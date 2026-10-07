@@ -7,8 +7,10 @@
 //! panics is reported as failed; the run goes on. Known differences with an accepted reason are
 //! listed in `xtask/roundtrip-allow.toml` and reported as allowed.
 //!
-//! The codecs arrive with M1.1 (generic property lists) to M1.4 (UFO and designspace); see
-//! `docs/plans/M1.md`. Until a kind has one, its samples are counted and listed as waiting.
+//! Codecs live in `codecs.rs`, one per mode and kind; see `docs/plans/M1.md`. A kind without one
+//! is counted and listed as waiting. A codec also reports how many scalars kept a source spelling
+//! because the canonical rules would have written them differently (`fontcraft_plist`); the
+//! fewer, the closer our rules are to the reference writer.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -18,14 +20,18 @@ use std::path::{Path, PathBuf};
 use toml::Table;
 
 /// What a codec writes back: one file, or a directory tree as relative path → bytes.
-// Constructed by the codecs, the first of which lands with M1.1.
-#[cfg_attr(not(test), allow(dead_code))]
 pub enum Written {
     File(Vec<u8>),
     Tree(BTreeMap<String, Vec<u8>>),
 }
 
-pub type Codec = fn(&Path) -> Result<Written, String>;
+/// A codec's output and the number of source spellings it had to keep.
+pub struct Coded {
+    pub written: Written,
+    pub spellings: usize,
+}
+
+pub type Codec = fn(&Path) -> Result<Coded, String>;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Kind {
@@ -239,35 +245,35 @@ pub fn tree_difference(original: &BTreeMap<String, Vec<u8>>, written: &BTreeMap<
     written.keys().find(|p| !original.contains_key(*p)).map(|p| format!("{p}: written but not in the original"))
 }
 
-/// Run `codec` on one sample and compare its output with the original.
-pub fn check(corpus: &Path, sample: &Sample, codec: Codec, allow: &BTreeMap<String, String>) -> Outcome {
+/// Run `codec` on one sample and compare its output with the original. Also returns the number
+/// of spellings the codec kept.
+pub fn check(corpus: &Path, sample: &Sample, codec: Codec, allow: &BTreeMap<String, String>) -> (Outcome, usize) {
     let path = corpus.join(&sample.path);
     let result = catch_unwind(AssertUnwindSafe(|| codec(&path)));
-    let difference = match result {
-        Err(_) => return Outcome::Failed("the codec panicked".to_string()),
-        Ok(Err(e)) => return Outcome::Failed(e),
-        Ok(Ok(Written::File(bytes))) => match std::fs::read(&path) {
+    let coded = match result {
+        Err(_) => return (Outcome::Failed("the codec panicked".to_string()), 0),
+        Ok(Err(e)) => return (Outcome::Failed(e), 0),
+        Ok(Ok(c)) => c,
+    };
+    let difference = match coded.written {
+        Written::File(bytes) => match std::fs::read(&path) {
             Ok(original) => first_difference(&original, &bytes),
-            Err(e) => return Outcome::Failed(format!("reading the original: {e}")),
+            Err(e) => return (Outcome::Failed(format!("reading the original: {e}")), coded.spellings),
         },
-        Ok(Ok(Written::Tree(tree))) => match read_tree(&path) {
+        Written::Tree(tree) => match read_tree(&path) {
             Ok(original) => tree_difference(&original, &tree),
-            Err(e) => return Outcome::Failed(format!("reading the original: {e}")),
+            Err(e) => return (Outcome::Failed(format!("reading the original: {e}")), coded.spellings),
         },
     };
-    match (difference, allow.get(&sample.path)) {
+    let outcome = match (difference, allow.get(&sample.path)) {
         (None, _) => Outcome::Identical,
         (Some(_), Some(reason)) => Outcome::Allowed(reason.clone()),
         (Some(d), None) => Outcome::Different(d),
-    }
+    };
+    (outcome, coded.spellings)
 }
 
-/// The codec for each kind, for the given mode. Empty until M1.1.
-fn codec(_mode: &str, _kind: Kind) -> Option<Codec> {
-    None
-}
-
-const MODES: [&str; 2] = ["plist", "model"];
+use crate::codecs::{MODES, codec};
 
 fn allow_list(root: &Path) -> Result<BTreeMap<String, String>, String> {
     let path = root.join("xtask/roundtrip-allow.toml");
@@ -287,7 +293,7 @@ fn allow_list(root: &Path) -> Result<BTreeMap<String, String>, String> {
 }
 
 pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
-    let mut mode = "model";
+    let mut mode = "plist";
     let mut kinds: Vec<Kind> = Kind::ALL.to_vec();
     let mut verbose = false;
     let mut it = args.iter();
@@ -313,14 +319,14 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
     let allow = allow_list(root)?;
     let samples = discover(&corpus)?;
 
-    // (kind, version, reference_written) → outcome counts
+    // (kind, version, reference_written) → outcome counts and the spellings kept
     type Key = (Kind, String, bool);
-    let mut table: BTreeMap<Key, [usize; 5]> = BTreeMap::new();
+    let mut table: BTreeMap<Key, ([usize; 5], usize)> = BTreeMap::new();
     let mut details = Vec::new();
     for s in samples.iter().filter(|s| kinds.contains(&s.kind)) {
-        let outcome = match codec(mode, s.kind) {
+        let (outcome, spellings) = match codec(mode, s.kind) {
             Some(c) => check(&corpus, s, c, &allow),
-            None => Outcome::NoCodec,
+            None => (Outcome::NoCodec, 0),
         };
         let slot = match outcome {
             Outcome::Identical => 0,
@@ -330,9 +336,11 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
             Outcome::NoCodec => 4,
         };
         let key = (s.kind, s.version.clone().unwrap_or_else(|| "?".into()), s.reference_written);
-        if let Some(cell) = table.entry(key).or_default().get_mut(slot) {
+        let row = table.entry(key).or_default();
+        if let Some(cell) = row.0.get_mut(slot) {
             *cell += 1;
         }
+        row.1 += spellings;
         if verbose || matches!(outcome, Outcome::Different(_) | Outcome::Failed(_)) {
             details.push(format!("  {}  {outcome}", s.path));
         }
@@ -340,20 +348,24 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
 
     println!("Round trip, mode `{mode}`: read each corpus source and write it back.\n");
     println!(
-        "{:<14} {:>7} {:>9}  {:>9} {:>7} {:>9} {:>6} {:>8}",
-        "kind", "version", "reference", "identical", "allowed", "different", "failed", "no codec"
+        "{:<14} {:>7} {:>9}  {:>9} {:>7} {:>9} {:>6} {:>8} {:>9}",
+        "kind", "version", "reference", "identical", "allowed", "different", "failed", "no codec", "spellings"
     );
     let mut total = [0usize; 5];
-    for ((kind, version, reference), counts) in &table {
+    let mut total_spellings = 0;
+    for ((kind, version, reference), (counts, spellings)) in &table {
         let [a, b, c, d, e] = *counts;
-        println!("{:<14} {:>7} {:>9}  {a:>9} {b:>7} {c:>9} {d:>6} {e:>8}", kind.name(), version, if *reference { "yes" } else { "no" });
+        let reference = if *reference { "yes" } else { "no" };
+        println!("{:<14} {version:>7} {reference:>9}  {a:>9} {b:>7} {c:>9} {d:>6} {e:>8} {spellings:>9}", kind.name());
         for (t, n) in total.iter_mut().zip(counts) {
             *t += n;
         }
+        total_spellings += spellings;
     }
     let [a, b, c, d, e] = total;
-    println!("{:<14} {:>7} {:>9}  {a:>9} {b:>7} {c:>9} {d:>6} {e:>8}", "total", "", "");
+    println!("{:<14} {:>7} {:>9}  {a:>9} {b:>7} {c:>9} {d:>6} {e:>8} {total_spellings:>9}", "total", "", "");
     println!("\n`reference` = saved by the format's reference tool; only those files are held to byte identity.");
+    println!("`spellings` = scalars written as in the source because the canonical rules would differ.");
     if !details.is_empty() {
         println!();
         for d in &details {
@@ -409,19 +421,19 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("x.glyphs"), b"{}").unwrap();
         let sample = Sample { path: "x.glyphs".into(), kind: Kind::Glyphs, version: None, reference_written: false };
-        fn boom(_: &Path) -> Result<Written, String> {
+        fn boom(_: &Path) -> Result<Coded, String> {
             panic!("boom")
         }
-        fn same(p: &Path) -> Result<Written, String> {
-            std::fs::read(p).map(Written::File).map_err(|e| e.to_string())
+        fn same(p: &Path) -> Result<Coded, String> {
+            std::fs::read(p).map(|b| Coded { written: Written::File(b), spellings: 0 }).map_err(|e| e.to_string())
         }
         let allow = BTreeMap::new();
         let prev = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
-        let failed = check(&dir, &sample, boom, &allow);
+        let failed = check(&dir, &sample, boom, &allow).0;
         std::panic::set_hook(prev);
         assert_eq!(failed, Outcome::Failed("the codec panicked".into()));
-        assert_eq!(check(&dir, &sample, same, &allow), Outcome::Identical);
+        assert_eq!(check(&dir, &sample, same, &allow).0, Outcome::Identical);
         let _ = std::fs::remove_file(dir.join("x.glyphs"));
         let _ = std::fs::remove_dir(&dir);
     }
@@ -434,19 +446,19 @@ mod tests {
         std::fs::write(pkg.join("fontinfo.plist"), b"{\n}\n").unwrap();
         std::fs::write(pkg.join("glyphs/A_.glyph"), b"{\nglyphname = A;\n}\n").unwrap();
         let sample = Sample { path: "x.glyphspackage".into(), kind: Kind::GlyphsPackage, version: None, reference_written: false };
-        fn same(p: &Path) -> Result<Written, String> {
-            read_tree(p).map(Written::Tree)
+        fn same(p: &Path) -> Result<Coded, String> {
+            read_tree(p).map(|t| Coded { written: Written::Tree(t), spellings: 0 })
         }
-        fn drops_a_glyph(p: &Path) -> Result<Written, String> {
+        fn drops_a_glyph(p: &Path) -> Result<Coded, String> {
             let mut t = read_tree(p)?;
             t.remove("glyphs/A_.glyph");
-            Ok(Written::Tree(t))
+            Ok(Coded { written: Written::Tree(t), spellings: 0 })
         }
         let allow = BTreeMap::new();
-        assert_eq!(check(&dir, &sample, same, &allow), Outcome::Identical);
-        assert_eq!(check(&dir, &sample, drops_a_glyph, &allow), Outcome::Different("glyphs/A_.glyph: not written".into()));
+        assert_eq!(check(&dir, &sample, same, &allow).0, Outcome::Identical);
+        assert_eq!(check(&dir, &sample, drops_a_glyph, &allow).0, Outcome::Different("glyphs/A_.glyph: not written".into()));
         let allowed: BTreeMap<String, String> = [("x.glyphspackage".to_string(), "test".to_string())].into();
-        assert_eq!(check(&dir, &sample, drops_a_glyph, &allowed), Outcome::Allowed("test".into()));
+        assert_eq!(check(&dir, &sample, drops_a_glyph, &allowed).0, Outcome::Allowed("test".into()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

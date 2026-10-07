@@ -13,6 +13,7 @@ repository = "https://github.com/aiongg/fontcraft"
 [workspace.dependencies]
 # internal (register every new crate in xtask/src/layers.rs)
 fontcraft-geom = { path = "crates/geom" }
+fontcraft-plist = { path = "crates/plist" }
 fontcraft-model = { path = "crates/model" }
 fontcraft-format = { path = "crates/format" }
 fontcraft-compile = { path = "crates/compile" }

@@ -15,23 +15,20 @@ _Updated: 2026-10-07, at the end of the planning session._
 
 ## Where to start
 
-**M1, the source model and the formats** (`ROADMAP.md` › What to build next). First steps:
+**M1, the source model and the formats.** The plan is `docs/plans/M1.md` (accepted; one agent,
+packages in order). Its material is `docs/spec/30-source-formats.md` and
+`spec/inventory/30-formats.toml`.
 
-1. `docs/plans/M1.md` is accepted (one agent throughout). Work its packages in order, starting
-   with M1.0 (corpus additions, the round-trip harness and two spikes).
-   Its material is
-   `docs/spec/30-source-formats.md` (field tables, crate findings, the recommended model, 17 open
-   questions) and `spec/inventory/30-formats.toml`.
-2. Done on the build box: corpus fetched (226 MB), fontc 1.0.0 and fontmake 3.12.1 installed.
-3. Suggested packages, disjoint enough for parallel agents:
-   - `crates/plist`: OpenStep and XML property lists, reading and writing, preserving spelling.
-   - `crates/model`: grow to the recommended outline (axes, instances, kerning, features, layer
-     kinds, parameters, tagged `extra`). This one is serial: everything else depends on it.
-   - `crates/io-glyphs`: read and write versions 2, 3, 4 and the package form; byte-exact round
-     trips over the `fontc`, `oswald` and `inter` corpora.
-   - `crates/io-ufo`: UFO and designspace through norad.
-   - `crates/decompile`: compiled TrueType fonts into the model.
-   - Engine: `file.open` by content sniffing, `file.saveAs` with a format, loss reports.
+| Package | State |
+|---|---|
+| M1.0 corpus, harness, spikes | done (plan § 8) |
+| M1.1 property lists | OpenStep done; XML waits for the owner's answer on question 11 |
+| M1.2 the model | **next** |
+| M1.3 to M1.6 | not started |
+
+Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
+oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
+`cargo xtask roundtrip` shows where the round trips stand.
 
 ## What the planning session decided
 
@@ -101,3 +98,8 @@ Append one terse entry per session: what landed, numbers, what is still open.
   pushed (private). Gate green locally (4 min 17 s). O1 (no licence; tutorial videos) and O4
   recorded. Corpus fetched, oracles installed. M1 plan drafted: 7 packages. No version 4
   `.glyphs` file in the corpus. The owner accepted the plan.
+- **2026-10-07, M1.0 and M1.1 (OpenStep).** Version 4 corpora pinned (16 files); sparse corpus
+  fetch; `cargo xtask roundtrip` (527 sources). Spikes: no existing crate round-trips any file
+  (plan § 8); own plist crate, own UFO I/O recommended (round 002, waiting). `crates/plist`
+  OpenStep reader and writer: 215 of 274 `.glyphs` sources identical, every reference-written
+  one outside fontc's test data. Next: the model (M1.2); the XML plist after question 11.

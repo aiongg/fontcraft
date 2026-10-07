@@ -790,6 +790,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-plist"
+version = "0.0.1"
+
+[[package]]
 name = "fontcraft-testkit"
 version = "0.0.1"
 dependencies = [
@@ -3467,6 +3471,7 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "fontcraft-engine",
+ "fontcraft-plist",
  "fontcraft-ui-egui",
  "serde",
  "serde_json",

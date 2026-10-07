@@ -23,6 +23,7 @@ pub enum Class {
 /// their layers are listed in docs/architecture.md.
 pub const TABLE: &[(&str, Class)] = &[
     ("geom", Class::Layer(0)),
+    ("plist", Class::Standalone),
     ("model", Class::Layer(1)),
     ("format", Class::Layer(3)),
     ("compile", Class::Layer(3)),

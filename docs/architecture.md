@@ -37,7 +37,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | Layer | Crate | State | Holds |
 |---|---|---|---|
 | L0 | `geom` | today | kurbo re-exports; cubic → quadratic; rounding. Later: extremes, inflections, curve fitting |
-| L0 alone | `plist` | M1 | OpenStep and XML property lists, reading and writing, keeping number spelling and key order (for `.glyphs` and UFO) |
+| L0 alone | `plist` | today (OpenStep); XML in M1 | OpenStep and XML property lists, reading and writing, keeping spelling, key order and layout (for `.glyphs` and UFO) |
 | L0 alone | `glyphdata` | M4 | glyph name database: Unicode, category, script, case, production name; built from GlyphData, AGL and the UCD |
 | L0 alone | `cff` | M2 | CFF and CFF2: DICTs, INDEX, charstring encoder and specialiser, subroutiniser. Not in any crate we can use |
 | L0 alone | `container` | M2/M12 | WOFF, WOFF2, collections: pack and unpack |

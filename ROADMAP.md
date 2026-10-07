@@ -89,13 +89,18 @@ on, so the engine track, where oracles prove correctness, goes first.
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry (18 engine commands), atomic
   failure, the panic guard, the journal.
-- **Formats:** `.fontcraft` (versioned JSON, stable output, atomic writes).
+- **Formats:** `.fontcraft` (versioned JSON, stable output, atomic writes). The `plist` crate
+  reads and writes the OpenStep property lists of `.glyphs` sources, keeping spelling and layout:
+  every corpus file the reference app saved (35 sources, versions 2 to 4) comes back byte for
+  byte; 215 of 274 `.glyphs` sources overall, the rest hand-edited test files. Not yet used by
+  any reader of the model.
 - **Compiler:** static TrueType from the first master, deterministic.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
 - **UI:** egui shell with a registry-built menu bar, Font View grid, Edit View display, Palette
   stub, status line, 9 shell commands; runs in a window and in headless test frames.
-- **Gates:** `cargo xtask ci` with nine steps; parity report generated from the inventory.
+- **Gates:** `cargo xtask ci` with nine steps; parity report generated from the inventory;
+  `cargo xtask roundtrip` over 527 corpus sources (outside the gate).
 
 ## Milestones
 
@@ -105,7 +110,7 @@ measured by what works (the parity table below and the measures in each mileston
 | # | Milestone | Status | Commands (live) |
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ⬜ next | 10 (5) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 in progress (M1.0 done, M1.1 OpenStep done) | 10 (5) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ⬜ | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |

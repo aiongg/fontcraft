@@ -4,6 +4,7 @@
 
 mod assets;
 mod brands;
+mod codecs;
 mod corpus;
 mod layers;
 mod parity;

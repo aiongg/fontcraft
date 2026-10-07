@@ -1,0 +1,13 @@
+[package]
+name = "fontcraft-plist"
+description = "FontCraft property lists: OpenStep text and XML, read and written with their original spelling (L0, standalone)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
