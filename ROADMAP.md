@@ -44,11 +44,6 @@ handbook rows against the handbook found 1 wrong and 14 imprecise (`docs/spec/RE
 documentation does not answer. Treat rows as a careful first reading, and each milestone's rows as
 due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
-**How much to trust the estimates below.** They are not calibrated: FontCraft has no measured
-throughput yet. They are derived from row counts and from the sibling apps' published record, and
-that record shows first estimates running several times too high for well-specified packages and
-too low for the fidelity pass. The first real calibration is M1.
-
 ### By dimension
 
 | Dimension | Estimate | Evidence and what is missing |
@@ -102,33 +97,31 @@ on, so the engine track, where oracles prove correctness, goes first.
   stub, status line, 9 shell commands; runs in a window and in headless test frames.
 - **Gates:** `cargo xtask ci` with nine steps; parity report generated from the inventory.
 
-## Milestones and estimates
+## Milestones
 
-Hours are wall-clock agent hours including builds and the gate, for one agent. See the caveat above.
+This file does not estimate time: estimates of agent hours have proved unreliable. Progress is
+measured by what works (the parity table below and the measures in each milestone's plan).
 
-| # | Milestone | Status | Commands (live) | Est. one agent (h) |
-|---|---|---|---:|---:|
-| M0 | Skeleton and vertical slice | ✅ done | 5 (5) | – |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ⬜ next | 10 (5) | 40–70 |
-| M2 | Compile core: static TTF and OTF, oracle harness | ⬜ | 6 (1) | 50–90 |
-| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) | 90–150 |
-| M4 | Font View and glyph management | ⬜ | 57 (6) | 30–50 |
-| M5 | Spacing, kerning and text mode | ⬜ | 109 (1) | 35–60 |
-| M6 | Components and anchors | ⬜ | 65 (0) | 40–70 |
-| M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) | 30–50 |
-| M8 | OpenType features | ⬜ | 40 (0) | 40–70 |
-| M9 | Interpolation and variable fonts | ⬜ | 68 (0) | 60–100 |
-| M10 | Hinting (PostScript and TrueType) | ⬜ | 57 (0) | 70–120 |
-| M11 | Colour fonts and images | ⬜ | 50 (0) | 30–50 |
-| M12 | Command-line tool suite (60 of the 70 subcommand rows) and quality checks (263 of 300) | ⬜ | 70 (0) | 70–110 |
-| M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 79 (0) | 60–100 |
-| M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) | 40–70 |
-| – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default) | ⬜ | | 60–90 |
-| – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | | 50–80 |
-| | **Total to full parity** (uncalibrated) | | 919 (27) | **~800–1,330** |
-
-With four to six agents on disjoint crates, wall-clock time divides by roughly 3.5 to 4 in the
-sibling apps' experience: **~200–380 hours**. Re-derive this row after M1 from measured throughput.
+| # | Milestone | Status | Commands (live) |
+|---|---|---|---:|
+| M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ⬜ next | 10 (5) |
+| M2 | Compile core: static TTF and OTF, oracle harness | ⬜ | 6 (1) |
+| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
+| M4 | Font View and glyph management | ⬜ | 57 (6) |
+| M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
+| M6 | Components and anchors | ⬜ | 65 (0) |
+| M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) |
+| M8 | OpenType features | ⬜ | 40 (0) |
+| M9 | Interpolation and variable fonts | ⬜ | 68 (0) |
+| M10 | Hinting (PostScript and TrueType) | ⬜ | 57 (0) |
+| M11 | Colour fonts and images | ⬜ | 50 (0) |
+| M12 | Command-line tool suite (60 of the 70 subcommand rows) and quality checks (263 of 300) | ⬜ | 70 (0) |
+| M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 79 (0) |
+| M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
+| – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default) | ⬜ | |
+| – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
+| | **Total** | | 919 (27) |
 
 ## Parity estimate
 
@@ -188,5 +181,4 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 ## How to update this file
 
 After each task lands: the milestone row, the parity-table row (score, missing items), "Shipped so
-far", and the "What to build next" list if it changed. Re-derive estimates from what remains, never
-from hoped-for speed. Keep the README's Status in step with the headline here.
+far", and the "What to build next" list if it changed. Keep the README's Status in step with the headline here.

@@ -50,7 +50,7 @@ made exact when they are about to be built.
    stays open.
 3. Verify every `memory` row or drop it.
 4. Group rows into packages that touch disjoint crates and files (§ 5), ordered by dependency.
-5. Write the plan to `docs/plans/M<n>.md` with an estimate per package, and review it against
+5. Write the plan to `docs/plans/M<n>.md` with measurable done-criteria per package, and review it against
    the notes for missing depth before coding. (The sibling apps found that this review is where
    most of the missing work is discovered.)
 
@@ -89,15 +89,12 @@ The layering makes crates independent; the shared files are few. Rules, as in th
 Packages that split well: one table builder each (M2), one importer each (M1), one tool each (M3),
 one filter each (M3), one check group each (M12), one CLI subcommand each (M12).
 
-## 6. Estimating
+## 6. No time estimates
 
-Count from what remains in the parity table, in wall-clock hours of agent work including builds
-and the gate, for one agent and for four to six in parallel. Calibrate on measured throughput and
-write the measurement down in `ROADMAP.md`. The sibling apps' record, for scale (from VectorCraft's `ROADMAP.md` and commit history as read
-on 2026-10-07): VectorCraft went
-from first commit to about 221,000 lines and roughly three quarters of its feature surface in
-eight days with up to eight agents, and its planned packages took a fifth of their first
-estimates. FontCraft has no throughput measurement of its own yet; the first one comes from M1.
+Do not estimate agent hours, for packages, milestones or the whole project: such estimates have
+been far off every time. A plan states scope, order, dependencies and how "done" is measured
+(a test, an oracle comparison, a round-trip count). Progress is reported by those measures and by
+the parity table.
 
 ## 7. Decisions that are the owner's
 

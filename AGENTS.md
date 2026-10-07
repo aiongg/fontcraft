@@ -81,6 +81,8 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
 - `ROADMAP.md` is the shared picture: update its milestone row, parity-table row and "Shipped so
   far" in the same change that lands a task. Grade by behaviour against `docs/spec/`, not by
   whether a command exists, and err low.
+- No time estimates: never estimate agent hours (`docs/execution-plan.md` § 6). Report progress
+  by what works and by the parity table.
 - `docs/status.md` is the hand-over note: sessions end abruptly, so a green tree plus that file is
   how the next agent picks up. Update it before you stop.
 - A row whose `status` is `memory` or `inferred`, and everything under "Open questions" in

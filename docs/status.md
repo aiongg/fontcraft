@@ -99,5 +99,5 @@ Append one terse entry per session: what landed, numbers, what is still open.
   everything in "Where to start" and the table of known limits.
 - **2026-10-07, set-up on the build box.** History rewritten to the owner's identity; repository
   pushed (private). Gate green locally (4 min 17 s). O1 (no licence; tutorial videos) and O4
-  recorded. Corpus fetched, oracles installed. M1 plan drafted: 7 packages, 57–94 h. No version 4
+  recorded. Corpus fetched, oracles installed. M1 plan drafted: 7 packages. No version 4
   `.glyphs` file in the corpus. Still open: the owner's review of the plan.
