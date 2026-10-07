@@ -8,7 +8,7 @@ version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.95"
-repository = "https://github.com/OWNER/fontcraft"
+repository = "https://github.com/aiongg/fontcraft"
 
 [workspace.dependencies]
 # internal (register every new crate in xtask/src/layers.rs)

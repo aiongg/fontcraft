@@ -55,6 +55,20 @@ distances, defaults, edge cases. It needs a licensed copy, and it is done like t
   files (`docs/testing.md`). Never attach a debugger, inspect memory, or read the app's files.
 - If the app's licence terms forbid using it this way, stop and tell the owner.
 
+### Tutorial videos
+
+The owner has no licence for the primary reference (open decision O1), so public tutorial videos
+are the nearest thing to observation. They count as public user documentation (first row of the
+table above):
+
+- Take **facts only**: which key or modifier does what, defaults shown on screen, the order of
+  steps, what a dialog contains. Never the narration's wording, the presenter's examples or fonts,
+  or images from the video.
+- Agents do not watch video. The owner watches and reports; the agent records the facts in our own
+  words in the behaviour note, with the video's title, channel and URL in the row's `notes`.
+- A video shows someone else's font and setup, so it confirms less than observation does. How such
+  rows are marked is open decision D13; until it is settled, keep their `status` and add the note.
+
 ## Assets and data
 
 - No icon, image, cursor, glyph artwork, sample text, preset, template, colour palette or example

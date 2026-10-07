@@ -10,8 +10,8 @@ _Updated: 2026-10-07, at the end of the planning session._
   Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
-- The work was done in a cloud workspace and handed over as an archive that includes its git
-  history (one commit). There is no remote, no CI configuration and no release.
+- The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
+  runs locally) and no release.
 
 ## Where to start
 
@@ -55,7 +55,6 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   and fonttools, which proves it is well-formed, not that it matches a reference compiler.
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
-- The `repository` field in `Cargo.toml` is a placeholder (`OWNER/fontcraft`).
 
 ## Known limits in the skeleton's code
 
@@ -81,8 +80,9 @@ around them. None can lose data; most are about scale.
 
 ## Waiting on the owner
 
-`docs/spec/00-open-decisions.md` › For the owner: whether the primary reference can be observed
-(O1), the name (O2), access to the sibling apps' shared standards (O3), the repository's home (O4).
+`docs/spec/00-open-decisions.md` › For the owner: the name (O2), access to the sibling apps' shared
+standards (O3), the application id (rest of O4), FontLab (O5), platforms (O6). O1 is answered (no
+licence; tutorial videos watched by the owner) and so is the repository's home.
 
 ## Dev log
 

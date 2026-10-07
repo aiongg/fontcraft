@@ -21,8 +21,9 @@ with; **dependency** is code we build on; **spec** defines a format; **secondary
 | Fontra documentation | https://docs.fontra.xyz/ ; repository https://github.com/fontra/fontra (formerly googlefonts/fontra) | GPL-3.0 (verified 2026-10-07 on the archived repository page); **documentation only** | **secondary**: collaborative editing, variable components | docs read 2026-10-07; pages listed there |
 
 The primary reference is known **only through its documentation** so far. Nothing in `spec/` has
-`status = "observed"`. Whether the owner has a licensed copy to observe is open
-([`spec/00-open-decisions.md`](spec/00-open-decisions.md), O1).
+`status = "observed"`. The owner has no licensed copy; public tutorial videos, watched by the
+owner, are the substitute ([`spec/00-open-decisions.md`](spec/00-open-decisions.md), O1;
+[`clean-room.md`](clean-room.md) › Tutorial videos).
 
 ## Command-line and compiler references
 

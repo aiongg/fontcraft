@@ -78,8 +78,9 @@ too low for the fidelity pass. The first real calibration is M1.
 4. Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
    orders them.
 
-**Before M3 in earnest, the owner's answer to open decision O1 matters** (can the primary
-reference be observed?). The engine track does not depend on it.
+**The primary reference cannot be observed directly** (open decision O1: no licence). Editor
+behaviour comes from the handbook and from public tutorial videos the owner watches and reports
+on, so the engine track, where oracles prove correctness, goes first.
 
 ## Shipped so far
 

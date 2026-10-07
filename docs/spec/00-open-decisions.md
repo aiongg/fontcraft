@@ -9,10 +9,10 @@ Each feature note also ends with its own open questions about the reference's be
 
 | # | Question | Why it matters | Default until answered |
 |---|---|---|---|
-| O1 | Is there a Mac with a licensed copy of the primary reference to observe? | Without it, every interaction detail the handbook omits is a guess: modifier keys, snapping distances, defaults, the many dialogs shown only as pictures | Work from the handbook; mark guesses `inferred`; prefer the oracle-checkable work (formats, compiler, CLI) first |
+| O1 | Is there a Mac with a licensed copy of the primary reference to observe? | Without it, every interaction detail the handbook omits is a guess: modifier keys, snapping distances, defaults, the many dialogs shown only as pictures | **Answered 2026-10-07: no licence.** The owner watches public tutorial videos and reports what they show (`docs/clean-room.md` › Tutorial videos). Engine track first; editor rows stay `handbook` or `inferred` unless a video confirms them (D13) |
 | O2 | The name. FontCraft is used by two unrelated projects | A rename after release costs file-extension and id migrations | Working name FontCraft, fallback GlyphCraft |
 | O3 | Access to the ArtCraft `craftrules` repository | This repository mirrors their standards as inferred from two apps, not as written | Follow VectorCraft's and PhotoCraft's `AGENTS.md` |
-| O4 | Where the repository lives, and the application id | CI, releases, the corpus fetch, `repository` in `Cargo.toml` (now `OWNER/fontcraft`) | Placeholders |
+| O4 | Where the repository lives, and the application id | CI, releases, the corpus fetch, `repository` in `Cargo.toml` | **Repository answered 2026-10-07:** private, `github.com/aiongg/fontcraft`. No hosted CI: the gate runs locally. Application id still open |
 | O5 | Is FontLab available to observe? | It would be the observable app on Windows and for the secondary features | Documentation only |
 | O6 | Which platforms matter first? | The primary is Mac-only; our users on Windows and Linux have no reference conventions | macOS, then Windows, Linux, web, as in the sibling apps |
 
@@ -32,6 +32,7 @@ Each feature note also ends with its own open questions about the reference's be
 | D10 | Cross-platform stand-ins for Mac-only features | M5, M14 | System text shaping in Text Preview, the emoji picker, test install, system services |
 | D11 | Auto-spacing and auto-kerning algorithms | M13 | No reference documents its method |
 | D12 | Fix target for outline repairs | M12 | In place with a backup layer (ours), or into a processed layer (the command-line reference) |
+| D13 | How to mark a row confirmed from a tutorial video | M3 | `observed` means checked on our own synthetic fonts. A video shows someone else's font and setup: a separate `status` value (for example `video`) with the source in `notes`, or `handbook` plus a note |
 
 ## Contradictions found in the sources
 
