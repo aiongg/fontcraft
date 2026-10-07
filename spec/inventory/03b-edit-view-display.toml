@@ -1,0 +1,2241 @@
+# Source: Glyphs 4 Handbook, chapter "Edit View", sections Info Box, Glyph Display, Background,
+#         Entering Text, Measuring, Annotating, Images, Previewing & Testing
+#         (https://handbook.glyphsapp.com/edit-view/ ; scratch copy handbook/03-edit-view.txt, lines 557-1087)
+# Date:   2026-10-07
+# All wording is our own. Labels, menu paths and shortcuts match the reference where it states them.
+# Rows marked `inferred` are FontCraft designs (mostly headless forms of pointer-only actions).
+
+# ───────────────────────────── Info box ─────────────────────────────
+
+[[panel]]
+id = "infoBox.glyph"
+label = "Info Box (glyph, horizontal layout)"
+location = "inspector"
+controls = [
+  "glyph name, centred on the top row (editable)",
+  "Unicode value, top right",
+  "arrow button beside the Unicode value: open the code point in an external Unicode browser",
+  "left sidebearing field (number or metrics key), left of the horizontal-metrics icon",
+  "right sidebearing field (number or metrics key), right of the icon",
+  "width field (number or metrics key), below the icon",
+  "left kerning value and left kerning group, at the left edge",
+  "right kerning value and right kerning group, at the right edge",
+  "colour swatch: glyph colour on the left half, layer colour on the right half",
+]
+area = "ui-chrome"
+milestone = "M5"
+summary = "Floating box drawn under the current glyph in Edit View with its name, Unicode value, sidebearings, width, kerning values and kerning groups. Current glyph means the glyph being edited; with text mode on, it is the glyph immediately following the text cursor. Shown only while View > Show Info is on."
+ref = "Edit View › Info Box"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.glyphVertical"
+label = "Info Box (glyph, vertical layout)"
+location = "inspector"
+controls = [
+  "glyph name and Unicode value",
+  "T: top sidebearing",
+  "B: bottom sidebearing",
+  "O: vertical origin",
+  "H: vertical width (height)",
+  "K: kerning value, one for the top and one for the bottom",
+  "G: kerning group, one for the top and one for the bottom",
+]
+area = "ui-chrome"
+milestone = "M5"
+summary = "Variant of the glyph Info box that replaces the horizontal one when the text is laid out top to bottom. It exposes the vertical metrics (top and bottom sidebearing, vertical origin, vertical advance) and top and bottom kerning values and groups."
+ref = "Edit View › Info Box › Vertical Layout"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.selection"
+label = "Info Box (selection)"
+location = "inspector"
+controls = [
+  "X and Y of the selection, measured from the layer origin to the chosen reference point",
+  "3x3 reference-point grid; the active point is drawn blue",
+  "width and height of the selection bounding box (see Scaling & Rotating)",
+  "for a single selected node: its X and Y coordinates",
+  "for a selected handle: its coordinates, delta X, delta Y and length relative to its on-curve node",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Part of the Info box that reports the current selection: position and size of its bounding box, or exact coordinates when one node is selected, plus offset and length when the selected point is a handle. Every number is an editable field. Selecting two nodes shows their distance in the width or height field, which is the quick way to read a stem width."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.component"
+label = "Info Box (component / base glyph)"
+location = "inspector"
+controls = [
+  "base glyph name; clicking it opens a glyph picker to repoint the component",
+  "X and Y offset",
+  "horizontal scale in percent",
+  "vertical scale in percent",
+  "slant to the right, in degrees",
+  "rotation, counterclockwise degrees",
+  "arrow button, top right: insert the base glyph into the tab text left of the current glyph and start editing it",
+]
+area = "components"
+milestone = "M6"
+summary = "Second Info box that appears to the right of the main one while a component is selected and describes the glyph the component references. Position edits are ignored while the component is automatically aligned."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.componentGlyphPicker"
+label = "Choose Base Glyph"
+location = "dialog"
+controls = ["searchable glyph list of the font", "confirm / cancel"]
+area = "components"
+milestone = "M6"
+summary = "Pop-up glyph list opened by clicking the base glyph name in the component Info box. Picking a glyph makes the selected component reference it instead. The handbook only says it is a glyph list in a pop-up window, so the search field is our assumption."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.image"
+label = "Info Box (image)"
+location = "inspector"
+controls = [
+  "X and Y position",
+  "width and height",
+  "rotation angle in degrees, beside the curved-arrow icon",
+  "right-pointing arrow: reveal the original image file in the file manager",
+  "lock toggle",
+]
+area = "color"
+milestone = "M11"
+summary = "Info box contents while a placed image is selected: position, displayed dimensions, rotation, a reveal-file button and a lock button."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.annotations"
+label = "Info Box (annotation palette)"
+location = "inspector"
+controls = [
+  "Annotation Selection tool (first button)",
+  "Text Annotation tool",
+  "Arrow Annotation tool",
+  "Circle Annotation tool",
+  "Plus annotation button",
+  "Minus annotation button",
+]
+area = "drawing"
+milestone = "M3"
+summary = "While the Annotation tool is active the Info box is replaced by a small strip of sub-tool buttons for selecting annotations and for adding text, arrow, circle, plus and minus marks. It is only visible when View > Show Info is on."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+[[command]]
+id = "glyph.openInUnicodeBrowser"
+label = "Open in UnicodeChecker"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, unicode?: hex}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "In the Info box, the arrow button beside the Unicode field hands the current glyph's code point to an external Unicode browser (UnicodeChecker in the reference). If that app is missing the reference offers a download link, and the first use triggers an OS permission prompt. FontCraft needs a cross-platform target; which one is undecided."
+ref = "Edit View › Info Box"
+status = "handbook"
+
+[[command]]
+id = "infoBox.setReferencePoint"
+label = "Set Info Box Reference Point"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{point: 'topLeft'|'top'|'topRight'|'left'|'center'|'right'|'bottomLeft'|'bottom'|'bottomRight'}"
+area = "drawing"
+milestone = "M3"
+summary = "Chooses which of the nine points of the selection bounding box the X and Y fields of the Info box report and edit. The chosen point is highlighted in blue; picking the centre makes X/Y the centre of the selection."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[command]]
+id = "selection.getInfo"
+label = "Get Selection Info"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids], referencePoint?: string}"
+area = "drawing"
+milestone = "M3"
+summary = "Query returning what the selection Info box shows: bounding box position at the reference point, width and height, and for a single node its coordinates, and for a single handle also delta X, delta Y and length to its on-curve node. Headless counterpart of reading the Info box; not a reference menu item."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "inferred"
+
+[[command]]
+id = "selection.setPosition"
+label = "Set Selection Position"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids], x?: number, y?: number, referencePoint?: string}"
+area = "drawing"
+milestone = "M3"
+summary = "Moves the selection so that the chosen reference point of its bounding box lands on the given X and/or Y, which is what typing into the X or Y field of the Info box does. For a single node or handle it sets that point's coordinates."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[command]]
+id = "component.setBaseGlyph"
+label = "Change Component Glyph"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, component?: index, base: name}"
+area = "components"
+milestone = "M6"
+summary = "Repoints the selected component at another glyph, keeping its transform. Triggered from the glyph picker that opens when the base glyph name in the component Info box is clicked."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[command]]
+id = "component.setTransform"
+label = "Set Component Transform"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, component?: index, x?: number, y?: number, scaleX?: percent, scaleY?: percent, slant?: degrees, rotation?: degrees}"
+area = "components"
+milestone = "M6"
+summary = "Sets any of the component values shown in the base-glyph Info box: offset, horizontal and vertical scale in percent, rightward slant and counterclockwise rotation. Offset changes have no effect while the component is automatically aligned."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[command]]
+id = "component.editBaseGlyph"
+label = "Edit Base Glyph"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, component?: index}"
+area = "components"
+milestone = "M6"
+summary = "Arrow button of the component Info box: inserts the referenced glyph into the Edit View text immediately left of the current glyph and makes it the glyph being edited."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.currentGlyphDefinition"
+area = "ui-chrome"
+milestone = "M5"
+summary = "The glyph Info box always describes the current glyph: the glyph open for editing, or in text mode the glyph that follows the text cursor."
+ref = "Edit View › Info Box"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.metricsFieldsAcceptKeys"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The LSB, RSB and width fields of the Info box accept either a plain number or a metrics key expression."
+ref = "Edit View › Info Box › Horizontal Layout"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.fieldEditing"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Clicking a number in the Info box turns it into a text field. Return or leaving the field commits; Escape cancels the edit and leaves no field focused; Tab commits and moves to the next value, Shift+Tab to the previous one."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.arrowKeyStepping"
+area = "ui-chrome"
+milestone = "M3"
+summary = "While an Info box field is focused, Up and Down raise or lower its value by 1, and by 10 with Shift held."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.followsSelection"
+area = "drawing"
+milestone = "M3"
+summary = "The Info box content tracks the selection at all times: one node shows its coordinates, a handle adds delta X, delta Y and length to its on-curve node, a component adds the base-glyph box, an image shows image fields, a guide shows guide fields."
+ref = "Edit View › Measuring › Measuring with the Info box"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.showsColorLabels"
+area = "ui-chrome"
+milestone = "M4"
+summary = "The Info box shows the glyph colour label on its left half and the layer colour label on its right half, the same split used by glyph cells in Font View."
+ref = "Edit View › Glyph Display › Glyph & Layer Colors"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.unicodeBrowserMissing"
+area = "ui-chrome"
+milestone = "M14"
+summary = "When the external Unicode browser is not installed, pressing the arrow button shows where to download it instead of failing silently."
+ref = "Edit View › Info Box"
+status = "handbook"
+
+# ───────────────────────────── Zooming and panning ─────────────────────────────
+
+[[tool]]
+id = "zoom"
+label = "Zoom"
+shortcut = "Z"
+group = ""
+gestures = [
+  "click: zoom in at the clicked point",
+  "Alt+click: zoom out",
+  "drag a rectangle: zoom so that the dragged area fills the window",
+  "hold Cmd+Space with any tool: temporary zoom-in tool",
+  "hold Cmd+Alt+Space with any tool: temporary zoom-out tool",
+]
+area = "ui-chrome"
+milestone = "M3"
+summary = "Pointer tool that magnifies the Edit View canvas. If Cmd+Space is taken by the system, pressing Space first and then adding Cmd also reaches the temporary zoom tool."
+ref = "Edit View › Glyph Display › Zooming"
+status = "handbook"
+
+[[tool]]
+id = "hand"
+label = "Hand"
+shortcut = "H"
+group = ""
+gestures = [
+  "drag: pan the canvas",
+  "hold Space with any tool except Text: temporary Hand tool",
+  "in text mode, press Cmd+Space then release Cmd: temporary Hand tool without typing a space",
+]
+area = "ui-chrome"
+milestone = "M3"
+summary = "Pointer tool that scrolls the Edit View canvas by dragging. While it is active the current glyph is drawn filled if Fill Preview is on."
+ref = "Edit View › Glyph Display › Panning"
+status = "handbook"
+
+[[command]]
+id = "view.zoomIn"
+label = "Zoom In"
+menu = ["View"]
+shortcut = "Cmd+Plus"
+kind = "ui"
+params = "{tab?: id}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Increases the Edit View magnification by one step. The step size is not stated in the handbook."
+ref = "Edit View › Glyph Display › Zooming"
+status = "handbook"
+
+[[command]]
+id = "view.zoomOut"
+label = "Zoom Out"
+menu = ["View"]
+shortcut = "Cmd+Minus"
+kind = "ui"
+params = "{tab?: id}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Decreases the Edit View magnification by one step."
+ref = "Edit View › Glyph Display › Zooming"
+status = "handbook"
+
+[[command]]
+id = "view.zoomToActiveLayer"
+label = "Zoom to Active Layer"
+menu = ["View"]
+shortcut = "Cmd+0"
+kind = "ui"
+params = "{tab?: id}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Sets the zoom so that the span from descender to ascender of the active layer fills the window as far as possible."
+ref = "Edit View › Glyph Display › Zooming"
+status = "handbook"
+
+[[command]]
+id = "view.zoomToActualSize"
+label = "Zoom to Actual Size"
+menu = ["View"]
+shortcut = "Cmd+Alt+0"
+kind = "ui"
+params = "{tab?: id}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Sets the zoom so that one font unit covers exactly one display point (zoom value 1000). A display point is one device pixel on a standard-density screen and two on a high-density one."
+ref = "Edit View › Glyph Display › Zooming"
+status = "handbook"
+
+[[command]]
+id = "view.setZoom"
+label = "Set Zoom"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, size: number, center?: [x, y]}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Sets the zoom numerically, as typing into the field between the zoom buttons at the bottom right of the window does. `size` is the number of display points that 1000 font units occupy, so 300 draws a 500-unit stem 150 points long."
+ref = "Edit View › Glyph Display › Zooming"
+status = "handbook"
+
+[[command]]
+id = "view.zoomToRect"
+label = "Zoom to Rectangle"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, rect: [x, y, width, height]}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Zooms and scrolls so that a given canvas rectangle fills the window. Headless form of dragging a rectangle with the Zoom tool."
+ref = "Edit View › Glyph Display › Zooming"
+status = "inferred"
+
+[[command]]
+id = "view.scrollTo"
+label = "Scroll Canvas"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, x?: number, y?: number, dx?: number, dy?: number}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Pans the Edit View canvas to an absolute position or by an offset. Headless form of dragging with the Hand tool, scrolling or dragging the scroll bars."
+ref = "Edit View › Glyph Display › Panning"
+status = "inferred"
+
+[[panel]]
+id = "editView.bottomBar"
+label = "Edit View bottom bar"
+location = "statusbar"
+controls = [
+  "Features pop-up button (bottom left); shows the tags of the active features and is tinted with the accent colour when any is on",
+  "Preview (eye) button (bottom left): show or hide the Preview Area",
+  "writing direction buttons: left to right, right to left, top to bottom (bottom right)",
+  "kerning mode button: no kerning, kerning, locked kerning (see Kerning Modes)",
+  "zoom out and zoom in buttons (bottom right)",
+  "zoom field between the zoom buttons: display points per 1000 units",
+]
+area = "ui-chrome"
+milestone = "M3"
+summary = "Row of controls along the lower edge of an Edit View tab: feature preview menu and preview toggle on the left, writing direction and zoom controls on the right. The exact order and the position of the kerning mode button are not described in this chapter."
+ref = "Edit View › Glyph Display › Zooming; Entering Text › Writing Direction; Previewing & Testing"
+status = "handbook"
+
+[[behavior]]
+id = "zoom.gestures"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Pinching on a trackpad zooms the canvas, and so does scrolling (wheel or gesture) with Alt held."
+ref = "Edit View › Glyph Display › Zooming"
+status = "handbook"
+
+[[behavior]]
+id = "zoom.valueMeaning"
+area = "ui-chrome"
+milestone = "M3"
+summary = "The zoom value states how many display points a length of 1000 font units takes up on screen. Display points are resolution independent: one point is one or two device pixels depending on screen density."
+ref = "Edit View › Glyph Display › Zooming"
+status = "handbook"
+
+[[behavior]]
+id = "pan.scrolling"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Two-finger dragging on a trackpad pans freely. A mouse wheel scrolls vertically and, with Shift held, horizontally. The canvas carries a vertical scroll bar along its right edge and a horizontal one along its bottom edge."
+ref = "Edit View › Glyph Display › Panning"
+status = "handbook"
+
+[[behavior]]
+id = "pan.spaceInTextMode"
+area = "edit-text"
+milestone = "M5"
+summary = "In text mode the Space bar types a space instead of invoking the Hand tool. To pan without inserting one, press Cmd+Space and then let go of Cmd."
+ref = "Edit View › Glyph Display › Panning"
+status = "handbook"
+
+# ───────────────────────────── View options ─────────────────────────────
+
+[[command]]
+id = "view.showNodes"
+label = "Show Nodes"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Master toggle for drawing on-curve and off-curve points in Edit View. In the reference this entry is a submenu of three separate switches (foreground layer, background layer, Extra Nodes). As a FontCraft design choice the bare command flips the foreground switch, so it can carry a shortcut."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.showNodesInBackground"
+label = "In Background"
+menu = ["View", "Show Nodes"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "layers"
+milestone = "M3"
+summary = "The displayed background layer is drawn with its nodes and handles as well, not only as an outline."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[command]]
+id = "view.showExtraNodes"
+label = "Extra Nodes"
+menu = ["View", "Show Nodes"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Toggles the display of Extra Nodes, the third node category the Show Nodes submenu controls. This section does not define them; see the path-editing part of the chapter."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.showMetrics"
+label = "Show Metrics"
+menu = ["View"]
+shortcut = "Cmd+Shift+M"
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Toggles the horizontal and vertical metric lines and the alignment zones of the glyph in Edit View."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.showMetricsNames"
+label = "Show Metrics Names"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Toggles text labels on the metric lines in Edit View."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.showHints"
+label = "Show Hints"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Toggles the display of PostScript hints on the glyph. TrueType hints are not covered by this switch; they are seen through the TrueType Instructor tool."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.showAnchors"
+label = "Show Anchors"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "components"
+milestone = "M6"
+summary = "Toggles the display of the current glyph's anchors."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.showInfo"
+label = "Show Info"
+menu = ["View"]
+shortcut = "Cmd+Shift+I"
+kind = "ui"
+params = "{on?: bool}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Toggles the Info box under the current glyph together with the context-dependent controls at the bottom of the Palette."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.showBackground"
+label = "Show Background"
+menu = ["View"]
+shortcut = "Cmd+Shift+B"
+kind = "ui"
+params = "{on?: bool}"
+area = "layers"
+milestone = "M3"
+summary = "Toggles drawing the paths and components of the other side (background while in the foreground, foreground while in the background) as a thin outline behind the layer being edited."
+ref = "Edit View › Glyph Display › View Options; Edit View › Background"
+status = "handbook"
+
+[[command]]
+id = "view.showImage"
+label = "Show Image"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "color"
+milestone = "M11"
+summary = "Toggles the display of images placed on glyph layers. Glyphs that have no paths and no components show their image regardless of this switch."
+ref = "Edit View › Glyph Display › View Options; Edit View › Images › Adding Images"
+status = "handbook"
+
+[[command]]
+id = "view.showMeasurementLine"
+label = "Show Measurement Line"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Toggles measurement mode for text: a line at an adjustable height, with numbers for the space between each sidebearing and the first outline crossing on that line. It is drawn only while the Text tool is active."
+ref = "Edit View › Glyph Display › View Options; Edit View › Measuring › Measurement Line"
+status = "handbook"
+
+[[command]]
+id = "view.showAnnotations"
+label = "Show Annotations"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Toggles the display of notes and correction marks made with the Annotation tool."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.fillPreview"
+label = "Fill Preview"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "edit-text"
+milestone = "M3"
+summary = "Toggles filling closed paths with the foreground colour. The glyph being edited is filled only while one of the Text, Hand and Zoom tools is active."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[command]]
+id = "view.getDisplayOptions"
+label = "Get Display Options"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id}"
+area = "automation"
+milestone = "M3"
+summary = "Query returning the state of every View-menu display toggle, the zoom value, the writing direction and the active preview features of an Edit View tab, so an agent can read the view state before changing it."
+ref = "Edit View › Glyph Display › View Options"
+status = "inferred"
+
+[[behavior]]
+id = "view.reporterPluginsInViewMenu"
+area = "extensions"
+milestone = "M13"
+summary = "Display plug-ins (reporters) that draw extra information in Edit View add their own toggle entries to the View menu once installed."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[behavior]]
+id = "view.fillColorFromSettings"
+area = "ui-chrome"
+milestone = "M14"
+summary = "The fill colour used by Fill Preview is the foreground colour from the Appearance settings and can be changed there."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+[[behavior]]
+id = "view.showInfoAffectsPalette"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Show Info governs two things at once: the Info box on the canvas and the contextual controls shown at the bottom of the Palette sidebar."
+ref = "Edit View › Glyph Display › View Options"
+status = "handbook"
+
+# ───────────────────────────── Glyph and layer colours ─────────────────────────────
+
+[[panel]]
+id = "editView.contextMenu"
+label = "Edit View canvas context menu"
+location = "window"
+controls = [
+  "colour label swatches: set the glyph colour",
+  "with Alt held: Set Layer Color, the same swatches applied to the layer",
+  "other entries are documented in other sections",
+]
+area = "ui-chrome"
+milestone = "M4"
+summary = "Menu opened by Ctrl-clicking or right-clicking the canvas of the active glyph. This section documents only its colour label part."
+ref = "Edit View › Glyph Display › Glyph & Layer Colors"
+status = "handbook"
+
+[[command]]
+id = "path.editBackground"
+label = "Edit Background"
+menu = ["Path"]
+shortcut = "Cmd+B"
+kind = "ui"
+params = "{on?: bool, glyph?: name, layer?: id}"
+area = "layers"
+milestone = "M3"
+summary = "Toggles between editing the layer's foreground and its background. While the background is the active side the canvas is drawn slightly darker."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[command]]
+id = "path.selectionToBackground"
+label = "Selection to Background"
+menu = ["Path"]
+shortcut = "Cmd+J"
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids]}"
+area = "layers"
+milestone = "M3"
+summary = "Replaces the whole content of the background with a copy of the current selection. When the background is the active side it works the other way and replaces the foreground. Run on glyphs selected in Font View it copies each layer into its own background."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[command]]
+id = "path.addSelectionToBackground"
+label = "Add Selection to Background"
+menu = ["Path"]
+shortcut = "Cmd+Alt+J"
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids]}"
+area = "layers"
+milestone = "M3"
+summary = "Alt variant of Selection to Background: copies the selection into the background and keeps what is already there."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[command]]
+id = "path.swapWithBackground"
+label = "Swap with Background"
+menu = ["Path"]
+shortcut = "Cmd+Ctrl+J"
+kind = "engine"
+params = "{glyphs?: [names], layer?: id}"
+area = "layers"
+milestone = "M3"
+summary = "Exchanges the full contents of the foreground and the background of the layer."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[command]]
+id = "path.clearBackground"
+label = "Clear Background"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id}"
+area = "layers"
+milestone = "M3"
+summary = "Empties the background layers of the selected glyphs. In the reference it only appears in the Path menu while Alt is held; which entry it replaces is not stated."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[command]]
+id = "path.assignBackground"
+label = "Assign Background"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], source: fontPath|documentId, master?: id}"
+area = "layers"
+milestone = "M3"
+summary = "Copies outlines from another font file into the background of every selected glyph; we assume glyphs are matched by name, which the handbook does not say. Choosing the font itself as the source snapshots the current outlines so later edits can be compared against them."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[behavior]]
+id = "background.everyLayerHasOne"
+area = "layers"
+milestone = "M1"
+summary = "Each glyph layer owns exactly one background layer that can hold paths and components. It is scratch space and a comparison copy and is not part of the exported outline."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[behavior]]
+id = "background.outlineDisplay"
+area = "layers"
+milestone = "M3"
+summary = "With Show Background on, the inactive side is drawn as a faint red outline behind the active side. The colour comes from the Appearance settings."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[behavior]]
+id = "background.snapping"
+area = "guides-metrics"
+milestone = "M3"
+summary = "While the background is displayed, its nodes and outlines are snapping targets for edits on the active side."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[behavior]]
+id = "background.darkenedCanvas"
+area = "layers"
+milestone = "M3"
+summary = "The Edit View canvas darkens a little while the background is the side being edited, as a mode indicator."
+ref = "Edit View › Background"
+status = "handbook"
+
+[[behavior]]
+id = "background.usedByFilters"
+area = "path-ops"
+milestone = "M3"
+summary = "Some filters, Hatch Outline being the named example, keep the untouched original in the background so they can be re-run non-destructively."
+ref = "Edit View › Background"
+status = "handbook"
+
+# ───────────────────────────── Entering text ─────────────────────────────
+
+[[tool]]
+id = "text"
+label = "Text"
+shortcut = "T"
+group = ""
+gestures = [
+  "select the tool: enter text mode with a text cursor in the tab's string",
+  "type: insert the glyphs for the typed characters at the cursor",
+  "Left / Right / Up / Down: move the text cursor",
+  "Escape: toggle between text mode and editing the current glyph",
+  "Home / End: replace the current glyph with the previous / next glyph of the font",
+  "Shift+Home / Shift+End: same, stepping through the glyphs currently listed in Font View",
+  "Cmd+Ctrl+Alt+click or drag: set the height of the measurement line",
+]
+area = "edit-text"
+milestone = "M5"
+summary = "Switches Edit View to text mode, where the tab holds an editable string of glyphs: a character, a word, a sentence or several lines. Standard text editing applies (cursor keys, selection, cut, copy, paste to and from other apps). The glyph that follows the cursor counts as the current glyph."
+ref = "Edit View › Entering Text › Text Tool"
+status = "handbook"
+
+[[command]]
+id = "editView.toggleTextMode"
+label = "Toggle Text Mode"
+menu = []
+shortcut = "Escape"
+kind = "ui"
+params = "{tab?: id, mode?: 'text'|'edit'}"
+area = "edit-text"
+milestone = "M5"
+summary = "Switches between typing text and editing the current glyph. The handbook states the Escape toggle but not which tool becomes active when leaving text mode."
+ref = "Edit View › Entering Text"
+status = "handbook"
+
+[[command]]
+id = "editView.insertText"
+label = "Insert Text"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{tab?: id, text?: string, glyphs?: [names], at?: index, replace?: [start, end]}"
+area = "edit-text"
+milestone = "M5"
+summary = "Inserts characters or named glyphs into the tab's string at the text cursor or a given index. This is what typing and pasting do; characters map to glyphs through their Unicode values."
+ref = "Edit View › Entering Text › Text Tool"
+status = "handbook"
+
+[[command]]
+id = "editView.setText"
+label = "Set Tab Text"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{tab?: id, text?: string, glyphs?: [names]}"
+area = "edit-text"
+milestone = "M5"
+summary = "Replaces the whole string shown in an Edit View tab. Headless counterpart of selecting all text and typing."
+ref = "Edit View › Entering Text › Text Tool"
+status = "inferred"
+
+[[command]]
+id = "editView.getText"
+label = "Get Tab Text"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{tab?: id}"
+area = "edit-text"
+milestone = "M5"
+summary = "Query returning the tab's string as a glyph name list with placeholders and line breaks marked, the cursor index, the current glyph, the writing direction and the active master."
+ref = "Edit View › Entering Text › Text Tool"
+status = "inferred"
+
+[[command]]
+id = "editView.setCursor"
+label = "Set Text Cursor"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, index: number, selectionLength?: number}"
+area = "edit-text"
+milestone = "M5"
+summary = "Places the text cursor before the glyph at the given index, optionally selecting a run of glyphs, which also changes the current glyph. Headless form of clicking in the text or using the arrow keys."
+ref = "Edit View › Entering Text › Text Tool"
+status = "inferred"
+
+[[command]]
+id = "edit.emojiAndSymbols"
+label = "Emoji & Symbols"
+menu = ["Edit"]
+shortcut = "Cmd+Ctrl+Space"
+kind = "ui"
+params = "{}"
+area = "edit-text"
+milestone = "M14"
+summary = "Opens the system character picker so characters that are hard to type can be inserted into the Edit View text. Platform feature; the cross-platform equivalent is undecided."
+ref = "Edit View › Entering Text"
+status = "handbook"
+
+[[command]]
+id = "edit.find"
+label = "Find…"
+menu = ["Edit", "Find"]
+shortcut = "Cmd+F"
+kind = "ui"
+params = "{query?: string, mode?: 'name'|'unicode'|'all', insert?: bool}"
+area = "edit-text"
+milestone = "M5"
+summary = "In Edit View, opens a live glyph search and inserts the chosen glyphs into the text on Return. A query with spaces matches glyphs whose name contains every term; a typed character finds its glyph. The same shortcut searches text in the Text Preview window."
+ref = "Edit View › Entering Text › Find Glyphs to Insert"
+status = "handbook"
+
+[[panel]]
+id = "editView.findGlyphs"
+label = "Find Glyphs"
+location = "dialog"
+controls = [
+  "search field with results updating on every keystroke",
+  "magnifying-glass menu: Name | Unicode | All",
+  "result list; first result preselected",
+  "Shift+click: select a range of results",
+  "Cmd+click: add or remove single results",
+  "Return: insert all selected results at the text cursor",
+]
+area = "edit-text"
+milestone = "M5"
+summary = "Search pop-up for inserting glyphs by name or code point. Name mode matches substrings of glyph names with all space-separated terms required, Unicode mode matches the query against hexadecimal code points, All does both."
+ref = "Edit View › Entering Text › Find Glyphs to Insert"
+status = "handbook"
+
+[[command]]
+id = "glyph.search"
+label = "Search Glyphs"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{query: string, mode?: 'name'|'unicode'|'all', limit?: number}"
+area = "edit-text"
+milestone = "M5"
+summary = "Query returning the glyph names the Find Glyphs pop-up would list for a search string, using the same matching rules. Lets agents use the search without the dialog."
+ref = "Edit View › Entering Text › Find Glyphs to Insert"
+status = "inferred"
+
+[[command]]
+id = "editView.previousGlyph"
+label = "Previous Glyph"
+menu = []
+shortcut = "Home"
+kind = "ui"
+params = "{tab?: id}"
+area = "edit-text"
+milestone = "M5"
+summary = "Replaces the current glyph in the tab with the glyph that precedes it in the font's glyph order. On keyboards without Home, Fn+Left does the same."
+ref = "Edit View › Entering Text › Change the Current Glyph"
+status = "handbook"
+
+[[command]]
+id = "editView.nextGlyph"
+label = "Next Glyph"
+menu = []
+shortcut = "End"
+kind = "ui"
+params = "{tab?: id}"
+area = "edit-text"
+milestone = "M5"
+summary = "Replaces the current glyph in the tab with the glyph that follows it in the font's glyph order. On keyboards without End, Fn+Right does the same."
+ref = "Edit View › Entering Text › Change the Current Glyph"
+status = "handbook"
+
+[[command]]
+id = "editView.previousVisibleGlyph"
+label = "Previous Glyph in Font View"
+menu = []
+shortcut = "Shift+Home"
+kind = "ui"
+params = "{tab?: id}"
+area = "edit-text"
+milestone = "M5"
+summary = "Like Previous Glyph, but steps through the glyphs as Font View currently lists them, so an active filter or search limits and orders the walk."
+ref = "Edit View › Entering Text › Change the Current Glyph"
+status = "handbook"
+
+[[command]]
+id = "editView.nextVisibleGlyph"
+label = "Next Glyph in Font View"
+menu = []
+shortcut = "Shift+End"
+kind = "ui"
+params = "{tab?: id}"
+area = "edit-text"
+milestone = "M5"
+summary = "Like Next Glyph, but steps through the glyphs as Font View currently lists them."
+ref = "Edit View › Entering Text › Change the Current Glyph"
+status = "handbook"
+
+[[command]]
+id = "edit.addPlaceholder"
+label = "Add Placeholder"
+menu = ["Edit"]
+shortcut = "Cmd+Alt+Shift+P"
+kind = "engine"
+params = "{tab?: id, at?: index}"
+area = "edit-text"
+milestone = "M5"
+summary = "Inserts a placeholder item into the tab text. A placeholder has no glyph of its own: it always renders as the current glyph and changes whenever the current glyph does."
+ref = "Edit View › Entering Text › Placeholder Glyphs"
+status = "handbook"
+
+[[command]]
+id = "editView.setWritingDirection"
+label = "Writing Direction"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, direction: 'ltr'|'rtl'|'ttb'}"
+area = "edit-text"
+milestone = "M5"
+summary = "Sets the layout of the tab text to left to right, right to left or top to bottom. Bound to the three direction buttons at the bottom right of the Edit View window; top to bottom also switches the Info box to its vertical form."
+ref = "Edit View › Entering Text › Writing Direction"
+status = "handbook"
+
+[[command]]
+id = "window.textPreview"
+label = "Text Preview"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "proofing"
+milestone = "M5"
+summary = "Opens the Text Preview window, a separate text field that renders long passages in the font through a real shaping engine without slowing Edit View down."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[panel]]
+id = "window.textPreview"
+label = "Text Preview"
+location = "window"
+controls = [
+  "style pop-up (top left): which font style / instance to preview",
+  "font size field, right of the style pop-up",
+  "pin button: keep the window above the font window",
+  "multi-line text field rendered in the font",
+  "context menu: Layout Orientation > Vertical (and horizontal)",
+  "context menu: Writing Direction submenu for the text and for the selection",
+  "find bar (Cmd+F) with find and replace, a magnifying-glass options menu and Insert Pattern",
+]
+area = "proofing"
+milestone = "M5"
+summary = "Window for proofing running text of any length. The reference renders with the operating system's shaping engine and draws characters the font lacks in a system fallback font; FontCraft needs its own shaper to match this."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[command]]
+id = "textPreview.setText"
+label = "Set Preview Text"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{text: string}"
+area = "proofing"
+milestone = "M5"
+summary = "Replaces the content of the Text Preview field. Headless form of typing or pasting into it."
+ref = "Edit View › Entering Text › Text Preview"
+status = "inferred"
+
+[[command]]
+id = "textPreview.setStyle"
+label = "Preview Font Style"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{instance: name|index}"
+area = "proofing"
+milestone = "M5"
+summary = "Chooses which style of the font the Text Preview renders, as the pop-up at the top left of the window does."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[command]]
+id = "textPreview.setFontSize"
+label = "Preview Font Size"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{size: number}"
+area = "proofing"
+milestone = "M5"
+summary = "Sets the size at which the Text Preview draws its text, via the field beside the style pop-up."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[command]]
+id = "textPreview.togglePinned"
+label = "Pin Text Preview"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "proofing"
+milestone = "M5"
+summary = "Toggles whether the Text Preview window floats above the font window, so glyphs can be edited while the preview stays visible."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[command]]
+id = "textPreview.setLayoutOrientation"
+label = "Layout Orientation"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{orientation: 'horizontal'|'vertical'}"
+area = "proofing"
+milestone = "M5"
+summary = "Switches the Text Preview field between horizontal and vertical text layout. In the reference it is the Layout Orientation > Vertical entry of the field's context menu; the name of the horizontal entry is not given."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[command]]
+id = "textPreview.setWritingDirection"
+label = "Writing Direction"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{scope: 'text'|'selection', direction: 'default'|'ltr'|'rtl'}"
+area = "proofing"
+milestone = "M5"
+summary = "Sets the base direction of the whole preview text or of the selected run, from the Writing Direction submenu of the field's context menu. The submenu items are not listed in the handbook, so the parameter values are our guess."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[command]]
+id = "textPreview.find"
+label = "Find…"
+menu = ["Edit", "Find"]
+shortcut = "Cmd+F"
+kind = "ui"
+params = "{query?: string, replace?: string, options?: object}"
+area = "proofing"
+milestone = "M5"
+summary = "With the Text Preview focused, Edit > Find > Find… searches and optionally replaces text inside the preview field. Search options sit behind the magnifying-glass icon."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[command]]
+id = "textPreview.insertPattern"
+label = "Insert Pattern"
+menu = []
+shortcut = "Cmd+Ctrl+Alt+P"
+kind = "ui"
+params = "{pattern?: string}"
+area = "proofing"
+milestone = "M14"
+summary = "Inserts a wildcard token (for example any whitespace or any digit) into the Text Preview search field. It is a feature of the system find bar; the list of patterns is not given."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[command]]
+id = "edit.selectSampleText"
+label = "Select Sample Text…"
+menu = ["Edit"]
+shortcut = "Cmd+Alt+F"
+kind = "ui"
+params = "{index?: number, text?: string}"
+area = "edit-text"
+milestone = "M5"
+summary = "Opens the list of stored sample strings; choosing one with a click or the arrow keys puts it into the Edit View text. Whether it replaces the whole text or inserts at the cursor is not stated."
+ref = "Edit View › Entering Text › Sample Strings"
+status = "handbook"
+
+[[command]]
+id = "edit.selectNextSampleString"
+label = "Select Next Sample String"
+menu = ["Edit", "Other"]
+shortcut = ""
+kind = "ui"
+params = "{tab?: id}"
+area = "edit-text"
+milestone = "M5"
+summary = "Switches the Edit View text to the sample string after the current one without opening the list. No default shortcut; one can be assigned in the settings."
+ref = "Edit View › Entering Text › Sample Strings"
+status = "handbook"
+
+[[command]]
+id = "edit.selectPreviousSampleString"
+label = "Select Previous Sample String"
+menu = ["Edit", "Other"]
+shortcut = ""
+kind = "ui"
+params = "{tab?: id}"
+area = "edit-text"
+milestone = "M5"
+summary = "Switches the Edit View text to the sample string before the current one without opening the list. No default shortcut; one can be assigned in the settings."
+ref = "Edit View › Entering Text › Sample Strings"
+status = "handbook"
+
+[[panel]]
+id = "editView.sampleStrings"
+label = "Select Sample Text"
+location = "dialog"
+controls = [
+  "list of the sample strings stored in Settings > Sample Strings",
+  "Up / Down or click: choose a string",
+  "pin button: keep the window open after choosing",
+]
+area = "edit-text"
+milestone = "M5"
+summary = "Chooser for stored sample strings. Unpinned it behaves as a transient picker; pinned it stays open so strings can be switched repeatedly."
+ref = "Edit View › Entering Text › Sample Strings"
+status = "handbook"
+
+[[command]]
+id = "sampleStrings.togglePinned"
+label = "Pin Sample Strings Window"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "edit-text"
+milestone = "M5"
+summary = "Toggles whether the sample strings window stays open after a string is chosen."
+ref = "Edit View › Entering Text › Sample Strings"
+status = "handbook"
+
+[[behavior]]
+id = "text.lineWidth"
+area = "edit-text"
+milestone = "M5"
+summary = "Text in Edit View wraps at a preset maximum line width, which is an application setting."
+ref = "Edit View › Entering Text"
+status = "handbook"
+
+[[behavior]]
+id = "text.currentGlyphAfterCursor"
+area = "edit-text"
+milestone = "M5"
+summary = "In text mode the glyph immediately after the text cursor is the current glyph: the Info box, placeholders and glyph-level commands refer to it."
+ref = "Edit View › Entering Text › Text Tool"
+status = "handbook"
+
+[[behavior]]
+id = "text.clipboard"
+area = "edit-text"
+milestone = "M5"
+summary = "Text can be copied out of Edit View and pasted into it as plain characters, and the usual Edit-menu text commands work on the tab string."
+ref = "Edit View › Entering Text › Text Tool"
+status = "handbook"
+
+[[behavior]]
+id = "text.systemServices"
+area = "edit-text"
+milestone = "M14"
+summary = "The reference exposes the tab text to operating-system text services (the app menu's Services submenu). This is platform specific and has no direct cross-platform equivalent."
+ref = "Edit View › Entering Text › Text Tool"
+status = "handbook"
+
+[[behavior]]
+id = "text.findMatchesAllTerms"
+area = "edit-text"
+milestone = "M5"
+summary = "In the glyph search, a query containing spaces is split into terms and only glyphs whose names contain all of them are listed. Searching `ha cy` therefore lists every name containing both fragments, including suffixed variants."
+ref = "Edit View › Entering Text › Find Glyphs to Insert"
+status = "handbook"
+
+[[behavior]]
+id = "text.findUnicodeMode"
+area = "edit-text"
+milestone = "M5"
+summary = "In Unicode mode the glyph search compares the query with the hexadecimal code points of the glyphs. In any mode, a literal character as query finds the glyph encoded with it."
+ref = "Edit View › Entering Text › Find Glyphs to Insert"
+status = "handbook"
+
+[[behavior]]
+id = "text.placeholdersMirrorCurrentGlyph"
+area = "edit-text"
+milestone = "M5"
+summary = "Any number of placeholders may sit in one tab and all of them show the same, currently selected glyph. Moving to another glyph rewrites every placeholder at once, which turns a spacing string built around one letter into the same string for the next letter."
+ref = "Edit View › Entering Text › Placeholder Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "text.longTextIsSlow"
+area = "edit-text"
+milestone = "M5"
+summary = "Edit View is not meant for long passages; the reference warns that a lot of text slows the interface and points to the Text Preview window, which handles book-length text."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[behavior]]
+id = "textPreview.fallbackFont"
+area = "proofing"
+milestone = "M5"
+summary = "Characters the font does not cover are drawn in a system fallback font in the Text Preview rather than as missing-glyph boxes."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+
+[[behavior]]
+id = "sampleStrings.storedInSettings"
+area = "edit-text"
+milestone = "M14"
+summary = "Sample strings are an application-level list edited in Settings > Sample Strings, not part of the font file."
+ref = "Edit View › Entering Text › Sample Strings"
+status = "handbook"
+
+# ───────────────────────────── Measuring ─────────────────────────────
+
+[[tool]]
+id = "measurement"
+label = "Measurement"
+shortcut = "L"
+group = ""
+gestures = [
+  "select the tool: show X/Y coordinates of every node and anchor and the deltas between on-curve nodes",
+  "drag: draw a ruler that labels the distance between each pair of consecutive outline crossings",
+  "Shift+drag: constrain the ruler to horizontal or vertical",
+  "G while dragging: leave a measurement guide where the ruler is",
+  "drag in text mode with the measurement line shown: move the measurement line to that height",
+  "hold Cmd: temporary Select tool",
+  "hold Cmd+Ctrl+Alt with any other tool: temporary Measurement tool (coordinates and ruler)",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Read-only tool for coordinates and distances. It labels all points of every glyph visible in the tab and measures along a dragged ruler, showing the ruler's angle at its end."
+ref = "Edit View › Measuring › Measurement Tool"
+status = "handbook"
+
+[[command]]
+id = "measure.ruler"
+label = "Measure Along Line"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, from: [x, y], to: [x, y]}"
+area = "drawing"
+milestone = "M3"
+summary = "Query returning the points where a line segment crosses the layer's outlines and components, the distances between consecutive crossings and the line's angle. Headless form of dragging a ruler with the Measurement tool; overlapping regions are treated as merged."
+ref = "Edit View › Measuring › Measurement Tool"
+status = "inferred"
+
+[[command]]
+id = "measure.coordinates"
+label = "List Point Coordinates"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "drawing"
+milestone = "M3"
+summary = "Query returning every on-curve node, off-curve point and anchor of a layer with coordinates, plus the X and Y deltas between consecutive on-curve nodes with X corrected for the italic angle. Headless form of the labels the Measurement tool draws."
+ref = "Edit View › Measuring › Measurement Tool"
+status = "inferred"
+
+[[command]]
+id = "guide.toggleMeasurement"
+label = "Measurement Guide"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, guide?: id, global?: bool, on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Turns the selected local or global guide into a measurement guide or back. In the reference, a selected guide's Info box offers it as the measurement icon."
+ref = "Edit View › Measuring › Measurement Guides"
+status = "handbook"
+
+[[command]]
+id = "view.setMeasurementLineHeight"
+label = "Set Measurement Line Height"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, y: number}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Moves the text-mode measurement line to a given height above the baseline. In the reference this is done by Cmd+Alt+Ctrl-clicking or dragging in text mode, or by dragging with the Measurement tool."
+ref = "Edit View › Measuring › Measurement Line"
+status = "handbook"
+
+[[command]]
+id = "measure.sidebearingsAtHeight"
+label = "Sidebearings at Height"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs: [names], master?: id, y: number}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Query returning, per glyph, the distance from the left edge of the advance to the first outline crossing at height y and from the last crossing to the right edge. These are the numbers the measurement line prints."
+ref = "Edit View › Measuring › Measurement Line"
+status = "inferred"
+
+[[behavior]]
+id = "measurement.labelColors"
+area = "drawing"
+milestone = "M3"
+summary = "With the Measurement tool, on-curve coordinates are printed in blue, off-curve coordinates in green and the X/Y deltas between neighbouring on-curve nodes in red."
+ref = "Edit View › Measuring › Measurement Tool"
+status = "handbook"
+
+[[behavior]]
+id = "measurement.italicCorrectedDelta"
+area = "drawing"
+milestone = "M3"
+summary = "The X deltas shown by the Measurement tool are taken relative to the master's italic angle, so a segment that runs exactly along the italic angle reports an X delta of zero."
+ref = "Edit View › Measuring › Measurement Tool"
+status = "handbook"
+
+[[behavior]]
+id = "measurement.rulerAngle"
+area = "drawing"
+milestone = "M3"
+summary = "The ruler shows its angle at its end point in counterclockwise degrees, with 0 meaning a ruler dragged straight up."
+ref = "Edit View › Measuring › Measurement Tool"
+status = "handbook"
+
+[[behavior]]
+id = "measurement.allVisibleGlyphs"
+area = "drawing"
+milestone = "M3"
+summary = "Coordinates and rulers of the Measurement tool cover every glyph shown in the Edit View tab, not only the active one, and a ruler may cross several glyphs."
+ref = "Edit View › Measuring › Measurement Tool"
+status = "handbook"
+
+[[behavior]]
+id = "measurement.overlapsIgnored"
+area = "drawing"
+milestone = "M3"
+summary = "Rulers and measurement guides measure the merged shape: crossings that lie inside an overlap of paths are skipped. Such overlapped stretches are drawn light grey to show they will vanish when overlaps are removed at export."
+ref = "Edit View › Measuring › Measurement Guides"
+status = "handbook"
+
+[[behavior]]
+id = "measurement.guidesAlwaysOn"
+area = "guides-metrics"
+milestone = "M3"
+summary = "A guide in measurement mode prints the distances between its crossings with outlines and components whenever guides are visible, whichever tool is active."
+ref = "Edit View › Measuring › Measurement Guides"
+status = "handbook"
+
+[[behavior]]
+id = "measurementLine.semantics"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The measurement line reports sidebearings at one height only: the gap between each side of the advance width and the first place the line meets the outline, ignoring the shape above and below."
+ref = "Edit View › Measuring › Measurement Line"
+status = "handbook"
+
+[[behavior]]
+id = "measurementLine.display"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "In measurement mode thin grey vertical lines mark each glyph's advance width, negative kerning is shaded light blue and positive kerning yellow. Both kerning colours are settings."
+ref = "Edit View › Measuring › Measurement Line"
+status = "handbook"
+
+[[behavior]]
+id = "measurementLine.textToolOnly"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The View Options list says the measurement line is visible only while the Text tool is active, while the Measuring section also lets the Measurement tool drag it; treat it as shown in text mode and adjustable with either tool."
+ref = "Edit View › Glyph Display › View Options; Edit View › Measuring › Measurement Line"
+status = "handbook"
+
+# ───────────────────────────── Annotating ─────────────────────────────
+
+[[tool]]
+id = "annotation"
+label = "Annotation"
+shortcut = "A"
+group = ""
+gestures = [
+  "select the tool: the Info box becomes the annotation palette",
+  "Cmd+A: select all annotations on the active layer",
+  "arrow keys: move selected annotations by 1 unit",
+  "Shift+arrow keys: move by 10 units",
+  "Cmd+arrow keys: move by 100 units",
+  "Delete: remove the selected annotations",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Tool for attaching notes and correction marks to a glyph layer. What a click does depends on the sub-tool chosen in the annotation palette. The shortcut is stated in the TrueType hinting chapter, where the same key does something else while the instructor tool is active."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+[[tool]]
+id = "annotationSelect"
+label = "Annotation Selection"
+shortcut = ""
+group = "annotation"
+gestures = [
+  "click an annotation: select it",
+  "Shift+click: add to or remove from the selection",
+]
+area = "drawing"
+milestone = "M3"
+summary = "First sub-tool of the annotation palette; selects existing annotations so they can be moved or deleted."
+ref = "Edit View › Annotating › Annotation Cursor"
+status = "handbook"
+
+[[tool]]
+id = "annotationText"
+label = "Text Annotation"
+shortcut = ""
+group = "annotation"
+gestures = [
+  "click: add a new text note at the pointer",
+  "double-click a note: edit its text",
+  "drag the handle on the right: change the width of the text box",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Sub-tool that places text notes on the layer. A note can hold several lines and wraps to the box width."
+ref = "Edit View › Annotating › Annotation Text"
+status = "handbook"
+
+[[tool]]
+id = "annotationArrow"
+label = "Arrow Annotation"
+shortcut = ""
+group = "annotation"
+gestures = [
+  "click: add a red arrow",
+  "drag the handle on the arrow's stem: rotate it",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Sub-tool that places red arrows pointing at a spot on the glyph."
+ref = "Edit View › Annotating › Annotation Arrow"
+status = "handbook"
+
+[[tool]]
+id = "annotationCircle"
+label = "Circle Annotation"
+shortcut = ""
+group = "annotation"
+gestures = [
+  "click: add a red circle",
+  "drag the circle's bottom handle: change its diameter",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Sub-tool that places red circles around an area of the glyph."
+ref = "Edit View › Annotating › Annotation Circle"
+status = "handbook"
+
+[[tool]]
+id = "annotationPlus"
+label = "Plus Annotation"
+shortcut = ""
+group = "annotation"
+gestures = ["click: add a plus sign at the pointer"]
+area = "drawing"
+milestone = "M3"
+summary = "Sub-tool that stamps a plus sign, the conventional mark for a part that should become heavier or larger."
+ref = "Edit View › Annotating › Plus & Minus Annotations"
+status = "handbook"
+
+[[tool]]
+id = "annotationMinus"
+label = "Minus Annotation"
+shortcut = ""
+group = "annotation"
+gestures = ["click: add a minus sign at the pointer"]
+area = "drawing"
+milestone = "M3"
+summary = "Sub-tool that stamps a minus sign, the conventional mark for a part that should become lighter or smaller."
+ref = "Edit View › Annotating › Plus & Minus Annotations"
+status = "handbook"
+
+[[command]]
+id = "annotation.add"
+label = "Add Annotation"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, type: 'text'|'arrow'|'circle'|'plus'|'minus', position: [x, y], text?: string, width?: number, angle?: degrees, diameter?: number}"
+area = "drawing"
+milestone = "M3"
+summary = "Adds one annotation of the given type to a layer. Width applies to text notes, angle to arrows and diameter to circles; defaults for these are not given in the handbook."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+[[command]]
+id = "annotation.update"
+label = "Edit Annotation"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, annotation: index, position?: [x, y], text?: string, width?: number, angle?: degrees, diameter?: number}"
+area = "drawing"
+milestone = "M3"
+summary = "Changes an existing annotation: its position, the text or box width of a note, the rotation of an arrow or the diameter of a circle. Covers what dragging the annotation handles and double-click text editing do."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+[[command]]
+id = "annotation.move"
+label = "Move Annotations"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, annotations?: [index], dx: number, dy: number}"
+area = "drawing"
+milestone = "M3"
+summary = "Offsets the selected annotations. The arrow keys call it with 1 unit, 10 with Shift and 100 with Cmd."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+[[command]]
+id = "annotation.delete"
+label = "Delete Annotations"
+menu = []
+shortcut = "Delete"
+kind = "engine"
+params = "{glyph?: name, layer?: id, annotations?: [index]}"
+area = "drawing"
+milestone = "M3"
+summary = "Removes the selected annotations from the layer, or the listed ones when called headless."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+[[command]]
+id = "annotation.selectAll"
+label = "Select All Annotations"
+menu = []
+shortcut = "Cmd+A"
+kind = "ui"
+params = "{glyph?: name, layer?: id}"
+area = "drawing"
+milestone = "M3"
+summary = "With the Annotation tool active, Edit > Select All selects every annotation on the active layer instead of the outline. In FontCraft this is the context-specific behaviour of the Select All command."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+[[command]]
+id = "annotation.setTool"
+label = "Choose Annotation Sub-tool"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tool: 'select'|'text'|'arrow'|'circle'|'plus'|'minus'}"
+area = "drawing"
+milestone = "M3"
+summary = "Activates one of the six buttons of the annotation palette."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+[[command]]
+id = "annotation.list"
+label = "List Annotations"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "drawing"
+milestone = "M3"
+summary = "Query returning the annotations stored on a layer with type, position and type-specific values."
+ref = "Edit View › Annotating"
+status = "inferred"
+
+[[behavior]]
+id = "annotation.storedPerLayer"
+area = "drawing"
+milestone = "M3"
+summary = "Annotations belong to a single glyph layer, are saved with it and are design notes only: they do not affect outlines or export."
+ref = "Edit View › Annotating"
+status = "handbook"
+
+# ───────────────────────────── Images ─────────────────────────────
+
+[[command]]
+id = "glyph.addImage"
+label = "Add Image…"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, path: file}"
+area = "color"
+milestone = "M11"
+summary = "Places an image file on the layer of the selected glyph. The image is put at the layer origin and sized so that one typographic point of the image equals one font unit. Only a path relative to the document is stored, not the image data."
+ref = "Edit View › Images › Adding Images"
+status = "handbook"
+
+[[command]]
+id = "image.setTransform"
+label = "Set Image Transform"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, x?: number, y?: number, width?: number, height?: number, rotation?: degrees}"
+area = "color"
+milestone = "M11"
+summary = "Sets position, displayed size and rotation of the layer's image, as the image fields of the Info box do. The same values change when the image is dragged, resized with the bounding box or Scale tool, turned with the Rotate tool or transformed from the Palette."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[command]]
+id = "image.revealFile"
+label = "Reveal Image File"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, layer?: id}"
+area = "color"
+milestone = "M11"
+summary = "Shows the image's source file in the system file manager. It is the right-pointing arrow in the image Info box."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[command]]
+id = "image.lock"
+label = "Lock Image"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "color"
+milestone = "M11"
+summary = "Locks the layer's image so it can no longer be selected, moved or transformed. Bound to the lock icon in the image Info box."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[command]]
+id = "image.unlock"
+label = "Unlock Image"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "color"
+milestone = "M11"
+summary = "Makes a locked image selectable and editable again. Since selection is impossible for a locked image, the reference offers this only in the context menu opened by right-clicking the image."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[command]]
+id = "image.setCrop"
+label = "Crop Image"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, rect: [x, y, width, height]}"
+area = "color"
+milestone = "M11"
+summary = "Limits the visible part of the image to a rectangle. In the reference this is done by dragging one of the image's handles with Ctrl+Alt held; the coordinate space of the stored crop is not documented."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[command]]
+id = "image.setCropToLayerBounds"
+label = "Set Crop to Layer Bounds"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "color"
+milestone = "M11"
+summary = "Trims the image so that it ends at the layer bounds. Offered in the image's context menu; what exactly counts as the layer bounds (advance width by vertical metrics, or outline bounds) is not spelled out."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[command]]
+id = "image.resetCrop"
+label = "Reset Crop"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "color"
+milestone = "M11"
+summary = "Removes the crop so the whole image is shown again. Offered in the image's context menu."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[command]]
+id = "image.getInfo"
+label = "Get Image Info"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "color"
+milestone = "M11"
+summary = "Query returning the layer image's stored path, whether the file resolves, its position, size, rotation, crop and lock state."
+ref = "Edit View › Images › Manipulating Images"
+status = "inferred"
+
+[[panel]]
+id = "editView.imageContextMenu"
+label = "Image context menu"
+location = "window"
+controls = ["Unlock Image (locked images)", "Set Crop to Layer Bounds", "Reset Crop"]
+area = "color"
+milestone = "M11"
+summary = "Entries added to the canvas context menu when it is opened on a placed image."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[behavior]]
+id = "image.supportedFormats"
+area = "color"
+milestone = "M11"
+summary = "The reference accepts every image type its operating system can decode and names JPEG, PNG, PDF, TIFF and PSD. FontCraft must decide which of these it decodes itself on every platform."
+ref = "Edit View › Images › Adding Images"
+status = "handbook"
+
+[[behavior]]
+id = "image.dragAndDrop"
+area = "color"
+milestone = "M11"
+summary = "Dropping an image file on a glyph cell in Font View or on a glyph in Edit View places it on that glyph's layer, the same as Glyph > Add Image…."
+ref = "Edit View › Images › Adding Images"
+status = "handbook"
+
+[[behavior]]
+id = "image.storedAsRelativePath"
+area = "color"
+milestone = "M11"
+summary = "The document records only the image's path relative to the font file. If the file has moved or the path no longer resolves, the canvas shows a missing-image symbol in its place."
+ref = "Edit View › Images › Adding Images"
+status = "handbook"
+
+[[behavior]]
+id = "image.alwaysShownForEmptyGlyphs"
+area = "color"
+milestone = "M11"
+summary = "A glyph with neither paths nor components shows its image even when View > Show Image is off."
+ref = "Edit View › Images › Adding Images"
+status = "handbook"
+
+[[behavior]]
+id = "image.ignoredAtExport"
+area = "color"
+milestone = "M11"
+summary = "Placed images are left out of exported fonts, except when a bitmap colour font such as sbix is being produced."
+ref = "Edit View › Images › Adding Images"
+status = "handbook"
+
+[[behavior]]
+id = "image.defaultPlacement"
+area = "color"
+milestone = "M11"
+summary = "A newly placed image sits at the layer origin, scaled so that one DTP point of the image maps to one font unit."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[behavior]]
+id = "image.directManipulation"
+area = "color"
+milestone = "M11"
+summary = "A selected image can be dragged to move it, resized with the bounding box or the Scale tool, rotated with the Rotate tool and transformed with the Transformations palette. Ctrl+Alt+dragging a handle crops instead of resizing."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[behavior]]
+id = "image.lockedNotSelectable"
+area = "color"
+milestone = "M11"
+summary = "A locked image ignores clicks and drags and is skipped by selection and transformation; only the context menu's Unlock Image reaches it."
+ref = "Edit View › Images › Manipulating Images"
+status = "handbook"
+
+# ───────────────────────────── Previewing & testing ─────────────────────────────
+
+[[behavior]]
+id = "preview.kerningModes"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Edit View text can be shown in three kerning modes: without kerning, with kerning, and with kerning locked. Details belong to the Kerning chapter."
+ref = "Edit View › Previewing & Testing › Previewing Kerning"
+status = "handbook"
+
+[[command]]
+id = "view.selectMaster"
+label = "Select Master"
+menu = []
+shortcut = "Cmd+1"
+kind = "ui"
+params = "{tab?: id, master: index|id|name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Makes a master the one Edit View draws all glyphs in. Cmd+1 to Cmd+9 select the first nine masters; clicking a master's icon in the toolbar selects any of them."
+ref = "Edit View › Previewing & Testing › Previewing Masters"
+status = "handbook"
+
+[[behavior]]
+id = "preview.masterIconsInToolbar"
+area = "ui-chrome"
+milestone = "M9"
+summary = "The toolbar shows one icon per master, defined in Font Info > Masters; the highlighted icon is the master currently drawn in Edit View."
+ref = "Edit View › Previewing & Testing › Previewing Masters"
+status = "handbook"
+
+[[behavior]]
+id = "preview.masterPerGlyphViaLayers"
+area = "layers"
+milestone = "M9"
+summary = "Choosing a master layer in the Layers palette changes the master of only the glyph being edited, or of the glyphs selected in the text, so one tab can mix masters."
+ref = "Edit View › Previewing & Testing › Previewing Masters"
+status = "handbook"
+
+[[panel]]
+id = "editView.featuresMenu"
+label = "Features menu"
+location = "statusbar"
+controls = [
+  "dash (-) at the top: turn all features off",
+  "one checkable entry per feature compiled into the font",
+  "Localized Forms entry",
+  "script and language choices at the bottom of the menu",
+  "type-ahead: typing a name (or the dash) while the menu is open jumps to that entry",
+]
+area = "features"
+milestone = "M8"
+summary = "Pop-up at the bottom left of Edit View that switches OpenType features on and off for the tab's text. Active features appear on the button as their four-letter tags, and the button takes the accent colour while any is on."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"
+
+[[command]]
+id = "editView.toggleFeature"
+label = "Toggle Feature"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, tag: string, on?: bool}"
+area = "features"
+milestone = "M8"
+summary = "Turns one OpenType feature on or off for the text of an Edit View tab. Several features can be active together; choosing an active feature again turns it off."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"
+
+[[command]]
+id = "editView.clearFeatures"
+label = "Deactivate All Features"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id}"
+area = "features"
+milestone = "M8"
+summary = "Turns off every preview feature of the tab. It is the dash entry at the top of the Features menu."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"
+
+[[command]]
+id = "editView.setLocalizedForms"
+label = "Localized Forms"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, on?: bool, script?: tag, language?: tag}"
+area = "features"
+milestone = "M8"
+summary = "Enables language-specific substitutions for the tab's text and picks the script and language they are evaluated for, using the entries at the bottom of the Features menu. It only has an effect if the font has a locl feature with rules for that language."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"
+
+[[command]]
+id = "editView.getFeatures"
+label = "Get Preview Features"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id}"
+area = "features"
+milestone = "M8"
+summary = "Query returning the features available in the Features menu, which are active in the tab, and the chosen script and language."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "inferred"
+
+[[behavior]]
+id = "features.menuNeedsCompile"
+area = "features"
+milestone = "M8"
+summary = "The Features menu lists compiled features only. A newly written feature appears after the feature code has been recompiled in Font Info > Features."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"
+
+[[behavior]]
+id = "features.previewScope"
+area = "features"
+milestone = "M8"
+summary = "Edit View applies substitution features, kerning and cursive attachment. Other positioning features are not previewed there and have to be tested with an exported font."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"
+
+[[behavior]]
+id = "features.buttonShowsActiveTags"
+area = "features"
+milestone = "M8"
+summary = "The Features button displays the tags of all active features and is highlighted in the accent colour as soon as one feature is on."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"
+
+[[command]]
+id = "view.togglePreviewArea"
+label = "Preview"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab?: id, on?: bool, height?: number}"
+area = "proofing"
+milestone = "M5"
+summary = "Splits the Edit View tab into the editing canvas above and a Preview Area below, or closes the split. It is the eye button at the bottom left of the window; dragging the separator changes the area's height."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "window.previewPanel"
+label = "Preview Panel"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "proofing"
+milestone = "M5"
+summary = "Opens the preview in a window of its own that can be moved to a second display. It follows whichever Edit View tab of the current font is active."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[panel]]
+id = "editView.previewArea"
+label = "Preview Area"
+location = "window"
+controls = [
+  "separator to the editing canvas (drag to resize)",
+  "instance pop-up (bottom left): dash (-) = follow the Edit View master, each instance, Show All Instances",
+  "eye toggle beside each instance name: include it in Show All Instances",
+  "Invert button: black on white / white on black",
+  "Flip button: turn the preview upside down",
+  "blur slider beside the Flip button",
+  "preview strip: drag horizontally to reposition the text, double-click a glyph to edit it",
+  "context menu: Always Center Active Glyph",
+]
+area = "proofing"
+milestone = "M9"
+summary = "Strip under the editing canvas that renders the tab's text filled, as a chosen instance or as the current master. Apart from the Show All Instances mode it draws the whole tab text on a single line."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[panel]]
+id = "window.previewPanel"
+label = "Preview Panel"
+location = "window"
+controls = [
+  "same controls as the Preview Area: instance pop-up, per-instance eye toggles, Invert, Flip, blur slider",
+  "preview strip mirroring the active Edit View tab",
+]
+area = "proofing"
+milestone = "M9"
+summary = "Detached version of the Preview Area. It shows the glyphs of the active Edit View tab of the current font and is empty while no Edit View tab is active; it refreshes as soon as one is clicked."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "preview.setInstance"
+label = "Preview Instance"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{target?: 'area'|'panel', instance: name|index|'master'|'all'}"
+area = "proofing"
+milestone = "M9"
+summary = "Chooses what the preview renders: a named instance (interpolated on the fly), the master used in Edit View (the dash entry), or all instances at once."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "preview.showAllInstances"
+label = "Show All Instances"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{target?: 'area'|'panel'}"
+area = "proofing"
+milestone = "M9"
+summary = "Switches the preview to showing only the current glyph, once for every instance of the font, instead of the tab's text in one instance."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "preview.toggleInstanceVisibility"
+label = "Show Instance in Preview"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{instance: name|index, on?: bool}"
+area = "proofing"
+milestone = "M9"
+summary = "Includes or excludes one instance from the Show All Instances line-up. It is the eye icon next to the instance name in the preview's pop-up."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "preview.invert"
+label = "Invert"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{target?: 'area'|'panel', on?: bool}"
+area = "proofing"
+milestone = "M5"
+summary = "Switches the preview between dark text on a light ground and light text on a dark ground."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "preview.flip"
+label = "Flip"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{target?: 'area'|'panel', on?: bool}"
+area = "proofing"
+milestone = "M5"
+summary = "Draws the preview upside down, or right way up again. Used to judge spacing without reading the words."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "preview.setBlur"
+label = "Blur"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{target?: 'area'|'panel', amount: number}"
+area = "proofing"
+milestone = "M5"
+summary = "Blurs the preview by an adjustable amount to test legibility. Bound to the slider next to the Flip button; its range and unit are not documented."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "preview.alwaysCenterActiveGlyph"
+label = "Always Center Active Glyph"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{target?: 'area'|'panel', on?: bool}"
+area = "proofing"
+milestone = "M5"
+summary = "Context-menu toggle of the Preview Area. On: the active glyph is kept in the horizontal centre. Off: the text is positioned to use the width as fully as possible, flush with the left or right edge."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[command]]
+id = "preview.setOffset"
+label = "Scroll Preview"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{target?: 'area'|'panel', x: number}"
+area = "proofing"
+milestone = "M5"
+summary = "Shifts the previewed line horizontally. Headless form of dragging the text sideways in the Preview Area."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "inferred"
+
+[[command]]
+id = "preview.render"
+label = "Render Preview"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{text?: string, glyphs?: [names], instance?: name|'master', master?: id, features?: [tags], size?: number, invert?: bool, flip?: bool, blur?: number, format?: 'png'|'svg'}"
+area = "automation"
+milestone = "M9"
+summary = "Renders the preview line to an image so an agent can inspect what the Preview Area would show. Not a reference feature."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "inferred"
+
+[[behavior]]
+id = "preview.singleLine"
+area = "proofing"
+milestone = "M5"
+summary = "The Preview Area and Preview Panel put the complete text of the active tab on one line, without wrapping, with the current glyph centred by default."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[behavior]]
+id = "preview.doubleClickEdits"
+area = "proofing"
+milestone = "M5"
+summary = "Double-clicking a glyph in the preview makes it the glyph being edited in Edit View."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[behavior]]
+id = "preview.dashFollowsMaster"
+area = "proofing"
+milestone = "M9"
+summary = "With the dash chosen in the instance pop-up, the preview is not interpolated: it mirrors whatever master Edit View is showing."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[behavior]]
+id = "preview.respectsInstanceData"
+area = "proofing"
+milestone = "M9"
+summary = "Instance previews take intermediate and alternate layers into account and apply some, not all, of the instance's custom parameters. The handbook does not list which."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[behavior]]
+id = "preview.panelBlankWithoutEditTab"
+area = "proofing"
+milestone = "M5"
+summary = "The Preview Panel is empty while the front tab is not an Edit View tab and fills in immediately when one is activated."
+ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
+status = "handbook"
+
+[[behavior]]
+id = "proofing.systemFontCache"
+area = "proofing"
+milestone = "M12"
+summary = "Operating systems and apps cache installed fonts, so a re-exported font may not show up until the testing app is quit and reopened. The reference's remedy is a Test Install option in the OTF export dialog, which activates the font from memory without writing a file; a restart of the testing app can still be needed."
+ref = "Edit View › Previewing & Testing › Previewing on macOS"
+status = "handbook"
+
+[[behavior]]
+id = "proofing.adobeFontsFolder"
+area = "proofing"
+milestone = "M12"
+summary = "Exporting OTFs into /Library/Application Support/Adobe/Fonts (created by hand if absent) makes them available at once in Adobe apps only, bypassing the system font cache and showing all positioning features and the style menu order. Each export overwrites the previous file; the apps may need one restart the first time the folder is used."
+ref = "Edit View › Previewing & Testing › Previewing in Adobe Applications"
+status = "handbook"
+
+[[behavior]]
+id = "proofing.webfontPreview"
+area = "proofing"
+milestone = "M12"
+summary = "Checking .woff2 (and optionally .woff for old browsers) in the export dialog writes webfonts that can be tested from a small HTML page with an @font-face rule. Reloading shows the new export, and a Shift-reload skips most browsers' font cache."
+ref = "Edit View › Previewing & Testing › Previewing in Web Browsers"
+status = "handbook"
+
+[[behavior]]
+id = "proofing.composerDifferences"
+area = "proofing"
+milestone = "M12"
+summary = "Layout engines differ: the handbook warns that the same OpenType features can be applied differently by the different text composers of one layout application, so proofing must happen in the target software."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"

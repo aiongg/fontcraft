@@ -1,0 +1,658 @@
+# Font View: behaviour notes
+
+Sources: Glyphs 4 Handbook, chapter "Font View"; GlyphsInfo (`GlyphData.xml`, BSD-3-Clause);
+agl-aglfn (BSD-3-Clause); fontc `glyphs-reader/src/glyphdata.rs` (Apache-2.0); GlyphsSDK file-format
+notes. Rows: `spec/inventory/05-font-view.toml`. Date: 2026-10-07.
+
+Ids in `code` are command ids unless marked as a panel or behaviour row.
+
+## 1. The view
+
+Font View is the leftmost tab of a font window and the tab a new document opens on
+(`fontView.show`, Cmd+Alt+1). It has two presentations of the same glyph list, switched with two
+buttons at the top left (`fontView.setViewMode`). Panel rows: `fontView.window`, `fontView.grid`,
+`fontView.list`, `fontView.inspector`, `fontView.sidebar`, `fontView.searchField`,
+`fontView.statusBar`.
+
+Three things decide which glyphs are listed, in this order: the sidebar selection, the search query,
+and (for order only) the glyph order or the active list filter. The status area shows three counts:
+selected, visible, total.
+
+### 1.1 Grid
+
+- Each cell draws the glyph's layer for the master selected in the window.
+- Cell size comes from the slider at the bottom right (`fontView.setCellSize`). Large cells show
+  outline, name and Unicode information; small cells show only the outline.
+- Unicode information sits at the bottom right beside the name. By default it is a small marker;
+  for CJK glyphs the marker is the character itself drawn in the system font; with the application
+  setting *Display Unicode Value* on, the full hexadecimal value is printed.
+- Cell badges:
+
+  | Badge | Position | Meaning |
+  |---|---|---|
+  | warning triangle | top right | a metrics key is out of sync |
+  | yellow note | not stated | annotation on the active master's layer |
+  | black info mark | not stated | the glyph stores properties that differ from the database |
+  | red corner | top left | layers are not all interpolation-compatible |
+  | red ring with a stroke | not stated | glyph does not export |
+
+- Colour labels: a glyph colour fills the cell. A layer colour alone fills the cell except for a
+  cut-out at the top left. With both, the layer colour covers the right half.
+- A placed image is drawn when View → Show Image is on, and always when the glyph has no paths and
+  no components.
+
+### 1.2 List
+
+One row per glyph, one column per property. Header click sorts, a second click reverses
+(`fontView.sortByColumn`); headers can be dragged to reorder and toggled from the header context
+menu (`fontView.setColumns`). Columns the chapter documents individually:
+
+| Column | Content | Editable |
+|---|---|---|
+| ID | position in glyph order (the export order) | no |
+| Char | first code point rendered in the system font | no |
+| Name | nice name | yes, single click |
+| Unicode | all code points | yes |
+| Note | free text | yes |
+| Components | names of the components used | yes: adds/removes components (`glyph.setComponents`) |
+| Last Changed | timestamp of the last modification | no |
+
+The chapter says every glyph property has a column but does not enumerate the rest (behaviour row
+`fontView.column.otherProperties`).
+
+*Last Changed* is rewritten on every edit of a glyph unless the font carries the parameter
+*Write lastChange* set to off. We must honour that flag so files under version control do not churn.
+
+## 2. Glyph properties
+
+Shown in the inspector at the bottom left (`fontView.toggleInspector`; the chevron next to the
+Unicode field reveals production name, script, category, subcategory:
+`fontView.toggleInspectorDetails`), in List View columns, in the Selection Info window
+(`edit.infoForSelection`, Cmd+Alt+I; panel `window.selectionInfo`) and partly in the glyph context
+menu (panel `fontView.glyphContextMenu`). `glyph.getInfo` is our read query.
+
+Mixed selections: a text field shows a grey *Multiple Values* placeholder and typing overwrites the
+value on every selected glyph; the Exports checkbox shows a line.
+
+| Property | Stored as (source key) | Default | Set with | Notes |
+|---|---|---|---|---|
+| Name | `glyphname` | – | `glyph.rename` | unique per font; identity of the glyph |
+| Unicode values | `unicode` (one value or ascending list) | from database by name | `glyph.setUnicodes` | zero, one or many |
+| Production name | `production` | derived, see §4.4 | `glyph.setProductionName` | used only in exported files |
+| Script | `script` | from database | `glyph.setScript` | empty for digits, punctuation, spaces |
+| Category / Subcategory | `category`, `subCategory` | from database | `glyph.setCategory` | none for non-exporting helper glyphs |
+| Case | `case` | from database / suffix | `glyph.setCase` | upper, lower, smallCaps, minor, none |
+| Writing direction | `direction` | from database, LTR when absent | `glyph.setDirection` | LTR, RTL, BiDi |
+| Exports | `export` | on, unless the name starts with `_` | `glyph.setExport` | instance parameter *Remove Glyphs* can drop more |
+| Colour label | `color` on the glyph | none | `glyph.setColorLabel` | index 0–11 |
+| Layer colour label | `color` on the layer | none | `glyph.setLayerColorLabel` | Option in the context menu |
+| Tags | `tags` (sorted list) | none | `glyph.setTags`, `glyph.addTag`, `glyph.removeTag` | comma not allowed inside a tag |
+| Sort name | `sortName` | database value, else the name | `glyph.setSortName` | Selection Info only, behind a checkbox |
+| Note | `note` | empty | `glyph.setNote` | searchable |
+| Last changed | `lastChange` | – | automatic | see §1.2 |
+| Metrics, metrics keys | layer widths; `metricLeft` / `metricRight` / `metricWidth` / `metricTop` / `metricBottom` / `metricVertOrigin` / `metricVertWidth` | – | spacing commands | inspector toggles horizontal ↔ vertical (`fontView.toggleMetricsOrientation`) |
+| Kerning groups | `kernLeft`, `kernRight` (`kernTop`, `kernBottom`) | none | kerning commands | inspector fields |
+
+Every database-backed property (Unicode, production name, script, category, subcategory, case,
+direction, sort name) is *unset* in the file unless the user overrides it; an unset property is
+resolved live from the database. A glyph with at least one override carries the black info badge
+and matches the smart-filter rule *Has Custom Glyph Info*. `glyph.updateGlyphInfo` (Glyph → Update
+Glyph Info) is, from memory, the command that drops overrides and re-reads the database.
+
+**Colour labels.** Twelve fixed colours, addressed by index or name in filters and scripts:
+0 Red, 1 Orange, 2 Brown, 3 Yellow, 4 Light Green, 5 Dark Green, 6 Cyan, 7 Blue, 8 Purple, 9 Pink,
+10 Light Gray, 11 Dark Gray. The context menu has twelve swatches and a cross that clears the label;
+holding Option makes the same swatches act on the current layer's label. Labels never reach an
+exported font.
+
+**Tags.** In the inspector's Tags field a comma or Return commits the typed text as a tag on all
+selected glyphs. The field lists tags only when all selected glyphs have identical tag sets. The
+context menu's Tags submenu lists every tag used in the font (the submenu is absent when there are
+none) with a checkmark when the selected glyphs have the tag and a dash when only some do; picking
+one adds it to all selected glyphs. Tags feed smart filters, metric scopes and feature-code tokens.
+
+**Case.** `.sc` and `.smcp` endings give small-capital case. Minor case covers superscript and
+subscript forms (`five.sups`, `ainferior`, `equalinferior`). Upper/lower also apply to some
+punctuation (`question` upper, `questiondown` lower) and to marks (`acutecomb` lower,
+`acutecomb.case` upper).
+
+## 3. Managing the glyph set
+
+### 3.1 Adding glyphs
+
+Four entry points.
+
+1. **`glyph.addGlyphs`** (Glyph → Add Glyphs…, Cmd+Shift+G; panel `dialog.addGlyphs`). One text
+   field; items separated by spaces. Item grammar:
+
+   | Item | Example | Result |
+   |---|---|---|
+   | glyph name | `Ccedilla`, `beh-ar.medi` | glyph with that name |
+   | literal character | `Ç` | glyph for that code point, under its nice name |
+   | code-point name | `uni00C7`, `u10330` | same, converted to the nice name when one exists |
+   | range `a:b` | `uni0218:uni021B`, `alpha:omega` | every code point from a to b inclusive |
+   | recipe | (defined in the components chapter) | composite built from named parts |
+
+   Conversion to nice names is skipped when the font has *Use Custom Naming* on.
+
+   If any requested name already exists, nothing is added yet; a dialog
+   (`dialog.addGlyphsExisting`) lists the existing names and offers *Replace* (they become new empty
+   glyphs), *Keep Existing* (only the genuinely new names are added) or *Cancel* (nothing is added).
+   Headless: `onExisting` selects the outcome; the default for agents should be `keep`.
+
+2. **`glyph.newGlyph`** (Cmd+Alt+Shift+N, or the plus button): one empty glyph named `newGlyph`.
+
+3. **Glyph Info window** (`window.glyphInfo` → `glyphInfo.addToFont`): add selected database rows.
+
+4. **Sidebar** (`fontView.listMissingGlyphs`, `fontView.generateMissingGlyphs`; panel
+   `dialog.missingGlyphs`): entries with a known full set show a grey present/total badge when
+   incomplete and a checkmark when complete. The entry's context menu opens the list of missing
+   names; *Generate* adds the selected ones (Cmd+A selects all).
+
+A new glyph receives its Unicode values, category, subcategory, script and default composition from
+the database record of its name (§4).
+
+### 3.2 Duplicating
+
+`glyph.duplicateGlyph` (Cmd+D) copies each selected glyph within the font. The chapter gives no
+naming rule; we use the same counter suffix as paste (`A.001`, `A.002`, …).
+
+### 3.3 Copy and paste between fonts
+
+`edit.copy` / `edit.paste` in Font View transfer whole glyphs.
+
+- Name clash on paste: the incoming glyph is renamed with the first free `.001`, `.002`, … suffix.
+- Components are re-pointed by name at the target font's glyphs. A missing base leaves an
+  unresolved component drawn as the *no base glyph* triangle.
+
+`edit.pasteSpecial` (Cmd+Alt+V; shown in the Edit menu while Option is held; panel
+`dialog.pasteSpecial`):
+
+| Mode | Effect |
+|---|---|
+| Glyphs With Same Name | overwrite same-named targets; add copied glyphs that have no counterpart |
+| Selected Glyphs | overwrite the selected targets in order, keeping the targets' names; surplus copied glyphs are dropped |
+| As Components | insert each copied glyph as a component into the selected glyphs, keeping existing shapes; *All Masters* does it on every master |
+
+For the first two modes a part selection limits what is transferred:
+
+| Part | Transfers |
+|---|---|
+| All Data | everything: shapes, anchors, layer attributes, metrics (implies the rest) |
+| Content of Active Layer | only the layer displayed at copy time |
+| Kerning Groups | left and right group names |
+| Metric Keys | sidebearing and width formulas only; run Update Metrics afterwards to apply them |
+| LSB / RSB / Width | the numeric values; with RSB and Width both chosen, RSB wins |
+
+### 3.4 Removing
+
+`glyph.removeGlyph` (Cmd+Delete, or the minus button) acts on the Font View selection, the current
+glyph in Edit View, or the Text-tool selection. Sequence:
+
+1. Confirmation (`dialog.removeGlyph`): *Remove* or *Cancel*.
+2. If a doomed glyph is used as a component elsewhere, the same dialog adds *Decompose*.
+   *Remove* deletes the glyph and every component that points at it. *Decompose* first converts
+   those components to outlines, then deletes.
+3. If metrics keys in surviving glyphs point at a doomed glyph (`dialog.removeGlyphMetricsKeys`):
+   *Remove* dissolves those keys; *Cancel* keeps them dangling. A dangling key is shown in
+   turquoise and is repaired by re-pointing it, replacing it with a number, or recreating the glyph.
+
+Headless parameters `components` and `metricsKeys` pick the answers; without them the command
+refuses when either situation arises.
+
+## 4. Glyph data
+
+### 4.1 What a record holds
+
+The handbook lists, per database glyph: nice name, production name, Unicode value, components (for
+composites), default anchors, marks for the mark cloud, script, category and subcategory.
+
+The openly licensed data (GlyphsInfo) is XML: a `glyphData` root holding empty `glyph` elements.
+Its DTD defines exactly these attributes:
+
+| Attribute | Required | Meaning | Form |
+|---|---|---|---|
+| `name` | yes | nice name, the primary key | ASCII glyph name |
+| `category` | yes | top-level class | `Letter`, `Mark`, `Number`, `Punctuation`, `Separator`, `Symbol` |
+| `subCategory` | no | finer class | see list below |
+| `unicode` | no | the code point the name maps to | uppercase hex, 4–6 digits, no prefix |
+| `unicodeLegacy` | no | compatibility / presentation-form code point | same form |
+| `production` | no | export name when it differs from `name` | glyph name |
+| `script` | no | writing system | lowercase id, e.g. `latin`, `arabic`, `cyrillic`, `han` |
+| `case` | no | `upper`, `lower`, `minor`, `smallCaps` | absent = no case |
+| `direction` | no | `RTL` or `BIDI` | absent = LTR |
+| `description` | no | Unicode character name or a descriptive phrase | text |
+| `altNames` | no | other names that resolve to this record | comma-separated |
+
+Subcategories present in the data: Arrow, Compatibility, Currency, Dash, Decimal Digit, Emoji,
+Enclosing, Format, Fraction, Geometry, Halfform, Jamo, Letter, Ligature, Math, Matra, Modifier,
+Nonspacing, Parenthesis, Quote, Radical, Small, Space, Spacing, Spacing Combining, Superscript,
+Syllable. Format readers additionally accept the categories Space and Other and the subcategories
+Composition, Conjunct, Lowercase, Number, Other, Smallcaps, Uppercase, so a parser must not reject
+them.
+
+Size and layout: about 34 000 records in the main file covering 82 script ids, and about 40 000 Han
+ideographs in a second file (`GlyphData_Ideographs.xml`) whose names are code-point names and which
+carry little beyond category, subcategory and `script="han"`. The data does not cover all of
+Unicode.
+
+The tab-separated form used for editing the data lists these columns: `unicode`, `name`, `sortName`,
+`sortNameKeep`, `decompose`, `category`, `subCategory`, `script`, `production`, `altNames`,
+`description`, `anchors`, `accents`. So the full record also has:
+
+| Field | Meaning | In the published XML |
+|---|---|---|
+| `sortName` | default ordering key | no |
+| `sortNameKeep` | ordering key for the mode that keeps alternates beside their base | no |
+| `decompose` | component recipe of a composite | no |
+| `anchors` | default anchor names | no |
+| `accents` | marks offered in the mark cloud | no |
+
+These five match the handbook's "components, anchors, marks" and the sort-name property, but their
+values are not in the public data. FontCraft must either author them or derive them (for example
+`decompose` from Unicode canonical decomposition). See Open questions.
+
+Naming scheme of nice names: Adobe Glyph List names where they exist, adjusted in places; otherwise
+a short readable name derived from the Unicode description. A hyphen plus script tag separates
+scripts, short for common scripts (`-ar`, `-cy`) and the full script name for most others.
+
+### 4.2 Resolving properties for a glyph
+
+Each property is resolved independently, first hit wins:
+
+1. **Value stored on the glyph** in the source file (the user's override).
+2. **Custom glyph data** (a user `GlyphData.xml`): entry whose name equals the glyph name; failing
+   that, an entry whose code point equals one of the glyph's code points.
+3. **Built-in data**, tried by: nice name; then production name (so `uni0410` finds `A-cy`); then
+   the glyph's code points in order.
+   - Alternative names are registered as extra keys after all primary names, so they can never
+     shadow a real name. A hit through an alternative name supplies category, subcategory, script
+     and production name, but not a code point.
+4. **Synthesis from the name** (below).
+5. Otherwise the property is empty.
+
+Commands: `glyphData.lookup` exposes this, with provenance per field.
+
+#### Name → Unicode
+
+- Direct record: its `unicode` value.
+- `uniXXXX` (four hex digits) or `uXXXXX` / `uXXXXXX` (five or six): the code point itself.
+- A suffixed name (`A.alt`) has no code point: the Unicode value belongs to the base glyph only.
+- `unicodeLegacy` is not assigned automatically (our reading; unconfirmed).
+- No record and not a code-point name: no Unicode value; the user sets one by hand
+  (`glyph.setUnicodes`). The handbook suggests the Private Use Area (for example U+E000–U+F8FF) for
+  characters outside Unicode, and warns against reusing a registered name for a custom glyph.
+
+#### Unicode → name (adding by character or by `uniXXXX`)
+
+Find the record whose `unicode` equals the code point and use its `name`. Without a record, keep the
+code-point name (`uni` + 4 digits, or `u` + 5–6 digits). Skipped when *Use Custom Naming* is on.
+
+#### Name → category and subcategory (synthesis)
+
+1. A name starting with `_` gets no category.
+2. Split off the suffix. Normally the base is everything before the first dot. With more than one
+   dot, try successively longer prefixes ending at the second, third, … dot and take the first that
+   is a known name; this finds records whose own name contains a dot.
+3. Look up the base (rules 2–3 of the list above). A hit supplies category and subcategory. This is
+   the handbook's rule that `A.alt`, `A.ss01` and `A.001` behave like `A`, whereas `Aalt` or `A001`
+   inherit nothing.
+4. If the base contains `_`, treat it as a ligature:
+   - Take a script suffix (`-xx`) found on the last part and, for each part lacking one, try
+     `part-xx`; keep the bare part when the bare name is known and the suffixed one is not.
+   - Look up every part. Let *first* be the first part's record.
+     - *first* is a Mark → Mark with *first*'s subcategory.
+     - *first* is a Letter and every other part is a Mark, a Separator or unknown → *first*'s
+       category and subcategory.
+     - *first* is a Letter otherwise → Letter / Ligature.
+     - anything else → continue.
+5. AGL fallback: interpret the base by the Adobe Glyph List rules (§4.5), take the first resulting
+   character, and map its Unicode general category:
+
+   | General category | Category | Subcategory |
+   |---|---|---|
+   | Lu, Ll, Lt, Lo | Letter | – |
+   | Lm | Letter | Modifier |
+   | Mn | Mark | Nonspacing |
+   | Mc | Mark | Spacing Combining |
+   | Me | Mark | Enclosing |
+   | Nd, No | Number | Decimal Digit |
+   | Nl | Number | – |
+   | Zs | Separator | Space |
+   | Zl, Zp, Cc | Separator | – |
+   | Cf | Separator | Format |
+   | Co | Letter | Compatibility |
+   | Pd | Punctuation | Dash |
+   | Ps, Pe | Punctuation | Parenthesis |
+   | Pc, Po | Punctuation | – |
+   | Pi, Pf | Punctuation | Quote |
+   | Sm | Symbol | Math |
+   | Sc | Symbol | Currency |
+   | Sk | Mark | Spacing |
+   | So, Cn | Symbol | – |
+
+   If the base contains `_` and the result is not a Mark, the subcategory becomes Ligature.
+6. Nothing matched: no category.
+
+Script, case and direction are not synthesised by the open-source implementations beyond inheriting
+from the base record; the handbook adds the `.sc` / `.smcp` → small-capital rule.
+
+#### Renaming
+
+`glyph.rename` re-runs resolution only when the base name changes (`eacute` → `plus` updates Unicode
+and category; `eacute.sc` → `eacute.pc` changes nothing else). Since unset properties are resolved
+live, "updating" means: drop nothing the user overrode, and let unset properties follow the new
+name. Whether the reference also rewrites stored Unicode values on rename is an open question.
+
+### 4.3 Naming rules
+
+Validity (`font.validateGlyphNames`; behaviour rows `glyphName.*`):
+
+- Allowed characters: `A–Z a–z 0–9 _ - .` and nothing else: no white space, no non-ASCII.
+- The first character is a letter; only non-exporting glyphs (usually `_…`) and `.notdef` are
+  exempt.
+- Names are case-sensitive and unique within a font.
+- An invalid name blocks export with an *Illegal glyph name* error that gives the position of the
+  offending character and offers *Show* to open the glyph. Feature compilation reports the same.
+
+Conventions that carry meaning:
+
+| Pattern | Meaning | Example |
+|---|---|---|
+| `_name` | helper glyph, not exported by default | `_part.x`, `_smart.x`, `_cap.x`, `_corner.x` |
+| `name-script` | script variant; Latin and Greek mostly bare | `A-cy`, `noon-ar`, `-hb`, `-ko`, `-thai`, `-math`, `-braille`, `-fraktur`, `-musical` |
+| `name.suffix` | alternate of `name`, inherits its properties | `h.sc`, `beh-ar.medi` |
+| `name.s1.s2` | chained suffixes, in the order of the features in Font Info | `x.sc.ss01` |
+| `a_b_c` | ligature of a, b, c | `f_f_l` |
+| `a_b-script.suffix` | script and variant suffixes once, at the end | `lam_alif-ar.fina` |
+| `uniXXXX`, `uXXXXX` | glyph named by code point | `uni5B57`, `u20547` |
+
+*Use Custom Naming* (Font Info → Other) disables conversion to nice names for a font. Automatic
+features and automatic categories then stop working unless a custom glyph database describes the
+names in use.
+
+Batch renaming: `edit.findAndReplace` (Edit → Find → Find and Replace…, Cmd+Shift+F; panel
+`dialog.findAndReplaceGlyphNames`) on the selected glyphs.
+
+- Plain mode: every occurrence of *Find* in each name is replaced by *Replace*.
+- Empty *Find*: *Replace* is appended to each name (adding `.ss05` to a selection).
+- *Regex*: *Find* is a regular expression; *Replace* may reference groups as `\1`, `\2`, …
+  (`\.cv(\d\d)` → `.ss\1` turns `x.cv03` into `x.ss03`).
+- Each rename obeys §4.2 "Renaming". A result that collides with an existing name must be reported;
+  the handbook does not say what the reference does.
+
+Copying names: `glyph.copyGlyphNames` with a `format`:
+
+| Format | Output for five, six, seven |
+|---|---|
+| Space Separated | `five six seven ` (space after every name) |
+| One per Line | one name per line |
+| Comma Separated | `five, six, seven, ` (comma and space after every name) |
+| Slashed | `/five/six/seven` (pastes into Edit View as text) |
+| Python List | `"five",` on a line each |
+| Unicodes | one line per glyph: hex code points padded to ≥ 4 digits, several joined by `, `; glyphs without one as `- # name` |
+
+### 4.4 Production names at export
+
+Nice names are for people; exported fonts carry production names that follow the Adobe Glyph List
+conventions so that text can be recovered from glyph names. For each exported glyph
+(`glyphData.productionName`; behaviour rows `export.productionName*`):
+
+1. The glyph's own production-name override, if set.
+2. Else the record found by §4.2: its `production` attribute, or its `name` when the record has no
+   `production` (the nice name is already acceptable, e.g. `Aacute`).
+3. Else synthesis:
+   1. Split base and suffix as in §4.2.
+   2. If there is a suffix and the base resolves to a record with a production name, the result is
+      that production name + `.` + suffix (`A-cy.sc` → `uni0410.sc`).
+   3. Otherwise split the base into ligature parts (script suffix distributed as in §4.2); a name
+      without `_` is a single part. Resolve each part to its production name, or to itself when it
+      is an AGLFN name. If any part cannot be resolved, there is no synthesised name.
+   4. If at least one part is a `uniXXXX` name and no part is a `u`-name above the BMP, write
+      `uni` followed by the four-digit hex of every part in order (AGLFN-named parts contribute
+      their code point): `lam_alef-ar` style names become `uni06440627`.
+   5. Otherwise join the parts with `_`.
+   6. Re-attach `.suffix`.
+4. Else the nice name unchanged.
+
+Form of code-point names: `uni` + exactly four uppercase hex digits in the BMP; `u` + five or six
+uppercase hex digits above it.
+
+Related rules:
+
+- A font-level switch can export nice names unchanged (stored as `disablesNiceNames` in the source
+  format); it is outside this chapter.
+- CID-keyed CJK fonts address glyphs by CID. A Registry–Ordering–Supplement maps nice names to
+  CIDs; exporting glyphs it does not cover are appended after the mapped range
+  (`export.cidMapping`).
+- Opening a compiled font with *Keep Glyph Names from Imported Files* on preserves its order by
+  adding a `glyphOrder` parameter (`import.keepGlyphNames`).
+
+### 4.5 Adobe Glyph List files
+
+- `glyphlist.txt` (AGL, about 4 300 records): `name;XXXX[ XXXX…]`, a glyph name mapped to one or
+  more code points.
+- `aglfn.txt` (AGLFN, 586 records): `XXXX;name;CHARACTER NAME`, the subset recommended for new
+  fonts, omitting names whose AGL mapping is a PUA or presentation-form value (`Asmall`, `ffi`).
+- `#` starts a comment; blank lines are ignored.
+
+Name → text, per the AGL specification: drop everything from the first `.`; split the rest at `_`;
+map each part by (a) the glyph list, (b) `uni` followed by one or more groups of four uppercase hex
+digits, none a surrogate, (c) `u` followed by four to six uppercase hex digits naming a scalar
+value; a part matching none maps to nothing. FontCraft uses AGLFN membership to decide whether a
+nice name can be exported as is, and the AGL mapping for the category fallback in §4.2.
+
+### 4.6 Glyph Info window
+
+`window.glyphInfo` (Window → Glyph Info): table of all records, searchable and sortable by column,
+with *Add to Font* (`glyphInfo.addToFont`). It is also the documented place to look up script
+suffixes. `glyphData.search` is the headless equivalent.
+
+A custom `GlyphData.xml` changes properties for every file on the machine; per-glyph overrides (§2)
+change them for one file.
+
+## 5. Selection and batch processing
+
+- `edit.selectAll` (Cmd+A) selects all *visible* glyphs; `edit.deselectAll` (Cmd+Alt+A) clears;
+  `edit.invertSelection` (Cmd+Alt+Shift+I) flips. `fontView.setSelection` sets it by name.
+- Glyph- and Path-menu commands run from Font View apply to every selected glyph on the current
+  master's layer. Those marked ✓ below extend to all masters while Option is held; for the rest,
+  Option either does nothing documented or switches to the variant shown.
+
+| Command | Shortcut | Option = all masters | Option variant |
+|---|---|---|---|
+| Glyph → Remove Glyph | Cmd+Delete | | |
+| Glyph → Duplicate Glyph | Cmd+D | | |
+| Glyph → Update Glyph Info | | | |
+| Glyph → Update Metrics | Cmd+Ctrl+M | ✓ | |
+| Glyph → Transform Metrics | | | |
+| Glyph → Add Component | Cmd+Shift+C | ✓ | |
+| Glyph → Create Composite | Cmd+Ctrl+C | ✓ | |
+| Glyph → Decompose Components | Cmd+Shift+D | ✓ | |
+| Glyph → Add Image… | | | |
+| Glyph → Set Anchors | Cmd+U | ✓ | |
+| Glyph → Reset Anchors | Cmd+Shift+U | ✓ | |
+| Path → Reverse Contours | Cmd+Ctrl+Alt+R | | |
+| Path → Correct Path Direction | Cmd+Shift+R | ✓ | |
+| Path → Round Coordinates | | ✓ | |
+| Path → Tidy up Paths | Cmd+Shift+T | ✓ | |
+| Path → Add Extremes | | | Force Extremes |
+| Path → Remove Overlap | Cmd+Shift+O | ✓ | |
+| Path → Transformations | | | |
+| Path → Selection to Background | Cmd+J | | Add Selection to Background (Cmd+Alt+J) |
+| Path → Assign Background… | | | Clear Background |
+| Path → Swap with Background | Cmd+Ctrl+J | | |
+| Path → Interpolate with Background | | | |
+| Path → Other → Convert to Cubic | | | |
+| Path → Other → Convert to Quadratic | | | |
+
+Also batch-capable: every Filter-menu filter; the Palette (Cmd+Alt+P) sections Fit Curve and
+Transformations, where node-level controls use each glyph's Edit View node selection; plug-ins and
+scripts that choose to. Behaviour rows: `fontView.batch.*`.
+
+Design consequence: every such command takes `glyphs?` and `allMasters?` parameters; the UI fills
+`glyphs` from the Font View selection and `allMasters` from the Option key.
+
+## 6. Filtering
+
+### 6.1 Search
+
+`fontView.focusSearch` (Cmd+F), `fontView.setSearch`. The term is matched against glyph name, hex
+code point, the literal character, and the note. The magnifier menu limits matching to name,
+Unicode value or note, and has two switches:
+
+- *Match Case*: off by default; when on, `Oslash` finds `Oslash` and `Oslashacute` but not `oslash`.
+  Matching is by substring.
+- *Regex*: the term is a regular expression. The handbook's examples (`.` finds one-character
+  names, `..` two-character names) imply the expression must match the whole name.
+
+### 6.2 Sidebar
+
+`fontView.selectSidebarEntries`; headless evaluation with `fontView.queryGlyphs`.
+
+- **All** shows the whole font (with an empty search field).
+- **Categories**: one entry per category, expandable to subcategories with counts.
+- **Languages**: scripts, expandable to language/subset filters. Only a default short list is shown
+  plus any script the font has glyphs for; the plus button opens a checklist
+  (`fontView.setVisibleScripts`).
+- **Filters**: smart filters, list filters, folders.
+- Custom Categories and Languages entries can come from a `Groups.plist` in the app's Glyphs Info
+  folder (format in another chapter).
+
+Combination rules:
+
+| Selection | Result |
+|---|---|
+| several Categories entries (Cmd-click) | union |
+| several scripts in Languages | union |
+| entries from different sections | intersection |
+| several entries in Filters (Cmd- or Shift-click) | intersection |
+| a filter folder | union of its contents |
+
+Filtering never affects export order.
+
+### 6.3 Smart filters
+
+`fontView.addSmartFilter`, `fontView.editFilter` (or double-click the gear icon); panel
+`dialog.smartFilterEditor`. A filter is a name and a rule tree. A new filter has one rule; plus adds
+a rule, minus removes one. Option turns plus into a dots button that adds a nested group of kind
+**All**, **Any** or **None**; groups nest.
+
+Rules and what they inspect:
+
+| Rule | Scope | Type |
+|---|---|---|
+| Glyph Name | glyph | text |
+| Count of Paths | first master's layer | number |
+| Count of Components | first master's layer | number |
+| Tags | glyph | text set |
+| Script | glyph | choice |
+| Category & Subcategory | glyph | choice |
+| Case | glyph | choice: upper, lower, small capital, none |
+| Master Compatible | glyph | bool |
+| Export Glyph | glyph | bool |
+| Has Unicode | glyph | bool |
+| Has Components | selected master's layer | bool |
+| Has Hints | selected master's layer | bool (manual hints of either kind) |
+| Has PostScript Hints | selected master's layer | bool |
+| Has TrueType Hints | selected master's layer | bool |
+| Has Corners | selected master's layer | bool |
+| Has Anchors | selected master's layer | bool |
+| Contains Component | selected master's layer | glyph name |
+| Has Special Layers | glyph | bool |
+| Has Custom Glyph Info | glyph | bool |
+| Has Annotations | selected master's layer | bool |
+| Is Auto-Aligned | selected master's layer | bool |
+| Has Metrics Keys | glyph | bool |
+| Metrics Keys Out of Sync | glyph | bool |
+| Has Kerning Groups | glyph | bool |
+| Color Label | glyph | colour or Not Set |
+| Layer Color Label | selected master's layer | colour or Not Set |
+| Is Hangul Key | glyph, via *Hangul Composition Groups* | bool |
+| Custom | – | glyph predicate expression (same language as feature-code predicate tokens) |
+
+Note the two count rules read the *first* master while the other layer rules read the *selected*
+master, so a filter's result can change with the master selection.
+
+Proposed rule-tree JSON for `fontView.addSmartFilter` / `fontView.queryGlyphs`:
+`{all|any|none: [rule…]}` with `rule = {property, op, value}` or a nested group.
+
+### 6.4 List filters
+
+`fontView.addListFilter`; panel `dialog.listFilterEditor` (Name, a text area of names separated by
+spaces or line breaks, OK / Cancel). A new list filter is pre-filled with the selected glyphs.
+Selecting it shows the font's glyphs that are in the list, **in list order**; sort names are
+ignored. Listed names missing from the font can be generated from the sidebar (§3.1). *Copy Glyph
+Names → One per Line* produces text in the accepted form.
+
+### 6.5 Managing filters
+
+Everything here goes through the bottom-left actions menu, or by direct manipulation:
+
+- drag to reorder or move into a folder (`fontView.moveFilter`); folders nest
+  (`fontView.addFilterFolder`);
+- double-click the icon to edit; double-click the name, or select and press Return, to rename
+  (`fontView.renameFilter`);
+- *Remove Filter* deletes the selected filter or folder; a folder takes its contents with it
+  (`fontView.removeFilter`).
+
+## 7. Glyph order
+
+Order in Font View (when no list filter is active) and in exported fonts is the same:
+
+1. If the font has a `glyphOrder` parameter (Font Info → Font; glyph names, one per line), that
+   order. Sort names are then ignored.
+2. Otherwise by sort name: the glyph's own sort name if set, else the database sort name, else the
+   glyph name.
+
+The ID column of List View shows the resulting index. Sidebar filters and search never change it.
+
+## 8. Images
+
+- Drop an image file on a cell: placed on that glyph's active layer.
+- `glyph.addImage` (Glyph → Add Image…, defined in the Edit View inventory) with one file: placed
+  on the selected glyph.
+- With several files: each file goes to the glyph whose name equals the file name without
+  extension (`Thorn.png` → `Thorn`), on the current master's layer.
+- Glyph names are case-sensitive, many file systems are not: on those, uppercase and lowercase
+  images must sit in different folders. On case-sensitive systems match exactly.
+- Display: View → Show Image toggles images in cells; an empty glyph always shows its image.
+
+## Open questions
+
+1. **Database fields not in the public data.** `sortName`, `sortNameKeep`, `decompose`, `anchors`
+   and `accents` exist as columns but ship with no values in GlyphsInfo. What does the reference
+   use, and can we derive equivalents (Unicode decomposition, our own anchor tables) well enough for
+   Create Composite, Set Anchors, the mark cloud and the default glyph order to match?
+2. **Default sort order.** With no `glyphOrder` and no stored sort names, the reference orders
+   glyphs by database sort names (category, script, then alphabet-like order). The exact key
+   construction must be observed; plain name order will not reproduce it.
+3. **`unicodeLegacy`.** Is it ever assigned to a new glyph, or only used for lookups and import?
+4. **Rename and stored Unicode.** When a base name changes, does the reference overwrite a Unicode
+   value the user typed, or only refresh database-derived ones?
+5. **Update Glyph Info.** Exact effect: does it also rename glyphs to nice names, and does it clear
+   every per-glyph override?
+6. **Duplicate Glyph naming** and **New Glyph naming when `newGlyph` exists** (`.001` assumed).
+7. **Add Glyphs parsing.** Are line breaks and commas separators? How is a range between two named
+   glyphs with non-adjacent code points handled, and what happens to code points in a range that
+   have no database record? Full recipe grammar lives in the components chapter.
+8. **Replace in Add Glyphs.** Does *Replace* keep the old glyph's properties, colour and kerning
+   membership, or produce a truly fresh glyph?
+9. **Find and Replace collisions.** Behaviour when a rename would produce an existing or invalid
+   name; whether renames update component references, feature code, kerning and metrics keys.
+10. **Smart filter operators.** The comparison operators per rule (is, is not, contains, begins
+    with, less than, …) and whether *Case* offers Minor are not listed.
+11. **Smart filter refresh.** When results are recomputed (live, on selection, on master change).
+12. **Invert Selection scope.** Visible glyphs only, or the whole font?
+13. **Regex search anchoring and target.** Whole-name match is implied by the examples; does regex
+    also apply to notes and Unicode values?
+14. **List View columns.** The complete column set, default visibility and which cells are editable.
+15. **Inspector and Selection Info fields.** Where case and writing direction are edited; the full
+    Selection Info layout; the positions of the three cell badges whose corner is not stated.
+16. **Components cell syntax** in List View (separator, effect on other masters, placement).
+17. **Tags context menu.** Whether choosing a checked tag removes it.
+18. **Paste Special pairing.** Order used to pair copied glyphs with selected targets (copy order
+    vs. glyph order) and which layers *Content of Active Layer* writes to in a multi-master target.
+19. **`glyphOrder` gaps.** Placement of glyphs not named in the parameter, and of `.notdef`.
+20. **Batch image import.** Treatment of files without a matching glyph and of glyphs that already
+    have an image.

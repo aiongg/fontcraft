@@ -1,0 +1,2126 @@
+# Source: Glyphs 4 Handbook (public web handbook, glyphsapp.com/learn), chapters
+#   "Glyphs", "Create", and "Edit View" up to and including the section "Guides"
+#   (intro, Drawing Paths, Editing Paths, Strokes, Compositing, Anchors, Guides).
+#   The rest of "Edit View" (Info Box onward) is inventoried in a sibling file.
+# Date: 2026-10-07
+# All summaries are our own wording. Labels, menu paths and shortcuts match the reference.
+# Rows with status = "inferred" are our own design (mostly headless equivalents of pointer gestures).
+
+# ───────────────────────────── Application basics ("Glyphs") ─────────────────────────────
+
+[[behavior]]
+id = "app.launchWithoutPlugins"
+area = "extensions"
+milestone = "M13"
+summary = "Holding Option and Shift while the application starts launches it with every plug-in disabled, as a way out when a plug-in makes the app crash."
+ref = "Glyphs › Issues"
+status = "handbook"
+
+[[behavior]]
+id = "app.crashReportOnNextLaunch"
+area = "ui-chrome"
+milestone = "M14"
+summary = "After a crash, the next launch shows a dialog offering to send a crash report to the developers."
+ref = "Glyphs › Issues"
+status = "handbook"
+
+# ───────────────────────────── Document creation ("Create") ─────────────────────────────
+
+[[panel]]
+id = "window.start"
+label = "Start Window"
+location = "window"
+controls = [
+  "left: list of recently opened documents (double-click opens one; context menu: Show in Finder)",
+  "right: application version information and links to the project website",
+  "checkbox: Show window on startup",
+  "plus button: switches the window to the new-document script chooser",
+  "script list (it also appears whenever the recent-documents list is empty); included scripts get a coloured icon",
+  "No / Yes toggle (top right) that includes the clicked script in the new document",
+  "glyph set checkboxes for the clicked script (right side)",
+  "search field (top right) filtering scripts by name",
+  "Create Document button (lower right)",
+]
+area = "ui-chrome"
+milestone = "M4"
+summary = "Window shown when the app starts with no document open. It lists recent documents and, after pressing plus, lets the user pick scripts and glyph sets and create a document with empty glyphs for them."
+ref = "Create"
+status = "handbook"
+
+[[command]]
+id = "window.startWindow"
+label = "Start Window"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M4"
+summary = "Opens the Start Window at any time, not only at launch."
+ref = "Create"
+status = "handbook"
+
+[[behavior]]
+id = "start.shownAtLaunchWithoutDocuments"
+area = "ui-chrome"
+milestone = "M4"
+summary = "The Start Window appears at launch when no document is open. Clearing its Show window on startup checkbox suppresses it on later launches (a persisted preference)."
+ref = "Create"
+status = "handbook"
+
+[[behavior]]
+id = "start.recentDocumentsList"
+area = "ui-chrome"
+milestone = "M4"
+summary = "Double-clicking an entry of the recent documents list opens that document. When the list is empty the script chooser is shown in its place."
+ref = "Create"
+status = "handbook"
+
+[[command]]
+id = "file.showInFinder"
+label = "Show in Finder"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{path: string}"
+area = "ui-chrome"
+milestone = "M4"
+summary = "Context-menu item on a recent document in the Start Window (Ctrl-click or right-click) that reveals the file in the system file manager."
+ref = "Create"
+status = "handbook"
+
+[[command]]
+id = "file.new"
+label = "New"
+menu = ["File"]
+shortcut = "Cmd+N"
+kind = "engine"
+params = "{}"
+area = "import-export"
+milestone = "M1"
+summary = "Creates a new untitled document that contains the basic ASCII glyphs, without asking anything."
+ref = "Create"
+status = "handbook"
+
+[[command]]
+id = "file.newFromGlyphSets"
+label = "New from Glyph Sets…"
+menu = ["File"]
+shortcut = ""
+kind = "engine"
+params = "{scripts?: [{script: string, glyphSets?: [string]}]}"
+area = "font-view"
+milestone = "M4"
+summary = "Opens the script and glyph-set chooser (the same one the Start Window plus button shows), preselected with the choices made last time, and creates a document holding one empty glyph for every glyph of the chosen sets. With explicit params it creates the document without showing the chooser."
+ref = "Create"
+status = "handbook"
+
+[[behavior]]
+id = "start.scriptChooserRules"
+area = "font-view"
+milestone = "M4"
+summary = "In the chooser a script is included by clicking it and switching its toggle from No to Yes; individual glyph sets of an included script are switched with checkboxes; the search field filters the script list by name; the chooser remembers which scripts and glyph sets were picked last time."
+ref = "Create"
+status = "handbook"
+
+[[command]]
+id = "file.save"
+label = "Save"
+menu = ["File"]
+shortcut = "Cmd+S"
+kind = "engine"
+params = "{path?: string, format?: string}"
+area = "import-export"
+milestone = "M1"
+summary = "Writes the document to disk. The first save asks for a name, a folder and one of three source file formats (the default being the native single-file format)."
+ref = "Create"
+status = "handbook"
+
+[[command]]
+id = "file.saveAs"
+label = "Save As…"
+menu = ["File"]
+shortcut = "Cmd+Shift+S"
+kind = "engine"
+params = "{path: string, format?: string}"
+area = "import-export"
+milestone = "M1"
+summary = "Saves the document under a new name or location, and is the way to switch an existing document to another of the source file formats at any time."
+ref = "Create"
+status = "handbook"
+
+# ───────────────────────────── Tabs and Edit View modes ─────────────────────────────
+
+[[command]]
+id = "view.newTab"
+label = "New Tab"
+menu = ["View"]
+shortcut = "Cmd+T"
+kind = "ui"
+params = "{glyphs?: [names], text?: string}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Opens a new Edit View tab in the current window showing the glyphs that are selected at the time, so several glyphs can be opened together."
+ref = "Edit View"
+status = "handbook"
+
+[[command]]
+id = "view.editSelectedGlyphs"
+label = "Edit Selected Glyphs"
+menu = []
+shortcut = "Cmd+Down"
+kind = "ui"
+params = "{glyphs?: [names]}"
+area = "font-view"
+milestone = "M4"
+summary = "In Font View, opens the selected glyphs for editing in Edit View; double-clicking a glyph or a selection does the same. The reference gives the key but no menu label for it."
+ref = "Edit View"
+status = "handbook"
+
+[[command]]
+id = "view.showTab"
+label = "Show Tab"
+menu = []
+shortcut = "Cmd+Alt+2"
+kind = "ui"
+params = "{index: integer}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Switches to the tab at the given position. The reference binds Cmd+Alt+2 through Cmd+Alt+9 to tab positions 2 to 9 (position 1 is Font View); the shortcut field holds only the first of that range."
+ref = "Edit View"
+status = "handbook"
+
+[[command]]
+id = "view.showNextTab"
+label = "Show Next Tab"
+menu = ["View", "Navigation"]
+shortcut = "Ctrl+Tab"
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Activates the tab to the right of the current one."
+ref = "Edit View"
+status = "handbook"
+
+[[command]]
+id = "view.showPreviousTab"
+label = "Show Previous Tab"
+menu = ["View", "Navigation"]
+shortcut = "Ctrl+Shift+Tab"
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Activates the tab to the left of the current one."
+ref = "Edit View"
+status = "handbook"
+
+[[command]]
+id = "view.closeTab"
+label = "Close Tab"
+menu = ["View"]
+shortcut = "Cmd+Shift+W"
+kind = "ui"
+params = "{index?: integer}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Closes the current Edit View tab. The close button that appears when the pointer is over a tab title does the same for that tab."
+ref = "Edit View"
+status = "handbook"
+
+[[command]]
+id = "view.closeOtherTabs"
+label = "Close Other Tabs"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{keep?: integer}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Closes every tab except one. The reference offers this only as Option-click on a tab's close button, which keeps the current tab; it names no menu item."
+ref = "Edit View"
+status = "handbook"
+
+[[command]]
+id = "view.reopenLastClosedTab"
+label = "Reopen Last Closed Tab"
+menu = ["View"]
+shortcut = "Cmd+Alt+Shift+W"
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Brings back the most recently closed tab. In the reference it is an alternate menu item that shows while Option is held."
+ref = "Edit View"
+status = "handbook"
+
+[[behavior]]
+id = "tabs.windowHoldsFontViewPlusEditTabs"
+area = "ui-chrome"
+milestone = "M3"
+summary = "One document window holds Font View as its fixed first tab followed by any number of Edit View tabs; clicking a tab title switches to it."
+ref = "Edit View"
+status = "handbook"
+
+[[behavior]]
+id = "menus.optionRevealsAlternateItems"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Holding Option while a menu or context menu is open swaps some items for an alternate form, typically the same action applied to all masters (Tidy up Paths, Correct Path Direction, Reverse Contours, Set/Reset Anchors, Expand Outline), plus Force Extremes, Add Global Guide and Reopen Last Closed Tab."
+ref = "Edit View › Editing Paths"
+status = "handbook"
+
+[[behavior]]
+id = "editView.textModeAndEditMode"
+area = "edit-text"
+milestone = "M3"
+summary = "Edit View is always in one of two modes. Text mode (entered by choosing the Text tool, shortcut T) inserts and removes glyphs and adjusts spacing and kerning; edit mode works on the outline of one glyph."
+ref = "Edit View"
+status = "handbook"
+
+[[behavior]]
+id = "editView.enteringEditMode"
+area = "edit-text"
+milestone = "M3"
+summary = "Edit mode starts when any tool other than Text is chosen, when a glyph in the tab is double-clicked, or when Escape is pressed in text mode, which makes the glyph just after the text cursor the edited one."
+ref = "Edit View"
+status = "handbook"
+
+# ───────────────────────────── Drawing tools ─────────────────────────────
+
+[[tool]]
+id = "draw"
+label = "Draw"
+shortcut = "P"
+group = ""
+gestures = [
+  "click on empty canvas: place a node; successive nodes are joined into one path",
+  "drag on empty canvas: place a node and pull two handles out of it, giving a curved segment",
+  "Alt while dragging: change only the handle of the coming segment and leave the handle of the previous segment where it is",
+  "Cmd while dragging: change only the length of the coming handle while both handles keep their shared angle",
+  "Space while dragging: move the node being placed instead of its handles",
+  "click on the first node of the open path being drawn: close the path",
+  "click on a node of an existing path: open the path at that node",
+  "Shift+click on a segment: insert a node at the extremum or inflection nearest to the click",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Pen tool for building Bézier outlines node by node. Clicks give straight joins, drags give curve handles whose length sets the curvature; it also opens paths at a node and inserts nodes at extremes and inflections."
+ref = "Edit View › Draw Tool"
+status = "handbook"
+
+[[tool]]
+id = "pencil"
+label = "Pencil"
+shortcut = "B"
+group = "pencil"
+gestures = [
+  "drag: draw a freehand stroke that is converted into a Bézier path following the pointer or stylus",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Freehand drawing tool aimed at tablets and styluses. The traced result follows the hand closely and therefore carries more nodes than a constructed path, so it normally needs cleaning up afterwards."
+ref = "Edit View › Pencil Tool"
+status = "handbook"
+
+[[tool]]
+id = "rectangle"
+label = "Primitives (Rectangle)"
+shortcut = "F"
+group = "primitives"
+gestures = [
+  "click: open a dialog to type the measurements of the rectangle to create at that spot",
+  "drag: draw a rectangle between the press and release points",
+  "Shift while dragging: constrain to a square",
+  "Alt while dragging: grow the shape from its centre instead of from a corner",
+  "Shift+F or click-and-hold on the toolbar icon: switch to the ellipse mode",
+  "context menu › Draw Circle: switch to the ellipse mode",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Rectangle mode of the Primitives tool, which adds a closed rectangular path either by dragging or from typed measurements."
+ref = "Edit View › Primitives"
+status = "handbook"
+
+[[tool]]
+id = "ellipse"
+label = "Primitives (Ellipse)"
+shortcut = "F"
+group = "primitives"
+gestures = [
+  "click: open a dialog to type the measurements of the ellipse to create at that spot",
+  "drag: draw an ellipse inside the dragged box",
+  "Shift while dragging: constrain to a circle",
+  "Alt while dragging: grow the shape from its centre instead of from a corner",
+  "Shift+F or click-and-hold on the toolbar icon: switch to the rectangle mode",
+  "context menu › Draw Rectangle: switch to the rectangle mode",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Ellipse mode of the Primitives tool, which adds a closed elliptical path either by dragging or from typed measurements."
+ref = "Edit View › Primitives"
+status = "handbook"
+
+[[command]]
+id = "tool.drawRectangle"
+label = "Draw Rectangle"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "Context-menu item of the Primitives tool that puts the tool into rectangle mode."
+ref = "Edit View › Primitives"
+status = "handbook"
+
+[[command]]
+id = "tool.drawCircle"
+label = "Draw Circle"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "Context-menu item of the Primitives tool that puts the tool into ellipse mode."
+ref = "Edit View › Primitives"
+status = "handbook"
+
+[[panel]]
+id = "dialog.primitiveMeasurements"
+label = "Primitive Measurements"
+location = "dialog"
+controls = ["numeric fields for the size of the shape (the reference does not list them; width and height assumed)", "confirm / cancel"]
+area = "drawing"
+milestone = "M3"
+summary = "Dialog shown after a single click with the Primitives tool; the typed measurements define the rectangle or ellipse that is then created at the clicked position. Field names, defaults and which point of the shape lands on the click are not documented."
+ref = "Edit View › Primitives"
+status = "handbook"
+
+[[command]]
+id = "path.addRectangle"
+label = "Add Rectangle"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, x: number, y: number, width: number, height: number, fromCenter?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Headless equivalent of the rectangle primitive: appends a closed four-node rectangular path to the layer. Our own command; the reference only has the tool."
+ref = "Edit View › Primitives"
+status = "inferred"
+
+[[command]]
+id = "path.addEllipse"
+label = "Add Ellipse"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, x: number, y: number, width: number, height: number, fromCenter?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Headless equivalent of the ellipse primitive: appends a closed elliptical path with nodes at its four extremes to the layer. Our own command; the reference only has the tool."
+ref = "Edit View › Primitives"
+status = "inferred"
+
+[[command]]
+id = "path.addPath"
+label = "Add Path"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, closed: bool, nodes: [{x, y, type: line|curve|offcurve, smooth?: bool}]}"
+area = "drawing"
+milestone = "M3"
+summary = "Headless equivalent of drawing with the Draw tool: appends a path given as an ordered point list in path direction. Our own command."
+ref = "Edit View › Draw Tool"
+status = "inferred"
+
+[[behavior]]
+id = "tools.sharedButtonCycling"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Tools that share one toolbar button (Select/Lasso, the two Primitives modes, Erase/Knife) have one shortcut letter; pressing Shift plus that letter switches to the other tool of the group, and click-and-hold on the button opens a menu listing the group's tools."
+ref = "Edit View › Cutting Paths"
+status = "handbook"
+
+[[behavior]]
+id = "points.terminology"
+area = "drawing"
+milestone = "M3"
+summary = "Vocabulary used throughout: a node is an on-curve point, a handle is an off-curve (Bézier control) point, and point covers both."
+ref = "Edit View › Draw Tool"
+status = "handbook"
+
+[[behavior]]
+id = "nodes.smoothAndCornerTypes"
+area = "drawing"
+milestone = "M3"
+summary = "Every node is either smooth or corner. A smooth node keeps its two handles collinear at all times and is drawn as a green circle; a corner node lets its handles take any angle (collinear or not) and is drawn as a blue square. Node size and colours come from the settings."
+ref = "Edit View › Draw Tool"
+status = "handbook"
+
+[[behavior]]
+id = "handles.display"
+area = "drawing"
+milestone = "M3"
+summary = "Handles are drawn as small circles joined to their node by a thin grey line; they set the curvature of the segment they belong to."
+ref = "Edit View › Draw Tool"
+status = "handbook"
+
+[[behavior]]
+id = "paths.openEndMarkers"
+area = "drawing"
+milestone = "M3"
+summary = "An open path shows a short blue stroke, at right angles to the path, at each of its two end nodes; the first node additionally carries a (light) blue triangle pointing in path direction."
+ref = "Edit View › Draw Tool"
+status = "handbook"
+
+[[behavior]]
+id = "paths.pointsStoredInDirectionOrder"
+area = "drawing"
+milestone = "M3"
+summary = "A path stores its points in path-direction order starting at the start node, and several path operations depend on that order."
+ref = "Edit View › Draw Tool"
+status = "handbook"
+
+[[command]]
+id = "view.showNodesInForeground"
+label = "In Foreground"
+menu = ["View", "Show Nodes"]
+shortcut = "Cmd+Shift+N"
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Toggles whether nodes and handles of the foreground layer are drawn in Edit View."
+ref = "Edit View › Draw Tool"
+status = "handbook"
+
+# ───────────────────────────── Selecting ─────────────────────────────
+
+[[tool]]
+id = "select"
+label = "Select"
+shortcut = "V"
+group = "select"
+gestures = [
+  "drag on empty canvas: rectangular marquee selecting the nodes and handles inside it",
+  "Alt+drag marquee: select on-curve nodes only, skipping handles",
+  "Ctrl while dragging a marquee: turn the marquee to a new angle; releasing Ctrl goes back to resizing at that angle (slanted selection)",
+  "click a node, handle or segment: select it",
+  "Shift+click or Shift+marquee: add to or remove from the selection",
+  "double-click near a segment: select the whole path",
+  "double-click a node: toggle it between smooth and corner (Alt keeps the outline unchanged)",
+  "Shift+double-click a node: toggle super-smooth",
+  "Alt+click a line segment: turn it into a curve segment",
+  "drag a selected node: move the selection; attached handles follow",
+  "Alt while moving nodes: move only the selected points, leaving unselected attached handles behind",
+  "Ctrl+Alt while moving nodes (or Alt added after the drag started): nudge, scaling the neighbouring unselected handles in proportion",
+  "drag a handle: move it (all selected handles move together)",
+  "Alt+drag a handle: change its length while keeping its angle",
+  "Ctrl+Alt+drag a handle of a smooth node: copy its length and angle to the opposite handle",
+  "drag a segment: move its two nodes and their handles",
+  "Alt+drag a segment: change the handle lengths while keeping each handle's angle",
+  "Alt+drag a selection: drag out a duplicate (whole paths, the selected segments of partial paths, anchors, guides)",
+  "drag an open path end onto another open end: join them, closing the path",
+  "drag a bounding-box knob: scale about the opposite knob (Shift proportional, Alt about the box centre)",
+  "drag just outside the bounding box: rotate about the opposite knob (Alt about the selection centre)",
+  "Ctrl while dragging: suspend magnetic guides and node snapping",
+  "click an anchor: select it; double-click an anchor: rename it",
+  "click a guide: select it; drag its knob: move it; drag the guide elsewhere: change its angle; double-click the knob: turn it by 90°",
+  "right-click or Ctrl+click: open the context menu for the item under the pointer",
+  "Shift+V or click-and-hold on the toolbar icon › Lasso Select: switch to the Lasso tool",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Main pointer tool: selects, moves, converts, duplicates, scales and rotates nodes, handles, segments, paths, anchors, guides and components, and gives access to the canvas context menu."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[tool]]
+id = "lasso"
+label = "Lasso Select"
+shortcut = "V"
+group = "select"
+gestures = [
+  "drag: draw a free-form outline; the points inside it become the selection",
+  "Shift+V: switch back to the Select tool",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Selection tool with a hand-drawn region instead of a rectangle, meant for dense outlines where a marquee would catch too much. Shares the toolbar button and the V key with Select."
+ref = "Edit View › Free-form Selections"
+status = "handbook"
+
+[[behavior]]
+id = "selection.marqueeSelectsNodesAndHandles"
+area = "drawing"
+milestone = "M3"
+summary = "A marquee picks up both nodes and handles that fall inside it; with Option held it picks up on-curve nodes only."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "selection.slantedMarquee"
+area = "drawing"
+milestone = "M3"
+summary = "While a marquee is being dragged, holding Ctrl rotates the marquee instead of resizing it; after Ctrl is released the drag resizes the marquee at the new angle. Intended for italic outlines."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "selection.shiftExtendsOrReduces"
+area = "drawing"
+milestone = "M3"
+summary = "With Shift held, clicking or marquee-selecting toggles the hit items in the existing selection rather than replacing it. Handles are selectable on their own, so Shift-clicking handles builds a non-contiguous selection."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "selection.doubleClickSelectsPath"
+area = "drawing"
+milestone = "M3"
+summary = "Double-clicking close to a segment selects every point of the path that segment belongs to."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "selection.segmentCountsAsSelected"
+area = "drawing"
+milestone = "M3"
+summary = "A segment is treated as selected when both of its end nodes are selected or when at least one of its handles is selected."
+ref = "Edit View › Deleting Nodes"
+status = "handbook"
+
+[[command]]
+id = "edit.selectAll"
+label = "Select All"
+menu = ["Edit"]
+shortcut = "Cmd+A"
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "In edit mode the first use selects all paths of the layer; if all paths are already selected (or there are none left to add) it also selects all anchors and components, so selecting everything can take two presses."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[command]]
+id = "edit.deselectAll"
+label = "Deselect All"
+menu = ["Edit"]
+shortcut = "Cmd+Alt+A"
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "Empties the selection."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[command]]
+id = "edit.invertSelection"
+label = "Invert Selection"
+menu = ["Edit"]
+shortcut = "Cmd+Alt+Shift+I"
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "Selects every point that is currently unselected and deselects the ones that were selected."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[command]]
+id = "selection.selectNext"
+label = "Select Next"
+menu = []
+shortcut = "Tab"
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "With exactly one node or handle selected, moves the selection to the following point along the path. With an anchor selected it moves to the next anchor, and with a guide selected to the next guide."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[command]]
+id = "selection.selectPrevious"
+label = "Select Previous"
+menu = []
+shortcut = "Shift+Tab"
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "Counterpart of selection.selectNext: moves the selection to the preceding point on the path, the previous anchor or the previous guide."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "handbook"
+
+[[command]]
+id = "selection.set"
+label = "Set Selection"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?, layer?, mode?: replace|add|remove|toggle, points?: [{path: integer, index: integer}], paths?: [integer], anchors?: [names], guides?: [integer], components?: [integer]}"
+area = "drawing"
+milestone = "M3"
+summary = "Headless equivalent of clicking and Shift-clicking: sets or amends the Edit View selection from explicit object references. Our own command."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "inferred"
+
+[[command]]
+id = "selection.selectInRegion"
+label = "Select in Region"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{rect?: [x, y, width, height], angle?: number, polygon?: [[x, y]], nodesOnly?: bool, mode?: replace|add|toggle}"
+area = "drawing"
+milestone = "M3"
+summary = "Headless equivalent of the marquee (optionally slanted) and of the lasso: selects the points inside a rectangle or polygon given in font units, with the same nodes-only and extend options as the pointer gestures. Our own command."
+ref = "Edit View › Free-form Selections"
+status = "inferred"
+
+# ───────────────────────────── Moving ─────────────────────────────
+
+[[command]]
+id = "selection.move"
+label = "Move"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{dx: number, dy: number, mode?: normal|pointsOnly|nudge, keepHandleAngles?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Moves the selected nodes, handles, anchors or guides by an offset in font units. It is what the arrow keys run: one unit per press, 10 with Shift, 100 with Cmd; the mode mirrors the Option (points only) and Ctrl+Option (nudge) modifiers."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "move.arrowKeyIncrements"
+area = "drawing"
+milestone = "M3"
+summary = "Each arrow key press moves the selection by 1 unit, by 10 units with Shift and by 100 units with Cmd. The same steps apply to selected handles, anchors and guides."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "move.nodesCarryHandles"
+area = "drawing"
+milestone = "M3"
+summary = "Moving a node moves the handles attached to it by the same offset even when those handles are not selected. Holding Option moves only the points that are actually selected."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "move.nudge"
+area = "drawing"
+milestone = "M3"
+summary = "Nudging (Ctrl+Option while moving nodes, or Option pressed after a drag has begun) moves the selected nodes and at the same time rescales the surrounding unselected handles in proportion, so the neighbouring curves keep their character instead of being sheared."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "move.handles"
+area = "drawing"
+milestone = "M3"
+summary = "A handle moves by dragging or with the arrow keys (Shift 10, Cmd 100); several selected handles move together. With Option held the handle keeps its angle and only its length changes."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "move.mirrorHandleAcrossSmoothNode"
+area = "drawing"
+milestone = "M3"
+summary = "While a handle of a smooth node is being moved with Ctrl and Option held, the opposite handle of that node is given the same length and the matching (opposite) angle, making the node symmetric."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "handbook"
+
+[[behavior]]
+id = "move.dragSegment"
+area = "drawing"
+milestone = "M3"
+summary = "Dragging a segment moves its two end nodes together with their handles. Option-dragging a curve segment instead lengthens or shortens its handles along their existing angles, leaving the nodes in place."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "handbook"
+
+# ───────────────────────────── Converting nodes and segments ─────────────────────────────
+
+[[command]]
+id = "path.toggleNodeType"
+label = "Toggle Node Type"
+menu = []
+shortcut = "Return"
+kind = "engine"
+params = "{nodes?: [{path, index}], to?: smooth|corner, keepOutline?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Switches each selected node between smooth and corner (also run by double-clicking a node). Turning a corner smooth adds handles on both sides where missing and may bend the outline to line the handles up; with keepOutline (Alt+Return or Alt+double-click) the shape is left exactly as it is."
+ref = "Edit View › Converting Nodes and Segments"
+status = "handbook"
+
+[[command]]
+id = "path.toggleNodeTypeKeepingOutline"
+label = "Toggle Node Type Keeping Outline"
+menu = []
+shortcut = "Alt+Return"
+kind = "engine"
+params = "{nodes?: [{path, index}]}"
+area = "drawing"
+milestone = "M3"
+summary = "Variant of path.toggleNodeType that changes only the node's type flag and never moves a point, so the drawn outline stays the same."
+ref = "Edit View › Converting Nodes and Segments"
+status = "handbook"
+
+[[command]]
+id = "path.toggleSuperSmooth"
+label = "Toggle Super Smooth"
+menu = []
+shortcut = "Alt+Shift+Return"
+kind = "engine"
+params = "{nodes?: [{path, index}], on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Turns the selected nodes into super-smooth nodes, or back into ordinary ones (also run by Shift+double-click on a node)."
+ref = "Edit View › Super-smooth Nodes"
+status = "handbook"
+
+[[command]]
+id = "path.convertSegmentToCurve"
+label = "Convert Segment to Curve"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{segments?: [{path, index}]}"
+area = "drawing"
+milestone = "M3"
+summary = "Turns a straight segment into a curve segment by adding one handle at each of its two nodes. The reference triggers it by Option-clicking the line segment."
+ref = "Edit View › Converting Nodes and Segments"
+status = "handbook"
+
+[[behavior]]
+id = "segments.deleteHandleMakesLine"
+area = "drawing"
+milestone = "M3"
+summary = "Selecting one or both handles of a curve segment and deleting them turns that segment back into a straight line."
+ref = "Edit View › Converting Nodes and Segments"
+status = "handbook"
+
+[[command]]
+id = "path.tidyUpPaths"
+label = "Tidy up Paths"
+menu = ["Path"]
+shortcut = "Cmd+Shift+T"
+kind = "engine"
+params = "{glyphs?: [names], layer?, nodes?: [{path, index}]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Heuristically sets each node to smooth or corner and removes redundant points: handles lying on a straight segment, on-curve nodes sitting exactly on the line between their neighbours, and adjacent nodes with identical coordinates (which get merged). Works on the selected nodes, or on all nodes when nothing is selected."
+ref = "Edit View › Converting Nodes and Segments"
+status = "handbook"
+
+[[command]]
+id = "path.tidyUpPathsForAllMasters"
+label = "Tidy up Paths for all Masters"
+menu = ["Path"]
+shortcut = "Cmd+Alt+Shift+T"
+kind = "engine"
+params = "{glyphs?: [names]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Runs Tidy up Paths on every master layer of the selected glyphs. Shown in the Path menu while Option is held."
+ref = "Edit View › Converting Nodes and Segments"
+status = "handbook"
+
+[[behavior]]
+id = "tidyUp.mayBreakCompatibility"
+area = "path-ops"
+milestone = "M3"
+summary = "Points that look redundant in one master can be required for point-compatibility with other masters, so tidying a single layer can make a glyph stop interpolating."
+ref = "Edit View › Converting Nodes and Segments"
+status = "handbook"
+
+[[behavior]]
+id = "nodes.superSmoothBetweenCurves"
+area = "drawing"
+milestone = "M3"
+summary = "A super-smooth node between two curve segments is drawn with a star icon and gives curvature (G2) continuity: both segments share tangent and curvature radius at the join. To achieve this the effective node position is shifted; the path as drawn is shown in grey behind the smoothed result and a small grey dot marks where the effective node is."
+ref = "Edit View › Super-smooth Nodes"
+status = "handbook"
+
+[[behavior]]
+id = "nodes.superSmoothBetweenLineAndCurve"
+area = "drawing"
+milestone = "M3"
+summary = "A super-smooth node between a straight and a curved segment is drawn with a half-square/half-circle (raindrop) icon and blends the line into the curve without a curvature jump (squircle-like corners). It needs a long enough straight segment; small grey dots on the line show the length it consumes and grey dots near the curve show the points that will be generated at export."
+ref = "Edit View › Super-smooth Nodes"
+status = "handbook"
+
+[[behavior]]
+id = "nodes.superSmoothResolvedAtExport"
+area = "compile"
+milestone = "M3"
+summary = "Super-smooth nodes are a source-level construct: the exported outline contains ordinary points computed from them (the grey preview dots), not the nodes as drawn."
+ref = "Edit View › Super-smooth Nodes"
+status = "handbook"
+
+[[behavior]]
+id = "nodes.metricLineHighlight"
+area = "guides-metrics"
+milestone = "M3"
+summary = "A beige diamond is drawn behind any node that sits precisely on one of the vertical metric lines, and a node inside an alignment zone with a beige circle, so their placement can be judged even when zoomed far out."
+ref = "Edit View › Nodes in Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "nodes.duplicateHighlight"
+area = "drawing"
+milestone = "M3"
+summary = "Two neighbouring on-curve nodes with identical coordinates are flagged with a red circle; Tidy up Paths merges them."
+ref = "Edit View › Duplicate Nodes"
+status = "handbook"
+
+# ───────────────────────────── Scaling and rotating ─────────────────────────────
+
+[[tool]]
+id = "rotate"
+label = "Rotate"
+shortcut = "R"
+group = ""
+gestures = [
+  "click: set the transformation origin at the clicked position",
+  "drag: rotate the current selection about the origin",
+  "Shift while dragging: rotate in steps of 90°",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Rotates the current selection freehand about an origin the user places with a click."
+ref = "Edit View › Scaling & Rotating"
+status = "handbook"
+
+[[tool]]
+id = "scale"
+label = "Scale"
+shortcut = "S"
+group = ""
+gestures = [
+  "click: set the transformation origin at the clicked position",
+  "drag: scale the current selection about the origin",
+  "Shift while dragging: scale proportionally (same factor on both axes)",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Scales the current selection freehand about an origin the user places with a click."
+ref = "Edit View › Scaling & Rotating"
+status = "handbook"
+
+[[command]]
+id = "view.showBoundingBox"
+label = "Show Bounding Box"
+menu = ["View"]
+shortcut = "Cmd+Alt+Shift+B"
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Toggles the selection bounding box with its scale knobs in Edit View."
+ref = "Edit View › Scaling & Rotating"
+status = "handbook"
+
+[[behavior]]
+id = "boundingBox.scaleKnobs"
+area = "drawing"
+milestone = "M3"
+summary = "When more than one node is selected a bounding box with eight knobs (four sides, four corners) is drawn. Dragging a knob scales the selected points with the opposite knob as fixed point; Shift keeps proportions and Option uses the box centre as fixed point."
+ref = "Edit View › Scaling & Rotating"
+status = "handbook"
+
+[[behavior]]
+id = "boundingBox.rotateOutside"
+area = "drawing"
+milestone = "M3"
+summary = "Dragging from just outside the bounding box rotates the selection about the knob opposite the grab position; with Option it rotates about the centre of the selection."
+ref = "Edit View › Scaling & Rotating"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.selectionGeometryFields"
+area = "drawing"
+milestone = "M3"
+summary = "With several nodes selected the Info box shows X, Y, width and height of the selection; editing X/Y moves it and editing width/height scales it about the reference point chosen in the nine-point origin control beside the fields. A closed lock scales width and height together, an open lock independently."
+ref = "Edit View › Scaling & Rotating"
+status = "handbook"
+
+[[behavior]]
+id = "infoBox.pointCounts"
+area = "drawing"
+milestone = "M3"
+summary = "With several points selected the Info box shows two counts: how many points are selected (beside a filled square) and how many points the active layer holds altogether (beside an outlined square)."
+ref = "Edit View › Scaling & Rotating"
+status = "handbook"
+
+[[behavior]]
+id = "numberFields.arrowKeyStepping"
+area = "ui-chrome"
+milestone = "M3"
+summary = "In every numeric text field of the app the Up and Down arrow keys raise or lower the value by 1, and by 10 with Shift."
+ref = "Edit View › Scaling & Rotating"
+status = "handbook"
+
+# ───────────────────────────── Aligning ─────────────────────────────
+
+[[command]]
+id = "path.alignSelection"
+label = "Align Selection"
+menu = ["Path"]
+shortcut = "Cmd+Shift+A"
+kind = "engine"
+params = "{axis?: auto|horizontal|vertical, origin?: string}"
+area = "path-ops"
+milestone = "M3"
+summary = "Lines up all selected nodes, handles and anchors on one coordinate. It picks the axis on its own, collapsing whichever of the selection's width or height is smaller, and the coordinate they land on follows the transformation origin set in the Palette's transformations section. Special cases apply for anchors, components and single nodes (see the align.* behaviours)."
+ref = "Edit View › Aligning"
+status = "handbook"
+
+[[behavior]]
+id = "align.viaZeroDimension"
+area = "path-ops"
+milestone = "M3"
+summary = "Typing 0 into the width or height field of the Info box while two or more points are selected aligns them on that axis, as an alternative to Align Selection."
+ref = "Edit View › Aligning"
+status = "handbook"
+
+[[behavior]]
+id = "align.anchorToPoints"
+area = "components"
+milestone = "M6"
+summary = "When the selection is a single anchor plus a single path point, Align Selection moves the anchor horizontally so it sits above or below the point; with one anchor and two points it centres the anchor between the two. The point(s) do not move, and the horizontal position is corrected for the master's italic angle."
+ref = "Edit View › Aligning"
+status = "handbook"
+
+[[behavior]]
+id = "align.componentOriginToNode"
+area = "components"
+milestone = "M6"
+summary = "Align Selection with exactly one node and one component selected moves the component so that its origin point lands on the node; the node stays put."
+ref = "Edit View › Aligning"
+status = "handbook"
+
+[[behavior]]
+id = "align.componentOriginPoint"
+area = "components"
+milestone = "M6"
+summary = "A component's origin point is the position of an anchor named origin in the referenced glyph when there is one. Otherwise, for upright masters it is where the baseline meets the left sidebearing; for slanted masters it is where the baseline is met by a vertical line drawn through the point at which the slanted left sidebearing reaches half the x-height."
+ref = "Edit View › Aligning"
+status = "handbook"
+
+[[behavior]]
+id = "align.singleNodeToBackground"
+area = "path-ops"
+milestone = "M3"
+summary = "Align Selection with only one node selected tries to move that node onto the closest node of the background layer."
+ref = "Edit View › Aligning"
+status = "handbook"
+
+# ───────────────────────────── Duplicating and deleting ─────────────────────────────
+
+[[behavior]]
+id = "duplicate.optionDrag"
+area = "drawing"
+milestone = "M3"
+summary = "Dragging a selection with Option held leaves the original in place and drags a copy to the new position. If only part of a path is selected, the selected segments are copied as a new open path (useful for repeating serifs and similar parts). Copy (Cmd+C) and paste (Cmd+V) is the alternative."
+ref = "Edit View › Duplicating Paths"
+status = "handbook"
+
+[[command]]
+id = "edit.delete"
+label = "Delete"
+menu = []
+shortcut = "Delete"
+kind = "engine"
+params = "{glyph?, layer?, points?: [{path, index}], anchors?: [names], guides?: [integer]}"
+area = "drawing"
+milestone = "M3"
+summary = "Removes the selection. A deleted node is taken out without opening the path, and the neighbouring handles are refitted so the remaining segment follows the old shape as closely as possible. The same key removes selected anchors and pen points."
+ref = "Edit View › Deleting Nodes"
+status = "handbook"
+
+[[command]]
+id = "edit.deleteInAllMasters"
+label = "Delete in All Masters"
+menu = []
+shortcut = "Alt+Delete"
+kind = "engine"
+params = "{glyph?, points?: [{path, index}]}"
+area = "drawing"
+milestone = "M3"
+summary = "Deletes the selected nodes with shape reconstruction, and removes the corresponding nodes in every master of the glyph as well."
+ref = "Edit View › Deleting Nodes"
+status = "handbook"
+
+[[command]]
+id = "path.deleteAndBreak"
+label = "Delete and Break"
+menu = []
+shortcut = "Shift+Delete"
+kind = "engine"
+params = "{glyph?, layer?, points?: [{path, index}]}"
+area = "drawing"
+milestone = "M3"
+summary = "Removes each selected node together with the two segments that meet at it, leaving the path open there. When whole segments are selected it removes just those segments and keeps every remaining part of the path unchanged."
+ref = "Edit View › Deleting Nodes"
+status = "handbook"
+
+[[command]]
+id = "path.deleteAndBreakInAllMasters"
+label = "Delete and Break in All Masters"
+menu = []
+shortcut = "Alt+Shift+Delete"
+kind = "engine"
+params = "{glyph?, points?: [{path, index}]}"
+area = "drawing"
+milestone = "M3"
+summary = "Same as path.deleteAndBreak, applied to the corresponding nodes in every master of the glyph."
+ref = "Edit View › Deleting Nodes"
+status = "handbook"
+
+# ───────────────────────────── Opening, closing, cutting ─────────────────────────────
+
+[[behavior]]
+id = "paths.openAtNodeWithDrawTool"
+area = "drawing"
+milestone = "M3"
+summary = "Clicking a node of a closed path with the Draw tool splits the path at that node into two coincident end nodes; the ends can then be pulled apart with the Select tool."
+ref = "Edit View › Opening and Closing Paths"
+status = "handbook"
+
+[[behavior]]
+id = "paths.closeByDraggingEnds"
+area = "drawing"
+milestone = "M3"
+summary = "With the Select tool, dragging the end node of an open path onto a second end node fuses the pair into one node, which closes a path or joins two open paths."
+ref = "Edit View › Opening and Closing Paths"
+status = "handbook"
+
+[[command]]
+id = "path.connectNodes"
+label = "Connect Nodes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [{path, index}, {path, index}]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Context-menu command for two selected open path ends: adds a straight segment between them, joining the two paths or closing the one path."
+ref = "Edit View › Opening and Closing Paths"
+status = "handbook"
+
+[[command]]
+id = "path.closeOpenPaths"
+label = "Close Open Paths"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{paths?: [integer]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Context-menu command that closes every selected open path completely by connecting its last node back to its first."
+ref = "Edit View › Opening and Closing Paths"
+status = "handbook"
+
+[[tool]]
+id = "knife"
+label = "Knife"
+shortcut = "E"
+group = "erase"
+gestures = [
+  "drag a line across one path: cut it into two outlines, each closed along the cutting line",
+  "drag a line across several overlapping paths: cut them all and rewire the cut segments with one another",
+  "Shift+E or click-and-hold on the toolbar icon › Knife: switch between Erase and Knife",
+]
+area = "path-ops"
+milestone = "M3"
+summary = "Cuts outlines along a straight line dragged across them and closes the resulting pieces along that line. Shares the toolbar button and the E key with the Erase tool."
+ref = "Edit View › Cutting Paths"
+status = "handbook"
+
+[[tool]]
+id = "erase"
+label = "Erase"
+shortcut = "E"
+group = "erase"
+gestures = []
+area = "path-ops"
+milestone = "M3"
+summary = "Tool that shares the toolbar button and the E key with Knife. The reference names it in this chapter but does not describe what it does or its gestures; behaviour must be observed."
+ref = "Edit View › Cutting Paths"
+status = "handbook"
+
+[[command]]
+id = "path.cutWithLine"
+label = "Cut with Line"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, from: [x, y], to: [x, y]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Headless equivalent of the Knife tool: splits every path crossed by the given line and closes the pieces along it. Our own command."
+ref = "Edit View › Cutting Paths"
+status = "inferred"
+
+# ───────────────────────────── Re-segmenting (open corners) ─────────────────────────────
+
+[[command]]
+id = "path.openCorner"
+label = "Open Corner"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [{path, index}]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Context-menu command that replaces a selected corner node by two nodes whose segments cross in a small triangular overlap, so the two segments can be edited independently. Does nothing on smooth nodes; with a segment selected it opens the nodes at both ends of that segment."
+ref = "Edit View › Re-segmenting Outlines"
+status = "handbook"
+
+[[command]]
+id = "path.reconnectNodes"
+label = "Reconnect Nodes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [{path, index}]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Context-menu command with two uses: on the two nodes of an open corner it restores the single corner node; on any even number of selected nodes it pairs each node with its nearest selected neighbour and rewires the outline through those pairs, creating overlapping corners."
+ref = "Edit View › Re-segmenting Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "openCorner.overlapSize"
+area = "path-ops"
+milestone = "M3"
+summary = "The overlap produced when corners are opened or nodes reconnected is about half of the master's first vertical stem value and half of its first horizontal stem value (from Font Info › Masters)."
+ref = "Edit View › Re-segmenting Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "openCorner.invisibleWhenSmall"
+area = "path-ops"
+milestone = "M3"
+summary = "An opened corner whose triangular overlap is small compared with the visible segments next to it is treated as invisible and does not show in the final outline, which allows opened corners on the outside of a shape. Once the overlap exceeds the threshold it becomes visible. The threshold is not specified."
+ref = "Edit View › Re-segmenting Outlines"
+status = "handbook"
+
+# ───────────────────────────── Path direction ─────────────────────────────
+
+[[behavior]]
+id = "paths.startNodeDisplay"
+area = "drawing"
+milestone = "M3"
+summary = "On a closed path the start node is drawn as an arrowhead pointing in path direction (green when the node is smooth) instead of the usual node shape."
+ref = "Edit View › Controlling Path Direction"
+status = "handbook"
+
+[[behavior]]
+id = "paths.directionConvention"
+area = "path-ops"
+milestone = "M3"
+summary = "Outer contours must run counter-clockwise and contours enclosed by them (counters) clockwise; two overlapping paths with opposite directions therefore produce a cut-out."
+ref = "Edit View › Controlling Path Direction"
+status = "handbook"
+
+[[command]]
+id = "path.makeNodeFirst"
+label = "Make Node First"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{node?: {path, index}}"
+area = "path-ops"
+milestone = "M3"
+summary = "Node context-menu command that makes the clicked on-curve node the start node of its closed path, rotating the stored point order without changing the shape."
+ref = "Edit View › Controlling Path Direction"
+status = "handbook"
+
+[[command]]
+id = "path.reverseContours"
+label = "Reverse Contours"
+menu = ["Path"]
+shortcut = "Cmd+Ctrl+Alt+R"
+kind = "engine"
+params = "{glyphs?: [names], layer?, paths?: [integer]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Reverses the point order of the selected paths, or of every path on the layer when no path is selected. The shortcut is stated in the Font View chapter. The context menu offers the same action as Reverse Selected Contours or Reverse All Contours depending on whether a path is selected."
+ref = "Edit View › Controlling Path Direction"
+status = "handbook"
+
+[[command]]
+id = "path.reverseContoursForAllMasters"
+label = "Reverse Contours for All Masters"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], paths?: [integer]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Option variant of Reverse Contours that reverses the corresponding paths on all masters of the glyph. The reference describes the modifier but not the alternate item's label."
+ref = "Edit View › Controlling Path Direction"
+status = "handbook"
+
+[[command]]
+id = "path.correctPathDirection"
+label = "Correct Path Direction"
+menu = ["Path"]
+shortcut = "Cmd+Shift+R"
+kind = "engine"
+params = "{glyphs?: [names], layer?}"
+area = "path-ops"
+milestone = "M3"
+summary = "Works out the proper direction of every path on the current layer (or on each selected glyph layer) from how the paths nest, and applies it. As side effects it reorders the layer's shapes and moves each path's start node to its bottom-left node."
+ref = "Edit View › Controlling Path Direction"
+status = "handbook"
+
+[[command]]
+id = "path.correctPathDirectionForAllMasters"
+label = "Correct Path Direction for all Masters"
+menu = ["Path"]
+shortcut = "Cmd+Alt+Shift+R"
+kind = "engine"
+params = "{glyphs?: [names]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Runs Correct Path Direction on every master layer and on every alternate and intermediate layer of the glyphs, skipping all other non-master layers. Shown while Option is held; meant to keep path order, start nodes and directions consistent for interpolation."
+ref = "Edit View › Controlling Path Direction"
+status = "handbook"
+
+# ───────────────────────────── Extremes and inflections ─────────────────────────────
+
+[[behavior]]
+id = "extremes.definitions"
+area = "path-ops"
+milestone = "M3"
+summary = "An extremum is a spot on a path where the tangent is exactly horizontal or vertical; an inflection is a spot inside a segment where the bend switches between clockwise and counter-clockwise. Nodes at extremes are expected by hinting and some renderers, and nodes at inflections help offsetting and avoid interpolation kinks."
+ref = "Edit View › Extremes & Inflections"
+status = "handbook"
+
+[[command]]
+id = "path.addExtremes"
+label = "Add Extremes"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?}"
+area = "path-ops"
+milestone = "M3"
+summary = "Inserts nodes at the horizontal and vertical extremes of all paths on the active layer. An extreme is skipped when adding it would leave a very short segment (the existing node placement is assumed deliberate); a node sitting only slightly off an extreme is moved onto it, with the shape preserved as far as possible and its handles made exactly horizontal or vertical."
+ref = "Edit View › Extremes & Inflections"
+status = "handbook"
+
+[[command]]
+id = "path.forceExtremes"
+label = "Force Extremes"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?}"
+area = "path-ops"
+milestone = "M3"
+summary = "Option variant of Add Extremes that inserts a node at every extreme without the short-segment exception."
+ref = "Edit View › Extremes & Inflections"
+status = "handbook"
+
+[[command]]
+id = "path.insertNode"
+label = "Insert Node"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, segment: {path, index}, t?: number, near?: [x, y], snap?: extremum|inflection}"
+area = "path-ops"
+milestone = "M3"
+summary = "Headless equivalent of the Draw tool's Shift-click on a segment: splits a segment at a parameter, or at the extremum or inflection closest to a given position, without changing the shape. Our own command."
+ref = "Edit View › Extremes & Inflections"
+status = "inferred"
+
+[[behavior]]
+id = "extremes.addedAtExportByFilter"
+area = "compile"
+milestone = "M7"
+summary = "Extremes can be left out of the source and added only in the exported font through a Filter custom parameter with the value AddExtremes, which keeps shallow curves and some multi-master outlines simpler to edit."
+ref = "Edit View › Extremes & Inflections"
+status = "handbook"
+
+# ───────────────────────────── Focusing and locking ─────────────────────────────
+
+[[command]]
+id = "path.focusOnSelectedPath"
+label = "Focus on Selected Path"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{paths?: [integer]}"
+area = "drawing"
+milestone = "M3"
+summary = "Context-menu command that restricts Edit View editing to the paths having at least one selected point: the nodes and handles of every other path are hidden. Filters, plug-ins and scripts are not restricted and still act on all paths."
+ref = "Edit View › Focusing & Locking"
+status = "handbook"
+
+[[command]]
+id = "path.clearFocusOnPaths"
+label = "Clear Focus on Paths"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "Context-menu command that ends path focus and shows the controls of all paths again."
+ref = "Edit View › Focusing & Locking"
+status = "handbook"
+
+[[command]]
+id = "path.lockPath"
+label = "Lock Path"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{paths?: [integer]}"
+area = "drawing"
+milestone = "M3"
+summary = "Context-menu command on a node (right-click or Ctrl-click) that locks the node's path: its points can no longer be selected or changed in Edit View, though filters, plug-ins and scripts can still alter it."
+ref = "Edit View › Focusing & Locking"
+status = "handbook"
+
+[[command]]
+id = "path.unlockPath"
+label = "Unlock Path"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{paths?: [integer]}"
+area = "drawing"
+milestone = "M3"
+summary = "Context-menu command on any node of a locked path that makes the path editable again."
+ref = "Edit View › Focusing & Locking"
+status = "handbook"
+
+[[behavior]]
+id = "paths.lockedPointsHoverRed"
+area = "drawing"
+milestone = "M3"
+summary = "Hovering over a point on a locked path colours it red, a sign that the point cannot be dragged."
+ref = "Edit View › Focusing & Locking"
+status = "handbook"
+
+[[command]]
+id = "glyph.toggleLocked"
+label = "Locked"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], locked?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Checkable item in a glyph's context menu that locks or unlocks the whole glyph. A locked glyph rejects every modification, whether from pointer tools, filters, plug-ins or scripts, and shows a lock icon in its top-right corner in both Edit View and Font View."
+ref = "Edit View › Focusing & Locking"
+status = "handbook"
+
+# ───────────────────────────── Strokes ─────────────────────────────
+
+[[panel]]
+id = "palette.stroke"
+label = "Stroke"
+location = "palette"
+controls = [
+  "stroke width field (font units)",
+  "stroke height field (font units; empty means same as width)",
+  "Fill checkbox (closed paths: also fill the area enclosed by the stroke outlines)",
+  "stroke position: percentage field plus three presets, centre (0 %), left of path (−100 %), right of path (100 %)",
+  "stroke join: four icon buttons, the last being a full-round join (the reference names only that one)",
+  "start cap and end cap (open paths, chosen separately): five icon buttons, the last two being round inset and aligned to an axis",
+  "aligned-to-axis cap: click-and-hold to force the X or the Y axis instead of the automatic choice",
+]
+area = "path-ops"
+milestone = "M3"
+summary = "Palette section at the bottom right holding the live stroke attributes of the selected path. It is available only while Show Info is on and a path is selected."
+ref = "Edit View › Strokes"
+status = "handbook"
+
+[[command]]
+id = "path.setStroke"
+label = "Set Stroke"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, paths?: [integer], width?: number|null, height?: number|null, fill?: bool, position?: number, join?: string, capStart?: string, capEnd?: string, capAxis?: auto|x|y}"
+area = "path-ops"
+milestone = "M3"
+summary = "Writes the stroke attributes of one or more paths, the action behind the Stroke palette fields; setting width to null removes the stroke. The reference exposes these only as palette controls."
+ref = "Edit View › Creating Strokes"
+status = "inferred"
+
+[[behavior]]
+id = "stroke.nonDestructiveAttribute"
+area = "path-ops"
+milestone = "M3"
+summary = "A stroke is an attribute of a path (open or closed), not new geometry: giving a path a stroke width makes it render as an expanded shape while the path itself remains editable. Width and height are in font units and height falls back to width when unset."
+ref = "Edit View › Creating Strokes"
+status = "handbook"
+
+[[behavior]]
+id = "stroke.fillForClosedPaths"
+area = "path-ops"
+milestone = "M3"
+summary = "A stroked closed path renders as a ring by default; with Fill checked the area enclosed by the new outlines is filled as well."
+ref = "Edit View › Creating Strokes"
+status = "handbook"
+
+[[behavior]]
+id = "stroke.display"
+area = "path-ops"
+milestone = "M3"
+summary = "In Edit View the original (centre) path of a stroked path is drawn light grey and the resulting stroke outline black."
+ref = "Edit View › Creating Strokes"
+status = "handbook"
+
+[[command]]
+id = "path.expandOutline"
+label = "Expand Outline"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?, paths?: [integer]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Context-menu command that replaces a stroked path by ordinary closed outlines of its stroke and drops the stroke attributes."
+ref = "Edit View › Creating Strokes"
+status = "handbook"
+
+[[command]]
+id = "path.expandOutlineForAllMasters"
+label = "Expand Outline for All Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], paths?: [integer]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Option variant of Expand Outline that expands the stroke on all masters of the glyph. The alternate item's label is not given in the reference."
+ref = "Edit View › Creating Strokes"
+status = "handbook"
+
+[[behavior]]
+id = "stroke.position"
+area = "path-ops"
+milestone = "M3"
+summary = "Stroke position is a percentage: 0 % centres the stroke on the path, −100 % puts it entirely on the left of the path and 100 % entirely on the right (left and right relative to path direction); any value in between is allowed."
+ref = "Edit View › Stroke Style"
+status = "handbook"
+
+[[behavior]]
+id = "stroke.joinsAndCaps"
+area = "path-ops"
+milestone = "M3"
+summary = "A stroke has one join style out of four, and open paths have a cap style out of five chosen separately for the start and the end node. The axis-aligned cap cuts the end parallel to the X or Y axis, picking whichever is closer to the cap's natural orientation unless an axis is forced."
+ref = "Edit View › Stroke Style"
+status = "handbook"
+
+[[command]]
+id = "path.addPenPoint"
+label = "Add Pen Point"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, path: integer, at: [x, y] | {segment: integer, t: number}}"
+area = "path-ops"
+milestone = "M3"
+summary = "Context-menu command (Select tool, right-click on a stroked path) that adds a pen point at that position along a segment, between nodes, without adding a node."
+ref = "Edit View › Pen Points"
+status = "handbook"
+
+[[command]]
+id = "path.setPenPoint"
+label = "Set Pen Point"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, path: integer, node?: integer, penPoint?: integer, width?: number, height?: number, angle?: number, position?: number, progressionIn?: number, progressionOut?: number, clear?: bool}"
+area = "path-ops"
+milestone = "M3"
+summary = "Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields."
+ref = "Edit View › Pen Points"
+status = "inferred"
+
+[[behavior]]
+id = "penPoints.overrideStrokeLocally"
+area = "path-ops"
+milestone = "M3"
+summary = "A pen point overrides the path's stroke width and height at its location, and also carries a pen angle (rotating the pen, which changes the apparent thickness) and its own stroke position offset. It can sit on an existing node or anywhere along a segment."
+ref = "Edit View › Pen Points"
+status = "handbook"
+
+[[behavior]]
+id = "penPoints.openVersusClosedPaths"
+area = "path-ops"
+milestone = "M3"
+summary = "On an open path the two end nodes keep the path-level stroke settings unless given pen points. On a closed path a single pen point replaces the settings for the whole path, so modulation needs at least two."
+ref = "Edit View › Pen Points"
+status = "handbook"
+
+[[behavior]]
+id = "penPoints.progression"
+area = "path-ops"
+milestone = "M3"
+summary = "Each pen point has two progression values, the last two Info box fields: the upper one shapes how the stroke changes as it approaches the pen point, the lower one how it changes as it leaves. Range −1.0 to 2.0; low values concentrate the change close to the pen point, high values spread it over the segment."
+ref = "Edit View › Pen Points"
+status = "handbook"
+
+[[behavior]]
+id = "penPoints.deleting"
+area = "path-ops"
+milestone = "M3"
+summary = "A free pen point is removed by selecting it and pressing Delete. A pen point attached to a node is removed by clearing its values in the node's Info box, since Delete would remove the node."
+ref = "Edit View › Pen Points"
+status = "handbook"
+
+# ───────────────────────────── Compositing ─────────────────────────────
+
+[[behavior]]
+id = "compositing.shapesCombineInOrder"
+area = "path-ops"
+milestone = "M3"
+summary = "The final outline of a layer is the composite of its shapes taken in their stored order; order matters because a mask only affects the shapes below it."
+ref = "Edit View › Compositing"
+status = "handbook"
+
+[[command]]
+id = "path.setMask"
+label = "Mask"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, paths?: [integer], mask: bool}"
+area = "path-ops"
+milestone = "M3"
+summary = "Sets or clears the Mask flag of the selected path (a Palette checkbox in the reference). A mask path is subtracted from every shape below it in shape order; it stays a normal editable path, so the subtraction is live."
+ref = "Edit View › Masking"
+status = "handbook"
+
+[[behavior]]
+id = "mask.display"
+area = "path-ops"
+milestone = "M3"
+summary = "With masks in play, the parts of paths that are subtracted away are drawn light grey and the resulting outline black."
+ref = "Edit View › Masking"
+status = "handbook"
+
+[[command]]
+id = "filter.shapeOrder"
+label = "Shape Order"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, order?: [integer]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Opens a dialog listing the layer's shapes for reordering by drag and drop; OK applies the new order. With an explicit order it reorders without the dialog."
+ref = "Edit View › Masking"
+status = "handbook"
+
+[[panel]]
+id = "dialog.shapeOrder"
+label = "Shape Order"
+location = "dialog"
+controls = ["draggable list of the layer's shapes in stacking order", "OK button"]
+area = "path-ops"
+milestone = "M3"
+summary = "Dialog of Filter › Shape Order used to rearrange the shapes of a layer; this chapter describes it only as far as masking needs."
+ref = "Edit View › Masking"
+status = "handbook"
+
+# ───────────────────────────── Anchors ─────────────────────────────
+
+[[behavior]]
+id = "anchors.purpose"
+area = "components"
+milestone = "M6"
+summary = "An anchor is a named point on a layer. By name convention anchors drive automatic alignment of components, corner and cap components, mark-to-base positioning, mark-to-mark positioning, cursive attachment and ligature carets; unknown names are kept and may be used by plug-ins."
+ref = "Edit View › Anchors"
+status = "handbook"
+
+[[command]]
+id = "anchor.add"
+label = "Add Anchor"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, name?: string, x: number, y: number}"
+area = "components"
+milestone = "M6"
+summary = "Canvas context-menu command that places an anchor at the clicked position. It is named new anchor and its name is immediately in edit state; Return or a click on the canvas confirms the typed name."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[command]]
+id = "anchor.rename"
+label = "Rename"
+menu = []
+shortcut = "Return"
+kind = "engine"
+params = "{glyph?, layer?, anchor: string, name: string}"
+area = "components"
+milestone = "M6"
+summary = "Renames an anchor. In the UI this starts by double-clicking the anchor, by pressing Return with it selected, or by editing the name field of the Info box."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[command]]
+id = "anchor.setPosition"
+label = "Set Position"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, anchor: string, x: number, y: number}"
+area = "components"
+milestone = "M6"
+summary = "Places an anchor at explicit coordinates, the headless form of dragging it, moving it with the arrow keys or typing coordinates into the Info box. Our own command."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "inferred"
+
+[[command]]
+id = "anchor.remove"
+label = "Remove"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, anchors: [names]}"
+area = "components"
+milestone = "M6"
+summary = "Removes the named anchors from a layer, the headless form of selecting anchors and pressing Delete. Our own command."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "inferred"
+
+[[command]]
+id = "glyph.setAnchors"
+label = "Set Anchors"
+menu = ["Glyph"]
+shortcut = "Cmd+U"
+kind = "engine"
+params = "{glyphs?: [names], layer?}"
+area = "components"
+milestone = "M6"
+summary = "Adds the default anchors that the glyph info database lists for each selected glyph. For ligature glyphs named after their parts it also adds the appropriate caret anchors."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[command]]
+id = "glyph.setAnchorsForAllMasters"
+label = "Set Anchors for all Masters"
+menu = ["Glyph"]
+shortcut = "Cmd+Alt+U"
+kind = "engine"
+params = "{glyphs?: [names]}"
+area = "components"
+milestone = "M6"
+summary = "Option variant of Set Anchors that adds the default anchors on every master layer of the selected glyphs."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[command]]
+id = "glyph.resetAnchors"
+label = "Reset Anchors"
+menu = ["Glyph"]
+shortcut = "Cmd+Shift+U"
+kind = "engine"
+params = "{glyphs?: [names], layer?}"
+area = "components"
+milestone = "M6"
+summary = "Deletes all anchors of the selected glyphs' layers and rebuilds the default set from the glyph info database."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[command]]
+id = "glyph.resetAnchorsForAllMasters"
+label = "Reset Anchors for All Masters"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names]}"
+area = "components"
+milestone = "M6"
+summary = "Option variant of Reset Anchors that resets the anchors on all masters. The reference mentions the modifier but gives neither the item's label nor a shortcut."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.selection"
+area = "components"
+milestone = "M6"
+summary = "An anchor is selected by clicking its orange dot, several by Shift-clicking, the next or previous one with Tab or Shift+Tab. Only selected anchors show their name."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.moveLikeNodes"
+area = "components"
+milestone = "M6"
+summary = "A selected anchor moves the same way a node does: by dragging with the Select tool, with the arrow keys and their increments, or by typing coordinates in the Info box."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.shapeShowsMetricPosition"
+area = "components"
+milestone = "M6"
+summary = "The anchor marker is a diamond when the anchor sits precisely on a metric line (baseline or x-height, for instance), a square when it is inside an alignment zone, and a circle otherwise. Anchors whose name starts with an underscore are drawn with a hole in the same three shapes."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.uniqueNamesPerLayer"
+area = "components"
+milestone = "M6"
+summary = "Anchor names are unique within a layer. An Option-drag that duplicates an anchor therefore gives the copy the original name with an underscore appended."
+ref = "Edit View › Adding, Editing, & Removing Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.originAnchor"
+area = "components"
+milestone = "M6"
+summary = "An anchor named origin inside a glyph defines the point of that glyph's components that Align Selection places on a node."
+ref = "Edit View › Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.markToBase"
+area = "features"
+milestone = "M8"
+summary = "The mark feature is generated automatically from anchors: a combining mark carries an underscore-prefixed anchor (for example _top) and base glyphs carry the anchor of the same name without the underscore (top); each such pair becomes a mark-to-base attachment. Combining marks usually end in comb, have Unicode values and can be typed after any base."
+ref = "Edit View › Mark to Base Positioning"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.ccmpAlongsideMark"
+area = "features"
+milestone = "M8"
+summary = "When the mark feature is generated and glyphs such as idotless and jdotless exist, the ccmp feature is generated as well."
+ref = "Edit View › Mark to Base Positioning"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.markToMark"
+area = "features"
+milestone = "M8"
+summary = "The mkmk feature is generated automatically for every combining mark that has both an underscore anchor and the matching plain anchor, so marks carrying both can be stacked on each other."
+ref = "Edit View › Mark to Mark Positioning"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.cursiveAttachment"
+area = "features"
+milestone = "M8"
+summary = "Anchors named exit and entry, placed at the end and the beginning of the connecting strokes of initial, medial and final forms, define cursive attachment: each glyph's entry anchor is placed on the exit anchor of its predecessor. With right-to-left typesetting switched on, Edit View previews the attachment live."
+ref = "Edit View › Cursive Attachment"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.ligatureCarets"
+area = "features"
+milestone = "M8"
+summary = "Anchors on the baseline of a ligature glyph named caret_ plus a distinguishing suffix (caret_1, caret_2 …) mark text-cursor positions inside the ligature. The suffix only keeps the names unique and its order is ignored; at export they become LigatureCaretByPos entries in GDEF."
+ref = "Edit View › Ligature Carets"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.contextual"
+area = "features"
+milestone = "M8"
+summary = "An anchor whose name starts with an asterisk (for example *bottom) is contextual: it replaces the plain anchor of the same base name for mark attachment whenever the glyph occurs in the context written in the anchor's Anchor Context field, and the plain anchor is used everywhere else. Several contextual anchors for one base name are told apart by a free suffix (*bottom.noon, *bottom.reh)."
+ref = "Edit View › Contextual Mark Attachment"
+status = "handbook"
+
+[[behavior]]
+id = "anchors.contextSyntax"
+area = "features"
+milestone = "M8"
+summary = "The anchor context is OpenType feature code for a glyph sequence in which * stands for the glyph holding the anchor; classes and tokens are allowed. An optional & marks where the mark glyph sits (needed when it does not come directly after the base), and a leading lookupflag …; statement sets lookup flags, typically UseMarkFilteringSet to restrict which marks the context applies to."
+ref = "Edit View › Contextual Mark Attachment"
+status = "handbook"
+
+[[panel]]
+id = "palette.anchorContext"
+label = "Anchor Context"
+location = "palette"
+controls = ["text field for the feature-code context of the selected contextual anchor"]
+area = "components"
+milestone = "M8"
+summary = "Field at the bottom of the Palette for the context of a selected asterisk-prefixed anchor. It is shown only while Show Info is on."
+ref = "Edit View › Contextual Mark Attachment"
+status = "handbook"
+
+[[command]]
+id = "anchor.setContext"
+label = "Set Context"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, anchor: string, context: string}"
+area = "components"
+milestone = "M8"
+summary = "Stores the context code of a contextual anchor, the action behind the Anchor Context field. The reference exposes it only as that field."
+ref = "Edit View › Contextual Mark Attachment"
+status = "inferred"
+
+# ───────────────────────────── Guides ─────────────────────────────
+
+[[behavior]]
+id = "guides.magnetic"
+area = "guides-metrics"
+milestone = "M3"
+summary = "While a node selection is dragged, temporary red lines appear whenever it lines up with other nodes or with a vertical metric. Holding Ctrl switches these magnetic guides off for the duration."
+ref = "Edit View › Magnetic Guides"
+status = "handbook"
+
+[[behavior]]
+id = "snapping.toNodesAndHandles"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Any dragged node or other object snaps to the nodes and handles of paths, including those inside components. Near a component node, small markers for the component's nodes fade in as snap targets. Holding Ctrl disables snapping."
+ref = "Edit View › Magnetic Guides"
+status = "handbook"
+
+[[command]]
+id = "guide.add"
+label = "Add Guide"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, x?: number, y?: number, angle?: number, throughNodes?: [{path, index}, {path, index}]}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Canvas context-menu command that adds a local guide to the displayed layer: horizontal through the clicked position, or, when exactly two nodes are selected, running through those two nodes."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[command]]
+id = "guide.addGlobal"
+label = "Add Global Guide"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master?, x?: number, y?: number, angle?: number}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Alternate context-menu item, shown while Option is held, that adds the guide as a global (master-wide) guide instead of a local one."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.fromMeasurementTool"
+area = "guides-metrics"
+milestone = "M3"
+summary = "While a measurement line is being dragged with the Measurement tool, pressing G with Cmd, Option and Ctrl held turns that line into a guide."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[command]]
+id = "view.showGuides"
+label = "Show Guides"
+menu = ["View"]
+shortcut = "Cmd+Shift+L"
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Toggles the display of guides in Edit View."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.localVersusGlobal"
+area = "guides-metrics"
+milestone = "M3"
+summary = "A local guide belongs to one glyph layer, is drawn blue and shows only on that layer. A global guide belongs to a master, is drawn red and shows on every glyph of that master unless its scope is restricted."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.knobAndSelection"
+area = "guides-metrics"
+milestone = "M3"
+summary = "A guide is selected by clicking anywhere on it and shows a filled knob while selected. Dragging the knob moves the guide, dragging the guide anywhere else changes its angle, and double-clicking the knob turns the guide perpendicular to its present orientation."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.keyboard"
+area = "guides-metrics"
+milestone = "M3"
+summary = "With a guide selected, Tab and Shift+Tab step to the next and previous guide, and the arrow keys move it by 1 unit (10 with Shift, 100 with Cmd) like a node."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.optionDragDuplicates"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Option-dragging one or more selected guides leaves the originals and drops copies at the new position."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[command]]
+id = "guide.makeGlobal"
+label = "Make Global Guide"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{guides?: [integer]}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Context-menu command that moves the selected local guide from the layer to the master, turning it into a global guide."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[command]]
+id = "guide.makeLocal"
+label = "Make Local Guide"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{guides?: [integer]}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Context-menu command that moves the selected global guide from the master to the current glyph layer, turning it into a local guide."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[command]]
+id = "guide.lock"
+label = "Lock Guides"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{guides?: [integer]}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Context-menu command that locks the selected guides. Once locked, a guide can no longer be selected, and a lock icon replaces its knob."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[command]]
+id = "guide.unlock"
+label = "Unlock Guide"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{guide?: integer}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Context-menu command, reached by right-clicking or Ctrl-clicking a locked guide's lock icon, that makes the guide selectable again."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[command]]
+id = "guide.setProperties"
+label = "Set Properties"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{guide: integer, scope?: local|global, x?: number, y?: number, angle?: number, angleLocked?: bool, relativeTo?: left|right|both, measurement?: bool, name?: string, filter?: object}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Writes the properties of a guide that the reference edits through the Info box and Info for Selection: position, angle, angle lock, sidebearing reference, measurement flag, name and, for global guides, the glyph filter. Our own command."
+ref = "Edit View › Local & Global Guides"
+status = "inferred"
+
+[[command]]
+id = "guide.remove"
+label = "Remove"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{guides: [integer], scope?: local|global}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Removes guides. Our own command; the chapter does not say how a guide is deleted (presumably the Delete key on a selected guide)."
+ref = "Edit View › Local & Global Guides"
+status = "inferred"
+
+[[behavior]]
+id = "guides.infoBoxFields"
+area = "guides-metrics"
+milestone = "M3"
+summary = "For a selected guide the Info box offers its position, its angle with a lock toggle, a three-way sidebearing reference control, a measurement toggle and a Name field."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.angleLock"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Closing the lock next to a guide's angle in the Info box freezes the angle, so dragging the guide can no longer rotate it until the lock is opened again."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.sidebearingReference"
+area = "guides-metrics"
+milestone = "M3"
+summary = "A guide's horizontal position is measured from the left sidebearing by default. It can instead be tied to the right sidebearing or to both sidebearings, so that a (typically slanted or global) guide keeps its relation to the right edge when the glyph width changes."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.measurementFlag"
+area = "guides-metrics"
+milestone = "M3"
+summary = "The measurement toggle in the Info box turns a selected guide into a measurement guide; what a measurement guide displays is covered with the measuring features."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.names"
+area = "guides-metrics"
+milestone = "M3"
+summary = "A guide can be given a name through the Name field of the Info box; the name is drawn at the left end of the guide."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "guides.globalScopeFilter"
+area = "guides-metrics"
+milestone = "M4"
+summary = "A global guide appears on all glyphs by default. Running Edit › Info for Selection (Cmd+Alt+I) on a selected global guide opens rules, built like Smart Filter rules, that limit the guide to the glyphs matching them."
+ref = "Edit View › Local & Global Guides"
+status = "handbook"
+
+[[behavior]]
+id = "undo.perGlyphHistory"
+area = "drawing"
+milestone = "M3"
+summary = "Undo in Edit View and Font View is kept per glyph: each glyph has its own history. Changes to data that does not belong to a glyph, notably global guides (which belong to a master), are not recorded and cannot be undone."
+ref = "Edit View › Glyph-Specific Undo History"
+status = "handbook"
+
+# ── Added after the audit of 2026-10-07: a tool the appendix names. ──
+
+[[tool]]
+id = "selectAllLayers"
+label = "Select All Layers"
+shortcut = "Shift+V"
+group = "select"
+gestures = ["as the Select tool, acting on the visible layers of the glyph at once (details not documented)"]
+area = "drawing"
+milestone = "M3"
+summary = "A variant of the Select tool sharing its toolbar button, named only in the appendix with its shortcut. What exactly it selects across layers must be observed."
+ref = "Appendix › Custom Parameters (mention only)"
+status = "handbook"

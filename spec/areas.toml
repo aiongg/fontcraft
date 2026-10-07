@@ -1,0 +1,115 @@
+# Parity areas. Every inventory entry names one of these in `area`.
+# `weight` is the share of the product (and of real users' work) the area represents; the parity
+# table in ROADMAP.md and docs/parity.md is computed as  sum(weight * score) / sum(weight).
+# Scores are never stored here: `cargo xtask parity` derives them from spec/inventory/*.toml
+# (entries with a live command or a `done` flag) and ROADMAP.md records the behaviour grade.
+
+[[area]]
+id = "ui-chrome"
+title = "Window, tabs, toolbar, sidebars, settings, shortcuts"
+weight = 5
+
+[[area]]
+id = "font-view"
+title = "Font View: glyph grid and list, filters, glyph data, adding and renaming glyphs"
+weight = 6
+
+[[area]]
+id = "edit-text"
+title = "Edit View text mode: typing, text preview, writing direction, sample strings"
+weight = 4
+
+[[area]]
+id = "drawing"
+title = "Drawing and editing outlines: tools, nodes, selection, transforms, measurement"
+weight = 10
+
+[[area]]
+id = "path-ops"
+title = "Path operations and filters: overlap removal, booleans, offset, corners, extremes, cleanup"
+weight = 6
+
+[[area]]
+id = "components"
+title = "Reusing shapes: components, anchors, composites, smart components, corner/cap/segment/brush components"
+weight = 7
+
+[[area]]
+id = "layers"
+title = "Layers, backups, backgrounds, masters as layers"
+weight = 3
+
+[[area]]
+id = "guides-metrics"
+title = "Guides, metric lines, alignment zones, grid, snapping"
+weight = 3
+
+[[area]]
+id = "spacing-kerning"
+title = "Spacing and kerning: sidebearings, metrics keys, kerning pairs, groups, kerning window"
+weight = 7
+
+[[area]]
+id = "font-info"
+title = "Font Info: font, masters, exports, names, custom parameters"
+weight = 6
+
+[[area]]
+id = "interpolation"
+title = "Interpolation: axes, masters, instances, intermediate and alternate layers, variable fonts"
+weight = 8
+
+[[area]]
+id = "features"
+title = "OpenType layout: feature code editor, automatic features, classes, mark and kern features"
+weight = 7
+
+[[area]]
+id = "hinting-ps"
+title = "PostScript hinting: stems, zones, autohinting, manual hints"
+weight = 3
+
+[[area]]
+id = "hinting-tt"
+title = "TrueType hinting: autohinting, manual instructions, control values, gasp"
+weight = 4
+
+[[area]]
+id = "color"
+title = "Colour fonts and images: layered colour, COLR/CPAL, sbix, SVG, placed images"
+weight = 3
+
+[[area]]
+id = "import-export"
+title = "Source formats in and out: native, UFO, designspace, .glyphs, binary fonts opened for editing"
+weight = 6
+
+[[area]]
+id = "compile"
+title = "Compiling fonts: static and variable TTF/OTF, WOFF/WOFF2, every table, checked against oracles"
+weight = 9
+
+[[area]]
+id = "proofing"
+title = "Preview, proofing and printing"
+weight = 2
+
+[[area]]
+id = "cli-tools"
+title = "Command-line font tools: dump, table edit, subset, instance, merge, convert, check, compare"
+weight = 8
+
+[[area]]
+id = "qa"
+title = "Font quality checks and auditing"
+weight = 3
+
+[[area]]
+id = "extensions"
+title = "Plug-ins and scripting over the command registry"
+weight = 3
+
+[[area]]
+id = "automation"
+title = "Agent surfaces: MCP, control channel, headless batch"
+weight = 4

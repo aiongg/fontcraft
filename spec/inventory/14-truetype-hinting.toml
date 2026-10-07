@@ -1,0 +1,1290 @@
+# Inventory: TrueType hinting
+# Sources:
+#   - Glyphs 4 Handbook, chapter "TrueType Hinting" (https://handbook.glyphsapp.com/), status "handbook"
+#   - Rows with status "memory" (ids autohint.tt.option.* and autohint.tt.controlInstructions.syntax)
+#     record the ttfautohint option set as recalled from its public documentation; the handbook only
+#     names the two custom parameters and lists no individual option. Verify before implementing.
+# Date: 2026-10-07
+#
+# Notes for readers of this file:
+#   - Custom parameters named here (Get Hints From Master, TTFAutohint options, TTFAutohint control
+#     instructions, TTFZones, TTFStems, TTFBlueFuzz, TTFOvershootSuppressionBelowPPM,
+#     TTZoneRoundingThreshold, TTMinimumDistance, CVT Table, prep Table Assembly, fpgm Table Assembly,
+#     gasp Table) are described as [[behavior]] rows with ids hinting.tt.param.*; their [[parameter]]
+#     rows belong to the custom-parameter inventory so that parameter names stay unique across files.
+#   - Context-menu commands carry menu = [] (the schema has no slot for context menus).
+#   - Single-letter shortcuts are active only while the TrueType Instructor tool is the current tool.
+#   - Ids: hinting.tt.* = rules, hint.tt.* = commands, autohint.tt.* = the export autohinter.
+
+# ---------------------------------------------------------------------------------------------
+# Concepts
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.tt.cubicSourceQuadraticOutput"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Sources keep cubic outlines; TrueType export converts them to quadratic outlines on the fly, and manual instructions, which refer to source nodes, are carried over to the matching points of the converted outline. Instructions are therefore stored against source nodes, never against final point numbers."
+ref = "TrueType Hinting › introduction"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.mainMasterOnly"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Glyph-level TrueType instructions are defined on one master only, the main master: the first in the masters list, or the one named by a Get Hints From Master custom parameter on the font. The same parameter controls PostScript hints."
+ref = "TrueType Hinting › introduction"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.replicateToOtherMasters"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Every master carries its own TT zones and stems, and these font-level values are what lets the main master's instructions be re-applied to all other masters and to interpolated instances: an instruction that refers to zone or stem N uses that master's or instance's value of N. It follows (our inference, not stated) that zone and stem lists must correspond across masters."
+ref = "TrueType Hinting › Font-level Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.getHintsFromMaster"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Get Hints From Master is a font-level custom parameter (Font Info › Font) whose value names the master whose layers supply glyph-level hints, overriding the first-master default."
+ref = "TrueType Hinting › introduction"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Autohinting at export
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.tt.export.autohintIgnoresManual"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Automatic and manual TrueType hinting cannot be combined. Exporting a TrueType-flavour font with the export dialog's Autohint option on discards all manual TT instructions for that export and hints the whole font with the autohinter (TTF Autohint in the reference)."
+ref = "TrueType Hinting › Autohinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.export.manualWhenAutohintOff"
+area = "hinting-tt"
+milestone = "M10"
+summary = "With the Autohint export option off, the manual instructions stored in the source are compiled into the exported font. Glyphs without instructions are exported unhinted."
+ref = "TrueType Hinting › Autohinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.ttfAutohintOptions"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TTFAutohint options is a custom parameter on an export instance (Font Info › Exports) holding the option settings passed to the autohinter for that instance. The handbook names the parameter but lists none of its options; see the autohint.tt.option.* rows for the recalled option set."
+ref = "TrueType Hinting › Autohinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.ttfAutohintControlInstructions"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TTFAutohint control instructions is a custom parameter on an export instance (Font Info › Exports) holding text lines that correct the autohinter's result for individual glyphs and points. The lines address points by index, which Show Point Indexes displays in Edit View."
+ref = "TrueType Hinting › Autohinting; Show Point Indexes"
+status = "handbook"
+
+[[command]]
+id = "autohint.tt.run"
+label = "Autohint TrueType"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path | instance: id, options?: {…autohint.tt.option.*}, controlInstructions?: string, output?: path}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Runs the TrueType autohinter over a whole compiled TrueType font or an instance being exported, replacing any existing instructions, with the options and control instructions of the instance. It is the engine behind the Autohint export option; exposing it as a command is our design."
+ref = "TrueType Hinting › Autohinting"
+status = "inferred"
+
+[[behavior]]
+id = "autohint.tt.option.hintingRange"
+area = "hinting-tt"
+milestone = "M10"
+summary = "hinting-range-min and hinting-range-max (recalled defaults 8 and 50) bound the pixel sizes for which the autohinter generates separate hint sets; sizes above the maximum reuse the set for the maximum size. Recalled from the ttfautohint documentation, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.hintingLimit"
+area = "hinting-tt"
+milestone = "M10"
+summary = "hinting-limit (recalled default 200) is the pixel size above which the generated instructions switch themselves off; 0 means no limit. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.increaseXHeight"
+area = "hinting-tt"
+milestone = "M10"
+summary = "increase-x-height (recalled default 14) rounds the x-height up more readily for sizes from 6 PPM up to the given size; 0 turns the behaviour off. x-height-snapping-exceptions lists sizes or size ranges that are exempt. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.fallbackStemWidth"
+area = "hinting-tt"
+milestone = "M10"
+summary = "fallback-stem-width gives the horizontal stem width, in font units, to assume for glyphs of scripts where the autohinter cannot derive a standard width itself. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.stemWidthMode"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Stem width handling can be chosen separately for the three Windows rendering targets (grayscale, GDI ClearType, DirectWrite ClearType): natural widths, quantized widths, or strong widths snapped to whole pixels. Older versions expose this as a strong-stem-width flag set per target. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.scripts"
+area = "hinting-tt"
+milestone = "M10"
+summary = "default-script names the script used for glyphs the autohinter cannot assign from OpenType features, and fallback-script the script used for glyphs it cannot classify at all; fallback-scaling makes fallback glyphs only scale to the grid instead of being hinted. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.windowsCompatibility"
+area = "hinting-tt"
+milestone = "M10"
+summary = "windows-compatibility adds two artificial blue zones at the OS/2 usWinAscent and usWinDescent heights so that hinted glyphs are not clipped by Windows at small sizes. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.composites"
+area = "hinting-tt"
+milestone = "M10"
+summary = "hint-composites hints a composite glyph as one outline instead of hinting its components separately, and adjust-subglyphs (formerly pre-hinting) applies existing glyph instructions before autohinting so that shifted components are analysed in place. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.symbol"
+area = "hinting-tt"
+milestone = "M10"
+summary = "symbol tells the autohinter to process a font that lacks the standard characters it normally measures, using default stem and zone values instead of failing; ignore-restrictions lets it process a font whose embedding flags forbid modification. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.dehint"
+area = "hinting-tt"
+milestone = "M10"
+summary = "dehint strips all hinting from the font instead of adding any, overriding every other option. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.option.info"
+area = "hinting-tt"
+milestone = "M10"
+summary = "By default the autohinter appends its name, version and option summary to the font's version name string; no-info suppresses that, and a detailed-info setting writes the full parameter list. FontCraft should default to not altering name strings. Recalled, not stated in the handbook."
+ref = "ttfautohint documentation (recalled)"
+status = "memory"
+
+[[behavior]]
+id = "autohint.tt.controlInstructions.syntax"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Control instructions are one statement per line, each starting with a glyph name: point shifts before or after hinting ('touch' or 'point' with point indexes, an x or y shift and an '@' list of pixel sizes), forced segment directions ('left', 'right', 'nodir' with a point range), and 'no' to remove a point from consideration at given sizes. Recalled from the ttfautohint documentation; the handbook only says point indexes are needed."
+ref = "ttfautohint documentation (recalled); TrueType Hinting › Show Point Indexes"
+status = "memory"
+
+# ---------------------------------------------------------------------------------------------
+# Font-level hints: zones
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.tt.zones.purpose"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TT zones make vertical extremes that belong together land on the same pixel row: when an outline is grid-fitted, extremes lying in one zone are rounded to one common height. Zones are placed at whatever heights the design repeats (baseline, descender, ascender, x-height, cap height, small-cap height, figure height, and script-specific heights such as shoulder, nabira or rekha height)."
+ref = "TrueType Hinting › TrueType Zones"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.zones.defaultFromAlignmentZones"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A master without a TTFZones custom parameter uses its ordinary alignment zones (Font Info › Masters › Metrics) for TrueType hinting. Adding TTFZones to the master replaces them for TrueType purposes only."
+ref = "TrueType Hinting › TrueType Zones"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.ttfZones"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TTFZones is a per-master custom parameter holding a list of zones of any length. Each zone has a unique name, a position, a size, an optional alignment to another zone, and (on the main master only) per-PPM deltas and a glyph filter."
+ref = "TrueType Hinting › TrueType Zones"
+status = "handbook"
+
+[[panel]]
+id = "dialog.ttfZones"
+label = "TTFZones editor"
+location = "dialog"
+controls = [
+  "zone list with columns: Name, Position, Size, Align (pop-up of other zones)",
+  "delta button per zone (opens the delta table; filled with the accent colour when any delta is set)",
+  "globe button per zone (opens the glyph filter; filled with the accent colour when a filter is set)",
+  "plus button: add a zone",
+  "minus button: remove the selected zone",
+  "actions menu (bottom left): Get PS zones",
+]
+area = "hinting-tt"
+milestone = "M10"
+summary = "Editor that opens from the value field of a master's TTFZones custom parameter in Font Info › Masters. It lists the master's TT zones for editing; the delta and filter buttons are meaningful on the main master only."
+ref = "TrueType Hinting › TrueType Zones"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.zones.name"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A zone's name is free text but must be unique within the list. The exact name 'xHeight' is reserved for the x-height zone, which is rounded up more readily than other zones at small sizes. Zone names appear in the Info box pop-up of a selected Snap instruction."
+ref = "TrueType Hinting › TrueType Zones › Name"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.zones.positionAndSize"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Position is the flat edge of the zone as an offset from the baseline (negative below it). Size is the extent in which overshoots are flattened onto the position: positive for a top zone (catches tops of shapes), negative for a bottom zone (catches bottoms, e.g. baseline, descender, bottoms of small figures). The span from position to position + size must contain every overshoot meant to be flattened, as with PostScript zones."
+ref = "TrueType Hinting › TrueType Zones › Position; Size"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.zones.align"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A zone may be aligned to another zone. Its pixel position is then derived from the other zone's rounded position plus the rounded distance between the two: the same pixel row for distances below 0.5 px, a neighbouring row from 0.5 px upwards, and so on. This keeps close or overlapping zones from drifting apart unevenly from one PPM to the next."
+ref = "TrueType Hinting › TrueType Zones › Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.zones.deltas"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A zone can be nudged at individual pixel sizes: for each (master, PPM) cell the setting is round up, round down, or none, moving the zone's rounded height one pixel up or down at that size. Zone deltas are stored on the main master's zone only. They help where, at some size, the Hinting Preview renders a zone a pixel above or below where it belongs."
+ref = "TrueType Hinting › TrueType Zones › Deltas"
+status = "handbook"
+
+[[panel]]
+id = "dialog.ttDeltas"
+label = "Delta table"
+location = "dialog"
+controls = [
+  "grid of buttons: one column per master, one row per PPM size",
+  "each button cycles: no rounding, round up, round down",
+]
+area = "hinting-tt"
+milestone = "M10"
+summary = "Pop-up table used in three places: the delta button of a TT zone, the delta button of a TT stem, and the Delta icon in the Info box for selected Delta instructions. The PPM range of the rows is not stated."
+ref = "TrueType Hinting › TrueType Zones › Deltas; Delta (E)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.zones.filter"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A zone can be restricted to a subset of glyphs with a rule set defined like a Smart Filter; glyphs outside the subset behave as if the zone did not exist. The filter is stored on the main master's zone only."
+ref = "TrueType Hinting › TrueType Zones › Filter"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.getPsZones"
+label = "Get PS zones"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Actions-menu item of the TTFZones editor: fills the master's TT zone list from its PostScript alignment zones. Whether it replaces or appends to existing TT zones, and how the imported zones are named, is not stated."
+ref = "TrueType Hinting › TrueType Zones"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.addZone"
+label = "Add Zone"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id, name: string, position: number, size: number, align?: zoneName}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Plus button of the TTFZones editor: appends a zone to the master's TT zone list. Names must stay unique. To keep masters in step the command should offer to add the zone to every master."
+ref = "TrueType Hinting › TrueType Zones"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.removeZone"
+label = "Remove Zone"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id, zone: zoneName}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Minus button of the TTFZones editor: deletes the selected zone. What happens to Snap instructions and zone alignments that refer to the removed zone is not stated."
+ref = "TrueType Hinting › TrueType Zones"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.setZone"
+label = "Edit Zone"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id, zone: zoneName, name?: string, position?: number, size?: number, align?: zoneName | null, deltas?: {masterId: {ppm: 'up'|'down'|'none'}}, filter?: smartFilterRules | null}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Changes any property of a TT zone: name, position, size, alignment target, per-master per-PPM deltas, glyph filter. Deltas and filter are accepted only for the main master's zones. Headless form of editing the zone list rows."
+ref = "TrueType Hinting › TrueType Zones"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# Font-level hints: stems
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.tt.stems.defaultFromStandardStems"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TT stems give strokes of similar thickness an identical pixel count when rendered. A master without a TTFStems custom parameter uses its standard stems; adding TTFStems to the master replaces them for TrueType purposes only."
+ref = "TrueType Hinting › TrueType Stems"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.ttfStems"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TTFStems is a per-master custom parameter holding a list of stems. Each stem has an orientation, a name, a size (the average thickness), and (on the main master only) per-PPM deltas and a glyph filter."
+ref = "TrueType Hinting › TrueType Stems"
+status = "handbook"
+
+[[panel]]
+id = "dialog.ttfStems"
+label = "TTFStems editor"
+location = "dialog"
+controls = [
+  "stem list with columns: orientation toggle (double-arrow icon, X or Y), Name, Size",
+  "delta button per stem (opens the delta table)",
+  "globe button per stem (opens the glyph filter; filled with the accent colour when a filter is set)",
+  "plus button: add a stem",
+  "minus button: remove the selected stem",
+  "actions menu: Get PS stems",
+]
+area = "hinting-tt"
+milestone = "M10"
+summary = "Editor that opens from the value field of a master's TTFStems custom parameter in Font Info › Masters. It lists the master's TT stems for editing; the delta and filter buttons are meaningful on the main master only."
+ref = "TrueType Hinting › TrueType Stems"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stems.orientation"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A stem's orientation is the axis along which it moves points: X-direction stems measure how thick an upright (vertical) stroke is, Y-direction stems how thick a horizontal one is. Clicking the double-arrow icon switches between the two."
+ref = "TrueType Hinting › TrueType Stems › Orientation"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stems.nameAndSize"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A stem's name is free text used to label it (and to pick it in a Stem instruction's pop-up); descriptive names are advised, and uniqueness is not required by the text. Its size is the average stroke thickness in font units; in rendering, stems of similar size are drawn with the same pixel count."
+ref = "TrueType Hinting › TrueType Stems › Name; Size"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stems.deltas"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A stem can be rounded up or down at individual pixel sizes per master, through the same table as zone deltas, stored on the main master only. Stem deltas take effect only in ClearType-style (Windows GDI) rendering."
+ref = "TrueType Hinting › TrueType Stems › Deltas"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stems.filter"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A stem can be restricted to a subset of glyphs with Smart Filter style rules, stored on the main master only; it works like the zone filter. Automatic stem choice in other glyphs then skips this stem."
+ref = "TrueType Hinting › TrueType Stems › Filter"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.getPsStems"
+label = "Get PS stems"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Actions-menu item of the TTFStems editor: fills the master's TT stem list from its PostScript standard stems, horizontal ones as Y-direction and vertical ones as X-direction stems. Whether existing TT stems are replaced is not stated."
+ref = "TrueType Hinting › TrueType Stems"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.addStemDefinition"
+label = "Add Stem"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id, name: string, orientation: 'x'|'y', size: number}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Plus button of the TTFStems editor: appends a stem to the master's TT stem list."
+ref = "TrueType Hinting › TrueType Stems"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.removeStemDefinition"
+label = "Remove Stem"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id, stem: stemName}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Minus button of the TTFStems editor: deletes the selected stem. What happens to Stem instructions that name the removed stem is not stated."
+ref = "TrueType Hinting › TrueType Stems"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.setStemDefinition"
+label = "Edit Stem"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id, stem: stemName, name?: string, orientation?: 'x'|'y', size?: number, deltas?: {masterId: {ppm: 'up'|'down'|'none'}}, filter?: smartFilterRules | null}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Changes any property of a TT stem: orientation, name, size, per-master per-PPM deltas, glyph filter. Deltas and filter are accepted only for the main master's stems. Headless form of editing the stem list rows."
+ref = "TrueType Hinting › TrueType Stems"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# Font-level hints: other settings
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.tt.param.ttfBlueFuzz"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TTFBlueFuzz widens every TT zone by the given number of units both above and below; the default is 1. It may be set on the font (applies to all instances), on masters (the values are interpolated at export), or on an export instance (overrides font and master values). Its main use is catching extremes that drop out of a zone through rounding in interpolated instances."
+ref = "TrueType Hinting › TrueType BlueFuzz"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.overshootSuppressionBelowPpm"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TTFOvershootSuppressionBelowPPM is a font-level custom parameter (Font Info › Font) setting a pixel size; at smaller sizes, overshoots inside a zone are collapsed onto the zone's flat edge (its position). At that size and above, overshoots are allowed to show. No default is stated."
+ref = "TrueType Hinting › Advanced TrueType Hinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.zoneRoundingThreshold"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TTZoneRoundingThreshold (font or export instance; the font value applies to instances without their own) is a small decimal, default 0.09375, added to the pixel position of every positive zone before rounding and added twice for the zone named xHeight, making those zones more likely to round up. Example: at 0.15, a zone at 8.4 px becomes 9 px (8.4 + 0.15 = 8.55) and an xHeight zone at 6.25 px becomes 7 px (6.25 + 2 × 0.15 = 6.55)."
+ref = "TrueType Hinting › Advanced TrueType Hinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.minimumDistance"
+area = "hinting-tt"
+milestone = "M10"
+summary = "TTMinimumDistance is an export-instance custom parameter (Font Info › Exports) giving, in pixels, the smallest length a stem with a Stem instruction may be drawn at any PPM. The default is 0.25, a quarter pixel."
+ref = "TrueType Hinting › Advanced TrueType Hinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.param.controlValueProgram"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Opening a hinted TrueType font adds three custom parameters to the masters: CVT Table, prep Table Assembly and fpgm Table Assembly, holding the font's control values and the assembly source of its control-value and font programs. They exist so that the original hinting survives a re-export and are rarely edited by hand; at export they are written to the cvt, prep and fpgm tables."
+ref = "TrueType Hinting › Advanced TrueType Hinting › Control Value Program"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.import.glyphPrograms"
+area = "hinting-tt"
+milestone = "M10"
+summary = "The handbook describes how cvt, prep and fpgm of an opened font are preserved but does not say how the per-glyph instruction programs are kept. For the preserved tables to be of any use, each imported glyph's instructions must be stored on its layer (as assembly text) and written back unchanged when the glyph's outline is untouched and no editor instructions replace them."
+ref = "TrueType Hinting › Advanced TrueType Hinting › Control Value Program"
+status = "inferred"
+
+[[command]]
+id = "hint.tt.removeImportedHinting"
+label = "Remove Imported TrueType Hinting"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphPrograms?: bool, controlValueProgram?: bool, gasp?: bool}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Deletes the hinting brought in from an opened binary font: the CVT Table, prep Table Assembly and fpgm Table Assembly parameters on every master and the imported per-glyph programs. The reference has no single command for this (the parameters are removed by hand); added so that dehinting is one scriptable step."
+ref = "TrueType Hinting › Advanced TrueType Hinting › Control Value Program"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# gasp
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.tt.param.gaspTable"
+area = "hinting-tt"
+milestone = "M10"
+summary = "gasp Table is a custom parameter on the font or on an export instance (the font value applies to instances without their own) holding a pair of PPM thresholds, each a size where the rendering behaviour that the font recommends switches; the defaults are 8 and 20. The table carries recommendations for both grayscale and ClearType renderers, which a renderer is free to ignore."
+ref = "TrueType Hinting › Advanced TrueType Hinting › gasp Table"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.gasp.ranges"
+area = "hinting-tt"
+milestone = "M10"
+summary = "The two thresholds give three ranges. Up to the first: 'No Hinting & Symmetric', no grid-fitting, antialiased rendering. Between them: 'Hinting & Asymmetric', grid-fitting without grayscale smoothing; in ClearType, vertical grid-fitting with horizontal subpixel rendering. Above the second: 'Hinting & Symmetric', grid-fitting plus grayscale smoothing, and symmetric smoothing in ClearType (antialiasing in Y in addition to horizontal subpixels)."
+ref = "TrueType Hinting › Advanced TrueType Hinting › gasp Table"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.gasp.flagMapping"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Proposed gasp records for the three ranges, to verify against a reference export: up to threshold 1, DOGRAY + SYMMETRIC_SMOOTHING; up to threshold 2, GRIDFIT + SYMMETRIC_GRIDFIT; up to 65535, GRIDFIT + DOGRAY + SYMMETRIC_GRIDFIT + SYMMETRIC_SMOOTHING, in a version 1 table. The handbook describes the ranges in words only; whether the middle and upper behaviours are user-selectable per range is not stated."
+ref = "TrueType Hinting › Advanced TrueType Hinting › gasp Table; OpenType spec › gasp"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# The TrueType Instructor tool
+# ---------------------------------------------------------------------------------------------
+
+[[tool]]
+id = "trueTypeInstructor"
+label = "TrueType Instructor"
+shortcut = "I"
+group = ""
+gestures = [
+  "click node: select it; Shift+click or drag a rectangle: extend the selection (inferred, standard node selection)",
+  "click an instruction badge: select that instruction and show its options in the Info box",
+  "Shift+click instruction badges: select several instructions (used for Make Triple Hint)",
+  "drag an instruction: reposition it",
+  "A: add Snap instructions to the selected points",
+  "S: add Stem instructions to the selected point pairs",
+  "F: add Shift instructions from the touched point to the other selected points",
+  "G: add an Interpolate instruction to the untouched point between two touched points",
+  "E: add Delta instructions to the selected points (vertical direction only)",
+  "X: toggle between vertical and horizontal hinting direction",
+  "Period or Plus: preview pixel size up by one",
+  "Comma or Minus: preview pixel size down by one",
+  "Cmd+Ctrl+Alt+Shift+I: autohint the current glyph, or all glyphs selected in Edit View",
+  "Control-click or right-click: context menu with instruction types, Autohint, Remove Hints, Show Pixel Preview, Show Point Indexes, preview scale 1x/2x/4x, Show Preview Address…",
+]
+area = "hinting-tt"
+milestone = "M10"
+summary = "Edit View tool for placing glyph-level TrueType instructions on the main master's nodes. While it is active the layer shows three outlines (master, unhinted instance, grid-fitted instance), the Info box shows pixel size and hinting direction, and the preview area becomes a size waterfall at the right. The appendix gives I as its shortcut, the same key the handbook gives the Higher-Order Interpolation tool; which one wins when both exist is open."
+ref = "TrueType Hinting › Glyph-level Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.tool.plainKeysAreInstructions"
+area = "hinting-tt"
+milestone = "M10"
+summary = "While the TrueType Instructor is active, unmodified letter keys add instructions and do not switch tools (A adds a Snap instruction rather than selecting the Annotation tool). Leaving the tool is done with the toolbar."
+ref = "TrueType Hinting › Glyph-level Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.tool.masterOutline"
+area = "hinting-tt"
+milestone = "M10"
+summary = "The current master's outline is drawn in black and is the only one whose nodes and handles can be selected. All nodes are drawn as gray discs (not the usual green circles and blue squares), and extra nodes at path intersections are always shown, whatever View › Show Nodes › Extra Nodes is set to."
+ref = "TrueType Hinting › Hinting Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.tool.instanceOutline"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A blue outline shows the currently previewed instance before hinting. The instance is the one chosen in the instance menu beside the eye icon at the bottom left of Edit View (clicking the eye reveals the menu). When that instance coincides with the current master the blue outline is omitted because it would lie under the black one."
+ref = "TrueType Hinting › Hinting Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.tool.gridFittedOutline"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A red outline shows the previewed instance after its instructions have been executed and grid-fitted for whichever rendering intent is chosen (Grayscale, ClearType, DirectWrite) at the current pixel size; it must equal what the Windows rasterizer produces. It is not drawn for a glyph without TT instructions."
+ref = "TrueType Hinting › Hinting Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.tool.pixelBackdrop"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Behind the outlines a pixel rendering at the current size is shown. It is only indicative: real output adds filtering (gamma, colour mode, transparency) after the grid-fitted outline, so the backdrop is not a pixel-exact prediction."
+ref = "TrueType Hinting › Hinting Outlines"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.showPixelPreview"
+label = "Show Pixel Preview"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Edit View context-menu toggle that shows or hides the blue (unhinted instance) and red (grid-fitted) outlines of the TrueType Instructor."
+ref = "TrueType Hinting › Hinting Outlines"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.setRenderingIntent"
+label = "Set Rendering Intent"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{intent: 'grayscale'|'cleartype'|'directwrite'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Chooses which Windows rendering mode the grid-fitted outline and the hinting preview simulate: Grayscale, ClearType (GDI) or DirectWrite. The handbook names the three intents and says there is a current one, but not which control selects it."
+ref = "TrueType Hinting › Hinting Outlines"
+status = "inferred"
+
+[[panel]]
+id = "infoBox.ttInstructor"
+label = "Info box: TrueType Instructor"
+location = "inspector"
+controls = [
+  "pixel size field (PPM) with stepper buttons; Up/Down change the value while the field has focus",
+  "hinting direction button (wavy arrow): vertical or horizontal",
+  "with a Snap instruction selected: zone pop-up (Auto, No Zone, each named zone)",
+  "with a Stem instruction selected: stem pop-up (Auto, No Stem, each named stem)",
+  "with Snap, Stem, Shift or Interpolate selected: five rounding buttons (Round, Round up, Round down, No rounding, Round only in GDI ClearType)",
+  "with Delta instructions selected: Delta button opening the delta table",
+]
+area = "hinting-tt"
+milestone = "M10"
+summary = "State of the Edit View Info box (View › Show Info, Cmd+Shift+I) while the TrueType Instructor tool is active. Pixel size and direction are always present; the remaining controls depend on the kind of the selected instruction."
+ref = "TrueType Hinting › Pixel Size; Hint Direction; Instructions"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.setPixelSize"
+label = "Set Preview Pixel Size"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{ppm: number}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Sets the pixels-per-em value used for the grid-fitted outline and pixel backdrop. One pixel then equals unitsPerEm / ppm font units (1000 UPM at 12 PPM gives about 83 units). Limits of the field are not stated."
+ref = "TrueType Hinting › Pixel Size"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.increasePixelSize"
+label = "Increase Pixel Size"
+menu = []
+shortcut = "."
+kind = "ui"
+params = "{}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Raises the preview pixel size by one. Keys: Period or Plus while the pixel size field is not focused; Up while it is focused; also the stepper button."
+ref = "TrueType Hinting › Pixel Size"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.decreasePixelSize"
+label = "Decrease Pixel Size"
+menu = []
+shortcut = ","
+kind = "ui"
+params = "{}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Lowers the preview pixel size by one. Keys: Comma or Minus while the pixel size field is not focused; Down while it is focused; also the stepper button."
+ref = "TrueType Hinting › Pixel Size"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.toggleDirection"
+label = "Toggle Hinting Direction"
+menu = []
+shortcut = "X"
+kind = "ui"
+params = "{direction?: 'vertical'|'horizontal'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Switches the tool between vertical hinting (points move in Y; used for horizontal stems) and horizontal hinting (points move in X; used for vertical stems). The Info box offers the same switch as its wavy-arrow button. New instructions are created in the current direction."
+ref = "TrueType Hinting › Hint Direction"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.tool.otherDirectionDimmed"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Instructions of the direction that is not current stay visible, dimmed and gray, as background reference; they cannot be selected or edited until the direction is switched."
+ref = "TrueType Hinting › Hint Direction"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.hintOrder"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Instructions run in the order in which they were added, and the order matters because later instructions build on points moved by earlier ones. The layer therefore stores instructions as an ordered list. The handbook describes no way to reorder them other than removing and re-adding."
+ref = "TrueType Hinting › Hint Order"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.touchedPoints"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A point that an instruction has moved is a touched point (in that direction). Several instruction types have requirements on this state: Snap needs untouched points, Shift a touched origin and untouched targets, Interpolate two touched references and an untouched target. Commands must evaluate the state by replaying the instruction list in order."
+ref = "TrueType Hinting › Hint Order; Instructions"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.iup"
+area = "hinting-tt"
+milestone = "M10"
+summary = "After the last instruction of a direction, every point still untouched is repositioned by interpolating between the nearest touched points before and after it in point-index order along its contour (the IUP step). Snap with No rounding, and Interpolate, exist partly to stop this step from moving a point undesirably."
+ref = "TrueType Hinting › Hint Order"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.showPointIndexes"
+label = "Show Point Indexes"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Edit View context-menu toggle that labels every on-curve node with its point index in the exported TrueType outline. These are the numbers used in TTFAutohint control instructions."
+ref = "TrueType Hinting › Show Point Indexes"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.getPointIndexes"
+label = "Get Point Indexes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, instance?: id}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Read-only query returning, for each source node of the glyph, the point index it receives in the exported quadratic outline. Headless counterpart of Show Point Indexes, for agents writing control instructions."
+ref = "TrueType Hinting › Show Point Indexes"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# Previews
+# ---------------------------------------------------------------------------------------------
+
+[[panel]]
+id = "preview.ttHintingWaterfall"
+label = "Hinting Preview"
+location = "sidebar"
+controls = [
+  "vertical list of the Edit View glyphs rendered hinted, one line per size from 8 to 80 PPM",
+  "drag up or down to scroll through the sizes",
+  "scale 1x, 2x or 4x (chosen from the Edit View context menu)",
+]
+area = "hinting-tt"
+milestone = "M10"
+summary = "While the TrueType Instructor is active, the Preview Area moves from the bottom to the right edge of Edit View and shows the tab's glyphs in the current instance as a waterfall of hinted renderings. The same waterfall can be shown in the separate Preview Panel (Window › Preview Panel)."
+ref = "TrueType Hinting › Hinting Preview"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.setPreviewScale"
+label = "Preview Scale"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{scale: 1|2|4}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Edit View context-menu choice of the magnification at which the Hinting Preview draws its pixels: no scaling (1x), 2x or 4x."
+ref = "TrueType Hinting › Hinting Preview"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.showPreviewAddress"
+label = "Show Preview Address…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Edit View context-menu item that starts a local web server serving a page with the font laid out like the Hinting Preview, and opens a dialog showing the page's address with a Copy button. The page is meant to be opened on a Windows machine or VM on the same network, since macOS does not apply TrueType hinting."
+ref = "TrueType Hinting › Web Preview"
+status = "handbook"
+
+[[panel]]
+id = "dialog.ttPreviewAddress"
+label = "Preview Address"
+location = "dialog"
+controls = ["web address of the preview page (read-only)", "Copy button"]
+area = "hinting-tt"
+milestone = "M10"
+summary = "Dialog shown by Show Preview Address… with the URL of the running preview server. When the server stops (closing the dialog, the document or the app) is not stated."
+ref = "TrueType Hinting › Web Preview"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.renderPreview"
+label = "Render Hinted Preview"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instance: id, glyphs?: [names], text?: string, ppem: [number], intent?: 'grayscale'|'cleartype'|'directwrite', output?: 'bitmap'|'outline'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Read-only query that compiles the instance's instructions in memory, runs them at the listed pixel sizes for the given rendering intent, and returns either bitmaps or the grid-fitted point coordinates. Headless counterpart of the red outline and the Hinting Preview, for agents and regression tests."
+ref = "TrueType Hinting › Hinting Outlines; Hinting Preview"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# Instructions: general
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.tt.instructions.addFromSelection"
+area = "hinting-tt"
+milestone = "M10"
+summary = "An instruction is added by selecting the nodes it should act on and choosing its type from the context menu or pressing its letter key. Instructions may sit on any node the tool shows, including off-curve points and extra nodes. A placed instruction can be dragged to reposition it."
+ref = "TrueType Hinting › Instructions; Points in Overlapping Intersections"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.instructions.badgeColours"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Each instruction is drawn with a clickable badge whose colour identifies its type: Snap purple, Stem sky blue, Shift dark blue, Interpolate green; Stem instructions joined into a triple hint turn purple. The colour of Delta badges is not stated."
+ref = "TrueType Hinting › Instructions"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.autohintGlyph"
+label = "Autohint"
+menu = []
+shortcut = "Cmd+Ctrl+Alt+Shift+I"
+kind = "engine"
+params = "{glyphs?: [names], layer?: id}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Context-menu item of the TrueType Instructor that generates editable instructions for the glyph as a starting point: Snap and Stem instructions only, never Shift, Interpolate or Delta. The shortcut acts on all glyphs selected in Edit View and can be reassigned in the Commands section of the settings. For a glyph it cannot handle it reports 'There was a problem compiling TrueType instructions'."
+ref = "TrueType Hinting › Instructions"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.removeHints"
+label = "Remove Hints"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Context-menu item of the TrueType Instructor that deletes every glyph-level TrueType instruction from the current glyph, in both directions."
+ref = "TrueType Hinting › Instructions"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.deleteInstructions"
+label = "Delete Instructions"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, instructions?: [index]}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Removes only the selected instructions. The handbook does not describe deleting single TT instructions (the Delete key is the likely gesture, as for PostScript hints); verify before binding a key."
+ref = "TrueType Hinting › Instructions"
+status = "inferred"
+
+[[command]]
+id = "hint.tt.listInstructions"
+label = "List TrueType Instructions"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Read-only query returning the layer's instruction list in execution order: type, direction, the nodes involved (origin, target, references), zone or stem reference, rounding mode, triple-hint membership and delta cells. Our design, for agents and tests."
+ref = "TrueType Hinting › Instructions"
+status = "inferred"
+
+[[command]]
+id = "hint.tt.setRounding"
+label = "Set Instruction Rounding"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, instructions?: [index], rounding: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Sets the rounding mode of the selected Snap, Stem, Shift or Interpolate instructions; in the UI these are the five icon buttons at the bottom of the Info box. Defaults by type: Snap rounds, the other three do not round."
+ref = "TrueType Hinting › Snap (A); Stem (S); Shift (F); Interpolate (G)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.rounding.modes"
+area = "hinting-tt"
+milestone = "M10"
+summary = "The five rounding modes: Round (nearest pixel edge), Round up (edge above in vertical mode, to the right in horizontal mode), Round down (edge below, or to the left), No rounding, and Round only in GDI ClearType (behaves like Round in the ClearType intent and like No rounding in Grayscale and DirectWrite). The last mode only matters in vertical hinting because GDI ClearType does not oversample vertically."
+ref = "TrueType Hinting › Snap (A)"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Instructions: Snap
+# ---------------------------------------------------------------------------------------------
+
+[[command]]
+id = "hint.tt.snapPoint"
+label = "Snap Point"
+menu = []
+shortcut = "A"
+kind = "engine"
+params = "{glyph?: name, layer?: id, nodes?: [nodeRef], direction?: 'vertical'|'horizontal', zone?: 'auto'|'none'|zoneName, rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Adds one Snap instruction per selected point; each must be untouched so far. A Snap instruction rounds its point to a pixel edge in the current direction and makes it a touched point. Defaults: zone Auto, rounding Round."
+ref = "TrueType Hinting › Snap (A)"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.setSnapZone"
+label = "Set Snap Zone"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, instructions?: [index], zone: 'auto'|'none'|zoneName}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Sets the zone option of the selected Snap instructions; in the UI this is the pop-up at the top of the Info box."
+ref = "TrueType Hinting › Snap (A)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.snap.zoneAuto"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Snap with zone Auto, in vertical mode: if the point lies inside a TT zone it goes to the pixel edge that zone rounds to (so zone alignment, deltas and the rounding threshold all apply); otherwise it goes to the nearest pixel edge. Auto is the recommended setting."
+ref = "TrueType Hinting › Snap (A)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.snap.zoneNone"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Snap with No Zone ignores all zones and only looks for the nearest pixel edge according to the rounding mode, even when the point lies inside a zone."
+ref = "TrueType Hinting › Snap (A)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.snap.zoneNamed"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Snap with a named zone does not snap the point onto that zone. It keeps the point at a constant rounded distance from the zone and guarantees that it can never cross over the zone, in the same way one zone can be aligned to another in TTFZones."
+ref = "TrueType Hinting › Snap (A)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.snap.noRoundingUse"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A Snap instruction set to No rounding leaves its point at its original position but still marks it as touched. This is the way to pin a point so that the final interpolation of untouched points does not move it and uses it as a reference."
+ref = "TrueType Hinting › Snap (A)"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Instructions: Stem
+# ---------------------------------------------------------------------------------------------
+
+[[command]]
+id = "hint.tt.addStemHint"
+label = "Stem"
+menu = []
+shortcut = "S"
+kind = "engine"
+params = "{glyph?: name, layer?: id, pairs?: [[originNodeRef, targetNodeRef]], direction?: 'vertical'|'horizontal', stem?: 'auto'|'none'|stemName, rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Adds a Stem instruction that links two points, the origin and the target (arrowhead end). The target is moved to follow the origin's movement at a distance governed by a TT stem. A pair is valid when neither point is touched or when exactly one of them is. With an even number of points selected, one instruction is added per pair. Default rounding: none (the handbook states no default for the stem choice). The context-menu label is not given in the handbook."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.reverse"
+label = "Reverse"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, instructions?: [index]}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Context-menu item on a Stem instruction that swaps its originating and target points."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.setStemReference"
+label = "Set Stem Reference"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, instructions?: [index], stem: 'auto'|'none'|stemName}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Sets the stem option of the selected Stem instructions; in the UI this is the pop-up at the top of the Info box."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.makeTripleHint"
+label = "Make Triple Hint"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, instructions?: [index, index, index]}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Context-menu item available when three Stem instructions on three horizontal stems are selected (Shift+click each badge). It links them into a group that keeps at least one pixel of distance between the stems at every size; the linked instructions are drawn purple. How to dissolve a triple hint is not stated."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stem.originInZoneSnaps"
+area = "hinting-tt"
+milestone = "M10"
+summary = "When the originating point of a Stem instruction lies inside a zone, the instruction itself snaps that point to the zone's pixel edge, so no separate Snap instruction is needed on it."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stem.optionAuto"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Stem option Auto: the instruction uses the TT stem of matching orientation whose size is closest to the measured distance between the two points. It is the recommended mode as long as the stem values are clearly distinct from each other."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stem.optionNoStem"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Stem option No Stem: the target is not fitted to the grid; it only keeps its original distance to the origin, so it moves exactly when the origin moves. Suited to mid-range sizes and to shapes where grid distortion would be too strong."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stem.optionNamed"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Stem option naming a specific TT stem forces that stem's width instead of the automatic choice; meant only for cases where Auto picks the wrong stem."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stem.rounding"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Rounding of a Stem instruction applies to the stem's size. Round puts the target on the nearest pixel edge; Round up on the edge farther from the origin (below it when the instruction points downward); Round down on the edge nearer the origin. No rounding (default) uses the TT stem width, which is already rounded to the oversampling grid of the rendering intent, so one stem edge may show a gray border but shapes distort less and counters collapse less often. Round only in GDI ClearType rounds in that intent alone."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stem.gdiOnlyForMiddleBars"
+area = "hinting-tt"
+milestone = "M10"
+summary = "For a stem that touches no zone, such as the middle bar of E or e, the GDI-only rounding mode keeps at least one edge on a pixel boundary under ClearType; the reference recommends pairing it with an Interpolate instruction that positions the bar between the outer stems."
+ref = "TrueType Hinting › Stem (S)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.stem.minimumDistance"
+area = "hinting-tt"
+milestone = "M10"
+summary = "A stem with a Stem instruction never renders thinner than the minimum distance, a quarter pixel unless TTMinimumDistance says otherwise, at any pixel size."
+ref = "TrueType Hinting › Advanced TrueType Hinting › TTMinimumDistance"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Instructions: Shift
+# ---------------------------------------------------------------------------------------------
+
+[[command]]
+id = "hint.tt.shiftPoints"
+label = "Shift Points"
+menu = []
+shortcut = "F"
+kind = "engine"
+params = "{glyph?: name, layer?: id, origin?: nodeRef, targets?: [nodeRef], direction?: 'vertical'|'horizontal', rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Adds a Shift instruction: an untouched target point is displaced by the same amount as its touched origin point, and the target counts as touched afterwards. The selection must contain exactly one touched point; every other selected point must be untouched and gets its own Shift instruction from that origin. Default rounding: No rounding (the recommended mode)."
+ref = "TrueType Hinting › Shift (F)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.shift.rounding"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Shift rounding modes act on the target after the movement has been copied: Round to the nearest pixel edge, Round up to the edge above, Round down to the edge below, No rounding keeps the copied movement exactly, GDI-only rounds in the ClearType intent alone."
+ref = "TrueType Hinting › Shift (F)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.shift.useCase"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Typical use, taking a sans-serif n: its left leg is snapped to the baseline zone, but a Stem instruction on the shoulder interrupts the contour, so the final interpolation moves the right leg from the stem instruction only. A Shift whose origin is the snapped left-leg point and whose target is a right-leg point makes both legs move alike; an m needs one Shift per additional leg."
+ref = "TrueType Hinting › Shift (F)"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Instructions: Interpolate
+# ---------------------------------------------------------------------------------------------
+
+[[command]]
+id = "hint.tt.interpolate"
+label = "Interpolate"
+menu = []
+shortcut = "G"
+kind = "engine"
+params = "{glyph?: name, layer?: id, references?: [nodeRef, nodeRef], target?: nodeRef, direction?: 'vertical'|'horizontal', rounding?: 'round'|'up'|'down'|'none'|'gdiOnly'}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Adds an Interpolate instruction: with two touched points and one untouched point selected, the untouched point is placed so that its position relative to the two touched points stays as it was in the unhinted outline, and it becomes touched. Default rounding: No rounding (the recommended mode)."
+ref = "TrueType Hinting › Interpolate (G)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.interpolate.rounding"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Interpolate rounding modes act on the interpolated position: Round to the nearest pixel edge (the mode to use when a Stem instruction is then started from the target), Round up to the next edge above, Round down to the next edge below, No rounding, and GDI-only which rounds in the ClearType intent alone."
+ref = "TrueType Hinting › Interpolate (G)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.interpolate.useCase"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Typical use: keeping a middle stroke, such as the bar of a lowercase e, at the same relative height between the already touched top and bottom strokes, where the default interpolation of untouched points would give an uneven result."
+ref = "TrueType Hinting › Interpolate (G)"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Instructions: Delta
+# ---------------------------------------------------------------------------------------------
+
+[[command]]
+id = "hint.tt.addDelta"
+label = "Delta"
+menu = []
+shortcut = "E"
+kind = "engine"
+params = "{glyph?: name, layer?: id, nodes?: [nodeRef], cells?: {instanceOrMasterId: {ppm: 'up'|'down'|'none'}}}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Adds a Delta instruction to each selected point (any number, touched or not). A Delta nudges its point a single pixel, upwards or downwards, at one pixel size in one static instance, as a last correction after all other instructions. Only available in vertical hinting direction."
+ref = "TrueType Hinting › Delta (E)"
+status = "handbook"
+
+[[command]]
+id = "hint.tt.setDeltas"
+label = "Set Delta Cells"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, instructions?: [index], cells: {instanceOrMasterId: {ppm: 'up'|'down'|'none'}}}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Sets at which sizes, and in which column, the selected Delta instructions move their point up or down; in the UI this is the Delta icon in the Info box, which opens the same table as zone deltas. The zone table's columns are masters while the Delta text speaks of static instances; which of the two the columns are here must be checked."
+ref = "TrueType Hinting › Delta (E)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.delta.restrictions"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Delta instructions exist only for vertical hinting, are left out of variable-font exports entirely, and should be added last and sparingly. Pressing E in horizontal direction should do nothing (or report why)."
+ref = "TrueType Hinting › Delta (E)"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Export behaviour and variable fonts
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.tt.export.overlapRemovalMovesHints"
+area = "hinting-tt"
+milestone = "M10"
+summary = "When a static font is exported with Remove Overlaps, points inside overlaps disappear and intersections become single points. An instruction on a point that is removed is reattached to whichever intersection point created by the removal lies closest, so hinting a regular node next to an intersection and hinting the intersection's extra node give the same result."
+ref = "TrueType Hinting › Points in Overlapping Intersections"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.variable.extraNodeHintsIgnored"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Variable fonts keep their overlaps, so intersection (extra) nodes do not exist in the output; an instruction placed on an extra node is dropped from a variable export. Glyphs meant for variable export must be instructed on regular nodes only; the UI should flag instructions on extra nodes."
+ref = "TrueType Hinting › Points in Overlapping Intersections"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.variable.deltasIgnored"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Delta instructions are not written into variable fonts. The handbook says this for glyph-level Delta instructions; whether zone and stem deltas are also dropped in variable exports is not stated."
+ref = "TrueType Hinting › Delta (E)"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.variable.cvar"
+area = "hinting-tt"
+milestone = "M10"
+summary = "In a variable TrueType export the glyph programs come once from the main master, and the control values derived from zones and stems (cvt) are those of the default master, with each other master's differences written to the cvar table so that zone positions and stem widths follow the design space. The handbook does not describe this; it follows from per-master zones and stems being the mechanism that replicates hints across masters."
+ref = "TrueType Hinting › Font-level Hints; OpenType spec › cvar"
+status = "inferred"
+
+[[behavior]]
+id = "hinting.tt.export.generatedPrograms"
+area = "hinting-tt"
+milestone = "M10"
+summary = "For manually instructed fonts the exporter generates the supporting tables itself: cvt entries from the instance's TT zones (position and size, widened by TTFBlueFuzz) and stems; fpgm functions for zone rounding, stem width selection per rendering mode and triple hints; a prep program applying zone alignment, zone and stem deltas, the rounding threshold and overshoot suppression per pixel size; and per-glyph programs from the ordered instruction lists ending with IUP. The table split is our reading; the handbook only describes the resulting behaviour."
+ref = "TrueType Hinting › Font-level Hints; Instructions; Advanced TrueType Hinting"
+status = "inferred"
+
+[[behavior]]
+id = "hinting.tt.export.instanceValues"
+area = "hinting-tt"
+milestone = "M10"
+summary = "For a static instance, TT zone positions and sizes, stem sizes and master-level TTFBlueFuzz are interpolated from the masters like other master values; instance-level parameters (TTFBlueFuzz, TTZoneRoundingThreshold, TTMinimumDistance, gasp Table) then override font-level ones. Zones and stems are matched across masters; the handbook does not say whether by name or by list position."
+ref = "TrueType Hinting › TrueType BlueFuzz; Font-level Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.tt.export.compileError"
+area = "hinting-tt"
+milestone = "M10"
+summary = "When a glyph's instructions cannot be compiled the reference reports 'There was a problem compiling TrueType instructions' (stated for the Autohint action). The engine should return a per-glyph error naming the offending instruction rather than a bare message."
+ref = "TrueType Hinting › Instructions"
+status = "handbook"

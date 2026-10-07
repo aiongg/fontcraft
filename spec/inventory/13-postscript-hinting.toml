@@ -1,0 +1,885 @@
+# Inventory: PostScript hinting
+# Sources:
+#   - Glyphs 4 Handbook, chapter "PostScript Hinting" (https://handbook.glyphsapp.com/), status "handbook"
+#   - AFDKO (Apache-2.0), refs/afdko/docs/otfautohint_Notes.md, refs/afdko/docs/AFDKO-Overview.md and
+#     refs/afdko/python/afdko/otfautohint/{__main__,autohint,fdTools,hinter}.py, status "docs"
+# Date: 2026-10-07
+#
+# Notes for readers of this file:
+#   - Custom parameters named here (Autohint, blueScale, blueShift, blueFuzz, Family Alignment Zones,
+#     Get Hints From Master) are described as [[behavior]] rows; their [[parameter]] rows belong to
+#     the custom-parameter inventory so that parameter names stay unique across files.
+#   - Context-menu commands carry menu = [] (the schema has no slot for context menus); the summary
+#     says where the item appears.
+#   - Ids: hinting.ps.* = rules, hint.ps.* = commands on glyph-level hints, autohint.ps.* = the
+#     autohinter engine as documented by otfautohint.
+
+# ---------------------------------------------------------------------------------------------
+# Concepts and font-level hints
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.ps.twoLevels"
+area = "hinting-ps"
+milestone = "M10"
+summary = "PostScript hinting data comes in two levels: font-level values (standard stems and alignment zones, plus a few optional numbers) that end up in the CFF Private dict, and glyph-level hints stored on a layer, each of which is either a stem hint or a ghost hint. The intended workflow is to set the font-level values well and let the autohinter produce the glyph-level hints."
+ref = "PostScript Hinting › introduction"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.hintingIsOptional"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Hinting is never required: a font can be exported with no glyph-level hints, and existing hinting can be left out. The reference recommends this for irregular designs (handwriting, ornament, grunge), for connected scripts and icon fonts where shape fidelity matters more than crisp pixels, and for fonts used only where hints are ignored, because the hint data only adds file size there."
+ref = "PostScript Hinting › introduction"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.standardStems"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Each master holds a list of horizontal stem widths (thickness of horizontal strokes: crossbars, serifs, top and bottom of a round) and a list of vertical stem widths (thickness of upright strokes), edited in Font Info › Masters. Up to twelve values per orientation are meaningful; the reference advises one or two representative values each, merging values that lie close together."
+ref = "PostScript Hinting › Standard Stems"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.standardStems.firstValueIsPrimary"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The first horizontal and first vertical stem of a master are the primary values and should describe the most common glyphs (usually lowercase). Other features read them too (the Cursivy algorithm and the Rounded Font filter are named); every further value is used for hinting only, and the horizontal stems also feed TrueType hinting."
+ref = "PostScript Hinting › Standard Stems"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.standardStems.interpolateByName"
+area = "hinting-ps"
+milestone = "M10"
+summary = "When an instance is interpolated, a stem value is computed only from stems that carry the same name in the contributing masters; the name, not the list position, is the matching key."
+ref = "PostScript Hinting › Standard Stems"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.standardStems.privateDictMapping"
+area = "hinting-ps"
+milestone = "M10"
+summary = "At export the first horizontal stem becomes StdHW and the first vertical stem StdVW; the full sorted lists (at most twelve each) become StemSnapH and StemSnapV. The handbook only says the values live in the Private dict; this mapping follows the CFF Private dict definition and how otfautohint treats Dominant/StemSnap values."
+ref = "PostScript Hinting › Font-Wide Hints; AFDKO otfautohint --doc-fontinfo"
+status = "inferred"
+
+[[behavior]]
+id = "hinting.ps.measureStems"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Stem widths are found by measuring: selecting two nodes shows their distance in the Info box, and the Measurement tool gives the same reading. No dedicated stem-measuring command is described by the reference."
+ref = "PostScript Hinting › Standard Stems"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.alignmentZones"
+area = "hinting-ps"
+milestone = "M10"
+summary = "An alignment zone is a pair of numbers per master: a position (the flat edge, normally a vertical metric such as baseline, x-height, cap height, ascender, descender) and a size (the largest overshoot expected there). A positive size makes a top zone reaching upward from the position; a negative size makes a bottom zone reaching downward."
+ref = "PostScript Hinting › Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.alignmentZones.effect"
+area = "hinting-ps"
+milestone = "M10"
+summary = "A zone only acts on outline parts that carry a horizontal stem hint or a ghost hint: at low resolution, such a part whose edge falls inside a zone is pulled to the zone's flat edge, which hides overshoots. Outline edges without a horizontal hint are not aligned, however deep inside a zone they sit."
+ref = "PostScript Hinting › Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.alignmentZones.limits"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Validity rules for a master's zones: at most 6 top zones, at most 5 bottom zones, plus the baseline zone; the baseline zone sits at position 0; zones never overlap and keep at least one unit between them; no zone is larger than 25 units, and none is larger than 240 / (240 x blueScale - 0.98). A font-info check should report each violated rule."
+ref = "PostScript Hinting › Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.alignmentZones.gridCompensation"
+area = "hinting-ps"
+milestone = "M10"
+summary = "When the font uses a non-default grid (grid spacing or subdivision), zones should be widened by one unit at each end to absorb coordinate rounding: move the position one unit away from the zone and grow the size by two units. The baseline zone is the exception: its position stays 0 and only its size grows by one unit."
+ref = "PostScript Hinting › Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.alignmentZones.blueValuesMapping"
+area = "hinting-ps"
+milestone = "M10"
+summary = "At export the zones are written as pairs into the Private dict: the baseline zone followed by every top zone, in ascending order, forms BlueValues; every other bottom zone forms OtherBlues. Each pair is (lower edge, upper edge), so a bottom zone of position p and size -s is written as p-s, p. The handbook does not spell this out; it follows the Type 1/CFF definitions and the otfautohint fontinfo documentation."
+ref = "PostScript Hinting › Alignment Zones; AFDKO otfautohint --doc-fontinfo"
+status = "inferred"
+
+[[behavior]]
+id = "hinting.ps.alignmentZones.metricDerived"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Zones are edited per master together with the vertical metrics (Font Info › Masters › Metrics); the usual set is a top zone at ascender, cap height and x-height and a bottom zone at baseline and descender. The editing UI itself is specified in the Font Info chapter; this chapter only defines what the values mean."
+ref = "PostScript Hinting › Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.blueScale"
+area = "hinting-ps"
+milestone = "M10"
+summary = "blueScale is an optional custom parameter written to the Private dict as BlueScale. It fixes the size below which overshoots are suppressed and thereby caps the zone size (see hinting.ps.alignmentZones.limits). The handbook gives no default; the CFF default of 0.039625 is recalled, not confirmed here."
+ref = "PostScript Hinting › Custom Parameters"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.blueShift"
+area = "hinting-ps"
+milestone = "M10"
+summary = "blueShift is an optional custom parameter (set in Font Info › Font) written to the Private dict as BlueShift. For flex hints to work it must be at least the depth of the shallow curve plus one unit, e.g. 6 or more for serifs cupped 5 units deep. The CFF default of 7 is recalled, not confirmed here."
+ref = "PostScript Hinting › Custom Parameters; Flex Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.blueFuzz"
+area = "hinting-ps"
+milestone = "M10"
+summary = "blueFuzz is an optional custom parameter written to the Private dict as BlueFuzz; it widens every zone by that many units at both ends when the rasterizer and the autohinter test whether an edge is inside a zone. The handbook only names it; the meaning is taken from otfautohint, which also uses 2 x BlueFuzz + 1 as the minimum gap between zones."
+ref = "PostScript Hinting › Custom Parameters; AFDKO otfautohint fdTools.py"
+status = "docs"
+
+[[behavior]]
+id = "hinting.ps.familyAlignmentZones"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Family Alignment Zones is an optional custom parameter holding a second zone list shared by all fonts of a family, written as FamilyBlues (baseline and top zones) and FamilyOtherBlues (other bottom zones). The handbook only names the parameter; its exact scope (font, master or instance) and editor are not described in this chapter."
+ref = "PostScript Hinting › Custom Parameters"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.validateFontHints"
+label = "Check PostScript Font Hints"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters?: [id]}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Read-only query that checks the stems and zones of each master against the documented limits (zone counts, overlap, minimum gap, baseline at 0, maximum size from blueScale and the 25-unit cap, at most twelve stems per orientation) and returns one finding per violation. Not a reference feature; it makes the stated rules testable headless."
+ref = "PostScript Hinting › Alignment Zones; Standard Stems"
+status = "inferred"
+
+[[command]]
+id = "hint.ps.getFontHints"
+label = "Get PostScript Font Hints"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master?: id, instance?: id}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Read-only query returning the values that would be written to the Private dict for a master or an interpolated instance: BlueValues, OtherBlues, FamilyBlues, FamilyOtherBlues, StdHW, StdVW, StemSnapH, StemSnapV, BlueScale, BlueShift, BlueFuzz. Our design, for agents and tests."
+ref = "PostScript Hinting › Font-Wide Hints"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# Autohinting at export
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.ps.export.autohintOption"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The export dialog (File › Export) has an Autohint checkbox. When it is on and the output has CFF outlines, the autohinter creates glyph-level hints for every glyph that has no manual hints, using the master's zones and standard stems. Sensible results need those font-level values to be set first."
+ref = "PostScript Hinting › Autohinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.export.autohintParameter"
+area = "hinting-ps"
+milestone = "M10"
+summary = "An Autohint custom parameter forces the autohint setting for an export regardless of the state of the checkbox in the export dialog. The handbook does not say on which Font Info tab it belongs; an instance-level override is the likely scope."
+ref = "PostScript Hinting › Autohinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.export.manualGlyphsSkipped"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Manual and automatic hints never mix inside one glyph: a glyph that has at least one manual hint is left out of autohinting at export and is written with exactly its manual hints. Such a glyph therefore has to be hinted completely by hand."
+ref = "PostScript Hinting › Manual hinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.export.stemHintsMadePositive"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Stem hints in the exported font must have a width above zero. A stem hint stored with a negative size is flipped at export (origin moved to the lower or left edge, size made positive) without changing the source. Ghost hints are not stem hints and are exempt (see autohint.ps.ghostStems)."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.export.hintReplacement"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Stem hints of one direction may overlap in the source (the two bowls of a figure eight, for example), which the charstring format forbids for simultaneously active hints. The exporter resolves this itself by inserting hint replacement: it splits the hints into non-overlapping groups and switches the active group along the outline. There is no manual control over this."
+ref = "PostScript Hinting › Manual hinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.flex.automatic"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Flex hints flatten very shallow curves (cupped serifs, slightly tapered stems) at low resolution. They cannot be placed by hand and are not stored in the source: the exporter adds them wherever the outline qualifies."
+ref = "PostScript Hinting › Flex Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.flex.conditions"
+area = "hinting-ps"
+milestone = "M10"
+summary = "An outline part qualifies for flex when: it consists of exactly two consecutive curve segments between three nodes (they need not be symmetric); the first and third node share the same Y (cupped serif) or the same X (tapered stem); all three nodes are extremes of the two segments, with handles that stay within the span of the three nodes but need not be exactly horizontal or vertical; the total depth is at most 20 units; and blueShift is at least depth + 1."
+ref = "PostScript Hinting › Flex Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.flex.zonePlacement"
+area = "hinting-ps"
+milestone = "M10"
+summary = "For cupped serifs the recommended placement is that all three nodes lie inside the matching alignment zone with the middle node exactly on the flat edge and the two outer nodes reaching into the zone. For bottom serifs this means the outer nodes sit slightly below the baseline, inside the baseline zone."
+ref = "PostScript Hinting › Flex Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.testing.external"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The reference has no built-in PostScript hinting preview. Testing means exporting, setting text in an Adobe application at a size of only a few pixels, and enlarging the screen with the operating system's zoom; problems are fixed by adjusting font-level values or hand-hinting the glyph, then exporting again."
+ref = "PostScript Hinting › Autohinting"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.renderPreview"
+label = "Render Hinted Preview"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instance: id, text: string, ppem: [number], hinted?: bool, format?: 'png'|'json'}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Compiles the given instance in memory with its PostScript hints and rasterizes a text at the listed pixel sizes with a hint-applying rasterizer, returning bitmaps (and optionally the unhinted rendering for comparison). Our design, replacing the reference's export-and-look-in-another-app loop for people and agents."
+ref = "PostScript Hinting › Autohinting"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# Manual hinting: commands
+# ---------------------------------------------------------------------------------------------
+
+[[command]]
+id = "hint.ps.autohintGlyph"
+label = "Autohint"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Edit View context-menu item. Runs the autohinter on the current layer and stores its result as editable glyph-level hints, identical to what export would have generated. From then on the glyph counts as manually hinted and is skipped by autohinting at export."
+ref = "PostScript Hinting › Manual hinting"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.addHorizontalHint"
+label = "Add Horizontal Hint"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, nodes?: [[nodeRef, nodeRef]] | [nodeRef], origin?: number, size?: number}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Edit View context-menu item that adds a horizontal stem hint (a band between two Y positions) to the layer. With two nodes selected the hint is linked to that pair; with several pairs selected, each on its own contour, one linked hint is made per pair. Invoked on exactly one node it creates a ghost hint attached to that node instead."
+ref = "PostScript Hinting › Stem Hints; Ghost Hints"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.addVerticalHint"
+label = "Add Vertical Hint"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, nodes?: [[nodeRef, nodeRef]], origin?: number, size?: number}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Edit View context-menu item that adds a vertical stem hint (a band between two X positions) to the layer. Node-pair linking works as for the horizontal command; vertical hints have no ghost form."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.makeGhostHint"
+label = "Make Ghost Hint"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, hints?: [hintIndex], direction?: 'top'|'bottom'}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Context-menu item on the badge of an existing hint that converts it into a ghost hint: the hint keeps its origin and loses its size in favour of a top or bottom orientation. Which orientation the conversion picks by default is not stated."
+ref = "PostScript Hinting › Ghost Hints"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.setGhostDirection"
+label = "Set Ghost Hint Direction"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, hints?: [hintIndex], direction: 'top'|'bottom'}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Sets whether the selected ghost hint marks a top edge or a bottom edge. In the UI this is the pair of up/down icon buttons shown in the Info box while a ghost hint is selected."
+ref = "PostScript Hinting › Ghost Hints"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.setHintValues"
+label = "Set Hint Values"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, hint: hintIndex, origin?: number, size?: number}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Changes the origin and/or size of a hint numerically; this is what typing into the Info box fields does while a hint is selected. How a typed value interacts with a node link (whether the link is dropped) is not stated."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.attachHintToNode"
+label = "Attach Hint to Node"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, hint: hintIndex, end: 'origin'|'target', node: nodeRef | null}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Links one end of a hint to a node so that the hint edge follows the node's coordinate; passing null detaches it and keeps the current number. In the UI this happens by dropping the hint's origin circle or size triangle on a node; the command form is our addition for headless use."
+ref = "PostScript Hinting › Stem Hints; Ghost Hints"
+status = "inferred"
+
+[[command]]
+id = "hint.ps.deleteHints"
+label = "Delete Hints"
+menu = []
+shortcut = "Delete"
+kind = "engine"
+params = "{glyph?: name, layer?: id, hints?: [hintIndex]}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Removes the selected hints from the layer. In the UI the Delete key does this while hint badges are selected."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.clearGlyphHints"
+label = "Remove PostScript Hints"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [id] | 'all'}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Removes every PostScript hint from the given layers so that the glyphs are autohinted at export again. The PostScript chapter names no such command (only deleting selected hints); added so the step is scriptable."
+ref = "PostScript Hinting › Manual hinting"
+status = "inferred"
+
+[[command]]
+id = "hint.ps.listHints"
+label = "List PostScript Hints"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Read-only query returning the layer's hints in order: direction, kind (stem, ghost top, ghost bottom), origin, size, the linked nodes if any, and whether the layer is the one hints are taken from. Our design, for agents and tests."
+ref = "PostScript Hinting › Manual hinting"
+status = "inferred"
+
+[[command]]
+id = "hint.ps.selectNextHint"
+label = "Select Next Hint"
+menu = []
+shortcut = "Tab"
+kind = "ui"
+params = "{}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "With a hint selected, moves the selection to the following hint of the layer so that its values can be edited in the Info box. Wrap-around at the last hint is not stated."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+[[command]]
+id = "hint.ps.selectPreviousHint"
+label = "Select Previous Hint"
+menu = []
+shortcut = "Shift+Tab"
+kind = "ui"
+params = "{}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "With a hint selected, moves the selection to the preceding hint of the layer."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Manual hinting: panel and behaviour
+# ---------------------------------------------------------------------------------------------
+
+[[panel]]
+id = "infoBox.psHint"
+label = "Info box: PostScript hint"
+location = "inspector"
+controls = [
+  "origin field (position of the hint's first edge)",
+  "size field (stem hints only)",
+  "up / down icon buttons choosing top or bottom orientation (ghost hints only)",
+]
+area = "hinting-ps"
+milestone = "M10"
+summary = "State of the Edit View Info box (View › Show Info, Cmd+Shift+I) while one or more PostScript hints are selected. It shows the numbers of the selected hint for editing; for a ghost hint it shows the orientation buttons instead of a size."
+ref = "PostScript Hinting › Stem Hints; Ghost Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.hintKinds"
+area = "hinting-ps"
+milestone = "M10"
+summary = "A glyph-level hint is either a stem hint, which brackets a horizontal or vertical stroke-like feature (stem, serif, crossbar) with an origin and a size, or a ghost hint, which marks only a top or a bottom edge where no horizontal stem exists (top and bottom of a sans-serif I, top of a sans L, bottom of a sans P). Ghost hints exist only in the horizontal-hint direction."
+ref = "PostScript Hinting › Manual hinting; Ghost Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.horizontalHintsNeedExactY"
+area = "hinting-ps"
+milestone = "M10"
+summary = "A horizontal stem or ghost hint only aligns nodes whose Y coordinate equals one of the hint's edges; nodes one unit off are not affected. One hint covers every node at that height, so a single hint per height per glyph is enough."
+ref = "PostScript Hinting › Manual hinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.display"
+area = "hinting-ps"
+milestone = "M10"
+summary = "In Edit View a stem hint is drawn as a gray bar across the glyph with a number badge showing its origin and size; the reference's figures tint vertical hints green, horizontal hints yellow and ghost hints blue. A ghost hint's badge shows only the position plus an arrow: up for a top ghost hint, down for a bottom one."
+ref = "PostScript Hinting › Stem Hints; Ghost Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.select"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Clicking a hint's number badge selects the hint; Shift+click adds to or removes from the hint selection. The selected hint's values appear in the Info box."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.dragMarkers"
+area = "hinting-ps"
+milestone = "M10"
+summary = "A hint has two blue markers at its edges: a circle at the origin and a triangle at the far edge that also shows the hint's direction and size. Dragging a marker moves that edge. A hint may point either way in the source (negative size); the direction is normalised only at export."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.linkOnDrop"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Dropping a hint marker on a node links that end of the hint to the node. A linked end has no number of its own: it takes the node's Y (horizontal hints) or X (vertical hints), so moving the node moves the hint. A ghost hint is linked by dropping its circle on a node."
+ref = "PostScript Hinting › Stem Hints; Ghost Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.linkToExtremes"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Hints give the best results when linked to extremum nodes; a UI may warn when a hint is linked to a node that is not an extreme in the hint's direction. The warning is our addition; the recommendation is the reference's."
+ref = "PostScript Hinting › Stem Hints"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.overlapAllowed"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The editor accepts stem hints that overlap one another in the same direction; no error is shown. They are separated into hint-replacement groups at export (see hinting.ps.export.hintReplacement)."
+ref = "PostScript Hinting › Manual hinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.manual.ghostFromSingleNode"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Control-click or right-click on exactly one node and choosing Add Horizontal Hint creates a ghost hint attached to that node rather than a stem hint. Whether it starts as top or bottom is not stated; picking the side from the outline direction at the node is a reasonable default to verify."
+ref = "PostScript Hinting › Ghost Hints"
+status = "handbook"
+
+# ---------------------------------------------------------------------------------------------
+# Multiple masters and variable CFF2
+# ---------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "hinting.ps.masters.mainMasterOnly"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Glyph-level hints are read from one master only, the main master, which is the first master in the list unless the font has a Get Hints From Master custom parameter (Font Info › Font) naming another. The same rule and the same parameter govern TrueType hints."
+ref = "PostScript Hinting › Hinting Multiple Masters"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.masters.transferByNodeLink"
+area = "hinting-ps"
+milestone = "M10"
+summary = "For an interpolated instance, each main-master hint is rebuilt from the nodes it is linked to: the same node indices are looked up in the interpolated outline and give the hint's edges. This needs compatible paths and linked hints; an unlinked hint carries only main-master numbers, which is why multiple-master fonts should link every manual hint to nodes."
+ref = "PostScript Hinting › Hinting Multiple Masters; Manual hinting"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.masters.fallbackToOtherMasters"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Manual hints placed on a glyph in a master other than the main one are ignored, with one exception: when the glyph's main-master layer has no hints at all, hints found in another master are used. Which master wins when several non-main masters have hints is not stated."
+ref = "PostScript Hinting › Hinting Multiple Masters"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.masters.specialLayers"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Where a glyph uses Alternate or Intermediate layers, hints must also be put on the special layer that stands in for the hint-carrying master layer; the master layer's own hints do not apply to the part of the design space where the special layer takes over."
+ref = "PostScript Hinting › Hinting Multiple Masters"
+status = "handbook"
+
+[[behavior]]
+id = "hinting.ps.cff2.sharedHintStructure"
+area = "hinting-ps"
+milestone = "M10"
+summary = "In a variable CFF2 font a glyph has one hint list and one set of hint masks for the whole design space; only the hint coordinates vary. Hints are therefore taken from the main master's structure and their edges become blended values from the linked nodes in every master, subject to the ordering and overlap rules in autohint.ps.variable.*. The handbook does not describe CFF2 output; this follows the otfautohint notes."
+ref = "AFDKO docs/otfautohint_Notes.md › Some notes on hinting glyphs in a variable font"
+status = "inferred"
+
+[[behavior]]
+id = "hinting.ps.cff2.privateDictBlends"
+area = "hinting-ps"
+milestone = "M10"
+summary = "In variable CFF2 output the Private dict values (BlueValues, OtherBlues, FamilyBlues, FamilyOtherBlues, StdHW, StdVW, StemSnapH, StemSnapV, and the scalar blue parameters where masters differ) are written with blend operators built from the per-master zones and stems, so every master must supply the same number of zones and the same named stems. Not covered by the handbook."
+ref = "OpenType spec › CFF2 Private DICT; AFDKO docs/otfautohint_Notes.md"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------
+# The autohinter engine, as documented by AFDKO otfautohint (ids autohint.ps.*)
+# ---------------------------------------------------------------------------------------------
+
+[[command]]
+id = "autohint.ps.run"
+label = "Autohint PostScript"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], excludeGlyphs?: [names], masters?: [id], overlap?: 'auto'|'all'|'none'|[names], allowChanges?: bool, flex?: bool, hintSubstitution?: bool, allowNoZonesOrStems?: bool, keepConflicts?: bool, decimal?: bool, maxSegments?: number, overrides?: [fdDict], hintAll?: bool, reportOnly?: bool}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Runs the PostScript autohinter on a source or a compiled CFF/CFF2 font and writes stem hints, hint masks, counter hints and flex for the chosen glyphs, using each glyph's zone and stem set. Defaults match otfautohint: all glyphs, flex and hint substitution on, integer coordinates, conflicts removed, outlines untouched, maxSegments 100. This is the engine behind the export option and the Edit View Autohint item."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[command]]
+id = "autohint.ps.reportStems"
+label = "Report Stem Widths"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], excludeGlyphs?: [names], master?: id, includeCurved?: bool}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Read-only stem histogram (AFDKO stemhist): runs the hinter's stem detection without writing hints and returns the horizontal and vertical stem widths found with their glyph counts, for choosing standard stems. By default only stems bounded by straight segments are counted; includeCurved adds stems formed by curves."
+ref = "AFDKO otfautohint __main__.py › stemhist; docs/AFDKO-Overview.md"
+status = "docs"
+
+[[command]]
+id = "autohint.ps.reportZones"
+label = "Report Alignment Zones"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], excludeGlyphs?: [names], master?: id}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Read-only alignment-zone report (AFDKO stemhist -z): returns the top and bottom extreme heights found across the glyphs with their counts, for choosing zone positions and sizes. Like the stem report it runs with flex off and without requiring existing zones."
+ref = "AFDKO otfautohint __main__.py › stemhist"
+status = "docs"
+
+[[command]]
+id = "autohint.ps.listFdDicts"
+label = "List Hint Dictionaries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{allInstances?: bool}"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Read-only query listing every zone-and-stem set in effect (from the font or from overrides) together with the glyphs assigned to each, including the catch-all set for glyphs that matched no override. With allInstances it lists them for every master or instance instead of only the default one (otfautohint --print-list-fddict / --print-all-fddict)."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.inputs"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The reference autohinter accepts bare CFF, name-keyed and CID-keyed OTF, UFO with cubic outlines, and Type 1 fonts (the latter through the tx converter); several inputs may be given but all must share one format and no path may repeat. It works best when zones cover at least baseline, x-height and cap height with their overshoots."
+ref = "AFDKO otfautohint --info"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.glyphSelection"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Glyphs to hint can be given as an include list (-g, or --glyphs-file) or an exclude list (-x, or --exclude-glyphs-file); the four forms are mutually exclusive. Entries are comma-separated glyph names, glyph indexes or CIDs written with a leading slash, and a hyphenated pair denotes a range unless that exact name exists in the font. Unknown names produce a warning, not an error."
+ref = "AFDKO otfautohint --help; autohint.py"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.overlapCorrection"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The hinter can hint glyphs that still contain overlapping contours roughly as if the overlap had been removed. Which glyphs get this treatment is set by a list (-m, --overlaps-file), by --force-overlap (all glyphs) or --force-no-overlap (none); without any of these it is on for variable fonts and for runs with a reference font, and off for single static fonts."
+ref = "AFDKO otfautohint --help; docs/otfautohint_Notes.md"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.looseOverlapMapping"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Option --loose-overlap-mapping relaxes the matching between segments of the overlap-removed shape and the original outline. It reduces, without eliminating, warnings that a derived path element could not be mapped back."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.output"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Without -o the input font is modified in place; with -o the hinted result goes to new files and the number of output paths must equal the number of inputs. --report-only runs the whole analysis and logs findings without changing anything, and cannot be combined with --allow-changes."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.referenceFont"
+area = "hinting-ps"
+milestone = "M10"
+summary = "For a set of compatible masters, -r names a reference font whose hint structure is computed first and then imposed on the other inputs so that all end up with matching hint lists; -b gives an output path for the hinted reference. The reference font may not also appear among the inputs."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.hintAll"
+area = "hinting-ps"
+milestone = "M10"
+summary = "For UFO input the hinter normally skips glyphs it has hinted before whose default-layer outline has not changed since; -a (--all) hints every glyph regardless. FontCraft's equivalent is a per-layer record of the outline state the stored autohints were computed from."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.writeToDefaultLayer"
+area = "hinting-ps"
+milestone = "M10"
+summary = "For UFO input the hinter writes results into a separate processed layer unless -w (--write-to-default-layer) tells it to write the hints into the default layer's glyph files. Relevant to UFO round-tripping of autohint results."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.allowChanges"
+area = "hinting-ps"
+milestone = "M10"
+summary = "With -c (--allow-changes) the hinter may alter outlines to hint better: it reorders contours to need fewer hint switches and turns nearly straight curves into lines. It is off by default, so hinting normally leaves every coordinate untouched."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.decimalCoordinates"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Coordinates are rounded to integers when glyphs are read for hinting unless -d (--decimal) is given, in which case fractional coordinates are kept and hint edges may be fractional too."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.noFlex"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Flex generation is on by default and is switched off for a run with --no-flex, or for one zone set with FlexOK false. The stem and zone report modes always run with flex off."
+ref = "AFDKO otfautohint --help; --doc-fontinfo"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.flexDetection"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The hinter marks a pair of adjoining curves as flex when the pair's endpoints line up in one direction, the bulge is no deeper than 20 units, the pair is long relative to its depth, and the two halves are not too unequal in length (ratio of about 1:3 or better). A glyph that already carries flex is left as it is."
+ref = "AFDKO otfautohint hinter.py (MaxFlex, FlexLengthRatioCutoff)"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.hintSubstitution"
+area = "hinting-ps"
+milestone = "M10"
+summary = "When a glyph needs stems that conflict (overlap) in one direction, the hinter distributes them over hint masks that switch the active set along the outline; this mask distribution is what older documentation calls hint substitution. --no-hint-sub disables it, leaving one non-conflicting set for the whole glyph."
+ref = "AFDKO otfautohint --help; docs/otfautohint_Notes.md"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.noZonesStems"
+area = "hinting-ps"
+milestone = "M10"
+summary = "A font with no alignment zones or no stem widths is rejected unless --no-zones-stems is given, in which case glyphs are hinted from their own geometry alone. FontCraft should surface the same condition as an export warning rather than a silent result."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.maxSegments"
+area = "hinting-ps"
+milestone = "M10"
+summary = "A glyph that yields more than --max-segments candidate segments (default 100) in one direction is not hinted in that direction, which keeps very complex glyphs from taking excessive time. The limit is not applied to glyphs the user named explicitly."
+ref = "AFDKO otfautohint --help; autohint.py"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.stemCandidates"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Stems are found by pairing opposing outline segments in each direction and scoring the pairs; pairs whose width matches a known stem width are preferred, and pairs wider than an initial limit of 150 units are not considered at first. Curves with an inflection are split there for analysis and the result is mapped back to the original curve."
+ref = "AFDKO otfautohint hinter.py; docs/otfautohint_Notes.md"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.ghostStems"
+area = "hinting-ps"
+milestone = "M10"
+summary = "A horizontal segment that lies inside an alignment zone but has no opposing segment to form a stem with gets a synthetic ghost stem so that the edge can still be aligned; internally the ghost partner sits 20 units away. In the charstring a ghost hint is written with the reserved widths (-20 for a top edge, -21 for a bottom edge; these two numbers are from the Type 2 charstring convention, recalled rather than read here)."
+ref = "AFDKO otfautohint hinter.py (GhostWidth); docs/otfautohint_Notes.md › Stem ordering"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.zoneMembership"
+area = "hinting-ps"
+milestone = "M10"
+summary = "An edge counts as inside a zone when it lies between the zone's two edges widened by BlueFuzz on each side. A built-in list of symbol glyphs (at, bullet, copyright, currency, registered) is always treated as being in no zone."
+ref = "AFDKO otfautohint hinter.py (inBand); autohint.py (ACOptions.noBlues)"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.counterHints"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Counter hints keep the gaps between three or more stems open and equal. The hinter only tries them on a short built-in list: vertical counters for m, M, T and ellipsis, horizontal counters for element, equivalence, notelement and divide. VCounterChars and HCounterChars extend the lists by at most 64 glyph names each, and LanguageGroup 1 marks a zone set whose (ideographic) glyphs should all get counter hints."
+ref = "AFDKO otfautohint --doc-fontinfo"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.fontinfoOverrides"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Groups of glyphs can be hinted with their own zones and stems instead of the font's global ones. The reference reads them from a text file named fontinfo beside the font (or --fontinfo-file PATH; --ignore-fontinfo disables the lookup) containing named 'begin FDDict NAME … end FDDict NAME' blocks of key/value lines and 'begin GlyphSet NAME … end GlyphSet NAME' blocks listing glyph names or regular expressions; '#' starts a comment."
+ref = "AFDKO otfautohint --doc-fontinfo"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.fontinfoOverrides.rules"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Rules for override sets: a set must be defined before the glyph list of the same name; repeated definitions of one set name merge, later values winning; a glyph-list name may occur only once; sets do not inherit from each other. As soon as any override exists the font's global zones and stems are ignored, and glyphs matched by no list get a dummy set whose zones lie outside the font bounding box (listed as 'No Alignment Zones')."
+ref = "AFDKO otfautohint --doc-fontinfo"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.fontinfoOverrides.zoneKeys"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Zone keys come in position/overshoot pairs. BlueValues pairs: BaselineYCoord/BaselineOvershoot, CapHeight/CapOvershoot, LcHeight/LcOvershoot, AscenderHeight/AscenderOvershoot, FigHeight/FigOvershoot, Height5/Height5Overshoot, Height6/Height6Overshoot. OtherBlues pairs: Baseline5, Baseline6, SuperiorBaseline, OrdinalBaseline, DescenderHeight, each with its …Overshoot key. Prefixing any of them with Family gives the family zone lists. Key order implies no ordering of values."
+ref = "AFDKO otfautohint --doc-fontinfo; fdTools.py"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.fontinfoOverrides.zoneDirection"
+area = "hinting-ps"
+milestone = "M10"
+summary = "For bottom zones (the baseline and every OtherBlues pair) the position is the top of the zone and the overshoot must be negative; for top zones the position is the bottom of the zone and the overshoot is positive. A wrong sign is an error, as are zones that overlap or lie closer together than 2 x BlueFuzz + 1 units."
+ref = "AFDKO otfautohint --doc-fontinfo; fdTools.py"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.fontinfoOverrides.requiredKeys"
+area = "hinting-ps"
+milestone = "M10"
+summary = "An override set must provide at least two zone pairs (the baseline bottom zone and one top zone) and both DominantH and DominantV; everything else is optional. Non-zone keys are FontName, OrigEmSqUnits and LanguageGroup (used when building CID fonts), DominantV, DominantH, FlexOK, VCounterChars, HCounterChars and BlueFuzz."
+ref = "AFDKO otfautohint --doc-fontinfo; fdTools.py"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.dominantStems"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The hinter's stem-width lists are DominantH and DominantV, written as bracketed number lists. When they are present the StdHW/StdVW entries are ignored, and any StemSnapH/StemSnapV widths not already listed are appended, so the full stem list can simply be given as the Dominant values."
+ref = "AFDKO otfautohint --doc-fontinfo"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.variable.stemOrdering"
+area = "hinting-ps"
+milestone = "M10"
+summary = "CFF2 requires a glyph's stems to be listed in increasing order of their lower edge, then of their upper edge, with no duplicates, and that order must hold in every master. A stem that would fall out of order in some master relative to the default master's order is dropped; checking the masters is sufficient because, without extrapolation, any order change inside the design space shows up in at least one master."
+ref = "AFDKO docs/otfautohint_Notes.md › Stem ordering"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.variable.keepConflicts"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Option -k (--keep-conflicts) keeps a stem whose order inverts against another stem somewhere in the design space instead of removing it. Default is removal."
+ref = "AFDKO otfautohint --help"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.variable.stemOverlap"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Two stems of a variable glyph are treated as overlapping, and so may not be active in the same hint mask, when they change order in any master compared with the default master, or when in any single master the gap between the first stem's end and the second stem's start is below the overlap margin."
+ref = "AFDKO docs/otfautohint_Notes.md › Stem overlap"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.variable.directCff2"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The hinter can hint a variable CFF-based font, including an already built CFF2 font, in one pass: the default master decides the hint structure and the other masters supply the varying coordinates. Glyphs that still contain overlaps (normal in variable fonts) are hinted close to how their overlap-removed form would be."
+ref = "AFDKO docs/otfautohint_Notes.md › Changes Summary"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.parallelism"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Glyphs are independent units of work: the reference hints them on several processes at once, by default one per CPU core; -p N sets the count and a negative N means cores minus that many, never below one. Each glyph is unpacked just before hinting and written back right after to limit memory."
+ref = "AFDKO otfautohint --help; docs/otfautohint_Notes.md"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.diagnostics"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Messages go to the console or to a file given with --log; -v and -vv raise the detail. In verbose mode the hinter reports near misses, where an edge just fails to reach a zone or a stem just fails to match a stem width, which often reveals drawing errors such as a glyph missing its zone by a unit."
+ref = "AFDKO otfautohint --help; docs/AFDKO-Overview.md"
+status = "docs"
+
+[[behavior]]
+id = "autohint.ps.notPorted"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Behaviours of the older C hinter that the current reference deliberately omits, and FontCraft may omit too: moving hints to earlier segments during substitution; cleaning duplicate moveto operators and warning about duplicate contours or oversized glyphs; splitting a curve at its midpoint when its two ends want conflicting hints; starting a new hint mask at every contour of percent and perthousand."
+ref = "AFDKO docs/otfautohint_Notes.md"
+status = "docs"

@@ -1,0 +1,1024 @@
+# Source: Glyphs 4 Handbook, chapter "Import & Export"
+#         https://handbook.glyphsapp.com/ (single-page edition, chapter 7)
+# Date:   2026-10-07
+# Rows are written in our own words. [[format]] rows for the file formats named here live in
+# another inventory file; this file holds the commands, dialogs and rules around them.
+# Commands that this chapter only touches and that other chapters document in full are NOT
+# repeated here (file.save, file.saveAs, edit.copy, edit.paste, edit.selectAll, path.removeOverlap,
+# path.convertToCubic, the Font Info tabs, the two import settings); behaviours below refer to them.
+
+# ───────────────────────────── Export: commands ─────────────────────────────
+
+[[command]]
+id = "file.export"
+label = "Export…"
+menu = ["File"]
+shortcut = "Cmd+E"
+kind = "ui"
+params = '{tab?: "otf"|"variable"|"ufo"|"metrics"}'
+area = "compile"
+milestone = "M2"
+summary = "Opens the export dialog for the frontmost document, with one tab per output kind (static OpenType, variable fonts, UFO, metrics). The dialog collects options and then runs the matching file.export* engine command."
+ref = "Import & Export › Exporting Font Files"
+status = "handbook"
+
+[[command]]
+id = "file.exportAll"
+label = "Export All"
+menu = ["File"]
+shortcut = "Cmd+Alt+E"
+kind = "engine"
+params = '{documents?: [paths]}'
+area = "compile"
+milestone = "M2"
+summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. The handbook does not say which options are used; we assume each document's last-used export settings (to be confirmed)."
+ref = "Import & Export › Exporting Font Files"
+status = "handbook"
+
+[[command]]
+id = "file.exportStatic"
+label = "Export Static Fonts"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{document?: path, instances?: [names], outlines: "cff"|"truetype", containers: ["plain"|"woff"|"woff2"], removeOverlap: bool, autohint: bool, destination?: path, testInstall?: bool}'
+area = "compile"
+milestone = "M2"
+summary = "Compiles one static font per export instance (or one default instance derived from the first master when the font defines none) in the chosen outline flavour, writing each requested container format. Existing files with the same name are replaced. This is the headless form of the dialog's OTF tab."
+ref = "Import & Export › Exporting Font Files › OpenType Export"
+status = "handbook"
+
+[[command]]
+id = "file.exportVariable"
+label = "Export Variable Fonts"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{document?: path, settings?: [names], containers: ["plain"|"woff"|"woff2"], destination?: path, testInstall?: bool}'
+area = "compile"
+milestone = "M9"
+summary = "Compiles one variable font per variable font setting, or one from a default setting when the font defines none. Output is always TrueType-flavoured; container formats and destination work as for static export. Headless form of the dialog's Variable Fonts tab."
+ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
+status = "handbook"
+
+[[command]]
+id = "file.exportUfo"
+label = "Export UFO"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{document?: path, masters: [ids], productionNames: bool, decomposeSmartStuff: bool, destination: path}'
+area = "import-export"
+milestone = "M1"
+summary = "Writes each chosen master as its own UFO 3 package into the destination folder. Options rename glyphs to production names and decide whether editor-only constructs are turned into plain paths or dropped. Headless form of the dialog's UFO tab."
+ref = "Import & Export › Exporting Font Files › Exporting UFO"
+status = "handbook"
+
+[[command]]
+id = "file.exportMetrics"
+label = "Export Metrics"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{document?: path, master?: id, format: "metrics"|"afm", path: path}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Writes the spacing and kerning of one master (the master active in the toolbar when none is given) to a metrics file or an AFM file. Headless form of the dialog's Metrics tab."
+ref = "Import & Export › Exporting Font Files › Exporting Metrics"
+status = "handbook"
+
+# ───────────────────────────── Export: dialogs ─────────────────────────────
+
+[[panel]]
+id = "dialog.export"
+label = "Export"
+location = "dialog"
+controls = [
+  "tab switcher: OTF, Variable Fonts, UFO, Metrics",
+  "tab body (see dialog.exportOtf, dialog.exportVariable, dialog.exportUfo, dialog.exportMetrics)",
+  "Next… button: start the export, or go on to a folder / file chooser when the tab needs one",
+]
+area = "compile"
+milestone = "M2"
+summary = "The export dialog attached to the current document. Each tab is an output kind with its own options; Next… either exports straight away or first asks where to write."
+ref = "Import & Export › Exporting Font Files"
+status = "handbook"
+
+[[panel]]
+id = "dialog.exportOtf"
+label = "Export › OTF"
+location = "dialog"
+controls = [
+  "Outline Flavor: PostScript/CFF or TrueType (exactly one)",
+  "File Format checkboxes: .otf/.ttf, WOFF, WOFF2 (any combination)",
+  "Remove Overlap checkbox",
+  "Autohint checkbox",
+  "Export Destination: checkbox plus clickable folder path",
+  "Test Install checkbox",
+  "Next… button",
+]
+area = "compile"
+milestone = "M2"
+summary = "Options for static OpenType export: outline flavour, the container formats to write, overlap removal, autohinting and the two destinations (a folder, or direct installation into the system)."
+ref = "Import & Export › Exporting Font Files › OpenType Export"
+status = "handbook"
+
+[[panel]]
+id = "dialog.exportVariable"
+label = "Export › Variable Fonts"
+location = "dialog"
+controls = [
+  "File Format checkboxes (as on the OTF tab)",
+  "Export Destination: checkbox plus clickable folder path",
+  "Test Install checkbox",
+  "Next… button",
+]
+area = "compile"
+milestone = "M9"
+summary = "Options for variable font export. The handbook only says file formats and destination are set as on the OTF tab; there is no flavour choice because the output is always TrueType. Whether Remove Overlap and Autohint appear here is not stated."
+ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
+status = "handbook"
+
+[[panel]]
+id = "dialog.exportUfo"
+label = "Export › UFO"
+location = "dialog"
+controls = [
+  "masters list with multiple selection (Cmd-click toggles, Shift-click extends, Select All)",
+  "Convert Glyph Names to Production Names checkbox",
+  "Decompose Smart Stuff checkbox",
+  "Next… button: opens a folder chooser",
+]
+area = "import-export"
+milestone = "M1"
+summary = "Options for UFO export: which masters to write and how to treat glyph names and editor-only constructs. Next… asks for the destination folder."
+ref = "Import & Export › Exporting Font Files › Exporting UFO"
+status = "handbook"
+
+[[panel]]
+id = "dialog.exportMetrics"
+label = "Export › Metrics"
+location = "dialog"
+controls = [
+  "Next… button: opens a save dialog",
+  "save dialog: file name, folder, format choice (Metrics File or AFM File)",
+]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Exports the metrics of the master currently active in the toolbar. The tab itself has no stated options; destination and format are picked in the save dialog that follows."
+ref = "Import & Export › Exporting Font Files › Exporting Metrics"
+status = "handbook"
+
+[[panel]]
+id = "dialog.chooseExportFolder"
+label = "Choose Export Folder"
+location = "dialog"
+controls = ["folder browser", "confirm / cancel"]
+area = "compile"
+milestone = "M2"
+summary = "Folder chooser shown when the destination path in the export dialog is clicked, when a font export starts with neither destination ticked, and after Next… on the UFO tab."
+ref = "Import & Export › Exporting Font Files › Export Destination"
+status = "handbook"
+
+# ───────────────────────────── Export: rules ─────────────────────────────
+
+[[behavior]]
+id = "export.overwritesExisting"
+area = "compile"
+milestone = "M2"
+summary = "Export replaces files that already exist at the target path; the handbook mentions no confirmation prompt."
+ref = "Import & Export › Exporting Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "export.exportAllSkipsDialog"
+area = "compile"
+milestone = "M2"
+summary = "Holding Option turns File › Export… into Export All, which processes all open documents and never shows the export dialog."
+ref = "Import & Export › Exporting Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "export.staticUsesInstancesOrDefault"
+area = "compile"
+milestone = "M2"
+summary = "Static export produces the font's configured instances. A font with no instances still exports: a default instance is synthesised from the first master."
+ref = "Import & Export › Exporting Font Files › OpenType Export"
+status = "handbook"
+
+[[behavior]]
+id = "export.outlineFlavorChoice"
+area = "compile"
+milestone = "M2"
+summary = "Exactly one outline flavour is chosen per static export: PostScript/CFF (cubic outlines in a CFF table, file suffix .otf) or TrueType (quadratic outlines in glyf plus the related TrueType tables, file suffix .ttf)."
+ref = "Import & Export › Exporting Font Files › OpenType Export › Outline Flavor"
+status = "handbook"
+
+[[behavior]]
+id = "export.cubicToQuadraticOnTrueType"
+area = "compile"
+milestone = "M2"
+summary = "Sources hold cubic paths; a TrueType export converts them to quadratic curves at compile time and leaves the source untouched. The result may differ from the drawn outline by a very small amount. Paths that are already quadratic in the source are an existing case the compiler must accept."
+ref = "Import & Export › Exporting Font Files › OpenType Export › Outline Flavor"
+status = "handbook"
+
+[[behavior]]
+id = "export.truetypeKeepsComponents"
+area = "compile"
+milestone = "M2"
+summary = "A TrueType export writes components as component references instead of flattening them to outlines. (The CFF flavour has no components, so they are flattened there; that half is implied, not stated in this chapter.)"
+ref = "Import & Export › Exporting Font Files › OpenType Export › Outline Flavor"
+status = "handbook"
+
+[[behavior]]
+id = "export.flavorsDifferInHinting"
+area = "compile"
+milestone = "M10"
+summary = "The two flavours carry different hinting: PostScript hints for CFF and TrueType instructions for glyf. The export options and the hinting data used depend on the flavour."
+ref = "Import & Export › Exporting Font Files › OpenType Export › Outline Flavor"
+status = "handbook"
+
+[[behavior]]
+id = "export.containerFormats"
+area = "compile"
+milestone = "M2"
+summary = "Three container formats can be ticked independently and all ticked ones are written in one export: the plain desktop file (.otf or .ttf according to flavour), WOFF (.woff) and WOFF2 (.woff2). The handbook does not say what happens when none is ticked."
+ref = "Import & Export › Exporting Font Files › OpenType Export › File Format"
+status = "handbook"
+
+[[behavior]]
+id = "export.removeOverlapOption"
+area = "compile"
+milestone = "M2"
+summary = "With Remove Overlap on, every exported glyph layer has its paths and components merged into non-overlapping outlines, using the same operation as Path › Remove Overlap. It is meant to be on for release builds and off only to speed up test exports or when the font already applies the Remove Overlap filter through custom parameters."
+ref = "Import & Export › Exporting Font Files › OpenType Export › Options"
+status = "handbook"
+
+[[behavior]]
+id = "export.autohintCff"
+area = "hinting-ps"
+milestone = "M10"
+summary = "With Autohint on and the CFF flavour, the PostScript autohinter runs only on glyphs that carry no manual PostScript hints; manually hinted glyphs keep their hints."
+ref = "Import & Export › Exporting Font Files › OpenType Export › Options"
+status = "handbook"
+
+[[behavior]]
+id = "export.autohintTrueType"
+area = "hinting-tt"
+milestone = "M10"
+summary = "With Autohint on and the TrueType flavour, the TrueType autohinter is applied to the whole font and any manual TrueType hints in the source are ignored."
+ref = "Import & Export › Exporting Font Files › OpenType Export › Options"
+status = "handbook"
+
+[[behavior]]
+id = "export.destinationFolder"
+area = "compile"
+milestone = "M2"
+summary = "The folder destination is a checkbox next to a path. Ticking it writes font files into that folder; clicking the path opens a folder chooser to change it. Whether the OTF and Variable Fonts tabs share one remembered folder is not stated."
+ref = "Import & Export › Exporting Font Files › Export Destination"
+status = "handbook"
+
+[[behavior]]
+id = "export.testInstall"
+area = "compile"
+milestone = "M14"
+summary = "Test Install registers the compiled fonts directly with the operating system's font system without writing files. They become usable in applications that go through the system text framework (Core Text on macOS) but not in applications with their own font handling, sidestep font-cache staleness, and are gone after a reboot. Platform-specific; needs an equivalent per OS."
+ref = "Import & Export › Exporting Font Files › Export Destination"
+status = "handbook"
+
+[[behavior]]
+id = "export.promptWhenNoDestination"
+area = "compile"
+milestone = "M2"
+summary = "If neither the folder checkbox nor Test Install is ticked, pressing Next… asks for an export folder before compiling. The two destinations are separate checkboxes; whether ticking both writes files and installs in one run is not spelled out."
+ref = "Import & Export › Exporting Font Files › Export Destination"
+status = "handbook"
+
+[[behavior]]
+id = "export.instanceExportFolder"
+area = "compile"
+milestone = "M7"
+summary = "An instance carrying the Export Folder custom parameter is written to that sub-path, resolved relative to the export destination. Forward slashes create nested folders and '..' segments climb out of the destination (for example '../Trial Versions')."
+ref = "Import & Export › Exporting Font Files › Export Destination"
+status = "handbook"
+
+[[behavior]]
+id = "export.variableUsesSettingsOrDefault"
+area = "compile"
+milestone = "M9"
+summary = "Variable export produces one font per variable font setting defined in the font's exports. With none defined, a default variable font setting is used so the export still yields one file."
+ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "export.variableAlwaysTrueType"
+area = "compile"
+milestone = "M9"
+summary = "Variable fonts are always compiled with TrueType outlines (glyf/gvar); no CFF2 output is offered from the export dialog."
+ref = "Import & Export › Exporting Font Files › Exporting Variable Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "export.ufoMasterSelection"
+area = "import-export"
+milestone = "M1"
+summary = "The UFO tab lists the font's masters. Cmd-click toggles single entries, Shift-click selects a range and Edit › Select All (Cmd+A) selects every master; each selected master becomes one UFO."
+ref = "Import & Export › Exporting Font Files › Exporting UFO"
+status = "handbook"
+
+[[behavior]]
+id = "export.ufoProductionNames"
+area = "import-export"
+milestone = "M1"
+summary = "Convert Glyph Names to Production Names writes glyphs under their production names instead of the editor's readable names, for downstream tools that expect the simpler scheme. Off, the readable names are written unchanged."
+ref = "Import & Export › Exporting Font Files › Exporting UFO"
+status = "handbook"
+
+[[behavior]]
+id = "export.ufoDecomposeSmartStuff"
+area = "import-export"
+milestone = "M1"
+summary = "UFO cannot hold editor-only constructs such as smart components and corner components. With Decompose Smart Stuff on they are converted to ordinary paths; with it off they are left out of the exported UFO altogether."
+ref = "Import & Export › Exporting Font Files › Exporting UFO"
+status = "handbook"
+
+[[behavior]]
+id = "export.ufoWritesVersion3"
+area = "import-export"
+milestone = "M1"
+summary = "UFOs created by the export dialog are always UFO version 3, whatever the source format is."
+ref = "Import & Export › Exporting Font Files › Exporting UFO"
+status = "handbook"
+
+[[behavior]]
+id = "export.metricsCurrentMaster"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Metrics export covers exactly one master: the one selected in the toolbar at the time of export."
+ref = "Import & Export › Exporting Font Files › Exporting Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "export.metricsFileIsComplete"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The reference's own metrics file format carries all spacing and kerning data of the master, including what AFM cannot express. Its layout is proprietary and undocumented in the handbook; we need our own lossless equivalent."
+ref = "Import & Export › Exporting Font Files › Exporting Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "export.afmIsLossy"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "AFM export is for exchange with other editors and drops what the format cannot represent; group kerning and metrics keys are named as unsupported. How group kerning is reduced (expanded to glyph pairs, or omitted) is not stated."
+ref = "Import & Export › Exporting Font Files › Exporting Metrics"
+status = "handbook"
+
+# ───────────────────────────── Source formats and saving ─────────────────────────────
+
+[[behavior]]
+id = "source.saveAsChoosesFormat"
+area = "import-export"
+milestone = "M1"
+summary = "File › Save As… (Cmd+Shift+S; the command row file.saveAs is in 03a-edit-view-drawing.toml) is where the source format is picked. Its format parameter should accept glyphs, glyphspackage, ufo, or the id of a format added by a plug-in. It is also the only way to turn an opened compiled font into an editable source."
+ref = "Import & Export › Source Formats; Opening Font Files"
+status = "handbook"
+
+[[panel]]
+id = "dialog.saveAs"
+label = "Save As"
+location = "dialog"
+controls = ["file name", "folder", "source format choice: Glyphs File, Glyphs File Package, Unified Font Object (plus plug-in formats)"]
+area = "import-export"
+milestone = "M1"
+summary = "Save dialog with a format chooser offering the three built-in source formats and any formats contributed by plug-ins."
+ref = "Import & Export › Source Formats"
+status = "handbook"
+
+[[behavior]]
+id = "source.threeBuiltInFormats"
+area = "import-export"
+milestone = "M1"
+summary = "A document can live in one of three source formats (.glyphs, .glyphspackage, .ufo) and can be moved between them at any time with Save As. New documents default to the single-file Glyphs format."
+ref = "Import & Export › Source Formats"
+status = "handbook"
+
+[[behavior]]
+id = "source.pluginFormats"
+area = "extensions"
+milestone = "M13"
+summary = "Plug-ins can register further source formats for saving and further font formats for opening; they appear alongside the built-in ones."
+ref = "Import & Export › Source Formats; Import & Export › Opening Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "source.glyphsFileIsFlatPlist"
+area = "import-export"
+milestone = "M1"
+summary = "A .glyphs file is one flat file holding the entire font, written as an old-style (NeXTSTEP/OpenStep) text property list, so it can be read and edited in a text editor. Any change rewrites the whole file."
+ref = "Import & Export › Source Formats › Glyphs File"
+status = "handbook"
+
+[[behavior]]
+id = "source.formatVersionKeptOnOpen"
+area = "import-export"
+milestone = "M1"
+summary = "A file made by an older application version is kept in its original format version when saved, so the older version can still open it. Features that the older version cannot store are then unavailable or lost until the font's File format version (Font Info › Other › File Saving) is switched to Version 3."
+ref = "Import & Export › Source Formats › Glyphs File"
+status = "handbook"
+
+[[behavior]]
+id = "source.newFilesAreVersion3"
+area = "import-export"
+milestone = "M1"
+summary = "Newly created Glyphs documents use format Version 3."
+ref = "Import & Export › Source Formats › Glyphs File"
+status = "handbook"
+
+[[behavior]]
+id = "source.packageLayout"
+area = "import-export"
+milestone = "M1"
+summary = "A .glyphspackage holds the same data as a .glyphs file but split across files inside a folder: notably one file per glyph. The Edit View tab strings, which change constantly, sit apart in UIState.plist so a version control system can ignore them. The operating system should present the folder as a single openable document."
+ref = "Import & Export › Source Formats › Glyphs File Package"
+status = "handbook"
+
+[[behavior]]
+id = "source.packageSavesOnlyChangedFiles"
+area = "import-export"
+milestone = "M1"
+summary = "Saving a package rewrites only the files whose content changed (for instance the glyph files that were edited), unlike the single-file format which is rewritten in full. This is why packages suit very large fonts (CJK) and version control."
+ref = "Import & Export › Source Formats › Glyphs File Package"
+status = "handbook"
+
+[[behavior]]
+id = "source.ufoIsSingleMaster"
+area = "import-export"
+milestone = "M1"
+summary = "A UFO holds one master only, unlike the two Glyphs formats; it is a folder shown as a single file. A document saved as UFO therefore cannot carry several masters in one file."
+ref = "Import & Export › Source Formats › Unified Font Object"
+status = "handbook"
+
+[[behavior]]
+id = "source.ufoVersionPreserved"
+area = "import-export"
+milestone = "M1"
+summary = "UFO version 2 and version 3 can both be opened and saved. A UFO keeps the version it was opened with when saved again; only UFOs newly created through export are forced to version 3."
+ref = "Import & Export › Source Formats › Unified Font Object"
+status = "handbook"
+
+[[behavior]]
+id = "source.ufoUnsupportedFeatureWarning"
+area = "import-export"
+milestone = "M1"
+summary = "While a document's source format is UFO, editor features the format cannot store are restricted: turning one on raises a warning message. The handbook does not list the affected features."
+ref = "Import & Export › Source Formats › Unified Font Object"
+status = "handbook"
+
+[[behavior]]
+id = "source.ufoPerFileImportOptions"
+area = "import-export"
+milestone = "M1"
+summary = "For a particular UFO, the two import behaviours (renaming glyphs to the built-in scheme, auto-aligning components) are controlled per file in Font Info › Other through Use Custom Naming and Disable Automatic Alignment, independently of the application-wide settings."
+ref = "Import & Export › Source Formats › Unified Font Object"
+status = "handbook"
+
+[[behavior]]
+id = "interop.otherEditors"
+area = "import-export"
+milestone = "M1"
+summary = "UFO is the general exchange format with other editors; FontLab 7 reads and writes .glyphs directly and keeps more detail than a UFO round trip, and FontLab Studio 5 relies on import/export macros shipped by the reference. Any exchange may simplify data (decomposed outlines) or drop font information, so nothing here should be assumed lossless."
+ref = "Import & Export › File Format Interoperability"
+status = "handbook"
+
+# ───────────────────────────── Opening compiled fonts ─────────────────────────────
+
+[[command]]
+id = "file.open"
+label = "Open…"
+menu = ["File"]
+shortcut = "Cmd+O"
+kind = "engine"
+params = '{path: path, keepGlyphNames?: bool, disableAutomaticAlignment?: bool, fontIndex?: number}'
+area = "import-export"
+milestone = "M1"
+summary = "Opens a source (.glyphs, .glyphspackage, .ufo) or a compiled font (.otf, .ttf, .ttc, .pfb) as a document. This chapter states what can be opened but not the menu item or its shortcut, so label and menu are our assumption; fontIndex for collections is our addition. The shortcut is the platform convention; the chapter does not state it."
+ref = "Import & Export › Opening Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "open.compiledFormats"
+area = "import-export"
+milestone = "M1"
+summary = "Compiled fonts that can be opened: OpenType with CFF outlines (.otf), OpenType with TrueType outlines (.ttf), TrueType-flavoured OpenType collections (.ttc) and Type 1 binary fonts (.pfb). How a collection's member fonts are presented is not stated."
+ref = "Import & Export › Opening Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "open.compiledIsLossy"
+area = "import-export"
+milestone = "M1"
+summary = "Opening a compiled font is a reconstruction, not a faithful load: some hinting data and some OpenType tables are dropped, so re-exporting never reproduces the original binary. Sources are the preferred starting point."
+ref = "Import & Export › Opening Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "open.compiledIsViewOnly"
+area = "import-export"
+milestone = "M1"
+summary = "A compiled font opens in a view-only state. It becomes a normal editable document once saved to one of the source formats with Save As. Exactly which edits are blocked before that is not stated."
+ref = "Import & Export › Opening Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "open.recordsGlyphOrder"
+area = "import-export"
+milestone = "M1"
+summary = "When a compiled font is opened, its glyph order is preserved by writing a glyphOrder custom parameter on the font (visible in Font Info › Font)."
+ref = "Import & Export › Opening Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "open.appliesNamingScheme"
+area = "import-export"
+milestone = "M1"
+summary = "On opening a font file, glyphs are renamed to the built-in naming scheme where possible. The setting Keep Glyph Names from Imported Files turns this off and keeps the file's names."
+ref = "Import & Export › Opening Font Files › Font File Importing Behaviors"
+status = "handbook"
+
+[[behavior]]
+id = "open.alignsCompositeMetrics"
+area = "import-export"
+milestone = "M6"
+summary = "On opening a font file, composite glyphs are put under automatic alignment so their metrics follow their base glyphs. The setting Disable Automatic Alignment for Imported Files turns this off."
+ref = "Import & Export › Opening Font Files › Font File Importing Behaviors"
+status = "handbook"
+
+[[behavior]]
+id = "open.truetypeKeepsQuadratic"
+area = "import-export"
+milestone = "M1"
+summary = "TrueType outlines are imported as quadratic curves, not converted. Quadratic paths can be edited but the drawing tools do not create new ones. Path › Other › Convert to Cubic turns them into cubic paths and works on the selected paths, layers or glyphs."
+ref = "Import & Export › Opening Font Files › Opening TrueType Font"
+status = "handbook"
+
+[[behavior]]
+id = "open.truetypeKeepsComponents"
+area = "import-export"
+milestone = "M1"
+summary = "Composite glyphs in a TrueType font come in as components rather than as flattened outlines."
+ref = "Import & Export › Opening Font Files › Opening TrueType Font"
+status = "handbook"
+
+[[behavior]]
+id = "open.fontsAsMasters"
+area = "interpolation"
+milestone = "M9"
+summary = "Several fonts are combined into one document by adding them as masters: Font Info › Masters › plus menu › Add Other Font (documented with the Masters tab) offers the masters of the other open fonts. Masters added this way must be outline-compatible before they can be interpolated."
+ref = "Import & Export › Opening Font Files › Importing Multiple Fonts Files into a Glyphs File"
+status = "handbook"
+
+[[behavior]]
+id = "open.reconstructsFeatures"
+area = "features"
+milestone = "M8"
+summary = "OpenType layout from a compiled font is turned back into feature code shown in Font Info › Features, but not every feature can be rebuilt. A lookup referenced by more than one feature is emitted once, in a prefix entry named Prefix, and referenced from the features."
+ref = "Import & Export › Opening Font Files › Importing OpenType Features"
+status = "handbook"
+
+[[behavior]]
+id = "open.kerningMostlyPreserved"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Pair kerning and kerning groups (classes) from a compiled font are mostly recovered into the document's kerning data; contextual kerning is not recovered."
+ref = "Import & Export › Opening Font Files › Importing OpenType Features"
+status = "handbook"
+
+[[behavior]]
+id = "open.postscriptHintsPreserved"
+area = "hinting-ps"
+milestone = "M10"
+summary = "From a CFF or Type 1 font, most glyph-level stem hints, the alignment zones and the standard stems are kept. Imported glyph hints are mostly positional and no longer attached to outline nodes; in a multi-master font the user re-attaches them by dragging each hint's two handles (drawn as a blue circle and a blue triangle) onto matching nodes."
+ref = "Import & Export › Opening Font Files › Importing PostScript Hints"
+status = "handbook"
+
+# ───────────────────────────── Importing font data ─────────────────────────────
+
+[[command]]
+id = "file.importOutlines"
+label = "Outlines…"
+menu = ["File", "Import"]
+shortcut = ""
+kind = "engine"
+params = '{files: [paths], glyph?: name, layer?: id, onMissingGlyph?: "ask"|"add"|"skip"}'
+area = "import-export"
+milestone = "M3"
+summary = "Imports the vector paths of PDF, EPS or SVG files as glyph outlines. From Font View several files are matched to glyphs by file name; from Edit View one file goes into the current glyph. With an explicit glyph parameter the file-name matching is bypassed."
+ref = "Import & Export › Importing Font Data › Importing Outlines"
+status = "handbook"
+
+[[panel]]
+id = "dialog.importOutlinesMissingGlyph"
+label = "Import Outlines: no matching glyph"
+location = "dialog"
+controls = ["OK: skip this file", "Add Glyph: create a glyph named after the file and import into it"]
+area = "import-export"
+milestone = "M3"
+summary = "Prompt shown once per imported file whose base name matches no glyph in the font."
+ref = "Import & Export › Importing Font Data › Importing Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "import.outlinesBatchByFileName"
+area = "import-export"
+milestone = "M3"
+summary = "In Font View, several files can be picked at once; each is imported into the glyph whose name equals the file's base name (A.pdf into A, comma.svg into comma)."
+ref = "Import & Export › Importing Font Data › Importing Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "import.outlinesMissingGlyphPrompt"
+area = "import-export"
+milestone = "M3"
+summary = "A file with no matching glyph is not imported silently: the user chooses between skipping it (OK) and adding a new glyph with the file's name to receive the outlines (Add Glyph)."
+ref = "Import & Export › Importing Font Data › Importing Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "import.outlinesSingleInEditView"
+area = "import-export"
+milestone = "M3"
+summary = "In Edit View the same command takes a single file and places its paths in the current glyph, regardless of the file's name. Whether existing shapes are kept or replaced, and which layer receives them, is not stated (we assume the active layer, appended)."
+ref = "Import & Export › Importing Font Data › Importing Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "import.outlinesDropStyling"
+area = "import-export"
+milestone = "M3"
+summary = "Only path geometry is taken from an imported file; fill colours and other styling are thrown away. The one exception stated: the stroke width of paths in a PDF is carried over as a stroke style on the path."
+ref = "Import & Export › Importing Font Data › Importing Outlines"
+status = "handbook"
+
+[[command]]
+id = "file.importMetrics"
+label = "Metrics…"
+menu = ["File", "Import"]
+shortcut = ""
+kind = "engine"
+params = '{file: path, master?: id, sourceMaster?: id, importKerning?: bool, importKerningGroups?: bool, importMetrics?: false|"lsbAndWidth"|"rsbAndWidth"|"bothSidebearings"|"widthCentered", keepAlignedComponents?: bool, glyphs?: [names]}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Reads spacing and kerning for one master from a metrics file, an AFM file, a Glyphs file or a UFO and applies the parts the user ticks to the open document. Available from Font View. Which options exist depends on the file type (see the two dialogs); sourceMaster for multi-master source files is our addition."
+ref = "Import & Export › Importing Font Data › Importing Metrics"
+status = "handbook"
+
+[[panel]]
+id = "dialog.importMetricsFile"
+label = "Import Metrics (Metrics or AFM file)"
+location = "dialog"
+controls = [
+  "Import Kerning (values) checkbox",
+  "Import Kerning Classes checkbox",
+  "Import Metrics checkbox with a four-way mode choice: LSB + width, RSB + width, both sidebearings, width centred",
+  "Keep Aligned Components checkbox",
+  "Selected Glyphs checkbox",
+  "Import / Cancel",
+]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Options shown after choosing a metrics or AFM file: kerning values, kerning classes, and glyph metrics with one of four ways to reconcile sidebearings and width. Exact checkbox captions for the kerning options are paraphrased, not quoted in the handbook."
+ref = "Import & Export › Importing Font Data › Importing Metrics"
+status = "handbook"
+
+[[panel]]
+id = "dialog.importMetricsFont"
+label = "Import Metrics (Glyphs or UFO file)"
+location = "dialog"
+controls = [
+  "Import Kerning (values) checkbox: not available for a Glyphs file",
+  "Import Kerning Classes checkbox",
+  "Import / Cancel",
+]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Reduced option set shown after choosing a Glyphs or UFO file: only the kerning checkboxes, with no glyph-metrics controls. The handbook's picture of the dialog is not reproduced in text, so the precise control list needs checking against the app."
+ref = "Import & Export › Importing Font Data › Importing Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "import.metricsSources"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Metrics can be imported from four kinds of file: the reference's metrics file, AFM, a Glyphs file and a UFO. The first two are exactly what metrics export writes, so export followed by import round-trips a master's spacing and kerning (fully for the metrics file, partially for AFM)."
+ref = "Import & Export › Importing Font Data › Importing Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "import.metricsNoKerningValuesFromGlyphsFile"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "When the source is a Glyphs file, kerning values cannot be imported through this command; only kerning classes can. Kerning values travel between Glyphs files by copying and pasting pairs in the Kerning window instead."
+ref = "Import & Export › Importing Font Data › Importing Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "import.metricsModes"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Glyph metrics from a metrics or AFM file are applied in one of four modes: take LSB and width (RSB follows), take RSB and width (LSB follows), take both sidebearings (width follows), or take the width and centre the outline so both sidebearings are equal. No default mode is stated."
+ref = "Import & Export › Importing Font Data › Importing Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "import.metricsBreaksAutoAlignment"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "If an imported value for an automatically aligned composite differs from what alignment would compute, alignment is switched off for the affected components so the imported value can hold. Ticking Keep Aligned Components prevents this and the aligned glyph keeps its derived metrics."
+ref = "Import & Export › Importing Font Data › Importing Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "import.metricsSelectedGlyphs"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Metrics are applied to every glyph unless Selected Glyphs is ticked, which limits the import to the Font View selection; with that option ticked and nothing selected, all glyphs are still processed."
+ref = "Import & Export › Importing Font Data › Importing Metrics"
+status = "handbook"
+
+[[command]]
+id = "file.importFeatures"
+label = "Features…"
+menu = ["File", "Import"]
+shortcut = ""
+kind = "engine"
+params = '{file: path}'
+area = "features"
+milestone = "M8"
+summary = "Reads a feature file in AFDKO syntax (.fea) and adds the features it contains to the font's feature list in Font Info › Features. How name clashes with existing features, classes and prefixes are resolved is not stated."
+ref = "Import & Export › Importing Font Data › Importing Feature Files"
+status = "handbook"
+
+[[panel]]
+id = "dialog.importFeatures"
+label = "Import Features"
+location = "dialog"
+controls = ["file browser limited to .fea files", "Import / Cancel"]
+area = "features"
+milestone = "M8"
+summary = "File chooser for the feature file to import."
+ref = "Import & Export › Importing Font Data › Importing Feature Files"
+status = "handbook"
+
+# ───────────────────────────── Pasting from vector drawing applications ─────────────────────────────
+
+[[behavior]]
+id = "paste.vectorOutlines"
+area = "drawing"
+milestone = "M3"
+summary = "Edit › Paste (Cmd+V) accepts path data placed on the clipboard by common vector drawing applications and adds it to the current glyph as outlines. Closed paths are the expected input."
+ref = "Import & Export › Vector Drawing Applications"
+status = "handbook"
+
+[[panel]]
+id = "dialog.pastedOutlineBounds"
+label = "Pasted outline is outside the glyph"
+location = "dialog"
+controls = ["accept: move the pasted outline into the glyph box", "decline: keep the pasted position"]
+area = "drawing"
+milestone = "M3"
+summary = "Offer shown when pasted outlines land far outside the glyph box. The handbook shows the dialog only as a picture, so button captions and the exact correction (translate only, or also scale) are unknown."
+ref = "Import & Export › Vector Drawing Applications"
+status = "handbook"
+
+[[behavior]]
+id = "paste.outOfBoundsCorrection"
+area = "drawing"
+milestone = "M3"
+summary = "After a paste, the editor checks whether the new outline sits far away from the glyph box and, if so, offers to fix its position instead of leaving it off-canvas. The threshold for 'far outside' is not stated."
+ref = "Import & Export › Vector Drawing Applications"
+status = "handbook"
+
+[[behavior]]
+id = "paste.onePointIsOneUnit"
+area = "drawing"
+milestone = "M3"
+summary = "Pasted coordinates are taken at a scale of one typographic point per font unit, with no scaling to the font's units per em: a 1000 pt tall drawing fills a 1000-unit em."
+ref = "Import & Export › Vector Drawing Applications › Adobe Illustrator"
+status = "handbook"
+
+[[behavior]]
+id = "paste.roundsToGrid"
+area = "drawing"
+milestone = "M3"
+summary = "Node coordinates of pasted outlines are rounded to the font's grid, except when the font's grid spacing is zero, in which case fractional coordinates are kept."
+ref = "Import & Export › Vector Drawing Applications › Adobe Illustrator"
+status = "handbook"
+
+[[behavior]]
+id = "paste.affinityClipboardModes"
+area = "drawing"
+milestone = "M3"
+summary = "Both clipboard flavours Affinity Designer can produce are accepted: its standard outline data and SVG. That application always reports copied shapes at the origin (0, 0), so the artboard position cannot be recovered on paste."
+ref = "Import & Export › Vector Drawing Applications › Affinity Designer"
+status = "handbook"
+
+[[behavior]]
+id = "paste.strokeAndFillMayDouble"
+area = "drawing"
+milestone = "M3"
+summary = "The handbook advises Sketch users to copy shapes with a 1 pt stroke and no fill to avoid doubled outlines. We read this as: a shape that has both fill and stroke may arrive as two contours; that reading is inferred, the cause is not explained."
+ref = "Import & Export › Vector Drawing Applications › Sketch"
+status = "inferred"
+
+# ───────────────────────────── Projects ─────────────────────────────
+
+[[command]]
+id = "file.newProject"
+label = "New Project"
+menu = ["File"]
+shortcut = ""
+kind = "engine"
+params = '{font?: path}'
+area = "font-info"
+milestone = "M7"
+summary = "Creates an empty project document: a set of export instance definitions that points at a font file without modifying it. It is saved like any document (File › Save) with the .glyphsproject suffix."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[command]]
+id = "project.linkFont"
+label = "Choose"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path, font: path}'
+area = "font-info"
+milestone = "M7"
+summary = "Sets or changes the font file a project is linked to (the Choose button, or a click on the shown path). The font does not have to be open. The project's sidebar then lists that font's instances."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[command]]
+id = "project.addInstance"
+label = "Add Instance"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path, kind: "instance"|"variableFontSetting", at?: index}'
+area = "font-info"
+milestone = "M7"
+summary = "The plus button in the project window: appends a new static instance or a new variable font setting to the project's list."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[command]]
+id = "project.removeInstances"
+label = "Remove Instances"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path, instances: [index|name]}'
+area = "font-info"
+milestone = "M7"
+summary = "The minus button in the project window: deletes the selected instances from the project. The linked font is not touched."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[command]]
+id = "project.revertInstances"
+label = "Revert to Font Instances"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path}'
+area = "font-info"
+milestone = "M7"
+summary = "The arrow button in the project window: discards the project's instance list and reloads the instances defined in the linked font file. The label is ours; the button has only an icon."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[command]]
+id = "project.moveInstances"
+label = "Move Instances"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path, instances: [index], to: index}'
+area = "font-info"
+milestone = "M7"
+summary = "Reorders instances in the project list; in the UI this is drag and drop within the sidebar."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[command]]
+id = "project.duplicateInstances"
+label = "Duplicate Instances"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path, instances: [index], to?: index}'
+area = "font-info"
+milestone = "M7"
+summary = "Copies instances within the project. In the UI: Option-drag an instance to the place where the copy should go, or use Copy (Cmd+C) followed by Paste (Cmd+V) on the selected instances."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[command]]
+id = "project.editInstance"
+label = "Edit Instance"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path, instance: index|name, changes: {<same fields as an export instance in Font Info › Exports>}}'
+area = "font-info"
+milestone = "M7"
+summary = "Changes the properties and custom parameters of one project instance. The right half of the project window is the same editor as Font Info › Exports."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[command]]
+id = "project.setExportDestination"
+label = "Export Destination"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path, folder: path}'
+area = "compile"
+milestone = "M7"
+summary = "Sets the folder a project exports into (a click on the Export Destination path in the project window opens a folder chooser)."
+ref = "Import & Export › Projects › Exporting a Project"
+status = "handbook"
+
+[[command]]
+id = "project.export"
+label = "Export"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{project?: path}'
+area = "compile"
+milestone = "M7"
+summary = "Compiles every instance configured in the project from the linked font into the project's export destination. Requires a saved project and a resolvable font link; the linked font need not be open."
+ref = "Import & Export › Projects › Exporting a Project"
+status = "handbook"
+
+[[panel]]
+id = "window.project"
+label = "Project"
+location = "window"
+controls = [
+  "linked font: Choose button (top right) and clickable file path",
+  "sidebar: instance list with drag reordering, Option-drag duplication, copy and paste",
+  "plus button: add an instance or a variable font setting",
+  "minus button: delete the selected instances",
+  "arrow button: reset the list to the linked font's instances",
+  "right half: instance editor (as Font Info › Exports)",
+  "Export Destination: clickable folder path",
+  "Export button (bottom right)",
+]
+area = "font-info"
+milestone = "M7"
+summary = "Document window of a .glyphsproject file: the font link, the list of instance definitions, an editor for the selected instance, and the export controls."
+ref = "Import & Export › Projects"
+status = "handbook"
+
+[[behavior]]
+id = "project.separateFromFont"
+area = "font-info"
+milestone = "M7"
+summary = "A project is a separate .glyphsproject file holding instance definitions and a reference to one font file. Editing it never alters the font file, so alternative font versions can be set up without touching the original."
+ref = "Import & Export › Projects"
+status = "handbook"
+
+[[behavior]]
+id = "project.startsFromFontInstances"
+area = "font-info"
+milestone = "M7"
+summary = "Once a font is linked, the project list shows that font's own instances as its starting point; from then on the list is the project's own and can be restored from the font with the revert button."
+ref = "Import & Export › Projects › Setting up a Project"
+status = "handbook"
+
+[[behavior]]
+id = "project.linkedFontNeedNotBeOpen"
+area = "font-info"
+milestone = "M7"
+summary = "Linking a font to a project and exporting the project both work with the font file closed; the project reads it from disk."
+ref = "Import & Export › Projects › Setting up a Project; Exporting a Project"
+status = "handbook"
+
+[[behavior]]
+id = "project.exportPreconditions"
+area = "compile"
+milestone = "M7"
+summary = "Project export needs the project to be saved and the stored path to the linked font to resolve. Renaming, moving or deleting the font file breaks the link, which must then be chosen again."
+ref = "Import & Export › Projects › Exporting a Project"
+status = "handbook"
+
+[[behavior]]
+id = "project.instanceExportFolder"
+area = "compile"
+milestone = "M7"
+summary = "All project instances go into the project's export destination; any instance carrying an Export Folder custom parameter is placed in that sub-path, following the same relative-path rules as export.instanceExportFolder."
+ref = "Import & Export › Projects › Exporting a Project"
+status = "handbook"

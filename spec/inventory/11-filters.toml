@@ -1,0 +1,827 @@
+# Inventory: Filters
+# Source: Glyphs 4 Handbook, chapter "Filters" (https://handbook.glyphsapp.com/single-page/),
+#         plus the "Filter" / "PreFilter" entries of its Appendix "Custom Parameters" for the
+#         export-string syntax, and one shortcut from the "Font View" chapter.
+# Date: 2026-10-07
+# All wording is our own. Rows with status "inferred" are FontCraft design, not reference facts.
+# Note: Transform Metrics, Transformations, Interpolate with Background, Add Extremes and Remove
+# Overlap live in the Glyph / Path menus of the reference but are documented as filters; they are
+# listed here under filter.* ids with their real menu in `menu`.
+
+# --- Filter menu and targeting rules ---
+
+[[command]]
+id = "filter.repeatLastFilter"
+label = "Repeat Last Filter"
+menu = []
+shortcut = "Cmd+R"
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Runs the most recently used filter again on the current target. The source gives only the shortcut: the label is ours, a menu position is not confirmed, and whether the previous values are reused silently or the dialog reopens, are not stated."
+ref = "Filters › Applying Filters › Filter Menu"
+status = "handbook"
+
+[[command]]
+id = "filter.apply"
+label = "Apply Filter"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], filter: string, args?: [string] | {name: value}, include?: [names], exclude?: [names]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Generic headless entry point: runs any registered filter (built-in or plug-in) by its filter name with the same arguments the export-time parameter string accepts. Not a reference menu item; proposed so agents and the CLI can run a filter without a dialog."
+ref = "Filters › Applying Filters; Appendix › Custom Parameters › Filter"
+status = "inferred"
+
+[[command]]
+id = "filter.list"
+label = "List Filters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "path-ops"
+milestone = "M3"
+summary = "Read-only query returning every registered filter with its filter name, label, origin (built-in or plug-in) and parameter schema. Not in the reference; proposed so the Filter menu, the CLI and agents share one registry."
+ref = "Filters (chapter introduction)"
+status = "inferred"
+
+[[behavior]]
+id = "filter.menu.contents"
+area = "path-ops"
+milestone = "M3"
+summary = "The Filter menu lists the built-in filters followed by every installed filter plug-in; choosing an entry applies that filter to the current target, through its options dialog where it has one."
+ref = "Filters (chapter introduction); Filters › Applying Filters › Filter Menu"
+status = "handbook"
+
+[[behavior]]
+id = "filter.menu.pluginFiltersListed"
+area = "extensions"
+milestone = "M13"
+summary = "Filters installed through the Plugin Manager appear in the Filter menu next to the built-in ones and can be used as export-time custom parameters in the same way."
+ref = "Filters (chapter introduction)"
+status = "handbook"
+
+[[behavior]]
+id = "filter.target.fontViewSelection"
+area = "path-ops"
+milestone = "M3"
+summary = "Run from Font View, a filter processes every selected glyph."
+ref = "Filters › Applying Filters › Filter Menu"
+status = "handbook"
+
+[[behavior]]
+id = "filter.target.editViewTextSelection"
+area = "path-ops"
+milestone = "M3"
+summary = "Run from Edit View while the Text tool is active, a filter processes the glyphs covered by the text selection."
+ref = "Filters › Applying Filters › Filter Menu"
+status = "handbook"
+
+[[behavior]]
+id = "filter.target.editViewCurrentGlyph"
+area = "path-ops"
+milestone = "M3"
+summary = "Run from Edit View with any tool other than Text, a filter processes only the current glyph."
+ref = "Filters › Applying Filters › Filter Menu"
+status = "handbook"
+
+[[behavior]]
+id = "filter.target.visibleLayerOnly"
+area = "path-ops"
+milestone = "M3"
+summary = "A filter normally changes only the layer currently shown for each target glyph. Other masters are untouched, so covering all masters means switching master and running the filter again (Cmd+R helps)."
+ref = "Filters › Applying Filters › Filter Menu"
+status = "handbook"
+
+[[behavior]]
+id = "filter.target.headlessExplicitTargets"
+area = "path-ops"
+milestone = "M3"
+summary = "Every filter command accepts explicit glyph names and layer ids so that it works without a UI selection; when both are omitted the UI targeting rules above apply. A layers list may name several masters, which removes the need to re-run per master."
+ref = "Filters › Applying Filters › Filter Menu"
+status = "inferred"
+
+# --- Extrude ---
+
+[[command]]
+id = "filter.extrude"
+label = "Extrude"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], offset: number, angle: number, dontSubtract?: bool = false}"
+area = "path-ops"
+milestone = "M3"
+summary = "Builds a solid drop-shadow body by sweeping the glyph shape along a straight vector of the given length and direction. By default the original shape is then cut out of the swept shape, leaving only the shadow; Don't Subtract keeps the full swept shape."
+ref = "Filters › Built-in Filters › Extrude"
+status = "handbook"
+
+[[panel]]
+id = "dialog.filterExtrude"
+label = "Extrude"
+location = "dialog"
+controls = [
+  "Offset number field",
+  "Angle number field",
+  "Don't Subtract checkbox",
+]
+area = "path-ops"
+milestone = "M3"
+summary = "Options dialog of the Extrude filter. Default values of Offset and Angle are not stated in the source; Don't Subtract is off by default."
+ref = "Filters › Built-in Filters › Extrude"
+status = "handbook"
+
+[[behavior]]
+id = "filter.extrude.offsetIsLength"
+area = "path-ops"
+milestone = "M3"
+summary = "Offset is the shadow length, measured in font units along the extrusion direction."
+ref = "Filters › Built-in Filters › Extrude"
+status = "handbook"
+
+[[behavior]]
+id = "filter.extrude.angleConvention"
+area = "path-ops"
+milestone = "M3"
+summary = "Angle is in degrees, counterclockwise, with 0 pointing horizontally to the right."
+ref = "Filters › Built-in Filters › Extrude"
+status = "handbook"
+
+[[behavior]]
+id = "filter.extrude.subtractsOriginalByDefault"
+area = "path-ops"
+milestone = "M3"
+summary = "Unless Don't Subtract is on, the result is the swept shape minus the original outline; with it on, the original area stays part of the result."
+ref = "Filters › Built-in Filters › Extrude"
+status = "handbook"
+
+# --- Hatch Outline ---
+
+[[command]]
+id = "filter.hatchOutline"
+label = "Hatch Outline"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], originX: number, originY: number, stepWidth: number, angle: number, offsetPath?: bool, strokeWidth?: number}"
+area = "path-ops"
+milestone = "M3"
+summary = "Replaces the glyph shape with parallel hatch strokes clipped to it. Strokes start from an origin point, repeat every Step Width units at the given angle, and are either expanded to closed shapes of the Offset Path thickness or left as open centre lines when Offset Path is off."
+ref = "Filters › Built-in Filters › Hatch Outline"
+status = "handbook"
+
+[[panel]]
+id = "dialog.filterHatchOutline"
+label = "Hatch Outline"
+location = "dialog"
+controls = [
+  "Origin X and Y fields",
+  "Step Width field",
+  "Angle field",
+  "Offset Path checkbox with thickness field",
+]
+area = "path-ops"
+milestone = "M3"
+summary = "Options dialog of the Hatch Outline filter. No default values are stated in the source."
+ref = "Filters › Built-in Filters › Hatch Outline"
+status = "handbook"
+
+[[behavior]]
+id = "filter.hatchOutline.origin"
+area = "path-ops"
+milestone = "M3"
+summary = "Origin (X, Y) is the point the hatch pattern is anchored to; moving it shifts the phase of the stripes."
+ref = "Filters › Built-in Filters › Hatch Outline"
+status = "handbook"
+
+[[behavior]]
+id = "filter.hatchOutline.stepWidth"
+area = "path-ops"
+milestone = "M3"
+summary = "Step Width is the spacing between neighbouring hatch strokes."
+ref = "Filters › Built-in Filters › Hatch Outline"
+status = "handbook"
+
+[[behavior]]
+id = "filter.hatchOutline.angleConvention"
+area = "path-ops"
+milestone = "M3"
+summary = "Hatch angle: 0 degrees gives horizontal strokes, 90 degrees vertical strokes."
+ref = "Filters › Built-in Filters › Hatch Outline"
+status = "handbook"
+
+[[behavior]]
+id = "filter.hatchOutline.openPathsWhenOffsetOff"
+area = "path-ops"
+milestone = "M3"
+summary = "Offset Path sets the stroke thickness. Switching it off outputs the hatch lines as open paths, meant as input for further filters or plug-ins."
+ref = "Filters › Built-in Filters › Hatch Outline"
+status = "handbook"
+
+# --- Offset Curve ---
+
+[[command]]
+id = "filter.offsetCurve"
+label = "Offset Curve"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], horizontal: number, vertical?: number, makeStroke?: bool, autoStroke?: bool, position?: number 0..1, keepCompatible?: bool, capStyle?: \"flat\"|\"square\"|\"round\"|\"roundInset\"|\"aligned\"}"
+area = "path-ops"
+milestone = "M3"
+summary = "Moves the outline outward (positive) or inward (negative) by separate horizontal and vertical distances, thickening or thinning stems. With Make Stroke it instead expands each path to both sides into a stroke outline, with a position split, optional vertical-dimension preservation (Auto Stroke) and a cap style for open paths. vertical defaults to horizontal (the locked state)."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[panel]]
+id = "dialog.filterOffsetCurve"
+label = "Offset Curve"
+location = "dialog"
+controls = [
+  "Horizontal field",
+  "Vertical field",
+  "lock button linking the two fields",
+  "Make Stroke checkbox",
+  "Auto Stroke checkbox",
+  "Position percent field",
+  "Keep Compatible checkbox",
+  "Cap Style picker: flat, square, round, round inset, aligned to axes",
+]
+area = "path-ops"
+milestone = "M3"
+summary = "Options dialog of the Offset Curve filter. Default values are not stated in the source."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[behavior]]
+id = "filter.offsetCurve.signConvention"
+area = "path-ops"
+milestone = "M3"
+summary = "Positive Horizontal/Vertical values grow the outline, negative values shrink it; the two axes are offset independently."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[behavior]]
+id = "filter.offsetCurve.lockUsesHorizontal"
+area = "path-ops"
+milestone = "M3"
+summary = "With the lock button engaged the Horizontal value is applied to both axes and the Vertical field is ignored."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[behavior]]
+id = "filter.offsetCurve.makeStroke"
+area = "path-ops"
+milestone = "M3"
+summary = "Make Stroke offsets to both sides of the path and joins the two results into a stroke outline; this is the way to get an outlined (hollow) version of a closed shape. It is destructive, unlike stroke styles on paths."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[behavior]]
+id = "filter.offsetCurve.autoStrokeKeepsVerticals"
+area = "path-ops"
+milestone = "M3"
+summary = "Auto Stroke expands to both sides but keeps the shape's vertical dimensions unchanged; while it is on, Position is treated as 50 %."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[behavior]]
+id = "filter.offsetCurve.positionDistribution"
+area = "path-ops"
+milestone = "M3"
+summary = "Position splits the stroke across the path: 0 % puts all of it on the left of the path direction, 100 % all on the right, 50 % half on each side."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[behavior]]
+id = "filter.offsetCurve.keepCompatible"
+area = "path-ops"
+milestone = "M3"
+summary = "Keep Compatible forbids adding nodes or handles, so the result keeps the same point structure in every master; the price is a less accurate offset."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[behavior]]
+id = "filter.offsetCurve.capStyles"
+area = "path-ops"
+milestone = "M3"
+summary = "Cap Style applies to the ends of open paths when making a stroke. Five choices: flat, square, round, round inset, and aligned to the horizontal/vertical axes."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+[[behavior]]
+id = "filter.offsetCurve.nonDestructiveAlternative"
+area = "path-ops"
+milestone = "M3"
+summary = "The same offsetting is available non-destructively as a stroke style on a path; the filter is the baked version."
+ref = "Filters › Built-in Filters › Offset Curve"
+status = "handbook"
+
+# --- Roughen ---
+
+[[command]]
+id = "filter.roughen"
+label = "Roughen"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], segmentLength: number, horizontal: number, vertical: number, seed?: integer}"
+area = "path-ops"
+milestone = "M3"
+summary = "Flattens every outline into straight segments of about Segment Length and then displaces each resulting node by a random amount of at most Horizontal units in x and Vertical units in y. seed is our addition for reproducible headless runs; the reference does not mention one."
+ref = "Filters › Built-in Filters › Roughen"
+status = "handbook"
+
+[[panel]]
+id = "dialog.filterRoughen"
+label = "Roughen"
+location = "dialog"
+controls = ["Segment Length field", "Horizontal field", "Vertical field"]
+area = "path-ops"
+milestone = "M3"
+summary = "Options dialog of the Roughen filter. No default values are stated in the source."
+ref = "Filters › Built-in Filters › Roughen"
+status = "handbook"
+
+[[behavior]]
+id = "filter.roughen.segmentsThenJitter"
+area = "path-ops"
+milestone = "M3"
+summary = "Roughen works in two steps: curves and lines are first cut into line segments of the chosen length, then all nodes (original and new) are moved randomly within the per-axis limits."
+ref = "Filters › Built-in Filters › Roughen"
+status = "handbook"
+
+[[behavior]]
+id = "filter.roughen.maxOffsetPerAxis"
+area = "path-ops"
+milestone = "M3"
+summary = "Horizontal and Vertical are upper bounds of the random displacement on each axis, not fixed distances."
+ref = "Filters › Built-in Filters › Roughen"
+status = "handbook"
+
+# --- Round Corners ---
+
+[[command]]
+id = "filter.roundCorners"
+label = "Round Corners"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], nodes?: [node refs], radius: number, visualCorrections?: bool}"
+area = "path-ops"
+milestone = "M3"
+summary = "Replaces corner nodes with arcs of the given radius (font units). With a node selection it rounds exactly the selected corners; with none it rounds only convex (outward-pointing) corners of the layer."
+ref = "Filters › Built-in Filters › Round Corners"
+status = "handbook"
+
+[[panel]]
+id = "dialog.filterRoundCorners"
+label = "Round Corners"
+location = "dialog"
+controls = ["Radius field", "Visual corrections checkbox"]
+area = "path-ops"
+milestone = "M3"
+summary = "Options dialog of the Round Corners filter. Defaults are not stated in the source."
+ref = "Filters › Built-in Filters › Round Corners"
+status = "handbook"
+
+[[behavior]]
+id = "filter.roundCorners.selectionRule"
+area = "path-ops"
+milestone = "M3"
+summary = "Selected corners are rounded whatever their direction, so inward corners can be rounded by selecting them; with no selection only outward-pointing corners are rounded."
+ref = "Filters › Built-in Filters › Round Corners"
+status = "handbook"
+
+[[behavior]]
+id = "filter.roundCorners.visualCorrections"
+area = "path-ops"
+milestone = "M3"
+summary = "Visual corrections varies the effective radius by corner angle: sharp (acute) corners get a smaller radius and blunt (obtuse) corners a larger one, so all corners look equally rounded."
+ref = "Filters › Built-in Filters › Round Corners"
+status = "handbook"
+
+# --- Rounded Font ---
+
+[[command]]
+id = "filter.roundedFont"
+label = "Rounded Font"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], stem?: number}"
+area = "path-ops"
+milestone = "M3"
+summary = "Rounds the ends of stems into full round terminals and adds a fitting overshoot. Stem widths are taken from the master's vertical stem values in Font Info; the optional stem argument (known only from the export parameter syntax) overrides them. Dialog controls are not described in the source."
+ref = "Filters › Built-in Filters › Rounded Font; Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.roundedFont.usesVerticalStems"
+area = "path-ops"
+milestone = "M3"
+summary = "Rounded Font reads the vertical stem metrics of the current master (Font Info › Masters › Stems) to recognise stem endings; with no stems defined its result is undefined in the source."
+ref = "Filters › Built-in Filters › Rounded Font"
+status = "handbook"
+
+[[behavior]]
+id = "filter.roundedFont.overshoot"
+area = "path-ops"
+milestone = "M3"
+summary = "Rounded terminals are pushed slightly past their original end so they keep their optical length (overshoot compensation)."
+ref = "Filters › Built-in Filters › Rounded Font"
+status = "handbook"
+
+# --- Transformations: Transform Metrics, Transformations, Interpolate with Background ---
+
+[[behavior]]
+id = "path.transformations.threeDialogs"
+area = "path-ops"
+milestone = "M3"
+summary = "What was one Transformations filter is three separate dialogs, each in a different menu: Glyph › Transform Metrics, Path › Transformations and Path › Interpolate with Background. As an export-time filter all of them are still addressed through the single filter name Transformations."
+ref = "Filters › Built-in Filters › Transformations; Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[command]]
+id = "glyph.transformMetrics"
+label = "Transform Metrics"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], width?: number, onBothSides?: bool, lsb?: number, rsb?: number, relative?: bool}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets a new advance width, or new left and/or right sidebearings, on the selected glyph layers. Passing width selects width mode; otherwise each of lsb and rsb that is present is changed, absolutely or (relative) as a delta."
+ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
+status = "handbook"
+
+[[panel]]
+id = "dialog.transformMetrics"
+label = "Transform Metrics"
+location = "dialog"
+controls = [
+  "Width checkbox with value field",
+  "on both sides checkbox",
+  "LSB checkbox with value field",
+  "RSB checkbox with value field",
+  "Relative checkbox",
+]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Dialog for assigning widths or sidebearings to many layers at once. The Width checkbox switches between width mode and sidebearing mode."
+ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "glyph.transformMetrics.widthMode"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "With Width enabled every target layer gets the entered advance width. Point coordinates are left unchanged (the difference lands on one side) unless on both sides is checked."
+ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "glyph.transformMetrics.onBothSides"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "on both sides distributes the width change equally between the left and right sidebearing, instead of putting it all on one side."
+ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "glyph.transformMetrics.sidebearingMode"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "With Width disabled the dialog sets sidebearings; the LSB and RSB checkboxes choose which of the two sides are written, so either side can be left alone."
+ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "glyph.transformMetrics.relative"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Relative adds the entered LSB/RSB values to the existing sidebearings (negative values reduce them); without it the entered values replace the existing ones."
+ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
+status = "handbook"
+
+[[command]]
+id = "path.transformations"
+label = "Transformations"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], nodes?: [node refs], translate?: {x: number, y: number}, origin?: \"capHeight\"|\"halfCapHeight\"|\"xHeight\"|\"halfXHeight\"|\"baseline\", scale?: {x: percent, y?: percent}, slant?: degrees, cursivy?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Applies an affine transform (move, scale, slant) to the selected points or to whole selected layers, around a chosen origin. scale.y defaults to scale.x (locked); cursivy switches the slant to the optically corrected variant. The origin choices come from the export parameter documentation, not from this chapter."
+ref = "Filters › Built-in Filters › Transformations › Transformations; Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[panel]]
+id = "dialog.transformations"
+label = "Transformations"
+location = "dialog"
+controls = [
+  "Translate X and Y fields",
+  "Origin picker",
+  "Scale horizontal and vertical fields with lock button",
+  "Slant field whose label is a pop-up: Slant | Cursivy",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Dialog for a one-off affine transformation of the selection or of selected layers."
+ref = "Filters › Built-in Filters › Transformations › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "path.transformations.targets"
+area = "drawing"
+milestone = "M3"
+summary = "Transformations acts on the selected points when there is a point selection, otherwise on the complete selected layers (one or many glyphs)."
+ref = "Filters › Built-in Filters › Transformations › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "path.transformations.translate"
+area = "drawing"
+milestone = "M3"
+summary = "Translate shifts the target by the entered X and Y amounts in font units."
+ref = "Filters › Built-in Filters › Transformations › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "path.transformations.origin"
+area = "drawing"
+milestone = "M3"
+summary = "Origin is the fixed point that scaling and slanting are measured from. As an export filter it is a number 0–4: cap height, half cap height, x-height, half x-height, baseline."
+ref = "Filters › Built-in Filters › Transformations › Transformations; Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "path.transformations.scaleLock"
+area = "drawing"
+milestone = "M3"
+summary = "Scale has separate horizontal and vertical factors; with the lock closed the horizontal factor is used for both."
+ref = "Filters › Built-in Filters › Transformations › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "path.transformations.slantVsCursivy"
+area = "drawing"
+milestone = "M3"
+summary = "Slant is a plain shear with no compensation. Clicking the Slant label offers Cursivy, a shear with optical correction of the curves."
+ref = "Filters › Built-in Filters › Transformations › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "path.transformations.cursivyNeedsStems"
+area = "drawing"
+milestone = "M3"
+summary = "Cursivy only works when the master has horizontal and vertical stem values in Font Info › Masters › Stems. FontCraft should refuse with a clear error when they are missing (the source does not say what the reference does)."
+ref = "Filters › Built-in Filters › Transformations › Transformations"
+status = "handbook"
+
+[[command]]
+id = "path.interpolateWithBackground"
+label = "Interpolate with Background"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], amount: percent}"
+area = "layers"
+milestone = "M3"
+summary = "Replaces the foreground outline with a blend between foreground and background: 0 % keeps the foreground, 100 % yields the background, values outside 0–100 extrapolate. Does not work when the two layers are not point-compatible."
+ref = "Filters › Built-in Filters › Transformations › Interpolate with Background"
+status = "handbook"
+
+[[panel]]
+id = "dialog.interpolateWithBackground"
+label = "Interpolate with Background"
+location = "dialog"
+controls = ["percentage field (may be below 0 or above 100)"]
+area = "layers"
+milestone = "M3"
+summary = "Dialog asking for the blend percentage between foreground and background."
+ref = "Filters › Built-in Filters › Transformations › Interpolate with Background"
+status = "handbook"
+
+[[behavior]]
+id = "path.interpolateWithBackground.extrapolation"
+area = "layers"
+milestone = "M3"
+summary = "Percentages below 0 or above 100 are accepted and extrapolate beyond the foreground or the background shape."
+ref = "Filters › Built-in Filters › Transformations › Interpolate with Background"
+status = "handbook"
+
+[[behavior]]
+id = "path.interpolateWithBackground.requiresCompatibility"
+area = "layers"
+milestone = "M3"
+summary = "The blend needs foreground and background with matching structure (same paths, node counts and node types); the source only says the filter does not work otherwise."
+ref = "Filters › Built-in Filters › Transformations › Interpolate with Background"
+status = "handbook"
+
+# --- Add Extremes and Remove Overlap (Path menu commands that are also filters) ---
+
+[[behavior]]
+id = "path.addExtremes.parameterName"
+area = "path-ops"
+milestone = "M7"
+summary = "As an export-time filter Add Extremes is written AddExtremes and takes no arguments."
+ref = "Filters › Built-in Filters › Add Extremes"
+status = "handbook"
+
+[[command]]
+id = "path.removeOverlap"
+label = "Remove Overlap"
+menu = ["Path"]
+shortcut = "Cmd+Shift+O"
+kind = "engine"
+params = "{glyphs?: [names], layers?: [ids], paths?: [path refs]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Unions overlapping closed paths into non-overlapping outlines. Works on the selected paths, or on all paths of the layer when nothing is selected or when several glyphs are targeted. Filter-registry entry for the Path menu command; the shortcut is given in the Font View and Reusing Shapes chapters."
+ref = "Filters › Built-in Filters › Remove Overlap; Font View chapter (shortcut)"
+status = "handbook"
+
+[[behavior]]
+id = "path.removeOverlap.selectionRule"
+area = "path-ops"
+milestone = "M3"
+summary = "With one glyph and a path selection only the selected paths are merged; with no selection, or with more than one glyph selected, every path on each layer takes part."
+ref = "Filters › Built-in Filters › Remove Overlap"
+status = "handbook"
+
+[[behavior]]
+id = "path.removeOverlap.removesOpenPathsAndStrayNodes"
+area = "path-ops"
+milestone = "M3"
+summary = "Besides merging, Remove Overlap deletes all open paths and single stray nodes from the processed glyphs."
+ref = "Filters › Built-in Filters › Remove Overlap"
+status = "handbook"
+
+[[behavior]]
+id = "path.removeOverlap.expectsCorrectDirections"
+area = "path-ops"
+milestone = "M3"
+summary = "The result is only correct when path directions are already right (outer contours and counters wound oppositely); the filter does not fix directions itself."
+ref = "Filters › Built-in Filters › Remove Overlap"
+status = "handbook"
+
+[[behavior]]
+id = "path.removeOverlap.parameterName"
+area = "path-ops"
+milestone = "M7"
+summary = "As an export-time filter Remove Overlap is written RemoveOverlap and takes no arguments."
+ref = "Filters › Built-in Filters › Remove Overlap"
+status = "handbook"
+
+[[behavior]]
+id = "path.removeOverlap.exportCheckbox"
+area = "compile"
+milestone = "M2"
+summary = "The export dialog has a Remove Overlap checkbox that runs the same operation on every exported glyph; it can be left off when a RemoveOverlap filter parameter already does the job."
+ref = "Filters › Built-in Filters › Remove Overlap; Import & Export chapter (export options)"
+status = "handbook"
+
+# --- Filters as export-time custom parameters ---
+
+[[behavior]]
+id = "filter.customParameter.filter"
+area = "path-ops"
+milestone = "M7"
+summary = "A Filter custom parameter on an instance (export) holds one filter string; at export the named filter runs on that instance's glyphs after composites have been decomposed."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.preFilter"
+area = "path-ops"
+milestone = "M7"
+summary = "PreFilter takes the same strings as Filter but runs before decomposition, so components are still intact. It is honoured for static fonts only."
+ref = "Appendix › Custom Parameters › PreFilter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.syntax"
+area = "path-ops"
+milestone = "M7"
+summary = "A filter string is the filter name followed by arguments, all separated by semicolons. Arguments are positional values or key: value pairs depending on the filter."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.booleans"
+area = "path-ops"
+milestone = "M7"
+summary = "Boolean arguments in a filter string are written 1 (on) or 0 (off)."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.includeExclude"
+area = "path-ops"
+milestone = "M7"
+summary = "A trailing include: or exclude: argument limits a filter to, or keeps it away from, the listed glyphs; names are separated by spaces or commas, e.g. RemoveOverlap; exclude:x,y,z."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.thirdParty"
+area = "extensions"
+milestone = "M13"
+summary = "Plug-in filters define their own argument strings and are not guaranteed to understand include: and exclude:."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.addExtremes"
+area = "path-ops"
+milestone = "M7"
+summary = "Export string: AddExtremes (no arguments)."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.autohinting"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Export string: Autohinting (no arguments) runs the autohinter as if it were a filter; it is an app function rather than a Filter menu entry."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.hatchOutline"
+area = "path-ops"
+milestone = "M7"
+summary = "Export string: HatchOutlineFilter; OriginX: x; OriginY: y; StepWidth: distance; Angle: angle; Offset: thickness (keyed arguments)."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.offsetCurve"
+area = "path-ops"
+milestone = "M7"
+summary = "Export string: OffsetCurve; x; y; makestroke; position. x and y are the horizontal and vertical offsets, makestroke is 0 or 1, and position is a fraction from 0.0 (0 %) to 1.0 (100 %) or the word auto for Auto Stroke."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.removeOverlap"
+area = "path-ops"
+milestone = "M7"
+summary = "Export string: RemoveOverlap (no arguments)."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.roughen"
+area = "path-ops"
+milestone = "M7"
+summary = "Export string: Roughenizer; segmentlength; x; y; angle. The fourth value (angle) has no counterpart in the dialog description of the Filters chapter."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.roundCorners"
+area = "path-ops"
+milestone = "M7"
+summary = "Export string: RoundCorner; radius; visualcorrection, the latter 0 or 1."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.roundedFont"
+area = "path-ops"
+milestone = "M7"
+summary = "Export string: RoundedFont; stem, where the stem value may be left out."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.transformations"
+area = "path-ops"
+milestone = "M7"
+summary = "Export string: Transformations; LSB: shift; RSB: shift; Width: shift; ScaleX: percent; ScaleY: percent; Slant: degrees; SlantCorrection: bool; OffsetX: amount; OffsetY: amount; Origin: 0–4. Shifts carry an explicit sign; it covers both the metrics and the affine dialog."
+ref = "Appendix › Custom Parameters › Filter"
+status = "handbook"
+
+[[behavior]]
+id = "filter.customParameter.extrudeUndocumented"
+area = "path-ops"
+milestone = "M7"
+summary = "No export string is documented for Extrude or for Interpolate with Background; whether they can be used as Filter parameters must be checked in the reference app."
+ref = "Appendix › Custom Parameters › Filter"
+status = "inferred"
+
+[[behavior]]
+id = "filter.customParameter.sameRegistryAsCommands"
+area = "path-ops"
+milestone = "M7"
+summary = "FontCraft parses a filter string into the params of the matching filter.* command and runs it through the command registry, so menu, CLI, MCP and export all share one implementation per filter."
+ref = "Appendix › Custom Parameters › Filter"
+status = "inferred"

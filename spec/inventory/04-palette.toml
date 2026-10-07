@@ -1,0 +1,889 @@
+# Source: Glyphs 4 Handbook, chapter "Palette"
+#         (https://handbook.glyphsapp.com/palette/ ; scratch copy handbook/04-palette.txt, whole file)
+# Date:   2026-10-07
+# All wording is our own. Labels, menu paths and shortcuts match the reference where it states them.
+# The Palette buttons carry icons, not text, in the reference; command labels are therefore ours
+# unless the handbook names the action. Rows marked `inferred` are FontCraft designs.
+
+# ───────────────────────────── Sidebar ─────────────────────────────
+
+[[panel]]
+id = "palette"
+label = "Palette"
+location = "sidebar"
+controls = [
+  "sidebar button at the window's top-right corner: show or hide the Palette",
+  "section header with a chevron on its left: collapse or expand the section",
+  "built-in sections in order: Dimensions, Fit Curve, Layers, Transformations",
+  "additional sections contributed by plug-ins",
+  "contextual controls at the bottom, shown while View > Show Info is on",
+]
+area = "ui-chrome"
+milestone = "M3"
+summary = "Right-hand sidebar of the font window made of collapsible sections. Four sections are built in and plug-ins can add more."
+ref = "Palette"
+status = "handbook"
+
+[[command]]
+id = "window.palette"
+label = "Palette"
+menu = ["Window"]
+shortcut = "Cmd+Alt+P"
+kind = "ui"
+params = "{on?: bool}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Shows or hides the Palette sidebar. The sidebar button at the top right of the window does the same."
+ref = "Palette"
+status = "handbook"
+
+[[command]]
+id = "palette.toggleSection"
+label = "Collapse / Expand Section"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{section: 'dimensions'|'fitCurve'|'layers'|'transformations'|pluginId, expanded?: bool}"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Collapses a Palette section to its title row or expands it again, as clicking the chevron beside the section name does."
+ref = "Palette"
+status = "handbook"
+
+[[behavior]]
+id = "palette.pluginSections"
+area = "extensions"
+milestone = "M13"
+summary = "Plug-ins can register their own Palette sections, which appear alongside the built-in ones and collapse the same way."
+ref = "Palette"
+status = "handbook"
+
+# ───────────────────────────── Dimensions ─────────────────────────────
+
+[[panel]]
+id = "palette.dimensions"
+label = "Dimensions"
+location = "palette"
+controls = [
+  "diagram of typical letter parts with one number field per labelled measurement",
+  "empty fields show -- ; click a number or an empty field to type a value",
+  "the set of fields depends on the script of the current glyph",
+]
+area = "guides-metrics"
+milestone = "M3"
+summary = "Notepad for recurring measurements of the design such as stem and bowl thicknesses. The numbers are stored per master and are reference only: they change nothing in the outlines or the exported font."
+ref = "Palette › Dimensions"
+status = "handbook"
+
+[[command]]
+id = "dimensions.setValue"
+label = "Set Dimension"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master?: id, key: string, value: number|null}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Stores one measurement in the Dimensions notepad of a master, or clears it with null. The field keys per script are not listed in the handbook."
+ref = "Palette › Dimensions"
+status = "handbook"
+
+[[command]]
+id = "dimensions.getValues"
+label = "Get Dimensions"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master?: id, script?: string}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Query returning the Dimensions values noted for a master, optionally limited to the fields of one script."
+ref = "Palette › Dimensions"
+status = "inferred"
+
+[[behavior]]
+id = "dimensions.perMaster"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Dimensions values are kept separately for every master, so switching master switches the numbers shown."
+ref = "Palette › Dimensions"
+status = "handbook"
+
+[[behavior]]
+id = "dimensions.fieldsFollowScript"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Which measurement fields the Dimensions section offers follows the script assigned to the current glyph. That script can be overridden per glyph through Edit > Info for Selection."
+ref = "Palette › Dimensions"
+status = "handbook"
+
+[[behavior]]
+id = "dimensions.noEffectOnFont"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Dimensions are informational. No tool, filter or export step is documented in this chapter as reading them."
+ref = "Palette › Dimensions"
+status = "handbook"
+
+# ───────────────────────────── Fit Curve ─────────────────────────────
+
+[[panel]]
+id = "palette.fitCurve"
+label = "Fit Curve"
+location = "palette"
+controls = [
+  "left percentage field: handle length applied by the leftmost button (lower bound)",
+  "right percentage field: handle length applied by the rightmost button (upper bound)",
+  "eight round buttons: evenly spaced handle lengths from the left to the right value",
+  "small grey marker under the buttons: current length of the selected handle",
+  "plus button: lengthen the handles of the selected segments",
+  "minus button: shorten the handles of the selected segments",
+  "scale (balance) button: even out the two handles of each segment",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Section for setting the handle lengths of curve segments as a percentage, to get evenly curved outlines. Every action treats both handles of a segment together even if only one is selected."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[command]]
+id = "fitCurve.applyStep"
+label = "Fit Curve"
+menu = []
+shortcut = "Ctrl+Alt+1"
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids], step: 1..8}"
+area = "drawing"
+milestone = "M3"
+summary = "Sets the handles of the selected curve segments to one of eight lengths. Step 1 is the value of the left field, step 8 the value of the right field, and steps 2 to 7 divide the range between them evenly. Ctrl+Alt+1 through Ctrl+Alt+8 run steps 1 to 8."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[command]]
+id = "fitCurve.setHandleLength"
+label = "Set Handle Length"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids], percent: 1..100}"
+area = "drawing"
+milestone = "M3"
+summary = "Sets both handles of each selected curve segment to an explicit percentage. Generalises the eight buttons for agents; values are clamped to 1 to 100."
+ref = "Palette › Fit Curve"
+status = "inferred"
+
+[[command]]
+id = "fitCurve.increase"
+label = "Increase Handle Length"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Plus button: lengthens the handles of the selected curve segments uniformly by one increment. The size of the increment is not documented."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[command]]
+id = "fitCurve.decrease"
+label = "Decrease Handle Length"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Minus button: shortens the handles of the selected curve segments uniformly by one increment."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[command]]
+id = "fitCurve.setRange"
+label = "Set Fit Curve Range"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{min?: percent, max?: percent}"
+area = "drawing"
+milestone = "M3"
+summary = "Sets the two percentage fields that define what the first and the last of the eight buttons apply. A per-font custom parameter can supply these two values instead."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[command]]
+id = "fitCurve.balanceHandles"
+label = "Balance Handles"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Scale button of the Fit Curve section: redistributes the lengths of the two handles of each selected segment so they are balanced while the segment keeps its overall curvature. The exact balancing rule is not given."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[command]]
+id = "fitCurve.getHandleLength"
+label = "Get Handle Length"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Query returning the current handle length percentage of each selected segment, the value the grey marker under the buttons indicates."
+ref = "Palette › Fit Curve"
+status = "inferred"
+
+[[behavior]]
+id = "fitCurve.bothHandles"
+area = "drawing"
+milestone = "M3"
+summary = "Fit Curve always changes the two handles of a segment as a pair, also when the selection contains only one of them."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[behavior]]
+id = "fitCurve.percentRange"
+area = "drawing"
+milestone = "M3"
+summary = "Handle length is expressed as a percentage from 1 to 100. About 55 percent approximates a circular or elliptical arc; higher values flatten the curve near its nodes, lower values flatten its middle and sharpen its ends."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[behavior]]
+id = "fitCurve.lengthIndicator"
+area = "drawing"
+milestone = "M3"
+summary = "With a handle selected, a small grey marker appears under the row of buttons and shows where its current length falls within the range."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+[[behavior]]
+id = "fitCurve.panelSettingsParameter"
+area = "font-info"
+milestone = "M7"
+summary = "A font-level custom parameter named Fit Curve Panel Settings fixes the lower and upper percentage for that document. Its value is two comma-separated numbers, for example 52, 78."
+ref = "Palette › Fit Curve"
+status = "handbook"
+
+# ───────────────────────────── Layers ─────────────────────────────
+
+[[panel]]
+id = "palette.layers"
+label = "Layers"
+location = "palette"
+controls = [
+  "layer list of the current glyph, grouped by master",
+  "eye toggle per layer: show the layer as an outline while another layer is active",
+  "master layer rows: master name in bold",
+  "backup layer rows: indented under their master, regular weight, default name is creation date and time",
+  "special layer rows (intermediate, alternate, colour, plug-in defined): indented, type label in bold",
+  "click: make a layer active; Shift+click: select a range; Cmd+click: non-contiguous selection",
+  "double-click a name: rename (not for master layers)",
+  "drag a row: reorder within its master; drag a backup onto a master row: use it as master",
+  "plus button (bottom left): new backup layer",
+  "minus button: delete the selected layer",
+  "actions menu: Use as Master",
+  "filter menu: Only Show Layers from Current Master, Hide Backup Layers",
+  "drag handle at the bottom edge: resize the section",
+]
+area = "layers"
+milestone = "M3"
+summary = "Lists every layer of the current glyph: one master layer per font master plus any backup and special layers beneath it. It is where layers are switched, shown, added, renamed, reordered and promoted."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.select"
+label = "Select Layer"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyphs?: [names], layer: id|name, extend?: 'range'|'toggle'}"
+area = "layers"
+milestone = "M3"
+summary = "Makes a layer of the current glyph the active one, or extends the layer selection as Shift+click and Cmd+click do. Choosing a master layer changes the master shown for the edited or text-selected glyphs only."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.toggleVisibility"
+label = "Show / Hide Layer"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer: id|name, visible?: bool}"
+area = "layers"
+milestone = "M3"
+summary = "Toggles the eye of a layer. A visible layer is drawn as a faint blue outline behind the active layer of the same glyph. Whether the flag is saved in the document is not stated; we treat it as document data."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.addBackupLayer"
+label = "New Backup Layer"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], master?: id, name?: string, from?: layerId}"
+area = "layers"
+milestone = "M3"
+summary = "Plus button: adds a backup layer under the current master of the glyph, named with the current date and time. The handbook describes backups as copies of earlier drawings but does not state outright that the new layer starts as a copy of the active one."
+ref = "Palette › Layers › Backup Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.delete"
+label = "Delete Layer"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layers?: [id|name]}"
+area = "layers"
+milestone = "M3"
+summary = "Minus button: removes the selected layer or layers of the glyph. Master layers are refused; they can only be removed by deleting the master in Font Info."
+ref = "Palette › Layers › Backup Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.rename"
+label = "Rename Layer"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer: id|name, name: string}"
+area = "layers"
+milestone = "M3"
+summary = "Renames a non-master layer, as double-clicking its name in the list does. Master layers always carry the master's name and cannot be renamed here."
+ref = "Palette › Layers › Backup Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.reorder"
+label = "Reorder Layer"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer: id|name, toIndex: number}"
+area = "layers"
+milestone = "M3"
+summary = "Moves a layer to another position among the layers of the same master. A move that would take it under a different master is not allowed."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.useAsMaster"
+label = "Use as Master"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer: id|name}"
+area = "layers"
+milestone = "M3"
+summary = "Restores a backup layer: its content becomes the master layer's content, the previous master content is saved to a newly created backup layer, and the restored backup is removed. Dragging a backup row onto a master row does the same."
+ref = "Palette › Layers › Backup Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.onlyShowLayersFromCurrentMaster"
+label = "Only Show Layers from Current Master"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "layers"
+milestone = "M3"
+summary = "Filter-menu toggle that hides all rows belonging to masters other than the current one, to shorten the list in fonts with many masters."
+ref = "Palette › Layers › Master Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.hideBackupLayers"
+label = "Hide Backup Layers"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "layers"
+milestone = "M3"
+summary = "Filter-menu toggle that removes all backup layers from the list without deleting them."
+ref = "Palette › Layers › Backup Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.list"
+label = "List Layers"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name}"
+area = "layers"
+milestone = "M3"
+summary = "Query returning the layers of a glyph in palette order with id, name, kind (master, backup, intermediate, alternate, colour, other), owning master and visibility."
+ref = "Palette › Layers"
+status = "inferred"
+
+[[behavior]]
+id = "layers.sortedByMaster"
+area = "layers"
+milestone = "M3"
+summary = "The layer list is grouped by master in master order, with each master's backup and special layers indented beneath its master layer."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[behavior]]
+id = "layers.threeKinds"
+area = "layers"
+milestone = "M1"
+summary = "A glyph's layers are of three kinds: master layers (exactly one per font master, needed for interpolation), backup layers (any number, inert copies) and special layers (intermediate, alternate, colour, or plug-in defined)."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[behavior]]
+id = "layers.masterLayersFixed"
+area = "layers"
+milestone = "M3"
+summary = "Master layers cannot be created, deleted or renamed from the Layers section; they follow the masters defined in Font Info > Masters."
+ref = "Palette › Layers › Master Layers"
+status = "handbook"
+
+[[behavior]]
+id = "layers.visibleLayerOutline"
+area = "layers"
+milestone = "M3"
+summary = "A layer whose eye is on is drawn as a thin blue line whenever a different layer of that glyph is being edited. The colour is an appearance setting."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[behavior]]
+id = "layers.rowStyling"
+area = "layers"
+milestone = "M3"
+summary = "Row typography encodes the kind: master layers bold at the top level, backup layers indented in regular weight, special layers indented with a bold label that states their type."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[behavior]]
+id = "layers.backupDefaultName"
+area = "layers"
+milestone = "M3"
+summary = "A new backup layer is named after the date and time of its creation until the user renames it."
+ref = "Palette › Layers › Backup Layers"
+status = "handbook"
+
+[[behavior]]
+id = "layers.sectionResizable"
+area = "ui-chrome"
+milestone = "M3"
+summary = "The height of the Layers section is changed by dragging the handle at its lower edge."
+ref = "Palette › Layers"
+status = "handbook"
+
+[[behavior]]
+id = "layers.pluginSpecialLayers"
+area = "extensions"
+milestone = "M13"
+summary = "Plug-ins may introduce further kinds of special layers, which the list shows like the built-in ones."
+ref = "Palette › Layers › Special Layers"
+status = "handbook"
+
+# ───────────────────────────── Transformations ─────────────────────────────
+
+[[panel]]
+id = "palette.transformations"
+label = "Transformations"
+location = "palette"
+controls = [
+  "origin row: transformation box (3x3 grid on the selection bounds: four corners, four edge centres, centre)",
+  "origin row: reference point (the origin clicked with the Scale or Rotate tool)",
+  "origin row: metrics point (baseline, half x-height, x-height, half cap height, cap height)",
+  "origin row, CJK glyphs: layer dimensions control in place of the metrics point (centre of the layer)",
+  "mirror horizontally / mirror vertically buttons",
+  "reverse scale button | horizontal percent field over vertical percent field with lock | scale button",
+  "rotate counterclockwise button | angle field | rotate clockwise button",
+  "slant left button | angle field | slant right button, plus slant down and slant up buttons",
+  "align buttons: left, horizontal centre, right, top, vertical centre, bottom",
+  "boolean buttons (bottom row): union, subtraction, intersection",
+]
+area = "drawing"
+milestone = "M3"
+summary = "Section for numeric transformations of whatever is selected: points, segments, paths, components, anchors, guides and images in Edit View, or whole layers of the glyphs selected in Font View. The button on each side of a field performs the opposite operation with the same value."
+ref = "Palette › Transformations"
+status = "handbook"
+
+[[command]]
+id = "transform.setOrigin"
+label = "Set Transformation Origin"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{mode: 'box'|'reference'|'metrics'|'layer', boxPoint?: 'topLeft'|'top'|'topRight'|'left'|'center'|'right'|'bottomLeft'|'bottom'|'bottomRight', metric?: 'baseline'|'halfXHeight'|'xHeight'|'halfCapHeight'|'capHeight', point?: [x, y]}"
+area = "drawing"
+milestone = "M3"
+summary = "Chooses the fixed point for Palette transformations: a point of the selection bounding box, the reference point set with the Scale or Rotate tool, a vertical metric of the master, or (for CJK glyphs) the centre of the layer. Alignment ignores this setting, except through Path > Align Selection."
+ref = "Palette › Transformations › Transformation Origin"
+status = "handbook"
+
+[[command]]
+id = "transform.mirrorHorizontal"
+label = "Mirror Horizontally"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Flips the selection left to right across a vertical axis through the transformation origin. With a metrics point as origin the axis is the horizontal centre of the layer (half the advance width). A mirrored corner component changes handedness, left corner becoming right corner."
+ref = "Palette › Transformations › Mirroring"
+status = "handbook"
+
+[[command]]
+id = "transform.mirrorVertical"
+label = "Mirror Vertically"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Flips the selection top to bottom across a horizontal axis through the transformation origin. With the origin set to half x-height or half cap height, overshoots are kept, so an overshooting arch ends up overshooting the baseline."
+ref = "Palette › Transformations › Mirroring"
+status = "handbook"
+
+[[command]]
+id = "transform.scale"
+label = "Scale"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], x: percent, y?: percent, origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Scales the selection about the transformation origin by the horizontal and vertical percentages of the two fields. Above 100 enlarges, below 100 shrinks, 100 is a no-op; with the lock closed, both axes scale by the value of the horizontal field."
+ref = "Palette › Transformations › Scaling"
+status = "handbook"
+
+[[command]]
+id = "transform.reverseScale"
+label = "Reverse Scale"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], x: percent, y?: percent, origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Scales by the reciprocal of the entered percentages, undoing a Scale made with the same values: 120 percent is reversed by a factor of 100/120, not by 80 percent. It works for values below 100 as well."
+ref = "Palette › Transformations › Scaling"
+status = "handbook"
+
+[[command]]
+id = "transform.setScaleLock"
+label = "Lock Scale Proportions"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{locked?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Toggles the lock between the two scale fields. Locked, the top (horizontal) field drives both axes; unlocked, the horizontal and vertical factors are independent."
+ref = "Palette › Transformations › Scaling"
+status = "handbook"
+
+[[command]]
+id = "transform.rotateClockwise"
+label = "Rotate Clockwise"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], angle: degrees, origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Rotates the selection clockwise about the transformation origin by the angle in the rotate field. It exactly undoes Rotate Counterclockwise with the same angle."
+ref = "Palette › Transformations › Rotating & Slanting"
+status = "handbook"
+
+[[command]]
+id = "transform.rotateCounterclockwise"
+label = "Rotate Counterclockwise"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], angle: degrees, origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Rotates the selection counterclockwise about the transformation origin by the angle in the rotate field."
+ref = "Palette › Transformations › Rotating & Slanting"
+status = "handbook"
+
+[[command]]
+id = "transform.slantLeft"
+label = "Slant Left"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], angle: degrees, origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Shears the selection horizontally so that it leans to the left by the angle in the slant field, keeping the transformation origin fixed. Opposite of Slant Right."
+ref = "Palette › Transformations › Rotating & Slanting"
+status = "handbook"
+
+[[command]]
+id = "transform.slantRight"
+label = "Slant Right"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], angle: degrees, origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Shears the selection horizontally so that it leans to the right by the angle in the slant field, keeping the transformation origin fixed."
+ref = "Palette › Transformations › Rotating & Slanting"
+status = "handbook"
+
+[[command]]
+id = "transform.slantDown"
+label = "Slant Down"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], angle: degrees, origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Shears the selection vertically, downward, by the angle in the slant field. Opposite of Slant Up. Which side moves is not spelled out and must be observed."
+ref = "Palette › Transformations › Rotating & Slanting"
+status = "handbook"
+
+[[command]]
+id = "transform.slantUp"
+label = "Slant Up"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [ids], angle: degrees, origin?: object}"
+area = "drawing"
+milestone = "M3"
+summary = "Shears the selection vertically, upward, by the angle in the slant field."
+ref = "Palette › Transformations › Rotating & Slanting"
+status = "handbook"
+
+[[command]]
+id = "transform.alignLeft"
+label = "Align Left"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Moves the selected points, paths or path parts, anchors and components so their left edges meet the left edge of the selection's bounding box."
+ref = "Palette › Transformations › Aligning"
+status = "handbook"
+
+[[command]]
+id = "transform.alignCenterHorizontal"
+label = "Align Horizontal Centers"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Centres the selected objects on the horizontal middle of the selection's bounding box, so they share one vertical axis. The handbook's wording of which centre button is which is ambiguous; confirm against the app."
+ref = "Palette › Transformations › Aligning"
+status = "handbook"
+
+[[command]]
+id = "transform.alignRight"
+label = "Align Right"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Moves the selected objects so their right edges meet the right edge of the selection's bounding box."
+ref = "Palette › Transformations › Aligning"
+status = "handbook"
+
+[[command]]
+id = "transform.alignTop"
+label = "Align Top"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Moves the selected objects so their top edges meet the top edge of the selection's bounding box."
+ref = "Palette › Transformations › Aligning"
+status = "handbook"
+
+[[command]]
+id = "transform.alignCenterVertical"
+label = "Align Vertical Centers"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Centres the selected objects on the vertical middle of the selection's bounding box, so they share one horizontal axis."
+ref = "Palette › Transformations › Aligning"
+status = "handbook"
+
+[[command]]
+id = "transform.alignBottom"
+label = "Align Bottom"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, selection?: [ids]}"
+area = "drawing"
+milestone = "M3"
+summary = "Moves the selected objects so their bottom edges meet the bottom edge of the selection's bounding box."
+ref = "Palette › Transformations › Aligning"
+status = "handbook"
+
+[[command]]
+id = "transform.booleanUnion"
+label = "Union"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, paths?: [index]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Merges overlapping closed paths into their combined outline. It acts on the selected paths, or on every path of the layer when nothing is selected, and is the same operation the Remove Overlap export option applies to all glyphs."
+ref = "Palette › Transformations › Boolean Operations"
+status = "handbook"
+
+[[command]]
+id = "transform.booleanSubtract"
+label = "Subtract"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, paths?: [index]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Cuts the selected closed paths out of the unselected ones. Each group is merged first so the result does not depend on internal overlaps. With no selection, the frontmost path is the one subtracted."
+ref = "Palette › Transformations › Boolean Operations"
+status = "handbook"
+
+[[command]]
+id = "transform.booleanIntersect"
+label = "Intersect"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, paths?: [index]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Keeps only the area where the selected closed paths and the unselected ones overlap. With no selection, the frontmost path plays the role of the selected path."
+ref = "Palette › Transformations › Boolean Operations"
+status = "handbook"
+
+[[command]]
+id = "transform.getSettings"
+label = "Get Transformation Settings"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "drawing"
+milestone = "M3"
+summary = "Query returning the Transformations section's state: origin mode and point, scale percentages and lock, rotate angle and slant angle."
+ref = "Palette › Transformations"
+status = "inferred"
+
+[[behavior]]
+id = "transform.targetsBySelection"
+area = "drawing"
+milestone = "M3"
+summary = "What a Palette transformation acts on follows the selection: selected segments or whole paths in Edit View, otherwise complete glyph layers, including every glyph selected in Font View."
+ref = "Palette › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "transform.supportedObjects"
+area = "drawing"
+milestone = "M3"
+summary = "Palette transformations apply to points, paths, components, anchors, guides and placed images alike."
+ref = "Palette › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "transform.oppositeButtonsExact"
+area = "drawing"
+milestone = "M3"
+summary = "The buttons on either side of a value field are exact inverses of each other, and applying one after the other returns the original coordinates without the rounding drift the unit grid could otherwise cause. How the reference achieves this (stored unrounded positions or an undo-like shortcut) is not explained."
+ref = "Palette › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "transform.originIndicator"
+area = "drawing"
+milestone = "M3"
+summary = "The reference point is set by clicking the canvas with the Scale or Rotate tool. While one of those tools is active it appears as a crosshair inside a red ring, and as a bare crosshair with any other tool."
+ref = "Palette › Transformations › Transformation Origin"
+status = "handbook"
+
+[[behavior]]
+id = "transform.originMetricsChoices"
+area = "drawing"
+milestone = "M3"
+summary = "The metrics-point origin offers five heights taken from the master's metrics: baseline, half x-height, x-height, half cap height and cap height. Its horizontal position is the centre of the layer, at least for mirroring."
+ref = "Palette › Transformations › Transformation Origin"
+status = "handbook"
+
+[[behavior]]
+id = "transform.originCjkLayerCenter"
+area = "drawing"
+milestone = "M3"
+summary = "For CJK glyphs the metrics-point control is replaced by a layer-dimensions control whose origin is the centre of the layer: half the advance width horizontally and midway between ascender and descender vertically."
+ref = "Palette › Transformations › Transformation Origin"
+status = "handbook"
+
+[[behavior]]
+id = "transform.alignIgnoresOrigin"
+area = "drawing"
+milestone = "M3"
+summary = "The align buttons are the only Palette transformations that do not use the transformation origin; they always work from the bounding box of the selection. Path > Align Selection (Cmd+Shift+A), by contrast, does honour the origin setting."
+ref = "Palette › Transformations › Aligning"
+status = "handbook"
+
+[[behavior]]
+id = "transform.mirrorComponentAnchors"
+area = "components"
+milestone = "M6"
+summary = "Flipping a glyph component vertically swaps the roles of the base glyph's top and bottom anchors for that component, so a mark drawn for the top can be reused below."
+ref = "Palette › Transformations › Mirroring"
+status = "handbook"
+
+[[behavior]]
+id = "transform.mirrorCornerComponent"
+area = "components"
+milestone = "M6"
+summary = "Mirroring a corner component changes its handedness: a left corner becomes a right corner and the reverse."
+ref = "Palette › Transformations › Mirroring"
+status = "handbook"
+
+[[behavior]]
+id = "transform.slantNotAdditive"
+area = "drawing"
+milestone = "M3"
+summary = "Slant amounts do not add up: slanting twice by an angle gives a different shape from slanting once by twice that angle. The handbook gives no formula; a shear by the tangent of the angle would explain it."
+ref = "Palette › Transformations › Rotating & Slanting"
+status = "handbook"
+
+[[behavior]]
+id = "transform.booleanNeedsClosedPaths"
+area = "path-ops"
+milestone = "M3"
+summary = "The three boolean buttons combine closed paths. Behaviour for open paths in the selection is not described."
+ref = "Palette › Transformations › Boolean Operations"
+status = "handbook"

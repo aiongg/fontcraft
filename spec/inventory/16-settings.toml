@@ -1,0 +1,1165 @@
+# Inventory: Settings
+# Source: Glyphs 4 Handbook, chapter "Settings" (https://handbook.glyphsapp.com/single-page/)
+# Date: 2026-10-07
+# All wording is our own. Setting ids are <section>.<name>. Rows with status "inferred" are
+# FontCraft design; rows with status "memory" are recalled and not confirmed by this chapter.
+
+# --- Settings window ---
+
+[[command]]
+id = "app.settings"
+label = "Settings…"
+menu = ["FontCraft"]
+shortcut = "Cmd+Comma"
+kind = "ui"
+params = "{section?: \"updates\"|\"appearance\"|\"userSettings\"|\"sampleStrings\"|\"sharing\"|\"addons\"|\"shortcuts\"}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Opens the settings window, optionally on a given section. In the reference it sits in the application menu."
+ref = "Settings (chapter introduction)"
+status = "handbook"
+
+[[command]]
+id = "settings.get"
+label = "Get Setting"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{id?: string}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Read-only query returning one preference value by setting id, or all of them when no id is given. Not in the reference; proposed so every preference is reachable headless."
+ref = "Settings (whole chapter)"
+status = "inferred"
+
+[[command]]
+id = "settings.set"
+label = "Set Setting"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{id: string, value: any}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Writes one preference by setting id, with the same validation and side effects as changing it in the settings window. Not in the reference; proposed for agents and the CLI."
+ref = "Settings (whole chapter)"
+status = "inferred"
+
+[[panel]]
+id = "window.settings"
+label = "Settings"
+location = "window"
+controls = [
+  "section switcher: Updates, Appearance, User Settings, Sample Strings, Sharing, Addons, Shortcuts",
+  "content area of the chosen section",
+]
+area = "ui-chrome"
+milestone = "M14"
+summary = "Application-wide preferences window with seven sections, shown in the order listed."
+ref = "Settings (chapter introduction)"
+status = "handbook"
+
+[[behavior]]
+id = "settings.menuItemNameOnOlderSystem"
+area = "ui-chrome"
+milestone = "M14"
+summary = "On macOS 12 the menu item that opens the window is labelled Preferences instead of Settings…; the shortcut is the same. On other platforms FontCraft follows the platform's convention for the item name and place."
+ref = "Settings (chapter introduction)"
+status = "handbook"
+
+[[behavior]]
+id = "settings.surviveVersionChange"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Preferences are kept when a newer version is installed or an older one is reinstalled."
+ref = "Settings › Updates"
+status = "handbook"
+
+# --- Updates ---
+
+[[panel]]
+id = "settings.updates"
+label = "Updates"
+location = "window"
+controls = [
+  "Check Now button",
+  "Automatically check for updates checkbox",
+  "Show cutting edge versions checkbox",
+]
+area = "ui-chrome"
+milestone = "M14"
+summary = "Section that controls how the application looks for and installs new versions."
+ref = "Settings › Updates"
+status = "handbook"
+
+[[command]]
+id = "settings.checkForUpdatesNow"
+label = "Check Now"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Looks for a newer version immediately. When one exists the app offers to download it and shows the list of additions and changes."
+ref = "Settings › Updates"
+status = "handbook"
+
+[[setting]]
+id = "updates.automaticallyCheck"
+label = "Automatically check for updates"
+kind = "bool"
+section = "Updates"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "When on, the app looks for new versions periodically in the background. The interval is not stated; the reference recommends leaving it on."
+ref = "Settings › Updates"
+status = "handbook"
+
+[[setting]]
+id = "updates.showCuttingEdgeVersions"
+label = "Show cutting edge versions"
+kind = "bool"
+section = "Updates"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "When on, update checks also offer beta builds, which appear often and are less tested than releases. Default is not stated (presumably off)."
+ref = "Settings › Updates"
+status = "handbook"
+
+[[behavior]]
+id = "updates.offerShowsChangeList"
+area = "ui-chrome"
+milestone = "M14"
+summary = "An available update is presented with its change list and a download offer; nothing is installed without the user accepting."
+ref = "Settings › Updates"
+status = "handbook"
+
+[[behavior]]
+id = "updates.revertByReinstallingStable"
+area = "ui-chrome"
+milestone = "M14"
+summary = "There is no in-app downgrade: going back from a beta to the latest stable build means downloading the stable build again from the vendor's site."
+ref = "Settings › Updates"
+status = "handbook"
+
+[[behavior]]
+id = "updates.betaAdvice"
+area = "ui-chrome"
+milestone = "M14"
+summary = "When beta builds are enabled, the user should be advised to work on copies of font files."
+ref = "Settings › Updates"
+status = "handbook"
+
+# --- Appearance ---
+
+[[panel]]
+id = "settings.appearance"
+label = "Appearance"
+location = "window"
+controls = [
+  "Display Unicode Value checkbox",
+  "Always use Light Mode checkboxes: Font View, Edit View",
+  "Text View Width field",
+  "Handle size control",
+  "Display Mark Cloud checkbox",
+  "colour wells in two columns (light and dark appearance): corner nodes, smooth nodes, alignment zones, foreground stroke, background stroke, other layers stroke, canvas, negative kerning, positive kerning",
+  "Standard button",
+]
+area = "ui-chrome"
+milestone = "M14"
+summary = "Section that sets how Font View and Edit View are drawn."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.displayUnicodeValue"
+label = "Display Unicode Value"
+kind = "bool"
+section = "Appearance"
+values = ""
+area = "font-view"
+milestone = "M14"
+summary = "Chooses what an encoded glyph's Font View cell shows in its bottom-right corner: either a small generic Unicode badge or the actual code point. Which state of the option gives which is not spelled out (presumably on shows the code point)."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.alwaysLightModeFontView"
+label = "Always use Light Mode: Font View"
+kind = "bool"
+section = "Appearance"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "Draws Font View content with the light appearance even when the system runs in dark mode; window chrome still follows the system."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.alwaysLightModeEditView"
+label = "Always use Light Mode: Edit View"
+kind = "bool"
+section = "Appearance"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "Draws Edit View content with the light appearance even when the system runs in dark mode; window chrome still follows the system."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.textViewWidth"
+label = "Text View Width"
+kind = "number"
+section = "Appearance"
+values = ""
+area = "edit-text"
+milestone = "M14"
+summary = "Line length at which Edit View text wraps, in thousandths of an em. It does not depend on the font's units per em. Default not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.handleSize"
+label = "Handle size"
+kind = "choice"
+section = "Appearance"
+values = ""
+area = "drawing"
+milestone = "M14"
+summary = "Drawn size of on-curve nodes, off-curve handles and anchors; smaller is tidier, larger is easier to see and hit. The available steps are not listed in the source."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.displayMarkCloud"
+label = "Display Mark Cloud"
+kind = "bool"
+section = "Appearance"
+values = ""
+area = "components"
+milestone = "M14"
+summary = "When on, selecting an anchor overlays all combining marks that attach to that anchor on every glyph shown. Which marks belong to a glyph and anchor comes from the glyph info database. Off hides mark clouds entirely."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.cornerNodes.light"
+label = "Corner Nodes (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "drawing"
+milestone = "M14"
+summary = "The fill colour of corner (non-smooth) on-curve nodes, used when content is drawn in the light appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.cornerNodes.dark"
+label = "Corner Nodes (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "drawing"
+milestone = "M14"
+summary = "The fill colour of corner (non-smooth) on-curve nodes, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.smoothNodes.light"
+label = "Smooth Nodes (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "drawing"
+milestone = "M14"
+summary = "The fill colour of smooth on-curve nodes, used when content is drawn in the light appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.smoothNodes.dark"
+label = "Smooth Nodes (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "drawing"
+milestone = "M14"
+summary = "The fill colour of smooth on-curve nodes, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.alignmentZones.light"
+label = "Alignment Zones (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "guides-metrics"
+milestone = "M14"
+summary = "The colour of the alignment zone bands in Edit View, used when content is drawn in the light appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.alignmentZones.dark"
+label = "Alignment Zones (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "guides-metrics"
+milestone = "M14"
+summary = "The colour of the alignment zone bands in Edit View, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.foregroundStroke.light"
+label = "Foreground Layer Stroke (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "drawing"
+milestone = "M14"
+summary = "The outline stroke colour of the layer being edited, used when content is drawn in the light appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.foregroundStroke.dark"
+label = "Foreground Layer Stroke (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "drawing"
+milestone = "M14"
+summary = "The outline stroke colour of the layer being edited, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.backgroundStroke.light"
+label = "Background Layer Stroke (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "layers"
+milestone = "M14"
+summary = "The outline stroke colour of the background layer, used when content is drawn in the light appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.backgroundStroke.dark"
+label = "Background Layer Stroke (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "layers"
+milestone = "M14"
+summary = "The outline stroke colour of the background layer, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.otherLayersStroke.light"
+label = "Other Layers Stroke (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "layers"
+milestone = "M14"
+summary = "The outline stroke colour of additional layers switched visible with the eye toggle in the layers list, used when content is drawn in the light appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.otherLayersStroke.dark"
+label = "Other Layers Stroke (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "layers"
+milestone = "M14"
+summary = "The outline stroke colour of additional layers switched visible with the eye toggle in the layers list, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.canvas.light"
+label = "Canvas (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "The background colour of the Edit View canvas, used when content is drawn in the light appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.canvas.dark"
+label = "Canvas (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "The background colour of the Edit View canvas, used when content is drawn in the dark appearance. Reset by the Standard button. Default value not stated."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.kerningNegative.light"
+label = "Negative Kerning (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "spacing-kerning"
+milestone = "M14"
+summary = "The tint of the indicator shown between a negatively kerned pair; default light blue, used when content is drawn in the light appearance. Reset by the Standard button."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.kerningNegative.dark"
+label = "Negative Kerning (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "spacing-kerning"
+milestone = "M14"
+summary = "The tint of the indicator shown between a negatively kerned pair; default light blue, used when content is drawn in the dark appearance. Reset by the Standard button."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.kerningPositive.light"
+label = "Positive Kerning (Light)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "spacing-kerning"
+milestone = "M14"
+summary = "The tint of the indicator shown between a positively kerned pair; default yellow, used when content is drawn in the light appearance. Reset by the Standard button."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[setting]]
+id = "appearance.color.kerningPositive.dark"
+label = "Positive Kerning (Dark)"
+kind = "color"
+section = "Appearance"
+values = ""
+area = "spacing-kerning"
+milestone = "M14"
+summary = "The tint of the indicator shown between a positively kerned pair; default yellow, used when content is drawn in the dark appearance. Reset by the Standard button."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[command]]
+id = "settings.resetColors"
+label = "Standard"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Returns every colour of the Appearance section, in both the light and the dark set, to its built-in default."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[behavior]]
+id = "appearance.colorsPerSystemAppearance"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Each customisable colour is stored twice, once for the light and once for the dark appearance; the set in use follows the appearance the view is actually drawn in (including the Always use Light Mode overrides)."
+ref = "Settings › Appearance"
+status = "handbook"
+
+[[behavior]]
+id = "appearance.markCloudOnAnchorSelection"
+area = "components"
+milestone = "M14"
+summary = "The mark cloud is shown for all glyphs in view as soon as an anchor is selected; presumably it goes away again when the anchor is deselected."
+ref = "Settings › Appearance"
+status = "handbook"
+
+# --- User Settings ---
+
+[[panel]]
+id = "settings.userSettings"
+label = "User Settings"
+location = "window"
+controls = [
+  "Keep Glyph Names from Imported Files checkbox",
+  "Disable Automatic Alignment for Imported Files checkbox",
+  "Disable Localization checkbox",
+  "Use Versions checkbox",
+  "Send Crash Reports checkbox",
+  "name field",
+  "email address field",
+]
+area = "ui-chrome"
+milestone = "M14"
+summary = "Section with import behaviour, interface language, file-saving and crash-report preferences."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[setting]]
+id = "user.keepGlyphNamesFromImportedFiles"
+label = "Keep Glyph Names from Imported Files"
+kind = "bool"
+section = "User Settings"
+values = ""
+area = "import-export"
+milestone = "M14"
+summary = "When on, glyphs keep the names found in an opened file; when off, names are converted to the app's default naming scheme on import. Intended for round trips with other tools."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[setting]]
+id = "user.disableAutomaticAlignmentForImportedFiles"
+label = "Disable Automatic Alignment for Imported Files"
+kind = "bool"
+section = "User Settings"
+values = ""
+area = "components"
+milestone = "M14"
+summary = "When on, components in an imported font are not put under automatic alignment, so they stay where the file places them."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[setting]]
+id = "user.disableLocalization"
+label = "Disable Localization"
+kind = "bool"
+section = "User Settings"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "Forces the interface to English regardless of the system language. Takes effect after the app is restarted."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[setting]]
+id = "user.useVersions"
+label = "Use Versions"
+kind = "bool"
+section = "User Settings"
+values = ""
+area = "import-export"
+milestone = "M14"
+summary = "Turns on the system's versioned-document saving: documents are saved automatically on close and earlier versions can be browsed. Off means a file is only written on an explicit save, so opening and closing never modifies it."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[setting]]
+id = "user.sendCrashReports"
+label = "Send Crash Reports"
+kind = "bool"
+section = "User Settings"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "When on, diagnostic data is sent to the developers after a crash."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[setting]]
+id = "user.crashReportName"
+label = "Name"
+kind = "string"
+section = "User Settings"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "Name attached to crash reports so the developers can reply. Exact field label not confirmed."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[setting]]
+id = "user.crashReportEmail"
+label = "Email"
+kind = "string"
+section = "User Settings"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "Email address attached to crash reports so the developers can reply. Exact field label not confirmed."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[command]]
+id = "settings.resetWarnings"
+label = "Reset Warnings"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Makes every warning dialog that was silenced with a do-not-show-again choice appear again. This chapter does not mention it; recalled from earlier versions of the reference and to be confirmed."
+ref = "Settings › User Settings"
+status = "memory"
+
+[[behavior]]
+id = "user.localizationNeedsRestart"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Changing Disable Localization shows no effect until the next launch; the UI should say so next to the option."
+ref = "Settings › User Settings"
+status = "handbook"
+
+[[behavior]]
+id = "user.versionsAutosaveOnClose"
+area = "import-export"
+milestone = "M14"
+summary = "With Use Versions on, closing a document saves it without asking and keeps a browsable history; this matches other document apps on the platform but changes files that were only opened and closed."
+ref = "Settings › User Settings"
+status = "handbook"
+
+# --- Sample Strings ---
+
+[[panel]]
+id = "settings.sampleStrings"
+label = "Sample Strings"
+location = "window"
+controls = [
+  "group list",
+  "plus button (add group)",
+  "minus button (delete selected group)",
+  "multi-line text field holding the selected group's strings, one per line",
+  "Default button",
+]
+area = "edit-text"
+milestone = "M14"
+summary = "Section that stores the groups of sample strings offered for insertion in Edit View."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[setting]]
+id = "sampleStrings.groups"
+label = "Sample Strings"
+kind = "string"
+section = "Sample Strings"
+values = ""
+area = "edit-text"
+milestone = "M14"
+summary = "Ordered list of named groups, each holding sample strings, one per line. Stored as structured data (list of {name, strings}); the schema's kind list has no list type, hence string."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[command]]
+id = "settings.addSampleStringGroup"
+label = "Add Group"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{name?: string, strings?: [string]}"
+area = "edit-text"
+milestone = "M14"
+summary = "Appends a new, empty sample-string group (plus button)."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[command]]
+id = "settings.removeSampleStringGroup"
+label = "Remove Group"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{group: name | index}"
+area = "edit-text"
+milestone = "M14"
+summary = "Deletes the selected sample-string group with all its strings (minus button)."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[command]]
+id = "settings.setSampleStrings"
+label = "Set Sample Strings"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{group: name | index, strings: [string]}"
+area = "edit-text"
+milestone = "M14"
+summary = "Replaces the strings of one group; the UI equivalent is editing the text field. Proposed for headless use."
+ref = "Settings › Sample Strings"
+status = "inferred"
+
+[[command]]
+id = "settings.resetSampleStrings"
+label = "Default"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "edit-text"
+milestone = "M14"
+summary = "Restores the built-in sample strings and removes all groups the user added."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[behavior]]
+id = "sampleStrings.oneStringPerLine"
+area = "edit-text"
+milestone = "M14"
+summary = "In the editor each line of the text field is one sample string of the selected group."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[behavior]]
+id = "sampleStrings.unicodeText"
+area = "edit-text"
+milestone = "M14"
+summary = "The field accepts any Unicode text, including combining marks and non-ASCII characters, and stores it unchanged."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[behavior]]
+id = "sampleStrings.lineBreakEscape"
+area = "edit-text"
+milestone = "M14"
+summary = "The two characters backslash and n inside a sample string stand for a line break in the inserted text."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[behavior]]
+id = "sampleStrings.glyphNameEscape"
+area = "edit-text"
+milestone = "M14"
+summary = "A glyph can be given by name as a slash, the glyph name and a terminating space; this reaches unencoded or hard-to-type glyphs. The terminating space is consumed, not shown."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[behavior]]
+id = "sampleStrings.consecutiveGlyphNames"
+area = "edit-text"
+milestone = "M14"
+summary = "When one slash-name is directly followed by another, the space between them may be left out because the next slash ends the name."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+[[behavior]]
+id = "sampleStrings.placeholder"
+area = "edit-text"
+milestone = "M14"
+summary = "/Placeholder inserts a placeholder that always shows whichever glyph is currently selected."
+ref = "Settings › Sample Strings"
+status = "handbook"
+
+# --- Sharing ---
+
+[[panel]]
+id = "settings.sharing"
+label = "Sharing"
+location = "window"
+controls = [
+  "Enable External Preview checkbox",
+  "Reset button (present only after a device has connected)",
+]
+area = "proofing"
+milestone = "M14"
+summary = "Section that controls streaming the current Edit View to a companion viewer app on a phone or tablet."
+ref = "Settings › Sharing"
+status = "handbook"
+
+[[setting]]
+id = "sharing.enableExternalPreview"
+label = "Enable External Preview"
+kind = "bool"
+section = "Sharing"
+values = ""
+area = "proofing"
+milestone = "M14"
+summary = "Lets a companion viewer app on a device in the same local network connect and mirror the active Edit View. Default not stated."
+ref = "Settings › Sharing"
+status = "handbook"
+
+[[command]]
+id = "settings.resetTrustedDevices"
+label = "Reset"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "proofing"
+milestone = "M14"
+summary = "Empties the list of devices that were approved for external preview, so each has to be confirmed again. The button only exists once at least one connection has been made."
+ref = "Settings › Sharing"
+status = "handbook"
+
+[[behavior]]
+id = "sharing.sameNetworkRequired"
+area = "proofing"
+milestone = "M14"
+summary = "The computer and the viewing device must be on the same network; the viewer lists reachable computers and the user picks one."
+ref = "Settings › Sharing"
+status = "handbook"
+
+[[behavior]]
+id = "sharing.confirmConnectionOnHost"
+area = "proofing"
+milestone = "M14"
+summary = "A first connection attempt from a device must be confirmed on the computer; confirmed devices are remembered as trusted."
+ref = "Settings › Sharing"
+status = "handbook"
+
+[[behavior]]
+id = "sharing.viewerShowsActiveEditView"
+area = "proofing"
+milestone = "M14"
+summary = "The viewer shows the Edit View that is currently active, and every edit appears there immediately."
+ref = "Settings › Sharing"
+status = "handbook"
+
+[[behavior]]
+id = "sharing.viewerGestures"
+area = "proofing"
+milestone = "M14"
+summary = "In the viewer: two-finger pinch zooms, one-finger drag pans, touch-and-hold returns to the viewer's menu."
+ref = "Settings › Sharing"
+status = "handbook"
+
+[[behavior]]
+id = "sharing.troubleshooting"
+area = "proofing"
+milestone = "M14"
+summary = "If no computer is found: check both are on the same wireless network, restart both, try another network, and make the router use a single wireless standard (mixed g/n modes can block discovery)."
+ref = "Settings › Sharing"
+status = "handbook"
+
+[[behavior]]
+id = "sharing.fontcraftEquivalent"
+area = "proofing"
+milestone = "M14"
+summary = "FontCraft has no companion app planned; the same need can be met by a read-only preview stream over the control channel that any browser on the network can open after confirmation on the host."
+ref = "Settings › Sharing"
+status = "inferred"
+
+# --- Addons ---
+
+[[panel]]
+id = "settings.addons"
+label = "Addons"
+location = "window"
+controls = [
+  "Python version pop-up",
+  "Use system console for script output checkbox",
+  "Alternate Plugin Repos multi-line text field",
+]
+area = "extensions"
+milestone = "M13"
+summary = "Section that configures how scripts, plug-ins and modules run and where the Plugin Manager finds them."
+ref = "Settings › Addons"
+status = "handbook"
+
+[[setting]]
+id = "addons.pythonVersion"
+label = "Python version"
+kind = "choice"
+section = "Addons"
+values = ""
+area = "extensions"
+milestone = "M13"
+summary = "Which installed Python interpreter runs scripts and plug-ins; values are the interpreters found on the machine plus the one installed by the Plugin Manager, labelled (Glyphs). Needs Python 3 or later and a relaunch. FontCraft embeds no Python, so it has no such setting."
+ref = "Settings › Addons › Python version"
+status = "handbook"
+
+[[setting]]
+id = "addons.useSystemConsoleForScriptOutput"
+label = "Use system console for script output"
+kind = "bool"
+section = "Addons"
+values = ""
+area = "extensions"
+milestone = "M13"
+summary = "Sends log output of scripts and plug-ins to the operating system's console instead of the Macro Panel console; meant for debugging when the Macro Panel cannot be reached."
+ref = "Settings › Addons › Console Output"
+status = "handbook"
+
+[[setting]]
+id = "addons.alternatePluginRepos"
+label = "Alternate Plugin Repos"
+kind = "string"
+section = "Addons"
+values = ""
+area = "extensions"
+milestone = "M13"
+summary = "Extra extension repositories listed in addition to the main one, one entry per line. An entry is an HTTPS URL (HTTP Basic credentials allowed) or a full local file path."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+[[behavior]]
+id = "addons.pythonRequired"
+area = "extensions"
+milestone = "M13"
+summary = "Most scripts and plug-ins of the reference need Python, and only version 3 or later is accepted."
+ref = "Settings › Addons › Python version"
+status = "handbook"
+
+[[behavior]]
+id = "addons.pythonInstallViaModules"
+area = "extensions"
+milestone = "M13"
+summary = "When no interpreter is chosen or the chosen one does not work, the remedy is to install Python from the Modules tab of the Plugin Manager and then pick the entry labelled (Glyphs)."
+ref = "Settings › Addons › Python version"
+status = "handbook"
+
+[[behavior]]
+id = "addons.pythonChangeNeedsRelaunch"
+area = "extensions"
+milestone = "M13"
+summary = "A changed Python version is used only after the app is relaunched."
+ref = "Settings › Addons › Python version"
+status = "handbook"
+
+[[behavior]]
+id = "addons.repo.mainRepository"
+area = "extensions"
+milestone = "M13"
+summary = "One main repository, available to every user, is always listed; alternates are added to it, never replace it."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+[[behavior]]
+id = "addons.repo.httpBasicAuth"
+area = "extensions"
+milestone = "M13"
+summary = "An alternate repository URL may require a user name and password, sent with HTTP Basic authentication over HTTPS."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+[[behavior]]
+id = "addons.repo.localPath"
+area = "extensions"
+milestone = "M13"
+summary = "A full file path in place of a URL makes a local repository definition usable."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+[[behavior]]
+id = "addons.repo.purpose"
+area = "extensions"
+milestone = "M13"
+summary = "Alternate repositories serve pre-release distribution and private, company-internal extensions."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+[[behavior]]
+id = "addons.repo.definitionStructure"
+area = "extensions"
+milestone = "M13"
+summary = "A repository definition is one property-list-style dictionary with a packages dictionary holding up to three lists: plugins, scripts and modules. Each entry has titles, url, path, descriptions and screenshot; further fields exist in the main repository file."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+[[behavior]]
+id = "addons.repo.entryFields"
+area = "extensions"
+milestone = "M13"
+summary = "Entry fields: titles and descriptions are dictionaries keyed by language code (en, …); url points at the extension's repository and path names the item inside it, e.g. a bundle (both read off the example, not explained); screenshot is an image URL."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+[[behavior]]
+id = "addons.repo.optionalLists"
+area = "extensions"
+milestone = "M13"
+summary = "Lists that are not used may be omitted, e.g. a scripts-only repository has no plugins or modules key."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+[[behavior]]
+id = "addons.repo.localizedScreenshot"
+area = "extensions"
+milestone = "M13"
+summary = "The screenshot is fetched with an Accept-Language header, so a server can answer with a localised image."
+ref = "Settings › Addons › Alternate Plugin Repositories"
+status = "handbook"
+
+# --- Shortcuts ---
+
+[[panel]]
+id = "settings.shortcuts"
+label = "Shortcuts"
+location = "window"
+controls = [
+  "scope buttons: All, Customized, Menu, Commands",
+  "search field (top right)",
+  "action list grouped in collapsible sections",
+  "per action: shortcut shown in key symbols, Record shortcut button",
+  "while recording: curved-arrow icon (keep current), cross icon (remove shortcut)",
+]
+area = "ui-chrome"
+milestone = "M14"
+summary = "Section for viewing and recording keyboard shortcuts of actions."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[setting]]
+id = "shortcuts.custom"
+label = "Custom Shortcuts"
+kind = "shortcut"
+section = "Shortcuts"
+values = ""
+area = "ui-chrome"
+milestone = "M14"
+summary = "The user's shortcut overrides: a map from action (command id) to a key combination or to none. Actions without an entry use their built-in shortcut."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "settings.recordShortcut"
+label = "Record shortcut"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{command: id, shortcut: string}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Assigns a key combination to an action. In the UI: click Record shortcut on the selected action, then press the keys. Headless: pass the combination in Mac notation."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "settings.cancelShortcutRecording"
+label = "Keep Current Shortcut"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Leaves recording mode without changing the action's shortcut (curved-arrow icon)."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "settings.removeShortcut"
+label = "Remove Shortcut"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{command: id}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Clears the shortcut of an action so that no key combination triggers it (cross icon)."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "settings.resetShortcut"
+label = "Reset Shortcut"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{command?: id}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Drops the user's override for one action, or for all when no id is given, restoring built-in shortcuts. Not described in the source; proposed because Customized filtering implies a way back."
+ref = "Settings › Shortcuts"
+status = "inferred"
+
+[[command]]
+id = "settings.filterShortcuts"
+label = "Filter Actions"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{scope?: \"all\"|\"customized\"|\"menu\"|\"commands\", search?: string}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Narrows the action list: All shows everything, Customized only actions whose shortcut was changed, Menu only menu-bar actions, Commands the other group (see open question); search further narrows by text."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "settings.toggleShortcutSection"
+label = "Collapse/Expand Section"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{section: string, collapsed?: bool}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Collapses or expands one group of actions in the list (disclosure chevron beside the group title)."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "settings.listShortcuts"
+label = "List Shortcuts"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope?: \"all\"|\"customized\"|\"menu\"|\"commands\"}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Read-only query returning each action with its section, default shortcut and current shortcut. Proposed for agents; equals the content of the list."
+ref = "Settings › Shortcuts"
+status = "inferred"
+
+[[behavior]]
+id = "shortcuts.composition"
+area = "ui-chrome"
+milestone = "M14"
+summary = "A shortcut is at least one modifier (Command, Option, Control, Shift) plus one ordinary key, which may be a letter, a digit, Return or Escape."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "shortcuts.keySymbolDisplay"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Shortcuts are displayed with the platform's key symbols rather than spelled-out key names."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "shortcuts.scopeFilters"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Four mutually exclusive scope buttons sit above the list: All, Customized, Menu, Commands. The source describes Commands only as actions within the current selection, which is unclear."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "shortcuts.sections"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Actions are listed in titled groups; each group can be folded with its chevron."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "shortcuts.search"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Typing in the search field filters the list to matching actions within the active scope."
+ref = "Settings › Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "shortcuts.scriptsAreActions"
+area = "extensions"
+milestone = "M13"
+summary = "Installed scripts appear as actions, so a script can be given a shortcut here."
+ref = "Extensions › Scripts › Run Scripts"
+status = "handbook"
+
+[[behavior]]
+id = "shortcuts.oneRegistry"
+area = "ui-chrome"
+milestone = "M14"
+summary = "FontCraft derives the action list from the command registry: every command with a label is listed under its menu or noun prefix, and the stored override map is keyed by command id."
+ref = "Settings › Shortcuts"
+status = "inferred"

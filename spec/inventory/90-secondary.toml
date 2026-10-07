@@ -1,0 +1,3160 @@
+# Secondary references: features the primary reference (Glyphs 4 handbook) lacks or leaves to plug-ins.
+# Sources (public user documentation only, read 2026-10-07):
+#   FontLab 8 "What's new" pages      https://help.fontlab.com/fontlab/8/whats-new/
+#   FontLab 7 User Manual (the detailed manual the FontLab 8 help site still relies on)
+#                                     https://help.fontlab.com/fontlab/7/manual/
+#   RoboFont documentation            https://robofont.com/documentation/
+#   FontForge user documentation      https://fontforge.org/docs/        (docs only; no source code read)
+#   Fontra documentation              https://docs.fontra.xyz/           (docs only; no source code read)
+# Date: 2026-10-07
+#
+# Conventions specific to this file:
+# - Every row carries `origin`. `status = "docs"` means the feature was read on a public doc page;
+#   `status = "memory"` means recalled and not confirmed on a page; `status = "inferred"` is our design.
+# - `shortcut` is left empty on purpose: the primary reference owns the keymap. Where the secondary
+#   reference documents a key, the summary quotes it as "(FontLab key: L)" so it can be offered as an
+#   alternative binding later.
+# - No [[format]] rows here (another file owns formats); legacy formats appear only as the commands
+#   that import or export them.
+
+# =====================================================================================================
+# FontLab — drawing aids, curve tension, measuring, snapping
+# =====================================================================================================
+
+[[command]]
+id = "view.showTunniLines"
+label = "Tunni Lines"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Toggles Tunni lines: for every curve segment, a dotted line joining its two handle ends plus a control dot where the extended handles meet. They are the canvas handles for balanced tension editing (FontLab key: L, tap to toggle or hold to show temporarily)."
+ref = "FontLab 7 manual › Tunni Lines; FontLab 8 What's new › Explore & prepare › View panel"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.selectTunniLines"
+label = "Edit Tunni Lines"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, segments?: [segmentRef]}"
+area = "drawing"
+milestone = "M3"
+summary = "Selects the Tunni lines of every curve segment inside the current selection, or of all curve segments on the layer when nothing is selected, and switches Tunni line display on. With Tunni lines visible, Select All selects them all."
+ref = "FontLab 7 manual › Tunni Lines; FontLab 8 What's new › Edit & refine › Selecting contours"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "tunni.dragLineSymmetric"
+area = "drawing"
+milestone = "M3"
+summary = "Dragging a Tunni line (or Shift-dragging its control dot) lengthens or shortens both handles of the segment together, keeping their directions, so the curve tension changes symmetrically. With several Tunni lines selected (Shift-click to add), dragging any one applies the same change to all."
+ref = "FontLab 7 manual › Tunni Lines"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "tunni.dragPointAsymmetric"
+area = "drawing"
+milestone = "M3"
+summary = "Alt-dragging a Tunni line, or dragging its control dot without Shift, moves only one handle of the segment, giving an asymmetric tension change."
+ref = "FontLab 7 manual › Tunni Lines"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.setCurveTension"
+label = "Set Curve Tension"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{segments?: [segmentRef], tension: percent, relative?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Sets both handles of the selected curve segments to a proportional tension given in percent of the distance to the handle intersection (the same percentage a Tunni line reports), or adjusts the current tension by a signed step when relative is true."
+ref = "FontLab 8 What's new › Edit & refine › Curve segments (Node panel: Set proportional curve tension)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.showCurveTension"
+label = "Show Curve Tension"
+menu = ["View", "Show"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Shows the tension of each curve segment next to it as a percentage of handle length, together with the lengths-and-angles readout it depends on."
+ref = "FontLab 8 What's new › Consistency & precision › Measuring details"
+status = "docs"
+origin = "fontlab"
+
+[[parameter]]
+name = "curveTension"
+scope = ["master"]
+kind = "number"
+area = "drawing"
+milestone = "M3"
+summary = "Default curve tension (percent) used by tension-driven drawing tools such as the Rapid tool and by tension-based ovals. Stored per master with the font dimensions."
+ref = "FontLab 8 What's new › Draft & draw › Drawing contours (Font Info › Font Dimensions › Curve tension)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.harmonizeNodes"
+label = "Harmonize Nodes"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [nodeRef], glyphs?, layer?}"
+area = "path-ops"
+milestone = "M3"
+summary = "Moves each selected smooth node along its handle line to the position where the curvature on both sides is equal (G2 continuity), leaving the handles where they are. Applies to all smooth nodes of the layer when nothing is selected. FontForge documents the same idea as Element › Align › Harmonize."
+ref = "FontLab 8 What's new › Edit & refine › Nodes and handles; FontForge Element menu › Align"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.harmonizeHandles"
+label = "Harmonize Handles"
+menu = ["Path", "Handles"]
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [nodeRef], order?: 'g2' | 'g3'}"
+area = "path-ops"
+milestone = "M3"
+summary = "Reaches curvature continuity at the selected smooth nodes by changing handle lengths while the nodes stay put. Order g3 (Superharmonize in the reference) also equalises the rate of curvature change."
+ref = "FontLab 8 What's new › Edit & refine › Nodes and handles"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.togglePowerNudge"
+label = "Power Nudge"
+menu = ["Path"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Switches the node-dragging mode in which the unselected neighbours of a moved selection are sorted automatically into fixed points and servant points that follow proportionally, so a stem or bowl can be moved without distorting what joins it (FontLab keys: Shift+C to toggle, hold C for temporary use)."
+ref = "FontLab 8 What's new › Edit & refine › Contour tool"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.setServantNode"
+label = "Set Servant Node"
+menu = ["Path", "Nodes"]
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [nodeRef], axis: 'x' | 'y' | 'none'}"
+area = "drawing"
+milestone = "M3"
+summary = "Declares the selected nodes as servants on the x or y axis so they always follow neighbouring edits proportionally on that axis, or clears the declaration with axis none. An optional status display marks every node as x-servant, y-servant or static."
+ref = "FontLab 8 What's new › Edit & refine › Contour tool (Servant declarations; Clear Genius & Servant)"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "nodes.slideAlongCurve"
+area = "drawing"
+milestone = "M3"
+summary = "A slide drag moves a node along its existing curve without changing the curve's shape, and past the end extends the curve; arrow keys do the same for a single node while the mode is on (FontLab: Shift+Alt-drag). RoboFont documents the related Cmd-drag that slides a smooth on-curve point between its two handles."
+ref = "FontLab 8 What's new › Edit & refine › Contour tool (Slide); RoboFont reference › Editing Tool"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "drag.leverPrecision"
+area = "drawing"
+milestone = "M3"
+summary = "With the lever modifier held, a dragged node, handle, sidebearing or kerning value moves by 1/n of the pointer distance so fine corrections do not need zooming in. The ratio is a setting; holding Shift in metrics and kerning modes restores 1:1."
+ref = "FontLab 8 What's new › Edit & refine › Contour lever; Metrics & kerning › lever precision dragging"
+status = "docs"
+origin = "fontlab"
+
+[[setting]]
+id = "editing.leverRatio"
+label = "Lever Ratio"
+section = "Editing"
+kind = "number"
+values = "1 (off) to 100"
+area = "drawing"
+milestone = "M14"
+summary = "Divisor applied to pointer movement during lever dragging. The reference defaults to 6 for contours and suggests 4 to 10 for spacing; 1 disables the lever."
+ref = "FontLab 8 What's new › Edit & refine (Preferences › Distances › Contour lever); Metrics & kerning"
+status = "docs"
+origin = "fontlab"
+
+[[tool]]
+id = "rapid"
+label = "Rapid"
+shortcut = ""
+group = ""
+gestures = [
+  "click: add a node of the current sub-mode (corner, curve or tangent); handles are placed automatically from the default curve tension",
+  "click a tension point: adjust how tight that one segment is",
+  "Cmd+Alt+click: add a tangent node when no sub-mode is latched",
+  "Esc or switching tools: finish the contour",
+]
+area = "drawing"
+milestone = "M13"
+summary = "Draws contours by clicking on-curve positions only; the tool supplies handles with a consistent tension, which suits tracing a scan quickly. Each segment keeps a tension point for later adjustment (FontLab key: 5)."
+ref = "FontLab 8 What's new › Draft & draw › Drawing contours"
+status = "docs"
+origin = "fontlab"
+
+[[tool]]
+id = "thickness"
+label = "Thickness"
+shortcut = ""
+group = ""
+gestures = [
+  "Shift+drag a control point: change the thickness of the whole stroked path",
+  "Alt+drag a control point: change the thickness at one node, on both sides",
+  "Shift+Alt+drag: shift the stroke from one side of the skeleton to the other without changing its width",
+  "Backspace on a control point: drop the per-node value and fall back to the path value",
+  "marquee several control points: edit them together",
+]
+area = "path-ops"
+milestone = "M13"
+summary = "Edits the width of a live stroke on canvas, per path and per node, so a skeleton can carry modulated contrast before it is expanded to outlines (FontLab key: 8). The primary reference has per-path stroke width only."
+ref = "FontLab 8 What's new › Draft & draw › Thickness tool"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.makeInkTrap"
+label = "Make Ink Trap"
+menu = ["Path", "Nodes"]
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [nodeRef], width?: number}"
+area = "path-ops"
+milestone = "M3"
+summary = "Turns each selected corner node into a simple ink trap by duplicating the node and separating the two copies by the ink trap width, which defaults to a per-master font dimension."
+ref = "FontLab 8 What's new › Edit & refine › Scissors tool; Ink traps and rounded corners"
+status = "docs"
+origin = "fontlab"
+
+[[parameter]]
+name = "inkTrapWidth"
+scope = ["master"]
+kind = "number"
+area = "path-ops"
+milestone = "M7"
+summary = "Default opening width of generated ink traps. The short-segment audit check also uses it as its length threshold."
+ref = "FontLab 8 What's new › Edit & refine › Ink traps (Font Info › Font Dimensions); Test & adjust › FontAudit"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.loopCorner"
+label = "Loop Corner"
+menu = ["Path", "Nodes"]
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [nodeRef]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Replaces each selected corner node with a small loop that extends both adjoining segments past the corner and crosses them, which keeps corners sharp under offsetting and interpolation. A font-level option decides whether the loop area counts as filled."
+ref = "FontLab 8 What's new › Edit & refine › Scissors tool (Loop Corner)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.replaceWithCorner"
+label = "Replace with Corner"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{segments?: [segmentRef]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Deletes the selected segment, or the gap of an open contour, and joins its two neighbours in a sharp corner at the point where their extensions intersect."
+ref = "FontLab 8 What's new › Edit & refine › Other contour operations"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.alignToMask"
+label = "Align Points to Background"
+menu = ["Path", "Align Points"]
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [nodeRef], tolerance?: number}"
+area = "path-ops"
+milestone = "M3"
+summary = "Moves each selected point onto the nearest point of the background (mask) layer when one lies within the tolerance; the reference uses 50 units."
+ref = "FontLab 8 What's new › Edit & refine › Nodes and handles (Align Points › To Mask)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.collapsePoints"
+label = "Collapse Points"
+menu = ["Path", "Align Points"]
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [nodeRef]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Moves the selected nodes to their common centre and retracts their handles to zero length."
+ref = "FontLab 8 What's new › Edit & refine › Nodes and handles (Align Points › Collapse)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.scaleToSameSize"
+label = "Same Width / Same Height"
+menu = ["Path", "Align Points"]
+shortcut = ""
+kind = "engine"
+params = "{paths?: [pathRef], dimension: 'width' | 'height', proportional?: bool}"
+area = "path-ops"
+milestone = "M3"
+summary = "Scales several selected paths about their own centres so they share one width or height, either proportionally or along that dimension only. With one path selected the target is the advance width, x-height or cap height."
+ref = "FontLab 8 What's new › Edit & refine › Node names (Scale paths to same width or height)"
+status = "docs"
+origin = "fontlab"
+
+[[panel]]
+id = "palette.selections"
+label = "Selections"
+location = "palette"
+controls = ["list of named selections stored with the glyph", "Add, Update and Remove buttons", "click an entry to restore that selection"]
+area = "drawing"
+milestone = "M13"
+summary = "Stores node selections per glyph under names and recalls them later, also on the matching nodes of other compatible masters. Selection changes get their own undo steps, separate from edits."
+ref = "FontLab 8 What's new › Edit & refine › Selecting contours"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "edit.storeSelection"
+label = "Store Selection"
+menu = ["Edit", "Selection"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, name: string, nodes?: [nodeRef]}"
+area = "drawing"
+milestone = "M13"
+summary = "Saves the current node selection of the glyph under a name in the glyph's data, replacing an existing entry of that name."
+ref = "FontLab 8 What's new › Edit & refine › Selections panel"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "edit.recallSelection"
+label = "Recall Selection"
+menu = ["Edit", "Selection"]
+shortcut = ""
+kind = "ui"
+params = "{glyph?, name: string, layer?}"
+area = "drawing"
+milestone = "M13"
+summary = "Selects the nodes recorded in a stored selection; on another compatible master the nodes with the same indexes are selected."
+ref = "FontLab 8 What's new › Edit & refine › Selections panel"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.lockOutline"
+label = "Lock Outline"
+menu = ["View", "Lock"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Blocks pointer and keyboard editing of outlines in the window while leaving guides, anchors and metrics editable, and shows a lock badge on the canvas. Commands run through the registry are not affected."
+ref = "FontLab 8 What's new › Edit & refine › Nodes and handles (Lock outline)"
+status = "docs"
+origin = "fontlab"
+
+# --- measuring -----------------------------------------------------------------------------------
+
+[[command]]
+id = "view.showStemWidths"
+label = "Show Stem Widths"
+menu = ["View", "Measure"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Labels every detected stem of the visible glyphs with its width, measured between opposing segments whose end nodes are extremes. Detection is limited to a per-font minimum and maximum width (reference default 20 to 250 units)."
+ref = "FontLab 8 What's new › Consistency & precision › Auto-meter"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.showCounterWidths"
+label = "Show Counter Widths"
+menu = ["View", "Measure"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Labels the white space between adjacent stems (counter width or height) in the same way stem widths are labelled."
+ref = "FontLab 8 What's new › Consistency & precision › Auto-meter"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.showCornerAngles"
+label = "Show Corner Angles"
+menu = ["View", "Measure"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Shows the angle at each sharp node once the view is zoomed in far enough to fit the label."
+ref = "FontLab 8 What's new › Consistency & precision › Auto-meter"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "autometer.editStemNumerically"
+area = "guides-metrics"
+milestone = "M3"
+summary = "A stem-width label on canvas is editable: clicking it accepts a typed width or Up/Down steps and the stem's nodes move to match. Labels are colour-coded as a common stem, an uncommon stem within the irregular-stem tolerance, or other, and a marker on a near-miss snaps it to the nearest common stem."
+ref = "FontLab 8 What's new › Consistency & precision › Auto-meter (Editing stems numerically; Automatic stem adjustment)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.showQuickMeasurement"
+label = "Quick Measurement"
+menu = ["View", "Measure"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "While on, hovering between two opposite segments shows the distance between them without a tool switch; Shift restricts the measure to horizontal or vertical. Hovering a guide or metric line shows its distance to the nearest segments, and optionally anchors report their distance to metric lines and sidebearings."
+ref = "FontLab 8 What's new › Consistency & precision › Quick measurement"
+status = "docs"
+origin = "fontlab"
+
+[[panel]]
+id = "palette.measurements"
+label = "Measurements"
+location = "palette"
+controls = ["table of design values per master: vertical dimensions, overshoots, contrast, stem widths", "Recalculate button for the selected cells", "icon per design feature"]
+area = "guides-metrics"
+milestone = "M13"
+summary = "A per-master table of design measurements that can be typed in or recalculated from the outlines. The values are working notes: they feed stem suggestions and audits but are never exported."
+ref = "FontLab 8 What's new › Consistency & precision › Measurements panel"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "font.recalculateMeasurements"
+label = "Recalculate Measurements"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{masters?: [id], fields?: [name]}"
+area = "guides-metrics"
+milestone = "M13"
+summary = "Measures the chosen design values (heights, overshoots, common stem widths) from the outlines of each master and writes them into the measurements table."
+ref = "FontLab 8 What's new › Consistency & precision › Measurements panel (Auto-calculation)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.showDetailsAcrossGlyphs"
+label = "Details Across Glyphs"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "edit-text"
+milestone = "M13"
+summary = "Draws nodes, measurements and other detail overlays for every glyph in the text line instead of only the active one, so stems and overshoots can be compared across a word."
+ref = "FontLab 8 What's new › Explore & prepare › View menu (canvas); Test & adjust › Stem discovery methods"
+status = "docs"
+origin = "fontlab"
+
+# --- snapping suggestions ---------------------------------------------------------------------------
+
+[[command]]
+id = "view.suggestHandles"
+label = "Suggest Handles"
+menu = ["View", "Suggest"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "While a handle is dragged, offers snap targets that make it horizontal or vertical, match the angle of the opposite handle of the segment, or stand at 90 degrees to it."
+ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.suggestLines"
+label = "Suggest Lines"
+menu = ["View", "Suggest"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "While a node is dragged, shows temporary snap lines: the continuation of nearby line segments and handle vectors at any angle, perpendiculars to diagonal guides, and the centrelines of stems, counters, hints and thick guides."
+ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.suggestDistance"
+label = "Suggest Distance"
+menu = ["View", "Suggest"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Shows snap outlines at fixed distances from existing contours and open skeletons, so a parallel edge can be drawn at a set weight. The distances come from the per-master suggestDistance values."
+ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions; Draft & draw › Working with stroke"
+status = "docs"
+origin = "fontlab"
+
+[[parameter]]
+name = "suggestDistance"
+scope = ["master"]
+kind = "dict"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Horizontal and vertical distances ({x, y}) at which the Suggest Distance snapping aid offers parallel snap outlines."
+ref = "FontLab 8 What's new › Consistency & precision (Font Info › Other Values › Suggest distance)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.suggestStems"
+label = "Suggest Stems"
+menu = ["View", "Suggest"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "While an edge is dragged, snaps the thickness being formed to the master's declared horizontal and vertical stem values. Stems may carry tags (uc, lc, sc, fig, a script tag) that limit the glyphs in which they are suggested."
+ref = "FontLab 8 What's new › Draft & draw › Working with stroke (Suggest › Stems; Font Info › Stems)"
+status = "docs"
+origin = "fontlab"
+
+[[setting]]
+id = "snapping.suggestActivation"
+label = "Suggestions Activate"
+section = "Editing"
+kind = "choice"
+values = "immediately | on pointer idle | after a delay"
+area = "guides-metrics"
+milestone = "M14"
+summary = "When snapping suggestions appear during a drag. Holding Cmd during the drag suppresses snapping to suggestions altogether."
+ref = "FontLab 8 What's new › Consistency & precision › Suggestion timing; Draft & draw › Working with stroke"
+status = "docs"
+origin = "fontlab"
+
+# --- guides ------------------------------------------------------------------------------------------
+
+[[tool]]
+id = "magnet"
+label = "Magnet"
+shortcut = ""
+group = ""
+gestures = [
+  "drag a node onto a guide, metric line or zone: link the node to it (the line becomes a power guide)",
+  "drag a linked node into empty space: remove that node's link",
+  "double-click a guide: make it a power guide; double-click a power guide: unlink all its nodes",
+  "Shift+click a node: add a ghost hint at that node",
+  "Shift+drag between two nodes: add a stem hint linked to both",
+]
+area = "guides-metrics"
+milestone = "M13"
+summary = "Creates and removes links between nodes and guides (power guides) and between nodes and PostScript hints (FontLab key: U)."
+ref = "FontLab 7 manual › Power Guides; FontLab 8 What's new › Test & adjust › Power guides; Consistency & precision › Ghost hints, Hint linking"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "guide.makePowerGuide"
+label = "Make Power Guide"
+menu = ["Path", "Guides"]
+shortcut = ""
+kind = "engine"
+params = "{guides?: [guideRef], nodes?: [nodeRef]}"
+area = "guides-metrics"
+milestone = "M13"
+summary = "Links the given nodes (or all nodes lying on the guide) to a guide, turning it into a power guide marked with a rhombus. Moving a power guide moves its linked nodes with it while unlinked nodes between power guides are repositioned proportionally."
+ref = "FontLab 7 manual › Power Guides; FontLab 8 What's new › Test & adjust › Power guides"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "guide.addPowerGuides"
+label = "Add Power Guides"
+menu = ["Path", "Guides"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id]}"
+area = "guides-metrics"
+milestone = "M13"
+summary = "Adds a power guide on each side of every detected horizontal and vertical stem, linked to the stem's nodes, so the glyph can then be widened, narrowed or re-proportioned by moving guides while stem widths are preserved."
+ref = "FontLab 7 manual › Power Guides (Creating Power guides, Scaling with Power guides); FontLab 8 What's new › Test & adjust"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "guide.unlinkPowerGuides"
+label = "Unlink Power Guides"
+menu = ["Path", "Guides"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], guides?: [guideRef]}"
+area = "guides-metrics"
+milestone = "M13"
+summary = "Removes all node links from the given power guides, or from every guide of the glyph, without changing outlines; the guides remain as ordinary guides."
+ref = "FontLab 7 manual › Power Guides (Removing links); FontLab 8 What's new › Test & adjust"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "guide.powerGuideScope"
+area = "guides-metrics"
+milestone = "M13"
+summary = "A power guide may be a glyph guide, a font-level guide, a metric line or an alignment zone; a setting limits which kinds may take links. Links to font-level lines mean one drag reshapes every glyph linked to that line, and links are drawn as dashed lines that can be shown or hidden."
+ref = "FontLab 7 manual › Power Guides (Cautions; View › Show › Node Links)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "guide.setThickness"
+label = "Set Guide Thickness"
+menu = ["Path", "Guides"]
+shortcut = ""
+kind = "engine"
+params = "{guide: guideRef, thickness: number}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Gives a guide a second edge at the given distance so it shows as a band; bands offer centreline snapping and a negative thickness converts to a hint of negative direction. On canvas, Shift-dragging a guide pulls out the band."
+ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions (Centerline snapping); Ghost hints (Guide conversion)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "guide.addMarkers"
+label = "Add Guide Markers"
+menu = ["Path", "Guides"]
+shortcut = ""
+kind = "engine"
+params = "{guide: guideRef, positions?: [number], auto?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Places measurement markers along a guide, either at given positions or automatically where the guide crosses the outline; perpendicular snap lines are offered at markers. On canvas, Alt-click adds one marker and double-click adds automatic ones."
+ref = "FontLab 8 What's new › Consistency & precision › Snapping suggestions (Guide markers); Guides and hints in the Glyph window"
+status = "docs"
+origin = "fontlab"
+
+[[setting]]
+id = "appearance.guideOpacity"
+label = "Guide and Metric Line Opacity"
+section = "Appearance"
+kind = "number"
+values = "0 to 100 per item type"
+area = "guides-metrics"
+milestone = "M14"
+summary = "Separate opacity for metric lines, alignment zones, font guides, glyph guides and hints. Below half opacity the numeric labels of hints and zones are hidden."
+ref = "FontLab 8 What's new › Consistency & precision › Guides and hints in the Glyph window (Opacity settings)"
+status = "docs"
+origin = "fontlab"
+
+# =====================================================================================================
+# FontLab — elements, references, live filters, composites
+# =====================================================================================================
+
+[[behavior]]
+id = "element.referenceModel"
+area = "components"
+milestone = "M13"
+summary = "An element reference is a shared shape with no owning glyph: every glyph that uses it holds an equal reference, and editing the shape's nodes in any of them changes all. This differs from a component, whose content belongs to one source glyph and which also brings that glyph's anchors and hints."
+ref = "FontLab 8 What's new › Build & assemble › Elements and components"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "element.perOccurrenceTransform"
+area = "components"
+milestone = "M13"
+summary = "Each occurrence of a shared element keeps its own live scale, rotation, slant, flip and position. Transforming with the element-level tool changes only that occurrence; transforming the nodes inside changes every occurrence."
+ref = "FontLab 8 What's new › Build & assemble › Elements and components"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.newFromSelection"
+label = "Selection to New Element"
+menu = ["Path", "Convert"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, paths?: [pathRef], name?: string}"
+area = "components"
+milestone = "M13"
+summary = "Moves the selected paths into a new named shared element, leaving a reference to it in place. Named elements appear in the element gallery for reuse in other glyphs."
+ref = "FontLab 8 What's new › Build & assemble › Elements (To New Element)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.detectReferences"
+label = "Detect Element References"
+menu = ["Path", "Convert"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layer?, paths?: [pathRef]}"
+area = "components"
+milestone = "M13"
+summary = "Finds identical copies of the selected paths in other glyphs and replaces them all with references to one shared element."
+ref = "FontLab 8 What's new › Build & assemble › Elements (Detect Element Reference)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.linkReference"
+label = "Link Element Reference"
+menu = ["Glyph", "Element Reference"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, element: elementRef}"
+area = "components"
+milestone = "M13"
+summary = "Joins a stand-alone element to an existing shared element when their shapes are identical, so later edits propagate."
+ref = "FontLab 8 What's new › Build & assemble › Elements (Link Reference)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.componentToReference"
+label = "Component to Element Reference"
+menu = ["Glyph", "Element Reference"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layer?, components?: [componentRef]}"
+area = "components"
+milestone = "M13"
+summary = "Converts components into element references to the same shapes, detaching them from the source glyph's metrics, anchors and hints while keeping the outlines shared."
+ref = "FontLab 8 What's new › Build & assemble › Boolean operations (Component to Reference); Test & adjust › Delta filter (Derived glyphs)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.toggleLocked"
+label = "Lock Element Content"
+menu = ["Glyph", "Element Reference"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, element: elementRef, locked?: bool}"
+area = "components"
+milestone = "M13"
+summary = "Locks the nodes of one occurrence of a shared element so the shape cannot be edited from that glyph. An option inserts all references locked except the first."
+ref = "FontLab 8 What's new › Build & assemble › Elements (Lock element references)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.copyTransformation"
+label = "Copy Element Transformation"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{from: elementRef, to?: [elementRef]}"
+area = "components"
+milestone = "M13"
+summary = "Copies the position and live scale, rotation and slant of one element or component so they can be pasted onto others."
+ref = "FontLab 8 What's new › Build & assemble › Elements (Copy transformation)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.addDeltaFilter"
+label = "Add Delta Filter"
+menu = ["Glyph", "Filters"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, element?: elementRef, deltas?: [{node: nodeRef, dx?: number, dy?: number, pinned?: bool}], strength?: percent}"
+area = "components"
+milestone = "M13"
+summary = "Attaches a non-destructive delta filter to an element: a few nodes receive explicit offsets (or are pinned in place) and every other node is repositioned by interpolating between them, as untouched points are in a variable font. On a locked element reference this yields a derived shape, such as an old-style zero from the lining zero, that still follows edits to the original."
+ref = "FontLab 8 What's new › Test & adjust › Delta filter"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "delta.nodeStates"
+area = "components"
+milestone = "M13"
+summary = "In delta-editing mode, untouched nodes show as pale circles and nodes with a delta as darker marks with an arrow. A delta is either free, horizontal-only or vertical-only; clicking a node cycles pinned free, pinned horizontal, pinned vertical; Backspace removes a delta and Alt-click applies the current delta to all selected nodes."
+ref = "FontLab 8 What's new › Test & adjust › Delta filter (Visual states; Editing controls)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.setDeltaStrength"
+label = "Set Delta Strength"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{element: elementRef, strength: percent}"
+area = "components"
+milestone = "M13"
+summary = "Scales the effect of an element's delta filter from 0 percent (ignored) to 100 percent (fully applied)."
+ref = "FontLab 8 What's new › Test & adjust › Delta filter (Strength slider)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.copyDeltasToMasters"
+label = "Copy Deltas to Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, element: elementRef, masters?: [id]}"
+area = "components"
+milestone = "M13"
+summary = "Copies an element's delta setup to the same element on all compatible masters."
+ref = "FontLab 8 What's new › Test & adjust › Delta filter (Copy to masters)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.expandFilters"
+label = "Expand Filters"
+menu = ["Glyph", "Filters"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], kinds?: [name]}"
+area = "components"
+milestone = "M13"
+summary = "Bakes every live, non-destructive filter on the selected glyphs into plain outlines: delta, live boolean, clipping group, live stroke and brush, smart corner and similar."
+ref = "FontLab 8 What's new › Test & adjust › Delta filter (Batch expand or remove); Build & assemble"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.removeFilters"
+label = "Remove Filters"
+menu = ["Glyph", "Filters"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], kinds?: [name]}"
+area = "components"
+milestone = "M13"
+summary = "Discards the live filters on the selected glyphs and restores the unfiltered source shapes."
+ref = "FontLab 8 What's new › Test & adjust › Delta filter (Batch expand or remove)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "element.setFusion"
+label = "Fusion"
+menu = ["Glyph", "Filters"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, element: elementRef, mode: 'add' | 'subtract' | 'intersect' | 'exclude' | 'none'}"
+area = "path-ops"
+milestone = "M13"
+summary = "Marks a shape or component as a live boolean operand acting on everything stacked below it: union, difference, intersection or exclusive-or. The result stays editable and is resolved by decomposing and removing overlaps at export. The primary reference offers only a live subtract (mask)."
+ref = "FontLab 8 What's new › Build & assemble › Boolean operations (Fusion filter)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "font.detectComposites"
+label = "Detect Composites"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layer?, tolerance?: number}"
+area = "components"
+milestone = "M6"
+summary = "Scans the glyphs for outlines that repeat the complete outline of another glyph and replaces each match with a component. Useful after opening a compiled font whose composites were flattened; FontForge documents the same job as Edit › Replace with Reference."
+ref = "FontLab 8 What's new › Build & assemble › Components (Detect Composites); FontForge Edit menu › Replace With Reference"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "path.detectComponent"
+label = "Detect Component"
+menu = ["Path", "Convert"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, paths?: [pathRef]}"
+area = "components"
+milestone = "M6"
+summary = "Looks for a glyph whose whole outline equals the selected paths and, when found, replaces the selection with a component of it."
+ref = "FontLab 8 What's new › Build & assemble › Components (Detect Component)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "glyph.setAutoLayerRecipe"
+label = "Set Auto Layer Recipe"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, masters?: [id], recipe?: string, auto?: bool}"
+area = "components"
+milestone = "M6"
+summary = "Marks a glyph layer as automatic and stores the recipe it is built from. An automatic layer is rebuilt whenever its sources change, and is created empty-but-pending when a component source does not exist yet so it fills in once that glyph is added. A companion action copies the recipe to all masters."
+ref = "FontLab 8 What's new › Build & assemble › Components, auto layers, mark attachment"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "recipe.directives"
+area = "components"
+milestone = "M6"
+summary = "Recipe text accepts directives beside glyph names: a comment marker for ignored notes, a marker that copies the rest of the line into the glyph note, and a no-anchors keyword that stops the built glyph from inheriting anchors from its sources at export (reference spellings: # comment, #! note, #?noanchors)."
+ref = "FontLab 8 What's new › Build & assemble › Components, auto layers, mark attachment"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "component.setInstanceLocation"
+label = "Select Component Instance"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?, component: componentRef, location?: {axisTag: number}, layerName?: string}"
+area = "components"
+milestone = "M9"
+summary = "Points a component at an interpolated instance of its source glyph instead of the current master: a location on the font axes or on axes private to the source glyph. Omitting both location and layerName resets it to follow the current layer. Fontra documents the same idea as variable components driven by glyph axes."
+ref = "FontLab 8 What's new › Families & variation (Select component instance; Custom glyph axes); Fontra how-to › Designing with variable components"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "anchor.removeExpressions"
+label = "Remove Anchor Expressions"
+menu = ["Glyph", "Anchors"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], anchors?: [name]}"
+area = "components"
+milestone = "M6"
+summary = "Replaces formula-driven anchor positions with their current numeric coordinates on the chosen glyphs, layers and anchor names."
+ref = "FontLab 8 What's new › Build & assemble › Anchors"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "anchor.positionExpressions"
+area = "components"
+milestone = "M6"
+summary = "An anchor coordinate may be an expression rather than a number, re-evaluated when the glyph changes (for example centred on the advance width or placed at a metric height). The expression grammar was not on the pages read and must be settled before implementation."
+ref = "FontLab 8 What's new › Build & assemble › Anchors (Remove anchors expressions)"
+status = "memory"
+origin = "fontlab"
+
+# =====================================================================================================
+# FontLab — FontAudit (live outline auditing)
+# =====================================================================================================
+# Our own audit design (spec/inventory/21-qa-checks.toml) already has live auditing, canvas markers,
+# a results panel, next/previous issue and one-step fixes, and already contains most FontAudit tests
+# under check.outlines.*. Only what FontAudit adds beyond that is listed here; the full mapping of
+# FontAudit tests to our check ids is in docs/spec/90-secondary-references.md.
+
+[[behavior]]
+id = "audit.fontViewCellMarks"
+area = "qa"
+milestone = "M12"
+summary = "After an audit run, every Font View cell whose glyph has outline findings carries a small mark in its top-right corner, so problem glyphs can be spotted in the grid without opening the results panel."
+ref = "FontLab 7 manual › FontAudit (Showing problems); FontAudit panel (Checking multiple glyphs)"
+status = "docs"
+origin = "fontlab"
+
+[[setting]]
+id = "audit.irregularStemTolerance"
+label = "Irregular Stem Tolerance"
+section = "Audit"
+kind = "number"
+values = ""
+area = "qa"
+milestone = "M14"
+summary = "How far a measured stem may differ from a common stem value and still be treated as a near miss to correct; 0 switches irregular-stem detection off."
+ref = "FontLab 8 What's new › Consistency & precision › Auto-meter (Preferences › FontAudit › Irregular stem tolerance)"
+status = "docs"
+origin = "fontlab"
+
+[[check]]
+id = "check.outlines.redundantClosingLine"
+severity = "info"
+scope = "source"
+fixable = true
+area = "qa"
+milestone = "M12"
+summary = "An explicit straight segment duplicates the implicit closing segment of the contour, leaving a zero-length close that can upset PostScript rasterisers."
+ref = "FontLab 7 manual › FontAudit › Vectors on ClosePaths"
+status = "docs"
+origin = "fontlab"
+
+[[check]]
+id = "check.outlines.weakExtremum"
+severity = "info"
+scope = "source"
+fixable = true
+area = "qa"
+milestone = "M12"
+summary = "A curve reaches a horizontal or vertical extreme only marginally beyond its end nodes, with no node there."
+ref = "FontLab 7 manual › FontAudit › Weak extremum points"
+status = "docs"
+origin = "fontlab"
+
+[[check]]
+id = "check.outlines.closedButFlaggedOpen"
+severity = "warn"
+scope = "source"
+fixable = true
+area = "qa"
+milestone = "M12"
+summary = "A contour's first and last nodes coincide, so it looks closed, but it is stored as open."
+ref = "FontLab 7 manual › FontAudit › Contour is not closed"
+status = "docs"
+origin = "fontlab"
+
+[[check]]
+id = "check.outlines.irregularStem"
+severity = "info"
+scope = "source"
+fixable = true
+area = "qa"
+milestone = "M12"
+summary = "A stem's measured width is close to one of the master's common stem widths, within the irregular-stem tolerance, without matching it."
+ref = "FontLab 8 What's new since VI › FontAudit stem and segment checks; Consistency & precision › Automatic stem adjustment"
+status = "docs"
+origin = "fontlab"
+
+# =====================================================================================================
+# FontLab — actions and action sets
+# =====================================================================================================
+
+[[panel]]
+id = "dialog.actions"
+label = "Actions"
+location = "dialog"
+controls = ["searchable list of actions in groups (basics, contour, metrics, guides and anchors, effects, hinting)", "parameter form for the chosen action", "scope: current glyph, selected glyphs, a glyph category or the whole font", "layer scope: active layer, visible layers or all masters", "resizable before/after preview with a wireframe toggle", "status line naming what will run on how many glyphs and which layers", "sidebar holding an ordered action set with add, remove, clear, save and open"]
+area = "automation"
+milestone = "M13"
+summary = "One dialog for running any batch operation on a chosen glyph and layer scope with a live preview, and for chaining several operations into a saved set. Actions that keep compatible masters compatible when run on all masters are marked as such."
+ref = "FontLab 7 manual › Actions; FontLab 8 What's new › Test & adjust › Actions"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "script.runActionSet"
+label = "Run Action Set"
+menu = ["Script"]
+shortcut = ""
+kind = "engine"
+params = "{set: path | [{command: id, params: object}], glyphs?, layers?: 'active' | 'visible' | 'masters' | [id]}"
+area = "automation"
+milestone = "M13"
+summary = "Runs an ordered list of commands with stored parameters over a glyph and layer scope as one undoable step. A set is a small JSON file and can be passed inline, so the same file serves the dialog, the CLI and agents."
+ref = "FontLab 8 What's new › Test & adjust › Actions (Action sets; Save/Open sets)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "script.saveActionSet"
+label = "Save Action Set"
+menu = ["Script"]
+shortcut = ""
+kind = "engine"
+params = "{name: string, steps: [{command: id, params: object}], path?: path}"
+area = "automation"
+milestone = "M13"
+summary = "Writes an action set as JSON into the user's action-set folder, or to a given path."
+ref = "FontLab 8 What's new › Test & adjust › Actions (Save/Open sets)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "script.repeatLastAction"
+label = "Repeat Actions"
+menu = ["Script"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?}"
+area = "automation"
+milestone = "M13"
+summary = "Runs the most recent action or action set again with the same parameters on the current scope."
+ref = "FontLab 7 manual › Actions (Tools › Repeat Actions)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "filter.adjustStems"
+label = "Adjust Stems"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], horizontal?: [{from: number, to: number, set?: number, offset?: number}], vertical?: [{from: number, to: number, set?: number, offset?: number}]}"
+area = "path-ops"
+milestone = "M13"
+summary = "Changes the thickness of every detected horizontal or vertical stem whose width falls in a given range, either by an offset or to a fixed value, one range per rule. Diagonal stems are left alone."
+ref = "FontLab 8 What's new › Test & adjust › Actions (Adjust stems)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "app.commandPalette"
+label = "Commands…"
+menu = ["Help"]
+shortcut = ""
+kind = "ui"
+params = "{query?: string}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Opens a search field over every registered command; typing part of a name and pressing Enter runs it. A button expands the popup into the shortcut editor, and selecting a command shows its help text (FontLab key: Cmd+Shift+P)."
+ref = "FontLab 8 What's new › Explore & prepare › Commands & Shortcuts dialog"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "app.quickHelp"
+label = "Quick Help"
+menu = ["Help"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "While active, hovering any control, menu item or tool shows its help text, taken from the command registry's description (FontLab: hold F1 for temporary, tap F1 to latch, Shift+F1 for a help panel)."
+ref = "FontLab 8 What's new › Explore & prepare › Help, commands, shortcuts"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "edit.moreInfo"
+label = "More Info"
+menu = ["Edit"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Opens the panel most relevant to the current window, tool and selection: node details for points, guide details for guides and zones, anchor details for anchors, element details for components, Font Info from Font View. Pressing it again walks to the next related panel."
+ref = "FontLab 8 What's new › Explore & prepare › Panels (Edit › More Info)"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "ui.numericFieldExpressions"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Every numeric field accepts a simple arithmetic expression (such as 300+50 or 300*1.2) and replaces it with the result on Enter, and offers a pull-down slider with a fine-control modifier."
+ref = "FontLab 8 What's new › Explore & prepare › Other UI changes (Sliders; Calculations)"
+status = "docs"
+origin = "fontlab"
+
+# =====================================================================================================
+# FontLab — spacing and kerning
+# =====================================================================================================
+
+[[command]]
+id = "spacing.autoSpace"
+label = "Auto Space"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, masters?: [id], method?: 'optical' | 'tight' | 'custom', percentOfUpm?: number, separation?: number, min?: number, max?: number}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Computes left and right sidebearings for the given glyphs from their shapes. Method optical judges the side profiles, tight sets both to zero, custom sets a percentage of the em; parts flagged as non-spacing are ignored (FontLab key: semicolon). FontForge's Auto Width does the same per script with a target separation plus minimum and maximum bearings, and warns against running it on glyphs built from references."
+ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Auto-spacing; Autospace method); FontForge dialogs › Auto Width"
+status = "docs"
+origin = "fontlab"
+
+[[setting]]
+id = "spacing.autoSpaceMethod"
+label = "Auto Space Method"
+section = "Spacing"
+kind = "choice"
+values = "optical | tight | custom"
+area = "spacing-kerning"
+milestone = "M14"
+summary = "Default method for Auto Space, with the percentage of the em used by the custom method."
+ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Autospace method)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.showMetricsBeam"
+label = "Metrics Beam"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool, y?: number}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Shows a draggable horizontal line and reports sidebearings where it crosses each glyph's outline rather than at the bounding box, with the values coloured differently from bounding-box values. Auto-spacing and set-sidebearing actions can be told to measure at the beam. RoboFont's Space Center has the same aid, called Beam."
+ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Metrics line); RoboFont reference › Space Center › Display options"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "spacing.centerInWidth"
+label = "Center in Width"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], ratio?: number}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Shifts the outline inside its unchanged advance width so the sidebearings are equal, or in the given left-to-right ratio (FontForge offers 1:2 as Thirds in Width). Background guides of the glyph move with it (FontLab key: | in metrics mode)."
+ref = "FontForge Metrics menu › Center in Width, Thirds in Width; FontLab 8 What's new › Metrics & kerning › Center glyph"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "kerning.autoKern"
+label = "Auto Kern"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "engine"
+params = "{pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], separation?: number, minKern?: number, onlyCloser?: bool, touching?: bool, keepExisting?: bool}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Proposes kerning values for the given pairs from the optical gap between the two glyph profiles, aiming at a target separation. Options drop values too small to matter, restrict results to tightening, or let glyphs touch; existing pairs are kept unless told otherwise (FontLab key in kerning mode: semicolon)."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (autokerning); FontLab 7 manual › Pairs and Phrases panel; FontForge dialogs › Lookups (pair kerning subtable: Default Separation, Min Kern, Touching, Only kern closer)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "kerning.kernToDistance"
+label = "Kern to Distance"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "engine"
+params = "{pairs?: [[left, right]], masters?: [id], distance: number}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets each given pair so that the smallest gap between the two outlines equals the target distance."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Kern to Distance)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "kerning.auditExceptions"
+label = "Audit Kerning Exceptions"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "engine"
+params = "{masters?: [id], pairs?: [[left, right]], threshold?: number, fix?: bool}"
+area = "spacing-kerning"
+milestone = "M12"
+summary = "Expands class kerning to glyph pairs and reports the pairs whose outlines collide or come closer than the threshold under the class value. With fix it adds a corrective exception for each."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Audit Exceptions)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "kerning.removePairsByRule"
+label = "Remove Pairs…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "engine"
+params = "{masters?: [id], smallerThan?: number, exceptionsWithin?: number, glyphs?: [names]}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Deletes kerning pairs by rule: values whose magnitude is below a limit, and exceptions that differ from their class value by no more than a given number of units."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Remove Pairs)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "kerning.matchAcrossMasters"
+label = "Match Kerning"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "engine"
+params = "{mainMaster?: id, masters?: [id]}"
+area = "spacing-kerning"
+milestone = "M9"
+summary = "Makes kerning interpolable across masters: flattens class kerning to pairs, copies the kerning classes of the main master to the others, gives every master the same set of pairs (adding zero-value pairs where missing), then rebuilds class kerning."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Match Kerning)"
+status = "docs"
+origin = "fontlab"
+
+[[panel]]
+id = "palette.pairsAndPhrases"
+label = "Pairs & Phrases"
+location = "palette"
+controls = ["mode selector: pairs, texts or automatic by active tool", "list of pairs with their current kerning value, or of sample phrases", "load a custom list from a text file (one pair or phrase per line); reset to the built-in list", "auto-kern button for the selected rows"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A work list for kerning and spacing: stepping through the rows puts each pair or phrase into the Edit View text, so a whole pair list can be walked with the keyboard. Selected pairs can be auto-kerned in place."
+ref = "FontLab 7 manual › Pairs and Phrases panel; FontLab 8 What's new › Metrics & kerning"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "kerning.loadPairList"
+label = "Load Pair List…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = "{path: path}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Loads a plain-text list with one pair or phrase per line (glyph names separated by spaces) as the current work list."
+ref = "FontLab 7 manual › Pairs and Phrases panel (Importing lists)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "kerning.stepPairList"
+label = "Next / Previous Pair"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "ui"
+params = "{direction: 'next' | 'previous'}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Moves to the next or previous row of the pair list and shows it in the Edit View; for a multi-line text it steps through the lines first."
+ref = "FontLab 7 manual › Pairs and Phrases panel (Lists and navigation)"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "kerning.representativeGlyph"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "While a class pair is being kerned, a key steps the displayed left or right glyph through the other members of its kerning group without leaving the pair, so the value can be judged against every member (FontLab: Ctrl+Up/Down for the left group, Alt+Up/Down for the right)."
+ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Representative glyphs)"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "features.opticalBoundsFromGuides"
+area = "features"
+milestone = "M13"
+summary = "Optical margin alignment: a per-master pair of global offsets, overridden per glyph by vertical guides named ol and or, is compiled into the lfbd and rtbd features when any is non-zero. Importing a font reads those features (and Apple's opbd table) back into offsets."
+ref = "FontLab 8 What's new › Metrics & kerning › Optical bounds"
+status = "docs"
+origin = "fontlab"
+
+[[parameter]]
+name = "opticalOffset"
+scope = ["master"]
+kind = "dict"
+area = "features"
+milestone = "M13"
+summary = "Global left and right optical-margin offsets ({left, right}) subtracted from sidebearings when the lfbd and rtbd features are generated."
+ref = "FontLab 8 What's new › Metrics & kerning › Optical bounds (Font Info › Other Values › Optical offset)"
+status = "docs"
+origin = "fontlab"
+
+# =====================================================================================================
+# FontLab — masters and variation
+# =====================================================================================================
+
+[[tool]]
+id = "matchmaker"
+label = "Matchmaker"
+shortcut = ""
+group = ""
+gestures = [
+  "(display): all visible masters side by side or stacked, lines joining corresponding nodes, contour numbers at start nodes",
+  "drag the stacking handle: change how far apart the masters are drawn",
+  "Shift+click a node: make it the start point of its contour",
+  "Alt+click a node: reverse the contour it belongs to",
+  "drag around a start node and an end node in every master, then Enter: make that section compatible by adding nodes where a master has fewer",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "A dedicated tool for making masters compatible by hand: it shows contour order, start points and node correspondence for all masters at once and fixes them by direct manipulation. An option colours each contour identically across masters, or shows interpolation steps between masters (FontLab key: 7)."
+ref = "FontLab 8 What's new › Families & variation › Variation (Matchmaker tool)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "glyph.matchMasters"
+label = "Match Masters"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, masters?: [id], strong?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Tries to make the masters of each glyph compatible automatically by reordering contours, moving start points and fixing direction. Strong mode forces both the ordering pass and the geometry comparison even when the font's auto-match settings disable them."
+ref = "FontLab 8 What's new › Families & variation › Variation (Match masters weak/strong; Improved Match Masters)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "glyph.relocateStartPoints"
+label = "Relocate Start Points"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, masters?: [id]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Moves the start point of every contour to the node nearest the bottom-left of the glyph, in one master or in all visible masters, giving a predictable common starting position."
+ref = "FontLab 8 What's new › Families & variation › Variation (Relocate startpoints)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "edit.toggleMatchWhenEditing"
+label = "Match When Editing"
+menu = ["Edit"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "While on, structural edits are repeated on the corresponding nodes of every compatible master: adding or deleting nodes, setting a start point, reversing a contour, adding corner effects. A separate drag mode moves the matching nodes of all visible masters together."
+ref = "FontLab 8 What's new › Families & variation › Variation (Match when Editing); What's new since VI › Match Moves"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "font.mergeFontsToMasters"
+label = "Merge Fonts to Masters"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{fonts: [fontRef | path], target?: fontRef}"
+area = "interpolation"
+milestone = "M9"
+summary = "Combines several open static fonts of one family into a single multi-master font, one master per source, creating axes and design coordinates from their weight and width differences. Background layers are carried over."
+ref = "FontLab 8 What's new › Families & variation › Variation (Merge Fonts to Masters)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "font.addVariation"
+label = "Add Variation…"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{from?: id, axis: {tag: string, name: string}, location: number, actionSet?: path}"
+area = "interpolation"
+milestone = "M9"
+summary = "Duplicates a master as a new master on a new axis and optionally runs a saved action set on the copy (for example a weight change), giving a rough second master to refine."
+ref = "FontLab 8 What's new › Families & variation › Variation (Add Variation; Run action set)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "glyph.replaceWithInstance"
+label = "Adjust by Variation"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, master?: id, location: {axisTag: number}, relative?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Replaces the outlines of a master layer with the glyph interpolated or extrapolated at another design-space location, given absolutely or as an offset from the master's own location. Used to make a few glyphs slightly bolder or narrower than their master."
+ref = "FontLab 8 What's new › Families & variation › Variation (Adjust by variation)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "font.setMasterLocations"
+label = "Set Master Locations…"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{masters?: [id], instances?: [id], axis: tag, map: [{from: number, to: number}] | {scale?: number, offset?: number}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Changes the design coordinates of many masters and instances on one axis in a single step, by table or by scale and offset."
+ref = "FontLab 8 What's new since VI › Families & variation (Batch coordinates)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.animateAxis"
+label = "Animate Axis"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{axis: tag, on?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Sweeps the preview location back and forth along one axis so kinks and jumps in the interpolation show up."
+ref = "FontLab 8 What's new › Families & variation › Variation (Play buttons)"
+status = "docs"
+origin = "fontlab"
+
+# =====================================================================================================
+# FontLab — TrueType hinting extras
+# =====================================================================================================
+
+[[panel]]
+id = "palette.ttHintProgram"
+label = "TrueType Hint Program"
+location = "palette"
+controls = ["text listing of the glyph's high-level hint commands, one per line", "Compile button to apply edited text", "Delete on a selected line removes that command"]
+area = "hinting-tt"
+milestone = "M10"
+summary = "Shows the manual TrueType hints of the glyph as an editable text program in step order, alongside the canvas representation, and applies hand edits on compile. It is the writable counterpart of the hint.tt.listInstructions query and gives diffs a textual form of visual hinting."
+ref = "FontLab 7 manual › TrueType Hinting tool (TrueType Hinting panel › Code panel)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "hint.tt.setProgramText"
+label = "Set TrueType Hint Program"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph, master?: id, program: string}"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Replaces the glyph's manual TrueType hint commands with the parsed text program, rejecting it without change when it does not parse."
+ref = "FontLab 7 manual › TrueType Hinting tool (Code panel)"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "hint.tt.referToNodeNames"
+area = "hinting-tt"
+milestone = "M10"
+summary = "Manual TrueType hints refer to nodes by a hidden node name rather than by index, so the program survives node insertion and reordering and can be pasted onto another glyph with the same names. Autohinting assigns the hidden names."
+ref = "FontLab 8 What's new › Edit & refine › Node names (TrueType hinting references; Automatic hidden names)"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "hint.tt.deltaWaterfallMarks"
+area = "hinting-tt"
+milestone = "M10"
+summary = "In the hinting size waterfall, sizes at which a delta hint is active are tinted, with one colour for deltas applied during the program and another for deltas applied after untouched points are interpolated."
+ref = "FontLab 8 What's new › Consistency & precision › TrueType Hinting (Delta highlighting)"
+status = "docs"
+origin = "fontlab"
+
+# =====================================================================================================
+# FontLab — colour, export profiles, misc
+# =====================================================================================================
+
+[[command]]
+id = "font.overlayFonts"
+label = "Overlay Fonts…"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{layers: [{font: fontRef | path, color: color, opacity?: number, offset?: [x, y], scale?: number}], output: 'colorLayers' | 'masters'}"
+area = "color"
+milestone = "M11"
+summary = "Stacks the matching glyphs of several monochrome fonts (the parts of a chromatic family) into one colour font, each source with its own colour, opacity, offset and scale. The bottom source supplies metrics and kerning. Output is either one colour-layered glyph set or one master per source."
+ref = "FontLab 8 What's new › Color › Overlay Fonts"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "color.generateDarkPalette"
+label = "Generate Dark Palette"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{palette?: index}"
+area = "color"
+milestone = "M11"
+summary = "Derives a second CPAL palette for dark backgrounds from the existing palette and flags it as the dark-background palette, so browsers can select it. Available as an export option and previewable in a dark preview."
+ref = "FontLab 8 What's new › Test & adjust › Previewing (Dark palette export); Color; Formats"
+status = "docs"
+origin = "fontlab"
+
+[[panel]]
+id = "dialog.exportProfiles"
+label = "Export Profiles"
+location = "dialog"
+controls = ["list of built-in and custom profiles with a tick for those shown in the export dialog", "duplicate / remove buttons (built-in profiles are read-only)", "name, output subfolder and format", "outline group: curve conversion and tolerance, contour direction, overlap removal, extremes, clean-up, rounding", "size group: composites in TrueType, subroutines in CFF, compressed UFO", "hinting group: use hinting, autohint, x-direction hints, recalculate zones and stems, TrueType hinter choice", "glyph group: add required glyphs, sort order, glyph names", "layout group: compile, keep or omit features, kern and mark; legacy kern table and its pair cap", "web group: WOFF2, WOFF, EOT; colour group: SVG, COLR, sbix, CBDT"]
+area = "compile"
+milestone = "M13"
+summary = "Named, reusable bundles of export settings. Built-in profiles cover the common targets; a custom profile is made by duplicating one and changing settings."
+ref = "FontLab 7 manual › Export Profiles; FontLab 8 What's new › Formats"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "file.exportWithProfiles"
+label = "Export Fonts As…"
+menu = ["File"]
+shortcut = ""
+kind = "engine"
+params = "{fonts?: [fontRef], profiles: [name], destination?: path, bySource?: bool, installTemporarily?: bool}"
+area = "compile"
+milestone = "M13"
+summary = "Exports every listed open font through every listed export profile in one run, into per-profile subfolders of the destination or next to each source file, and can install the results until the application quits."
+ref = "FontLab 8 What's new › Formats › File › Export Font As"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "file.saveExportProfile"
+label = "Save Export Profile"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name: string, basedOn?: name, settings: object}"
+area = "compile"
+milestone = "M13"
+summary = "Creates or updates a custom export profile from a settings object, optionally starting from an existing profile."
+ref = "FontLab 7 manual › Export Profiles (Creating custom profiles)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "file.exportWindowContents"
+label = "Export Window Contents…"
+menu = ["File", "Export"]
+shortcut = ""
+kind = "engine"
+params = "{view?: 'edit' | 'fontView' | 'preview', format: 'pdf' | 'svg', path: path}"
+area = "proofing"
+milestone = "M14"
+summary = "Writes what a view currently shows to a vector file: PDF gives the filled preview of the text, SVG gives the editing view with nodes and guides, like a vector screenshot."
+ref = "FontLab 8 What's new › Formats (File › Export › Window Contents; Preview panel as PDF)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "glyph.exportArtwork"
+label = "Export Artwork…"
+menu = ["File", "Export"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layer?: id, format: 'svg' | 'pdf' | 'png', directory: path, pixelsPerEm?: number}"
+area = "import-export"
+milestone = "M13"
+summary = "Writes one image file per glyph, named after the glyph, for the chosen layer. The inverse imports a folder of images, one glyph per file."
+ref = "FontLab 8 What's new › Formats (Artwork as PDF, SVG, or PNG; Artwork Collection)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.filterByEncodingFile"
+label = "Filter by Encoding File"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{path?: path, name?: string}"
+area = "font-view"
+milestone = "M13"
+summary = "Uses an imported encoding file (an ordered list of glyph names or code points for a legacy code page or a custom character set) as a Font View filter that shows its slots in order, including empty ones. Encoding files can be imported and exported."
+ref = "FontLab 8 What's new since VI › Glyphs & fonts (Encoding files); Glyphs & fonts › Font window"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "font.compareInTable"
+label = "Compare Fonts in List"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{fonts: [fontRef], property: name}"
+area = "font-view"
+milestone = "M13"
+summary = "Shows the glyph list with one column per selected open font for a chosen property (advance width, sidebearings, node count, and so on), so differences between fonts of a family can be read across a row."
+ref = "FontLab 8 What's new › Glyphs & fonts › Font window (Font comparison)"
+status = "docs"
+origin = "fontlab"
+
+[[behavior]]
+id = "fontInfo.importantNote"
+area = "font-info"
+milestone = "M14"
+summary = "Text below a marker line in the font note is treated as an important note and shown in a dialog each time the file is opened, for hand-over instructions."
+ref = "FontLab 8 What's new › Glyphs & fonts › Font Info and fonts (Important font note)"
+status = "docs"
+origin = "fontlab"
+
+[[command]]
+id = "view.previewWaterfall"
+label = "Preview Waterfall"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool, sizes?: [number], useOpticalSize?: bool}"
+area = "proofing"
+milestone = "M14"
+summary = "Switches the text preview to a waterfall: the same line repeated at a list of sizes, echoing the current Edit View text or Font View selection. With an optical-size axis, each line can use the axis value matching its size."
+ref = "FontLab 8 What's new › Test & adjust › Previewing and printing (Echo text in waterfall; Optical size toggle)"
+status = "docs"
+origin = "fontlab"
+
+# =====================================================================================================
+# FontForge — finding and validating problems
+# =====================================================================================================
+# The guided Find Problems walk and the live Validation window map onto our audit commands
+# (audit.run, audit.nextIssue, audit.revealIssue, audit.fix, window.fontAudit). Listed here: what they
+# add, and the checks that 21-qa-checks.toml does not have yet.
+
+[[command]]
+id = "audit.selectGlyphsWithIssue"
+label = "Select Glyphs with This Issue"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{check: checkId, masters?: [id]}"
+area = "qa"
+milestone = "M12"
+summary = "Selects in Font View every glyph that currently has a result of the given check, so the whole set can be opened, filtered or batch-fixed. In the reference this is a context-menu item of the validation list, next to one that fixes every glyph with that error."
+ref = "FontForge dialogs › Font Validation window (context menu)"
+status = "docs"
+origin = "fontforge"
+
+[[behavior]]
+id = "audit.nearTolerance"
+area = "qa"
+milestone = "M12"
+summary = "Checks of the almost-but-not-quite kind share one tolerance: a value is near a target when it lies within the tolerance of it without being equal. The reference default is 3 units, and the parameterised checks (a target x or y, an expected advance, a bounding-box limit, a standard stem width, a point limit) take their value from the same dialog."
+ref = "FontForge dialogs › Finding common font problems automagically (Near field)"
+status = "docs"
+origin = "fontforge"
+
+[[setting]]
+id = "export.validateBeforeExport"
+label = "Validate Before Export"
+section = "Export"
+kind = "bool"
+values = ""
+area = "qa"
+milestone = "M12"
+summary = "When on, an export first validates the font; a clean font exports without further prompts and a failing one offers to open the validation window instead."
+ref = "FontForge dialogs › Generate Font › Validate Before Saving"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.outlines.handleBeyondSegment"
+severity = "warn"
+scope = "source"
+fixable = false
+area = "qa"
+milestone = "M12"
+summary = "A handle projects well outside the span between the two end points of its segment."
+ref = "FontForge Find Problems › Control points beyond spline"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.outlines.negligibleHandle"
+severity = "info"
+scope = "source"
+fixable = true
+area = "qa"
+milestone = "M12"
+summary = "A handle is so short relative to its segment that it barely affects the curve; the ratio is a parameter."
+ref = "FontForge Find Problems › Irrelevant control points"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.metrics.advanceDiffersFrom"
+severity = "info"
+scope = "source"
+fixable = false
+area = "qa"
+milestone = "M12"
+summary = "A glyph's advance width (or vertical advance) differs from a given value; used to verify tabular sets and monospaced fonts."
+ref = "FontForge Find Problems › Check Advance, Check Vertical Advance"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.metrics.boundsBeyond"
+severity = "info"
+scope = "source"
+fixable = false
+area = "qa"
+milestone = "M12"
+summary = "A glyph's bounding box extends past a given limit above, below, left or right."
+ref = "FontForge Find Problems › Glyph BB Above / Below / Right Of / Left Of"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.outlines.pointCountLimit"
+severity = "warn"
+scope = "source"
+fixable = false
+area = "qa"
+milestone = "M12"
+summary = "A glyph has more points than a limit; the reference cites 1500 as the guaranteed PostScript minimum."
+ref = "FontForge Find Problems › More Points Than; Font Validation window"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.hinting.stemNearStandardWidth"
+severity = "info"
+scope = "source"
+fixable = true
+area = "qa"
+milestone = "M12"
+summary = "A stem hint's width is near a given standard width without matching it, or a point sits slightly off a hint edge."
+ref = "FontForge Find Problems › Hint width near; Points near hint edges"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.bitmaps.missingGlyph"
+severity = "warn"
+scope = "source"
+fixable = true
+area = "qa"
+milestone = "M11"
+summary = "A glyph has outlines but is missing from a bitmap strike, or a strike has a glyph that the outline font lacks."
+ref = "FontForge Find Problems › Missing bitmaps"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.bitmaps.advanceMismatch"
+severity = "warn"
+scope = "source"
+fixable = true
+area = "qa"
+milestone = "M11"
+summary = "A bitmap glyph's advance differs from the outline advance scaled to the strike size and rounded."
+ref = "FontForge Find Problems › Bitmap/Outline Advance Width Mismatch"
+status = "docs"
+origin = "fontforge"
+
+# =====================================================================================================
+# FontForge — outline search, path operations, style transformations
+# =====================================================================================================
+
+[[panel]]
+id = "dialog.findOutline"
+label = "Find / Replace Outline"
+location = "dialog"
+controls = ["search pattern pane and replacement pane, each a small outline editor", "allow rotated, flipped or scaled matches", "end points give minimum length and direction only", "restrict to selected glyphs", "Find / Find Next, Find All, Replace, Replace All"]
+area = "path-ops"
+milestone = "M13"
+summary = "Searches glyph outlines for a drawn shape and optionally replaces every occurrence with another shape. A closed pattern matches whole contours; an open pattern matches a run of points inside any contour, which allows swapping one serif or terminal design for another across a font."
+ref = "FontForge dialogs › Finding shapes within glyphs; FontLab 8 What's new › Edit & refine (Edit › Find Outline)"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.findOutlinePattern"
+label = "Find Outline…"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{pattern: [path], glyphs?, layer?, allowRotated?: bool, allowFlipped?: bool, allowScaled?: bool, endpointsLoose?: bool, tolerance?: number}"
+area = "path-ops"
+milestone = "M13"
+summary = "Returns every place where the pattern occurs in the glyphs searched, with the transform under which it matched. Matching is point for point, so on-curve points and handles must correspond."
+ref = "FontForge dialogs › Finding shapes within glyphs"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.replaceOutlinePattern"
+label = "Replace Outline…"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{pattern: [path], replacement: [path], glyphs?, layer?, allowRotated?: bool, allowFlipped?: bool, allowScaled?: bool, endpointsLoose?: bool}"
+area = "path-ops"
+milestone = "M13"
+summary = "Replaces each match of the pattern with the replacement under the same transform. For an open pattern the replacement's first point takes the place of the pattern's first point, so both should span the same distance between their ends."
+ref = "FontForge dialogs › Finding shapes within glyphs (Replace, Replace All; Limitations)"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.findIntersections"
+label = "Add Nodes at Intersections"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layer?, paths?: [pathRef]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Inserts a node on each contour at every point where contours cross, without removing anything."
+ref = "FontForge Element menu › Overlap › Find Intersections"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.makeParallel"
+label = "Make Parallel"
+menu = ["Path", "Align Points"]
+shortcut = ""
+kind = "engine"
+params = "{segments?: [segmentRef]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Rotates one of two selected straight segments so the two become parallel; with four selected lines forming a quadrilateral it produces a parallelogram."
+ref = "FontForge Element menu › Align › Make Parallel"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.spacePoints"
+label = "Space Points Evenly"
+menu = ["Path", "Align Points"]
+shortcut = ""
+kind = "engine"
+params = "{nodes?: [nodeRef], byRegion?: bool}"
+area = "path-ops"
+milestone = "M3"
+summary = "Distributes three or more selected points at equal steps along the axis on which they are spread; with byRegion, clusters of nearby points are treated as units and the clusters are spaced evenly."
+ref = "FontForge Element menu › Align › Space Points, Space Regions"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.roundToCluster"
+label = "Round to Cluster"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layer?, nodes?: [nodeRef], within?: number}"
+area = "path-ops"
+milestone = "M3"
+summary = "Gives coordinates that lie very close together the same value, so nearly aligned points become exactly aligned."
+ref = "FontForge Element menu › Round › Round to Cluster"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.makeArc"
+label = "Make Arc"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{segments?: [segmentRef]}"
+area = "path-ops"
+milestone = "M3"
+summary = "Reshapes the segment between two adjacent selected nodes into an elliptical arc. Many ellipses fit two points, so the reference warns the result may not be the one intended."
+ref = "FontForge Point menu › Make Arc"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.insertNodeAt"
+label = "Insert Node at Coordinate…"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{segment: segmentRef, x?: number, y?: number}"
+area = "path-ops"
+milestone = "M3"
+summary = "Adds a node to a segment where it crosses the given x or y coordinate, without changing its shape."
+ref = "FontForge Point menu › Insert Point on Spline at"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "path.nameContour"
+label = "Name Contour…"
+menu = ["Path"]
+shortcut = ""
+kind = "engine"
+params = "{path: pathRef, name: string}"
+area = "drawing"
+milestone = "M13"
+summary = "Attaches a name to a contour, kept in the source. FontLab names nodes for the same purpose; both give scripts and agents a stable handle that survives reordering."
+ref = "FontForge Point menu › Name Contour; FontLab 8 What's new › Edit & refine › Node names"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "filter.changeWeight"
+label = "Change Weight…"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], amount: number, method?: 'auto' | 'cjk' | 'lcg' | 'custom', zones?: {bottom: number, top: number, serifHeight?: number}, counters?: 'auto' | 'squish' | 'retain', cleanup?: bool}"
+area = "path-ops"
+milestone = "M13"
+summary = "Thickens or thins stems by the given amount. The lcg method then pulls the glyph back between its bottom and top zones so letter heights do not grow, keeping serifs near the zones fixed; the cjk method only expands. Counters are either allowed to shrink or kept by widening the glyph."
+ref = "FontForge dialogs › Stylistic Transformations › Change Weight"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "filter.condenseExtend"
+label = "Condense / Extend…"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], counters: {scale?: percent, add?: number}, sidebearings: {scale?: percent, add?: number}}"
+area = "path-ops"
+milestone = "M13"
+summary = "Narrows or widens glyphs by changing counters and sidebearings while holding vertical stem widths roughly constant. A slanted font is unslanted by its italic angle first and reslanted after."
+ref = "FontForge dialogs › Stylistic Transformations › Condense/Extend"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "filter.changeXHeight"
+label = "Change x-Height…"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], from?: number, to: number, serifHeight?: number}"
+area = "path-ops"
+milestone = "M13"
+summary = "Moves the x-height of the lowercase to a new value by stretching the region between baseline and x-height. A serif height greater than zero keeps features within that distance of the lines rigid."
+ref = "FontForge dialogs › Stylistic Transformations › Change X-Height"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "glyph.addSmallCaps"
+label = "Add Small Caps…"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, masters?: [id], suffix?: string, height?: number, stemScale?: {h: number, v: number}, petite?: bool, includeSymbols?: bool}"
+area = "components"
+milestone = "M13"
+summary = "Creates a small-capital glyph for each selected letter by scaling the capital to the target height and thickening stems to lowercase weight, without touching the originals, and adds the substitution features from capitals and from lowercase. Covers Latin, Greek and Cyrillic; a petite-caps variant uses its own suffix and features. A drafting aid whose results need review."
+ref = "FontForge dialogs › Stylistic Transformations › Add Small Caps"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "glyph.addSubSuperscripts"
+label = "Add Subscripts / Superscripts…"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, masters?: [id], suffix: string, feature: tag, scale?: number, stemScale?: number, shiftY?: number}"
+area = "components"
+milestone = "M13"
+summary = "Creates scaled and vertically shifted copies of the selected glyphs under a suffix and adds the substitution feature mapping to them. Reference defaults: scale two thirds, stems three quarters so the result looks darker, raise 450 units."
+ref = "FontForge dialogs › Stylistic Transformations › Add Subscripts/Superscripts"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "filter.nonLinearTransform"
+label = "Non-Linear Transform…"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id], x: expression, y: expression}"
+area = "path-ops"
+milestone = "M13"
+summary = "Maps every point through two expressions in x and y that give the new x and the new y, for warps that an affine transform cannot express. Segments must be subdivided first for a faithful result; the expression grammar is ours to define."
+ref = "FontForge Element menu › Transformations › Non-Linear Transform; FontForge dialogs › Transform Dialog"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "glyph.autotraceImage"
+label = "Autotrace Image"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layer?: id, threshold?: number, smoothness?: number, removeImage?: bool}"
+area = "drawing"
+milestone = "M13"
+summary = "Converts the placed image of each glyph into outlines. FontForge delegates to an external tracer program; FontLab ships its own tracer and a command that splits the traced result into separate non-overlapping shapes. Ours needs a pure-Rust tracer."
+ref = "FontForge Element menu › AutoTrace; FontLab 8 What's new › Draft & draw (Autotrace); Explore & prepare › Element menu (Optically Separate)"
+status = "docs"
+origin = "fontforge"
+
+[[tool]]
+id = "spiro"
+label = "Spiro"
+shortcut = ""
+group = ""
+gestures = [
+  "click: add a spiro control point of the current kind (curve with continuous curvature, curve with continuous slope, corner, or left/right transition from line to curve)",
+  "drag a control point: the whole curve through the points is recomputed",
+  "toggle spiro mode off: the contour becomes ordinary Bezier segments",
+]
+area = "drawing"
+milestone = "M13"
+summary = "Draws a contour as a sequence of on-curve control points through which a smooth spiral-based curve is fitted, instead of placing handles. The fitted curve is converted to cubic segments for storage."
+ref = "FontForge main views › Outline Glyph View (Spiro point tools; Spiro mode toggle)"
+status = "docs"
+origin = "fontforge"
+
+# =====================================================================================================
+# FontForge — comparing, merging, interpolating whole fonts
+# =====================================================================================================
+
+[[command]]
+id = "font.compareGlyphs"
+label = "Compare Glyphs of Two Fonts…"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{a: fontRef | path, b: fontRef | path, what?: ['glyphSet', 'outlines', 'bitmaps', 'names', 'substitutions', 'positioning'], outlineMatch?: 'exact' | 'near', tolerance?: number, acceptInlinedComponents?: bool, differencesToBackground?: bool}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Glyph-level comparison of two fonts, sources or binaries, complementing the table-level font.diff and the master comparison of the primary reference: reports glyphs present in only one, glyphs whose outlines or bitmaps differ, and differences in names, substitutions and positioning. Near matching accepts contours within a tolerance, so a TrueType and a PostScript build of one design can be compared; optionally each differing outline of the second font is copied into the background of the first."
+ref = "FontForge Element menu › Compare Fonts"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "font.compareLayers"
+label = "Compare Layers…"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layerA: id, layerB: id, tolerance?: number}"
+area = "layers"
+milestone = "M13"
+summary = "Reports which of the given glyphs differ between two layers of the same font; from Font View it selects the differing glyphs and scrolls to the first."
+ref = "FontForge Element menu › Compare Layer To Layer"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "font.interpolateFonts"
+label = "Interpolate Fonts…"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{a: fontRef | path, b: fontRef | path, amount: percent}"
+area = "interpolation"
+milestone = "M13"
+summary = "Builds a new font between, or beyond, two compatible single-master fonts: 50 gives the midpoint, values above 100 or below 0 extrapolate. Both fonts need the same glyphs with matching contours, points and components."
+ref = "FontForge Element menu › Interpolate Fonts"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "glyph.listDependencies"
+label = "Show Dependencies"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyph, kind?: 'components' | 'substitutions' | 'both'}"
+area = "font-view"
+milestone = "M6"
+summary = "Lists the glyphs that use the given glyph as a component and the glyphs whose substitutions depend on it (for example the ligatures an i takes part in), with a way to open any of them. Read-only."
+ref = "FontForge Element menu › Show Dependencies"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "file.revertGlyph"
+label = "Revert Glyph"
+menu = ["File"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, layers?: [id]}"
+area = "import-export"
+milestone = "M13"
+summary = "Restores the selected glyphs to their state in the saved source file, leaving the rest of the document's unsaved changes alone."
+ref = "FontForge File menu › Revert Glyph"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "edit.copyMetrics"
+label = "Copy Width / Sidebearings"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{from: glyph, what: ['width', 'lsb', 'rsb', 'verticalAdvance'], to?: [glyph]}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Copies only the chosen metric values of a glyph so a paste applies them to other glyphs without touching outlines."
+ref = "FontForge Edit menu › Copy Width, Copy VWidth, Copy LBearing, Copy RBearing"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "edit.copyLayerToLayer"
+label = "Copy Layer to Layer…"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, from: id, to: id, mode?: 'replace' | 'append'}"
+area = "layers"
+milestone = "M13"
+summary = "Copies the paths and components of one layer into another for all selected glyphs, either replacing the target's contents or adding to them."
+ref = "FontForge Edit menu › Copy Layer To Layer"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "edit.pasteAfter"
+label = "Paste After"
+menu = ["Edit"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, layer?}"
+area = "font-view"
+milestone = "M13"
+summary = "Pastes the copied glyph into the target glyph to the right of its existing content, at the current advance width, then extends the advance by the pasted glyph's width. Repeating it assembles a word or logotype glyph from letters."
+ref = "FontForge Edit menu › Paste After"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "file.print"
+label = "Print…"
+menu = ["File"]
+shortcut = ""
+kind = "engine"
+params = "{layout: 'fontChart' | 'glyphPerPage' | 'glyphWaterfall' | 'sampleText', glyphs?, text?: string, pointSize?: number, output?: path}"
+area = "proofing"
+milestone = "M14"
+summary = "Menu front end to the proof generator (font.proof): makes a proof as PDF, to a file or the system printer, in one of four layouts: a chart of all glyphs, selected glyphs one per page at page size, selected glyphs at a ladder of sizes (reference: 72 down to 4 point), or styled sample text mixing fonts, sizes, scripts, languages and features per run."
+ref = "FontForge dialogs › Display & Print Fonts; FontForge File menu › Print"
+status = "docs"
+origin = "fontforge"
+
+# =====================================================================================================
+# FontForge — hinting at instruction level
+# =====================================================================================================
+
+[[panel]]
+id = "dialog.ttInstructions"
+label = "TrueType Instructions"
+location = "dialog"
+controls = ["listing of the instructions of a glyph or of the font program (fpgm) or control-value program (prep)", "hover help per instruction", "Edit switches to a text area; Parse checks the text and returns to the listing"]
+area = "hinting-tt"
+milestone = "M13"
+summary = "Views and edits raw TrueType bytecode as assembly text, for glyph programs and for the font-level programs the primary reference keeps only as imported assembly parameters. Arguments may be written on the instruction's line and are turned into push instructions; a control value can be referred to by its value and is looked up or created; delta arguments have a size-and-amount shorthand."
+ref = "FontForge dialogs › Viewing and Editing truetype instructions; FontForge Hints menu › Edit Instructions, Edit fpgm, Edit prep"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "hint.tt.setAssembly"
+label = "Set TrueType Instructions"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{target: {glyph: name} | 'fpgm' | 'prep', master?: id, assembly: string}"
+area = "hinting-tt"
+milestone = "M13"
+summary = "Assembles the text and stores it as the raw instructions of a glyph or of a font-level program, failing without change on a parse error. Raw instructions on a glyph take precedence over visual hints at export."
+ref = "FontForge dialogs › Viewing and Editing truetype instructions"
+status = "docs"
+origin = "fontforge"
+
+[[panel]]
+id = "window.ttDebugger"
+label = "TrueType Debugger"
+location = "window"
+controls = ["glyph pane showing points as each instruction moves them", "instruction pane with the current instruction and breakpoints (click to set)", "step into, step over, step out, continue", "inspector panes: registers, stack, points, storage, control values, raster, plain-language gloss of the instruction", "watch points on glyph points"]
+area = "hinting-tt"
+milestone = "M13"
+summary = "Runs a glyph's TrueType program one instruction at a time at a chosen size and resolution and shows the interpreter state after each step. Needs our own bytecode interpreter, which the hinting preview needs as well."
+ref = "FontForge main views › Outline Glyph View (Debugger pane); FontForge Hints menu › Debug"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "hint.tt.debugStep"
+label = "Debugger Step"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph, master?: id, ppem: number, action: 'start' | 'into' | 'over' | 'out' | 'continue' | 'stop', breakpoints?: [number]}"
+area = "hinting-tt"
+milestone = "M13"
+summary = "Drives a debugging session and returns the interpreter state after the step: program counter, stack, graphics state, point positions in both zones, storage and control values."
+ref = "FontForge main views › Outline Glyph View (Debugger pane)"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "hint.tt.suggestDeltas"
+label = "Suggest Deltas…"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, master?: id, ppemRange: [number, number], dpi?: number, within?: number}"
+area = "hinting-tt"
+milestone = "M13"
+summary = "Rasterises the glyphs over a size range and reports the points and sizes at which a small delta would likely improve the result. The page read names the dialog but not its criteria, so the detection rule is ours to design."
+ref = "FontForge Hints menu › Suggest Deltas"
+status = "docs"
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.stemHistogram"
+label = "Stem Histogram"
+location = "dialog"
+controls = ["kind: horizontal stems, vertical stems or vertical extremes (for alignment zones)", "bar chart of how many selected glyphs have each width or position; hovering a bar lists its glyphs", "bar-width (bucket) and summing controls", "click bars to choose primary and secondary values, written back to the master's stems or zones"]
+area = "hinting-ps"
+milestone = "M10"
+summary = "Charts the distribution returned by the stem report (autohint.ps.reportStems) so standard stems and alignment zones can be picked from its peaks and written to Font Info in one step. The pages read confirm the three histogram kinds; the chart controls listed are recalled."
+ref = "FontForge Hints menu › Histograms; FontForge dialogs › The histogram dialog"
+status = "memory"
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.reviewHints"
+label = "Review Hints"
+location = "dialog"
+controls = ["direction switch: horizontal or vertical stems", "current hint position and width fields", "previous / next hint, create, remove", "the active hint is highlighted in the glyph"]
+area = "hinting-ps"
+milestone = "M13"
+summary = "Steps through the PostScript stem hints of a glyph one at a time for inspection and numeric correction."
+ref = "FontForge Hints menu › Review Hints"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "hint.ps.addDiagonalHint"
+label = "Add Diagonal Hint"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, master?: id, nodes: [nodeRef, nodeRef, nodeRef, nodeRef]}"
+area = "hinting-ps"
+milestone = "M13"
+summary = "Records a diagonal stem from four selected nodes that form its two edges. Diagonal stems have no place in CFF hints; they would inform TrueType autohinting and stem measurement only."
+ref = "FontForge Hints menu › Add DHint, Clear DStem"
+status = "docs"
+origin = "fontforge"
+
+# =====================================================================================================
+# FontForge — bitmap strikes
+# =====================================================================================================
+
+[[command]]
+id = "bitmap.setStrikes"
+label = "Bitmap Strikes…"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{add?: [{ppem: number, depth?: 1 | 2 | 4 | 8}], remove?: [{ppem: number, depth?: number}], rasterize?: bool}"
+area = "color"
+milestone = "M11"
+summary = "Declares which embedded bitmap sizes (strikes) the font carries, in pixels per em, each either black-and-white or grey with 2, 4 or 8 bits per pixel. A new strike is filled by rasterising the outlines unless rasterize is false; removing a strike deletes its glyph bitmaps."
+ref = "FontForge Element menu › Bitmap Strikes Available"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "bitmap.regenerateGlyphs"
+label = "Regenerate Bitmap Glyphs…"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, strikes?: [{ppem: number, depth?: number}]}"
+area = "color"
+milestone = "M11"
+summary = "Re-rasterises the selected glyphs into the chosen strikes from the current outlines, overwriting hand edits in those bitmaps."
+ref = "FontForge Element menu › Regenerate Bitmap Glyphs"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "bitmap.removeGlyphs"
+label = "Remove Bitmap Glyphs…"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, strikes?: [{ppem: number, depth?: number}]}"
+area = "color"
+milestone = "M11"
+summary = "Deletes the selected glyphs from the chosen strikes, leaving outlines and other strikes alone."
+ref = "FontForge Element menu › Remove Bitmap Glyphs"
+status = "docs"
+origin = "fontforge"
+
+[[panel]]
+id = "window.bitmapEditor"
+label = "Bitmap Glyph Editor"
+location = "window"
+controls = ["actual-size preview of the glyph", "pointer position in pixels from the glyph origin and drag distance", "Recalculate button: rasterise the outline into this glyph again", "pixel canvas with separate toggles for the outline overlay and the pixel grid", "tool palette: pointer, magnify, pencil, line, shift, hand", "context menu: outlined and filled rectangle and ellipse, flips, quarter-turn rotations, set width"]
+area = "color"
+milestone = "M11"
+summary = "Edits one glyph of one strike pixel by pixel, with the scaled outline shown behind as a guide. Only the bitmap is editable here; the outline and grid are overlays."
+ref = "FontForge main views › Bitmap View"
+status = "docs"
+origin = "fontforge"
+
+[[tool]]
+id = "bitmapPencil"
+label = "Bitmap Pencil"
+shortcut = ""
+group = "bitmap"
+gestures = [
+  "click: toggle the pixel under the pointer",
+  "drag: set or clear every pixel passed over, according to the state the first pixel took",
+  "Alt+click (grey strikes): pick up the grey level under the pointer as the drawing level",
+]
+area = "color"
+milestone = "M11"
+summary = "Sets and clears single pixels in a bitmap glyph. In a grey strike it paints with the current grey level, chosen from the shades palette or picked from the canvas."
+ref = "FontForge main views › Bitmap View (Pencil; Anti-aliased glyphs)"
+status = "docs"
+origin = "fontforge"
+
+[[tool]]
+id = "bitmapLine"
+label = "Bitmap Line"
+shortcut = ""
+group = "bitmap"
+gestures = [
+  "drag: draw a straight run of pixels from press to release, setting or clearing by the state the first pixel took",
+]
+area = "color"
+milestone = "M11"
+summary = "Draws straight pixel lines in a bitmap glyph. The reference does not constrain the angle with Shift."
+ref = "FontForge main views › Bitmap View (Line)"
+status = "docs"
+origin = "fontforge"
+
+[[tool]]
+id = "bitmapShift"
+label = "Bitmap Shift"
+shortcut = ""
+group = "bitmap"
+gestures = [
+  "drag: move the whole bitmap of the glyph by whole pixels",
+]
+area = "color"
+milestone = "M11"
+summary = "Repositions the entire bitmap of the glyph relative to its origin. The ordinary pointer tool, by contrast, selects a rectangular region to move or copy and nudges it with the arrow keys."
+ref = "FontForge main views › Bitmap View (Four-arrow; Pointer)"
+status = "docs"
+origin = "fontforge"
+
+[[panel]]
+id = "palette.shades"
+label = "Shades"
+location = "palette"
+controls = ["one swatch per grey level of the strike (4, 16 or 256)", "outline marking the current drawing level", "outline marking the level under the pointer"]
+area = "color"
+milestone = "M11"
+summary = "Chooses the grey level the bitmap tools paint with. Shown only while a grey strike is being edited."
+ref = "FontForge main views › Bitmap View (Shades palette)"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "bitmap.setPixels"
+label = "Set Pixels"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph, strike: {ppem: number, depth?: number}, pixels?: [{x: number, y: number, value: number}], rows?: [string], origin?: [x, y], advance?: number}"
+area = "color"
+milestone = "M11"
+summary = "Headless form of bitmap editing: sets individual pixels, or replaces the whole glyph bitmap from rows of values, with its origin offset and, in a bitmap-only font, its advance."
+ref = "FontForge main views › Bitmap View"
+status = "inferred"
+origin = "fontforge"
+
+[[command]]
+id = "bitmap.transform"
+label = "Transform Bitmap"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, strike: {ppem: number, depth?: number}, op: 'flipH' | 'flipV' | 'rotate90cw' | 'rotate90ccw' | 'rotate180' | 'skew', skew?: [dx, dy]}"
+area = "color"
+milestone = "M11"
+summary = "Flips, rotates by quarter turns or skews bitmap glyphs by a pixel ratio."
+ref = "FontForge Element menu › Transformations (bitmap view: Flip, Rotate, Skew)"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "view.setFontViewStrike"
+label = "Show Strike in Font View"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{strike?: {ppem: number, depth?: number}, magnification?: number}"
+area = "font-view"
+milestone = "M11"
+summary = "Makes the glyph grid show the bitmaps of one strike instead of rendered outlines, optionally magnified; omitting the strike returns to outlines. The View menu lists every strike, grey ones as size@depth."
+ref = "FontForge View menu › bitmap pixel size list, Bitmap Magnification"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "bitmap.importStrikes"
+label = "Import Bitmap Strikes…"
+menu = ["File", "Import"]
+shortcut = ""
+kind = "engine"
+params = "{paths: [path], into?: fontRef, asBackground?: bool}"
+area = "import-export"
+milestone = "M11"
+summary = "Adds the strikes found in bitmap font files to the current font, matching glyphs by encoding or name. The reference reads BDF, X11 PCF, TeX PK and GF, the strikes embedded in TrueType and OpenType files, and Mac bitmap resources. A bitmap font can also be opened on its own as a bitmap-only font."
+ref = "FontForge File menu › Import (font view); Open"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "bitmap.exportStrikes"
+label = "Export Bitmap Strikes…"
+menu = ["File", "Export"]
+shortcut = ""
+kind = "engine"
+params = "{strikes?: [{ppem: number, depth?: number}], format: 'bdf' | 'embedded' | 'otb', path: path}"
+area = "import-export"
+milestone = "M11"
+summary = "Writes the chosen strikes as BDF files, embeds them in the exported TrueType or OpenType font, or writes a bitmap-only font in an sfnt wrapper. The reference also writes Windows FON and FNT, Mac NFNT and Palm formats, which we do not plan."
+ref = "FontForge dialogs › Generate Font › Bitmap Formats"
+status = "docs"
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.strikeProperties"
+label = "Strike Properties"
+location = "dialog"
+controls = ["strike chooser", "table of named properties with typed values (strings, integers)", "add, remove and reset to computed defaults"]
+area = "color"
+milestone = "M11"
+summary = "Edits the property list that a BDF file carries for a strike, such as its font descriptor string, resolution, ascent and descent."
+ref = "FontForge Element menu › BDF Info; FontForge dialogs › BDF Info Dialog"
+status = "docs"
+origin = "fontforge"
+
+[[behavior]]
+id = "bitmap.widthOnlyInBitmapFonts"
+area = "color"
+milestone = "M11"
+summary = "A bitmap glyph's advance can be edited directly only when the font has no outlines; with outlines present the strike advance follows the outline advance scaled to the strike size and rounded."
+ref = "FontForge main views › Bitmap View (Pointer; Set Width); Find Problems › Bitmap/Outline Advance Width Mismatch"
+status = "docs"
+origin = "fontforge"
+
+[[behavior]]
+id = "bitmap.references"
+area = "color"
+milestone = "M11"
+summary = "A bitmap glyph may be composed of references to other bitmap glyphs of the same strike, and building an accented composite can create the bitmap references together with the outline components."
+ref = "FontForge main views › Bitmap View (Bitmap references); FontForge Element menu › Build Accented Glyph"
+status = "docs"
+origin = "fontforge"
+
+# =====================================================================================================
+# FontForge — kerning views, classes, layout tables, encodings, CID
+# =====================================================================================================
+
+[[panel]]
+id = "window.kerningPairsPreview"
+label = "Kerning Pairs Preview"
+location = "window"
+controls = ["every kerning pair of the font drawn kerned, with its value underneath", "render size chooser", "sort by first glyph, by second glyph, or by size of the value", "type a character to scroll to its pairs", "drag the second glyph of a pair, or use arrow keys, to change the value; changed values are highlighted"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A visual list of all kerning pairs for reviewing a whole font's kerning at a glance and correcting outliers in place. Opened from a glyph it shows only that glyph's pairs; double-clicking a pair opens it enlarged."
+ref = "FontForge dialogs › The Kerning Pairs dialog; FontForge View menu › Combinations › Kern Pairs"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "kerning.buildGroups"
+label = "Build Kerning Groups…"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, masters?: [id], side?: 'left' | 'right' | 'both', maxDifference: number, replaceExisting?: bool}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Proposes kerning groups by comparing the side profiles of the given glyphs and putting glyphs in one group while their accumulated profile difference stays under the limit. Returns the proposal for review before it is applied."
+ref = "FontForge dialogs › Manipulating OpenType Lookups (kerning classes: guess classes); FontForge main views › Metrics View (Kerning by class)"
+status = "docs"
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.kerningGroupsEditor"
+label = "Kerning Groups Editor"
+location = "dialog"
+controls = ["list of groups, filtered by side, with add and remove", "members of the current group as cells or as a list", "stacked view: all members drawn on top of each other, aligned on the group's side", "all glyphs of the font below, for dragging into the group"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Builds and inspects kerning groups by drag and drop. The stacked view overlays the members aligned on the relevant side so a glyph whose shape does not fit the group stands out."
+ref = "RoboFont reference › Groups Editor; FontLab 8 What's new › Metrics & kerning (Set Kerning Class dialog)"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "kerning.verticalFromHorizontal"
+label = "Vertical Kerning from Horizontal"
+menu = ["Font", "Kerning"]
+shortcut = ""
+kind = "engine"
+params = "{masters?: [id]}"
+area = "spacing-kerning"
+milestone = "M13"
+summary = "Clears vertical kerning, then for every horizontal pair whose two glyphs both have a vertical alternate creates a vertical pair between the alternates with the same value."
+ref = "FontForge Metrics menu › VKern From HKern"
+status = "docs"
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.mathTable"
+label = "Math Table"
+location = "dialog"
+controls = ["math constants", "per-glyph italic correction, top accent attachment and math kerning", "extended-shape flags", "vertical and horizontal size variants and glyph assemblies"]
+area = "features"
+milestone = "M13"
+summary = "Edits the data of the OpenType MATH table: font-wide constants and per-glyph math metrics, variants and assemblies."
+ref = "FontForge Element menu › MATH Info; FontForge dialogs › Math typesetting information"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "font.setMathData"
+label = "Set Math Data"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master?: id, constants?: {name: number}, glyphs?: {name: {italicCorrection?: number, topAccent?: number, variants?: object, assembly?: object}}}"
+area = "features"
+milestone = "M13"
+summary = "Sets math constants and per-glyph math data from a structured object; the compiler writes them to the MATH table."
+ref = "FontForge dialogs › Math typesetting information"
+status = "docs"
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.baselines"
+label = "Baselines"
+location = "dialog"
+controls = ["direction: horizontal or vertical", "one row per script with its default baseline and the offset of each baseline tag", "per-script, per-language extent (minimum and maximum) overrides"]
+area = "features"
+milestone = "M13"
+summary = "Edits the OpenType BASE table directly: which baseline each script sits on, where the other baselines lie relative to it, and line-extent overrides."
+ref = "FontForge Element menu › Horizontal Baselines, Vertical Baselines; FontForge dialogs › The baseline dialog"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "font.renameGlyphsByNamelist"
+label = "Rename Glyphs by Name List…"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{namelist: path | name, glyphs?, updateReferences?: bool}"
+area = "font-view"
+milestone = "M13"
+summary = "Renames glyphs to the names a name list gives for their code points; a name list is a text file mapping code points to names. The font's current mapping can be saved as a name list, and a list of bare names can create empty unencoded glyphs."
+ref = "FontForge Encoding menu › Load Namelist, Rename Glyphs, Save Namelist of Font, Create Named Glyphs"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "cid.convertToCid"
+label = "Convert to CID-Keyed…"
+menu = ["Font", "CID"]
+shortcut = ""
+kind = "engine"
+params = "{registry: string, ordering: string, supplement: number, cmap?: path}"
+area = "font-info"
+milestone = "M13"
+summary = "Turns an ordinary font into a CID-keyed one with a single sub-font, assigning CIDs from a named character collection or from a CMap file."
+ref = "FontForge CID menu › Convert to CID, Convert By CMap"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "cid.flatten"
+label = "Flatten CID Font"
+menu = ["Font", "CID"]
+shortcut = ""
+kind = "engine"
+params = "{cmap?: path}"
+area = "font-info"
+milestone = "M13"
+summary = "Merges all sub-fonts of a CID-keyed font into one ordinary font in CID order, or encoded as a given CMap directs."
+ref = "FontForge CID menu › Flatten, Flatten By CMap"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "cid.editSubfonts"
+label = "Edit CID Sub-fonts"
+menu = ["Font", "CID"]
+shortcut = ""
+kind = "engine"
+params = "{insert?: fontRef | path | 'blank', remove?: name, show?: name, supplement?: number}"
+area = "font-info"
+milestone = "M13"
+summary = "Manages the sub-fonts (font dictionaries) of a CID-keyed font: adds an existing font or an empty one as a sub-font, removes one, switches which one Font View shows, and changes the supplement number. Each sub-font carries its own hinting settings."
+ref = "FontForge CID menu › Insert Font, Insert Blank, Remove Font, Change Supplement, sub font list"
+status = "docs"
+origin = "fontforge"
+
+[[check]]
+id = "check.cid.definedTwiceOrMissing"
+severity = "info"
+scope = "source"
+fixable = false
+area = "qa"
+milestone = "M13"
+summary = "A CID has glyphs in more than one sub-font, or has no glyph in any. The reference notes that undefined CIDs are common and the second half should be used with care."
+ref = "FontForge Find Problems › Check for CIDs defined twice, Check for undefined CIDs"
+status = "docs"
+origin = "fontforge"
+
+[[command]]
+id = "file.importMetricsFile"
+label = "Import Kerning from Metrics File…"
+menu = ["File", "Import"]
+shortcut = ""
+kind = "engine"
+params = "{path: path, masters?: [id], merge?: 'replace' | 'addMissing'}"
+area = "import-export"
+milestone = "M13"
+summary = "Reads kerning pairs (and ligature data where present) from a legacy metrics file that accompanies a Type 1 font and merges them into the font. The reference accepts AFM, PFM, TFM and OFM; we plan AFM and PFM only."
+ref = "FontForge File menu › Merge Feature Info"
+status = "docs"
+origin = "fontforge"
+
+# =====================================================================================================
+# RoboFont — Space Center, guidelines, UFO workflow
+# =====================================================================================================
+
+[[panel]]
+id = "window.spaceCenter"
+label = "Space Center"
+location = "window"
+controls = ["text input with a menu of stored sample strings", "control-glyph fields placed before and after every glyph of the text", "preview area: multi-line, single line or waterfall; centred, right-to-left or upside-down", "space matrix: one column per glyph with rows for width, left margin and right margin", "display menu: metrics, beam, cut-off band, overlay layers, guidelines, zones, images, fill, stroke, inverse, line space, tracking, preferred suffix"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A separate window dedicated to spacing: several lines of text at reading size with a numeric matrix under them, so many glyphs' metrics can be compared and typed without opening any of them for drawing. Complements the primary's in-editor text mode rather than replacing it."
+ref = "RoboFont reference › Space Center"
+status = "docs"
+origin = "robofont"
+
+[[behavior]]
+id = "spaceCenter.inputSyntax"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The spacing text accepts plain characters, /name for a glyph by name, a layer suffix on a name to show that glyph from another layer, a token for the glyph currently being edited, a token for the Font View selection, a token that expands to all members of a named group, and a line-break escape (reference spellings: /name, /name@layer, /?, /!, /:groupName, backslash-n)."
+ref = "RoboFont reference › Space Center › Text input syntax"
+status = "docs"
+origin = "robofont"
+
+[[behavior]]
+id = "spaceCenter.matrixEntry"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A matrix cell accepts a number, a reference that copies another glyph's value once, or a small expression mixing glyph values and numbers (reference: =name and forms like =e+10). Up and Down change the value by 1, Shift by 10, Shift+Cmd by 100; Tab moves along the row and an Alt-arrow jumps to the neighbouring cell. Unlike a metrics key, nothing stays linked."
+ref = "RoboFont reference › Space Center › Numerical fields"
+status = "docs"
+origin = "robofont"
+
+[[behavior]]
+id = "spaceCenter.pointerAndKeys"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "In the preview, dragging a margin changes it (with Alt, in all layers) and dragging the outline shifts the glyph sideways inside its width. With a glyph selected, Left and Right change the right margin, Alt-arrows the left margin and Ctrl+Cmd-arrows shift the outline, in steps of 1, 10 with Shift and 100 with Shift+Cmd."
+ref = "RoboFont reference › Space Center › Editing spacing with the mouse; Arrow key increments"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "view.setSpacingCutOff"
+label = "Cut-Off Band"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool, bottom?: number, top?: number}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Inverts foreground and background of the spacing preview between two heights (by default baseline and x-height), which makes the rhythm of stems and counters easier to judge without ascenders and descenders distracting."
+ref = "RoboFont reference › Space Center › Display options (Cut Off)"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "view.setPreferredSuffix"
+label = "Prefer Suffix"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{suffix?: string}"
+area = "edit-text"
+milestone = "M5"
+summary = "Shows, for every glyph of the preview text, the variant with the given name suffix when the font has one, so a whole text can be proofed in an alternate set without enabling a feature."
+ref = "RoboFont reference › Space Center › Display options (Suffixes)"
+status = "docs"
+origin = "robofont"
+
+[[behavior]]
+id = "kerning.previewGroupCombinations"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Selecting a group-to-group pair in a kerning list previews every glyph combination the pair covers, not only one representative, and clicking a combination selects the pair that actually applies to it."
+ref = "RoboFont reference › Kern Center (Preview)"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "guide.setAppearance"
+label = "Guide Colour and Magnetism"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{guide: guideRef, color?: color, magnetism?: number, showMeasurements?: bool}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Sets per-guide display and snapping properties: an individual colour, how strongly dragged selections snap to the guide, and whether distances are shown where it crosses the outline."
+ref = "RoboFont reference › Guidelines (popover fields: Color, Magnetic, Show Measurements)"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "guide.sliceContours"
+label = "Slice Along Guide"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{guide: guideRef, glyph?, layer?, addPointsOnly?: bool}"
+area = "path-ops"
+milestone = "M3"
+summary = "Cuts the glyph's contours along a guide exactly as a knife stroke along that line would; with addPointsOnly it just inserts nodes at the crossings."
+ref = "RoboFont reference › Guidelines (contextual menu); Slice Tool"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "view.showOutlineErrors"
+label = "Show Outline Errors"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "qa"
+milestone = "M12"
+summary = "A lightweight always-on display that highlights only two things while drawing: overlapping points and segments that are almost, but not exactly, horizontal, vertical or at the italic angle. A cheaper sibling of the full audit overlay."
+ref = "RoboFont reference › Display options (Outline Errors)"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "view.showIndexes"
+label = "Show Indexes"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{points?: bool, segments?: bool, contours?: bool, components?: bool, anchors?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Labels points, segments, contours, components and anchors with their index in the source. Useful when checking master compatibility and when telling an agent which element to act on."
+ref = "RoboFont reference › Display options (Point, Segment, Contour, Component, Anchor Indexes); Fontra reference › Glyph editor appearance; FontForge View menu › Number Points"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "view.showCurveLength"
+label = "Show Curve Length"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "Shows the arc length of each curve segment beside it."
+ref = "RoboFont reference › Display options (Curve Length)"
+status = "docs"
+origin = "robofont"
+
+[[panel]]
+id = "dialog.externalChanges"
+label = "External Changes"
+location = "dialog"
+controls = ["first prompt: Review, Reject all, Update all", "list of open fonts that changed on disk", "changed glyphs of the selected font grouped by layer, each with a tick", "abort (reject everything) and accept-selected buttons", "double-click a glyph: side-by-side text difference of its stored form, incoming lines marked as additions and current lines as removals"]
+area = "import-export"
+milestone = "M13"
+summary = "Appears when another program has changed the files of an open source on disk (a script, a second editor, a version-control checkout) and lets the user take or refuse the incoming change glyph by glyph instead of all or nothing."
+ref = "RoboFont reference › External Changes window"
+status = "docs"
+origin = "robofont"
+
+[[command]]
+id = "file.reviewExternalChanges"
+label = "Review External Changes…"
+menu = ["File"]
+shortcut = ""
+kind = "engine"
+params = "{font?: fontRef, accept?: [{layer: id, glyph: name}] | 'all' | 'none'}"
+area = "import-export"
+milestone = "M13"
+summary = "Lists what differs between the open document and its files on disk, by layer and glyph plus font-level data, and merges the accepted items into the open document as one undoable step. Without accept it only reports."
+ref = "RoboFont reference › External Changes window"
+status = "docs"
+origin = "robofont"
+
+[[behavior]]
+id = "io.watchSourceOnDisk"
+area = "import-export"
+milestone = "M13"
+summary = "While a file-per-glyph source is open, the application watches it for modification by other programs and raises the external-changes prompt when the window regains focus, rather than silently overwriting on the next save."
+ref = "RoboFont reference › External Changes window"
+status = "docs"
+origin = "robofont"
+
+[[behavior]]
+id = "io.stableSourceSerialization"
+area = "import-export"
+milestone = "M1"
+summary = "Saving writes source files in a normalised form, with fixed key order, number formatting and indentation, and rewrites only the glyph files that changed, so version-control differences show real edits only. RoboFont bundles a UFO normaliser; the exact save behaviour is recalled rather than read."
+ref = "RoboFont technical specification (embedded libraries: ufoNormalizer)"
+status = "memory"
+origin = "robofont"
+
+[[command]]
+id = "font.buildFromConstructions"
+label = "Build Glyphs from Constructions…"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{rules: string | path, glyphs?: [names], masters?: [id], overwrite?: bool, preview?: bool}"
+area = "components"
+milestone = "M6"
+summary = "Builds or rebuilds composite glyphs from a text file of construction rules. Beyond anchor-to-anchor attachment a rule can position a part against a guideline, at a distance or percentage of a metric, at a named reference point of another glyph, or through a transform matrix, and can set width and vertical metrics. With preview it returns the results without storing them."
+ref = "RoboFont topics › Accented glyphs (Glyph Construction positioning); RoboFont technical specification (embedded libraries: glyphConstruction)"
+status = "docs"
+origin = "robofont"
+
+[[behavior]]
+id = "constructions.ruleGrammar"
+area = "components"
+milestone = "M6"
+summary = "Recalled shape of a construction rule: target name, an equals sign, a base glyph, then plus-separated parts each with an at-sign position (anchor name, metric keyword, percentage or coordinates), optional width expressions before and after a bar, plus variables and comments. The grammar was not on the pages read and must be designed against the published Glyph Construction documentation, which is permissively licensed."
+ref = "RoboFont topics › Accented glyphs (links to the Glyph Construction project)"
+status = "memory"
+origin = "robofont"
+
+[[command]]
+id = "app.openPreferencesEditor"
+label = "Preferences Editor…"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Opens every application setting as an editable text document of keys and values with a describing comment above each, including settings that have no control in the Settings window; closing asks whether to save or discard. Same data the settings commands read and write (RoboFont key: Cmd+Alt+comma)."
+ref = "RoboFont reference › Preferences Editor; RoboFont topics › Features overview"
+status = "docs"
+origin = "robofont"
+
+[[behavior]]
+id = "app.safeMode"
+area = "extensions"
+milestone = "M13"
+summary = "A start-up mode, entered by holding Shift while launching, that loads no plug-ins and runs no start-up scripts so a broken extension cannot prevent the application from opening. A menu item then loads them on demand."
+ref = "RoboFont reference › Safe Mode"
+status = "docs"
+origin = "robofont"
+
+# =====================================================================================================
+# Fontra — per-glyph design space, references, collaboration
+# =====================================================================================================
+
+[[panel]]
+id = "palette.glyphSources"
+label = "Glyph Sources"
+location = "palette"
+controls = ["font axis sliders with reset", "glyph axis sliders (axes private to the current glyph) with edit and reset", "source list for the current glyph: default source in bold, font sources the glyph does not yet have in grey", "per source: active tick, incompatibility marker, show-in-background toggle, influence bar for the current location", "header toggle for multi-source editing", "add source at the current location; delete source", "layers of the selected source: one foreground layer plus background layers"]
+area = "interpolation"
+milestone = "M9"
+summary = "Treats every glyph as having its own list of sources in the design space: its master layers plus what the primary reference calls intermediate layers. The panel shows at a glance which sources exist, which font masters the glyph does not draw, and how much each one contributes at the previewed location; adding a source here is the same as adding an intermediate layer at the previewed location."
+ref = "Fontra reference › Editor › Panels › Designspace"
+status = "docs"
+origin = "fontra"
+
+[[command]]
+id = "glyph.setSourceActive"
+label = "Use Source in Interpolation"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?, source: id, active: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Excludes one of a glyph's sources from interpolation, or includes it again, without deleting its drawing. An inactive source is skipped at export for that glyph."
+ref = "Fontra reference › Editor › Panels › Designspace (the on checkbox)"
+status = "docs"
+origin = "fontra"
+
+[[command]]
+id = "view.showSourceInfluence"
+label = "Show Source Influence"
+menu = ["View"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?, location?: {axisTag: number}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Reports, for a design-space location, how much each source of the glyph contributes to the interpolated result; the panel draws it as a bar per source. Read-only."
+ref = "Fontra reference › Editor › Panels › Designspace (bars icon)"
+status = "docs"
+origin = "fontra"
+
+[[panel]]
+id = "window.crossAxisMappings"
+label = "Cross-Axis Mappings"
+location = "window"
+controls = ["one card per mapping with an input location and an output location", "tick per axis: whether it takes part in the mapping", "optional description, and group description", "New cross-axis mapping button", "Alt-click a disclosure arrow: expand or collapse all cards"]
+area = "interpolation"
+milestone = "M13"
+summary = "Edits mappings in which the position on one axis changes the effective position on others (the second version of the avar table), beyond the per-axis mappings the primary reference offers. The reference warns that most projects do not need them."
+ref = "Fontra reference › Font menu › Cross-axis mapping"
+status = "docs"
+origin = "fontra"
+
+[[command]]
+id = "font.setCrossAxisMappings"
+label = "Set Cross-Axis Mappings"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{mappings: [{input: {axisTag: number}, output: {axisTag: number}, description?: string}]}"
+area = "interpolation"
+milestone = "M13"
+summary = "Replaces the font's list of cross-axis mappings; the compiler writes them as a version 2 avar table. A view option applies the mappings to the axis sliders while previewing."
+ref = "Fontra reference › Font menu › Cross-axis mapping; Editor › Panels › Designspace (View options)"
+status = "docs"
+origin = "fontra"
+
+[[panel]]
+id = "palette.referenceFont"
+label = "Reference Font"
+location = "palette"
+controls = ["list of reference fonts, filled by dropping compiled font files", "custom character field", "language code field"]
+area = "drawing"
+milestone = "M13"
+summary = "Holds compiled fonts to draw against. The glyph for the character being edited is shown behind the outline from the selected reference font; the language code selects localised forms. The docs page leaves the two fields undescribed, so their exact effect is unconfirmed."
+ref = "Fontra reference › Editor › Panels › Reference font; Glyph editor appearance (Reference font)"
+status = "docs"
+origin = "fontra"
+
+[[command]]
+id = "view.setReferenceFont"
+label = "Set Reference Font"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{path?: path, show?: bool, character?: string, language?: string}"
+area = "drawing"
+milestone = "M13"
+summary = "Adds a compiled font file as a reference and toggles the background display of its glyph for the current character."
+ref = "Fontra reference › Editor › Panels › Reference font"
+status = "docs"
+origin = "fontra"
+
+[[panel]]
+id = "palette.relatedGlyphs"
+label = "Related Glyphs & Characters"
+location = "palette"
+controls = ["alternates: glyphs with the same base name and another suffix", "components this glyph is built from", "glyphs in which this glyph appears as a component", "characters this character decomposes into", "characters whose decomposition contains this character", "each section collapsible and shown only when it has entries; clicking an entry opens it"]
+area = "font-view"
+milestone = "M13"
+summary = "Shows what is connected to the current glyph in both directions, from the font's own structure and from Unicode decomposition data, for quick navigation between a base letter, its accented forms and its alternates."
+ref = "Fontra reference › Editor › Panels › Related glyphs & characters"
+status = "docs"
+origin = "fontra"
+
+[[command]]
+id = "font.setStatusDefinitions"
+label = "Status Definitions…"
+menu = ["Font"]
+shortcut = ""
+kind = "engine"
+params = "{statuses: [{code: number, name: string, color: color, isDefault?: bool}]}"
+area = "font-view"
+milestone = "M13"
+summary = "Defines the project's list of development statuses (for example draft, review, final), each with a code, a name and a colour, one of them being the default for new work. Unlike free colour labels these have agreed names stored in the font."
+ref = "Fontra reference › Font menu › Status definitions"
+status = "docs"
+origin = "fontra"
+
+[[command]]
+id = "glyph.setStatus"
+label = "Set Status"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?, sources?: [id], status: number}"
+area = "font-view"
+milestone = "M13"
+summary = "Assigns a defined status to glyph sources; a display option tints each glyph on canvas with its status colour. The docs confirm the tint and the definitions; that the status is stored per glyph source is recalled."
+ref = "Fontra reference › Glyph editor appearance (Development status color); Font menu › Status definitions"
+status = "memory"
+origin = "fontra"
+
+[[behavior]]
+id = "drag.ghostOutline"
+area = "drawing"
+milestone = "M3"
+summary = "While points or contours are dragged, the outline as it was before the drag stays visible in grey underneath, optionally with dotted cross-hair lines through the pointer."
+ref = "Fontra reference › Glyph editor appearance (Drag ghost path; Drag crosshair)"
+status = "docs"
+origin = "fontra"
+
+[[behavior]]
+id = "collab.liveSharedEditing"
+area = "automation"
+milestone = "M13"
+summary = "When a project is served from one machine, several people can open it at once and each sees the others' edits arrive live in the glyphs they have open. The editor is a client of a document server whether that server runs locally or remotely."
+ref = "Fontra documentation › Introduction"
+status = "docs"
+origin = "fontra"
+
+[[command]]
+id = "collab.serveProject"
+label = "Share Project…"
+menu = ["File"]
+shortcut = ""
+kind = "engine"
+params = "{font?: fontRef, address?: string, port?: number, readOnly?: bool}"
+area = "automation"
+milestone = "M13"
+summary = "Starts serving the open document so other editor instances and agents can connect to it and edit it together, over the same change-message channel the control interface uses. Command form, conflict policy and permissions are our design; the docs state only that hosted projects are edited by several users in real time."
+ref = "Fontra documentation › Introduction"
+status = "inferred"
+origin = "fontra"
+
+[[command]]
+id = "collab.showServerInfo"
+label = "Server Info"
+menu = ["Help"]
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "automation"
+milestone = "M13"
+summary = "Reports the application version, when the document server started, which project back end is in use and which plug-ins are loaded. Read-only."
+ref = "Fontra reference › Fontra menu › Server info"
+status = "docs"
+origin = "fontra"
+
+[[behavior]]
+id = "app.browserClient"
+area = "ui-chrome"
+milestone = "M14"
+summary = "The whole editor runs in a web browser against a local or remote server, and a small desktop wrapper bundles both for people who just want to open a file. Relevant to the web build planned for 1.0."
+ref = "Fontra documentation › Introduction; Fontra how-tos › Installing Fontra Pak"
+status = "docs"
+origin = "fontra"

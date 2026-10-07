@@ -1,0 +1,1696 @@
+# Source: Glyphs 4 Handbook, chapter "Reusing Shapes" (Components, Smart Components, Corner
+# Components, Cap Components, Segment Components, Brushes, Pixel Tool), public web handbook at
+# https://handbook.glyphsapp.com/ . A few rows cite cross-referenced sections of other chapters
+# (Edit View › Info Box, Edit View › Anchors, Font Info › Other, Spacing › Metrics Keys & Automatic
+# Alignment, Appendix › Custom Parameters); those are named in `ref`.
+# Date: 2026-10-07
+#
+# Conventions used in this file
+# - Commands that exist in the reference only as an Info box field, a context-menu item or a mouse
+#   gesture get a command id here so agents can run them headless; `menu = []` for those.
+# - `status = "handbook"` means the behaviour is stated in the handbook. Where only the command
+#   shape (id, params) is ours, the status stays `handbook`; where the behaviour itself is our
+#   guess the row is `inferred`, and where it is recalled but absent from the handbook, `memory`.
+# - Commands owned by other chapters (Glyph › Add Glyphs, Glyph › Set Anchors, Path › Align
+#   Selection, Edit › Select All, Edit › Copy/Paste, Edit › Info for Selection, View › Show Info,
+#   View › Show Bounding Box, Filter › Shape Order, Palette mirror buttons, custom parameters and
+#   Font Info options) are NOT redefined here; their component-specific effects are `[[behavior]]`
+#   rows.
+# - component.setTransform, component.setBaseGlyph, component.editBaseGlyph, the panels
+#   infoBox.component / infoBox.componentGlyphPicker and selection.selectNext live in the Edit View
+#   inventory files (03a/03b); this file refers to them and does not repeat them.
+
+# =====================================================================================
+# Components: building composites
+# =====================================================================================
+
+[[command]]
+id = "glyph.createComposite"
+label = "Create Composite"
+menu = ["Glyph"]
+shortcut = "Cmd+Ctrl+C"
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, allMasters?: bool}"
+area = "components"
+milestone = "M6"
+summary = "Rebuilds the current layer of each target glyph as a composite: every path and component already on the layer is removed and the components named by the glyph info database for that glyph are inserted in the database's order. With allMasters it does the same on every master layer."
+ref = "Reusing Shapes › Components › Building Composites"
+status = "handbook"
+
+[[command]]
+id = "glyph.createCompositeAllMasters"
+label = "Create Composite (all masters)"
+menu = ["Glyph"]
+shortcut = "Cmd+Ctrl+Alt+C"
+kind = "engine"
+params = "{glyphs?: [names]}"
+area = "components"
+milestone = "M6"
+summary = "The Option-key alternate of Create Composite: replaces the shapes on all master layers of the glyph, not only the current one. The handbook gives the shortcut but no separate menu label, so the label here is ours."
+ref = "Reusing Shapes › Components › Building Composites"
+status = "handbook"
+
+[[command]]
+id = "glyph.addComponent"
+label = "Add Component"
+menu = ["Glyph"]
+shortcut = "Cmd+Shift+C"
+kind = "engine"
+params = "{glyph?: name, layer?: id, component: name | unicode, allMasters?: bool}"
+area = "components"
+milestone = "M6"
+summary = "Appends one component to the current layer. In the UI it opens the component picker, where the base glyph is found by glyph name or Unicode value; headless callers pass the base glyph directly."
+ref = "Reusing Shapes › Components › Building Composites"
+status = "handbook"
+
+[[command]]
+id = "glyph.addComponentAllMasters"
+label = "Add Component (all masters)"
+menu = ["Glyph"]
+shortcut = "Cmd+Alt+Shift+C"
+kind = "engine"
+params = "{glyph?: name, component: name | unicode}"
+area = "components"
+milestone = "M6"
+summary = "The Option-key alternate of Add Component: the chosen component is appended on every master layer of the glyph. The handbook gives the shortcut but no separate menu label."
+ref = "Reusing Shapes › Components › Building Composites"
+status = "handbook"
+
+[[command]]
+id = "glyph.componentFromSelection"
+label = "Component from Selection"
+menu = ["Glyph"]
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, shapes?: [indices], name: string}"
+area = "components"
+milestone = "M6"
+summary = "Moves the selected paths and components of a layer into a new glyph with the given name and puts a component referencing that glyph in their place. In the UI it first asks for the name, then appends the new glyph to the current Edit View tab and makes it the active glyph. Also offered in the canvas context menu."
+ref = "Reusing Shapes › Components › Turning Paths into Components"
+status = "handbook"
+
+[[panel]]
+id = "dialog.componentPicker"
+label = "Component picker"
+location = "dialog"
+controls = ["search field matching glyph name or Unicode value", "result list of glyphs", "Return inserts the highlighted glyph"]
+area = "components"
+milestone = "M6"
+summary = "The glyph picker shown by Add Component. It behaves exactly like the glyph picker the Text tool uses to insert glyphs in Edit View, so one picker implementation serves both."
+ref = "Reusing Shapes › Components › Building Composites"
+status = "handbook"
+
+[[panel]]
+id = "dialog.componentFromSelection"
+label = "Component from Selection"
+location = "dialog"
+controls = ["glyph name field, pre-filled with a suggested name", "OK button"]
+area = "components"
+milestone = "M6"
+summary = "Asks for the name of the glyph that will hold the selected shapes. The field starts with a name suggested from context and accepts any other name; an underscore-prefixed name makes the new glyph a non-exporting part."
+ref = "Reusing Shapes › Components › Turning Paths into Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.liveUpdateFromBaseGlyph"
+area = "components"
+milestone = "M6"
+summary = "A component is a live reference to its base glyph: editing the base glyph changes every component that points to it, and in Edit View the composites redraw while the base glyph is being edited."
+ref = "Reusing Shapes › Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.autoComposeOnAddGlyph"
+area = "components"
+milestone = "M6"
+summary = "When a glyph that the glyph info database describes as a composite is added to the font, it is created already filled with its components (adding eacute yields e plus acutecomb). The database is the only source for which components go into which glyph."
+ref = "Reusing Shapes › Components › Building Composites"
+status = "handbook"
+
+[[behavior]]
+id = "components.autoComposeNeedsAllParts"
+area = "components"
+milestone = "M6"
+summary = "Automatic composition is all-or-nothing: if any one of the components the database calls for is missing from the font, no components are inserted."
+ref = "Reusing Shapes › Components › Building Composites"
+status = "handbook"
+
+[[behavior]]
+id = "components.preferMarkWithSameSuffix"
+area = "components"
+milestone = "M6"
+summary = "While composing a glyph automatically, a mark glyph carrying the same dot suffix as the composite wins over the plain mark when it exists (agrave.sc takes gravecomb.sc before gravecomb)."
+ref = "Reusing Shapes › Components › Preferred Marks for Glyph Composition"
+status = "handbook"
+
+[[behavior]]
+id = "components.preferCaseMarksForUppercase"
+area = "components"
+milestone = "M6"
+summary = "While composing an uppercase letter automatically, a mark with the suffix .case is used in place of the plain mark when the font has one (Agrave takes gravecomb.case before gravecomb)."
+ref = "Reusing Shapes › Components › Preferred Marks for Glyph Composition"
+status = "handbook"
+
+[[behavior]]
+id = "components.preferNarrowMarksForIJ"
+area = "components"
+milestone = "M6"
+summary = "Composites built on i or j (imacron, jcircumflex and the like) prefer mark glyphs whose names end in .i or .narrow when such marks exist."
+ref = "Reusing Shapes › Components › Preferred Marks for Glyph Composition"
+status = "handbook"
+
+[[behavior]]
+id = "components.ijBuiltFromDotless"
+area = "components"
+milestone = "M6"
+summary = "The default composition of i and j is the dotless letter (idotless, jdotless) plus a dotaccentcomb component."
+ref = "Reusing Shapes › Components › Preferred Marks for Glyph Composition"
+status = "handbook"
+
+[[behavior]]
+id = "components.recipeSingleComponent"
+area = "components"
+milestone = "M6"
+summary = "Add Glyphs accepts the recipe form component=glyph: the glyph named on the right of the equals sign is created holding the glyph on the left as its only component (Delta=increment makes increment from one Delta component)."
+ref = "Reusing Shapes › Components › Recipes"
+status = "handbook"
+
+[[behavior]]
+id = "components.recipeBasePlusMarks"
+area = "components"
+milestone = "M6"
+summary = "Add Glyphs accepts the recipe form base+mark=glyph: names joined by plus signs become the components, in that order, of the glyph named after the equals sign, and the mark components are positioned on the base through anchors (q+tildecomb=qtilde)."
+ref = "Reusing Shapes › Components › Recipes"
+status = "handbook"
+
+[[behavior]]
+id = "components.recipeMultipleBases"
+area = "components"
+milestone = "M6"
+summary = "A recipe may join several base glyphs with plus signs (t+s.join=ts); they become base components set side by side, which is the usual way to build ligatures."
+ref = "Reusing Shapes › Components › Recipes"
+status = "handbook"
+
+[[behavior]]
+id = "components.underscoreNameNotExported"
+area = "components"
+milestone = "M6"
+summary = "A glyph whose name begins with an underscore defaults to non-exporting, so it can serve purely as a part inside other glyphs (an _f.connect shared by fl and f_f). The default comes from the name; the glyph's exports property remains the actual switch."
+ref = "Reusing Shapes › Components › Underscore Components"
+status = "handbook"
+
+# =====================================================================================
+# Components: selecting and editing
+# =====================================================================================
+
+[[command]]
+id = "component.move"
+label = "Move Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, components?: [indices], dx: number, dy: number}"
+area = "components"
+milestone = "M6"
+summary = "Shifts the selected components by a delta; the UI drives it from mouse drags and arrow keys (1 unit, Shift 10, Cmd 100). Auto-aligned components ignore the move, except the blue single-number case which accepts only the vertical part; locked components do not move."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[command]]
+id = "component.setAnchor"
+label = "Choose Attachment Anchor"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, component: index, anchor: name}"
+area = "components"
+milestone = "M6"
+summary = "Chooses which of several same-type anchors (top, top_alt, top_viet ...) an attached component snaps to. In the UI it is the anchor menu in the component Info box, which only appears when more than one candidate anchor exists."
+ref = "Reusing Shapes › Components › Anchors"
+status = "handbook"
+
+[[command]]
+id = "glyph.showGlyphsUsingAsComponent"
+label = "Show all glyphs that use this glyph as a component"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name}"
+area = "components"
+milestone = "M6"
+summary = "Canvas context-menu item that displays every glyph containing the current glyph as a component. The handbook does not say whether the result opens in a new tab or replaces the current text."
+ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
+status = "handbook"
+
+[[command]]
+id = "glyph.listComposites"
+label = "List Glyphs Using Glyph as Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, recursive?: bool}"
+area = "components"
+milestone = "M6"
+summary = "Read-only query returning the names of all glyphs that reference the given glyph as a component; the data behind the context-menu item above. The recursive option (users of users) is our addition."
+ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
+status = "inferred"
+
+[[command]]
+id = "component.disableAutomaticAlignment"
+label = "Disable Automatic Alignment"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, components?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item on an auto-aligned component that turns alignment off for it, so the component can be positioned by hand."
+ref = "Reusing Shapes › Components › Automatic Alignment"
+status = "handbook"
+
+[[command]]
+id = "component.enableAutomaticAlignment"
+label = "Enable Automatic Alignment"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, components?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item on a manually placed component that turns automatic alignment back on for it."
+ref = "Reusing Shapes › Components › Automatic Alignment"
+status = "handbook"
+
+[[command]]
+id = "component.lock"
+label = "Lock Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, components?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item that pins a component in place so it cannot be moved. It applies to components that are not auto-aligned."
+ref = "Reusing Shapes › Components › Locking Components"
+status = "handbook"
+
+[[command]]
+id = "component.unlock"
+label = "Unlock Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, components?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item that releases a locked component so it can be moved again."
+ref = "Reusing Shapes › Components › Locking Components"
+status = "handbook"
+
+[[command]]
+id = "glyph.decomposeGlyph"
+label = "Decompose Glyph"
+menu = ["Glyph"]
+shortcut = "Cmd+Shift+D"
+kind = "engine"
+params = "{glyphs?: [names], layer?: id}"
+area = "components"
+milestone = "M6"
+summary = "Replaces every component of the glyph layer with the paths and anchors of its base glyph, descending through nested components until none remain."
+ref = "Reusing Shapes › Components › Decomposing"
+status = "handbook"
+
+[[command]]
+id = "component.decompose"
+label = "Decompose"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, components?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item that turns only the selected components into their contents, one level deep: components nested inside them are kept as components."
+ref = "Reusing Shapes › Components › Decomposing"
+status = "handbook"
+
+[[behavior]]
+id = "components.tabCyclesComponents"
+area = "components"
+milestone = "M6"
+summary = "With a component selected, Tab moves the selection to the next component on the layer and Shift+Tab to the previous one. This is the generic next/previous-object selection (selection.selectNext in the Edit View inventory) applied to components."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.infoBoxExtraControls"
+area = "components"
+milestone = "M6"
+summary = "Beyond the fields listed for the component Info box in the Edit View inventory (infoBox.component: name, offset, scales, slant, rotation, arrow button), this chapter adds two conditional controls: an anchor menu, present only when the attached component has several candidate anchors, and a Smart badge on smart components. The box needs View › Show Info and at least one selected component."
+ref = "Reusing Shapes › Components › Editing Components; Components › Anchors; Smart Components › Using Smart Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.swapBaseKeepsPlacement"
+area = "components"
+milestone = "M6"
+summary = "Changing the glyph a component points to (component.setBaseGlyph, defined in the Edit View inventory) is how a component is swapped; that the component keeps its slot in the shape order, its alignment state and its chosen anchor is our assumption, as the handbook only says the glyph is exchanged."
+ref = "Edit View › Info Box; Reusing Shapes › Components › Editing Components"
+status = "inferred"
+
+[[behavior]]
+id = "components.flipViaNegativeScaleOrMirror"
+area = "components"
+milestone = "M6"
+summary = "A component is flipped with the Palette mirror buttons or by transforming it through the Info box or bounding box (component.setTransform, defined in the Edit View inventory). The handbook does not spell out that a negative scale percentage is how a flip is stored for glyph components; it says so only for corner components."
+ref = "Reusing Shapes › Components › Editing Components; Palette › Transformations"
+status = "inferred"
+
+[[behavior]]
+id = "components.clickSelects"
+area = "components"
+milestone = "M6"
+summary = "Clicking a component with the Select tool selects it; one or more selected components bring up the component Info box next to the glyph Info box."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.rubberBandIgnoresComponents"
+area = "components"
+milestone = "M6"
+summary = "A selection rectangle dragged with the Select tool skips components; holding Option while dragging includes them."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.selectAllTwoStage"
+area = "components"
+milestone = "M6"
+summary = "On a layer that has paths, the first Select All (Cmd+A) takes only the paths; a second Select All adds all components (and, per the Edit View chapter, anchors)."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.transformVia"
+area = "components"
+milestone = "M6"
+summary = "Components can be transformed three ways: by the fields of their Info box, by dragging the bounding box, and by the Transformations section of the Palette."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.verticalFlipSwapsTopBottomAnchors"
+area = "components"
+milestone = "M6"
+summary = "Mirroring a component top-to-bottom exchanges the roles of its top and bottom anchors, so the anchor that ends up above still acts as the top one and the one below as the bottom one. A flipped top mark can therefore attach as a bottom mark (gcommaaccent from g and a flipped commaaccentcomb)."
+ref = "Reusing Shapes › Components › Editing Components; Palette › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "components.arrowKeyIncrements"
+area = "components"
+milestone = "M6"
+summary = "Arrow keys nudge the selected components by 1 unit, by 10 with Shift held and by 100 with Cmd held."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.optionDragDuplicates"
+area = "components"
+milestone = "M6"
+summary = "Dragging a component with Option held leaves the original in place and drags a copy."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.deleteKeyRemoves"
+area = "components"
+milestone = "M6"
+summary = "Pressing Delete removes all selected components from the layer."
+ref = "Reusing Shapes › Components › Editing Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.doubleClickOpensBase"
+area = "components"
+milestone = "M6"
+summary = "Double-clicking a component places its base glyph next to the composite in the Edit View text and activates it for editing."
+ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
+status = "handbook"
+
+[[behavior]]
+id = "components.lockedCannotMove"
+area = "components"
+milestone = "M6"
+summary = "A locked component rejects every move, from mouse, arrow keys or Info box, until it is unlocked."
+ref = "Reusing Shapes › Components › Locking Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.placeholderEmptyBase"
+area = "components"
+milestone = "M6"
+summary = "A component whose base glyph exists but has an empty layer is drawn as an empty-base placeholder. The remedies are to delete the component or to draw something on that layer."
+ref = "Reusing Shapes › Components › Component Placeholders"
+status = "handbook"
+
+[[behavior]]
+id = "components.placeholderMissingBase"
+area = "components"
+milestone = "M6"
+summary = "A component that names a glyph absent from the font is drawn as a no-base-glyph placeholder. Clicking it still shows the referenced name in the Info box, and it resolves when the component is removed or a glyph of that name is added."
+ref = "Reusing Shapes › Components › Component Placeholders"
+status = "handbook"
+
+[[behavior]]
+id = "components.placeholderCircularReference"
+area = "components"
+milestone = "M6"
+summary = "A component whose base glyph, directly or through nesting, contains the glyph it sits in is flagged as a bad reference and drawn as a placeholder rather than expanded."
+ref = "Reusing Shapes › Components › Component Placeholders"
+status = "handbook"
+
+[[behavior]]
+id = "components.nodesInsideComponentsSnap"
+area = "components"
+milestone = "M6"
+summary = "While a node, anchor or other element is being dragged, the nodes inside components on the layer are revealed as snap targets, and the dragged element snaps to one when it comes close."
+ref = "Reusing Shapes › Components › Combining Paths and Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.alignOriginToNode"
+area = "components"
+milestone = "M6"
+summary = "Path › Align Selection (Cmd+Shift+A) with exactly one node and one component selected moves the component so its origin lands on the node; the node does not move. The origin is the point where the baseline meets the left sidebearing (for an italic angle of zero), unless the base glyph has an anchor named origin, which then defines it."
+ref = "Reusing Shapes › Components › Combining Paths and Components"
+status = "handbook"
+
+# =====================================================================================
+# Components: nesting and anchor propagation
+# =====================================================================================
+
+[[behavior]]
+id = "components.nestingAllowed"
+area = "components"
+milestone = "M6"
+summary = "A base glyph may itself be made of components to any depth (dieresiscomb from two dotaccentcomb components, then used inside edieresis). Rendering, decomposition and export must resolve the whole chain."
+ref = "Reusing Shapes › Components › Nesting Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.topBottomAnchorsPropagate"
+area = "components"
+milestone = "M6"
+summary = "Anchors named top and bottom on a component's base glyph count as anchors of the composite that contains it, so further marks can attach to the composite although it holds no anchors of its own (Edieresis inherits bottom from E)."
+ref = "Reusing Shapes › Components › Nesting Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.ownAnchorOverridesPropagated"
+area = "components"
+milestone = "M6"
+summary = "An anchor placed directly in the composite replaces a propagated anchor of the same name."
+ref = "Reusing Shapes › Components › Nesting Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.propagateAnchorsParameter"
+area = "components"
+milestone = "M6"
+summary = "Propagation is on by default. A font-level custom parameter Propagate Anchors with its checkbox off stops it, which also suppresses the mark and mkmk rules that would be generated for composites from inherited anchors."
+ref = "Reusing Shapes › Components › Nesting Components; Appendix › Custom Parameters › Propagate Anchors"
+status = "handbook"
+
+# =====================================================================================
+# Components: anchors and automatic alignment
+# =====================================================================================
+
+[[behavior]]
+id = "components.anchorsServeFeaturesAndComposition"
+area = "components"
+milestone = "M6"
+summary = "One set of anchors drives both OpenType positioning (mark-to-base, mark-to-mark, cursive attachment) and the placement of components inside composites; the same anchor usually serves both jobs."
+ref = "Reusing Shapes › Components › Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "components.underscoreAnchorSnapsToPlainAnchor"
+area = "components"
+milestone = "M6"
+summary = "A component whose base glyph has an anchor with a leading underscore (_top) is positioned so that anchor coincides with the anchor of the same name without the underscore (top) on the base component, the same way mark-to-base positioning would place the mark glyph."
+ref = "Reusing Shapes › Components › Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "components.alternativeAnchorSuffix"
+area = "components"
+milestone = "M6"
+summary = "A layer may carry several anchors of one type, told apart by an underscore suffix after the shared name (top, top_alt, top_viet); the suffix text is free. A mark component can be switched between them."
+ref = "Reusing Shapes › Components › Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "components.anchorMenuOnlyWhenChoiceExists"
+area = "components"
+milestone = "M6"
+summary = "The anchor chooser in the component Info box is hidden unless the selected attached component has more than one anchor it could attach to."
+ref = "Reusing Shapes › Components › Anchors"
+status = "handbook"
+
+[[behavior]]
+id = "components.ligatureNumberedAnchors"
+area = "components"
+milestone = "M6"
+summary = "NOT in this handbook chapter: recalled from the reference app, ligature glyphs carry one numbered anchor per ligature part (top_1, top_2, bottom_1 ...), and a mark component in a composite can be attached to a chosen numbered anchor. The handbook documents only caret_1/caret_2 anchors for ligature carets; confirm by observation before implementing."
+ref = "not in handbook (Edit View › Ligature Carets covers caret_N only)"
+status = "memory"
+
+[[behavior]]
+id = "components.autoAlignDefaultOnWhenComponentsOnly"
+area = "components"
+milestone = "M6"
+summary = "Automatic alignment is on by default for a glyph layer whose shapes are all components. It keeps both the component positions and the composite's metrics tied to the base glyphs, so a sidebearing change in U flows to every composite built on U."
+ref = "Reusing Shapes › Components › Automatic Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "components.pathOnLayerDisablesAutoAlign"
+area = "components"
+milestone = "M6"
+summary = "The presence of any path on a layer switches automatic alignment off for that layer. Components then keep fixed offsets and can drift out of place when their base glyphs change."
+ref = "Reusing Shapes › Components › Combining Paths and Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.fontWideDisableAutoAlign"
+area = "components"
+milestone = "M6"
+summary = "The Font Info › Other option Disable Automatic Alignment turns off automatic component positioning and automatic metrics synchronisation for every composite in the font."
+ref = "Reusing Shapes › Components › Automatic Alignment; Font Info › Other › Disable Automatic Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "components.importedFilesDisableAutoAlignSetting"
+area = "components"
+milestone = "M6"
+summary = "A user setting, Disable Automatic Alignment for Imported Files, decides whether fonts opened from OpenType or UFO sources start with automatic alignment switched off for all components."
+ref = "Font Info › Other › Disable Automatic Alignment; Settings › User Settings"
+status = "handbook"
+
+[[behavior]]
+id = "components.autoAlignColors"
+area = "components"
+milestone = "M6"
+summary = "Component fill colour signals alignment state in Edit View: green for auto-aligned, gray for manually placed, blue for the vertically shiftable single-number case."
+ref = "Reusing Shapes › Components › Automatic Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "components.autoAlignedCannotMove"
+area = "components"
+milestone = "M6"
+summary = "An auto-aligned component cannot be dragged, nudged or repositioned through the Info box. The single exception is the blue case, which moves along the vertical axis only."
+ref = "Reusing Shapes › Components › Editing Components; Edit View › Info Box"
+status = "handbook"
+
+[[behavior]]
+id = "components.singleNumberComponentShiftsVertically"
+area = "components"
+milestone = "M6"
+summary = "When a composite's only component has the glyph category Number (zero to nine), the component is drawn blue and may be moved up and down while its horizontal position and the composite's metrics stay automatic."
+ref = "Reusing Shapes › Components › Automatic Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "components.autoAlignMetricsFromBase"
+area = "components"
+milestone = "M6"
+summary = "The sidebearings of an auto-aligned composite are derived from its base components, so ordinary metrics keys cannot be set on it. Its metrics fields read auto followed by the derived value in parentheses."
+ref = "Reusing Shapes › Components › Automatic Alignment; Spacing › Metrics Keys & Automatic Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "components.autoAlignMetricsOffsetKeys"
+area = "components"
+milestone = "M6"
+summary = "An auto-aligned composite accepts exactly one kind of metrics key, a signed number written after an equals sign (=+18, =-12), which adds to or subtracts from the derived sidebearing while alignment stays on."
+ref = "Reusing Shapes › Components › Automatic Alignment; Spacing › Metrics Keys & Automatic Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "components.autoAlignSingleComponent"
+area = "components"
+milestone = "M6"
+summary = "A composite may consist of one auto-aligned component and then mirrors the base glyph's metrics. Typical uses are same-shape letters across scripts (Alpha, A, A-cy) and flipped twins (nine from six, mirrored brackets, guillemets and arrows)."
+ref = "Reusing Shapes › Components › Automatic Alignment › Single Component"
+status = "handbook"
+
+[[behavior]]
+id = "components.autoAlignBaseThenMarks"
+area = "components"
+milestone = "M6"
+summary = "In a base-plus-marks composite the base component comes first in the shape order and the combining marks follow it; each mark is placed on the base through a matching anchor pair."
+ref = "Reusing Shapes › Components › Automatic Alignment › Base Component & Mark Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.marksStackInOrder"
+area = "components"
+milestone = "M6"
+summary = "Several marks on one base stack in the order they were added: each later mark attaches to the mark before it. This requires every stacking mark glyph to carry both the underscore anchor (_top) and the plain anchor (top)."
+ref = "Reusing Shapes › Components › Automatic Alignment › Base Component & Mark Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.anchoredMarksDoNotAffectSidebearings"
+area = "components"
+milestone = "M6"
+summary = "Mark components placed through anchors contribute nothing to the composite's sidebearings, so a wide mark may stick out of the glyph box (macron on dotless i). The stated cures are a narrower mark or an =+N / =-N metrics offset."
+ref = "Reusing Shapes › Components › Automatic Alignment › Base Component & Mark Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.multipleBasesSetSideBySide"
+area = "components"
+milestone = "M6"
+summary = "Several base components in one composite are laid out next to each other the way the same glyphs would be when typed in sequence."
+ref = "Reusing Shapes › Components › Automatic Alignment › Multiple Base Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.marksBelongToPrecedingBase"
+area = "components"
+milestone = "M6"
+summary = "With several bases, shape order assigns marks: each base component is followed by its own marks, then the next base and its marks. A mark therefore attaches to the nearest base before it."
+ref = "Reusing Shapes › Components › Automatic Alignment › Multiple Base Components"
+status = "handbook"
+
+[[behavior]]
+id = "components.exitEntryAnchorsConnectBases"
+area = "components"
+milestone = "M6"
+summary = "Base components can be chained with cursive-attachment anchors: when one component's glyph has an anchor #exit and the next one's has #entry, the second is positioned so the two anchors coincide. A part carrying both can be repeated (m from _part.stem and two _part.arch)."
+ref = "Reusing Shapes › Components › Automatic Alignment › Multiple Base Components"
+status = "handbook"
+
+# =====================================================================================
+# Export-time behaviour
+# =====================================================================================
+
+[[behavior]]
+id = "export.componentsDecomposedWithRemoveOverlap"
+area = "compile"
+milestone = "M2"
+summary = "Exporting with Remove Overlaps switched on converts every component to paths before overlaps are removed, so the output glyphs contain outlines only."
+ref = "Reusing Shapes › Components"
+status = "handbook"
+
+[[behavior]]
+id = "export.trueTypeKeepsNonOverlappingComponents"
+area = "compile"
+milestone = "M2"
+summary = "A TrueType-flavour export without Remove Overlaps (variable fonts are the usual case) writes components that do not overlap as real composite-glyph references and decomposes only the composites whose components overlap."
+ref = "Reusing Shapes › Components"
+status = "handbook"
+
+[[behavior]]
+id = "export.keepOverlappingComponentsParameter"
+area = "compile"
+milestone = "M6"
+summary = "The instance custom parameter Keep Overlapping Components makes a TrueType-flavour export keep overlapping components as references too (Ccedilla stays a composite). It does nothing for CFF output."
+ref = "Reusing Shapes › Components; Appendix › Custom Parameters › Keep Overlapping Components"
+status = "handbook"
+
+[[behavior]]
+id = "export.underscoreGlyphsOmitted"
+area = "compile"
+milestone = "M2"
+summary = "Non-exporting glyphs, which underscore-named part glyphs are by default, are left out of the exported font; composites using them must therefore have those components decomposed at export. The decomposition step is our inference from the non-export rule."
+ref = "Reusing Shapes › Components › Underscore Components"
+status = "inferred"
+
+# =====================================================================================
+# Smart components
+# =====================================================================================
+
+[[behavior]]
+id = "smart.glyphDetection"
+area = "components"
+milestone = "M6"
+summary = "A glyph is a smart glyph when its name starts with _smart. or _part. ; in addition every CJK radical glyph and every Korean base glyph is smart. Components that point at a smart glyph are smart components."
+ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "smart.layersHoldVariants"
+area = "components"
+milestone = "M6"
+summary = "The alternative shapes of a smart glyph live on extra layers of that glyph (smart layers), added with the plus button of the Layers palette. A new layer is named with the current date and time and should be renamed, by double-clicking, to describe the variant (Narrow, Low Contrast)."
+ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "smart.layersMustBeCompatible"
+area = "components"
+milestone = "M6"
+summary = "Every smart layer must be outline-compatible with the master layer it varies, by the same rules as master compatibility, because instances are produced by interpolating between them."
+ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "smart.axesAreLocalToGlyph"
+area = "components"
+milestone = "M6"
+summary = "Smart properties act like variation axes that exist only inside one glyph; each component instance carries its own value per property and the component outline is interpolated from the glyph's smart layers."
+ref = "Reusing Shapes › Smart Components"
+status = "handbook"
+
+[[command]]
+id = "smartGlyph.showSettings"
+label = "Show Smart Glyph Settings"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name}"
+area = "components"
+milestone = "M6"
+summary = "Opens the Smart Glyph Settings (tabs Properties and Layers) for a smart glyph. Reached from the component context menu, or with Edit › Info for Selection (Cmd+Alt+I) while in the smart glyph."
+ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
+status = "handbook"
+
+[[command]]
+id = "smartGlyph.addProperty"
+label = "Add Smart Property"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, name: string, min?: number, max?: number}"
+area = "components"
+milestone = "M6"
+summary = "Adds a property (a local axis) to a smart glyph: a free-form name plus a minimum and maximum, defaulting to 0 and 100. The minimum must be smaller than the maximum; negative numbers are allowed. In the UI it is the plus button at the bottom left of the Properties tab."
+ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
+status = "handbook"
+
+[[command]]
+id = "smartGlyph.setProperty"
+label = "Edit Smart Property"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, property: name, name?: string, min?: number, max?: number}"
+area = "components"
+milestone = "M6"
+summary = "Renames a smart property or changes its range, keeping min below max. Headless form of editing a row in the Properties tab."
+ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
+status = "handbook"
+
+[[command]]
+id = "smartGlyph.removeProperty"
+label = "Remove Smart Property"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, property: name}"
+area = "components"
+milestone = "M6"
+summary = "Deletes a property from a smart glyph together with its pole assignments. The handbook only shows adding; removal, and what happens to values stored on existing components, is our assumption."
+ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
+status = "inferred"
+
+[[command]]
+id = "smartGlyph.setLayerPole"
+label = "Assign Layer to Property Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id | name, property: name, pole: min | max | none}"
+area = "components"
+milestone = "M6"
+summary = "Records, for one smart layer and one property, whether the layer represents the property's minimum, its maximum, or neither (the layer is unrelated to that property). In the UI this is a pair of checkboxes per property in the Layers tab."
+ref = "Reusing Shapes › Smart Components › Smart Glyph Layers Settings"
+status = "handbook"
+
+[[command]]
+id = "smartGlyph.listProperties"
+label = "List Smart Properties"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name}"
+area = "components"
+milestone = "M6"
+summary = "Read-only query returning a smart glyph's properties (name, min, max) and the pole each layer holds for each property. Our addition for headless use."
+ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
+status = "inferred"
+
+[[command]]
+id = "smartComponent.showSettings"
+label = "Smart Component Settings"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, layer?: id, components?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Opens the settings of the selected smart components, one control per property of their smart glyph. Reached by clicking the Smart badge in the component Info box or with Edit › Info for Selection (Cmd+Alt+I)."
+ref = "Reusing Shapes › Smart Components › Using Smart Components"
+status = "handbook"
+
+[[command]]
+id = "smartComponent.setValue"
+label = "Set Smart Component Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, component: index, property: name, value: number}"
+area = "components"
+milestone = "M6"
+summary = "Sets one property value on one smart component instance. Any number is accepted, including values below the minimum or above the maximum, which extrapolate. Driven in the UI by the slider, number field or checkbox, by bounding-box resizing, or by a smart handle."
+ref = "Reusing Shapes › Smart Components › Using Smart Components"
+status = "handbook"
+
+[[panel]]
+id = "dialog.smartGlyphSettings"
+label = "Smart Glyph Settings"
+location = "dialog"
+controls = [
+  "Properties tab: list of properties with name, minimum and maximum",
+  "Properties tab: plus button (bottom left) to add a property",
+  "Layers tab: sidebar listing all smart layers of the glyph",
+  "Layers tab: per property, a minimum checkbox and a maximum checkbox for the selected layer",
+]
+area = "components"
+milestone = "M6"
+summary = "Defines the local axes of a smart glyph and maps its layers onto them. For each layer and property at most one of minimum or maximum is ticked; neither means the layer does not take part in that property."
+ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
+status = "handbook"
+
+[[panel]]
+id = "dialog.smartComponentSettings"
+label = "Smart Component settings"
+location = "dialog"
+controls = [
+  "per property: slider running from minimum to maximum",
+  "per property: number field accepting any value, also outside the range",
+  "per property with range 0 to 1: a checkbox in place of slider and field",
+]
+area = "components"
+milestone = "M6"
+summary = "Per-instance property values of the selected smart components. Opened from the Smart badge or Info for Selection."
+ref = "Reusing Shapes › Smart Components › Using Smart Components"
+status = "handbook"
+
+[[panel]]
+id = "palette.smartComponent"
+label = "Smart component settings (Palette)"
+location = "palette"
+controls = ["same per-property slider, number field and 0/1 checkbox as the Smart Component settings dialog"]
+area = "components"
+milestone = "M6"
+summary = "The same per-instance controls shown at the bottom of the Palette. They are present only while the Palette is open, View › Show Info is checked and a smart component is selected."
+ref = "Reusing Shapes › Smart Components › Using Smart Components"
+status = "handbook"
+
+[[behavior]]
+id = "smart.badgeInInfoBox"
+area = "components"
+milestone = "M6"
+summary = "The Info box of a smart component shows a Smart badge that marks it as smart and opens its settings when clicked."
+ref = "Reusing Shapes › Smart Components › Using Smart Components"
+status = "handbook"
+
+[[behavior]]
+id = "smart.propertyNamesFree"
+area = "components"
+milestone = "M6"
+summary = "Property names are arbitrary and need not match layer names or font axis names. Only the exact names Width and Height (capitalised) carry extra meaning."
+ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
+status = "handbook"
+
+[[behavior]]
+id = "smart.propertyRangeRules"
+area = "components"
+milestone = "M6"
+summary = "A property range may be any pair of numbers with minimum strictly below maximum, negatives included; the default is 0 to 100. For unit-like properties the handbook suggests using real measurements as the range ends (Width 200 to 600 when the shape is drawn 200 and 600 units wide)."
+ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
+status = "handbook"
+
+[[behavior]]
+id = "smart.valuesExtrapolate"
+area = "components"
+milestone = "M6"
+summary = "Component values outside a property's range are legal and extrapolate the interpolation linearly past the pole layers (Width 150 or 700 on a 200 to 600 range). The slider is limited to the range; only the number field reaches beyond it."
+ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
+status = "handbook"
+
+[[behavior]]
+id = "smart.zeroOneRangeIsToggle"
+area = "components"
+milestone = "M6"
+summary = "A property with minimum 0 and maximum 1 is treated as an on/off switch: the component settings show a checkbox for it in place of a slider."
+ref = "Reusing Shapes › Smart Components › Using Smart Components"
+status = "handbook"
+
+[[behavior]]
+id = "smart.cornerLayersInferred"
+area = "components"
+milestone = "M6"
+summary = "Layers are not needed at every combination of extremes. With N properties, the layer at all minimums plus one layer per property at its maximum suffice; shapes for combined extremes are computed by adding the per-property differences. A layer at a combined extreme is optional and, when present, overrides the computed shape."
+ref = "Reusing Shapes › Smart Components › Smart Glyph Layers Settings"
+status = "handbook"
+
+[[behavior]]
+id = "smart.widthHeightFollowBoundingBox"
+area = "components"
+milestone = "M6"
+summary = "With View › Show Bounding Box on, dragging a selected smart component's bounding box horizontally changes its property named Width and dragging vertically changes Height. A smart component with neither property cannot be resized through the bounding box at all."
+ref = "Reusing Shapes › Smart Components › Width & Height Properties"
+status = "handbook"
+
+[[behavior]]
+id = "smart.handlesFromPropertyAnchors"
+area = "components"
+milestone = "M6"
+summary = "An anchor whose name equals a property name exactly (case included), present on every layer of the smart glyph and moved on the layers that affect that property, becomes a gray drag handle on selected components; dragging it changes that property's value. Properties without such anchors simply get no handle."
+ref = "Reusing Shapes › Smart Components › Smart Handles"
+status = "handbook"
+
+# =====================================================================================
+# Corner components
+# =====================================================================================
+
+[[behavior]]
+id = "corner.glyphNaming"
+area = "components"
+milestone = "M6"
+summary = "A glyph is a corner glyph when its name starts with _corner. followed by any name (_corner.serif). It holds an open path lying on both sides of the layer origin."
+ref = "Reusing Shapes › Corner Components › Creating Corner Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "corner.originPoint"
+area = "components"
+milestone = "M6"
+summary = "The reference point of a corner glyph is the layer origin (0, 0), unless the layer has an anchor named origin, whose position then replaces it."
+ref = "Reusing Shapes › Corner Components › Creating Corner Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "corner.pathDirection"
+area = "components"
+milestone = "M6"
+summary = "The open path must run in the direction it would have as part of the host outline. Normally its start node shares the X or the Y coordinate of the origin, and the position of its end node relative to the origin decides which way the corner grows out of the stem; a path drawn the wrong way round makes the corner grow in the wrong direction and is fixed by reversing the contour."
+ref = "Reusing Shapes › Corner Components › Creating Corner Glyphs"
+status = "handbook"
+
+[[command]]
+id = "cornerComponent.add"
+label = "Add Corner Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, nodes?: [{path: index, node: index}], extraNodes?: [{x, y}], corner: name}"
+area = "components"
+milestone = "M6"
+summary = "Attaches a corner component to each selected node, or to an extra node at a path intersection. In the UI it is a context-menu item that opens a glyph picker listing corner glyphs; Return inserts the highlighted one."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[command]]
+id = "cornerComponent.decompose"
+label = "Decompose Corner"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, corners?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item that bakes a corner component into the host path: the fitted corner outline replaces the node and the component is removed."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[command]]
+id = "cornerComponent.setGlyph"
+label = "Replace Corner Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, corners?: [indices], corner: name}"
+area = "components"
+milestone = "M6"
+summary = "Swaps the corner glyph an attached corner component uses, keeping its node, scale and alignment. In the UI: click the component name in its Info box and pick another."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[command]]
+id = "cornerComponent.setScale"
+label = "Set Corner Scale"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, corners?: [indices], scaleX?: percent, scaleY?: percent}"
+area = "components"
+milestone = "M6"
+summary = "Sets the horizontal and vertical scale of a corner component in percent. A negative value mirrors the corner on that axis, so one serif glyph serves left and right or bottom and top."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[command]]
+id = "cornerComponent.setAlignment"
+label = "Set Corner Alignment"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, corners?: [indices], mode: left | right | both | none}"
+area = "components"
+milestone = "M6"
+summary = "Chooses how a corner adapts to a diagonal stem. left: the start node follows the diagonal and the end node stays; right: the end node follows and the start node stays; both: a blend of the two; none: neither end is adjusted."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[command]]
+id = "cornerComponent.editGlyph"
+label = "Edit Corner Glyph"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, layer?: id, corner: index}"
+area = "components"
+milestone = "M6"
+summary = "The arrow button of the corner Info box: adds the corner glyph to the Edit View text and activates it."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.cornerComponent"
+label = "Corner component Info box"
+location = "inspector"
+controls = [
+  "component name (click to replace with another corner glyph)",
+  "arrow button: open the corner glyph in Edit View",
+  "horizontal scale field",
+  "vertical scale field",
+  "alignment mode buttons: left arrow, right arrow, left-right arrow, x-mark",
+]
+area = "components"
+milestone = "M6"
+summary = "Shown for a selected corner component when View › Show Info is on."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[panel]]
+id = "dialog.cornerPicker"
+label = "Corner glyph picker"
+location = "dialog"
+controls = ["search field", "list of corner glyphs", "Return inserts the highlighted glyph"]
+area = "components"
+milestone = "M6"
+summary = "Glyph picker opened by Add Corner Component, showing the font's corner glyphs."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[behavior]]
+id = "corner.highlightAndSelection"
+area = "components"
+milestone = "M6"
+summary = "In Edit View a corner component is tinted with a faint blue background. A click selects it, Shift-click extends the selection to several corners, and Delete removes the selected ones."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[behavior]]
+id = "corner.copyPasteOntoNodes"
+area = "components"
+milestone = "M6"
+summary = "A selected corner component can be copied with Edit › Copy and, with other nodes selected, pasted onto them with Edit › Paste, giving each node the same corner."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[behavior]]
+id = "corner.mirrorViaPalette"
+area = "components"
+milestone = "M6"
+summary = "The Palette's mirror buttons flip selected corner components, equivalent to negating the matching scale; a left corner becomes a right one and the reverse."
+ref = "Reusing Shapes › Corner Components › Using Corner Components; Palette › Transformations"
+status = "handbook"
+
+[[behavior]]
+id = "corner.alignmentTypicalUse"
+area = "components"
+milestone = "M6"
+summary = "Typical alignment choices on diagonals: left for serifs at the bottom left or top right, right for serifs at the bottom right or top left, both for ink traps and similar notches."
+ref = "Reusing Shapes › Corner Components › Using Corner Components"
+status = "handbook"
+
+[[behavior]]
+id = "corner.entryAnchor"
+area = "components"
+milestone = "M6"
+summary = "The entry point, where the stem runs into the corner, defaults to the layer origin. An anchor named left (named right when the open path faces right) relocates it; the anchor must lie on the line through the origin and the path's start node. Moving it from the start node toward the baseline lengthens the corner on the obtuse side of a diagonal and shortens it on the acute side; moving it the other way does the opposite."
+ref = "Reusing Shapes › Corner Components › Adjusting the Entry Point of a Corner"
+status = "handbook"
+
+[[behavior]]
+id = "corner.exitAnchor"
+area = "components"
+milestone = "M6"
+summary = "The exit point, where the outline leaves the corner back into the host path, defaults to the open path's end node. An anchor named right (left for a right-facing corner) replaces the end node as exit position, so the end node itself may sit above or below the baseline, as for cupped serifs."
+ref = "Reusing Shapes › Corner Components › Adjusting the Exit Point of a Corner"
+status = "handbook"
+
+[[behavior]]
+id = "corner.scaleStretchesByDefault"
+area = "components"
+milestone = "M6"
+summary = "Without further setup, scaling a corner component stretches its outline geometrically."
+ref = "Reusing Shapes › Corner Components › Adjusting the Width and Height"
+status = "handbook"
+
+[[behavior]]
+id = "corner.scaleInterpolatesWithIntermediateLayers"
+area = "components"
+milestone = "M6"
+summary = "If the corner glyph has Intermediate layers tagged with a Width and Height in percent (for instance 150 % by 100 %), scaling interpolates between the main layer and those layers. An axis with no layer away from 100 % still stretches: with only a 150 % width layer, a 125 % width is interpolated while any height change stretches."
+ref = "Reusing Shapes › Corner Components › Adjusting the Width and Height"
+status = "handbook"
+
+[[behavior]]
+id = "corner.closedPathsAllowed"
+area = "components"
+milestone = "M6"
+summary = "A corner glyph may hold closed paths besides its single open path; they are carried along with the corner as extra shapes inside or outside it. The open path has to be the first shape of the layer (reorder with Filter › Shape Order)."
+ref = "Reusing Shapes › Corner Components › Closed Paths in Corners"
+status = "handbook"
+
+[[behavior]]
+id = "corner.extraNodesAcceptCorners"
+area = "components"
+milestone = "M6"
+summary = "Extra nodes, the points where overlapping paths intersect (displayed with View › Show Nodes › Extra Nodes), can take corner components through the same context-menu item. This gives smooth joins or ink traps at stem and crossbar crossings."
+ref = "Reusing Shapes › Corner Components › Extra Nodes"
+status = "handbook"
+
+# =====================================================================================
+# Cap components
+# =====================================================================================
+
+[[behavior]]
+id = "cap.glyphNaming"
+area = "components"
+milestone = "M6"
+summary = "A glyph is a cap glyph when its name starts with _cap. followed by any name (_cap.flag)."
+ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "cap.attachesToTwoAdjacentNodes"
+area = "components"
+milestone = "M6"
+summary = "A cap component is bound to two nodes that are neighbours on the same path (a corner is bound to one). It models stroke endings: spurs, terminals, flag serifs."
+ref = "Reusing Shapes › Cap Components"
+status = "handbook"
+
+[[behavior]]
+id = "cap.originAnchorSetup"
+area = "components"
+milestone = "M6"
+summary = "Simple anchor setup for a cap glyph: a single anchor named origin gives the spot in the cap shape on which the first stem node of the pair lands."
+ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "cap.node1Node2AnchorSetup"
+area = "components"
+milestone = "M6"
+summary = "Flexible anchor setup for a cap glyph: two anchors named node1 and node2 stand for the two stem nodes, so both the position and the scaling of the cap are controlled relative to both nodes. This lets one cap fit stems of different widths."
+ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
+status = "handbook"
+
+[[command]]
+id = "capComponent.add"
+label = "Add Cap Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, path?: index, nodes?: [index, index], cap: name}"
+area = "components"
+milestone = "M6"
+summary = "Attaches a cap component to two selected adjacent nodes of one path. In the UI it is a context-menu item that opens a glyph picker listing only cap glyphs; Return inserts the highlighted one."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[command]]
+id = "capComponent.decompose"
+label = "Decompose Cap"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, caps?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item that bakes a cap component into the host path and removes the component."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[command]]
+id = "capComponent.setFit"
+label = "Fit Cap to Stroke"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, caps?: [indices], fit: bool}"
+area = "components"
+milestone = "M6"
+summary = "Toggles the Fit option of a cap component. When on, the cap is resized automatically to the width of the stroke end it sits on, that is the distance between its two nodes."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[command]]
+id = "capComponent.setGlyph"
+label = "Replace Cap Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, caps?: [indices], cap: name}"
+area = "components"
+milestone = "M6"
+summary = "Swaps the cap glyph used by an attached cap component. The handbook says caps are replaced the same way as corners, that is through the name in the Info box."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[command]]
+id = "capComponent.setScale"
+label = "Set Cap Scale"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, caps?: [indices], scaleX?: percent, scaleY?: percent}"
+area = "components"
+milestone = "M6"
+summary = "Sets the horizontal and vertical scale of a cap component; negative values flip it. The handbook states only that caps transform like corners, so the field set is taken from the corner Info box."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[command]]
+id = "capComponent.setAlignment"
+label = "Set Cap Alignment"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, caps?: [indices], mode: left | right | both | none}"
+area = "components"
+milestone = "M6"
+summary = "Sets the alignment mode of a cap component using the same four modes as corners. The handbook says caps align like corners without describing what each mode does on a two-node attachment."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.capComponent"
+label = "Cap component Info box"
+location = "inspector"
+controls = [
+  "Fit checkbox",
+  "component name (replace), scale fields and alignment modes as in the corner Info box",
+]
+area = "components"
+milestone = "M6"
+summary = "Shown for a selected cap component when View › Show Info is on. Only the Fit checkbox is described explicitly; the remaining controls follow from the statement that caps are replaced, transformed and aligned like corners."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[panel]]
+id = "dialog.capPicker"
+label = "Cap glyph picker"
+location = "dialog"
+controls = ["search field", "list restricted to cap glyphs", "Return inserts the highlighted glyph"]
+area = "components"
+milestone = "M6"
+summary = "Glyph picker opened by Add Cap Component."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[behavior]]
+id = "cap.highlightAndSelection"
+area = "components"
+milestone = "M6"
+summary = "A cap component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected caps."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+[[behavior]]
+id = "cap.copyPasteOntoSegments"
+area = "components"
+milestone = "M6"
+summary = "A selected cap component can be copied and then pasted onto other selected segments (node pairs) with the standard Copy and Paste commands."
+ref = "Reusing Shapes › Cap Components › Using Cap Components"
+status = "handbook"
+
+# =====================================================================================
+# Segment components
+# =====================================================================================
+
+[[behavior]]
+id = "segment.glyphNaming"
+area = "components"
+milestone = "M6"
+summary = "A glyph is a segment glyph when its name starts with _segment. followed by any name (_segment.stem). Its contents are a single open path laid on the baseline plus the anchors start and end."
+ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "segment.startEndAnchors"
+area = "components"
+milestone = "M6"
+summary = "The start and end anchors belong on the first and last node of the open path; Glyph › Set Anchors (Cmd+U) puts them there. If they sit elsewhere, the fitted component will not span the full length of the host segment. The path's two end nodes should both be on the baseline or both at one equal distance from it."
+ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "segment.appliesToStraightAndCurved"
+area = "components"
+milestone = "M6"
+summary = "A segment component replaces one straight or curved host segment with its open path, which may be a single bent segment or a long path with many nodes."
+ref = "Reusing Shapes › Segment Components"
+status = "handbook"
+
+[[behavior]]
+id = "segment.bendingAddsNoNodes"
+area = "components"
+milestone = "M6"
+summary = "Bending a segment component along a curved host segment moves its existing points only and never inserts nodes. Fidelity to the curve can suffer, but the node count is identical in every master, which keeps the result interpolatable."
+ref = "Reusing Shapes › Segment Components"
+status = "handbook"
+
+[[command]]
+id = "segmentComponent.add"
+label = "Add Segment Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, segments?: [{path: index, segment: index}], segment: name}"
+area = "components"
+milestone = "M6"
+summary = "Attaches a segment component to a selected path segment (a segment counts as selected after a click on it or when its two nodes are both selected). In the UI it is a context-menu item that opens a picker listing only segment glyphs; Return inserts the highlighted one."
+ref = "Reusing Shapes › Segment Components › Using Segment Components"
+status = "handbook"
+
+[[command]]
+id = "segmentComponent.decompose"
+label = "Decompose Segment Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, segmentComponents?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item that replaces the host segment with the fitted path of the segment component and removes the component."
+ref = "Reusing Shapes › Segment Components › Using Segment Components"
+status = "handbook"
+
+[[command]]
+id = "segmentComponent.setGlyph"
+label = "Replace Segment Component"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, segmentComponents?: [indices], segment: name}"
+area = "components"
+milestone = "M6"
+summary = "Swaps the segment glyph used by an attached segment component; in the UI by clicking the component name in its Info box."
+ref = "Reusing Shapes › Segment Components › Using Segment Components"
+status = "handbook"
+
+[[command]]
+id = "segmentComponent.editGlyph"
+label = "Edit Segment Glyph"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, layer?: id, segmentComponent: index}"
+area = "components"
+milestone = "M6"
+summary = "The arrow button of the segment Info box: adds the segment glyph to the Edit View text and activates it."
+ref = "Reusing Shapes › Segment Components › Using Segment Components"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.segmentComponent"
+label = "Segment component Info box"
+location = "inspector"
+controls = ["component name (click to replace with another segment glyph)", "arrow button: open the segment glyph in Edit View"]
+area = "components"
+milestone = "M6"
+summary = "Shown for a selected segment component when View › Show Info is on."
+ref = "Reusing Shapes › Segment Components › Using Segment Components"
+status = "handbook"
+
+[[panel]]
+id = "dialog.segmentPicker"
+label = "Segment glyph picker"
+location = "dialog"
+controls = ["search field", "list restricted to segment glyphs", "Return inserts the highlighted glyph"]
+area = "components"
+milestone = "M6"
+summary = "Glyph picker opened by Add Segment Component."
+ref = "Reusing Shapes › Segment Components › Using Segment Components"
+status = "handbook"
+
+[[behavior]]
+id = "segment.highlightAndSelection"
+area = "components"
+milestone = "M6"
+summary = "A segment component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected ones."
+ref = "Reusing Shapes › Segment Components › Using Segment Components"
+status = "handbook"
+
+[[behavior]]
+id = "segment.copyPasteOntoSegments"
+area = "components"
+milestone = "M6"
+summary = "A selected segment component can be copied and pasted onto other selected segments with the standard Copy and Paste commands."
+ref = "Reusing Shapes › Segment Components › Using Segment Components"
+status = "handbook"
+
+# =====================================================================================
+# Brushes
+# =====================================================================================
+
+[[behavior]]
+id = "brush.glyphNaming"
+area = "components"
+milestone = "M6"
+summary = "A glyph is a brush glyph when its name starts with _brush. followed by any name (_brush.arrow). It must contain exactly one closed path plus two anchors, start and end; several closed shapes have to be merged into one with Remove Overlap first."
+ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "brush.startEndAnchors"
+area = "components"
+milestone = "M6"
+summary = "Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end anchors at the left and right of the layer. They normally sit on the baseline or at one equal distance from it."
+ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "brush.stretchZoneBetweenAnchors"
+area = "components"
+milestone = "M6"
+summary = "Only the part of the brush outline lying between the start and end anchors stretches and bends to follow the host segment. Outline before start and after end keeps its shape, which is how fixed ends such as an arrowhead are made."
+ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "brush.bendingNeedsHandles"
+area = "components"
+milestone = "M6"
+summary = "A segment of the brush outline bends along a curved host segment only if it is a curve segment with handles; straight line segments stay straight. Handles are added to a line segment by Option-clicking it."
+ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "brush.expandsSegments"
+area = "components"
+milestone = "M6"
+summary = "A brush turns a host path segment, straight or curved, into the brush's closed outline laid along it. It works on any segment but is intended mainly for open paths, most often an open path of a single segment."
+ref = "Reusing Shapes › Brushes"
+status = "handbook"
+
+[[command]]
+id = "brush.add"
+label = "Add Brush"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, segments?: [{path: index, segment: index}], nodes?: [{path: index, node: index}], brush: name}"
+area = "components"
+milestone = "M6"
+summary = "Attaches a brush to every selected segment. If nodes are selected in place of segments, brushes are added so that each selected node is the end node of a new brush. In the UI it is a context-menu item that opens a picker listing only brush glyphs; Return inserts the highlighted one."
+ref = "Reusing Shapes › Brushes › Using Brushes"
+status = "handbook"
+
+[[command]]
+id = "brush.decompose"
+label = "Decompose Brush"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, brushes?: [indices]}"
+area = "components"
+milestone = "M6"
+summary = "Context-menu item that replaces a brush with the outline it produces and removes the brush."
+ref = "Reusing Shapes › Brushes › Using Brushes"
+status = "handbook"
+
+[[command]]
+id = "brush.setGlyph"
+label = "Replace Brush"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, brushes?: [indices], brush: name}"
+area = "components"
+milestone = "M6"
+summary = "Swaps the brush glyph used by an attached brush; in the UI by clicking the component name in its Info box."
+ref = "Reusing Shapes › Brushes › Using Brushes"
+status = "handbook"
+
+[[command]]
+id = "brush.editGlyph"
+label = "Edit Brush Glyph"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, layer?: id, brush: index}"
+area = "components"
+milestone = "M6"
+summary = "The arrow button of the brush Info box: adds the brush glyph to the Edit View text and activates it."
+ref = "Reusing Shapes › Brushes › Using Brushes"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.brush"
+label = "Brush Info box"
+location = "inspector"
+controls = ["component name (click to replace with another brush glyph)", "arrow button: open the brush glyph in Edit View"]
+area = "components"
+milestone = "M6"
+summary = "Shown for a selected brush when View › Show Info is on."
+ref = "Reusing Shapes › Brushes › Using Brushes"
+status = "handbook"
+
+[[panel]]
+id = "dialog.brushPicker"
+label = "Brush glyph picker"
+location = "dialog"
+controls = ["search field", "list restricted to brush glyphs", "Return inserts the highlighted glyph"]
+area = "components"
+milestone = "M6"
+summary = "Glyph picker opened by Add Brush."
+ref = "Reusing Shapes › Brushes › Using Brushes"
+status = "handbook"
+
+[[behavior]]
+id = "brush.highlightAndSelection"
+area = "components"
+milestone = "M6"
+summary = "A brush is tinted with a faint blue background in Edit View. Clicking on the brush's outline selects it, Shift-click selects several, Delete removes the selected brushes."
+ref = "Reusing Shapes › Brushes › Using Brushes"
+status = "handbook"
+
+[[behavior]]
+id = "brush.copyPasteOntoSegments"
+area = "components"
+milestone = "M6"
+summary = "The standard Copy and Paste commands carry a selected brush over to other segments that are selected."
+ref = "Reusing Shapes › Brushes › Using Brushes"
+status = "handbook"
+
+# =====================================================================================
+# Pixel tool and pixel fonts
+# =====================================================================================
+
+[[tool]]
+id = "pixel"
+label = "Pixel"
+shortcut = "X"
+group = "pencil"
+gestures = [
+  "click on an empty grid cell: add a component of the glyph named pixel in that cell",
+  "click on a cell that already holds a pixel: remove that pixel",
+  "drag starting on an empty cell: add a pixel in every cell the pointer crosses",
+  "drag starting on an existing pixel: remove the pixels in every cell the pointer crosses",
+  "click when the font has no glyph named pixel: show the offer to add it",
+]
+area = "drawing"
+milestone = "M6"
+summary = "Paints glyphs out of pixel components snapped to the font grid, for pixel fonts and pixel symbols. Shortcut X; Shift+B switches to it while the Pencil tool is active, from which we take it that the two share a toolbar button (the group value is that reading, not a stated fact). Needs a grid spacing of 2 or more."
+ref = "Reusing Shapes › Pixel Tool"
+status = "handbook"
+
+[[command]]
+id = "pixel.addPixelGlyph"
+label = "Add Pixel Glyph"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{size?: number}"
+area = "drawing"
+milestone = "M6"
+summary = "Creates the glyph named pixel containing a square whose side equals the font's grid spacing. Run from the Add button of the prompt the Pixel tool shows when the glyph is missing."
+ref = "Reusing Shapes › Pixel Tool › Setup"
+status = "handbook"
+
+[[command]]
+id = "pixel.setPixels"
+label = "Set Pixels"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, cells: [[column, row]], mode: add | remove | toggle}"
+area = "drawing"
+milestone = "M6"
+summary = "Headless form of painting with the Pixel tool: adds, removes or toggles pixel components at grid cells given in grid units. The cell addressing is our design; the handbook describes only the mouse gestures."
+ref = "Reusing Shapes › Pixel Tool › Drawing Pixels"
+status = "inferred"
+
+[[panel]]
+id = "dialog.addPixelGlyph"
+label = "Add pixel glyph prompt"
+location = "dialog"
+controls = ["Add button"]
+area = "drawing"
+milestone = "M6"
+summary = "Shown on the first click with the Pixel tool in a font that has no glyph named pixel; Add creates the default square pixel glyph. The handbook names only the Add button."
+ref = "Reusing Shapes › Pixel Tool › Setup"
+status = "handbook"
+
+[[behavior]]
+id = "pixel.requiresGridSpacingTwoOrMore"
+area = "drawing"
+milestone = "M6"
+summary = "The Pixel tool works only when the font's Grid Spacing (Font Info › Other) is 2 or greater; the grid spacing is the pixel pitch."
+ref = "Reusing Shapes › Pixel Tool › Setup"
+status = "handbook"
+
+[[behavior]]
+id = "pixel.usesGlyphNamedPixel"
+area = "drawing"
+milestone = "M6"
+summary = "Every pixel the tool paints is a component referencing the glyph named exactly pixel, so redrawing that one glyph restyles the whole font."
+ref = "Reusing Shapes › Pixel Tool › Setup"
+status = "handbook"
+
+[[behavior]]
+id = "pixel.defaultShapeIsGridSquare"
+area = "drawing"
+milestone = "M6"
+summary = "The automatically created pixel glyph is a square with sides equal to the grid spacing in force when it is created."
+ref = "Reusing Shapes › Pixel Tool › Setup"
+status = "handbook"
+
+[[behavior]]
+id = "pixel.customShape"
+area = "drawing"
+milestone = "M6"
+summary = "The pixel glyph may hold any shape (an x-mark for a stitched look). To draw detail finer than one pixel, lower the grid spacing temporarily (1 is the font default) and raise it again before painting with the Pixel tool."
+ref = "Reusing Shapes › Pixel Tool › Pixel Shape"
+status = "handbook"

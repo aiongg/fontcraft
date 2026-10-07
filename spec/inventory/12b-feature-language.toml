@@ -1,0 +1,1468 @@
+# Feature inventory: the OpenType feature file language the compiler must accept
+# Sources: AFDKO docs/OpenTypeFeatureFileSpecification.md, document version 1.27 (refs/afdko, Apache-2.0),
+#          AFDKO docs/Variable_Feature_Guide.md and docs/Feature_Parser_Notes.md (Apache-2.0),
+#          fea-rs README, grammar and test data (refs/fontc/fea-rs, MIT OR Apache-2.0).
+# Date: 2026-10-07
+# One [[behavior]] row per construct, id `fea.<construct>`. Every summary ends with "fea-rs:" and what
+# the fea-rs sources and tests show about support: yes, partial, no, or unknown when it cannot be told.
+# "Adobe does not implement" repeats the specification's own implementation notes about makeotf.
+
+# ----------------------------------------------------------------------------
+# Lexical structure
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.comment"
+area = "features"
+milestone = "M8"
+summary = "A `#` starts a comment that runs to the end of the line; the rest of the line is dropped before parsing, so a terminating semicolon may not sit behind a comment on the same line. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.whitespace"
+area = "features"
+milestone = "M8"
+summary = "Spaces, tabs and line ends only separate tokens; any amount is allowed between tokens and LF, CR and CRLF line ends are all accepted, so one statement may span many lines. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.keywords"
+area = "features"
+milestone = "M8"
+summary = "The keyword list (anchor, anchorDef, anon/anonymous, by, contourpoint, cursive, device, enum/enumerate, exclude_dflt, feature, from, ignore, the lookup-flag names, include, include_dflt, language, languagesystem, locationDef, lookup, lookupflag, mark, markClass, nameid, NULL, parameters, pos/position, required, reversesub/rsub, script, sub/substitute, subtable, table, useExtension, valueRecordDef) is reserved in every context; table-specific keywords are reserved only inside their block. fea-rs: yes for the keyword set except locationDef, which its lexer does not know."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.c"
+status = "docs"
+
+[[behavior]]
+id = "fea.statementTerminator"
+area = "features"
+milestone = "M8"
+summary = "Statements end with `;`. Other punctuation: `,` list separator, `@` class or location name, `\\` CID or keyword escape, `-` range or axis nudge, `+` axis nudge, `:` location/value separator, `=` class assignment or axis value, `'` context mark, double quotes for strings, `{}` blocks, `[]` classes, `<>` value records, anchors, devices and carets, `()` include paths and variable values. fea-rs: yes; a stray extra semicolon inside a block is tolerated (naked_semi tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.d"
+status = "docs"
+
+[[behavior]]
+id = "fea.number"
+area = "features"
+milestone = "M8"
+summary = "A number is a signed decimal integer without leading zeros; it is used for device tables, contour point indexes and many table fields. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.numberRadix"
+area = "features"
+milestone = "M8"
+summary = "Where the name table string attributes and some OS/2 fields are read, a leading 0 means octal and a leading 0x means hexadecimal (letters in either case); plain decimals must start with a non-zero digit. fea-rs: yes (the lexer has octal and hex tokens)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.e, §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.float"
+area = "features"
+milestone = "M8"
+summary = "Numbers with a decimal point are accepted for head FontRevision, the `size` feature parameters, STAT axis values and axis locations. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.b, §9.c, §9.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.metric"
+area = "features"
+milestone = "M8"
+summary = "A metric is a number in font units; it appears in value records and table fields and adjusts (adds to or subtracts from) the stored placement or advance. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.glyphName"
+area = "features"
+milestone = "M8"
+summary = "A production glyph name is at most 63 characters from A-Z, a-z, 0-9, period and underscore, and may not begin with a digit or a period; `.notdef` is the one exception. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.f.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.glyphNameDevelopment"
+area = "features"
+milestone = "M8"
+summary = "Source glyph names may additionally contain `*`, `+`, `-`, `:`, `^`, `|` and `~`, though not as the first character. The compiler must accept either the development or the production name for a glyph but emit only one kind consistently. fea-rs: yes for hyphens and the extra characters (glyph_name_formats and glyph_name_tricks tests); accepting production-name aliases is not shown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.f.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.glyphNameEscape"
+area = "features"
+milestone = "M8"
+summary = "A leading backslash marks the token as a glyph name even when it spells a keyword, for example a glyph called `table` is written `\\table`. fea-rs: yes (parse or compile tests cover it); escaping a non-keyword is also accepted."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.f.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.glyphNameVsRange"
+area = "features"
+milestone = "M8"
+summary = "A token containing a hyphen is first looked up as a glyph name; only when no such glyph exists is it read as a range between two glyphs. fea-rs: yes (glyph_or_range parse test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.f.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.cid"
+area = "features"
+milestone = "M8"
+summary = "In CID-keyed fonts a glyph is written as a backslash followed by a non-negative number, such as `\\101`. fea-rs: yes (cid_range test from fontTools)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.f.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.tag"
+area = "features"
+milestone = "M8"
+summary = "A tag is up to four characters and is told apart from a glyph name by position. Unquoted, it must start with a letter or underscore and may continue with digits and `. - * + : ^ | ~`; shorter tags are padded with spaces. Keywords and the axis unit letters are not tags, except `mark`. fea-rs: yes (short-tag, mark-tag and name-tag parse tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.h"
+status = "docs"
+
+[[behavior]]
+id = "fea.tagQuoted"
+area = "features"
+milestone = "M8"
+summary = "A tag that does not fit the bare-tag rules can be written in double quotes: at most four characters, each in 0x20-0x7E except the double quote itself. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.h"
+status = "docs"
+
+[[behavior]]
+id = "fea.tagDefaults"
+area = "features"
+milestone = "M8"
+summary = "`DFLT` is valid only as a script tag and `dflt` only as a language tag; `dflt` is a syntax convenience for the default language system of the current script and is not stored as a language record. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.c, §4.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupLabel"
+area = "features"
+milestone = "M8"
+summary = "A lookup label follows the production glyph-name rules (63 characters, same character set). `mark` is the only keyword that may also be used as a label. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.i"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Glyph classes
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.glyphClass"
+area = "features"
+milestone = "M8"
+summary = "A list of glyphs in square brackets stands for one position in a sequence that matches any member; the same notation gives the alternates in an alternate substitution. A class with one member is a singleton class. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g"
+status = "docs"
+
+[[behavior]]
+id = "fea.glyphRange.letter"
+area = "features"
+milestone = "M8"
+summary = "Inside a class, `first - last` (spaces optional) expands by stepping a single differing letter A-Z or a-z while the rest of both names stays identical, e.g. `[A.swash - Z.swash]`. Both names must have the same length. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.glyphRange.numeric"
+area = "features"
+milestone = "M8"
+summary = "A range may instead differ in one run of up to three decimal digits, e.g. `[ampersand.01 - ampersand.58]`; names of different length are an error, and ranges that are not an alphabetic or numeric sequence (zero - nine) are invalid. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.glyphRange.cid"
+area = "features"
+milestone = "M8"
+summary = "For CID fonts a range such as `[\\0-\\31]` expands in CID order. fea-rs: yes (cid_range test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.glyphRange.missingMembers"
+area = "features"
+milestone = "M8"
+summary = "Names produced by expanding a range that do not exist in the font are silently left out; the named end points need not be adjacent in glyph order. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.namedGlyphClass"
+area = "features"
+milestone = "M8"
+summary = "`@name = [ ... ];` defines a class. The name after `@` follows production glyph-name rules plus hyphens. Definitions may appear anywhere, at top level or inside blocks, and a name can be used only after its definition. fea-rs: yes; redefining a name is reported as a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.namedGlyphClass.nesting"
+area = "features"
+milestone = "M8"
+summary = "A class name written inside brackets contributes its members to the class being built; glyphs, ranges and class names can be mixed freely in one class. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.namedGlyphClass.alias"
+area = "features"
+milestone = "M8"
+summary = "A class may be assigned directly from one other class name with no brackets: `@a = @b;`. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.classSharing"
+area = "features"
+milestone = "M8"
+summary = "Identical Coverage and ClassDef tables produced from different rules or features should be stored once; lookups using the extension types keep their own copies. fea-rs: unknown (table packing is left to write-fonts)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.g.ii implementation note"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Value records, anchors and devices
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.valueRecord.single"
+area = "features"
+milestone = "M8"
+summary = "A bare metric with no angle brackets is an x-advance adjustment with every other field zero. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv"
+status = "docs"
+
+[[behavior]]
+id = "fea.valueRecord.verticalSingle"
+area = "features"
+milestone = "M8"
+summary = "Directly inside the vkrn, vpal, vhal or valt feature a bare single value means y advance instead; inside a standalone lookup it stays an x advance even when one of those features references the lookup. fea-rs: yes (the compiler special-cases these feature tags)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv"
+status = "docs"
+
+[[behavior]]
+id = "fea.valueRecord.four"
+area = "features"
+milestone = "M8"
+summary = "`<xPlacement yPlacement xAdvance yAdvance>` gives all four adjustments in that order. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv"
+status = "docs"
+
+[[behavior]]
+id = "fea.valueRecord.device"
+area = "features"
+milestone = "M8"
+summary = "The four metrics may be followed by four `<device>` entries, one per metric, to express a complete OpenType value record. Adobe's compiler does not implement this. fea-rs: yes (it parses and builds Device tables; big_device compile test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format E"
+status = "docs"
+
+[[behavior]]
+id = "fea.valueRecord.null"
+area = "features"
+milestone = "M8"
+summary = "`<NULL>` stands for an undefined value record, as in the long form of pair positioning format B. Not implemented by Adobe. fea-rs: yes (single_pos_NULL test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format F"
+status = "docs"
+
+[[behavior]]
+id = "fea.valueRecord.named"
+area = "features"
+milestone = "M8"
+summary = "`<NAME>` in angle brackets uses a record defined earlier with valueRecordDef, whether that record has one value or four. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format G"
+status = "docs"
+
+[[behavior]]
+id = "fea.valueRecordDef"
+area = "features"
+milestone = "M8"
+summary = "`valueRecordDef <value> NAME;` names a single-value or four-value record. The spec makes it a top-level statement that must come before first use; the name follows glyph-name rules. fea-rs: yes; it additionally accepts the statement inside feature and lookup blocks."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.v"
+status = "docs"
+
+[[behavior]]
+id = "fea.device"
+area = "features"
+milestone = "M8"
+summary = "`<device ppem pixels, ppem pixels, ...>` lists per-size pixel corrections. Used in value records, anchors and ligature carets. Not implemented by Adobe. fea-rs: yes."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iii"
+status = "docs"
+
+[[behavior]]
+id = "fea.device.null"
+area = "features"
+milestone = "M8"
+summary = "`<device NULL>` fills a slot in a list of devices where no device table is wanted. fea-rs: yes."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iii"
+status = "docs"
+
+[[behavior]]
+id = "fea.contourPoint"
+area = "features"
+milestone = "M8"
+summary = "`contourpoint N` names an outline point by index for anchors and ligature carets; meaningful only for TrueType outlines because CFF has no point indexes. fea-rs: yes."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vi"
+status = "docs"
+
+[[behavior]]
+id = "fea.anchor.coordinates"
+area = "features"
+milestone = "M8"
+summary = "`<anchor x y>` gives an attachment point in font units. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii"
+status = "docs"
+
+[[behavior]]
+id = "fea.anchor.contourPoint"
+area = "features"
+milestone = "M8"
+summary = "`<anchor x y contourpoint N>` adds a contour point that hinted rasterisers use instead of the coordinates. fea-rs: yes (anchor_formats parse test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii"
+status = "docs"
+
+[[behavior]]
+id = "fea.anchor.device"
+area = "features"
+milestone = "M8"
+summary = "`<anchor x y <device ...> <device ...>>` adds x and y device tables. fea-rs: yes (anchor_formats parse test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii"
+status = "docs"
+
+[[behavior]]
+id = "fea.anchor.null"
+area = "features"
+milestone = "M8"
+summary = "`<anchor NULL>` marks an anchor as absent; required for a missing cursive entry or exit and for a ligature component with no marks. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii format D"
+status = "docs"
+
+[[behavior]]
+id = "fea.anchor.named"
+area = "features"
+milestone = "M8"
+summary = "`<anchor NAME>` uses an anchor defined earlier with anchorDef. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii format E"
+status = "docs"
+
+[[behavior]]
+id = "fea.anchorDef"
+area = "features"
+milestone = "M8"
+summary = "`anchorDef x y [contourpoint N] NAME;` names an anchor so one edit changes every rule that uses it. A duplicate name should at least be reported. fea-rs: yes; duplicate names give a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.viii"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Including files
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.include"
+area = "features"
+milestone = "M8"
+summary = "`include(path);` splices another file in at that point. The path is taken literally up to the closing parenthesis and may contain spaces. fea-rs: yes; the trailing semicolon is optional and stray tokens after the path are an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §3"
+status = "docs"
+
+[[behavior]]
+id = "fea.include.contexts"
+area = "features"
+milestone = "M8"
+summary = "An include may appear wherever semicolon-terminated statements are allowed: top level, feature, lookup and table blocks, cvParameters and AxisValue blocks and name groups. It is never recognised inside an anonymous block. fea-rs: yes for top level, feature, lookup and table blocks (include_in_* tests); other contexts unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §3, §10"
+status = "docs"
+
+[[behavior]]
+id = "fea.include.resolution"
+area = "features"
+milestone = "M8"
+summary = "A relative path is tried, in order, against the UFO font directory when the source is a UFO, then the directory of the top-level feature file, then the directory of the including file; the first hit wins. fea-rs: yes (include-resolution tests); the caller can also supply its own resolver."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §3"
+status = "docs"
+
+[[behavior]]
+id = "fea.include.depth"
+area = "features"
+milestone = "M8"
+summary = "Nesting deeper than 50 includes is an error, which also stops files that include each other. fea-rs: yes (limit of 50); including the same file twice is allowed."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §3"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Features, language systems and lookups
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.featureBlock"
+area = "features"
+milestone = "M8"
+summary = "`feature TAG { ... } TAG;` holds substitution rules, positioning rules or both; the closing tag must equal the opening tag. Several blocks for the same tag accumulate. fea-rs: yes; a mismatched closing tag is an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.rule.autoType"
+area = "features"
+milestone = "M8"
+summary = "The lookup type of every sub and pos statement is derived from its form; the author never names a lookup type. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5, §6"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookup.implicit"
+area = "features"
+milestone = "M8"
+summary = "Outside named lookup blocks, each consecutive run of rules sharing feature, script, language, lookup flag and lookup type becomes one lookup. fea-rs: yes; it additionally lets single, multiple and ligature rules share a run by promoting them (mixed_lookups and rule_promotion tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.e, §7.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.languagesystem"
+area = "features"
+milestone = "M8"
+summary = "`languagesystem SCRIPT LANG;` at top level, before any feature block, lists the language systems under which every feature without its own script or language statements is registered. fea-rs: yes; duplicates give a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.languagesystem.default"
+area = "features"
+milestone = "M8"
+summary = "With no languagesystem statement the file behaves as if `languagesystem DFLT dflt;` were present. Once any statement is written, DFLT/dflt is included only when stated explicitly. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.languagesystem.order"
+area = "features"
+milestone = "M8"
+summary = "`DFLT dflt`, when present, must be the first languagesystem statement, and other DFLT-script statements must precede those of other scripts. fea-rs: yes (languagesystem_order tests expect an error)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.script"
+area = "features"
+milestone = "M8"
+summary = "`script TAG;` inside a feature block switches the current script, resets the language to dflt and the lookup flag to 0, and lasts until the next script statement or the end of the feature. Not allowed in standalone lookups, aalt or size. fea-rs: yes (script_stmt_scope, repeated_script_stmt tests; errors for use in a standalone lookup)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.language"
+area = "features"
+milestone = "M8"
+summary = "`language TAG;` switches the current language within the current script; following rules are registered only there. By default the language also inherits the default lookups collected so far. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.language.defaultInheritance"
+area = "features"
+milestone = "M8"
+summary = "Rules before the first script statement go to every language system from the languagesystem list; rules after a script statement and before its first non-dflt language go to every language explicitly named for that script in the feature. A language that is not named does not get the script-level defaults. fea-rs: yes (spec4h1 and spec4h2 tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.ii, §4.h"
+status = "docs"
+
+[[behavior]]
+id = "fea.language.excludeDflt"
+area = "features"
+milestone = "M8"
+summary = "`language TAG exclude_dflt;` registers the language without inheriting the default lookups. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.language.includeDflt"
+area = "features"
+milestone = "M8"
+summary = "`language TAG include_dflt;` states the default inheriting behaviour explicitly and is otherwise a no-op. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.language.deprecatedKeywords"
+area = "features"
+milestone = "M8"
+summary = "The older spellings `excludeDFLT` and `includeDFLT` still work and produce a deprecation warning. fea-rs: yes for parsing (both spellings are lexed); whether it warns is unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.language.required"
+area = "features"
+milestone = "M8"
+summary = "`language TAG required;` makes the current feature the required feature of that language system. Adobe's compiler does not implement it. fea-rs: yes (language_required test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.parameters"
+area = "features"
+milestone = "M8"
+summary = "`parameters ...;` sets feature parameters; it is defined only for the size feature (ssXX and cvXX use their own blocks). fea-rs: yes for size."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.c, §8.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupflag.named"
+area = "features"
+milestone = "M8"
+summary = "`lookupflag` followed by one or more of RightToLeft, IgnoreBaseGlyphs, IgnoreLigatures, IgnoreMarks, MarkAttachmentType and UseMarkFilteringSet, in any order and each at most once, replaces the current lookup flag. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.d format A"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupflag.markAttachmentType"
+area = "features"
+milestone = "M8"
+summary = "`MarkAttachmentType <class>` skips all marks except those in the given class, which may be a literal class, a named class or a mark class. The classes used this way must not overlap, at most 15 may be used, and they become the GDEF mark attachment class definition. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.d, §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupflag.useMarkFilteringSet"
+area = "features"
+milestone = "M8"
+summary = "`UseMarkFilteringSet <class>` filters marks to a glyph set; sets may overlap and each distinct set becomes a GDEF mark glyph set. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.d, §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupflag.numeric"
+area = "features"
+milestone = "M8"
+summary = "`lookupflag N;` sets the whole flag word from a number; `lookupflag 0;` is the only standard way to clear all flags. fea-rs: yes; the high byte of a literal is ignored with a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.d format B"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupflag.scope"
+area = "features"
+milestone = "M8"
+summary = "The flag starts at 0 in each feature and each named lookup block and stays until changed by another lookupflag statement, a lookup reference, a script statement or the end of the feature. A change starts a new lookup. fea-rs: yes (lookupflag_scope tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.d"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupBlock"
+area = "features"
+milestone = "M8"
+summary = "`lookup LABEL { ... } LABEL;` defines exactly one lookup, so all its rules must share one lookup type and one lookup flag, and it may contain no other block. It may be written inside or outside a feature block. fea-rs: yes; mixed rule types and duplicate labels are errors."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupBlock.standalone"
+area = "features"
+milestone = "M8"
+summary = "A lookup block outside any feature is not attached to a feature until referenced; script and language statements are not allowed in it. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupBlock.useExtension"
+area = "features"
+milestone = "M8"
+summary = "`lookup LABEL useExtension { ... }` wraps the lookup in the GSUB or GPOS extension type so 32-bit offsets are used and its data is kept together; references to it need no keyword. fea-rs: yes (lookup_extension, useExtension tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.lookupReference"
+area = "features"
+milestone = "M8"
+summary = "`lookup LABEL;` inside a feature adds an already defined lookup to the feature under the current script and language by reusing its lookup index. fea-rs: yes; a reference outside any feature is ignored with a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.e, §7.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.markClass"
+area = "features"
+milestone = "M8"
+summary = "`markClass <glyph or class> <anchor> @NAME;` adds marks, with their attaching anchor, to a mark class; repeating the statement with another anchor extends the same class. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.markClass.rules"
+area = "features"
+milestone = "M8"
+summary = "All markClass statements must come before the first rule that uses any mark class, and mark classes used in one lookup must not share glyphs. Classes are numbered in order of their first definition. fea-rs: yes for the disjointness check (GPOS_4_non_disjoint_mark_class test); the ordering rule is unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.markClass.gdefInference"
+area = "features"
+milestone = "M8"
+summary = "When the file has no explicit GlyphClassDef, the compiler creates GDEF itself: mark-class members become marks, glyphs made by ligature rules become ligatures (and their inputs components), and conflicts between these assignments are reported. fea-rs: yes (omitted_GlyphClassDef and gdef_infer tests; conflicting classes are an error)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.f, §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.subtable"
+area = "features"
+milestone = "M8"
+summary = "`subtable;` forces a subtable break after the previous rule. It must be honoured for class pair kerning and may be ignored elsewhere; the compiler also inserts its own breaks when a subtable would overflow. fea-rs: yes for pair positioning; other lookup types unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §4.g, §6.b.iii"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# GSUB rules
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.gsub1.glyphByGlyph"
+area = "features"
+milestone = "M8"
+summary = "`sub a by b;` replaces one glyph with another (`substitute` is the long spelling). fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.a format A"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub1.classByGlyph"
+area = "features"
+milestone = "M8"
+summary = "`sub [a b c] by x;` replaces every member of the class with the same glyph. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.a format B"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub1.classByClass"
+area = "features"
+milestone = "M8"
+summary = "`sub @A by @B;` pairs the members of two classes in order; the classes must have the same size unless the replacement is a singleton. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.a format C"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub1.null"
+area = "features"
+milestone = "M8"
+summary = "`sub a by NULL;` removes the glyph from the run, and leaving out the `by` clause means the same. It compiles as a multiple substitution with an empty sequence. fea-rs: yes (delete_glyph, gsub_1_omit_by tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub2.multiple"
+area = "features"
+milestone = "M8"
+summary = "`sub f_f_i by f f i;` replaces one glyph with a sequence of two or more glyphs. The standard forbids classes in the replacement. fea-rs: yes; it also accepts classes on both sides with matching sizes, following glyphsLib and feaLib."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub3.alternate"
+area = "features"
+milestone = "M8"
+summary = "`sub a from [a.1 a.2 a.3];` offers a set of alternates for one glyph. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.c"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub4.ligature"
+area = "features"
+milestone = "M8"
+summary = "`sub f i by f_i;` replaces a sequence of two or more glyphs with one glyph. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.d"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub4.classEnumeration"
+area = "features"
+milestone = "M8"
+summary = "Classes in the input of a ligature rule are expanded into every combination, because the binary format has no class-based ligatures. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.d"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub4.sorting"
+area = "features"
+milestone = "M8"
+summary = "Within a lookup, ligature rules are sorted by the compiler so longer sequences are tried before their prefixes, whatever order the author wrote them in. fea-rs: yes (liga_sort_order test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.d, §7.c"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub5.contextual"
+area = "features"
+milestone = "M8"
+summary = "Lookup type 5 has no syntax of its own; every such rule is written in the chaining form, and the compiler may choose type 5 when there is no backtrack or lookahead. fea-rs: yes (GSUB_5_formats test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub6.marking"
+area = "features"
+milestone = "M8"
+summary = "A chaining rule is written in text order as backtrack, input and lookahead; every glyph or class of the input carries a `'` mark. The whole sequence must match, and the run advances by the input length afterwards. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.f.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub6.lookupReferences"
+area = "features"
+milestone = "M8"
+summary = "`sub a b' lookup L1 c' lookup L2;` applies named lookups at marked positions; the lookups may be of different types and carry their own flags. More than one lookup may follow a single marked glyph and they are applied in order. fea-rs: yes (MultipleLookupsPerGlyph tests); a positioning lookup referenced from a substitution rule is an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.f.i examples 1 and 5"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub6.inlineSingle"
+area = "features"
+milestone = "M8"
+summary = "`sub [a e n] d' by d.alt;` with exactly one marked glyph or class creates the single substitution lookup implicitly. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.f.i examples 2-3"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub6.inlineLigature"
+area = "features"
+milestone = "M8"
+summary = "`sub [e e.begin]' t' c by ampersand;` treats the whole marked run as ligature components and creates the ligature lookup implicitly. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.f.i example 4"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub6.ignore"
+area = "features"
+milestone = "M8"
+summary = "`ignore sub <context>;` placed before chaining rules in the same lookup adds a match that does nothing, so later rules are skipped where it matches. At least one glyph must be marked. fea-rs: yes; an ignore with no marked glyph is an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.f.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub6.ignoreList"
+area = "features"
+milestone = "M8"
+summary = "One ignore statement may list several complete match sequences separated by commas, each with its own backtrack, marked input and lookahead. fea-rs: yes (ignore_sub_comma test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.f.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub7.extension"
+area = "features"
+milestone = "M8"
+summary = "Lookup type 7 is never written directly; it results from `useExtension` on a lookup block or on the aalt feature block. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.g"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub8.reverse"
+area = "features"
+milestone = "M8"
+summary = "`rsub [a e n] d' by d.alt;` (`reversesub` is the long spelling) uses the chaining syntax but allows exactly one marked glyph or class and only a single substitution; it is applied from the end of the run backwards. fea-rs: yes for the in-line form (rsub tests); explicit lookup references in rsub rules are rejected."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.h"
+status = "docs"
+
+[[behavior]]
+id = "fea.gsub8.null"
+area = "features"
+milestone = "M8"
+summary = "The standard allows `by NULL`, or no `by` clause, in a reverse substitution to delete the glyph. fea-rs: no (rsub_null is an expected parse error)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.h"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# GPOS rules
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.gpos1.single"
+area = "features"
+milestone = "M8"
+summary = "`pos one <-80 0 -160 0>;` adjusts a glyph or every member of a class by a value record (`position` is the long spelling). fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos2.formatA"
+area = "features"
+milestone = "M8"
+summary = "`pos T -60 a <-40 0 -40 0>;` gives each glyph of the pair its own value record. fea-rs: yes (GPOS_2a/2b parse tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.b.i format A"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos2.formatB"
+area = "features"
+milestone = "M8"
+summary = "`pos T a -100;` gives one value record after both glyphs; it applies to the first glyph (x advance, or y advance in vertical kerning features) and the second gets none. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.b.i format B"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos2.classVsSpecific"
+area = "features"
+milestone = "M8"
+summary = "A pair rule is a class pair as soon as either side is written as a class, even a singleton one; otherwise it is a specific glyph pair. Specific pairs should be written before class pairs so they take precedence. fea-rs: yes (pairpos_format_choice test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.b.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos2.enum"
+area = "features"
+milestone = "M8"
+summary = "`enum pos @A b -80;` (`enumerate` is the long spelling) expands a class pair into individual glyph pairs so they act as exceptions to class kerning. fea-rs: yes (spec6b_ii, enum tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos2.conflicts"
+area = "features"
+milestone = "M8"
+summary = "When two specific pair rules name the same glyphs, the first one wins and later ones are dropped without error, so hand-written pairs can override enumerated ones. fea-rs: yes (early_kern_rules_win, class_pair_pos_duplicates tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.b.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos2.subtableBreaks"
+area = "features"
+milestone = "M8"
+summary = "If class pairs cannot share one subtable because a glyph would fall into two first-side classes, the compiler starts a new subtable and warns that later pairs may be shadowed. An explicit `subtable;` between class pair rules forces a break. fea-rs: yes for explicit breaks; automatic splitting with a warning is unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.b.iii"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos3.cursive"
+area = "features"
+milestone = "M8"
+summary = "`pos cursive <glyph or class> <entry anchor> <exit anchor>;` sets entry and exit points; a missing side is written as `<anchor NULL>`. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.c"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos4.markToBase"
+area = "features"
+milestone = "M8"
+summary = "`pos base <glyph or class> <anchor> mark @CLASS ...;` lists, in one statement, every anchor of the base together with the mark class that attaches there. A base class is expanded per glyph and shares anchor and mark records. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.d"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos5.markToLigature"
+area = "features"
+milestone = "M8"
+summary = "`pos ligature <glyph or class> <anchor> mark @C ... ligComponent <anchor> mark @C ...;` gives anchor and mark-class pairs per component, separated by `ligComponent`. All ligatures in a class must have the same component count and anchors. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos5.nullComponent"
+area = "features"
+milestone = "M8"
+summary = "A ligature component that takes no marks must still be written, with a single `<anchor NULL>`; missing anchors for mark classes a component does not use are filled in as null. fea-rs: yes (GPOS_5_null_lig_component test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos6.markToMark"
+area = "features"
+milestone = "M8"
+summary = "`pos mark <glyph or class> <anchor> mark @CLASS ...;` has the same shape as mark-to-base but starts with `mark`; the first glyph is the mark being attached to. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos7.contextual"
+area = "features"
+milestone = "M8"
+summary = "Lookup type 7 has no syntax of its own; rules are written in the chaining form. fea-rs: yes."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.g"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos8.marking"
+area = "features"
+milestone = "M8"
+summary = "Chaining positioning uses the same backtrack, marked input and lookahead layout as chaining substitution. Only glyph and class names take the `'` mark; marking a keyword or a value record is a syntax error. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.h.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos8.lookupReferences"
+area = "features"
+milestone = "M8"
+summary = "`pos T' lookup L1 [o c]' @MARKS' lookup L2;` applies named positioning lookups at marked positions, several per position if wanted and of differing types. fea-rs: yes (spec6h_ii test); referencing a substitution lookup is an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.h.ii"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos8.inlineSingle"
+area = "features"
+milestone = "M8"
+summary = "A value record written directly after a marked glyph adjusts that glyph, e.g. `pos s f' 10 t' -5 period;`. Marked glyphs without a record are left alone. All in-line adjustments in one rule are single positionings. fea-rs: yes (GPOS_8 tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.h.iii"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos8.pairShorthand"
+area = "features"
+milestone = "M8"
+summary = "When exactly one glyph is marked and a single value record closes a run of unmarked glyphs after it, the record applies to the marked glyph: `pos L' quoteright -150;` equals `pos L' -150 quoteright;`. This is the only case where a record may follow an unmarked glyph. fea-rs: yes (spec_6iii_3c test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.h.iii example 3C"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos8.inlineCursive"
+area = "features"
+milestone = "M8"
+summary = "A cursive rule becomes contextual by writing glyphs before the `cursive` keyword or after the anchors; the cursive glyph itself must be marked. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.h.iv"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos8.inlineMark"
+area = "features"
+milestone = "M8"
+summary = "Mark-to-base, mark-to-ligature and mark-to-mark rules become contextual by adding glyphs before the leading keyword, after the base, or after the last mark clause. At least one mark class must be marked; all marked mark classes merge into one input class. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.h.v"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos8.ignore"
+area = "features"
+milestone = "M8"
+summary = "`ignore pos <context> (, <context>)*;` works like ignore substitute for positioning lookups. fea-rs: yes (ignore_pos tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.h.vi"
+status = "docs"
+
+[[behavior]]
+id = "fea.gpos9.extension"
+area = "features"
+milestone = "M8"
+summary = "Lookup type 9 results from `useExtension` on a positioning lookup block. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §6.i"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Ordering
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.order.lookups"
+area = "features"
+milestone = "M8"
+summary = "Lookups are written to the lookup list in the order their blocks or rule runs appear in the file; since every lookup is one pass over the glyph run, this order is the order of application. fea-rs: yes; when external code inserts lookups the order is kept through `# Automatic Code` markers."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §7.a, §7.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.order.aaltFirst"
+area = "features"
+milestone = "M8"
+summary = "Lookups generated for aalt are placed before all others in GSUB, and aalt is the first feature. fea-rs: yes (aalt_lookup_ids test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §7.b, §8.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.order.rules"
+area = "features"
+milestone = "M8"
+summary = "Written order matters only for chaining contextual rules, which are stored as written; for every other type the compiler sorts as needed. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §7.c"
+status = "docs"
+
+[[behavior]]
+id = "fea.order.subtables"
+area = "features"
+milestone = "M8"
+summary = "Subtables keep the order of their rules when that order affects layout; otherwise the compiler may arrange them freely. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §7.b"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Specially handled features
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.aalt.featureReference"
+area = "features"
+milestone = "M8"
+summary = "Inside `feature aalt`, `feature TAG;` pulls in every single and alternate substitution of that feature, including single substitutions inside chaining rules. The aalt block must precede the features it names. fea-rs: yes (aalt_contextual test); a missing referenced feature is a warning and a feature reference outside aalt is an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.a step 1"
+status = "docs"
+
+[[behavior]]
+id = "fea.aalt.extraRules"
+area = "features"
+milestone = "M8"
+summary = "Single and alternate substitutions written directly in the aalt block are added to the collected groups, and their alternates are listed before the collected ones. fea-rs: yes (aalt_rule_order test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.a step 2"
+status = "docs"
+
+[[behavior]]
+id = "fea.aalt.grouping"
+area = "features"
+milestone = "M8"
+summary = "Per target glyph, duplicates are removed; one alternate yields a single substitution and several yield an alternate substitution, ordered by the order the source features are named in aalt. fea-rs: partial (the fontTools spec8a_2 comparison is on its ignore list)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.a step 3"
+status = "docs"
+
+[[behavior]]
+id = "fea.aalt.restrictions"
+area = "features"
+milestone = "M8"
+summary = "script, language, lookupflag and subtable statements, named lookup blocks and lookup references are not allowed in aalt; it is registered under all languagesystem entries with lookup flag 0, and `feature aalt useExtension {` makes its lookups extension lookups. fea-rs: yes (aalt_script_statement is an expected error; aalt_useextension test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.size.parameters"
+area = "features"
+milestone = "M8"
+summary = "The size feature holds no rules, only `parameters designSize subfamilyID rangeStart rangeEnd;`. Whole numbers are decipoints and numbers with a decimal point are points. With subfamily 0 the two range values may be left out. fea-rs: yes (size tests; bad_size tests for invalid forms)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.size.sizemenuname"
+area = "features"
+milestone = "M8"
+summary = "`sizemenuname [platform [script language]] \"string\";` adds a menu name for the size group, using name-table string syntax and allocating a name ID from 256 up. It must be present when the font belongs to a size group and absent otherwise. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.size.restrictions"
+area = "features"
+milestone = "M8"
+summary = "No script, language, lookup or rule statements are allowed in size; it is written to GPOS with zero lookups and registered under every languagesystem entry. fea-rs: yes (size_script_statement is an expected error)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.featureNames"
+area = "features"
+milestone = "M8"
+summary = "In ss01-ss20, `featureNames { name [platform [script language]] \"string\"; ... };` placed before any rule gives the set a user-visible name per platform and language; name IDs are allocated automatically and referenced from the feature parameters. fea-rs: yes (spec8c test); a second block or a block outside ss01-ss20 gives a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.c"
+status = "docs"
+
+[[behavior]]
+id = "fea.cvParameters"
+area = "features"
+milestone = "M8"
+summary = "In cv01-cv99, a `cvParameters { ... };` block before any rule may contain, in this order, FeatUILabelNameID, FeatUITooltipTextNameID, SampleTextNameID (each at most once) and any number of ParamUILabelNameID groups, each holding `name` entries. fea-rs: yes (spec8d test); a duplicate block is ignored with a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.d"
+status = "docs"
+
+[[behavior]]
+id = "fea.cvParameters.character"
+area = "features"
+milestone = "M8"
+summary = "After the name groups, `Character N;` entries list the Unicode values the feature applies to, in decimal or 0x hexadecimal, up to 0xFFFFFF. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.d"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Table blocks
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.table.block"
+area = "features"
+milestone = "M8"
+summary = "`table TAG { ... } TAG;` sets or overrides fields of BASE, GDEF, head, hhea, name, OS/2, vhea, vmtx and STAT. Any other tag is an error. fea-rs: yes for these nine tables."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.base.tagList"
+area = "features"
+milestone = "M8"
+summary = "`HorizAxis.BaseTagList` and `VertAxis.BaseTagList` list baseline tags, which must be in ascending ASCII order. Without any BASE entry no BASE table is written. fea-rs: yes; unknown baseline tags give a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.base.scriptList"
+area = "features"
+milestone = "M8"
+summary = "`HorizAxis.BaseScriptList` and `VertAxis.BaseScriptList` take comma-separated records of script tag, default baseline tag and one coordinate per tag in the tag list. fea-rs: yes (base_table test; bad_base_table for count mismatches)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.base.minMax"
+area = "features"
+milestone = "M8"
+summary = "`HorizAxis.MinMax` and `VertAxis.MinMax` give min and max extents for a script and language, optionally followed by per-feature overrides. Adobe does not implement them, nor base coordinate formats B (with glyph and point) and C (with device). fea-rs: partial (parsed, minmax parse test; the compile step is marked not yet implemented)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.a"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.gdef.glyphClassDef"
+area = "features"
+milestone = "M8"
+summary = "`GlyphClassDef <base>, <ligature>, <mark>, <component>;` assigns glyph classes; any of the four may be empty but all three commas are required, and unlisted glyphs get class 0. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.gdef.attach"
+area = "features"
+milestone = "M8"
+summary = "`Attach <glyph or class> N+;` lists attachment contour point indexes for a glyph. fea-rs: yes (Attach test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.gdef.ligatureCaretByPos"
+area = "features"
+milestone = "M8"
+summary = "`LigatureCaretByPos <glyph or class> x+;` gives caret coordinates, one fewer than the number of components. A glyph may have only one caret statement of either kind. fea-rs: yes; negative positions are accepted."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.gdef.ligatureCaretByIndex"
+area = "features"
+milestone = "M8"
+summary = "`LigatureCaretByIndex <glyph or class> N+;` gives carets as contour point indexes. fea-rs: yes; a negative index is an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.gdef.ligatureCaretByDev"
+area = "features"
+milestone = "M8"
+summary = "A caret form with device tables is reserved in the grammar but not specified in detail or implemented by Adobe. fea-rs: no (the statement is parsed and discarded)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.gdef.derivedClasses"
+area = "features"
+milestone = "M8"
+summary = "MarkAttachClassDef and MarkGlyphSets cannot be written in a GDEF block; they come only from the classes used with MarkAttachmentType and UseMarkFilteringSet. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.b"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.head.fontRevision"
+area = "features"
+milestone = "M8"
+summary = "`FontRevision 1.001;` sets the font version as a decimal with three fraction digits, stored as 16.16 fixed and also used for the version name string; fewer digits are accepted with a warning about how the value will be read. fea-rs: yes; a later statement overrides an earlier one with a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.c"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.hhea"
+area = "features"
+milestone = "M8"
+summary = "The hhea block accepts CaretOffset, CaretSlopeRise, CaretSlopeRun, Ascender, Descender and LineGap, each with one metric. fea-rs: partial (CaretOffset, Ascender, Descender and LineGap only; the caret slope keywords are not in its grammar)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.d"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.name.nameid"
+area = "features"
+milestone = "M8"
+summary = "`nameid ID [platform [encoding language]] \"string\";` adds a name record. Platform may be 1 or 3; other IDs are 0-65535. Missing attributes default to platform 3, encoding 1, language 0x0409, or for platform 1 to encoding 0 and language 0. fea-rs: yes (name, spec9e tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.name.reserved"
+area = "features"
+milestone = "M8"
+summary = "Name IDs the compiler owns (the spec text names 2 and 6 and lists the family, subfamily, unique, full, version and PostScript names) cannot be overridden; such a record is dropped with a warning. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.name.strings"
+area = "features"
+milestone = "M8"
+summary = "Strings are UTF-8 between double quotes with embedded line breaks removed. For platform 3 a backslash plus four hex digits gives a UTF-16 code unit (backslash is \\005c, quote \\0022); for platform 1 a backslash plus two hex digits gives a Mac Roman byte (\\5c, \\22). fea-rs: yes; escapes of the wrong length are errors (name_table_encoding test) and unsupported platform encodings give a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.e"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.fsType"
+area = "features"
+milestone = "M8"
+summary = "`FSType N;` sets the embedding permission bits; the spelling `fsType` is accepted too. fea-rs: yes for FSType; the lowercase spelling is unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f, revision v1.5"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.panose"
+area = "features"
+milestone = "M8"
+summary = "`Panose n n n n n n n n n n;` takes ten decimal numbers. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.unicodeRange"
+area = "features"
+milestone = "M8"
+summary = "`UnicodeRange` takes a white-space separated list of Unicode range bit numbers to set. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.codePageRange"
+area = "features"
+milestone = "M8"
+summary = "`CodePageRange` takes a list of Windows code page numbers (1252, 1251, 932 ...) that are mapped to the code page range bits. fea-rs: yes; an unknown code page is an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.typoMetrics"
+area = "features"
+milestone = "M8"
+summary = "`TypoAscender`, `TypoDescender` (negative below the baseline) and `TypoLineGap` each take one metric. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.winMetrics"
+area = "features"
+milestone = "M8"
+summary = "`winAscent` and `winDescent` each take one metric; winDescent is positive below the baseline. fea-rs: yes; negative values are an error."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.heights"
+area = "features"
+milestone = "M8"
+summary = "`XHeight` and `CapHeight` each take one metric. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.classes"
+area = "features"
+milestone = "M8"
+summary = "`WeightClass`, `WidthClass` and `FamilyClass` each take one number; FamilyClass packs class and subclass into two bytes and is usually written in hexadecimal. fea-rs: yes; an unknown family class gives a warning."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.vendor"
+area = "features"
+milestone = "M8"
+summary = "`Vendor \"ABCD\";` sets the vendor ID; shorter strings are padded with spaces and longer ones are an error. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.opticalSize"
+area = "features"
+milestone = "M8"
+summary = "`LowerOpSize` and `UpperOpSize` set the optical point size range in twentieths of a point and force OS/2 version 5 or later. fea-rs: yes."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.os2.scriptAndStrikeout"
+area = "features"
+milestone = "M8"
+summary = "Version 1.27 adds SubscriptXSize, SubscriptXOffset, SubscriptYSize, SubscriptYOffset, the four Superscript equivalents, StrikeoutSize and StrikeoutPosition, each taking one metric. fea-rs: no (these keywords do not appear in its grammar)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.vhea"
+area = "features"
+milestone = "M8"
+summary = "The vhea block accepts VertTypoAscender, VertTypoDescender and VertTypoLineGap, plus CaretOffset, CaretSlopeRise and CaretSlopeRun. fea-rs: partial (the three VertTypo fields; caret fields unknown)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.g"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.vmtx"
+area = "features"
+milestone = "M8"
+summary = "`VertOriginY <glyph> N;` and `VertAdvanceY <glyph> N;` override one glyph's vertical origin and advance; the origin also sets the top side bearing and the VORG entry. Defaults are TypoAscender for the origin and ascender minus descender for the advance, or the upright glyph's horizontal advance for vrt2 targets. fea-rs: yes for the two statements; the defaults are the font compiler's job."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.h"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.stat.elidedFallbackName"
+area = "features"
+milestone = "M8"
+summary = "`ElidedFallbackName { name ...; };` or `ElidedFallbackNameID N;` must appear exactly once; the ID form must point at an existing name record. fea-rs: yes (STAT_test tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.stat.designAxis"
+area = "features"
+milestone = "M8"
+summary = "`DesignAxis TAG ordering { name ...; };` declares an axis with its ordering number and names; every fvar axis must be listed, extra axes are allowed. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.stat.axisValue"
+area = "features"
+milestone = "M8"
+summary = "`AxisValue { location ...; name ...; flag ...; };` defines one axis value record with one or more names; `flag` is optional and may combine ElidableAxisValueName and OlderSiblingFontAttribute. fea-rs: yes (parse or compile tests cover it)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.table.stat.locationFormats"
+area = "features"
+milestone = "M8"
+summary = "`location TAG value;` once gives format 1 and several times gives format 4; `location TAG nominal min max;` gives format 2; `location TAG value linked;` gives format 3. Formats 2 and 3 allow only one location statement. Values are signed decimals up to 32767.99998; the extreme values stand for open-ended ranges (the spec text gives -32767 as the lower extreme, its example uses -32768). fea-rs: yes (STAT_test; STAT_bad for invalid combinations)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.i"
+status = "docs"
+
+[[behavior]]
+id = "fea.anonymous"
+area = "features"
+milestone = "M8"
+summary = "`anonymous TAG { ... } TAG;` (or `anon`) carries raw text that the compiler does not parse and hands to its caller with the tag. The closing brace, tag and semicolon must share one line, and include is not processed inside. fea-rs: partial (the block is parsed and skipped, spec10 test; handing the content to a caller is not shown)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §10"
+status = "docs"
+
+[[behavior]]
+id = "fea.legacy.except"
+area = "features"
+milestone = "M8"
+summary = "Files older than v1.2 may use `except <sequences> sub ...` instead of `ignore sub`; Adobe still reads it with a notice. FontCraft may reject it with a hint to rewrite. fea-rs: no (no such keyword)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §11 v1.2"
+status = "docs"
+
+[[behavior]]
+id = "fea.legacy.bareValueRecord"
+area = "features"
+milestone = "M8"
+summary = "Files older than v1.2 may write a four-value record without angle brackets (`pos a 80 0 -160 0;`); Adobe still reads it with a notice. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §11 v1.2"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Variable-font extensions
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "fea.var.location"
+area = "features"
+milestone = "M9"
+summary = "A designspace location is a comma-separated list of `tag=value` entries, at most one per axis; axes left out sit at their default. fea-rs: yes (variable_metrics tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iia; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.locationUnits"
+area = "features"
+milestone = "M9"
+summary = "Each axis value carries a unit letter: `u` for user coordinates, `d` for design coordinates, `n` for normalised coordinates between -1 and 1. The guide requires a unit, while one example in the spec omits it. fea-rs: partial (the unit suffix is optional and described as experimental; how a value without unit is read is for the caller's variation info to decide)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iia; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.locationNudge"
+area = "features"
+milestone = "M9"
+summary = "A `+` or `-` after the unit letter moves the normalised position by one F2Dot14 step up or down, to place two locations right next to each other. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iia; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.locationDef"
+area = "features"
+milestone = "M9"
+summary = "`locationDef <location> @name;` names a location; the name starts with `@`, then a letter or underscore, then letters, digits, underscores or periods, never a hyphen. It can then replace a literal location. fea-rs: no (keyword not present)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iib; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.scalar"
+area = "features"
+milestone = "M9"
+summary = "`(default loc:value loc:value ...)` in parentheses is a number that varies; pairs are separated by white space, and at most one value may omit its location, which makes it the value at the default location. fea-rs: yes in positioning rules and anchors (variable_scalar tests from fontTools); a second default and unknown axes are errors."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format B; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.valueRecordPerMetric"
+area = "features"
+milestone = "M9"
+summary = "Inside angle brackets any of the four metrics may be a parenthesised variable value: `<0 0 (20 loc:30) 0>`. Best when only some metrics vary or they use different locations. fea-rs: yes (variable_value_record tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format C; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.valueRecordPerLocation"
+area = "features"
+milestone = "M9"
+summary = "`(<a b c d> loc:<a b c d> ...)` gives a full four-value record per location inside one pair of parentheses. Best when all metrics use the same locations. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.iv format D; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.valueRecordDef"
+area = "features"
+milestone = "M9"
+summary = "valueRecordDef accepts the variable forms, so a named record can vary. fea-rs: yes (variable_value_record parse test)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.v; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.anchorPerMetric"
+area = "features"
+milestone = "M9"
+summary = "Either or both anchor coordinates may be parenthesised variable values. fea-rs: yes (variable_anchor, variable_mark_anchor tests)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.anchorPerLocation"
+area = "features"
+milestone = "M9"
+summary = "`<anchor (<x y> loc:<x y> ...)>` gives a coordinate pair per location inside one pair of parentheses. fea-rs: unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.vii; AFDKO Variable_Feature_Guide.md"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.anchorDef"
+area = "features"
+milestone = "M9"
+summary = "anchorDef accepts both variable anchor forms. fea-rs: yes for per-coordinate values (variable_anchor parse test); per-location pairs unknown."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §2.e.viii"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.tableValues"
+area = "features"
+milestone = "M9"
+summary = "Variable values are allowed for BASE coordinates, GDEF LigatureCaretByPos positions, the hhea and vhea caret fields, the OS/2 metric fields and the vmtx overrides; they are meant to end up in the matching variation tables (MVAR, VVAR, item variation stores). fea-rs: partial (parsed; the validator rejects variable metrics in several table blocks as not yet supported)."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.a, §9.b, §9.d, §9.f, §9.g, §9.h"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.conditionset"
+area = "features"
+milestone = "M9"
+summary = "`conditionset NAME { tag min max; ... } NAME;` names a set of axis ranges that must all hold. This is not in AFDKO spec 1.27, which leaves feature variations unspecified; it comes from the syntax proposed in afdko pull request 1350 and implemented by fontTools feaLib. fea-rs: yes (variable_conditionset tests; fractional bounds allowed; unknown axis and out-of-range bounds are errors)."
+ref = "fea-rs (fontc/fea-rs) parse grammar and tests; afdko PR 1350"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.variation"
+area = "features"
+milestone = "M9"
+summary = "`variation TAG CONDSET { ... } TAG;` gives the lookups that replace the feature's normal lookups while the condition set matches, producing a FeatureVariations record. The lookups of the ordinary feature block of the same tag are included as well. fea-rs: yes (variation_block, variable_feature_include_base tests)."
+ref = "fea-rs (fontc/fea-rs) parse grammar and tests; afdko PR 1350"
+status = "docs"
+
+[[behavior]]
+id = "fea.var.variationNull"
+area = "features"
+milestone = "M9"
+summary = "`variation TAG NULL { ... } TAG;` writes a feature variation record with no condition set, which therefore always applies. fea-rs: yes (variable_feature_null_conditionset test)."
+ref = "fea-rs (fontc/fea-rs) compile tests"
+status = "docs"

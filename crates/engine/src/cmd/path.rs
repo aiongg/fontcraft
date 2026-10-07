@@ -1,0 +1,71 @@
+//! Path menu and the headless forms of the drawing tools.
+
+use fontcraft_model::{Layer, Node, NodeKind, Path, Shape};
+use serde_json::{Value, json};
+
+use super::*;
+use crate::params::{Params, kind};
+
+/// Most nodes one path may be given (a guard against hostile input).
+const MAX_NODES: usize = 100_000;
+
+pub fn specs() -> Vec<CommandSpec> {
+    vec![cmd!(
+        "path.addPath",
+        "Add Path",
+        [],
+        None,
+        "{glyph: name, layer?: master id (default: the first master), closed?: bool = true, nodes: [{x, y, type?: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\" (default line), smooth?: bool}]} append a path, nodes in path direction: two offcurve nodes before each curve node, one or more before a qcurve node; coordinates within ±1,000,000, at most 100,000 nodes → {glyph, layer, shape: index, nodes: count}",
+        has_doc,
+        add_path
+    )]
+}
+
+fn node(p: &Params, v: &Value) -> Result<Node> {
+    let Value::Object(o) = v else {
+        return Err(p.bad(format!("each node must be an object {{x, y, type?}}, found {}", kind(v))));
+    };
+    let coord = |key: &str| {
+        o.get(key).and_then(Value::as_f64).filter(|n| n.is_finite()).ok_or_else(|| p.bad(format!("a node's `{key}` must be a finite number")))
+    };
+    let node_kind = match o.get("type").and_then(Value::as_str).unwrap_or("line") {
+        "line" => NodeKind::Line,
+        "curve" => NodeKind::Curve,
+        "qcurve" => NodeKind::QCurve,
+        "offcurve" => NodeKind::OffCurve,
+        other => return Err(p.bad(format!("a node's `type` must be line, curve, qcurve or offcurve, got \"{other}\""))),
+    };
+    let mut out = Node::new(coord("x")?, coord("y")?, node_kind);
+    out.smooth = o.get("smooth").and_then(Value::as_bool).unwrap_or(false);
+    Ok(out)
+}
+
+fn add_path(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("path.addPath", p)?;
+    let glyph = p.str("glyph")?.to_string();
+    let list = p.array("nodes")?;
+    if list.is_empty() {
+        return Err(p.bad("`nodes` is empty"));
+    }
+    if list.len() > MAX_NODES {
+        return Err(p.bad(format!("`nodes` holds {} nodes; at most {MAX_NODES} are allowed", list.len())));
+    }
+    let path =
+        Path { closed: p.bool_or("closed", true)?, nodes: list.iter().map(|v| node(&p, v)).collect::<Result<Vec<_>>>()?, extra: Default::default() };
+    path.to_bez().map_err(|why| p.bad(why))?;
+    let count = path.nodes.len();
+    let layer = match p.opt_str("layer")? {
+        Some(id) => s.font()?.master(id)?.id.clone(),
+        None => s.font()?.default_master()?.id.clone(),
+    };
+    let index = s.edit("Add Path", |font| {
+        let g = font.glyph_mut(&glyph)?;
+        if g.layer(&layer).is_none() {
+            g.layers.push(Layer::new(&layer, 600.0));
+        }
+        let Some(l) = g.layer_mut(&layer) else { return Err(fontcraft_model::ModelError::NoSuchMaster(layer.clone()).into()) };
+        l.shapes.push(Shape::Path(path));
+        Ok(l.shapes.len() - 1)
+    })?;
+    Ok(json!({ "glyph": glyph, "layer": layer, "shape": index, "nodes": count }))
+}

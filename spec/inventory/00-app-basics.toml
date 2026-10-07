@@ -1,0 +1,201 @@
+# Application-wide commands and rules that no handbook chapter owns: the Edit menu's undo and
+# clipboard commands, closing and quitting, and the commands agents use to discover the others.
+# Written for FontCraft on 2026-10-07. The menu items and shortcuts are the platform conventions
+# every document app follows (status "memory": to be checked against the running reference app);
+# the agent-facing commands are our own design (status "inferred").
+
+[[command]]
+id = "edit.undo"
+label = "Undo"
+menu = ["Edit"]
+shortcut = "Cmd+Z"
+kind = "engine"
+params = "{} → {undone: label, revision}"
+area = "ui-chrome"
+milestone = "M0"
+summary = "Reverts the last change of the active document and moves it to the redo list. FontCraft keeps one history per document; the reference keeps one per glyph, with font-level changes outside it (docs/spec/00-open-decisions.md, D4)."
+ref = "platform convention"
+status = "memory"
+
+[[command]]
+id = "edit.redo"
+label = "Redo"
+menu = ["Edit"]
+shortcut = "Cmd+Shift+Z"
+kind = "engine"
+params = "{} → {redone: label, revision}"
+area = "ui-chrome"
+milestone = "M0"
+summary = "Reapplies the change last undone. Any new change empties the redo list."
+ref = "platform convention"
+status = "memory"
+
+[[command]]
+id = "edit.cut"
+label = "Cut"
+menu = ["Edit"]
+shortcut = "Cmd+X"
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [node or shape refs]} → {copied: count}"
+area = "drawing"
+milestone = "M3"
+summary = "Copies the selection to the clipboard and removes it: nodes, paths, components and anchors in Edit View, whole glyphs in Font View, text in text mode."
+ref = "platform convention"
+status = "memory"
+
+[[command]]
+id = "edit.copy"
+label = "Copy"
+menu = ["Edit"]
+shortcut = "Cmd+C"
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, selection?: [node or shape refs]} → {copied: count, flavours: [string]}"
+area = "drawing"
+milestone = "M3"
+summary = "Puts the selection on the clipboard in FontCraft's own JSON flavour and, for outlines, as SVG and PDF so other apps can paste it. In Font View it copies whole glyphs with all their layers."
+ref = "platform convention"
+status = "memory"
+
+[[command]]
+id = "edit.paste"
+label = "Paste"
+menu = ["Edit"]
+shortcut = "Cmd+V"
+kind = "engine"
+params = "{glyph?: name, layer?: id, at?: [x, y], data?: clipboard payload} → {pasted: count}"
+area = "drawing"
+milestone = "M3"
+summary = "Inserts the clipboard contents into the active layer at their original coordinates (or at `at`), or as glyphs in Font View. Outlines from other apps arrive through the SVG or PDF flavour. Paste Special and Paste After are separate commands (edit.pasteSpecial, edit.pasteAfter)."
+ref = "platform convention"
+status = "memory"
+
+[[command]]
+id = "file.close"
+label = "Close"
+menu = ["File"]
+shortcut = "Cmd+W"
+kind = "engine"
+params = "{discard?: bool} → {closed: title}"
+area = "ui-chrome"
+milestone = "M0"
+summary = "Closes the active document. With unsaved changes the app asks Save, Don't Save or Cancel; headless, the command fails unless discard is true."
+ref = "platform convention"
+status = "memory"
+
+[[command]]
+id = "file.openRecent"
+label = "Open Recent"
+menu = ["File"]
+shortcut = ""
+kind = "ui"
+params = "{index?: number, path?: string} → {title, path}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Reopens one of the recently used documents; the list is kept with the preferences and can be cleared."
+ref = "platform convention"
+status = "memory"
+
+[[command]]
+id = "app.quit"
+label = "Quit FontCraft"
+menu = ["FontCraft"]
+shortcut = "Cmd+Q"
+kind = "ui"
+params = "{discard?: bool} → {}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Quits after asking about each document with unsaved changes. Background saves and exports finish first."
+ref = "platform convention"
+status = "memory"
+
+[[command]]
+id = "app.about"
+label = "About FontCraft"
+menu = ["FontCraft"]
+shortcut = ""
+kind = "ui"
+params = "{} → {version, licences}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Shows the version, the licences of FontCraft and of everything it ships, and the graphics adapter in use."
+ref = "platform convention"
+status = "inferred"
+
+[[command]]
+id = "path.convertToCubic"
+label = "Convert to Cubic"
+menu = ["Path", "Other"]
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], layer?: id, allMasters?: bool} → {glyphs: [names], segments: count}"
+area = "path-ops"
+milestone = "M3"
+summary = "Rewrites quadratic segments as cubic ones, exactly (every quadratic curve has one cubic form). The opposite, path.convertToQuadratic, approximates within the compiler's tolerance. Referenced by the import notes for TrueType outlines; the menu position is not confirmed."
+ref = "Import & Export (referenced only)"
+status = "memory"
+
+[[command]]
+id = "document.inspect"
+label = "Inspect Documents"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{} → {documents: [{index, active, title, path, modified, revision, familyName, glyphs, masters, undo, redo}], active}"
+area = "automation"
+milestone = "M0"
+summary = "Summarises the open documents. `revision` grows with every change, so an agent can tell whether a document changed since it last looked, whoever changed it."
+ref = "FontCraft design (docs/control-protocol.md)"
+status = "inferred"
+
+[[command]]
+id = "command.batch"
+label = "Run Commands as One Step"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{label?: string, steps: [{command: id, params?: object}]} → {results: [value]}"
+area = "automation"
+milestone = "M1"
+summary = "Runs several commands as one transaction and one undo step: if any step fails, none of them takes effect. The building block of actions, scripts and multi-step agent edits."
+ref = "FontCraft design, following the sibling apps"
+status = "inferred"
+
+[[behavior]]
+id = "commands.failedCommandChangesNothing"
+area = "automation"
+milestone = "M0"
+summary = "A command that returns an error leaves every document, its history and the journal exactly as they were. The engine snapshots before each top-level command and restores on error or on an internal failure."
+ref = "FontCraft design (docs/architecture.md › Commands)"
+status = "inferred"
+
+[[behavior]]
+id = "commands.neverPanic"
+area = "automation"
+milestone = "M0"
+summary = "No command panics, whatever its parameters and the document state: wrong types, absurd sizes, missing glyphs, cyclic components and non-finite numbers are errors that name the command and the parameter. Checked by the junk-parameter sweep over the whole registry."
+ref = "AGENTS.md › Never crash"
+status = "inferred"
+
+[[behavior]]
+id = "commands.explicitTargets"
+area = "automation"
+milestone = "M0"
+summary = "Every engine command can name what it acts on (glyphs, layer, nodes, paths) in its parameters. The UI fills those from its selection; agents and the CLI pass them. No engine command depends on UI state."
+ref = "FontCraft design (docs/architecture.md › Commands)"
+status = "inferred"
+
+[[behavior]]
+id = "commands.queriesNotJournaled"
+area = "automation"
+milestone = "M0"
+summary = "Commands that only read are queries: they are not recorded in the journal and do not create undo steps."
+ref = "FontCraft design"
+status = "inferred"
+
+[[behavior]]
+id = "shortcuts.platformMapping"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Shortcuts are stored in Mac notation. On Windows and Linux, Cmd maps to Ctrl and Alt stays Alt; a shortcut that already uses Ctrl together with Cmd gets a documented alternative, since the two would collide. The mapping table lives with the shortcut editor."
+ref = "FontCraft design, following the sibling apps"
+status = "inferred"

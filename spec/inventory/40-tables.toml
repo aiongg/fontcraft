@@ -1,0 +1,1698 @@
+# Compile inventory: OpenType tables and compiler rules.
+# Date: 2026-10-07
+#
+# Sources (all permissively licensed, read as code and docs from local clones):
+#   fontations  (MIT/Apache-2.0)  refs/fontations @ d6a9007
+#       read-fonts 0.45.0, write-fonts 0.54.0, font-types 0.12.6, skrifa 0.48.0, skera 0.8.0, kurbo 0.13.0
+#       read-fonts/src/tables/, read-fonts/src/ps/, write-fonts/src/tables/, write-fonts/src/ps/,
+#       write-fonts/generated/, write-fonts/src/font_builder.rs
+#   fontc       (Apache-2.0)      refs/fontc @ f7d2bd9  (fontc, fontbe, fontir, fea-rs all 1.0.0)
+#       README.md, fontc/src/args.rs, fontbe/src/*.rs, fontbe/src/features/*.rs, fontir/src/glyph.rs,
+#       fontir/src/ir.rs, fontir/src/ir/static_metadata.rs, ufo2fontir/src/source.rs, glyphs2fontir/src/source.rs
+#   fontmake    (Apache-2.0)      refs/fontmake @ 92f6ea7  (pins fonttools 4.63.0, ufo2ft 3.8.0, glyphsLib 6.11.6,
+#       cffsubr 0.3.0, compreffor 0.6.0)  README.md, USAGE.md, Lib/fontmake/__main__.py, font_project.py
+#   fonttools   (MIT)             refs/fonttools @ 9d3adb4 (4.66.2.dev0)  ttLib/ttFont.py, ttLib/woff2.py,
+#       ttLib/sfnt.py, ttLib/ttCollection.py, cu2qu/, cffLib/__init__.py, cffLib/width.py, misc/timeTools.py
+#   AFDKO       (Apache-2.0)      refs/afdko @ c53bdc6  docs/MakeOTFUserGuide.md, WinWeights.md, CFF2_Support.md,
+#       CIDKeyedUFOGuide.md, python/afdko/makeotf.py (option help), buildmasterotfs.py, buildcff2vf.py,
+#       c/addfeatures/hotconv/{hot,name,head,hmtx,post,map}.cpp
+#
+# ufo2ft and glyphsLib are NOT in the reference folder. Where a row describes their behaviour it does so
+# through fontmake's documentation or through fontc source comments that cite them, and says so.
+#
+# Conventions used in this file
+#   read  = "read-fonts"  a typed reader exists in read-fonts 0.45.0
+#           "own"         read-fonts has no typed reader; we parse the bytes ourselves
+#   write = "write-fonts" a typed, serialising table exists in write-fonts 0.54.0 and is exported from src/tables.rs
+#           "own"         no typed writer, but the payload is an opaque or trivial byte array that we emit
+#                         ourselves through FontBuilder::add_raw
+#           "none-yet"    write-fonts has no usable writer and a real encoder has to be built by us
+#   flavour values: "ttf", "otf" (CFF), "variable-ttf", "variable-otf" (CFF2)
+#   status = "docs" for facts read in the references above, "inferred" for FontCraft design choices,
+#            "memory" where a fact is recalled and could not be checked in the reference folder.
+
+# ---------------------------------------------------------------------------------------------------
+# Tables: static core (M2)
+# ---------------------------------------------------------------------------------------------------
+
+[[table]]
+tag = "head"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "unitsPerEm, fontRevision (major.minor with the minor as three literal decimal digits), flags, created/modified, font bounding box, macStyle mirrored from OS/2 fsSelection bold and italic, lowestRecPPEM, indexToLocFormat from the loca builder. checksumAdjustment is filled by the font assembler, not the table builder. fontc and makeotf both default flags to bits 0 and 1; they differ on lowestRecPPEM (6 against 3)."
+ref = "fontc fontbe/src/head.rs, fontir/src/ir/static_metadata.rs; write-fonts src/font_builder.rs; AFDKO hotconv/head.cpp"
+status = "docs"
+
+[[table]]
+tag = "hhea"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "Line metrics (ascender, descender, lineGap) from the default master's global metrics, caret slope rise/run/offset, advanceWidthMax over all glyphs, minimum left and right side bearing and xMaxExtent over glyphs with outlines only, and numberOfHMetrics from the hmtx builder. A FEA table hhea block overrides Ascender, Descender, LineGap and CaretOffset."
+ref = "fontc fontbe/src/metrics_and_limits.rs; AFDKO hotconv/hmtx.cpp"
+status = "docs"
+
+[[table]]
+tag = "hmtx"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "One advance and left side bearing per glyph in glyph order: advance is the default-master width rounded, lsb is the glyph's xMin (0 for empty glyphs). A trailing run of equal advances is collapsed so only the first of the run keeps a full record and the rest store lsb only. For CFF2 fonts this table is the only place advances live."
+ref = "fontc fontbe/src/metrics_and_limits.rs; AFDKO docs/CFF2_Support.md"
+status = "docs"
+
+[[table]]
+tag = "maxp"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "numGlyphs for every font. For TrueType outlines also maxPoints, maxContours, maxCompositePoints, maxCompositeContours, maxComponentElements and maxComponentDepth computed from the built glyphs; fontc writes maxZones 1 and zero for all instruction limits because it emits no instructions. write-fonts picks version 0.5 or 1.0 from which optional fields are set, so the CFF flavours must leave them unset."
+ref = "fontc fontbe/src/metrics_and_limits.rs; write-fonts src/tables/maxp.rs; AFDKO docs/CFF2_Support.md"
+status = "docs"
+
+[[table]]
+tag = "OS/2"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "Weight and width class, fsType, vendor id, fsSelection, PANOSE, family class, typo and win metrics, sub/superscript and strikeout metrics, x-height and cap height, xAvgCharWidth, Unicode and code page range bits, first/last char index, default and break char, usMaxContext. Computed fields are derived from cmap, hmtx and GSUB/GPOS; a FEA table OS/2 block overrides only the fields it names. write-fonts derives the table version from which optional fields are present (4 when the version 2 fields are set, 5 with optical size bounds)."
+ref = "fontc fontbe/src/os2.rs; write-fonts src/tables/os2.rs; AFDKO docs/MakeOTFUserGuide.md, hotconv/hot.cpp"
+status = "docs"
+
+[[table]]
+tag = "name"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "Name records from font info plus derived defaults for IDs 1, 2, 3, 4, 5, 6 and optionally 16/17, then the axis, instance and STAT label names from ID 256 up, then records from a FEA table name block which replace records with the same platform, encoding, language and name id. fontc and fontmake write Windows platform records only; makeotf writes Windows and Macintosh records unless told to omit the Mac ones."
+ref = "fontc fontir/src/ir.rs (NameBuilder), fontbe/src/name.rs; AFDKO docs/MakeOTFUserGuide.md, hotconv/name.cpp"
+status = "docs"
+
+[[table]]
+tag = "cmap"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "Codepoint to glyph map built from every glyph's Unicode values. write-fonts Cmap::from_mappings emits a format 4 subtable shared by the (0,3) and (3,1) encoding records and, only when a supplementary-plane character exists, a format 12 subtable shared by (0,4) and (3,10); fontc adds a format 14 subtable at (0,5) for variation sequences. Typed structs exist for formats 0, 2, 4, 6, 8, 10, 12, 13 and 14, but builders only for 4, 12 and 14."
+ref = "write-fonts src/tables/cmap.rs; fontc fontbe/src/cmap.rs; AFDKO hotconv/map.cpp"
+status = "docs"
+
+[[table]]
+tag = "post"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "italicAngle, underlinePosition, underlineThickness, isFixedPitch and, in version 2.0, the glyph names in glyph order (the 258 standard Macintosh names by index, other names in a deduplicated string pool). write-fonts has a helper only for version 2.0 (Post::new_v2); a version 3.0 table is built by setting the fields directly. fontc always writes 2.0; makeotf writes 3.0 for CFF because the CFF table already carries the names."
+ref = "write-fonts src/tables/post.rs; fontc fontbe/src/post.rs; AFDKO hotconv/post.cpp, docs/CFF2_Support.md"
+status = "docs"
+
+[[table]]
+tag = "glyf"
+flavour = ["ttf", "variable-ttf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "Quadratic outlines of the default master, one simple or composite glyph per glyph id. write-fonts covers simple glyphs (built from a kurbo BezPath, with an overlaps flag that sets OVERLAP_SIMPLE on the first point and an opaque instruction byte array), composite glyphs (component flags including USE_MY_METRICS, ROUND_XY_TO_GRID and OVERLAP_COMPOUND, 2x2 transforms, instructions) and a GlyfLocaBuilder; it does not assemble instructions and has no cubic (glyf version 1) outlines."
+ref = "write-fonts src/tables/glyf.rs, glyf/simple.rs, glyf/composite.rs, glyf/glyf_loca_builder.rs; fontc fontbe/src/glyphs.rs"
+status = "docs"
+
+[[table]]
+tag = "loca"
+flavour = ["ttf", "variable-ttf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "Glyph offsets produced together with glyf by GlyfLocaBuilder, which also reports whether the short or long format was chosen so head.indexToLocFormat can be set to match."
+ref = "write-fonts src/tables/loca.rs, glyf/glyf_loca_builder.rs; fontc fontbe/src/glyphs.rs"
+status = "docs"
+
+[[table]]
+tag = "CFF "
+flavour = ["otf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M2"
+summary = "Cubic outlines as Type 2 charstrings plus Name, Top DICT, String, Global Subr, Charset, CharStrings, Private DICT and Local Subr structures, and FDArray/FDSelect for CID-keyed fonts. read-fonts parses all of it and evaluates charstrings. write-fonts 0.54.0 cannot write it: generated/generated_cff.rs has header, INDEX, FDSelect and charset structs but is not included by any module, and there is no DICT encoder, charstring encoder, specialiser or subroutiniser. fontc has no CFF output at all."
+ref = "read-fonts src/ps/cff/, src/ps/cs.rs; write-fonts src/ps/cff.rs, generated/generated_cff.rs; fontc fontbe/src/font.rs; fontmake USAGE.md; AFDKO docs/MakeOTFUserGuide.md"
+status = "docs"
+
+[[table]]
+tag = "vhea"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "Written only when the source carries vertical data. Version 1.1; ascender, descender and line gap from the vertical global metrics, vertical caret slope (defaults rise 0, run 1, offset 0), advanceHeightMax, minimum top and bottom side bearing and yMaxExtent from the built glyphs. A FEA table vhea block overrides VertTypoAscender, VertTypoDescender and VertTypoLineGap."
+ref = "fontc fontbe/src/vertical_metrics.rs, fontir/src/ir.rs; AFDKO hotconv/hot.cpp"
+status = "docs"
+
+[[table]]
+tag = "vmtx"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M2"
+summary = "Written together with vhea. Advance height per glyph from the glyph's height (or the font default), top side bearing as vertical origin minus the glyph's yMax, with the same trailing-run compression as hmtx."
+ref = "fontc fontbe/src/vertical_metrics.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Tables: layout (M8)
+# ---------------------------------------------------------------------------------------------------
+
+[[table]]
+tag = "GSUB"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M8"
+summary = "Substitution lookups compiled from feature code, plus single-substitution lookups and a FeatureVariations table generated from designspace rules or Glyphs bracket layers. write-fonts has typed tables for every lookup type, contextual formats 1 to 3, extension lookups and FeatureVariations with condition formats 1 to 5, and builders for single, multiple, alternate and ligature substitution; contextual and reverse-chain lookups are assembled by fea-rs."
+ref = "write-fonts src/tables/gsub.rs, gsub/builders.rs, generated/generated_layout.rs; fontc fea-rs/src/compile/, fontbe/src/features/feature_variations.rs"
+status = "docs"
+
+[[table]]
+tag = "GPOS"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M8"
+summary = "Positioning lookups from feature code plus generated kern/dist, mark, mkmk, abvm, blwm and curs lookups. Values that vary across masters are written as VariationIndex references into the GDEF item variation store. write-fonts has builders for single, pair (glyph and class), cursive, mark-to-base, mark-to-ligature and mark-to-mark positioning, value records and anchors with device or variation deltas."
+ref = "write-fonts src/tables/gpos.rs, gpos/builders.rs, gpos/value_record.rs; fontc fontbe/src/features/kern.rs, marks.rs"
+status = "docs"
+
+[[table]]
+tag = "GDEF"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M8"
+summary = "Glyph class definitions (from an explicit FEA GDEF block when present, otherwise from the source's glyph categories), ligature caret list from caret anchors, mark attachment classes and mark glyph sets used by lookup flags, and in variable fonts the ItemVariationStore that GPOS and caret VariationIndex records point into."
+ref = "write-fonts src/tables/gdef.rs, generated/generated_gdef.rs; fontc fontbe/src/features.rs, fontbe/src/features/marks.rs"
+status = "docs"
+
+[[table]]
+tag = "BASE"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M8"
+summary = "Baseline tags and per-script baseline coordinates and min/max extents. fontc only emits it when the feature code has a table BASE block and copies fea-rs's result unchanged; write-fonts supports BaseCoord formats 1 to 3 and bumps the version to 1.1 when an item variation store is attached."
+ref = "fontc fontbe/src/font.rs; write-fonts src/tables/base.rs, generated/generated_base.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Tables: variations (M9)
+# ---------------------------------------------------------------------------------------------------
+
+[[table]]
+tag = "fvar"
+flavour = ["variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M9"
+summary = "One axis record per ranged source axis (axes whose minimum, default and maximum coincide are left out) with name ids from 256 up, and one instance record per named instance with its subfamily name id and optional PostScript name id. If any instance has a PostScript name every instance record must carry the field, using the explicit no-name value for the others."
+ref = "fontc fontbe/src/fvar.rs, fontir/src/ir/static_metadata.rs; write-fonts src/tables/fvar.rs, instance_record.rs"
+status = "docs"
+
+[[table]]
+tag = "avar"
+flavour = ["variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M9"
+summary = "Per-axis segment maps from default normalisation to the designer's mapping; every axis always gets the three required maps (-1, 0, 1). The table is left out when every map is an identity and there are no cross-axis mappings. With cross-axis mappings it becomes version 2 with an axis index map and an item variation store; write-fonts selects version 2 automatically when either is present."
+ref = "fontc fontbe/src/avar.rs; write-fonts src/tables/avar.rs"
+status = "docs"
+
+[[table]]
+tag = "gvar"
+flavour = ["variable-ttf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M9"
+summary = "Per-glyph tuple variations for outline points and the four phantom points, one (possibly empty) entry for every glyph in glyf. write-fonts provides Gvar::new with shared peak tuples (tuples used more than once, most frequent first, at most 4095), shared point numbers, packed deltas, automatic long offsets, and the IUP optimiser in gvar/iup.rs."
+ref = "write-fonts src/tables/gvar.rs, gvar/iup.rs, variations.rs; fontc fontbe/src/gvar.rs, fontbe/src/glyphs.rs"
+status = "docs"
+
+[[table]]
+tag = "HVAR"
+flavour = ["variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M9"
+summary = "Advance width deltas for every glyph. fontc builds an indirect store with a glyph to delta-set index map and, when all glyphs share one variation model, also a direct store indexed by glyph id, then keeps the direct one if it is no larger than store plus map. Side bearing mappings are not written. Required for CFF2 because CFF2 has no phantom points."
+ref = "fontc fontbe/src/hvar.rs, fontbe/src/metric_variations.rs; write-fonts src/tables/hvar.rs, variations/ivs_builder.rs; AFDKO docs/CFF2_Support.md"
+status = "docs"
+
+[[table]]
+tag = "VVAR"
+flavour = ["variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M9"
+summary = "Advance height deltas, built exactly like HVAR (direct or indirect store, whichever is smaller) and only when the font has vertical metrics, that is when vmtx is written."
+ref = "fontc fontbe/src/vvar.rs; write-fonts src/tables/vvar.rs"
+status = "docs"
+
+[[table]]
+tag = "MVAR"
+flavour = ["variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M9"
+summary = "Deltas for the global metrics that have an MVAR value tag (OS/2 typo and win metrics, x-height, cap height, sub/superscript, strikeout, underline, caret values and so on); hhea ascender, descender and line gap have no tag and are skipped. Metrics whose deltas are all zero are not encoded and the table is omitted when nothing varies."
+ref = "fontc fontbe/src/mvar.rs; write-fonts src/tables/mvar.rs; AFDKO docs/CFF2_Support.md"
+status = "docs"
+
+[[table]]
+tag = "STAT"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M9"
+summary = "Design axis records and axis value tables with their flags (elidable, older sibling) and the elided fallback name id (default name id 2). Axis value format is 3 when a linked value is given, 2 when a range bound is given (a missing bound becomes the Fixed minimum or maximum), otherwise 1; format 4 exists in write-fonts but fontc does not emit it. A STAT block in feature code replaces the generated table. It is also valid in a static font."
+ref = "fontc fontbe/src/stat.rs, fontbe/src/font.rs, fontir/src/ir/static_metadata.rs; write-fonts src/tables/stat.rs"
+status = "docs"
+
+[[table]]
+tag = "CFF2"
+flavour = ["variable-otf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M9"
+summary = "Variable cubic outlines: charstrings with blend operators, a variation store, FDArray/Private DICTs with blended hint values, no glyph names, no widths and no encoding. read-fonts parses it and evaluates blends. write-fonts 0.54.0 exposes only a Cff2Header struct (raw Top DICT bytes and raw trailing bytes) and Index::from_items; DICT encoding, charstring encoding with blend, the variation store placement and subroutinisation are missing. fontc does not produce it; fontmake does with -o variable-cff2 and AFDKO with buildmasterotfs plus buildcff2vf."
+ref = "write-fonts src/ps/cff/v2.rs, generated/generated_cff2.rs; read-fonts src/ps/cff/v2.rs, blend.rs; fontmake README.md; AFDKO docs/CFF2_Support.md"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Tables: hinting (M10)
+# ---------------------------------------------------------------------------------------------------
+
+[[table]]
+tag = "gasp"
+flavour = ["ttf", "variable-ttf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M10"
+summary = "Grid-fitting and smoothing ranges from the source, sorted by rangeMaxPPEM, version 1. Omitted when the source defines no ranges."
+ref = "fontc fontbe/src/gasp.rs; write-fonts src/tables/gasp.rs"
+status = "docs"
+
+[[table]]
+tag = "cvt "
+flavour = ["ttf", "variable-ttf"]
+read = "read-fonts"
+write = "own"
+area = "compile"
+milestone = "M10"
+summary = "Control values as a plain array of big-endian int16. read-fonts returns the array; write-fonts has no table type for it, so we serialise the values ourselves and add them with FontBuilder::add_raw. None of fontc, fontmake or makeotf generates it from stems and zones; fontmake only gets it by running ttfautohint as a post step."
+ref = "read-fonts src/table_provider.rs (cvt); write-fonts src/tables.rs; fontmake USAGE.md (-a)"
+status = "docs"
+
+[[table]]
+tag = "fpgm"
+flavour = ["ttf", "variable-ttf"]
+read = "own"
+write = "own"
+area = "compile"
+milestone = "M10"
+summary = "Font program bytecode. Neither crate has a typed view (read-fonts hands back the raw bytes; skrifa can execute them), so decoding to mnemonics and assembling from our hinting model is ours, and the bytes go in through add_raw. Writing it also obliges us to fill maxp's function, storage, stack and instruction limits, which fontc leaves at zero."
+ref = "read-fonts src/table_provider.rs; skrifa src/outline/glyf/hint; fontc fontbe/src/metrics_and_limits.rs"
+status = "docs"
+
+[[table]]
+tag = "prep"
+flavour = ["ttf", "variable-ttf"]
+read = "own"
+write = "own"
+area = "compile"
+milestone = "M10"
+summary = "Control value program bytecode, handled exactly like fpgm: raw bytes in and out, with our own assembler and disassembler."
+ref = "read-fonts src/table_provider.rs; skrifa src/outline/glyf/hint"
+status = "docs"
+
+[[table]]
+tag = "cvar"
+flavour = ["variable-ttf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M10"
+summary = "Tuple variations for cvt values: one scalar delta per control value per region. write-fonts has a builder taking tents and delta lists (CvarVariationData). No reference compiler here generates it from source hinting data, so the input model is ours."
+ref = "write-fonts src/tables/cvar.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Tables: colour and images (M11)
+# ---------------------------------------------------------------------------------------------------
+
+[[table]]
+tag = "COLR"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M11"
+summary = "Colour glyph descriptions. write-fonts has version 0 base glyph and layer records and the complete version 1 paint graph (all Paint formats including the Var variants, colour lines, clip list, var index map and item variation store) and sets the version to 1 when any version 1 field is present. fontc builds layers, solid fills and linear and radial gradients from the source, with clip boxes quantised to a tenth of the em."
+ref = "write-fonts src/tables/colr.rs, generated/generated_colr.rs; fontc fontbe/src/colr.rs"
+status = "docs"
+
+[[table]]
+tag = "CPAL"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M11"
+summary = "Colour palettes referenced by COLR and SVG. Written only when the source defines at least one colour."
+ref = "fontc fontbe/src/cpal.rs; write-fonts src/tables/cpal.rs"
+status = "docs"
+
+[[table]]
+tag = "sbix"
+flavour = ["ttf", "variable-ttf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M11"
+summary = "Bitmap strikes holding PNG or other image data per glyph and ppem. write-fonts has Sbix, Strike and GlyphData types; fontc does not build the table, so strike selection, origin offsets and the mapping from placed images are ours."
+ref = "write-fonts src/tables/sbix.rs, generated/generated_sbix.rs; fontc fontbe/src/font.rs"
+status = "docs"
+
+[[table]]
+tag = "SVG "
+flavour = ["ttf", "otf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M11"
+summary = "SVG documents keyed by glyph id ranges, optionally gzip-compressed. read-fonts can list the documents; write-fonts has no SVG table, so the document index and the per-glyph SVG generation are ours."
+ref = "read-fonts src/tables/svg.rs; write-fonts src/tables.rs"
+status = "docs"
+
+[[table]]
+tag = "CBDT"
+flavour = ["ttf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M11"
+summary = "Colour bitmap data with its companion location table CBLC (strike list, index subtables, glyph metrics). read-fonts reads both; write-fonts has neither, so the index subtable formats and bitmap data formats are ours."
+ref = "read-fonts src/tables/cbdt.rs, cblc.rs, bitmap.rs; write-fonts src/tables.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Tables: rare and legacy (M12)
+# ---------------------------------------------------------------------------------------------------
+
+[[table]]
+tag = "VORG"
+flavour = ["otf", "variable-otf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Default vertical origin Y and per-glyph exceptions for CFF fonts with vertical metrics. read-fonts reads it. write-fonts ships generated/generated_vorg.rs but no module includes it, so it is not usable as published. makeotf derives the default origin from the typo ascender."
+ref = "read-fonts src/tables/vorg.rs; write-fonts generated/generated_vorg.rs, src/tables.rs; AFDKO hotconv/hot.cpp"
+status = "docs"
+
+[[table]]
+tag = "kern"
+flavour = ["ttf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Legacy pair kerning (format 0 subtables). read-fonts reads the OpenType and Apple variants; write-fonts cannot write it and neither fontc nor fontmake's documented pipeline produces one. We would flatten GPOS pair kerning into a format 0 subtable on request for old software."
+ref = "read-fonts src/tables/kern.rs; write-fonts src/tables.rs"
+status = "docs"
+
+[[table]]
+tag = "meta"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M12"
+summary = "Design languages (dlng) and supported languages (slng) as lists of ScriptLangTag strings from the source's meta values; invalid tags are dropped with a warning and the table is written only when the source provides values."
+ref = "fontc fontbe/src/meta.rs; write-fonts src/tables/meta.rs"
+status = "docs"
+
+[[table]]
+tag = "DSIG"
+flavour = ["ttf", "otf", "variable-ttf", "variable-otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M12"
+summary = "Digital signature container. write-fonts can write the header and signature blocks; real signing is out of scope. makeotf adds a minimal empty one by default in release mode; fontTools drops it when encoding WOFF2 and always orders it last."
+ref = "write-fonts src/tables/dsig.rs; AFDKO python/afdko/makeotf.py (-addDSIG/-omitDSIG); fonttools ttLib/woff2.py, ttLib/ttFont.py"
+status = "docs"
+
+[[table]]
+tag = "hdmx"
+flavour = ["ttf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Pre-computed hinted advance widths per ppem. read-fonts reads it; write-fonts ships generated/generated_hdmx.rs without a module that includes it. Only meaningful for hinted fonts, and producing it needs a TrueType interpreter run per size."
+ref = "read-fonts src/tables/hdmx.rs; write-fonts generated/generated_hdmx.rs, src/tables.rs"
+status = "docs"
+
+[[table]]
+tag = "LTSH"
+flavour = ["ttf"]
+read = "own"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Per-glyph ppem above which advances scale linearly. Neither fontations crate knows the table; it only appears as a name in write-fonts's recommended table order. Preserve on round trip, generate only if a hinted legacy target asks for it."
+ref = "write-fonts src/font_builder.rs; read-fonts src/table_provider.rs"
+status = "docs"
+
+[[table]]
+tag = "VDMX"
+flavour = ["ttf"]
+read = "own"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Vertical device metrics (yMax/yMin per ppem). Unknown to both fontations crates apart from its slot in the recommended table order. Same policy as LTSH."
+ref = "write-fonts src/font_builder.rs; read-fonts src/table_provider.rs"
+status = "docs"
+
+[[table]]
+tag = "MATH"
+flavour = ["ttf", "otf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M12"
+summary = "Math constants, glyph info (italic corrections, top accent attachment, extended shapes, kern info) and variants/assemblies. Typed reader and writer both exist; no reference compiler here builds it from sources, so the source model for math data is ours."
+ref = "read-fonts src/tables/math.rs; write-fonts src/tables/math.rs, generated/generated_math.rs"
+status = "docs"
+
+[[table]]
+tag = "JSTF"
+flavour = ["ttf", "otf"]
+read = "own"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Justification table. Not present in read-fonts or write-fonts and not produced by fontc, fontmake or makeotf as documented. Kept as opaque bytes on round trip; no generation planned until a user needs it."
+ref = "read-fonts src/tables/; write-fonts src/tables.rs"
+status = "docs"
+
+[[table]]
+tag = "EBDT"
+flavour = ["ttf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Embedded monochrome or grey bitmaps with their location table EBLC (and EBSC scaling). read-fonts reads EBDT and EBLC through the shared bitmap code; there is no writer."
+ref = "read-fonts src/tables/ebdt.rs, eblc.rs, bitmap.rs; write-fonts src/tables.rs"
+status = "docs"
+
+[[table]]
+tag = "morx"
+flavour = ["ttf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Apple extended glyph metamorphosis, with the related feat (feature names) and ltag tables. read-fonts reads morx, mort, feat and ltag; nothing writes them and no reference compiler here generates them. Round-trip only."
+ref = "read-fonts src/tables/morx.rs, mort.rs, feat.rs, ltag.rs, aat.rs; write-fonts src/tables.rs"
+status = "docs"
+
+[[table]]
+tag = "kerx"
+flavour = ["ttf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Apple extended kerning, with the related ankr anchor table. Readable through read-fonts, no writer. Round-trip only."
+ref = "read-fonts src/tables/kerx.rs, ankr.rs; write-fonts src/tables.rs"
+status = "docs"
+
+[[table]]
+tag = "trak"
+flavour = ["ttf"]
+read = "read-fonts"
+write = "none-yet"
+area = "compile"
+milestone = "M12"
+summary = "Apple tracking table. Readable through read-fonts, no writer. Round-trip only."
+ref = "read-fonts src/tables/trak.rs; write-fonts src/tables.rs"
+status = "docs"
+
+[[table]]
+tag = "VARC"
+flavour = ["variable-ttf"]
+read = "read-fonts"
+write = "write-fonts"
+area = "compile"
+milestone = "M12"
+summary = "Variable composites (draft specification): components with their own axis locations and variable transforms backed by a multi-item variation store. Both crates support it and write-fonts has a builder from composite glyphs; fontc's backend does not merge it into fonts. Experimental, off by default."
+ref = "write-fonts src/tables/varc.rs, variations/mivs_builder.rs; read-fonts src/tables/varc.rs; fontc fontbe/src/font.rs"
+status = "docs"
+
+[[table]]
+tag = "Debg"
+flavour = ["ttf", "variable-ttf"]
+read = "own"
+write = "own"
+area = "compile"
+milestone = "M12"
+summary = "Private debugging table mapping compiled lookups back to feature source locations. fontc adds it as raw bytes from fea-rs when --emit-lookup-debug-info is given. Useful for our feature editor's 'where did this lookup come from' view; never in release builds."
+ref = "fontc fontc/src/args.rs, fontbe/src/font.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: pipeline and preflight
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.pipelineStages"
+area = "compile"
+milestone = "M2"
+summary = "Compilation runs in fixed stages: preflight, instance or master preparation, outline preparation (decompose, overlap removal, quadratic conversion, direction), final glyph order, per-table builders, layout compilation, variation tables, assembly with checksums, then container wrapping. Each stage reads only the outputs of earlier ones so stages can run in parallel per glyph, as fontc's work graph does."
+ref = "fontmake USAGE.md (Functional overview); fontc fontbe/src/orchestration.rs, fontir/src/glyph.rs"
+status = "inferred"
+
+[[behavior]]
+id = "compile.filterOrder"
+area = "compile"
+milestone = "M2"
+summary = "fontmake runs outline filters in this order: user pre-filters, explode colour layer glyphs, decompose components, flatten components, remove overlaps, cubic to quadratic, user post-filters. We keep the same relative order for the built-in steps."
+ref = "fontmake USAGE.md (Included filters)"
+status = "docs"
+
+[[behavior]]
+id = "compile.pruneMissingComponents"
+area = "compile"
+milestone = "M2"
+summary = "A component that points at a glyph that does not exist is dropped with a warning and the build continues; this happens before any other glyph processing so one bad reference cannot cause its siblings to be decomposed. fontc does this to match fontmake."
+ref = "fontc fontir/src/glyph.rs (prune_missing_components)"
+status = "docs"
+
+[[behavior]]
+id = "compile.nonExportGlyphs"
+area = "compile"
+milestone = "M2"
+summary = "Glyphs marked not to export are removed from the final glyph order; any exported glyph that uses one as a component gets that component's outlines inlined first, so nothing references a glyph that is gone."
+ref = "fontc fontir/src/glyph.rs (flatten_all_non_export_components, GlyphOrderWork); fontmake USAGE.md (--no-write-skipexportglyphs)"
+status = "docs"
+
+[[behavior]]
+id = "compile.interpolationCompatibility"
+area = "compile"
+milestone = "M9"
+summary = "Before building a variable font every glyph is checked: all masters must use the same component sequence and path structures that convert to the same point counts; a glyph that fails stops the build with a per-glyph error. fontmake has --check-compatibility / --no-check-compatibility to run or skip the same check up front."
+ref = "fontc fontbe/src/glyphs.rs (CheckedGlyph); fontmake Lib/fontmake/__main__.py"
+status = "docs"
+
+[[behavior]]
+id = "compile.instanceInterpolation"
+area = "compile"
+milestone = "M9"
+summary = "Static instances are produced by interpolating masters at the instance location before compiling. fontmake's default interpolator does not extrapolate outside the masters and does not support anisotropic locations; those need the optional MutatorMath path. Outline rounding at this stage is optional (--round-instances)."
+ref = "fontmake USAGE.md (Options for instance generation)"
+status = "docs"
+
+[[behavior]]
+id = "compile.instanceLayoutInterpolation"
+area = "compile"
+milestone = "M9"
+summary = "fontmake's feature writers interpolate kerning and anchors for instances but not explicit pos statements in feature code; --interpolate-binary-layout builds master binaries and interpolates GPOS from them instead. Because we compile variable feature data once, instancing layout should come from the variable GPOS rather than from re-running writers."
+ref = "fontmake USAGE.md (--interpolate-binary-layout)"
+status = "docs"
+
+[[behavior]]
+id = "compile.expandFeatureIncludes"
+area = "compile"
+milestone = "M8"
+summary = "Feature include() paths are resolved relative to the source file; fontmake needs --expand-features-to-instances or --fea-include-dir when instances are compiled from another directory. Our compiler always resolves includes against the original source location, so no flag is needed."
+ref = "fontmake USAGE.md; fontmake Lib/fontmake/__main__.py (--fea-include-dir)"
+status = "inferred"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: outline preparation
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.mixedGlyphsBecomeSimple"
+area = "compile"
+milestone = "M2"
+summary = "A glyph with both contours and components cannot be stored in glyf. By default (fontc --prefer-simple-glyphs=true, and fontmake's DecomposeComponents for TTF) its components are converted to contours; with the preference off fontc instead moves the contours into a new glyph named <base>.<n> and makes the original a pure composite."
+ref = "fontc fontc/src/args.rs, fontir/src/glyph.rs; fontmake USAGE.md (DecomposeComponents)"
+status = "docs"
+
+[[behavior]]
+id = "compile.otfDecomposesAllComponents"
+area = "compile"
+milestone = "M2"
+summary = "For CFF outlines every component is decomposed, since CFF has no component mechanism; fontmake calls DecomposeComponents automatically for OTF output."
+ref = "fontmake USAGE.md (Included filters)"
+status = "docs"
+
+[[behavior]]
+id = "compile.inconsistentComponentsDecompose"
+area = "compile"
+milestone = "M9"
+summary = "A composite whose component 2x2 transforms differ between masters is converted to a simple glyph, because gvar can vary component offsets but not their scale or rotation."
+ref = "fontc fontir/src/glyph.rs (GlyphOrderWork: has_consistent_components)"
+status = "docs"
+
+[[behavior]]
+id = "compile.overflowingComponentTransformDecompose"
+area = "compile"
+milestone = "M2"
+summary = "A composite with a component transform value outside the F2Dot14 range of -2.0 to 2.0 is converted to a simple glyph instead of being clamped."
+ref = "fontc fontir/src/glyph.rs (has_overflowing_component_transforms)"
+status = "docs"
+
+[[behavior]]
+id = "compile.flattenNestedComponents"
+area = "compile"
+milestone = "M6"
+summary = "Optional: components that are themselves composites are replaced by the simple glyphs they reference, with transforms combined, so composite depth is 1. Off by default in fontmake (-f / --flatten-components); in fontc the option is tri-state (omitted means the source's own setting)."
+ref = "fontmake README.md (-f); fontc fontc/src/args.rs (--flatten-components), fontir/src/glyph.rs (flatten_glyph)"
+status = "docs"
+
+[[behavior]]
+id = "compile.decomposeTransformedComponents"
+area = "compile"
+milestone = "M6"
+summary = "Optional, off by default: any composite with a component whose 2x2 transform is not the identity is converted to contours (a mirrored or scaled component can rasterise and hint badly). When combined with flattening, transformed components are decomposed first and the rest flattened afterwards, which keeps more components."
+ref = "fontc fontc/src/args.rs (--decompose-transformed-components), fontir/src/glyph.rs (apply_optional_transformations); fontmake USAGE.md (DecomposeTransformedComponents)"
+status = "docs"
+
+[[behavior]]
+id = "compile.decomposeAllComponents"
+area = "compile"
+milestone = "M6"
+summary = "Optional: decompose every composite, or the glyphs named by the source's decomposeComponents filter (all, an include list or an exclude list). Runs before the consistency checks and flattening, so a composite that referenced a decomposed glyph then sees a simple glyph."
+ref = "fontc fontc/src/args.rs (--decompose-components), fontir/src/glyph.rs (decompose_components), fontir/src/ir/static_metadata.rs (FilterScope)"
+status = "docs"
+
+[[behavior]]
+id = "compile.componentFlags"
+area = "compile"
+milestone = "M2"
+summary = "Composite components are always written with ROUND_XY_TO_GRID set (fontc, citing ufo2ft's default). Offsets are rounded half-up to integers and transform values are rounded in double precision before conversion to F2Dot14."
+ref = "fontc fontbe/src/glyphs.rs (create_component_ref_gid)"
+status = "docs"
+
+[[behavior]]
+id = "compile.useMyMetrics"
+area = "compile"
+milestone = "M2"
+summary = "USE_MY_METRICS is set on the first component whose glyph has the same advance as the composite, an identity 2x2 and no x offset that survives rounding (y offset is allowed), and only in static fonts. In variable fonts it is never set automatically because composite and component advances may differ in other masters. fontmake exposes --auto-use-my-metrics / --no-auto-use-my-metrics with the same static-only default."
+ref = "fontc fontbe/src/glyphs.rs (can_reuse_metrics, create_composite); fontmake Lib/fontmake/__main__.py"
+status = "docs"
+
+[[behavior]]
+id = "compile.compositeBounds"
+area = "compile"
+milestone = "M2"
+summary = "A composite's bounding box is computed after all simple glyphs are built, by transforming each component's box; head's font box, hhea extents and side bearings depend on it, so the hmtx/hhea/maxp job waits for glyf."
+ref = "fontc fontbe/src/glyphs.rs (compute_composite_bboxes), fontbe/src/metrics_and_limits.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.removeOverlapsStatic"
+area = "compile"
+milestone = "M2"
+summary = "fontmake removes overlaps by default when building static fonts and skips it for interpolatable masters and variable fonts; --keep-overlaps turns it off and --overlaps-backend chooses booleanOperations (default) or pathops. fontc never removes overlaps and makeotf leaves it to a separate tool. We remove overlaps for static output by default using our own boolean engine and keep them for variable output."
+ref = "fontmake USAGE.md (--keep-overlaps, --overlaps-backend), Lib/fontmake/font_project.py; fontc fontbe/src/glyphs.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.overlapFlags"
+area = "compile"
+milestone = "M9"
+summary = "write-fonts can set OVERLAP_SIMPLE (first point of the first contour) and OVERLAP_COMPOUND, but fontc's backend never sets either (no use of those fields in fontbe). Our choice: set them on glyphs of variable TrueType fonts, where overlaps are kept, and never on static fonts whose overlaps were removed."
+ref = "write-fonts src/tables/glyf/simple.rs, glyf/composite.rs; fontc fontbe/src/glyphs.rs"
+status = "inferred"
+
+[[behavior]]
+id = "compile.cu2quTolerance"
+area = "compile"
+milestone = "M2"
+summary = "Cubic curves are approximated by quadratic splines with a maximum error of 0.001 em (one unit at 1000 units per em). fontTools cu2qu uses DEFAULT_MAX_ERR = 0.001, fontmake exposes it as -e / --conversion-error in em, and fontc computes units_per_em / 1000 and calls kurbo's cubics_to_quadratic_splines."
+ref = "fonttools Lib/fontTools/cu2qu/ufo.py; fontmake USAGE.md (--conversion-error); fontc fontbe/src/glyphs.rs (cubics_to_quadratics)"
+status = "docs"
+
+[[behavior]]
+id = "compile.cu2quAcrossMasters"
+area = "compile"
+milestone = "M9"
+summary = "For variable fonts each cubic segment is converted together with the matching segment of every other master, so all masters end up with the same number of quadratic points; a segment that cannot be converted compatibly is a hard failure for that glyph. Lines and existing quadratics pass through untouched."
+ref = "fontc fontbe/src/glyphs.rs (cubics_to_quadratics); fontmake README.md (ttf-interpolatable)"
+status = "docs"
+
+[[behavior]]
+id = "compile.ttfCurveModes"
+area = "compile"
+milestone = "M12"
+summary = "fontmake --ttf-curves has four modes: cu2qu (default, everything quadratic), mixed (convert only when cheaper; needs draft glyf version 1), keep-quad and keep-cubic (no conversion). fontc always converts to quadratic. We ship cu2qu and keep-quad; the cubic-in-glyf modes wait for the format to be final."
+ref = "fontmake Lib/fontmake/__main__.py (--ttf-curves), font_project.py (CurveConversion)"
+status = "docs"
+
+[[behavior]]
+id = "compile.reverseContourDirection"
+area = "compile"
+milestone = "M2"
+summary = "Sources are assumed to be drawn counter-clockwise (PostScript convention), so contours are reversed when writing TrueType outlines; --keep-direction (same name in fontmake and fontc) disables it. CFF output keeps the source direction. Composites are not touched."
+ref = "fontmake USAGE.md (--keep-direction); fontc fontc/src/args.rs, fontbe/src/glyphs.rs (reverse_contour_direction)"
+status = "docs"
+
+[[behavior]]
+id = "compile.dropImpliedOnCurves"
+area = "compile"
+milestone = "M12"
+summary = "Optional, off by default in fontmake: on-curve points lying exactly midway between two off-curve points are dropped from TrueType glyphs since the format implies them. Must be applied identically in all masters of a variable font."
+ref = "fontmake Lib/fontmake/__main__.py (--drop-implied-oncurves)"
+status = "docs"
+
+[[behavior]]
+id = "compile.rounding"
+area = "compile"
+milestone = "M2"
+summary = "All font-unit values are rounded half up (OpenType rounding), not half to even. Master values such as point coordinates, anchors and kerning are rounded before deltas are computed, so instancing a variable font at a master location matches building that master as a static font."
+ref = "fontc fontbe/src/glyphs.rs, fontbe/src/features.rs; write-fonts src/round.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.cffRoundTolerance"
+area = "compile"
+milestone = "M2"
+summary = "CFF charstring coordinates are rounded to integers by default; fontmake's --cff-round-tolerance defaults to 0.5 and a value of 0 disables rounding so fractional coordinates are kept."
+ref = "fontmake USAGE.md (--cff-round-tolerance)"
+status = "docs"
+
+[[behavior]]
+id = "compile.glyphsOutlinePreSteps"
+area = "compile"
+milestone = "M6"
+summary = "Two Glyphs-specific steps run before decomposition when the source asks for them: erase open corners and propagate anchors from components to composites. Anchor propagation must run before non-export components are flattened, because it reads the component references. fontc exposes both as tri-state flags; fontmake gets them through filters listed in the UFO lib (glyphsLib adds eraseOpenCorners there)."
+ref = "fontc fontc/src/args.rs (--erase-open-corners, --propagate-anchors), fontir/src/glyph.rs; fontmake USAGE.md (Outline Filtering)"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: glyph order and names
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.notdefFirst"
+area = "compile"
+milestone = "M2"
+summary = "Glyph id 0 is always .notdef: if the source has one elsewhere in the order it is moved to the front, and if it has none a glyph is generated."
+ref = "fontc fontir/src/glyph.rs (ensure_notdef_exists_and_is_gid_0)"
+status = "docs"
+
+[[behavior]]
+id = "compile.notdefSynthesis"
+area = "compile"
+milestone = "M2"
+summary = "The generated .notdef is a hollow rectangle: advance = half the em (rounded), stroke = 5 percent of the em (rounded), outer box from x = stroke to advance - stroke and from descender to ascender, inner box inset by one stroke, height = ascender - descender. In a variable font it gets extra masters only where ascender, descender or the typo ascender/descender differ from the default. makeotf instead offers -addn to replace .notdef with a built-in design matched to the font's weight and width."
+ref = "fontc fontir/src/glyph.rs (synthesize_notdef, make_notdef_outline); AFDKO docs/MakeOTFUserGuide.md (-addn)"
+status = "docs"
+
+[[behavior]]
+id = "compile.glyphOrder"
+area = "compile"
+milestone = "M2"
+summary = "Glyph order is the source's explicit order restricted to glyphs that exist, followed by the remaining glyphs sorted by name, then .notdef forced to index 0 (fontc reading a UFO's public.glyphOrder). Glyphs created by the compiler are appended after the source glyphs: for Glyphs sources the bracket-layer and colour-layer glyphs go last together in sorted name order (fontc, citing ufo2ft), and a split-off contour glyph is added when it is created."
+ref = "fontc ufo2fontir/src/source.rs (glyph_order), fontir/src/glyph.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.glyphOrderMakeotf"
+area = "compile"
+milestone = "M12"
+summary = "makeotf with -r or -ga orders glyphs differently: names in the CFF standard string list come first in that list's order, then glyphs in GlyphOrderAndAliasDB order, then anything else in source order. It cannot reorder a TrueType source. CID-keyed sources are always arranged in CID order. We offer this as an alternative ordering mode for AFDKO-style projects."
+ref = "AFDKO docs/MakeOTFUserGuide.md (GlyphOrderAndAliasDB), docs/CIDKeyedUFOGuide.md"
+status = "docs"
+
+[[behavior]]
+id = "compile.glyphCountLimit"
+area = "compile"
+milestone = "M2"
+summary = "More than 65535 glyphs cannot be represented (maxp.numGlyphs and glyph ids are 16-bit; fontc simply unwraps the conversion). Preflight reports it as an error naming the count rather than failing later."
+ref = "fontc fontbe/src/metrics_and_limits.rs"
+status = "inferred"
+
+[[behavior]]
+id = "compile.productionNames"
+area = "compile"
+milestone = "M2"
+summary = "By default glyphs are renamed to production names in the binary. fontmake: use the source's name map (public.postscriptNames); encoded glyphs without an entry become uniXXXX, unencoded ligatures are named from their components' production names, other unencoded glyphs keep their name; --no-production-names disables all renaming. fontc applies only the source's map (glyphs without an entry keep their name) and has the same flag."
+ref = "fontmake USAGE.md (--no-production-names); fontc fontc/src/args.rs, fontbe/src/post.rs, ufo2fontir/src/source.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.productionNameSanitising"
+area = "compile"
+milestone = "M2"
+summary = "Final names are stripped of every character outside A-Z, a-z, 0-9, period and underscore; a name that collides with an earlier one gets .1, .2 and so on appended. The stricter Adobe Glyph List rules (no leading digit or period, at most 63 characters) are not enforced by fontc; we enforce them as warnings."
+ref = "fontc fontbe/src/post.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.goadbRenaming"
+area = "compile"
+milestone = "M12"
+summary = "makeotf's GlyphOrderAndAliasDB has one glyph per line: final name, source name, optional Unicode override (uniXXXX or uXXXX[XX], uppercase hex only, comma-separated for several). Renaming and ordering apply only with -r or -ga; with -gf alone only the Unicode column is used; -gs additionally drops glyphs not listed. Source font and feature file must use the same names as each other."
+ref = "AFDKO docs/MakeOTFUserGuide.md (GlyphOrderAndAliasDB, -ga, -gs, -gf)"
+status = "docs"
+
+[[behavior]]
+id = "compile.unicodeFromGlyphNames"
+area = "compile"
+milestone = "M12"
+summary = "makeotf assigns Unicode values to name-keyed glyphs in this order: the GOADB third column; else the Adobe Glyph List for New Fonts; else a uniXXXX / uXXXXXX glyph name; else none. It never assigns Private Use codes. The fontmake family instead takes codepoints from the source glyphs. We follow the source data and offer the makeotf lookup as an import-time fill-in."
+ref = "AFDKO docs/MakeOTFUserGuide.md (GlyphOrderAndAliasDB rule 3); fontc fontbe/src/cmap.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: cmap and post
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.cmapSubtables"
+area = "compile"
+milestone = "M2"
+summary = "Default cmap: a format 4 subtable for BMP characters referenced by both the Unicode (0,3) and Windows (3,1) records, plus a format 12 subtable referenced by (0,4) and (3,10) only if any character is above U+FFFF; records are ordered by platform then encoding. makeotf additionally writes a Macintosh platform subtable chosen by script heuristics (-cs/-cl override)."
+ref = "write-fonts src/tables/cmap.rs (Cmap::from_mappings); AFDKO hotconv/map.cpp, docs/MakeOTFUserGuide.md"
+status = "docs"
+
+[[behavior]]
+id = "compile.cmapConflict"
+area = "compile"
+milestone = "M2"
+summary = "One codepoint mapped to two different glyphs is an error that names the codepoint and both glyph ids; identical duplicate mappings are merged silently. One glyph may carry several codepoints."
+ref = "write-fonts src/tables/cmap.rs (CmapConflict)"
+status = "docs"
+
+[[behavior]]
+id = "compile.cmapVariationSequences"
+area = "compile"
+milestone = "M2"
+summary = "Unicode variation sequences produce a format 14 subtable at platform 0 encoding 5. A sequence whose glyph equals the base character's normal mapping is stored as a default UVS (ranges of consecutive codepoints, at most 256 per range); any other is a non-default UVS mapping. Sequences naming a missing glyph are skipped with a warning. makeotf reads them from a text file (-ci) of 'base selector; glyph' lines, or 'base selector; R-O; CID+n' for CID fonts."
+ref = "fontc fontbe/src/cmap.rs; AFDKO docs/MakeOTFUserGuide.md (UVS file)"
+status = "docs"
+
+[[behavior]]
+id = "compile.cmapLegacyOptions"
+area = "compile"
+milestone = "M12"
+summary = "makeotf has two legacy cmap switches: -dbl double-maps a fixed list of glyphs (for example hyphen to U+002D and U+00AD, mu to U+00B5 and U+03BC) and -stubCmap4 writes a two-segment placeholder format 4 subtable for special-purpose fonts. Both are off by default and we expose them only in the AFDKO-compatible CLI."
+ref = "AFDKO python/afdko/makeotf.py (-dbl, -stubCmap4)"
+status = "docs"
+
+[[behavior]]
+id = "compile.postVersion"
+area = "compile"
+milestone = "M2"
+summary = "Glyph names: fontc and fontmake write post 2.0 with names for TrueType fonts; makeotf writes 3.0 (no names) for CFF because CFF stores them; buildcff2vf writes 3.0 for CFF2 unless -k asks for format 2 names. Our defaults: 2.0 for TrueType and CFF2, 3.0 for CFF, with an option to force 3.0 everywhere for size."
+ref = "fontc fontbe/src/post.rs; AFDKO hotconv/post.cpp, python/afdko/buildcff2vf.py (-k), docs/CFF2_Support.md"
+status = "docs"
+
+[[behavior]]
+id = "compile.postFields"
+area = "compile"
+milestone = "M2"
+summary = "post.italicAngle comes from the source's italic angle, underlinePosition and underlineThickness from the default master's metrics (rounded), isFixedPitch from the source flag and 0 when the source says nothing. fontc does not detect monospacing by measuring advances."
+ref = "fontc fontbe/src/post.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: name table
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.namePlatforms"
+area = "compile"
+milestone = "M2"
+summary = "fontc and fontmake write each name once, on the Windows platform with language 0x409 and encoding 1, or encoding 10 when the string contains a character outside the BMP. makeotf writes Windows and Macintosh records by default (-omitMacNames for Windows only). Our default is Windows only, with Mac records as an export option."
+ref = "fontc fontir/src/ir/static_metadata.rs (NameKey); AFDKO python/afdko/makeotf.py (-omitMacNames, -useMacNames), hotconv/name.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.nameFallbacks"
+area = "compile"
+milestone = "M2"
+summary = "Missing names are derived: family defaults to 'New Font' and subfamily to 'Regular'. If ID 2 is unset it takes the typographic subfamily when that is one of Regular, Italic, Bold, Bold Italic (case-insensitive); otherwise ID 2 becomes Regular and the typographic subfamily is appended to the ID 1 family name. IDs 16 and 17 fall back to IDs 1 and 2."
+ref = "fontc fontir/src/ir.rs (NameBuilder::build, default_value, is_ribbi)"
+status = "docs"
+
+[[behavior]]
+id = "compile.nameFullAndPostScript"
+area = "compile"
+milestone = "M2"
+summary = "Unless set, ID 4 is typographic family + space + typographic subfamily. ID 6 is the typographic family with spaces removed, a hyphen, and the subfamily, then stripped of whitespace, of the characters [](){}<>/% and of anything outside printable ASCII (fontc drops such characters with a warning where fontmake transliterates them)."
+ref = "fontc fontir/src/ir.rs (NameBuilder::build, normalize_for_postscript)"
+status = "docs"
+
+[[behavior]]
+id = "compile.nameVersionString"
+area = "compile"
+milestone = "M2"
+summary = "Unless set, ID 5 is 'Version <major>.<minor padded to 3 digits>'. fontc appends ';fontc <version>' to every ID 5 record, replacing an older stamp. makeotf writes 'Version x.xxx;addfeatures <client version>' and in non-release builds the string carries the word Development, which -r removes. We stamp ';fontcraft <version>' the same way and make it optional."
+ref = "fontc fontir/src/ir.rs, fontbe/src/name.rs (stamp_compiler_version); AFDKO hotconv/name.cpp, docs/MakeOTFUserGuide.md (-r)"
+status = "docs"
+
+[[behavior]]
+id = "compile.nameUniqueId"
+area = "compile"
+milestone = "M2"
+summary = "Unless set, ID 3 is '<version without the word Version>;<vendor id>;<PostScript name>'. makeotf uses '<x.xxx>;<vendor>;<FontName>' with ';<license id>' appended when one is given."
+ref = "fontc fontir/src/ir.rs (NameBuilder::build); AFDKO hotconv/name.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.nameTypographicDropped"
+area = "compile"
+milestone = "M2"
+summary = "IDs 16 and 17 are removed when they equal IDs 1 and 2. Records whose string is empty are removed at the very end, after fallbacks, so an explicitly empty name suppresses its fallback."
+ref = "fontc fontir/src/ir.rs (NameBuilder::build)"
+status = "docs"
+
+[[behavior]]
+id = "compile.styleLinking"
+area = "compile"
+milestone = "M7"
+summary = "Style-linked groups hold at most four fonts (Regular, Italic, Bold, Bold Italic) sharing ID 1. The linked family name is the family plus every word of the style name that is not the Regular/Bold/Italic(Oblique) word already expressed by the bold and italic flags, so 'Family' + 'Semibold Italic' with the italic flag gives 'Family Semibold' and ID 2 'Italic'. makeotf expresses the same thing with explicit FontMenuNameDB entries."
+ref = "fontc fontir/src/ir.rs (style_map_family_name, citing glyphsLib); AFDKO docs/MakeOTFUserGuide.md (FontMenuNameDB)"
+status = "docs"
+
+[[behavior]]
+id = "compile.fontMenuNameDb"
+area = "compile"
+milestone = "M12"
+summary = "makeotf's FontMenuNameDB keys entries by [PostScriptName] with f= (preferred family), s= (style), l= (compatible family) and m=1, (Mac compatible full name). With only f= it goes to ID 1; when l= differs, f= goes to ID 16, l= to ID 1 and ID 2 is chosen from the bold/italic flags; s= goes to ID 17 only when it differs from that style; m=1, goes to Mac ID 18. Keys take an optional platform,script,language triplet and backslash hex escapes; the older c= syntax selects the pre-2.5 naming scheme."
+ref = "AFDKO docs/MakeOTFUserGuide.md (FontMenuNameDB Version 2 and Version 1)"
+status = "docs"
+
+[[behavior]]
+id = "compile.nameLengthAdvice"
+area = "compile"
+milestone = "M12"
+summary = "AFDKO recommends that family, style and compatible family names each stay within 31 characters for legacy menus. We report longer names as a warning, not an error."
+ref = "AFDKO docs/MakeOTFUserGuide.md (Note on length restrictions)"
+status = "docs"
+
+[[behavior]]
+id = "compile.nameFeaOverrides"
+area = "compile"
+milestone = "M8"
+summary = "Name records declared in a feature-file name table block replace generated records with the same platform, encoding, language and name id, and the merged list is sorted. Name ids that feature code allocates for stylistic set or character variant labels are renumbered to start after the highest id already used. makeotf only lets feature code override menu names with -overrideMenuNames, and never IDs 2 and 6."
+ref = "fontc fontbe/src/name.rs (merge_name_records), fontbe/src/features.rs; AFDKO python/afdko/makeotf.py (-overrideMenuNames)"
+status = "docs"
+
+[[behavior]]
+id = "compile.nameIdAllocation"
+area = "compile"
+milestone = "M9"
+summary = "Axis, instance and STAT label names are allocated from name id 256 upward and one record is shared by identical strings. Axis names may only reuse a record with id 256 or higher. An instance at the default location may reuse ID 2 or 17 when its name matches; STAT value labels and the elided fallback name may reuse any existing record. Registration order follows fontTools so ids match fontmake's."
+ref = "fontc fontir/src/ir/static_metadata.rs (StaticMetadata::new, set_stat), fontbe/src/fvar.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: OS/2, head, hhea, metrics
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.os2Version"
+area = "compile"
+milestone = "M2"
+summary = "write-fonts chooses the OS/2 version from the fields present: 5 with optical size bounds, 4 when x-height, cap height, default char, break char or max context is set (fontc always sets them, so it writes 4), otherwise 1 or 0 by code page ranges. makeotf defaults to version 3 and switches to 4 when any of fsSelection bits 7 to 9 is used; -osv forces a version."
+ref = "write-fonts src/tables/os2.rs (compute_version); fontc fontbe/src/os2.rs; AFDKO docs/MakeOTFUserGuide.md (-osv)"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2WeightWidthClass"
+area = "compile"
+milestone = "M2"
+summary = "usWeightClass is the wght axis default clamped to 1..1000 when the font has that axis, else the source's value, else 400. usWidthClass is the class nearest to the wdth axis default percentage when the font has that axis, else the source's value, else 5 (normal)."
+ref = "fontc fontbe/src/os2.rs (Os2Work::exec)"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2WeightAdvice"
+area = "compile"
+milestone = "M12"
+summary = "AFDKO's Windows guidance: weight classes 100 and 200 can trigger smeared or wrongly linked bold in old Windows applications, so regular-linked fonts should use 250 or more, and the bold partner should fall in a range that depends on the regular's weight (for example 600 to 850 for a 400 regular). Reported as an informational check, never applied silently."
+ref = "AFDKO docs/WinWeights.md"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2FsSelection"
+area = "compile"
+milestone = "M2"
+summary = "fsSelection: BOLD and ITALIC from the style-map style (or from a Regular/Italic/Bold/Bold Italic style name), REGULAR when neither is set, plus USE_TYPO_METRICS and WWS when the source enables them; an explicit source value replaces the derivation. makeotf sets bold and italic with -b / -i or fontinfo keys and bits 7, 8, 9 with -osbOn / -osbOff or the keys PreferOS/2TypoMetrics, IsOS/2WidthWeigthSlopeOnly and IsOS/2OBLIQUE; once one of the three is set all three must be stated."
+ref = "fontc ufo2fontir/src/source.rs, glyphs2fontir/src/source.rs; AFDKO docs/MakeOTFUserGuide.md (fontinfo, New OS/2.fsSelection Bits)"
+status = "docs"
+
+[[behavior]]
+id = "compile.headMacStyle"
+area = "compile"
+milestone = "M2"
+summary = "head.macStyle bold and italic bits are copied from the OS/2 fsSelection BOLD and ITALIC bits; no other macStyle bit is set."
+ref = "fontc fontbe/src/head.rs (apply_macstyle); AFDKO hotconv/head.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2VendorId"
+area = "compile"
+milestone = "M2"
+summary = "achVendID comes from the source; when missing fontc writes four spaces, while makeotf looks for a known foundry in the font's notice string and otherwise writes UKWN. Our default follows fontc; the vendor id is a Font Info field."
+ref = "fontc fontir/src/ir.rs (DEFAULT_VENDOR_ID), fontir/src/ir/static_metadata.rs; AFDKO hotconv/hot.cpp (setVendId)"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2FsType"
+area = "compile"
+milestone = "M2"
+summary = "fsType comes from the source. The default when unset depends on the source format in fontc: bit 2 (0x0004, preview and print embedding) for UFO sources and bit 3 (0x0008, editable embedding) for Glyphs sources. Our native format stores the value explicitly so no default guess is needed after import."
+ref = "fontc ufo2fontir/src/source.rs, glyphs2fontir/src/source.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2AvgCharWidth"
+area = "compile"
+milestone = "M2"
+summary = "xAvgCharWidth is the rounded mean of all non-zero advance widths in hmtx (zero-width glyphs are not counted). makeotf computes the same mean but truncates the division."
+ref = "fontc fontbe/src/os2.rs (x_avg_char_width); AFDKO hotconv/hot.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2UnicodeRanges"
+area = "compile"
+milestone = "M2"
+summary = "ulUnicodeRange bits are computed from the mapped codepoints using the specification's block table, setting a bit as soon as one codepoint of the block is present, plus bit 57 for any codepoint beyond the BMP. Bits given explicitly in the source or in a FEA OS/2 block replace the computed set."
+ref = "fontc fontbe/src/os2.rs (UNICODE_RANGES, apply_unicode_range)"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2CodePageRanges"
+area = "compile"
+milestone = "M2"
+summary = "ulCodePageRange bits are guessed from marker characters (a table of one or two tell-tale characters per code page, some requiring full printable ASCII or the box-drawing character), and bit 0 (Latin 1) is set when nothing else matches so the font works in MS Word. Explicit source bits replace the guess."
+ref = "fontc fontbe/src/os2.rs (codepage_range_bits)"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2CharIndexes"
+area = "compile"
+milestone = "M2"
+summary = "usFirstCharIndex and usLastCharIndex are the lowest and highest mapped codepoints, each clamped to 0xFFFF. usDefaultChar is 0 and usBreakChar is 32 in fontc; makeotf sets the break char to space only when a space glyph exists and has -dcs to put the space codepoint in usDefaultChar for an old QuarkXPress problem."
+ref = "fontc fontbe/src/os2.rs; AFDKO hotconv/hot.cpp, docs/MakeOTFUserGuide.md (-dcs)"
+status = "docs"
+
+[[behavior]]
+id = "compile.os2MaxContext"
+area = "compile"
+milestone = "M8"
+summary = "usMaxContext is the longest glyph context any GSUB or GPOS lookup needs, computed from the compiled lookups (0 when there is no layout); the OS/2 builder therefore runs after layout compilation."
+ref = "fontc fontbe/src/os2.rs (apply_max_context), fontbe/src/os2/max_context.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.ascenderDescenderDefaults"
+area = "compile"
+milestone = "M2"
+summary = "When the source gives no values: ascender 0.8 em, descender -0.2 em, cap height 0.7 em, x-height 0.5 em (fontc, following ufo2ft). makeotf instead measures x-height and cap height from the top of the o and O glyphs, or 0 when they are missing."
+ref = "fontc fontir/src/ir.rs (populate_defaults); AFDKO hotconv/hot.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.typoMetricsDefaults"
+area = "compile"
+milestone = "M2"
+summary = "fontc/ufo2ft defaults: sTypoAscender = ascender, sTypoDescender = descender, sTypoLineGap = max(0, 1.2 em + descender - ascender). makeotf defaults: sTypoAscender = the taller of the d glyph's top and cap height (falling back to the font box top, capped at one em), sTypoDescender = sTypoAscender - em, sTypoLineGap = 1.2 em - ascender + descender; for CID fonts it uses the box of a reference ideograph or 880/-120 per 1000 and a line gap of ascender - descender."
+ref = "fontc fontir/src/ir.rs (populate_defaults); AFDKO hotconv/hot.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.winMetricsDefaults"
+area = "compile"
+milestone = "M2"
+summary = "fontc/ufo2ft defaults: usWinAscent = ascender + sTypoLineGap, usWinDescent = absolute value of the descender. makeotf defaults: usWinAscent = top of the font bounding box, usWinDescent = minus its bottom, with a warning when their sum is less than one em. Our export dialog offers both strategies; the fontc one is the default."
+ref = "fontc fontir/src/ir.rs (populate_defaults); AFDKO hotconv/hot.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.hheaMetricsDefaults"
+area = "compile"
+milestone = "M2"
+summary = "fontc/ufo2ft defaults: hhea ascender = ascender + sTypoLineGap, descender = descender, lineGap = 0. makeotf defaults: hhea ascender, descender and line gap copy the three typo values. Both can be overridden per field from feature code."
+ref = "fontc fontir/src/ir.rs (populate_defaults); AFDKO hotconv/hmtx.cpp (hheaFill)"
+status = "docs"
+
+[[behavior]]
+id = "compile.subSuperStrikeoutDefaults"
+area = "compile"
+milestone = "M2"
+summary = "Defaults shared by fontc/ufo2ft and makeotf: subscript and superscript size 0.65 em wide by 0.60 em high, subscript lowered by 0.075 em, superscript raised by 0.35 em, x offsets from the italic angle (zero when upright), strikeout thickness = underline thickness, strikeout position = 0.6 of the x-height or 0.22 em when the x-height is zero."
+ref = "fontc fontir/src/ir.rs (populate_defaults); AFDKO hotconv/hot.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.underlineDefaults"
+area = "compile"
+milestone = "M2"
+summary = "Default underline thickness is 0.05 em. Default underline position is -0.1 em in fontc (matching Glyphs), whereas fontc's comments record that ufo2ft uses -0.075 em. We use -0.1 em."
+ref = "fontc fontir/src/ir.rs (populate_defaults)"
+status = "docs"
+
+[[behavior]]
+id = "compile.caretSlopeDefaults"
+area = "compile"
+milestone = "M2"
+summary = "hhea caretSlopeRise defaults to the em size and caretSlopeRun to the horizontal shift for that rise at the italic angle (0 when upright); caretOffset defaults to 0. vhea defaults are rise 0, run 1, offset 0."
+ref = "fontc fontir/src/ir.rs (populate_defaults)"
+status = "docs"
+
+[[behavior]]
+id = "compile.verticalMetrics"
+area = "compile"
+milestone = "M2"
+summary = "vhea and vmtx (and VVAR, and VORG for CFF) are produced only when the source has vertical data. makeotf's defaults when values are missing: vertical typo ascender = half the em, descender = minus that, line gap = ascender - descender, default vertical advance = typo descender - typo ascender (negative, pointing down), default vertical origin Y = typo ascender."
+ref = "fontc fontbe/src/vertical_metrics.rs, fontir/src/ir/static_metadata.rs (build_vertical); AFDKO hotconv/hot.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.headFlagsAndPpem"
+area = "compile"
+milestone = "M2"
+summary = "head.flags defaults to bit 0 (baseline at y=0) and bit 1 (left side bearing at x=0) in both fontc and makeotf. lowestRecPPEM defaults to 6 in fontc (following ufo2ft) and 3 in makeotf; makeotf also sets fontDirectionHint to 2. We default to 6 and let Font Info override."
+ref = "fontc fontir/src/ir/static_metadata.rs; AFDKO hotconv/head.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.headFontRevision"
+area = "compile"
+milestone = "M2"
+summary = "head.fontRevision is the decimal number written as major, a point, and the minor version zero-padded to three digits and read literally (minor 7000 gives 1.7, not 8.0). A FontRevision in a FEA head block overrides it. makeotf's -rev edits that FEA value: no argument adds 5 to the minor part, an integer adds that much, a three-decimal number sets it."
+ref = "fontc fontbe/src/head.rs (apply_font_revision); AFDKO docs/MakeOTFUserGuide.md (-rev)"
+status = "docs"
+
+[[behavior]]
+id = "compile.timestamps"
+area = "compile"
+milestone = "M2"
+summary = "head.created is the source's creation date when it has one, otherwise the build time; head.modified is the build time. When the SOURCE_DATE_EPOCH environment variable holds a valid Unix timestamp it replaces the build time (fontc and fontTools both honour it); an invalid value falls back to the clock with a warning. makeotf writes the current time into both fields."
+ref = "fontc fontbe/src/head.rs (current_timestamp, apply_created_modified); fonttools Lib/fontTools/misc/timeTools.py; AFDKO hotconv/head.cpp"
+status = "docs"
+
+[[behavior]]
+id = "compile.reproducibleOutput"
+area = "compile"
+milestone = "M2"
+summary = "The same source, options and SOURCE_DATE_EPOCH must give byte-identical output: no iteration over unordered maps reaches the binary, ties are broken by glyph order or first occurrence (write-fonts keeps shared gvar tuples with equal counts in first-seen order for this reason), and parallel jobs merge in glyph order."
+ref = "write-fonts src/tables/gvar.rs (compute_shared_peak_tuples); fontc fontir/src/glyph.rs (batch_interpolate_missing)"
+status = "inferred"
+
+[[behavior]]
+id = "compile.hmtxConstruction"
+area = "compile"
+milestone = "M2"
+summary = "Advances are rounded default-master widths; the left side bearing is the built glyph's xMin, or 0 for a glyph with no outline. numberOfHMetrics is the glyph count minus the length of the trailing run of identical advances plus one."
+ref = "fontc fontbe/src/metrics_and_limits.rs (MetricsBuilder)"
+status = "docs"
+
+[[behavior]]
+id = "compile.hheaExtents"
+area = "compile"
+milestone = "M2"
+summary = "advanceWidthMax considers every glyph including empty ones; minLeftSideBearing, minRightSideBearing (advance - lsb - box width) and xMaxExtent (lsb + box width) consider only glyphs that have a bounding box, saturate at the int16 limits, and are 0 when no glyph has outlines."
+ref = "fontc fontbe/src/metrics_and_limits.rs (MetricsBuilder::update)"
+status = "docs"
+
+[[behavior]]
+id = "compile.maxpCompositeLimits"
+area = "compile"
+milestone = "M2"
+summary = "maxCompositePoints and maxCompositeContours are the largest sums over a composite's fully resolved components, and maxComponentDepth is the deepest nesting (1 for a composite of simple glyphs); they are resolved bottom-up so nested composites are counted correctly."
+ref = "fontc fontbe/src/metrics_and_limits.rs (update_composite_limits)"
+status = "docs"
+
+[[behavior]]
+id = "compile.feaTableOverrides"
+area = "compile"
+milestone = "M8"
+summary = "Table blocks in feature code override computed values after the builders run: head (FontRevision only), hhea (Ascender, Descender, LineGap, CaretOffset), vhea (the three vertical typo values), OS/2 (only the fields actually written in the block, including an explicit zero), name (per record), and whole BASE and STAT tables."
+ref = "fontc fontbe/src/head.rs, metrics_and_limits.rs, vertical_metrics.rs, os2.rs (merge_fea_os2), name.rs, stat.rs, orchestration.rs (ExtraFeaTables)"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: assembly and containers
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.sfntVersion"
+area = "compile"
+milestone = "M2"
+summary = "The sfnt version tag is OTTO when the font contains a CFF or CFF2 table and 0x00010000 otherwise; searchRange, entrySelector and rangeShift are computed from the table count."
+ref = "write-fonts src/font_builder.rs (TableDirectory::from_table_records)"
+status = "docs"
+
+[[behavior]]
+id = "compile.tableOrder"
+area = "compile"
+milestone = "M2"
+summary = "Table data is laid out in the specification's recommended order: for TrueType head, hhea, maxp, OS/2, hmtx, LTSH, VDMX, hdmx, cmap, fpgm, prep, cvt, loca, glyf, kern, name, post, gasp, PCLT; for fonts with a CFF table head, hhea, maxp, OS/2, name, cmap, post, CFF. Remaining tables follow in tag order and DSIG is always last. Directory records are sorted by tag. This is write-fonts's order and it matches fontTools's sortedTagList; note the CFF order is keyed on 'CFF ' only, so a CFF2 font uses the TrueType list."
+ref = "write-fonts src/font_builder.rs (ordered_tags); fonttools Lib/fontTools/ttLib/ttFont.py (sortedTagList)"
+status = "docs"
+
+[[behavior]]
+id = "compile.checksums"
+area = "compile"
+milestone = "M2"
+summary = "Every table is zero-padded to a multiple of four bytes and its checksum is computed over the padded data; head is checksummed with checkSumAdjustment zeroed. checkSumAdjustment is 0xB1B0AFBA minus the sum of all table checksums and the directory checksum, modulo 2^32."
+ref = "write-fonts src/font_builder.rs (FontBuilder::build)"
+status = "docs"
+
+[[behavior]]
+id = "compile.variableOnlyTables"
+area = "compile"
+milestone = "M9"
+summary = "avar, fvar, gvar, HVAR, VVAR and MVAR are built only when the font has at least one ranged axis; a static build skips them. STAT is the exception and may appear in a static font. Axes that are a single point are removed from the variation model and from fvar."
+ref = "fontc fontbe/src/font.rs (is_variable_only), fontir/src/ir/static_metadata.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.woff2Encoding"
+area = "compile"
+milestone = "M12"
+summary = "WOFF2 as fontTools writes it: glyf and loca are stored with the WOFF2 transform by default (the hmtx transform is available but optional), DSIG is always dropped, glyf is first normalised to 4-byte glyph padding with loca and indexToLocFormat updated, bit 11 of head.flags is set to mark lossless modification, checksums are recalculated, and the whole table stream is compressed with Brotli in font mode. No Rust crate in the reference folder encodes WOFF2, so the transform is ours and Brotli comes from a pure-Rust crate."
+ref = "fonttools Lib/fontTools/ttLib/woff2.py"
+status = "docs"
+
+[[behavior]]
+id = "compile.woffEncoding"
+area = "compile"
+milestone = "M12"
+summary = "WOFF 1.0 compresses each table separately with zlib; fontTools uses compression level 6 by default and can use Zopfli instead. The head table is always stored uncompressed, and any other table is stored raw when its compressed form is not smaller."
+ref = "fonttools Lib/fontTools/ttLib/sfnt.py (ZLIB_COMPRESSION_LEVEL, USE_ZOPFLI)"
+status = "docs"
+
+[[behavior]]
+id = "compile.collectionSharing"
+area = "compile"
+milestone = "M12"
+summary = "A font collection stores byte-identical tables once and points several fonts at them; fontTools's TTCollection.save shares tables by default, and reads the timestamp once so head tables do not differ needlessly. write-fonts declares a TTCHeader type whose version computation panics as not supported yet, so the collection writer is ours. AFDKO has otf2otc and otc2otf for the same job."
+ref = "fonttools Lib/fontTools/ttLib/ttCollection.py; write-fonts src/font_builder.rs (TTCHeader); AFDKO python/afdko/otf2otc.py"
+status = "docs"
+
+[[behavior]]
+id = "compile.outputNaming"
+area = "compile"
+milestone = "M2"
+summary = "Reference defaults for output paths: fontmake writes into per-format folders (master_ttf, master_otf, instance_ttf, instance_otf, variable_ttf, variable_otf) unless --output-dir or --output-path is given; makeotf writes <PostScript-Name>.otf next to the source; fontc writes build/font.ttf. Ours: <PostScript name>.<ext> in the chosen export folder, with explicit paths in headless use."
+ref = "fontmake README.md; AFDKO docs/MakeOTFUserGuide.md (-o); fontc fontc/src/args.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.outputFormats"
+area = "compile"
+milestone = "M2"
+summary = "fontmake's -o accepts otf, ttf, otf-cff2, variable, variable-cff2, plus the intermediate otf-interpolatable, ttf-interpolatable and ufo; with no -o it builds otf and ttf for each master, and instances only with -i. fontc builds exactly one variable or static TrueType font per run. Our export covers static and variable TTF and OTF plus WOFF, WOFF2 and collections as wrappers."
+ref = "fontmake README.md (Output file format options); fontc README.md"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: variation tables
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.gvarIupOptimisation"
+area = "compile"
+milestone = "M9"
+summary = "Deltas that a renderer can infer by interpolating untouched points are dropped from gvar for simple glyphs, using a tolerance of 0.5 font units; composite glyphs are not optimised this way, their all-zero deltas are simply omitted. fontmake does the same by default and --no-optimize-gvar turns it off; fontc has no switch."
+ref = "fontc fontbe/src/glyphs.rs (compute_deltas, should_iup); write-fonts src/tables/gvar/iup.rs; fontmake USAGE.md (--no-optimize-gvar)"
+status = "docs"
+
+[[behavior]]
+id = "compile.gvarEveryGlyph"
+area = "compile"
+milestone = "M9"
+summary = "gvar holds variation data for every glyph id in glyph order, empty for glyphs that do not vary. A glyph defined at only some master locations gets its own variation model built from just those locations; otherwise the font-wide model is used."
+ref = "fontc fontbe/src/gvar.rs (make_variations), fontbe/src/glyphs.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.gvarPhantomPoints"
+area = "compile"
+milestone = "M9"
+summary = "Each glyph's point list ends with four phantom points: (0, 0), (advance width, 0), (0, vertical origin) and (0, vertical origin - advance height); the last two are (0, 0) when the font has no vertical metrics. For a composite the list is one point per component (its rounded offset) followed by the phantoms. Their deltas are stored like any other point, so advances vary even without HVAR."
+ref = "fontc fontbe/src/glyphs.rs (point_seqs_for_simple_glyph, point_seqs_for_composite_glyph)"
+status = "docs"
+
+[[behavior]]
+id = "compile.gvarSharedTuples"
+area = "compile"
+milestone = "M9"
+summary = "Peak tuples used by more than one tuple variation across the font are moved into the shared tuple list, most frequent first, at most 4095 of them. The offset array switches to 32-bit offsets when the data no longer fits 16-bit halved offsets."
+ref = "write-fonts src/tables/gvar.rs (Gvar::new, compute_flags)"
+status = "docs"
+
+[[behavior]]
+id = "compile.hvarStoreChoice"
+area = "compile"
+milestone = "M9"
+summary = "HVAR and VVAR are built twice when possible (direct store indexed by glyph id, and deduplicated store plus index map) and the smaller serialised result is kept, preferring direct on a tie. A .notdef with a single master is given dense deltas at every location so the region list comes out in the same order as fontTools's."
+ref = "fontc fontbe/src/hvar.rs, vvar.rs, metric_variations.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.avarMaps"
+area = "compile"
+milestone = "M9"
+summary = "avar always writes the -1, 0 and 1 mappings for every axis even when the axis has no custom mapping, because some implementations require them (fontc matches fontTools here). The table is dropped only when all axes are identity and there is no avar 2 data."
+ref = "fontc fontbe/src/avar.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.fvarInstances"
+area = "compile"
+milestone = "M9"
+summary = "Named instances are written only for variable fonts and their locations are reduced to the ranged axes. Instance subfamily names take ids from 256 up except that an instance at the default location reuses ID 2 or 17 when its name matches."
+ref = "fontc fontir/src/ir/static_metadata.rs (StaticMetadata::new), fontbe/src/fvar.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.statDefaults"
+area = "compile"
+milestone = "M9"
+summary = "STAT axes default to the fvar axes with no value labels; a source can supply a longer list, including axes with no fvar counterpart (a point width axis, or an ital axis for an upright family). The elided fallback name id defaults to 2. Axis names share the fvar axis name records."
+ref = "fontc fontir/src/ir/static_metadata.rs (set_stat), fontbe/src/stat.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.cff2VariableBuild"
+area = "compile"
+milestone = "M9"
+summary = "Reference routes to a CFF2 variable font: fontmake -o variable-cff2 builds interpolatable CFF masters and merges them; AFDKO builds one CFF OTF per master with buildmasterotfs (running makeotf on each font.ufo) and merges them with buildcff2vf (options: -k keep glyph names in post format 2, --omit-mac-names, -c check compatibility and fix flat curves, -i per-master glyph inclusion). AFDKO's newer flow merges outlines into a bare CFF2 OTF first and then adds layout with addfeatures. We build CFF2 directly from the source model, which is the newer flow without intermediate files."
+ref = "fontmake README.md; AFDKO python/afdko/buildmasterotfs.py, buildcff2vf.py, docs/CFF2_Support.md"
+status = "docs"
+
+[[behavior]]
+id = "compile.cff2CompanionTables"
+area = "compile"
+milestone = "M9"
+summary = "Because CFF2 drops data that CFF carried, a CFF2 font needs it elsewhere: advances in hmtx with HVAR, glyph names in post (when names are wanted), all naming strings in name, and the em size and font box in head. A CFF table's built-in encoding is ignored in favour of cmap."
+ref = "AFDKO docs/CFF2_Support.md (CFF2 Portability)"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: layout compilation
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.featureCompilation"
+area = "compile"
+milestone = "M8"
+summary = "Feature code is lexed, parsed, validated once and compiled to GSUB, GPOS and GDEF plus any head, hhea, vhea, OS/2, name, BASE and STAT blocks, against the final glyph order (fontc uses fea-rs). When masters carry different feature files each is compiled separately and the results merged into one variable compilation; generated kerning and marks are then added once."
+ref = "fontc fea-rs/README.md, fea-rs/src/compile/output.rs, fontbe/src/features.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.featureWriterModes"
+area = "compile"
+milestone = "M8"
+summary = "Generated features have two modes. skip (default): a generated feature is not written when the feature code already declares that feature, unless the code contains the comment '# Automatic Code', in which case the generated lookups are inserted at that position. append: generated lookups are added after all hand-written lookups and markers are ignored. A source can replace the whole writer list, and an empty list or fontmake's --feature-writer None disables generation."
+ref = "fontmake USAGE.md (Feature writing); fontc fontbe/src/features.rs, fea-rs/src/compile/output.rs (insert_markers)"
+status = "docs"
+
+[[behavior]]
+id = "compile.kernValueLookup"
+area = "compile"
+milestone = "M8"
+summary = "The kerning value for a pair is resolved per master in this order: the exact pair; then for each side a glyph is tried both as itself and as its group; then zero. This is the UFO kerning lookup, applied against each master's own groups."
+ref = "fontc fontbe/src/features/kern.rs (lookup_kerning_value)"
+status = "docs"
+
+[[behavior]]
+id = "compile.kernGroupReconciliation"
+area = "compile"
+milestone = "M9"
+summary = "When masters group glyphs differently for kerning, output classes are the common refinement of all masters' groupings: glyphs that share a kerned group in every master stay together and the rest split into smaller classes. A glyph-to-class pair is treated as per-glyph exceptions and emitted glyph by glyph. Pairs that are zero in every master are dropped."
+ref = "fontc fontbe/src/features/kern.rs (build_variable_kern_adjustments, refine_divergent_groups)"
+status = "docs"
+
+[[behavior]]
+id = "compile.kernFeatureWriter"
+area = "compile"
+milestone = "M8"
+summary = "Generated kerning is split into lookups by script and writing direction using Unicode data for each glyph (through cmap and substitution closure); scripts that need it get the dist feature and the others kern. Common-script glyphs are added to every script's lookups, pairs mixing strong left-to-right and right-to-left glyphs are dropped, and lookups nobody references are pruned. Lookups ignore marks by default; pairs involving marks go to separate lookups, and a mark with an advance width turns the flag into a mark filtering set."
+ref = "fontc fontbe/src/features/kern.rs; fontmake USAGE.md (KernFeatureWriter)"
+status = "docs"
+
+[[behavior]]
+id = "compile.kernQuantisation"
+area = "compile"
+milestone = "M8"
+summary = "fontmake's kern and mark writers accept a quantization option that rounds values to a multiple of a given number to make tables compress better; it is off by default. fontc has no such option. We expose it as an export option, off by default."
+ref = "fontmake USAGE.md (KernFeatureWriter, MarkFeatureWriter); fontc fontbe/src/features/"
+status = "docs"
+
+[[behavior]]
+id = "compile.markFeatureWriter"
+area = "compile"
+milestone = "M8"
+summary = "Anchors generate mark (mark to base and mark to ligature), mkmk (mark to mark), abvm and blwm (for scripts that use them) and, from entry/exit anchor pairs, curs. An anchor 'top' pairs with '_top'; 'entry' pairs with 'exit' and 'entry.N' with 'exit.N' only. fontc emits one lookup per mark class. curs is a separate writer from the mark writer."
+ref = "fontc fontbe/src/features/marks.rs, fontbe/src/features.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.gdefClasses"
+area = "compile"
+milestone = "M8"
+summary = "GDEF glyph classes come from an explicit GDEF block in feature code when there is one; otherwise from the source's glyph categories. For Glyphs sources the categories are refined from anchors (a glyph with attaching anchors becomes a base; a ligature without attaching anchors loses its ligature class); for UFO sources the stored categories are used as they are. fontmake's --no-generate-GDEF stops the generated block when the feature code already has one."
+ref = "fontc fontbe/src/features.rs, fontir/src/glyph.rs (recompute_gdef_categories); fontmake USAGE.md (--no-generate-GDEF)"
+status = "docs"
+
+[[behavior]]
+id = "compile.gdefLigatureCarets"
+area = "compile"
+milestone = "M8"
+summary = "Ligature caret positions in GDEF come from anchors named caret_N (horizontal text, x coordinate) and vcaret_N (vertical text, y coordinate), and vary with the masters in a variable font."
+ref = "fontmake USAGE.md (GdefFeatureWriter); fontc fontbe/src/features/marks.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.featureVariations"
+area = "compile"
+milestone = "M9"
+summary = "Glyph swaps tied to axis ranges compile to single-substitution lookups plus a FeatureVariations table. For designspace rules the feature is rvrn when rules are processed first and rclt when processed last; for Glyphs bracket layers it is rvrn unless the 'Feature for Feature Variations' parameter names another tag. Overlapping condition boxes are split into non-overlapping regions first. When the only feature is rvrn its lookups go at the front of the lookup list."
+ref = "fontc ufo2fontir/src/source.rs, glyphs2fontir/src/source.rs (make_feature_variations), fontir/src/feature_variations.rs, fontbe/src/features/feature_variations.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.bracketLayerGlyphs"
+area = "compile"
+milestone = "M9"
+summary = "Each alternate (bracket) layer set becomes an extra glyph named after its parent with a suffix; it is appended to the glyph order, takes the parent's production name plus the same suffix, has no codepoint, and is reached only through the feature variation substitution."
+ref = "fontc glyphs2fontir/src/source.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.layoutPacking"
+area = "compile"
+milestone = "M8"
+summary = "write-fonts resolves subtable offsets with a graph packer that reorders subtables, deduplicates identical ones, splits some oversized subtables and promotes lookups to extension lookups when 16-bit offsets overflow. A table that still cannot be packed is a build error naming the table, never a silently truncated font."
+ref = "write-fonts src/graph.rs, src/graph/splitting.rs; fontc fontbe/src/font.rs (failure_to_pack_a_table_is_an_error)"
+status = "docs"
+
+[[behavior]]
+id = "compile.skipFeatures"
+area = "compile"
+milestone = "M8"
+summary = "fontc's --skip-features builds the font without any layout tables, for fast outline-only iteration. We offer the same switch for preview builds."
+ref = "fontc fontc/src/args.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: CFF path
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.cffOptimisationLevels"
+area = "compile"
+milestone = "M2"
+summary = "fontmake --optimize-cff: 0 writes plain charstrings, 1 specialises operators (hlineto, vlineto and friends, which drop zero arguments), 2 (default) also subroutinises. --no-subroutinize is the deprecated spelling of level 1."
+ref = "fontmake USAGE.md (--optimize-cff), Lib/fontmake/font_project.py"
+status = "docs"
+
+[[behavior]]
+id = "compile.cffSubroutinisation"
+area = "compile"
+milestone = "M2"
+summary = "Repeated charstring sequences are moved into subroutines. fontmake delegates to compreffor for CFF (the default there, CFF only) or cffsubr for CFF2 (selectable with --subroutinizer). makeotf does it only with -S or in release mode (-r), turns it off with -nS, and can cap the number of subroutines with -maxs; its guide warns of large memory and time cost for CID fonts and little gain for Japanese and Chinese fonts. Nothing in fontations subroutinises, so this is our own code."
+ref = "fontmake USAGE.md (--subroutinizer); AFDKO docs/MakeOTFUserGuide.md (-S, -r), python/afdko/makeotf.py (-maxs)"
+status = "docs"
+
+[[behavior]]
+id = "compile.cffWidthOptimisation"
+area = "compile"
+milestone = "M2"
+summary = "A charstring can omit its width when it equals the Private DICT's defaultWidthX and otherwise stores the difference from nominalWidthX. fontTools has an optimiser (cffLib.width.optimizeWidths) that picks the pair minimising total bytes in time linear in em size plus glyph count; makeotf optimises by default and -swo suppresses it. We compute the optimal pair per Private DICT."
+ref = "fonttools Lib/fontTools/cffLib/width.py; AFDKO python/afdko/makeotf.py (-swo)"
+status = "docs"
+
+[[behavior]]
+id = "compile.cffFontBBox"
+area = "compile"
+milestone = "M2"
+summary = "Top DICT FontBBox is the union of all charstring bounds expanded to integers, or the format's default box when no glyph has an outline (fontTools recalcFontBBox). It must agree with head's xMin/yMin/xMax/yMax."
+ref = "fonttools Lib/fontTools/cffLib/__init__.py (recalcFontBBox)"
+status = "docs"
+
+[[behavior]]
+id = "compile.cffNamesAndStrings"
+area = "compile"
+milestone = "M2"
+summary = "A CFF table carries its own PostScript font name, full name, family name, copyright and glyph names (standard names by string id, others in the String INDEX), which must agree with name ID 6 and the glyph order. CFF2 has none of these."
+ref = "AFDKO docs/CFF2_Support.md (name, post)"
+status = "docs"
+
+[[behavior]]
+id = "compile.cidKeyedFonts"
+area = "compile"
+milestone = "M12"
+summary = "A source becomes CID-keyed when it declares a Registry-Ordering-Supplement and a glyph name to CID map; optional font dictionaries (hint values per glyph group) are selected by groups named FDArraySelect.<index>[.<label>]. Glyphs are written in CID order whatever the editing order. makeotf -cn can also convert a name-keyed CFF to CID-keyed with the Adobe-Identity-0 ordering as an experimental post step."
+ref = "AFDKO docs/CIDKeyedUFOGuide.md; python/afdko/makeotf.py (-cn)"
+status = "docs"
+
+[[behavior]]
+id = "compile.cidCmapResources"
+area = "compile"
+milestone = "M12"
+summary = "For CID-keyed fonts makeotf takes encodings from Adobe CMap resources chosen by ROS: a Macintosh CMap, a UTF-32 horizontal CMap and a UTF-32 vertical CMap (for example UniJIS-UTF32-H/V for Adobe-Japan1); only glyphs named in them are encoded. Options -cm, -ch, -cv override the files. Our CID path reads codepoints from the source glyphs and can import a CMap resource to fill them."
+ref = "AFDKO docs/MakeOTFUserGuide.md (Adobe character code map)"
+status = "docs"
+
+[[behavior]]
+id = "compile.makeotfReleaseMode"
+area = "compile"
+milestone = "M12"
+summary = "makeotf distinguishes development and release builds. -r turns on subroutinisation, applies the GlyphOrderAndAliasDB (order, final names, Unicode overrides), removes the word Development from the version string and adds a stub DSIG; later options can undo parts of it (-r -nS does not subroutinise, -nS -r does). Our export presets 'draft' and 'release' map onto this: draft skips subroutinisation and renaming."
+ref = "AFDKO docs/MakeOTFUserGuide.md (-r, option order), python/afdko/makeotf.py (-addDSIG)"
+status = "docs"
+
+[[behavior]]
+id = "compile.makeotfOptionPrecedence"
+area = "compile"
+milestone = "M12"
+summary = "makeotf reads settings in increasing priority from the fontinfo file, then the project file (current.fpr or -fp), then the command line left to right, where a later option overrides an earlier conflicting one; the last used options are always saved to current.fpr."
+ref = "AFDKO docs/MakeOTFUserGuide.md (MakeOTF options)"
+status = "docs"
+
+[[behavior]]
+id = "compile.makeotfSyntheticGlyphs"
+area = "compile"
+milestone = "M12"
+summary = "makeotf -adds synthesises missing Euro, Apple symbol and a few standard glyphs from built-in multiple master designs matched to the font's zero width and stem weight (needs zero and O; -serif or -sans picks the design). We do not synthesise designed glyphs at compile time; a missing-glyph report covers it."
+ref = "AFDKO docs/MakeOTFUserGuide.md (Synthetic Glyphs)"
+status = "docs"
+
+[[behavior]]
+id = "compile.kernClassOptimisation"
+area = "compile"
+milestone = "M12"
+summary = "makeotf by default saves space in class kerning by using left-side class 0 for non-zero values, which confuses some programs; -skco suppresses it. Our pair positioning comes from write-fonts's PairPosBuilder and does not use this trick."
+ref = "AFDKO python/afdko/makeotf.py (-skco/-nskco); write-fonts src/tables/gpos/builders.rs"
+status = "docs"
+
+# ---------------------------------------------------------------------------------------------------
+# Behaviours: hinting, colour, misc
+# ---------------------------------------------------------------------------------------------------
+
+[[behavior]]
+id = "compile.instructionBytes"
+area = "compile"
+milestone = "M10"
+summary = "write-fonts stores glyph instructions as an opaque byte vector on simple and composite glyphs and checks only that the length fits 16 bits; a composite sets WE_HAVE_INSTRUCTIONS when the vector is not empty. Turning our hinting model into bytecode, and filling the matching maxp limits, is entirely ours."
+ref = "write-fonts src/tables/glyf/simple.rs, glyf/composite.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.ttfAutohintPostStep"
+area = "compile"
+milestone = "M10"
+summary = "fontmake hints TrueType output by running the external ttfautohint program on the finished binary (-a, with optional pass-through arguments), not during compilation. We keep autohinting as a post-compile stage too, so unhinted and hinted builds share everything before it."
+ref = "fontmake USAGE.md (-a)"
+status = "docs"
+
+[[behavior]]
+id = "compile.colrClipBoxes"
+area = "compile"
+milestone = "M11"
+summary = "COLR clip boxes are the colour glyph's bounds expanded outward to multiples of a quantum equal to a tenth of the em rounded to the nearest 10 units (100 at 1000 units per em, 200 at 2048), so that many glyphs share a box; consecutive glyphs with the same box are stored as one range."
+ref = "fontc fontbe/src/colr.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.colrGradientGeometry"
+area = "compile"
+milestone = "M11"
+summary = "Glyphs gradient coordinates are fractions of the layer's bounding box and are scaled to font units at compile time. A radial gradient without an explicit radius uses the largest distance from its centre to the four box corners. A linear gradient's third point is obtained by rotating the start-to-end vector by -90 degrees around the start point."
+ref = "fontc fontbe/src/colr.rs"
+status = "docs"
+
+[[behavior]]
+id = "compile.subsetOnExport"
+area = "compile"
+milestone = "M12"
+summary = "fontmake subsets an instance when it carries a Keep Glyphs parameter, unless --no-subset is given. We apply instance-level glyph filters before the glyph-order stage so removed glyphs never reach the builders."
+ref = "fontmake USAGE.md (--subset / --no-subset)"
+status = "docs"
+
+[[behavior]]
+id = "compile.oracleComparison"
+area = "compile"
+milestone = "M2"
+summary = "fontc validates itself by compiling thousands of families with both fontc and fontmake and diffing normalised dumps (its repository ships ttx_diff, otl-normalizer and fontc_crater for this). Our oracle harness does the same against fontc for TrueType output and against fontmake and makeotf for CFF output, with known, documented differences listed per table."
+ref = "fontc README.md (Are we there yet?, Plan), ttx_diff/, otl-normalizer/"
+status = "inferred"

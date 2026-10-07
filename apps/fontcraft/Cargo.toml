@@ -1,0 +1,18 @@
+[package]
+name = "fontcraft"
+description = "FontCraft, the font editor (desktop app)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-engine.workspace = true
+fontcraft-ui-egui.workspace = true
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "x11", "wayland"] }
+serde_json.workspace = true
+log.workspace = true

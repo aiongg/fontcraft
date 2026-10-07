@@ -1,0 +1,31 @@
+# Real-file test corpora, pinned by commit. `cargo xtask corpus --fetch` downloads them into
+# corpus/<name> (git-ignored). Nothing here is ever committed to this repository.
+# Licences were read from each repository's licence file on 2026-10-07.
+
+[[corpus]]
+name = "fontc"
+repo = "https://github.com/googlefonts/fontc"
+commit = "4504578c3f74c2739f7e55cae133bbfe773f6d8c"
+licence = "Apache-2.0"
+holds = "resources/testdata: about 160 small .glyphs (v2, v3), .designspace and .ufo sources written as compiler test cases, one behaviour each"
+
+[[corpus]]
+name = "fonttools"
+repo = "https://github.com/fonttools/fonttools"
+commit = "9d3adb44ed3ce295dd2f3ef78a2d4acb8f567efd"
+licence = "MIT"
+holds = "Tests/: designspace files, feature files with expected ttx output, variation-model cases, subset and merge fixtures"
+
+[[corpus]]
+name = "oswald"
+repo = "https://github.com/googlefonts/OswaldFont"
+commit = "89795261ac9eeb9aa8cd99f43982c4e4b0e53261"
+licence = "OFL-1.1"
+holds = "sources/Oswald.glyphs: a real variable family (the first family the Rust reference compiler matched against the Python one)"
+
+[[corpus]]
+name = "inter"
+repo = "https://github.com/rsms/inter"
+commit = "353b61b9f4430d5f420d56605a6e7993e0941470"
+licence = "OFL-1.1"
+holds = "src/Inter-Roman.glyphspackage and Inter-Italic.glyphspackage: a large real family in package form (thousands of glyphs, features, two axes)"

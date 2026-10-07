@@ -1,0 +1,9 @@
+/target
+/target-*
+/dist
+# Local only: reference-app screenshots, session notes, the dev log. Never committed.
+/plan/local/
+/log/
+# Real-file test corpora, fetched at pinned commits by `cargo xtask corpus --fetch`. Never committed.
+/corpus/
+.DS_Store

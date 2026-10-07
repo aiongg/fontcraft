@@ -1,0 +1,1104 @@
+# Source: Glyphs 4 Handbook, chapter "Color Fonts" (https://handbook.glyphsapp.com/color-fonts/),
+#   read from the converted chapter text 15-color-fonts.txt.
+# Cross-checked for terminology only against:
+#   - Glyphs 4 Handbook, Appendix › Custom Parameters (parameter names and value types)
+#   - GlyphsSDK/GlyphsFileFormat/GlyphsFileFormatv3.md and v4.md (layer attribute keys)
+#   - fontations: read-fonts 0.45.0, write-fonts 0.54.0 (colour table coverage)
+#   - fontc: fontbe/src/colr.rs, fontbe/src/cpal.rs (how Glyphs colour layers map to COLR v0 / v1)
+# Date: 2026-10-07
+#
+# Notes for readers of this file:
+#   - Custom parameters named here (Color Palettes, Master Color, Export COLR Table, …) are owned
+#     as [[parameter]] rows by the Appendix inventory; this file only records what each one does to
+#     colour output, as [[behavior]] rows with ids under `color.export.*` and `color.*`.
+#   - Commands that belong to other chapters (window.palette Cmd+Alt+P, view.showInfo Cmd+Shift+I,
+#     glyph.addImage, the Font Info axis / master / instance commands) are referenced, not redefined.
+#   - Layer-type items live in the Layers palette context menu, so their `menu` is [].
+
+# ───────────────────────────── Commands: colour palettes ─────────────────────────────
+
+[[command]]
+id = "colorPalette.edit"
+label = "Edit Color Palettes"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "color"
+milestone = "M11"
+summary = "Opens the palette editor for the font-level Color Palettes parameter; in the reference this happens when the parameter's value cell is clicked in Font Info › Font. Edits made in the editor are applied to the font only when it is confirmed with OK."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[command]]
+id = "colorPalette.list"
+label = "List Color Palettes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "color"
+milestone = "M11"
+summary = "Query: returns every palette of the font as an ordered list of RGBA colours, with palette numbers and colour indices both counting from 0. Headless counterpart of reading the palette editor; our addition."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "inferred"
+
+[[command]]
+id = "colorPalette.addColor"
+label = "Add Color"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{color?: \"#RRGGBBAA\", colors?: [\"#RRGGBBAA\" per palette]}"
+area = "color"
+milestone = "M11"
+summary = "Appends one colour entry to the palette table (the plus button of the editor); the new entry takes the next free colour index. The source does not state the initial colour of a new entry or how it is filled in the other palettes, so the defaults here are ours."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[command]]
+id = "colorPalette.removeColor"
+label = "Remove Color"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{index: int}"
+area = "color"
+milestone = "M11"
+summary = "Deletes the selected colour row from the palette table (the minus button of the editor). The source does not say whether layers that used this or a higher index are renumbered; see the open questions."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[command]]
+id = "colorPalette.setColor"
+label = "Set Palette Color"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{palette?: int = 0, index: int, color: \"#RRGGBBAA\"}"
+area = "color"
+milestone = "M11"
+summary = "Changes one entry of one palette to a new colour; in the editor this is done by clicking the entry's swatch and choosing a value in the colour picker."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[command]]
+id = "colorPalette.addPalette"
+label = "Add Palette"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{copyFrom?: int}"
+area = "color"
+milestone = "M11"
+summary = "Adds another palette (a new column in the editor) so the font carries several alternative colour sets; reached from the gear menu of the editor. The palette gets the next number, counting from 0; what colours a new palette starts with is not documented."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[command]]
+id = "colorPalette.removePalette"
+label = "Remove Palette"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{palette: int}"
+area = "color"
+milestone = "M11"
+summary = "Removes one palette column; in the editor it is offered after clicking that palette's column heading. Whether the last remaining palette can be removed is not documented."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+# ───────────────────────────── Commands: colour layer types ─────────────────────────────
+
+[[command]]
+id = "layer.convertToColorPalette"
+label = "Color Palette"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph?: name, layer?: id, index?: int | "*"}'
+area = "color"
+milestone = "M11"
+summary = "Turns a layer (normally one just added with the Layers palette plus button) into a Color Palette layer that paints its outlines in one palette colour. Chosen from the context menu of the layer entry; the layer is then labelled Color plus its colour index."
+ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers"
+status = "handbook"
+
+[[command]]
+id = "layer.setColorPaletteIndex"
+label = "Set Palette Color of Layer"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph?: name, layer?: id, index: int | "*"}'
+area = "color"
+milestone = "M11"
+summary = "Assigns a palette colour to a Color Palette layer: either a colour index from the Color Palettes parameter or the asterisk, which stands for the text colour chosen by the font user. Done from the swatch at the right of the layer name; the layer name follows the new index."
+ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers"
+status = "handbook"
+
+[[command]]
+id = "layer.convertToIColor"
+label = "iColor"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, size?: int}"
+area = "color"
+milestone = "M11"
+summary = "Turns a layer into an iColor layer, the bitmap layer type that feeds the sbix table; chosen from the context menu of the layer entry. The layer carries a pixel size and is labelled iColor plus that size; the default size of a fresh iColor layer is not documented."
+ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
+status = "handbook"
+
+[[command]]
+id = "layer.setIColorSize"
+label = "Set iColor Size"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, size: int}"
+area = "color"
+milestone = "M11"
+summary = "Changes the pixel size of an iColor layer; in the UI by double-clicking the layer entry and editing the number. The size is the strike's pixels-per-em, so raising it above the image's own resolution makes the image draw smaller and lowering it makes the image draw larger."
+ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
+status = "handbook"
+
+[[command]]
+id = "layer.setIColorImage"
+label = "Set iColor Image"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, path: string}"
+area = "color"
+milestone = "M11"
+summary = "References a PNG, JPEG or TIFF file as the image of an iColor layer and positions it using the bounding box of the master layer's paths. The chapter does not name the gesture (the general image commands, drag-and-drop or Glyph › Add Image, are assumed), so this explicit headless form is ours."
+ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
+status = "inferred"
+
+[[command]]
+id = "layer.convertToSvg"
+label = "svg"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "color"
+milestone = "M11"
+summary = "Turns a layer into an svg layer, which holds one referenced SVG document that is written to the SVG table for this glyph; chosen from the context menu of the layer entry."
+ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files"
+status = "handbook"
+
+[[command]]
+id = "layer.setSvgImage"
+label = "Set SVG Image"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, path: string}"
+area = "color"
+milestone = "M11"
+summary = "References an SVG file as the artwork of an svg layer; in the UI the file is dragged onto the layer. The file is linked by path, not embedded, and can afterwards be moved and scaled like any placed image."
+ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files"
+status = "handbook"
+
+[[command]]
+id = "layer.convertToColor"
+label = "Color"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id}"
+area = "color"
+milestone = "M11"
+summary = "Turns a layer into a full-colour layer, labelled Color and marked with a colour-spectrum disc, on which each path carries its own fill, stroke or gradient. Chosen from the context menu of the layer entry."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+
+[[command]]
+id = "layer.listColorLayers"
+label = "List Color Layers"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [names], master?: id}"
+area = "color"
+milestone = "M11"
+summary = "Query: for each glyph returns its colour layers with type (palette, iColor, svg, full colour), palette index or pixel size, referenced image path and whether that file exists. Our addition so agents can audit a colour setup without the Layers palette."
+ref = "Color Fonts"
+status = "inferred"
+
+# ───────────────────────────── Commands: path attributes on full-colour layers ─────────────────────────────
+
+[[command]]
+id = "attributes.addAttribute"
+label = "Add Attribute"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph?: name, layer?: id, paths?: [index], attribute: "gradient" | "shadow" | "innerShadow" | "patternImage"}'
+area = "color"
+milestone = "M11"
+summary = "Adds a further style control to the selected paths from the plus button beside the Attributes heading. Gradient is exportable; Shadow, Inner Shadow and Pattern Image only affect PNG/PDF output from Filter › Glyph as Image and are never written to a font."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+
+[[command]]
+id = "attributes.setStrokeWidth"
+label = "Set Stroke Width"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index], width: number}"
+area = "color"
+milestone = "M11"
+summary = "Sets the stroke width of the selected paths in font units, from the field beside the Stroke heading. An empty field counts as 0, which means no visible stroke."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
+status = "handbook"
+
+[[command]]
+id = "attributes.setStrokeAlignment"
+label = "Set Stroke Alignment"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph?: name, layer?: id, paths?: [index], alignment: "center" | "left" | "right"}'
+area = "color"
+milestone = "M11"
+summary = "Chooses where the stroke sits relative to the path: centred on it (the default) or shifted wholly to its left or right side, which puts it inside or outside the shape depending on path direction."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
+status = "handbook"
+
+[[command]]
+id = "attributes.setStrokeColor"
+label = "Set Stroke Color"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index], color: \"#RRGGBBAA\"}"
+area = "color"
+milestone = "M11"
+summary = "Sets the stroke colour of the selected paths, from the swatch button in the Stroke row."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
+status = "handbook"
+
+[[command]]
+id = "attributes.removeStroke"
+label = "Remove Stroke"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index]}"
+area = "color"
+milestone = "M11"
+summary = "The minus button of the Stroke row: on the selected paths, zeroes the stroke width and makes the stroke colour fully transparent."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
+status = "handbook"
+
+[[command]]
+id = "attributes.setFillColor"
+label = "Set Fill Color"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index], color: \"#RRGGBBAA\"}"
+area = "color"
+milestone = "M11"
+summary = "Sets the solid fill colour of the selected paths, from the swatch button in the Fill row. Not available while the paths carry a gradient."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Fill"
+status = "handbook"
+
+[[command]]
+id = "attributes.removeFill"
+label = "Remove Fill"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index]}"
+area = "color"
+milestone = "M11"
+summary = "The minus button of the Fill row: makes the fill of the selected paths fully transparent."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Fill"
+status = "handbook"
+
+[[command]]
+id = "attributes.addGradient"
+label = "Add Gradient"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph?: name, layer?: id, paths?: [index], type?: "linear" | "radial", stops?: [{offset: 0..1, color}]}'
+area = "color"
+milestone = "M11"
+summary = "Gives the selected paths a gradient, which takes the place of their solid fill. A gradient always has at least two colour stops; the initial type, stop colours and position are not documented."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+status = "handbook"
+
+[[command]]
+id = "attributes.setGradientType"
+label = "Set Gradient Type"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph?: name, layer?: id, paths?: [index], type: "linear" | "radial"}'
+area = "color"
+milestone = "M11"
+summary = "Switches the gradient of the selected paths between linear and radial by clicking the matching icon in the Gradient row."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+status = "handbook"
+
+[[command]]
+id = "attributes.addGradientStop"
+label = "Add Gradient Stop"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index], offset: 0..1, color?: \"#RRGGBBAA\"}"
+area = "color"
+milestone = "M11"
+summary = "Inserts a colour stop at a position along the gradient; in the UI, a click at any spot on the gradient bar does this. The colour a new stop starts with is not documented (interpolating the bar at that position is our default)."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+status = "handbook"
+
+[[command]]
+id = "attributes.removeGradientStop"
+label = "Remove Gradient Stop"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index], stop: int}"
+area = "color"
+milestone = "M11"
+summary = "Deletes a colour stop; in the UI by dragging its knob off the gradient bar. Must refuse to go below two stops."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+status = "handbook"
+
+[[command]]
+id = "attributes.setGradientStopColor"
+label = "Set Gradient Stop Color"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index], stop: int, color?: \"#RRGGBBAA\", offset?: 0..1}"
+area = "color"
+milestone = "M11"
+summary = "Edits one colour stop: clicking its knob under the gradient bar opens the colour picker for that stop. Moving a stop along the bar is assumed (not stated in the chapter) and is covered by the optional offset."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+status = "handbook"
+
+[[command]]
+id = "attributes.setGradientPosition"
+label = "Set Gradient Position"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, paths?: [index], start: [x, y], end?: [x, y]}"
+area = "color"
+milestone = "M11"
+summary = "Places the gradient on the shape, the headless form of dragging the gradient knobs in Edit View: start and end for a linear gradient, a single origin for a radial one. The Glyphs file format stores these points relative to the shape's bounds."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+status = "handbook"
+
+[[command]]
+id = "color.describeExport"
+label = "Describe Color Export"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instance?: id}"
+area = "compile"
+milestone = "M11"
+summary = "Query: for one instance (or all) reports which colour tables would be written (CPAL, COLR and its version, sbix, SVG), from which layers and parameters, plus problems such as missing image files or mismatched aspect ratios. Our addition; the reference has no such report."
+ref = "Color Fonts › Working with Color Fonts › Exporting Color Fonts"
+status = "inferred"
+
+# ───────────────────────────── Panels ─────────────────────────────
+
+[[panel]]
+id = "dialog.colorPalettes"
+label = "Color Palettes"
+location = "dialog"
+controls = [
+  "table: one row per colour index (from 0), one column per palette (header shows the palette number, from 0)",
+  "colour swatch per cell, opening the colour picker",
+  "plus button: add a colour row",
+  "minus button: delete the selected colour row",
+  "gear menu: Add Palette",
+  "column heading click: Remove Palette",
+  "OK / Cancel",
+]
+area = "color"
+milestone = "M11"
+summary = "Editor for the font-level Color Palettes parameter, opened by clicking the parameter value in Font Info › Font. All changes are staged: OK commits them as one edit, Cancel leaves the palettes exactly as they were."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[panel]]
+id = "palette.layers.colorLayerEntry"
+label = "Color layer entries in the Layers palette"
+location = "palette"
+controls = [
+  "context menu on a layer entry: Color Palette, iColor, svg, Color",
+  "Color Palette layer: swatch at the right of the name, opening the palette-colour chooser",
+  "iColor layer: double-click the entry to edit its pixel size",
+  "Color layer: colour-spectrum disc beside the name",
+  "eye buttons to show several layers at once",
+]
+area = "color"
+milestone = "M11"
+summary = "How colour layers appear in the Layers palette (Window › Palette, Cmd+Alt+P): as special layers indented under their master, with a type-specific label and controls. They are created by adding a layer with the plus button and then picking a colour type from the entry's context menu."
+ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers; sbix Fonts › Adding Images to Glyphs; SVG Color Fonts"
+status = "handbook"
+
+[[panel]]
+id = "palette.layers.paletteColorChooser"
+label = "Palette color chooser"
+location = "palette"
+controls = [
+  "one entry per colour index of the Color Palettes parameter",
+  "asterisk (*) entry: the font user's text colour",
+]
+area = "color"
+milestone = "M11"
+summary = "Small chooser opened from the swatch of a Color Palette layer. It lists the predefined palette colours and an asterisk entry for the foreground colour; which palette's colours it shows when several exist is not documented."
+ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers"
+status = "handbook"
+
+[[panel]]
+id = "inspector.attributes"
+label = "Attributes"
+location = "inspector"
+controls = [
+  "plus button beside the heading: add Gradient, Shadow, Inner Shadow, Pattern Image",
+  "Stroke: width field (font units), alignment buttons centre / left / right, colour swatch, minus button",
+  "Fill: colour swatch, minus button (hidden while a gradient is present)",
+  "Gradient: linear / radial type icons, gradient bar with stop knobs",
+  "swatch with a red diagonal line = fully transparent colour",
+]
+area = "color"
+milestone = "M11"
+summary = "Style inspector for the selected paths of a full-colour layer, shown at the bottom of the Palette and toggled together with the Info display by View › Show Info (Cmd+Shift+I). Stroke and Fill are present from the start; the other controls appear once added with the plus button."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+
+[[panel]]
+id = "inspector.attributes.gradientBar"
+label = "Gradient bar"
+location = "inspector"
+controls = [
+  "bar showing the colour ramp",
+  "knob per colour stop along the bottom edge: click to edit its colour",
+  "click on the bar: add a stop",
+  "drag a knob away from the bar: remove the stop",
+]
+area = "color"
+milestone = "M11"
+summary = "The stop editor inside the Gradient row of the Attributes inspector. It never holds fewer than two stops."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+status = "handbook"
+
+[[panel]]
+id = "dialog.masterColorPicker"
+label = "Master Color picker"
+location = "dialog"
+controls = ["colour picker", "Opacity slider"]
+area = "color"
+milestone = "M11"
+summary = "Colour picker used for the value of the Master Color and Master Color Dark parameters in Font Info › Masters. Lowering Opacity gives a semi-transparent preview colour, useful for seeing stacked layers through each other."
+ref = "Color Fonts › Layered Color Fonts › Initial Setup"
+status = "handbook"
+
+# ───────────────────────────── Behaviours: common to all colour fonts ─────────────────────────────
+
+[[behavior]]
+id = "color.fourKinds"
+area = "color"
+milestone = "M11"
+summary = "Four colour workflows are supported: layered fonts (one font file per colour), palette layers written as CPAL + COLR, bitmap layers written as sbix, and SVG glyphs written as an SVG table. All are built from extra layers on a glyph."
+ref = "Color Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "color.metrics.linkWithFirstMaster"
+area = "color"
+milestone = "M11"
+summary = "Colour masters must share metrics and kerning so the layers register. Give each master but the first a Link Metrics With First Master parameter and those masters take sidebearings and kerning from the first master."
+ref = "Color Fonts › Working with Color Fonts › Keeping the Metrics in Sync"
+status = "handbook"
+
+[[behavior]]
+id = "color.metrics.linkWithMaster"
+area = "color"
+milestone = "M11"
+summary = "Link Metrics With Master does the same as the first-master variant but names the master to follow, so any master can be the metrics source."
+ref = "Color Fonts › Working with Color Fonts › Keeping the Metrics in Sync"
+status = "handbook"
+
+[[behavior]]
+id = "color.preview.editViewOtherGlyphs"
+area = "color"
+milestone = "M11"
+summary = "In Edit View, when the layer selected in the current glyph is a colour layer, the other glyphs in the tab are also drawn in colour; with a plain master layer selected they are drawn as ordinary outlines."
+ref = "Color Fonts › Working with Color Fonts › Previewing Color Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "color.preview.previewArea"
+area = "proofing"
+milestone = "M11"
+summary = "Two previews, the strip that the eye button opens below the Edit View canvas and the Preview Panel from Window › Preview Panel, draw a glyph in colour only while one of that glyph's colour layers is the selected layer."
+ref = "Color Fonts › Working with Color Fonts › Previewing Color Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "color.preview.textPreview"
+area = "proofing"
+milestone = "M11"
+summary = "Text Preview (Window › Text Preview) shows the font as the system text engine renders it (Core Text in the reference), so it reflects what the compiled colour tables really do. FontCraft must feed it the compiled font, not the editor's own colour drawing."
+ref = "Color Fonts › Working with Color Fonts › Previewing Color Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "color.preview.paletteDrivesFontView"
+area = "color"
+milestone = "M11"
+summary = "Once the Color Palettes parameter exists, glyphs with palette layers are previewed in colour in Font View cells as well as in Edit View."
+ref = "Appendix › Custom Parameters › Color Palettes"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.anyFlavour"
+area = "compile"
+milestone = "M11"
+summary = "Colour data is added to ordinary OpenType fonts and can go into every export flavour: CFF-based .otf, TrueType .ttf, WOFF and WOFF2. Whether the colours show depends only on the rendering environment."
+ref = "Color Fonts › Working with Color Fonts › Exporting Color Fonts"
+status = "handbook"
+
+# ───────────────────────────── Behaviours: layered colour fonts ─────────────────────────────
+
+[[behavior]]
+id = "color.layered.colorAxis"
+area = "color"
+milestone = "M11"
+summary = "A layered colour font is set up with an extra axis added in Font Info › Font (plus button beside Axes), named Color with a four-letter tag such as COLR. The axis only separates the colour masters; nothing is interpolated along it."
+ref = "Color Fonts › Layered Color Fonts › Initial Setup"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.noCompatibilityCheck"
+area = "color"
+milestone = "M11"
+summary = "Colour masters need not be interpolation-compatible. Adding Enforce Compatibility Check in the Font tab and unchecking it tells the app so, which turns off the incompatibility warnings for the font."
+ref = "Color Fonts › Layered Color Fonts › Initial Setup"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.masterPerColor"
+area = "color"
+milestone = "M11"
+summary = "Each colour gets its own master with a descriptive name (Front, Inside Light, Outer Shadow, …) and its own numeric position on the Color axis, for example 1, 2, 3."
+ref = "Color Fonts › Layered Color Fonts › Initial Setup"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.masterColor"
+area = "color"
+milestone = "M11"
+summary = "The Master Color parameter on a master sets the colour its filled outlines are drawn with in the editor, including opacity. It is a preview aid only and never reaches the exported font; it can be added to several selected masters in one step."
+ref = "Color Fonts › Layered Color Fonts › Initial Setup"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.masterColorDark"
+area = "color"
+milestone = "M11"
+summary = "Master Color Dark supplies an alternative preview colour used when the system is in dark appearance; without it the Master Color is used in both appearances."
+ref = "Color Fonts › Layered Color Fonts › Initial Setup"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.instancePerMaster"
+area = "color"
+milestone = "M11"
+summary = "In Font Info › Exports, the plus button's Add Instance for each Master creates one exporting instance per position on the Color axis, so each colour layer becomes its own font."
+ref = "Color Fonts › Layered Color Fonts › Initial Setup"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.editLikeMasters"
+area = "color"
+milestone = "M11"
+summary = "Layers of a layered colour font are ordinary master layers and are edited as such. By default only the selected master is drawn; the eye buttons in the Layers palette show further masters, and showing all of them is the usual way to work."
+ref = "Color Fonts › Layered Color Fonts › Editing Color Layers"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.stackingOrder"
+area = "color"
+milestone = "M11"
+summary = "When several masters are shown together, their order in Font Info › Masters is the stacking order in Edit View: the first master is drawn on top, the second below it, and so on."
+ref = "Color Fonts › Layered Color Fonts › Editing Color Layers"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.exportSeparateFonts"
+area = "compile"
+milestone = "M11"
+summary = "Exporting a layered colour font writes one plain, colourless font file per instance, that is per colour layer; the user stacks and colours them in the layout application. No colour table is written."
+ref = "Color Fonts › Layered Color Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.toSvg"
+area = "compile"
+milestone = "M11"
+summary = "An extra instance with both Color Layers to SVG and Export SVG Table checked exports a single font whose SVG table holds all colour masters stacked, each drawn in its Master Color."
+ref = "Color Fonts › Layered Color Fonts › Exporting; Appendix › Custom Parameters › Color Layers to SVG"
+status = "handbook"
+
+[[behavior]]
+id = "color.layered.toColr"
+area = "compile"
+milestone = "M11"
+summary = "Color Layers to COLR on an instance converts a layered setup into CPAL and COLR tables in one font, with colours read off every master carrying a Master Color parameter. Documented in the appendix only, not in the chapter."
+ref = "Appendix › Custom Parameters › Color Layers to COLR"
+status = "handbook"
+
+# ───────────────────────────── Behaviours: palettes and palette layers (CPAL + COLR v0) ─────────────────────────────
+
+[[behavior]]
+id = "color.palette.fontLevelParameter"
+area = "color"
+milestone = "M11"
+summary = "Palettes are stored on the font as the Color Palettes custom parameter, added in Font Info › Font: a list of palettes, each a list of colours. It is the source of the CPAL table."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[behavior]]
+id = "color.palette.indexFromZero"
+area = "color"
+milestone = "M11"
+summary = "Colours are addressed by a colour index that counts up from 0, and palettes by a palette number that also starts at 0 and is shown in the column header of the editor."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[behavior]]
+id = "color.palette.multiplePalettes"
+area = "color"
+milestone = "M11"
+summary = "A font may define several palettes. They share the same colour indices (one row per index, one column per palette), so every palette has the same number of entries, as CPAL requires."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[behavior]]
+id = "color.palette.editorIsTransactional"
+area = "color"
+milestone = "M11"
+summary = "Changes in the palette editor take effect only on OK; Cancel throws all of them away. In FontCraft the editor therefore produces one undoable change."
+ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
+status = "handbook"
+
+[[behavior]]
+id = "color.paletteLayer.naming"
+area = "color"
+milestone = "M11"
+summary = "A Color Palette layer is labelled with the word Color followed by its colour index (Color 0, Color 1, …). In the Glyphs file format the index is the layer attribute colorPalette, an integer or \"*\"."
+ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
+status = "handbook"
+
+[[behavior]]
+id = "color.paletteLayer.foregroundColor"
+area = "color"
+milestone = "M11"
+summary = "The asterisk choice means the colour the font user sets for the text. The editor previews it in black, or in white under dark appearance; in the Glyphs format and in COLR it is palette index 0xFFFF."
+ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
+status = "handbook"
+
+[[behavior]]
+id = "color.paletteLayer.freeAssignment"
+area = "color"
+milestone = "M11"
+summary = "Within a glyph several layers may use the same colour index, and palette colours may go unused. Glyphs need not have the same number of colour layers; one glyph may have a single layer, another several per colour."
+ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers"
+status = "handbook"
+
+[[behavior]]
+id = "color.paletteLayer.belongsToMaster"
+area = "color"
+milestone = "M11"
+summary = "Colour layers are special layers attached to a master and listed indented under it; each master of a glyph has its own set."
+ref = "Palette › Layers › Special Layers; Color Fonts › COLR/CPAL Fonts › Color Palette Layers"
+status = "handbook"
+
+[[behavior]]
+id = "color.fallback.masterLayerColr"
+area = "compile"
+milestone = "M11"
+summary = "For a glyph with palette layers the master layer is the fallback: its outline is what the base glyph contains, shown by software without COLR support and never shown where COLR is supported. The master layer should therefore hold a sensible one-colour version of the glyph."
+ref = "Color Fonts › COLR/CPAL Fonts › Master Layer as Fallback"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.colrFromPaletteLayers"
+area = "compile"
+milestone = "M11"
+summary = "If glyphs have Color Palette layers, export writes CPAL and COLR: each palette layer becomes a hidden layer glyph, and the base glyph's COLR record lists those layer glyphs with their palette indices. Solid palette-indexed layers fit COLR version 0; the layer-glyph naming and the stacking order taken from the Layers palette are not documented."
+ref = "Color Fonts › COLR/CPAL Fonts; fontc fontbe/src/colr.rs"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.defaultPalette"
+area = "compile"
+milestone = "M11"
+summary = "Without further parameters an instance exports with the first palette (number 0)."
+ref = "Color Fonts › COLR/CPAL Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.colorPaletteForCpal"
+area = "compile"
+milestone = "M11"
+summary = "Color Palette for CPAL on an instance holds a palette number (0-based) and makes that palette the one the instance's CPAL table uses. Whether the other palettes are still written after it is not documented."
+ref = "Color Fonts › COLR/CPAL Fonts › Exporting; Appendix › Custom Parameters › Color Palette for CPAL"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.exportColrTableOff"
+area = "compile"
+milestone = "M11"
+summary = "Export COLR Table added to an instance and unchecked strips all colour from that instance: neither CPAL nor COLR is written and only the fallback outlines remain."
+ref = "Color Fonts › COLR/CPAL Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.colrToSvg"
+area = "compile"
+milestone = "M11"
+summary = "A palette-layer font is converted to an SVG colour font per instance with three parameters: Color Layers to SVG checked, Color Palette for SVG set to the 0-based palette number whose colours are baked into the SVG, and Export SVG Table checked."
+ref = "Color Fonts › COLR/CPAL Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.colorPaletteForSvg"
+area = "compile"
+milestone = "M11"
+summary = "Color Palette for SVG picks which palette supplies the literal colours when palette layers are converted to SVG. It has an effect only together with Color Layers to SVG."
+ref = "Appendix › Custom Parameters › Color Palette for SVG"
+status = "handbook"
+
+# ───────────────────────────── Behaviours: full-colour layers (SVG, COLR v1) ─────────────────────────────
+
+[[behavior]]
+id = "color.fullColor.layerNaming"
+area = "color"
+milestone = "M11"
+summary = "A full-colour layer is labelled simply Color (no index) and shows a colour-spectrum disc in the Layers palette. In the Glyphs file format it is the boolean layer attribute color."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
+status = "handbook"
+
+[[behavior]]
+id = "color.fullColor.defaultGrayFill"
+area = "color"
+milestone = "M11"
+summary = "Paths on a full-colour layer are drawn and edited with the normal tools. A newly drawn shape is filled with a gray until its attributes are changed."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "color.fullColor.attributesPerPath"
+area = "color"
+milestone = "M11"
+summary = "Fill, stroke and gradient are properties of individual paths, edited for the current path selection in the Attributes inspector."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "color.fullColor.transparentSwatch"
+area = "color"
+milestone = "M11"
+summary = "A colour swatch crossed by a red line means the colour is fully transparent, which is how a removed fill or stroke is shown."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "color.fullColor.strokeUnits"
+area = "color"
+milestone = "M11"
+summary = "Stroke width is in font units (12 gives a 12-unit-wide stroke) and an empty field means 0. The stroke is centred on the path unless left or right alignment is chosen."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
+status = "handbook"
+
+[[behavior]]
+id = "color.fullColor.gradientReplacesFill"
+area = "color"
+milestone = "M11"
+summary = "A path has either a solid fill or a gradient. Adding a gradient hides the Fill control; how a gradient is removed again is not documented."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Fill; Gradient"
+status = "handbook"
+
+[[behavior]]
+id = "color.fullColor.gradientTypes"
+area = "color"
+milestone = "M11"
+summary = "The chapter describes two gradient types, linear and radial, each with at least two colour stops. The Glyphs 4 file format additionally defines a conic gradient and an extend mode, which the chapter does not mention."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient; GlyphsSDK GlyphsFileFormatv4.md › gradient"
+status = "handbook"
+
+[[behavior]]
+id = "color.fullColor.gradientCanvasKnobs"
+area = "color"
+milestone = "M11"
+summary = "While a path with a gradient is selected, Edit View shows draggable knobs for the gradient geometry: two for a linear gradient (start and end), one for a radial gradient (its origin)."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
+status = "handbook"
+
+[[behavior]]
+id = "color.fullColor.imageOnlyEffects"
+area = "color"
+milestone = "M11"
+summary = "Shadow, Inner Shadow and Pattern Image cannot be written to SVG. Only Filter › Glyph as Image respects them, in its PNG and PDF output; font export ignores them."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.fullColorToSvg"
+area = "compile"
+milestone = "M11"
+summary = "With Color Layers to SVG checked on an instance, the paths of each glyph's Color layer are written with their fills, strokes and gradients as one SVG document per glyph in the SVG table of that instance."
+ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.fullColorToColrV1"
+area = "compile"
+milestone = "M11"
+summary = "Full-colour layers can also be compiled to COLR version 1: each path becomes a PaintGlyph over a PaintSolid, PaintLinearGradient or PaintRadialGradient, grouped by PaintColrLayers, with colours collected into CPAL. The chapter does not describe this; it is how the open-source Glyphs compilers treat such layers, and FontCraft offers it as the vector alternative to SVG."
+ref = "fontc fontbe/src/colr.rs, fontbe/src/cpal.rs; OpenType spec › COLR"
+status = "docs"
+
+[[behavior]]
+id = "color.export.colrVersionChoice"
+area = "compile"
+milestone = "M11"
+summary = "The compiler writes COLR version 0 when every colour glyph is a plain stack of solid palette-indexed layers and version 1 as soon as any glyph needs gradients or other paints. This is the rule fontc applies; the reference app's own rule is unconfirmed."
+ref = "fontc fontbe/src/colr.rs"
+status = "docs"
+
+[[behavior]]
+id = "color.export.strokeInColr"
+area = "compile"
+milestone = "M11"
+summary = "COLR has no stroke paint, so a stroked path on a full-colour layer must be expanded to an outline (respecting width and alignment) before it can be a COLR layer, while SVG can keep it as a stroke. Our design; the reference's handling is unknown."
+ref = "OpenType spec › COLR"
+status = "inferred"
+
+# ───────────────────────────── Behaviours: bitmap colour (sbix) ─────────────────────────────
+
+[[behavior]]
+id = "color.sbix.bitmapFormats"
+area = "color"
+milestone = "M11"
+summary = "sbix glyphs are made from bitmap files, not vectors. PNG, JPEG and TIFF sources are accepted."
+ref = "Color Fonts › sbix Fonts › Standard Bitmap Graphics"
+status = "handbook"
+
+[[behavior]]
+id = "color.sbix.imagePerSize"
+area = "color"
+milestone = "M11"
+summary = "A glyph has one image per pixel size and may have several sizes (for example 512, 128, 32, 16) so a renderer can pick the closest. Small sizes can be redrawn for clarity and spare the renderer from downscaling; above the largest size the image is scaled up and looks soft."
+ref = "Color Fonts › sbix Fonts › Standard Bitmap Graphics"
+status = "handbook"
+
+[[behavior]]
+id = "color.sbix.sizeIsPixels"
+area = "color"
+milestone = "M11"
+summary = "Image sizes are pixel heights (pixels per em of the strike), not font units."
+ref = "Color Fonts › sbix Fonts › Preparing Images"
+status = "handbook"
+
+[[behavior]]
+id = "color.sbix.sameAspectRatio"
+area = "color"
+milestone = "M11"
+summary = "All sizes of one glyph's image must have the same width-to-height ratio; a square 512 px image requires square images at every other size. FontCraft should warn when the ratios differ."
+ref = "Color Fonts › sbix Fonts › Preparing Images"
+status = "handbook"
+
+[[behavior]]
+id = "color.sbix.fileNamingTip"
+area = "color"
+milestone = "M11"
+summary = "Recommended file naming is the glyph name, a space and the pixel size, such as sun 48.png. It is a convention for people only; the chapter does not say the app matches files by name."
+ref = "Color Fonts › sbix Fonts › Preparing Images"
+status = "handbook"
+
+[[behavior]]
+id = "color.images.referencedNotEmbedded"
+area = "color"
+milestone = "M11"
+summary = "Bitmap and SVG files added to colour layers are stored as file references, not copied into the source. Moving, renaming or deleting a file breaks the link, so the images should live in a folder beside the source file (the handbook suggests one named Images)."
+ref = "Color Fonts › sbix Fonts › Preparing Images; SVG Color Fonts › Importing Existing SVG Files"
+status = "handbook"
+
+[[behavior]]
+id = "color.sbix.masterLayerBounds"
+area = "color"
+milestone = "M11"
+summary = "The master layer of an sbix glyph has no real outline, but two tiny paths at the bottom-left and top-right corners should be placed on it. Their bounding box is the rectangle the app fits the images into on the iColor layers, and some software (Chrome, Photoshop) clips the bitmap to it."
+ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "color.sbix.zeroSizeCornerPaths"
+area = "color"
+milestone = "M11"
+summary = "The corner paths may have all their nodes on one point, making them invisible. The red marker normally drawn behind coinciding nodes appears for them and is harmless here."
+ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "color.sbix.iColorNaming"
+area = "color"
+milestone = "M11"
+summary = "sbix layers are labelled iColor followed by their pixel size (iColor 256, iColor 20). One iColor layer is added per image resolution; in the Glyphs file format the size is the layer attribute sbixSize."
+ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
+status = "handbook"
+
+[[behavior]]
+id = "color.sbix.sizeScalesImage"
+area = "color"
+milestone = "M11"
+summary = "The image on an iColor layer is drawn at image pixels divided by the layer's pixel size, in ems. A layer size larger than the image makes it appear smaller and a smaller size makes it appear larger; changing the size is the way to scale it."
+ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "color.layers.widthFollowsMaster"
+area = "color"
+milestone = "M11"
+summary = "iColor and svg layers have no advance width of their own: a new width on the master layer applies to all its iColor layers and to its svg layer as well."
+ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs; SVG Color Fonts › Importing Existing SVG Files"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.sbixAutomatic"
+area = "compile"
+milestone = "M11"
+summary = "An sbix table is written automatically whenever the font contains iColor layers: one strike per distinct pixel size, holding each glyph's image for that size. Placed images on ordinary layers are not exported."
+ref = "Color Fonts › sbix Fonts › Exporting; Edit View › Images › Adding Images"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.exportSbixTableOff"
+area = "compile"
+milestone = "M11"
+summary = "Export sbix Table added to an instance and unchecked leaves the sbix table out of that instance."
+ref = "Color Fonts › sbix Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.sbixToSvg"
+area = "compile"
+milestone = "M11"
+summary = "SBIX to SVG on an instance takes a pixel size and additionally writes the bitmaps of that size into an SVG table, each wrapped in an SVG document, for software that reads SVG but not sbix."
+ref = "Color Fonts › sbix Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.sbixToSvgSizeChoice"
+area = "compile"
+milestone = "M11"
+summary = "For SBIX to SVG the layer is chosen per glyph: the iColor layer of exactly the requested size if present, otherwise the smallest one larger than it, otherwise the largest one below it."
+ref = "Color Fonts › sbix Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.svgOnlyFromSbix"
+area = "compile"
+milestone = "M11"
+summary = "Combining an unchecked Export sbix Table with SBIX to SVG yields a font that carries the bitmaps only in its SVG table."
+ref = "Color Fonts › sbix Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.cbdtNotInReference"
+area = "compile"
+milestone = "M11"
+summary = "The chapter has no CBDT/CBLC workflow; the only bitmap output it describes is sbix. If FontCraft offers CBDT/CBLC it would be built from the same iColor layers as an export option of our own, and needs its own table writer."
+ref = "Color Fonts › sbix Fonts"
+status = "inferred"
+
+# ───────────────────────────── Behaviours: SVG colour glyphs ─────────────────────────────
+
+[[behavior]]
+id = "color.svg.threeSources"
+area = "color"
+milestone = "M11"
+summary = "An SVG table can come from three sources: conversion of another colour setup (layered masters, palette layers or iColor bitmaps), SVG files referenced on svg layers, or paths with attributes drawn on full-colour layers. The result is an OpenType font with SVG glyph images, not the obsolete SVG font format."
+ref = "Color Fonts › SVG Color Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "color.svg.layerHoldsFile"
+area = "color"
+milestone = "M11"
+summary = "An svg layer holds one SVG file dropped onto it, which may contain vector and embedded bitmap content. In the Glyphs file format it is the boolean layer attribute svg."
+ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files; GlyphsSDK GlyphsFileFormatv3.md › layerAttr"
+status = "handbook"
+
+[[behavior]]
+id = "color.svg.fileNamingTip"
+area = "color"
+milestone = "M11"
+summary = "Recommended naming for SVG sources is the glyph name plus .svg (A.svg) in a folder called Images. As with bitmaps this is advice, not a lookup rule."
+ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files"
+status = "handbook"
+
+[[behavior]]
+id = "color.svg.imageTransform"
+area = "color"
+milestone = "M11"
+summary = "The SVG on an svg layer is positioned and scaled like any placed image: by dragging, the bounding box, the Scale and Rotate tools, the Transformations palette, or the image fields of the Info box. The placement must be carried into the exported document."
+ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files; Edit View › Images › Manipulating Images"
+status = "handbook"
+
+[[behavior]]
+id = "color.fallback.masterLayerSvg"
+area = "compile"
+milestone = "M11"
+summary = "For a glyph with an svg layer the master layer outline is the fallback, shown where SVG glyphs are unsupported and hidden where they are supported."
+ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.exportSvgTable"
+area = "compile"
+milestone = "M11"
+summary = "Export SVG Table controls whether SVG data is included in an instance. The chapter asks for it to be checked alongside Color Layers to SVG when converting; the appendix says an SVG table is exported by default and the parameter exists to switch it off, so the two descriptions do not fully agree."
+ref = "Color Fonts › Layered Color Fonts › Exporting; Appendix › Custom Parameters › Export SVG Table"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.colorLayersToSvg"
+area = "compile"
+milestone = "M11"
+summary = "Color Layers to SVG, a boolean on an instance, is the single switch that turns vector colour layers into SVG documents: Master Color masters in a layered setup, palette layers, or full-colour layers with path attributes, whichever the font has."
+ref = "Color Fonts › Layered Color Fonts › Exporting; COLR/CPAL Fonts › Exporting; SVG Color Fonts › Creating SVG Glyphs › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.perInstance"
+area = "compile"
+milestone = "M11"
+summary = "Every colour export switch (Color Layers to SVG, Color Layers to COLR, Color Palette for CPAL, Color Palette for SVG, Export COLR Table, Export sbix Table, Export SVG Table, SBIX to SVG) is set per instance in Font Info › Exports, so one source can export differently coloured or differently encoded fonts side by side."
+ref = "Color Fonts › COLR/CPAL Fonts › Exporting; sbix Fonts › Exporting"
+status = "handbook"
+
+[[behavior]]
+id = "color.export.glyphFilterTokens"
+area = "compile"
+milestone = "M11"
+summary = "Export glyph filters can test colour properties: colorIndex (palette index of layers), isAnyColorGlyph (palette, sbix or full-colour glyph) and isAppleColorGlyph (has an iColor layer). Feature-code tokens likewise offer isColorGlyph."
+ref = "Appendix › Custom Parameters › Remove Glyphs; Feature Code › Tokens"
+status = "handbook"

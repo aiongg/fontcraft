@@ -1,0 +1,2263 @@
+# Source: Glyphs 4 Handbook, chapter "Font Info" (https://handbook.glyphsapp.com/font-info/)
+#   sections: Font, Masters, Exports, Features, Other Settings, Notes.
+# Source-file key names (rows and fields marked "docs"): GlyphsSDK,
+#   refs/GlyphsSDK/GlyphsFileFormat/GlyphsFileFormatv3.md and GlyphsFileFormatv4.md.
+# Date: 2026-10-07
+#
+# Scope notes
+# - [[parameter]] rows here cover only the built-in fields of the Font / Masters / Exports tabs.
+#   Their names carry a scope prefix ("font.", "master.", "instance.") so they cannot collide with
+#   the custom parameters of the appendix (several of which share a bare name with a built-in
+#   field, e.g. unitsPerEm).
+# - The feature language itself, text tokens, the custom parameter catalogue and the user settings
+#   are inventoried from their own chapters; rows here cover only the Font Info window.
+# - Command targets are explicit so the commands work headless: masters and instances are addressed
+#   by id, name or index; "selection" is only the default when a UI is attached.
+
+# ───────────────────────────── Window and shared row mechanics ─────────────────────────────
+
+[[panel]]
+id = "fontInfo"
+label = "Font Info"
+location = "window"
+controls = [
+  "tab bar: Font, Masters, Exports, Features, Other Settings, Notes",
+  "Font / Masters / Exports: rows of fields grouped under bold headings",
+  "plus button beside each bold heading: add a field or entry to that group",
+  "minus button at the right of a row: delete the row",
+  "Alt held: rows that show a plus button show a minus button instead",
+  "row selection (click, Cmd+click for several)",
+  "language menu and plus button on localizable fields",
+]
+area = "font-info"
+milestone = "M7"
+summary = "Per-document window holding the font-wide metadata, the masters, the exports (instances and variable font settings), the feature code, document settings and a note. One window per open font, split into six tabs."
+ref = "Font Info"
+status = "handbook"
+
+[[command]]
+id = "font.info"
+label = "Font Info…"
+menu = ["File"]
+shortcut = "Cmd+I"
+kind = "ui"
+params = "{tab?: 'font'|'masters'|'exports'|'features'|'other'|'notes'}"
+area = "font-info"
+milestone = "M7"
+summary = "Opens the Font Info window of the current font, optionally on a given tab. The Info button at the top-left of the main window runs the same command."
+ref = "Font Info"
+status = "handbook"
+
+[[command]]
+id = "font.info.selectTab"
+label = "Select Font Info Tab"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tab: 'font'|'masters'|'exports'|'features'|'other'|'notes'}"
+area = "font-info"
+milestone = "M7"
+summary = "Switches the open Font Info window to one of its six tabs. The handbook only describes clicking the tabs; no shortcut is given."
+ref = "Font Info"
+status = "inferred"
+
+[[command]]
+id = "font.info.get"
+label = "Get Font Info"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope?: 'font'|'master'|'instance', target?: id|name|index, keys?: [string]}"
+area = "font-info"
+milestone = "M7"
+summary = "Reads Font Info fields as structured data: the font-wide fields, or the fields of one master or one export. Without keys it returns every built-in field, every added field with all its localizations, and the custom parameters of that scope."
+ref = "Font Info"
+status = "inferred"
+
+[[command]]
+id = "font.info.set"
+label = "Set Font Info"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope?: 'font'|'master'|'instance', targets?: [id|name|index], values: {key: value}}"
+area = "font-info"
+milestone = "M7"
+summary = "Writes one or more built-in or added fields in a single undoable step. With several masters or instances as targets the same value is written to each, matching the multi-selection editing of the UI."
+ref = "Font Info"
+status = "inferred"
+
+[[command]]
+id = "font.info.listFields"
+label = "List Available Fields"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', query?: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns the fields that the plus button beside a General heading offers for the given scope, each with its key, whether it is localizable and whether it is already present."
+ref = "Font Info"
+status = "inferred"
+
+[[command]]
+id = "font.info.addField"
+label = "Add Field"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], key: string, value?: any, language?: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Adds an optional field row (for example familyNames, postscriptFontName or postscriptFullName) under the General heading of the Font, Masters or Exports tab. In the UI this is the plus button beside the heading followed by picking the field and pressing Add."
+ref = "Font Info; Font Info › Font › Family Name"
+status = "handbook"
+
+[[command]]
+id = "font.info.removeField"
+label = "Remove Field"
+menu = []
+shortcut = "Cmd+Delete"
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], keys: [string]}"
+area = "font-info"
+milestone = "M7"
+summary = "Deletes the selected field rows. Reached through the minus button at the right of a row (shown with Alt held on rows that normally show a plus button) or by selecting rows and pressing the shortcut."
+ref = "Font Info"
+status = "handbook"
+
+[[command]]
+id = "font.info.setLocalizedValue"
+label = "Set Localized Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, key: string, language: string, value: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Adds or changes one language entry of a localizable field. In the UI the plus button beside the field adds another localization row and the language menu picks its language."
+ref = "Font Info"
+status = "handbook"
+
+[[command]]
+id = "font.info.removeLocalizedValue"
+label = "Remove Localized Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, key: string, language: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Removes one language entry from a localizable field, the counterpart of the minus button on a localization row."
+ref = "Font Info"
+status = "handbook"
+
+[[command]]
+id = "font.info.copyRows"
+label = "Copy Rows"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, keys?: [string]}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns the selected Font Info rows (fields, custom parameters) as a transferable value and, in the UI, puts them on the clipboard. The UI reaches it through the normal Edit > Copy (Cmd+C) while rows are selected, so it has no menu entry or shortcut of its own."
+ref = "Font Info"
+status = "handbook"
+
+[[command]]
+id = "font.info.pasteRows"
+label = "Paste Rows"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], rows?: [row]}"
+area = "font-info"
+milestone = "M7"
+summary = "Inserts previously copied rows into the current tab. The UI reaches it through Edit > Paste (Cmd+V); how a pasted row that already exists is merged, and whether pasting into another font or tab is allowed, is not documented."
+ref = "Font Info"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.rows.plusAddsField"
+area = "font-info"
+milestone = "M7"
+summary = "On the Font, Masters and Exports tabs every bold group heading carries a plus button that adds another field or entry to that group."
+ref = "Font Info"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.rows.altRevealsMinus"
+area = "font-info"
+milestone = "M7"
+summary = "A row normally shows a minus button at its right edge; rows that show a plus button there (localizable fields) swap it for the minus button while Alt is held."
+ref = "Font Info"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.rows.selection"
+area = "font-info"
+milestone = "M7"
+summary = "Clicking a row selects it and Cmd+click builds a selection of several rows. The selection is what Cmd+Delete, Copy and Paste act on."
+ref = "Font Info"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.rows.localizable"
+area = "font-info"
+milestone = "M7"
+summary = "A localizable field shows a language menu and a plus button; each added row holds the same field in another language chosen from the menu."
+ref = "Font Info"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.general.textTokens"
+area = "font-info"
+milestone = "M7"
+summary = "Fields under the General heading of the Font tab and of the Exports tab, and the stylistic set name fields, accept text tokens written in curly braces that are expanded at export. The token syntax is specified with the Text Tokens section."
+ref = "Font Info › Font; Font Info › Exports; Font Info › Features › Naming Stylistic Sets"
+status = "handbook"
+
+# ───────────────────────────── Font tab ─────────────────────────────
+
+[[panel]]
+id = "fontInfo.font"
+label = "Font"
+location = "window"
+controls = [
+  "General heading with plus button (add optional fields such as familyNames, postscriptFontName, postscriptFullName)",
+  "Family Name: text field",
+  "Units per Em: number field with a double-arrow button that scales the whole font to a new UPM",
+  "Version: major and minor number separated by a period, with stepper buttons for the minor part",
+  "Creation Date: date and time field with an update button that sets it to now",
+  "optional localizable fields: value field, language menu, plus button",
+  "Axes heading with plus button; per axis: name field with predefined names, four-character tag field, Hidden checkbox",
+  "Custom Parameters heading with plus button; one row per parameter with its value editor",
+]
+area = "font-info"
+milestone = "M7"
+summary = "First tab of Font Info: metadata shared by every exported font file, the design axes, and the font-level custom parameters."
+ref = "Font Info › Font"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.fieldPicker"
+label = "Add Field"
+location = "dialog"
+controls = ["list of optional fields for the current tab", "Add button"]
+area = "font-info"
+milestone = "M7"
+summary = "Picker opened by the plus button beside a General heading. The user selects one or more optional fields and confirms with Add; the fields appear as new rows."
+ref = "Font Info › Font › Family Name"
+status = "handbook"
+
+[[parameter]]
+name = "font.familyName"
+scope = ["font"]
+kind = "string"
+area = "font-info"
+milestone = "M7"
+summary = "Family Name field. Names the exported fonts and groups them into one family in font menus; should use only ASCII letters, digits and spaces. Drives the export file name, name IDs 1, 3, 4 and 6, and in CFF fonts the FontName and FullName. Glyphs source key: familyName."
+ref = "Font Info › Font › Family Name; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.unitsPerEm"
+scope = ["font"]
+kind = "number"
+area = "font-info"
+milestone = "M7"
+summary = "Units per Em field: the number of coordinate units across the em square, 1000 in a new file. Editing the number alone leaves outlines and metrics untouched. Glyphs source key: unitsPerEm."
+ref = "Font Info › Font › Units per Em; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.versionMajor"
+scope = ["font"]
+kind = "number"
+area = "font-info"
+milestone = "M7"
+summary = "Integer part of the Version field, 1 in a new file. Written together with the minor part to head.fontRevision and used for the version string in name ID 5. Glyphs source key: versionMajor."
+ref = "Font Info › Font › Version; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.versionMinor"
+scope = ["font"]
+kind = "number"
+area = "font-info"
+milestone = "M7"
+summary = "Part of the Version field after the period, shown with three digits (1.000 in a new file) and changed by the stepper buttons. Glyphs source key: versionMinor."
+ref = "Font Info › Font › Version; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.date"
+scope = ["font"]
+kind = "string"
+area = "font-info"
+milestone = "M7"
+summary = "Creation Date field: a date, time and time zone that export writes to both head.created and head.modified. Glyphs source key: date."
+ref = "Font Info › Font › Creation Date; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.properties"
+scope = ["font"]
+kind = "list"
+area = "font-info"
+milestone = "M7"
+summary = "The optional General fields added with the plus button, each a key with either one value or a list of language/value pairs. The chapter names familyNames, postscriptFontName and postscriptFullName; the full catalogue comes from the appendix. Glyphs source key: properties (items with key and value or values)."
+ref = "Font Info › Font › Family Name; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.axes"
+scope = ["font"]
+kind = "list"
+area = "interpolation"
+milestone = "M9"
+summary = "Ordered list of design axes, each defined by a name, a tag of four characters and a flag that marks it hidden. The list defines the dimensions of the designspace that master and instance coordinates refer to. Glyphs source key: axes (items with name, tag, hidden)."
+ref = "Font Info › Font › Axes; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.customParameters"
+scope = ["font"]
+kind = "list"
+area = "font-info"
+milestone = "M7"
+summary = "Ordered list of font-level custom parameters (name and value). A parameter that also exists on a master or an export is overridden there. Glyphs source key: customParameters."
+ref = "Font Info › Font › Custom Parameters; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.familyName.allowedCharacters"
+area = "font-info"
+milestone = "M7"
+summary = "The Family Name should contain only A-Z, a-z, 0-9 and spaces; other characters can stop fonts from exporting or installing. The UI should warn rather than block, and point to the familyNames field for non-ASCII or localized family names."
+ref = "Font Info › Font › Family Name"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.familyName.derivedNames"
+area = "compile"
+milestone = "M7"
+summary = "Export derives the file name and name IDs 1, 3, 4 and 6 from the Family Name, and for CFF-flavoured fonts also the CFF FontName and FullName. The postscriptFontName and postscriptFullName fields, when present, set those two values independently."
+ref = "Font Info › Font › Family Name"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.familyName.instanceOverride"
+area = "font-info"
+milestone = "M7"
+summary = "An export that carries its own familyNames field uses that family name instead of the one on the Font tab."
+ref = "Font Info › Font › Family Name; Font Info › Exports › Style Linking"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.unitsPerEm.limits"
+area = "font-info"
+milestone = "M7"
+summary = "New files start at 1000 UPM. The format allows 16 to 16384; the handbook warns that some applications misbehave above 3000, Adobe InDesign and Illustrator above 5000, that CFF glyph widths become unreliable beyond 4096 UPM, and that no point coordinate may exceed plus or minus 32768."
+ref = "Font Info › Font › Units per Em"
+status = "handbook"
+
+[[command]]
+id = "font.info.scaleToUnitsPerEm"
+label = "Scale Font to Units per Em"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{unitsPerEm: integer}"
+area = "font-info"
+milestone = "M7"
+summary = "Sets a new UPM and scales the whole font by new/old so glyphs keep their apparent size; this is the double-arrow button beside the Units per Em field. The handbook says outlines scale with the UPM and does not list which other data (metrics, kerning, anchors, guides, stems) is scaled."
+ref = "Font Info › Font › Units per Em"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.unitsPerEm.resizeTrick"
+area = "font-info"
+milestone = "M7"
+summary = "Because typing a new UPM does not touch outlines while the scale button does, lowering the UPM by typing and then scaling back to the original value enlarges every glyph; raising it first and scaling back shrinks them. Both steps must stay separate undoable actions."
+ref = "Font Info › Font › Units per Em"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.unitsPerEm.exportOverrides"
+area = "compile"
+milestone = "M7"
+summary = "Two custom parameters change the UPM of exported files only: Scale to UPM on an instance rescales outlines and metrics to the new value, while unitsPerEm changes the value without scaling anything."
+ref = "Font Info › Font › Units per Em"
+status = "handbook"
+
+[[command]]
+id = "font.info.stepVersion"
+label = "Step Minor Version"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{delta?: integer}"
+area = "font-info"
+milestone = "M7"
+summary = "Raises or lowers the minor version by one step per click of the stepper beside the Version field (delta defaults to +1). Behaviour at the ends of the range is not documented."
+ref = "Font Info › Font › Version"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.version.headAndNameId5"
+area = "compile"
+milestone = "M7"
+summary = "Export writes major.minor to head.fontRevision and builds name ID 5 as 'Version <major>.<minor>' followed by a semicolon and the exporting application's own name and build. A versionString parameter replaces the generated string; some applications require it to start with 'Version <major>.<minor>'."
+ref = "Font Info › Font › Version"
+status = "handbook"
+
+[[command]]
+id = "font.info.updateDate"
+label = "Update Creation Date"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{date?: iso8601}"
+area = "font-info"
+milestone = "M7"
+summary = "Sets the Creation Date to the current date and time (or to the given timestamp when run headless), like the update button beside the field."
+ref = "Font Info › Font › Creation Date"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.date.headCreatedModified"
+area = "compile"
+milestone = "M7"
+summary = "The single date field feeds both the created and the modified timestamps of the head table."
+ref = "Font Info › Font › Creation Date"
+status = "handbook"
+
+# Axes
+
+[[command]]
+id = "font.axes.list"
+label = "List Axes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "interpolation"
+milestone = "M9"
+summary = "Returns the design axes in order, each with name, tag and hidden flag."
+ref = "Font Info › Font › Axes"
+status = "inferred"
+
+[[command]]
+id = "font.axes.add"
+label = "Add Axis"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name?: string, tag?: string, hidden?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Appends a design axis, as the plus button beside the Axes heading does. Every master and instance gains a coordinate for the new axis; the default name, tag and coordinate of a new axis are not stated."
+ref = "Font Info › Font › Axes"
+status = "handbook"
+
+[[command]]
+id = "font.axes.set"
+label = "Edit Axis"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{axis: index|tag, name?: string, tag?: string, hidden?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Changes the name, the four-character tag or the Hidden flag of an axis. Choosing one of the predefined names also sets the matching tag."
+ref = "Font Info › Font › Axes"
+status = "handbook"
+
+[[command]]
+id = "font.axes.remove"
+label = "Remove Axis"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{axis: index|tag}"
+area = "interpolation"
+milestone = "M9"
+summary = "Deletes an axis through the minus button of its row or Cmd+Delete on the selected row. What happens to the stored master and instance coordinates of that axis is not described."
+ref = "Font Info; Font Info › Font › Axes"
+status = "handbook"
+
+[[command]]
+id = "font.axes.listPredefined"
+label = "List Predefined Axis Names"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "interpolation"
+milestone = "M9"
+summary = "Returns the predefined axis names offered by the name field together with the tag each one sets. The chapter says such a list exists but does not enumerate it."
+ref = "Font Info › Font › Axes"
+status = "inferred"
+
+[[behavior]]
+id = "fontInfo.axes.predefinedNameSetsTag"
+area = "interpolation"
+milestone = "M9"
+summary = "Picking a predefined axis name rewrites the tag field to the tag registered for that name; a free-form name leaves the tag for the user to enter."
+ref = "Font Info › Font › Axes"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.axes.hidden"
+area = "interpolation"
+milestone = "M9"
+summary = "An axis marked Hidden is still used for interpolation but is flagged so that font users are not shown it in exported variable fonts."
+ref = "Font Info › Font › Axes"
+status = "handbook"
+
+# Custom parameters (shared by the Font, Masters and Exports tabs)
+
+[[panel]]
+id = "fontInfo.customParameterPicker"
+label = "Add Custom Parameter"
+location = "dialog"
+controls = [
+  "search field",
+  "scrolling list of the parameters valid for the current tab",
+  "description of the clicked parameter",
+  "Add button (adds every selected parameter)",
+]
+area = "font-info"
+milestone = "M7"
+summary = "Picker opened by the plus button beside a Custom Parameters heading. Searching or scrolling finds a parameter, clicking its name shows what it does, and Add inserts the selected parameters into the font, master or export."
+ref = "Font Info › Font › Custom Parameters"
+status = "handbook"
+
+[[command]]
+id = "font.customParameters.list"
+label = "List Custom Parameters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns the custom parameters set on the font, on one master or on one export, in row order with their values."
+ref = "Font Info › Font › Custom Parameters"
+status = "inferred"
+
+[[command]]
+id = "font.customParameters.describe"
+label = "Describe Custom Parameters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope?: 'font'|'master'|'instance', query?: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Searches the catalogue of known custom parameters and returns name, value type, valid scopes and description, the data behind the picker's list and description pane."
+ref = "Font Info › Font › Custom Parameters"
+status = "inferred"
+
+[[command]]
+id = "font.customParameters.add"
+label = "Add Custom Parameter"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], name: string, value?: any}"
+area = "font-info"
+milestone = "M7"
+summary = "Adds a custom parameter row to the font, to masters or to exports. Whether the same parameter may be added twice to one scope is not stated in this chapter."
+ref = "Font Info › Font › Custom Parameters; Masters › Custom Parameters; Exports › Custom Parameters"
+status = "handbook"
+
+[[command]]
+id = "font.customParameters.set"
+label = "Set Custom Parameter"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], name: string, index?: integer, value: any}"
+area = "font-info"
+milestone = "M7"
+summary = "Changes the value of an existing custom parameter row."
+ref = "Font Info › Font › Custom Parameters"
+status = "inferred"
+
+[[command]]
+id = "font.customParameters.remove"
+label = "Remove Custom Parameter"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], name: string, index?: integer}"
+area = "font-info"
+milestone = "M7"
+summary = "Deletes a custom parameter row, as the row's minus button or Cmd+Delete on the selected rows does."
+ref = "Font Info"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.customParameters.precedence"
+area = "font-info"
+milestone = "M7"
+summary = "When one parameter exists at several levels the most specific wins: an export's value overrides the master's and the font's, and a master's value overrides the font's."
+ref = "Font Info › Masters › Custom Parameters; Font Info › Exports › Custom Parameters"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.customParameters.masterInterpolation"
+area = "interpolation"
+milestone = "M9"
+summary = "A custom parameter present on every master is interpolated for instances that lie between masters; one missing from any master is not."
+ref = "Font Info › Masters › Custom Parameters"
+status = "handbook"
+
+# ───────────────────────────── Masters tab ─────────────────────────────
+
+[[panel]]
+id = "fontInfo.masters"
+label = "Masters"
+location = "window"
+controls = [
+  "master list sidebar with icons; drag to reorder; multiple selection",
+  "plus button (bottom): Add Master, Add Other Font, Duplicate Selected",
+  "minus button (bottom-left): delete selected masters",
+  "General: master name field, master icon button",
+  "Axes Coordinates: one number field per font axis",
+  "Metrics & Alignment Zones: per metric a clickable name, position field, zone size field (Italic Angle has one field)",
+  "Stems heading with plus button: per stem an orientation icon (vertical/horizontal), name, value, actions button for the glyph scope",
+  "Custom Parameters heading with plus button",
+  "Number Values heading with plus button: name and value per row",
+  "gray 'Multiple Values' placeholder in fields whose value differs across the selected masters",
+]
+area = "font-info"
+milestone = "M7"
+summary = "Second tab of Font Info: the list of masters on the left and the properties of the selected master or masters on the right."
+ref = "Font Info › Masters"
+status = "handbook"
+
+[[command]]
+id = "font.master.list"
+label = "List Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "interpolation"
+milestone = "M7"
+summary = "Returns the masters in list order with id, name, icon and axis coordinates."
+ref = "Font Info › Masters › Managing Masters"
+status = "inferred"
+
+[[command]]
+id = "font.master.get"
+label = "Get Master"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id|name|index}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns every property of one master: name, icon, axis coordinates, metric positions and zone sizes, stem values, number values and custom parameters."
+ref = "Font Info › Masters"
+status = "inferred"
+
+[[command]]
+id = "font.master.set"
+label = "Edit Master"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters: [id|name|index], name?: string, icon?: string, axes?: {tag: number}, metrics?: {metric: {position?: number, zone?: number}}, stems?: {stem: number}, numbers?: {name: number}}"
+area = "font-info"
+milestone = "M7"
+summary = "Writes properties of one or several masters in one step; with several masters each given property is set to the same value on all of them, as editing a multi-selection in the Masters tab does."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[command]]
+id = "font.master.add"
+label = "Add Master"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name?: string, axes?: {tag: number}}"
+area = "interpolation"
+milestone = "M7"
+summary = "Adds a new master whose layers are empty in every glyph and whose metrics hold the default values. First entry of the plus menu at the bottom of the Masters tab."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[command]]
+id = "font.master.addFromOtherFont"
+label = "Add Other Font"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{sources: [{font: path|documentId, master: id|name}]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Imports one or more masters from other open fonts. The UI lists every master of every open document and imports the chosen ones on OK; Cancel imports nothing. How glyphs missing on either side are handled is not described."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.addOtherFont"
+label = "Add Other Font"
+location = "dialog"
+controls = ["list of all masters of all open fonts (multiple selection)", "OK button", "Cancel button"]
+area = "interpolation"
+milestone = "M9"
+summary = "Sheet shown by the Add Other Font entry of the masters plus menu, used to choose which masters of other open documents are copied into this font."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[command]]
+id = "font.master.duplicate"
+label = "Duplicate Selected"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters: [id|name|index]}"
+area = "interpolation"
+milestone = "M7"
+summary = "Copies each given master including its name, all glyph layers and its metrics. The copies keep the original names, so callers should rename them afterwards."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[command]]
+id = "font.master.remove"
+label = "Remove Master"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters: [id|name|index]}"
+area = "interpolation"
+milestone = "M7"
+summary = "Deletes the selected masters together with their layers; this is the minus button at the bottom-left of the window. A font needs at least one master, so removing the last one must be refused (file-format rule, not stated in the handbook)."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[command]]
+id = "font.master.reorder"
+label = "Reorder Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master: id|name|index, toIndex: integer}"
+area = "interpolation"
+milestone = "M7"
+summary = "Moves a master to another position in the list, as dragging it in the sidebar does. Order matters: the first master supplies glyph-level hinting information unless a Get Hints From Master parameter names another."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[command]]
+id = "font.master.setIcon"
+label = "Set Master Icon"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters: [id|name|index], icon?: string, glyph?: glyphName}"
+area = "font-info"
+milestone = "M7"
+summary = "Sets the icon that represents a master in the UI: either one of 25 built-in lowercase-n drawings of differing weight and width, or a glyph of the font given by name."
+ref = "Font Info › Masters › General"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.masterIconPicker"
+label = "Master Icon"
+location = "dialog"
+controls = ["grid of 25 predefined lowercase-n icons in various widths and weights", "glyph name text field at the bottom"]
+area = "font-info"
+milestone = "M7"
+summary = "Popover opened by clicking the master icon. Clicking a drawing picks it; typing a glyph name in the field uses that glyph of the font as the icon."
+ref = "Font Info › Masters › General"
+status = "handbook"
+
+[[command]]
+id = "font.master.setAxisLocation"
+label = "Set Master Axes Coordinates"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters: [id|name|index], location: {tag: number}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Places a master in the designspace by giving it one coordinate per font axis. Axes not named in the call keep their current coordinate."
+ref = "Font Info › Masters › Axes Coordinates"
+status = "handbook"
+
+[[parameter]]
+name = "master.name"
+scope = ["master"]
+kind = "string"
+area = "font-info"
+milestone = "M7"
+summary = "Master name. Used only inside the editor to identify the master; exported fonts take their names from instances. A new file has one master called Regular. Glyphs source key: fontMaster[].name."
+ref = "Font Info › Masters › General; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "master.iconName"
+scope = ["master"]
+kind = "string"
+area = "font-info"
+milestone = "M7"
+summary = "Master icon: either a named icon from the built-in set of 25 lowercase-n drawings or a glyph name from the font. Glyphs source key: fontMaster[].iconName (default Regular)."
+ref = "Font Info › Masters › General; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "master.axesValues"
+scope = ["master"]
+kind = "list"
+area = "interpolation"
+milestone = "M9"
+summary = "Axes Coordinates of the master: one number per font axis, in axis order, giving its position in the designspace. Glyphs source key: fontMaster[].axesValues."
+ref = "Font Info › Masters › Axes Coordinates; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "master.metricValues"
+scope = ["master"]
+kind = "list"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Per-master values of the font's metrics, in metric order: the offset from the baseline and the alignment zone size that starts at that offset. Italic Angle carries a single value in degrees clockwise. Glyphs source key: fontMaster[].metricValues (pos, over)."
+ref = "Font Info › Masters › Metrics & Alignment Zones; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "master.stemValues"
+scope = ["master"]
+kind = "list"
+area = "hinting-ps"
+milestone = "M7"
+summary = "Per-master widths of the font's stem definitions, in stem order. Read by the autohinter and interpolated between masters by matching stem name. Glyphs source key: fontMaster[].stemValues."
+ref = "Font Info › Masters › Stems; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "master.numberValues"
+scope = ["master"]
+kind = "list"
+area = "features"
+milestone = "M8"
+summary = "Per-master values of the font's named numbers, in number order. Feature code reads them through number value tokens so the inserted number interpolates between masters. Glyphs source key: fontMaster[].numberValues."
+ref = "Font Info › Masters › Number Values; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "master.customParameters"
+scope = ["master"]
+kind = "list"
+area = "font-info"
+milestone = "M7"
+summary = "Ordered list of custom parameters on the master. They override font-level parameters of the same name and are interpolated when present on all masters. Glyphs source key: fontMaster[].customParameters."
+ref = "Font Info › Masters › Custom Parameters; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "master.properties"
+scope = ["master"]
+kind = "list"
+area = "font-info"
+milestone = "M7"
+summary = "Optional fields added under the master's General heading. The handbook gives the plus-button rule for all three tabs but names no master field; the storage key comes from the file-format documentation. Glyphs source key: fontMaster[].properties."
+ref = "Font Info; GlyphsSDK GlyphsFileFormatv3.md"
+status = "docs"
+
+[[parameter]]
+name = "font.metrics"
+scope = ["font"]
+kind = "list"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Definitions of the metrics shown on the Masters tab: each has a category (the metric type), a freely chosen name and an optional glyph scope. They are defined once per font while every master stores its own values. Glyphs source key: metrics (type, name, filter, horizontal)."
+ref = "Font Info › Masters › Metrics & Alignment Zones; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.stems"
+scope = ["font"]
+kind = "list"
+area = "hinting-ps"
+milestone = "M7"
+summary = "Stem definitions shown on the Masters tab: each has a name, an orientation (vertical for stems measured across from left to right, horizontal for stems measured from top to bottom) and an optional glyph scope. Glyphs source key: stems (name, horizontal, filter)."
+ref = "Font Info › Masters › Stems; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "font.numbers"
+scope = ["font"]
+kind = "list"
+area = "features"
+milestone = "M8"
+summary = "Names of the Number Values shown on the Masters tab; every master stores one value per name. Glyphs source key: numbers."
+ref = "Font Info › Masters › Number Values; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.masters.newFileHasRegular"
+area = "font-info"
+milestone = "M7"
+summary = "A newly created font starts with exactly one master named Regular."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.masters.multipleValues"
+area = "font-info"
+milestone = "M7"
+summary = "With several masters selected, name, metrics, stems, numbers and custom parameters are edited for all of them at once. A field whose values differ shows a gray Multiple Values placeholder until a new value is typed."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.masters.firstMasterHints"
+area = "hinting-ps"
+milestone = "M10"
+summary = "Glyph-level hinting information is taken from the first master in the list unless the Get Hints From Master parameter points to another one, so reordering masters can change hinting output."
+ref = "Font Info › Masters › Managing Masters"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.masters.nameIsInternal"
+area = "font-info"
+milestone = "M7"
+summary = "The master name never reaches exported files; only instances define exported style names."
+ref = "Font Info › Masters › General"
+status = "handbook"
+
+# Metrics and alignment zones
+
+[[command]]
+id = "font.metrics.list"
+label = "List Metrics"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master?: id|name|index}"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Returns the metric definitions (category, name, scope) and, when a master is given, that master's position and zone size for each."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "inferred"
+
+[[command]]
+id = "font.metrics.add"
+label = "Add Metric"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{category: string, name?: string, scope?: filter}"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Adds a metric definition to the font, giving every master a new position and zone value. The handbook states the general plus-button rule for bold headings but does not describe the Metrics plus button itself."
+ref = "Font Info; Font Info › Masters › Metrics & Alignment Zones"
+status = "inferred"
+
+[[command]]
+id = "font.metrics.set"
+label = "Edit Metric"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{metric: index|name, category?: string, name?: string, scope?: filter}"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Changes the category (metric type), the display name or the glyph scope of a metric; in the UI these are edited in a popover opened by clicking the metric's name. A scope hides the metric's alignment line in glyphs that do not match it."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+[[command]]
+id = "font.metrics.remove"
+label = "Remove Metric"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{metric: index|name}"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Deletes a metric definition and its values from every master, through the row's minus button or Cmd+Delete. Whether built-in metrics such as Baseline can be removed is not stated."
+ref = "Font Info"
+status = "inferred"
+
+[[command]]
+id = "font.master.setMetric"
+label = "Set Master Metric"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters: [id|name|index], metric: index|name, position?: number, zone?: number}"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Sets a master's value for one metric: the left field is the offset from the baseline and the right field the size of the alignment zone that begins at that offset. Italic Angle takes only one value."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.metricEditor"
+label = "Metric"
+location = "dialog"
+controls = ["category menu (metric type)", "name field", "scope editor (glyph filter, same rules as smart filters)"]
+area = "guides-metrics"
+milestone = "M7"
+summary = "Popover opened by clicking the name of a metric on the Masters tab; it edits the metric's category, name and the subset of glyphs it applies to."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.metrics.defaultsByScript"
+area = "guides-metrics"
+milestone = "M7"
+summary = "The default set of metrics depends on the font's script and language choice. Latin gets Ascender, Cap Height, x-Height, Baseline, Descender and Italic Angle; Arabic gets Ascender, Baseline, Descender, Alef Height, Joining Line and Meem Depth."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.metrics.baselineAndSigns"
+area = "guides-metrics"
+milestone = "M7"
+summary = "Metric positions are offsets from the baseline, which is always 0; the descender is therefore negative. Italic Angle is measured in degrees clockwise."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.metrics.italicAngleUses"
+area = "guides-metrics"
+milestone = "M7"
+summary = "The master's italic angle feeds the sidebearing calculation, the alignment of anchors between selected nodes and every transformation that offers to respect the italic angle."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.metrics.scopeHidesLine"
+area = "guides-metrics"
+milestone = "M7"
+summary = "A metric with a glyph scope is drawn only in glyphs matching the scope; for example a metric scoped to Devanagari glyphs shows no alignment line elsewhere. Scopes use the smart-filter rule model."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.metrics.shownInEditView"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Edit View draws the master metrics as orange alignment lines while View > Show Metrics is on."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.zones.highlightAndHinting"
+area = "guides-metrics"
+milestone = "M7"
+summary = "An alignment zone starts at its metric's position and extends by the zone size. Nodes and anchors inside a zone are highlighted in Edit View, and the PostScript autohinter uses the zones so overshoots collapse onto the flat metric at small sizes; TrueType hinting can use separately configured zones."
+ref = "Font Info › Masters › Metrics & Alignment Zones"
+status = "handbook"
+
+# Stems
+
+[[command]]
+id = "font.stems.list"
+label = "List Stems"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master?: id|name|index}"
+area = "hinting-ps"
+milestone = "M7"
+summary = "Returns the stem definitions (name, orientation, scope) and, when a master is given, that master's value for each."
+ref = "Font Info › Masters › Stems"
+status = "inferred"
+
+[[command]]
+id = "font.stems.add"
+label = "Add Stem"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name?: string, orientation: 'vertical'|'horizontal', scope?: filter, values?: {master: number}}"
+area = "hinting-ps"
+milestone = "M7"
+summary = "Adds a stem definition with the plus button beside the Stems heading. A vertical stem is measured left to right, a horizontal stem top to bottom."
+ref = "Font Info › Masters › Stems"
+status = "handbook"
+
+[[command]]
+id = "font.stems.set"
+label = "Edit Stem"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{stem: index|name, name?: string, orientation?: 'vertical'|'horizontal', scope?: filter}"
+area = "hinting-ps"
+milestone = "M7"
+summary = "Changes a stem's name, orientation or glyph scope. The scope is set from the actions button at the right of the stem row and follows the same rule model as metric scopes and smart filters."
+ref = "Font Info › Masters › Stems"
+status = "handbook"
+
+[[command]]
+id = "font.stems.remove"
+label = "Remove Stem"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{stem: index|name}"
+area = "hinting-ps"
+milestone = "M7"
+summary = "Deletes a stem definition and its values in every master, through the row's minus button or Cmd+Delete."
+ref = "Font Info"
+status = "handbook"
+
+[[command]]
+id = "font.master.setStem"
+label = "Set Master Stem Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters: [id|name|index], stem: index|name, value: number}"
+area = "hinting-ps"
+milestone = "M7"
+summary = "Sets the width a master records for one stem definition. Good values sit close to as many real stems of that master as possible."
+ref = "Font Info › Masters › Stems"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.stems.interpolateByName"
+area = "interpolation"
+milestone = "M9"
+summary = "Stem values of an interpolated instance are computed from stems that carry the same name in the contributing masters."
+ref = "Font Info › Masters › Stems"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.stems.autohinterInput"
+area = "hinting-ps"
+milestone = "M10"
+summary = "The PostScript autohinter places vertical and horizontal stem hints using the master's stem values; TrueType hinting may be given its own separate stems."
+ref = "Font Info › Masters › Stems"
+status = "handbook"
+
+# Number values
+
+[[command]]
+id = "font.numbers.list"
+label = "List Number Values"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{master?: id|name|index}"
+area = "features"
+milestone = "M8"
+summary = "Returns the named numbers of the font and, when a master is given, that master's value for each."
+ref = "Font Info › Masters › Number Values"
+status = "inferred"
+
+[[command]]
+id = "font.numbers.add"
+label = "Add Number Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name: string, values?: {master: number}}"
+area = "features"
+milestone = "M8"
+summary = "Adds a named number with the plus button beside the Number Values heading; every master then stores its own value under that name."
+ref = "Font Info › Masters › Number Values"
+status = "handbook"
+
+[[command]]
+id = "font.numbers.rename"
+label = "Rename Number Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{number: index|name, name: string}"
+area = "features"
+milestone = "M8"
+summary = "Renames a named number in all masters. Feature code that refers to the old name through a token is not said to be updated."
+ref = "Font Info › Masters › Number Values"
+status = "inferred"
+
+[[command]]
+id = "font.numbers.remove"
+label = "Remove Number Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{number: index|name}"
+area = "features"
+milestone = "M8"
+summary = "Deletes a named number from all masters, through the row's minus button or Cmd+Delete."
+ref = "Font Info"
+status = "handbook"
+
+[[command]]
+id = "font.master.setNumber"
+label = "Set Master Number Value"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters: [id|name|index], number: index|name, value: number}"
+area = "features"
+milestone = "M8"
+summary = "Sets the value one or more masters store for a named number."
+ref = "Font Info › Masters › Number Values"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.numbers.tokensInterpolate"
+area = "features"
+milestone = "M8"
+summary = "A number value token in feature code is replaced by the named number of the master or, for an instance, by the value interpolated between the masters."
+ref = "Font Info › Masters › Number Values"
+status = "handbook"
+
+# ───────────────────────────── Exports tab ─────────────────────────────
+
+[[panel]]
+id = "fontInfo.exports"
+label = "Exports"
+location = "window"
+controls = [
+  "export list sidebar (static instances and variable font settings); Cmd+click and Shift+click selection; drag to reorder; gray icon for inactive entries",
+  "plus button (bottom-left): Add Instance, Add Instance for Each Master, Instance as Master, Add Variable Font Setting",
+  "minus button: delete selected exports",
+  "General heading with plus button (optional fields such as familyNames)",
+  "Active checkbox",
+  "Style Name text field",
+  "Weight Class: number field 1-1000 with a disclosure button listing 100-900",
+  "Width Class: number field with a disclosure button listing 1-9",
+  "Axes Coordinates: one number field per font axis",
+  "Style Linking: Bold checkbox, Italic checkbox, base style name field",
+  "Custom Parameters heading with plus button",
+]
+area = "font-info"
+milestone = "M7"
+summary = "Third tab of Font Info: the list of fonts that File > Export produces, static instances and variable font settings, with the properties of the selected entries."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[command]]
+id = "font.instance.list"
+label = "List Exports"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{type?: 'static'|'variable', activeOnly?: bool}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns the entries of the Exports tab in order with type, style name, active flag, weight and width class, axis coordinates and style-link data."
+ref = "Font Info › Exports"
+status = "inferred"
+
+[[command]]
+id = "font.instance.get"
+label = "Get Export"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instance: id|name|index}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns every property of one export entry including its added General fields and custom parameters."
+ref = "Font Info › Exports"
+status = "inferred"
+
+[[command]]
+id = "font.instance.set"
+label = "Edit Export"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances: [id|name|index], active?: bool, styleName?: string, weightClass?: integer, widthClass?: integer, axes?: {tag: number}, isBold?: bool, isItalic?: bool, linkStyle?: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Writes built-in properties of one or several export entries in one step."
+ref = "Font Info › Exports"
+status = "inferred"
+
+[[command]]
+id = "font.instance.add"
+label = "Add Instance"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{styleName?: string, axes?: {tag: number}, weightClass?: integer, widthClass?: integer}"
+area = "font-info"
+milestone = "M7"
+summary = "Adds a static instance, named Regular unless a name is given. First entry of the plus menu at the bottom-left of the Exports tab."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[command]]
+id = "font.instance.addForEachMaster"
+label = "Add Instance for Each Master"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{masters?: [id|name|index]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Adds one static instance per master, each named after its master and placed at the master's axis coordinates (a Thin master at weight 100 yields a Thin instance at weight 100). Whether existing instances at those locations are skipped is not stated."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[command]]
+id = "font.instance.toMaster"
+label = "Instance as Master"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instance: id|name|index}"
+area = "interpolation"
+milestone = "M9"
+summary = "Creates a new master from the interpolated outlines and metrics of the selected instance and adds it to the Masters tab. Instances on either side then interpolate against the new master, and the source instance uses it directly."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[command]]
+id = "font.instance.addVariableFontSetting"
+label = "Add Variable Font Setting"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name?: string}"
+area = "interpolation"
+milestone = "M9"
+summary = "Adds a variable-font entry to the export list; each such entry exports one variable font with its own settings and custom parameters. Its fields are detailed in the Interpolation chapter."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[command]]
+id = "font.instance.remove"
+label = "Remove Export"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances: [id|name|index]}"
+area = "font-info"
+milestone = "M7"
+summary = "Deletes the selected instances or variable font settings; this is the minus button under the export list."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[command]]
+id = "font.instance.reorder"
+label = "Reorder Exports"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instance: id|name|index, toIndex: integer}"
+area = "font-info"
+milestone = "M7"
+summary = "Moves an export entry within the list, as dragging does. The order is organisational only and has no effect on exported files."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[command]]
+id = "font.instance.setActive"
+label = "Set Export Active"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances: [id|name|index], active: bool}"
+area = "font-info"
+milestone = "M7"
+summary = "Turns the Active flag on or off. Inactive entries are skipped by File > Export and drawn with a gray icon in the list."
+ref = "Font Info › Exports › Active"
+status = "handbook"
+
+[[command]]
+id = "font.instance.setAxisLocation"
+label = "Set Instance Axes Coordinates"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances: [id|name|index], location: {tag: number}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Places an instance in the designspace with one coordinate per font axis. Locations between masters are interpolated; locations beyond the masters are extrapolated."
+ref = "Font Info › Exports › Axes Coordinates"
+status = "handbook"
+
+[[command]]
+id = "font.instance.setStyleLinking"
+label = "Set Style Linking"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances: [id|name|index], isBold?: bool, isItalic?: bool, linkStyle?: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Declares an instance to be the bold, the italic or the bold italic of another instance by setting the two checkboxes and the style name of the base instance. The link only works between fonts that share a family name."
+ref = "Font Info › Exports › Style Linking"
+status = "handbook"
+
+[[command]]
+id = "font.instance.setWeightClass"
+label = "Set Weight Class"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances: [id|name|index], weightClass: integer}"
+area = "font-info"
+milestone = "M7"
+summary = "Sets the Weight Class to any integer from 1 to 1000; the disclosure menu offers the standard steps 100 to 900. Values outside the range must be rejected."
+ref = "Font Info › Exports › Weight & Width"
+status = "handbook"
+
+[[command]]
+id = "font.instance.setWidthClass"
+label = "Set Width Class"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances: [id|name|index], widthClass: integer}"
+area = "font-info"
+milestone = "M7"
+summary = "Sets the Width Class to one of the values 1 to 9 offered by the disclosure menu."
+ref = "Font Info › Exports › Weight & Width"
+status = "handbook"
+
+[[parameter]]
+name = "instance.exports"
+scope = ["instance"]
+kind = "bool"
+area = "font-info"
+milestone = "M7"
+summary = "Active checkbox: whether File > Export produces this entry. Glyphs source key: instances[].exports (default true)."
+ref = "Font Info › Exports › Active; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.name"
+scope = ["instance"]
+kind = "string"
+area = "font-info"
+milestone = "M7"
+summary = "Style Name shown in application font menus, such as Regular, Bold or Light Italic Display. Should stay within ASCII letters, digits, spaces and a little punctuation such as the hyphen; Unicode style names go in styleNames. Glyphs source key: instances[].name."
+ref = "Font Info › Exports › Style Name; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.weightClass"
+scope = ["instance"]
+kind = "number"
+area = "font-info"
+milestone = "M7"
+summary = "Weight Class, an integer from 1 to 1000 with 100 to 900 as the standard steps, following the OS/2 table definition. Used by other applications and by CSS to order and select weights; independent of the weight axis coordinate. Glyphs source key: instances[].weightClass (default 400)."
+ref = "Font Info › Exports › Weight & Width; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.widthClass"
+scope = ["instance"]
+kind = "number"
+area = "font-info"
+milestone = "M7"
+summary = "Width Class, 1 to 9 following the OS/2 table definition. Used by other applications to categorise fonts; independent of the width axis coordinate. Glyphs source key: instances[].widthClass (default 5)."
+ref = "Font Info › Exports › Weight & Width; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.axesValues"
+scope = ["instance"]
+kind = "list"
+area = "interpolation"
+milestone = "M9"
+summary = "Axes Coordinates of the instance: one number per font axis in axis order, its location in the designspace. Glyphs source key: instances[].axesValues."
+ref = "Font Info › Exports › Axes Coordinates; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.isBold"
+scope = ["instance"]
+kind = "bool"
+area = "font-info"
+milestone = "M7"
+summary = "Bold checkbox of Style Linking: marks the instance as the bold of the instance named in the link field. Glyphs source key: instances[].isBold."
+ref = "Font Info › Exports › Style Linking; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.isItalic"
+scope = ["instance"]
+kind = "bool"
+area = "font-info"
+milestone = "M7"
+summary = "Italic checkbox of Style Linking: marks the instance as the italic of the instance named in the link field. Glyphs source key: instances[].isItalic."
+ref = "Font Info › Exports › Style Linking; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.linkStyle"
+scope = ["instance"]
+kind = "string"
+area = "font-info"
+milestone = "M7"
+summary = "Text field of Style Linking: the style name of the base instance this one is the bold and/or italic of, for example Regular on a Bold Italic instance. Glyphs source key: instances[].linkStyle."
+ref = "Font Info › Exports › Style Linking; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.type"
+scope = ["instance"]
+kind = "choice"
+area = "interpolation"
+milestone = "M9"
+summary = "Kind of export entry: a static instance or a variable font setting. The handbook distinguishes the two by the plus-menu entry that creates them; the stored values come from the file-format documentation. Glyphs source key: instances[].type (single by default, variable for a variable font setting)."
+ref = "Font Info › Exports; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.properties"
+scope = ["instance"]
+kind = "list"
+area = "font-info"
+milestone = "M7"
+summary = "Optional General fields added to an export, such as a familyNames override of the font's family name. Glyphs source key: instances[].properties."
+ref = "Font Info › Exports › Style Linking; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.customParameters"
+scope = ["instance"]
+kind = "list"
+area = "font-info"
+milestone = "M7"
+summary = "Ordered list of custom parameters on the export; they override master-level and font-level parameters of the same name. Glyphs source key: instances[].customParameters."
+ref = "Font Info › Exports › Custom Parameters; GlyphsSDK GlyphsFileFormatv3.md"
+status = "handbook"
+
+[[parameter]]
+name = "instance.manualInterpolation"
+scope = ["instance"]
+kind = "bool"
+area = "interpolation"
+milestone = "M9"
+summary = "Whether the instance uses hand-entered master factors instead of factors computed from its axis coordinates. Not described in this handbook chapter; taken from the file-format documentation. Glyphs source key: instances[].manualInterpolation."
+ref = "GlyphsSDK GlyphsFileFormatv3.md"
+status = "docs"
+
+[[parameter]]
+name = "instance.instanceInterpolations"
+scope = ["instance"]
+kind = "dict"
+area = "interpolation"
+milestone = "M9"
+summary = "Interpolation factors per master id, each either one number or an x/y pair, used when manual interpolation is on. Not described in this handbook chapter; taken from the file-format documentation. Glyphs source key: instances[].instanceInterpolations."
+ref = "GlyphsSDK GlyphsFileFormatv3.md"
+status = "docs"
+
+[[behavior]]
+id = "fontInfo.exports.selection"
+area = "font-info"
+milestone = "M7"
+summary = "In the export list Cmd+click toggles single entries and Shift+click selects a range; the selection is what the minus button and the Instance as Master entry act on."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.exports.orderIsCosmetic"
+area = "font-info"
+milestone = "M7"
+summary = "The order of export entries is kept for the user's organisation only and must not influence any exported file."
+ref = "Font Info › Exports"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.exports.inactiveGrayIcon"
+area = "font-info"
+milestone = "M7"
+summary = "An export entry with Active off is drawn with a gray icon in the list and is left out by File > Export."
+ref = "Font Info › Exports › Active"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.styleName.limits"
+area = "font-info"
+milestone = "M7"
+summary = "Style names outside ASCII letters, digits, spaces and simple punctuation are not safe everywhere; family plus style name longer than about 20 characters can fail in older systems, applications and printers. The remedy is abbreviated postscriptFontName and postscriptFullName values, and styleNames for Unicode names."
+ref = "Font Info › Exports › Style Name"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.weightClass.range"
+area = "font-info"
+milestone = "M7"
+summary = "The weight class accepts typed values from 1 to 1000 (350 for a Semi Light, say) besides the nine standard steps, although values between the standard steps are refused by some applications. Neither class is bound to the range or the values of the weight or width axis."
+ref = "Font Info › Exports › Weight & Width"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.instance.extrapolation"
+area = "interpolation"
+milestone = "M9"
+summary = "An instance whose coordinates lie inside the range covered by masters is interpolated; one outside is extrapolated. With masters at weight 40 and 120, weight 80 interpolates while 20 and 150 extrapolate."
+ref = "Font Info › Exports › Axes Coordinates"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.styleLinking.sameFamily"
+area = "font-info"
+milestone = "M7"
+summary = "Style linking connects only fonts with an identical family name. All instances inherit the Font tab's family name unless they carry a familyNames field, and instances from different source files (a roman and an italic file) can share a family name and link to each other."
+ref = "Font Info › Exports › Style Linking"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.styleLinking.recommendedScheme"
+area = "qa"
+milestone = "M12"
+summary = "Recommended scheme, usable as a lint: Bold, Italic and Bold Italic link to Regular; every other italic links to its upright of the same weight. Linking a non-bold weight as the bold of another (Semibold as bold of Light) is allowed but hides it from family pickers that only expose four styles."
+ref = "Font Info › Exports › Style Linking"
+status = "handbook"
+
+# ───────────────────────────── Features tab ─────────────────────────────
+
+[[panel]]
+id = "fontInfo.features"
+label = "Features"
+location = "window"
+controls = [
+  "sidebar in three groups: Prefix, Classes, Features, each heading with a plus button",
+  "update button beside each automatic entry; error icon beside entries with errors",
+  "minus button (bottom-left): delete selected sidebar entries",
+  "Update button (bottom-left): regenerate all automatic entries and add newly possible ones",
+  "Compile button (bottom-left)",
+  "checkbox Generate Feature Automatically, placed over the code editor",
+  "stylistic set name rows above the editor (ss01-ss20 only): language picker, name field, plus and minus buttons",
+  "feature code editor with syntax colouring, autocomplete, inline error markers and Fix buttons",
+  "notes field below the editor with a draggable divider",
+  "snippets button (bottom-right)",
+  "Spec button (top-right, only while a feature is selected)",
+]
+area = "features"
+milestone = "M8"
+summary = "Fourth tab of Font Info: the font's feature code organised as prefixes, classes and features, each either generated automatically or written by hand. Kerning, mark attachment and cursive attachment features are generated at export and are not listed."
+ref = "Font Info › Features"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.featurePicker"
+label = "Add Feature"
+location = "dialog"
+controls = ["search field (matches feature tag or feature name)", "result list; Up/Down move, Return or double-click adds"]
+area = "features"
+milestone = "M8"
+summary = "Picker opened by the plus button beside the Features heading. Typing filters the registered features by tag or name; double-clicking a result or pressing Return adds it to the sidebar."
+ref = "Font Info › Features › Editing Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.list"
+label = "List Feature Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind?: 'prefix'|'class'|'feature'}"
+area = "features"
+milestone = "M8"
+summary = "Returns the sidebar entries in order: kind, name or tag, automatic flag and whether the entry currently has compile errors."
+ref = "Font Info › Features › Editing Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.get"
+label = "Get Feature Entry"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer}"
+area = "features"
+milestone = "M8"
+summary = "Returns one prefix, class or feature with its code, automatic flag, notes and, for stylistic sets, the localized names."
+ref = "Font Info › Features › Editing Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.listAvailable"
+label = "Search Feature Tags"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{query?: string}"
+area = "features"
+milestone = "M8"
+summary = "Searches the registered feature tags by tag or by descriptive name, the data behind the Add Feature picker, and reports for each whether automatic code generation is possible in this font."
+ref = "Font Info › Features › Editing Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.addPrefix"
+label = "Add Prefix"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name?: string, code?: string, automatic?: bool}"
+area = "features"
+milestone = "M8"
+summary = "Adds a prefix entry: free-form feature code placed outside every feature, mainly for lookups that features share."
+ref = "Font Info › Features › Editing Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.addClass"
+label = "Add Class"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name: string, code?: string, glyphs?: [glyphName], automatic?: bool}"
+area = "features"
+milestone = "M8"
+summary = "Adds a glyph class whose body is a list of glyph names separated by spaces or line breaks. Classes that can be generated but are not added by Update, such as All (every exporting glyph), are added this way."
+ref = "Font Info › Features › Editing Feature Code; Automatic Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.addFeature"
+label = "Add Feature"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{tag: string, code?: string, automatic?: bool}"
+area = "features"
+milestone = "M8"
+summary = "Adds a feature identified by its four-character tag. Also used to add features that Update leaves out, such as cpsp, and to add an implicit feature such as kern in order to extend it by hand."
+ref = "Font Info › Features › Editing Feature Code; Implicit Features"
+status = "handbook"
+
+[[command]]
+id = "font.features.remove"
+label = "Remove Feature Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{entries: [{kind: 'prefix'|'class'|'feature', name: string, index?: integer}]}"
+area = "features"
+milestone = "M8"
+summary = "Deletes the selected prefixes, classes and features; this is the minus button at the bottom-left of the Features tab."
+ref = "Font Info › Features › Editing Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.rename"
+label = "Rename Feature Entry"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, newName: string}"
+area = "features"
+milestone = "M8"
+summary = "Changes the name of a prefix or class, or the tag of a feature. The handbook does not describe renaming in the sidebar."
+ref = "Font Info › Features › Editing Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.setCode"
+label = "Set Feature Code"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, code: string}"
+area = "features"
+milestone = "M8"
+summary = "Replaces the code of one entry. Whether writing code to an automatic entry switches it to manual or is refused is not documented."
+ref = "Font Info › Features › Manual Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.setAutomatic"
+label = "Generate Feature Automatically"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, automatic: bool}"
+area = "features"
+milestone = "M8"
+summary = "Sets the checkbox above the code editor. Turning it off keeps the current code as hand-editable text that Update no longer touches; entries that cannot be generated, such as calt, are always manual and cannot be switched on."
+ref = "Font Info › Features › Automatic Feature Code; Manual Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.setNotes"
+label = "Set Feature Notes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, notes: string}"
+area = "features"
+milestone = "M8"
+summary = "Writes the free-text note kept with a prefix, class or feature, shown in the field under the code editor."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.update"
+label = "Update"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "features"
+milestone = "M8"
+summary = "Regenerates every automatic prefix, class and feature in one step and adds entries that have become possible since the last run, for example liga after ligature glyphs with underscore names were added. Manual entries are left alone, and optional ones such as the All class or cpsp are never added by this command."
+ref = "Font Info › Features › Automatic Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.updateEntry"
+label = "Update Entry"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer}"
+area = "features"
+milestone = "M8"
+summary = "Regenerates the code of a single automatic entry, as the update button beside its name in the sidebar does."
+ref = "Font Info › Features › Automatic Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.compile"
+label = "Compile"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "features"
+milestone = "M8"
+summary = "Compiles the feature code so that Edit View can preview it and returns the errors found. Edit View previews hand-written substitution rules but not hand-written positioning rules."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.listErrors"
+label = "List Feature Errors"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind?: 'prefix'|'class'|'feature', name?: string}"
+area = "features"
+milestone = "M8"
+summary = "Returns the current compile errors with entry, text range, message, expanded description and, where one exists, the suggested fix. The UI shows the same data as inline markers and sidebar icons."
+ref = "Font Info › Features › Manual Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.applyFix"
+label = "Fix"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{error: id}"
+area = "features"
+milestone = "M8"
+summary = "Applies the correction suggested for an error; only errors drawn with a wrench icon carry such a suggestion."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.jumpToError"
+label = "Jump to Error"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{kind: 'prefix'|'class'|'feature', name: string, error?: id}"
+area = "features"
+milestone = "M8"
+summary = "Selects the entry and scrolls the editor to the faulty code, as clicking the error icon of an entry in the sidebar does."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.listSnippets"
+label = "List Code Snippets"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "features"
+milestone = "M8"
+summary = "Returns the predefined and user-defined feature code snippets offered by the snippets button, including the automatic-code placeholder."
+ref = "Font Info › Features › Manual Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.insertSnippet"
+label = "Insert Snippet"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, snippet: string, position?: integer}"
+area = "features"
+milestone = "M8"
+summary = "Inserts a snippet chosen from the snippets button at the bottom-right of the tab into the code of the current entry. One snippet inserts the '# Automatic Code' placeholder line."
+ref = "Font Info › Features › Manual Feature Code; Implicit Features"
+status = "handbook"
+
+[[command]]
+id = "font.features.openSpec"
+label = "Spec"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{tag: string}"
+area = "features"
+milestone = "M8"
+summary = "Opens the specification page of the selected feature on Microsoft's OpenType site in the browser. The button is shown at the top-right only while a feature is selected."
+ref = "Font Info › Features › Editing Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.setLabel"
+label = "Set Stylistic Set Name"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{tag: string, language?: string, name: string}"
+area = "features"
+milestone = "M8"
+summary = "Adds or changes one localized display name of a stylistic set feature (ss01 to ss20). The language defaults to the Default entry, which acts as the fallback name."
+ref = "Font Info › Features › Naming Stylistic Sets"
+status = "handbook"
+
+[[command]]
+id = "font.features.removeLabel"
+label = "Remove Stylistic Set Name"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{tag: string, language: string}"
+area = "features"
+milestone = "M8"
+summary = "Removes one localized name row from a stylistic set feature, as the row's minus button does."
+ref = "Font Info › Features › Naming Stylistic Sets"
+status = "handbook"
+
+[[command]]
+id = "font.features.complete"
+label = "Complete Feature Code"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, position: integer, prefix?: string}"
+area = "features"
+milestone = "M8"
+summary = "Returns the glyph names, class names and lookup names that fit at a position in the code, the data behind the editor's autocomplete menu."
+ref = "Font Info › Features › Manual Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.previewName"
+label = "Preview Glyph or Class"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{name: string}"
+area = "features"
+milestone = "M8"
+summary = "Shows a popover with a drawing of the glyph, or with all member glyphs of the class, for the glyph or class name that was Alt-clicked in the code editor."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.sidebarGroups"
+area = "features"
+milestone = "M8"
+summary = "The sidebar always has three groups in fixed order: Prefix (arbitrary code outside features), Classes (whitespace-separated glyph name lists) and Features (rules under a four-character tag)."
+ref = "Font Info › Features › Editing Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.automaticIndicator"
+area = "features"
+milestone = "M8"
+summary = "Automatic entries carry an update button beside their name in the sidebar; manual entries do not."
+ref = "Font Info › Features › Automatic Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.updateDetectsNew"
+area = "features"
+milestone = "M8"
+summary = "Update inspects glyph names for features it can newly generate: underscore names produce liga, dot suffixes such as .sc or .tf fill the matching feature, and a suffix equal to a feature tag (g.ss01) puts the glyph into that feature."
+ref = "Font Info › Features › Automatic Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.optionalAutomatic"
+area = "features"
+milestone = "M8"
+summary = "Some entries can be generated but are not added by Update, among them the All class and the cpsp feature; the user adds them by hand and may then leave them automatic."
+ref = "Font Info › Features › Automatic Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.manualNotUpdated"
+area = "features"
+milestone = "M8"
+summary = "Entries with Generate Feature Automatically off are skipped by Update, and entries that have no generator, such as calt, are permanently manual."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.syntaxColouring"
+area = "features"
+milestone = "M8"
+summary = "The code editor colours keywords, glyph names, numbers, lookup names and comments differently."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.autocomplete"
+area = "features"
+milestone = "M8"
+summary = "Typing where a glyph, class or lookup name is expected opens a suggestion menu. Up and Down move through it, further typing narrows it and Return inserts the highlighted suggestion."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.inlineErrors"
+area = "features"
+milestone = "M8"
+summary = "Code that fails to compile is flagged inline. Clicking the error icon expands the message, a wrench icon signals an available Fix, and every entry with errors also gets an icon in the sidebar."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.notesDivider"
+area = "features"
+milestone = "M8"
+summary = "The notes field under the editor is resized by dragging the gray divider line above it."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.stylisticSetNames"
+area = "features"
+milestone = "M8"
+summary = "Selecting one of ss01 to ss20 shows name rows above the editor, each with a language and a text. The Default language is the fallback, which many systems treat as English, so the usual set-up is Default for English plus rows for other languages. The texts accept text tokens."
+ref = "Font Info › Features › Naming Stylistic Sets"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.implicit"
+area = "features"
+milestone = "M8"
+summary = "kern, dist, mark, abvm, blwm, mkmk and curs are produced at export from kerning and anchors and never appear in the Features tab, because their code differs for each master and instance. dist behaves like kerning but is not under user control."
+ref = "Font Info › Features › Implicit Features"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.automaticCodePlaceholder"
+area = "features"
+milestone = "M8"
+summary = "An implicit feature added by hand may contain the comment line '# Automatic Code'. Code above the line is emitted before the generated rules and code below it after them."
+ref = "Font Info › Features › Implicit Features"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.features.exportSpecific"
+area = "features"
+milestone = "M8"
+summary = "Per-instance feature changes are made with the custom parameters Add, Remove and Replace for Prefix, Class and Feature. Automatic classes and features need no such parameters because they are regenerated for the glyph set of each instance."
+ref = "Font Info › Features › Export-Specific Features"
+status = "handbook"
+
+# ───────────────────────────── Other Settings tab ─────────────────────────────
+
+[[panel]]
+id = "fontInfo.other"
+label = "Other Settings"
+location = "window"
+controls = [
+  "Grid Spacing: number field",
+  "Subdivision: number field",
+  "Keyboard Increments: Shift value and Command value fields",
+  "Use Custom Naming: checkbox",
+  "Disable Automatic Alignment: checkbox",
+  "Keep Alternates Next to Base Glyph: checkbox",
+  "File Format Version: menu (Version 2, 3, 4)",
+  "Font Type: menu (Default, Variable)",
+]
+area = "font-info"
+milestone = "M7"
+summary = "Fifth tab of Font Info: document-wide working settings for coordinate rounding, arrow-key steps, glyph naming, component alignment, glyph sorting, the saved file format and the interpolation model."
+ref = "Font Info › Other Settings"
+status = "handbook"
+
+[[command]]
+id = "font.settings.get"
+label = "Get Font Settings"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{keys?: [string]}"
+area = "font-info"
+milestone = "M7"
+summary = "Reads the Other Settings values: gridSpacing, gridSubdivision, keyboardIncrementShift, keyboardIncrementCmd, useCustomNaming, disableAutomaticAlignment, keepAlternatesNextToBase, fileFormatVersion and fontType."
+ref = "Font Info › Other Settings"
+status = "inferred"
+
+[[command]]
+id = "font.settings.set"
+label = "Set Font Settings"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{gridSpacing?: number, gridSubdivision?: integer, keyboardIncrementShift?: number, keyboardIncrementCmd?: number, useCustomNaming?: bool, disableAutomaticAlignment?: bool, keepAlternatesNextToBase?: bool, fileFormatVersion?: 2|3|4, fontType?: 'default'|'variable'}"
+area = "font-info"
+milestone = "M7"
+summary = "Writes one or more Other Settings values. Changing a setting never rewrites existing glyph data by itself: coordinates are not re-rounded and glyphs are not renamed."
+ref = "Font Info › Other Settings"
+status = "inferred"
+
+[[behavior]]
+id = "fontInfo.grid.spacing"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Grid Spacing sets the rounding step for point coordinates. The default 1 rounds to whole units, 5 rounds to multiples of 5 (3.142, 7.816 becomes 5, 10) and 0 switches rounding off. Every tool and every modification snaps to this grid."
+ref = "Font Info › Other Settings › Grid Spacing & Subdivision"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.grid.subdivision"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Subdivision divides the grid step: the effective step is spacing divided by subdivision. Spacing 100 with subdivision 5 gives a 20-unit grid, and spacing 1 with subdivision 10 gives coordinates with one decimal."
+ref = "Font Info › Other Settings › Grid Spacing & Subdivision"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.grid.noRetroactiveRounding"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Changing the grid does not move existing points; Path > Round Coordinates rounds the selected points to the current grid on request."
+ref = "Font Info › Other Settings › Grid Spacing & Subdivision"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.grid.fractionalCff"
+area = "compile"
+milestone = "M2"
+summary = "Fractional coordinates produced by a zero or subdivided grid may be written as they are into CFF-flavoured fonts; the compiler must not round them."
+ref = "Font Info › Other Settings › Grid Spacing & Subdivision"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.keyboardIncrements"
+area = "drawing"
+milestone = "M3"
+summary = "Arrow keys nudge points in Edit View and step numbers in text fields (Up and Down). Holding Shift uses a larger step, 10 by default, and holding Cmd a still larger one, 100 by default; both values are set per font on the Other Settings tab."
+ref = "Font Info › Other Settings › Keyboard Increments"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.useCustomNaming"
+area = "font-view"
+milestone = "M4"
+summary = "With Use Custom Naming on, glyph names that differ from the built-in glyph database are kept instead of being replaced automatically. Turning it off renames nothing until Glyph > Update Glyph Info is run on a selection, which can break imported or hand-written feature code."
+ref = "Font Info › Other Settings › Use Custom Naming"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.useCustomNaming.import"
+area = "import-export"
+milestone = "M1"
+summary = "When an OpenType font or UFO is opened, glyph names are either kept or converted to database names according to the user setting Keep Glyph Names from Imported Files."
+ref = "Font Info › Other Settings › Use Custom Naming"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.disableAutomaticAlignment"
+area = "components"
+milestone = "M6"
+summary = "Disable Automatic Alignment switches off, for the whole font, both the automatic positioning of components and the automatic syncing of metrics in composite glyphs such as accented letters. Single components can instead be locked from the Edit View context menu, and a user setting applies the option to imported files."
+ref = "Font Info › Other Settings › Disable Automatic Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.keepAlternatesNextToBase"
+area = "font-view"
+milestone = "M4"
+summary = "With Keep Alternates Next to Base Glyph on, glyphs with a dot suffix sort directly after their base glyph (a, a.alt, a.loclDEU, a.ss15) rather than after the whole run of base glyphs."
+ref = "Font Info › Other Settings › Keep Alternates Next to Base Glyph"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.fileFormatVersion"
+area = "import-export"
+milestone = "M1"
+summary = "The document remembers which Glyphs file format version (2, 3 or 4) it is saved in. Files from older application versions stay in their format when opened, some newer features cannot be stored there, and switching the setting to Version 4 unlocks them. The handbook says new files start in version 3."
+ref = "Font Info › Other Settings › File Format Version"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.fontType"
+area = "interpolation"
+milestone = "M9"
+summary = "Font Type picks the interpolation model for static instances. Default uses the Multiple Master style model and is what new documents get; Variable reproduces variable-font interpolation so static and variable exports of one project differ as little as possible."
+ref = "Font Info › Other Settings › Font Type"
+status = "handbook"
+
+# ───────────────────────────── Notes tab ─────────────────────────────
+
+[[panel]]
+id = "fontInfo.notes"
+label = "Notes"
+location = "window"
+controls = ["multi-line text field with Markdown syntax highlighting"]
+area = "font-info"
+milestone = "M7"
+summary = "Last tab of Font Info: one free-text note for the font, kept in the source and never exported."
+ref = "Font Info › Notes"
+status = "handbook"
+
+[[command]]
+id = "font.note.get"
+label = "Get Font Note"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns the font note as plain text."
+ref = "Font Info › Notes"
+status = "inferred"
+
+[[command]]
+id = "font.note.set"
+label = "Set Font Note"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{text: string}"
+area = "font-info"
+milestone = "M7"
+summary = "Replaces the font note. The same text is what the font's note custom parameter reads and writes."
+ref = "Font Info › Notes"
+status = "inferred"
+
+[[behavior]]
+id = "fontInfo.notes.notExported"
+area = "font-info"
+milestone = "M7"
+summary = "The font note exists only in the source file and is identical to the font's note custom parameter; no exported font carries it."
+ref = "Font Info › Notes"
+status = "handbook"
+
+[[behavior]]
+id = "fontInfo.notes.markdownHighlighting"
+area = "font-info"
+milestone = "M7"
+summary = "The note field highlights Markdown as plain text styling: italic with single asterisks or underscores, bold with double ones, inline links and angle-bracket autolinks, and headings of level one to six marked with number signs. The text is stored unrendered."
+ref = "Font Info › Notes"
+status = "handbook"

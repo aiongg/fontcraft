@@ -1,0 +1,19 @@
+[package]
+name = "xtask"
+description = "Workspace tooling: cargo xtask <command>"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Build tooling, not shipped code: it may unwrap on its own invariants, so it does not take the
+# workspace's no-panic lints. It still forbids unsafe.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+serde = { workspace = true }
+serde_json.workspace = true
+toml = "1"
+fontcraft-engine.workspace = true
+fontcraft-ui-egui.workspace = true

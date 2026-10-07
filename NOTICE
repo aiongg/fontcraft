@@ -1,0 +1,33 @@
+FontCraft
+Copyright (c) 2026 The FontCraft contributors.
+Licensed under the MIT License or the Apache License, Version 2.0, at your option
+(LICENSE-MIT, LICENSE-APACHE).
+
+FontCraft is an independent project. It follows the conventions of the ArtCraft Crafting Apps
+(https://github.com/storytold) and is not, at the time of writing, part of that organisation. The
+ArtCraft name and logos are trademarks of the ArtCraft Team and are not used here.
+
+Third-party material
+
+This repository bundles no third-party assets today. When it does, each file gets a row in
+ASSETS.md (path, author, source, licence), its licence text sits next to it, and it is summarised
+here. `cargo xtask assets` fails on an asset without a row.
+
+Rust dependencies (kurbo, write-fonts, read-fonts, skrifa, egui, eframe, serde, …) are fetched
+through crates.io under their own permissive licences (MIT and/or Apache-2.0 for the ones named
+here; their own dependencies also include BSD, ISC, Zlib, Unicode-3.0 and, on Windows, BSL-1.0 for
+clipboard-win and error-code). egui's default fonts,
+compiled into the desktop app through the epaint_default_fonts crate, are Ubuntu Light (Ubuntu
+Font Licence 1.0), Hack (MIT and the Bitstream Vera licence), Noto Emoji (SIL Open Font License 1.1) and emoji-icon-font (MIT);
+their licence texts ship with that crate.
+
+References
+
+FontCraft is specified from public documentation of existing font tools (docs/references.md) and
+written without their code. Where a permissively licensed project's code or data is ported or
+bundled, the file says so in its header and the project is listed here with its licence:
+
+  (none yet)
+
+Product names mentioned in the documentation are trademarks of their owners and are used only to
+identify the products FontCraft is compared with or interoperates with.

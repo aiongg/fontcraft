@@ -1,0 +1,1403 @@
+# Inventory: interpolation, masters, instances, special layers, variable fonts, multi-font work.
+# Source: Glyphs 4 Handbook, chapter "Interpolation" (public web handbook,
+#         https://handbook.glyphsapp.com/interpolation/), read from the scratch conversion
+#         handbook/10-interpolation.txt. Cross-checked for labels only against the chapters
+#         "Font Info", "Feature Code" and "Appendix › Custom Parameters" of the same handbook.
+# Terminology cross-checks (permissive): fonttools Doc/source/designspaceLib/xml.rst,
+#         Lib/fontTools/varLib/__init__.py and models.py; GlyphsSDK GlyphsFileFormat/GlyphsFileFormatv4.md;
+#         fontc glyphs-reader / glyphs2fontir (bracket layers, axis mapping precedence).
+# Date: 2026-10-07
+#
+# Notes for whoever merges the inventory:
+# - Commands whose home is another chapter are NOT repeated here, to keep ids unique across
+#   files. This chapter relies on: font.axes.add / set / remove / list / listPredefined,
+#   font.master.add / addFromOtherFont / setAxisLocation, font.instance.add / addForEachMaster /
+#   addVariableFontSetting / toMaster / setAxisLocation (06-font-info.toml);
+#   path.correctPathDirection, path.correctPathDirectionForAllMasters, filter.shapeOrder
+#   (03a-edit-view-drawing.toml); layers.addBackupLayer, layers.toggleVisibility (04-palette.toml).
+# - The nine [[parameter]] rows at the end were requested for this file although the appendix
+#   inventory (18-custom-parameters.toml) holds rows with the same names. Merge, do not keep
+#   both; the rows here carry the scope the Interpolation chapter states.
+# - Rows with status "inferred" are FontCraft design (headless equivalents of UI gestures, or
+#   queries an agent needs); rows with status "memory" are recalled from the reference app and
+#   are not stated in the handbook chapter.
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Axes (Font Info › Font › Axes)
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[command]]
+id = "font.axes.reorder"
+label = "Reorder Axes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{order: [tag]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Changes the axis order. Order matters because intermediate-layer coordinates and alternate-layer ranges are shown and stored in axis order, so the command must permute those lists too. Not described in the chapter."
+ref = "Interpolation › Setting up Axes"
+status = "inferred"
+
+[[behavior]]
+id = "axes.definition"
+area = "interpolation"
+milestone = "M9"
+summary = "An axis names one aspect of the design that varies between masters. A font has zero or more axes; one axis is a line, two a plane, three or more a higher-dimensional designspace, any point of which can become an instance."
+ref = "Interpolation › (introduction)"
+status = "handbook"
+
+[[behavior]]
+id = "axes.tagRules"
+area = "interpolation"
+milestone = "M9"
+summary = "Axis tags are four characters. Registered axes use their registered tag; a private axis takes any name and a tag of four capital letters so it cannot clash with a tag registered later."
+ref = "Interpolation › Setting up Axes"
+status = "handbook"
+
+[[behavior]]
+id = "axes.coordinatesAreFreeNumbers"
+area = "interpolation"
+milestone = "M9"
+summary = "Internal axis coordinates are arbitrary numbers chosen by the designer, not tied to OpenType ranges. Typical choices: the stem width for Weight (e.g. 45 for Light, 160 for Bold), 0–100 for an abstract axis such as Serif or a smoothly slanting Italic, and 0–1 for an axis whose outlines flip rather than blend."
+ref = "Interpolation › Setting up Masters › Axes Coordinates"
+status = "handbook"
+
+[[behavior]]
+id = "axes.linearSpread"
+area = "interpolation"
+milestone = "M9"
+summary = "Between two masters, internal coordinates are distributed linearly: a location halfway between two master coordinates yields the halfway shape. Non-linear user-facing ranges are produced only by axis mappings and only in variable fonts."
+ref = "Interpolation › Setting up Masters › Axes Coordinates"
+status = "handbook"
+
+[[behavior]]
+id = "axes.internalVersusExternal"
+area = "interpolation"
+milestone = "M9"
+summary = "Two coordinate systems exist per axis. Internal coordinates are the values typed into master, instance and special-layer coordinate fields; external coordinates are what a variable font exposes to its user. Without Axis Location or Axis Mappings the two are identical."
+ref = "Interpolation › Variable Font Options › Axis Location; Axis Mappings"
+status = "handbook"
+
+[[behavior]]
+id = "axes.unusedAxesDropped"
+area = "compile"
+milestone = "M9"
+summary = "When masters are disabled for a variable-font export, any axis on which the remaining masters all share one coordinate is left out of the exported font."
+ref = "Interpolation › Setting up Instances › Subsetting the Designspace"
+status = "handbook"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Masters (Font Info › Masters)
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[behavior]]
+id = "masters.mustCoverDesignspace"
+area = "interpolation"
+milestone = "M9"
+summary = "Masters should be placed so that the wanted region of the designspace lies between them. One axis needs two masters (e.g. Light 300, Bold 700); a third in between (Regular 400) refines the transition."
+ref = "Interpolation › Setting up Masters › Axes Coordinates"
+status = "handbook"
+
+[[behavior]]
+id = "masters.minimalSetup"
+area = "interpolation"
+milestone = "M9"
+summary = "The smallest valid setup is one origin master plus one master per axis, where each non-origin master differs from the origin on exactly one axis. Take Weight and Width with three masters, Thin Narrow (200, 60), Thin (200, 100) and Black (900, 100): Thin can serve as origin, whereas Black cannot, since it lies away from Thin Narrow on both axes."
+ref = "Interpolation › Setting up Masters › Minimal Multiple Masters Setup"
+status = "handbook"
+
+[[behavior]]
+id = "masters.originAutomaticForStatic"
+area = "interpolation"
+milestone = "M9"
+summary = "The origin master is a designer's choice only for variable fonts. When interpolating static instances the engine determines a suitable origin by itself."
+ref = "Interpolation › Setting up Masters › Minimal Multiple Masters Setup"
+status = "handbook"
+
+[[behavior]]
+id = "masters.cornerAndIntermediateSetups"
+area = "interpolation"
+milestone = "M9"
+summary = "A minimal setup reaches the whole designspace but gives no direct control where two axes are both away from the origin (e.g. Bold Condensed). Adding masters at every corner, and further masters inside the space (e.g. a 3 × 3 grid of weights and widths), gives that control; the model must accept any number of masters at arbitrary positions."
+ref = "Interpolation › Setting up Masters › Elaborate Multiple Masters Setups"
+status = "handbook"
+
+[[behavior]]
+id = "masters.namingAndIcon"
+area = "font-info"
+milestone = "M7"
+summary = "Each master has a free name (Light, Regular Condensed, Bold Caption…) and an icon chosen to represent it; both are organisational only."
+ref = "Interpolation › Setting up Masters"
+status = "handbook"
+
+[[behavior]]
+id = "masters.metricsInterpolate"
+area = "interpolation"
+milestone = "M9"
+summary = "Besides outlines, per-master data must interpolate between masters: advance widths, anchors, component placement, vertical metrics, kerning, and stems and number values matched by name. The chapter only says an instance has outlines and metrics; the name-matching rule for stems and numbers is in the Font Info chapter, and the rest of the list is our reading of what an instance needs."
+ref = "Interpolation › Working with Multiple Fonts; Font Info › Masters"
+status = "inferred"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Instances and variable font settings (Font Info › Exports)
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[command]]
+id = "file.generateInstances"
+label = "Generate Instances"
+menu = ["File"]
+shortcut = ""
+kind = "engine"
+params = "{instances?: [id|name], open?: bool, saveTo?: path}"
+area = "interpolation"
+milestone = "M9"
+summary = "Interpolates the instances of the current document, turns each into a master and creates new source documents from them, so each instance can be edited as ordinary outlines. The chapter says a file per instance in one sentence and a new file holding those masters in the next; which it is must be observed."
+ref = "Interpolation › Working with Multiple Fonts › Glyphs Files, Masters, & Instances"
+status = "handbook"
+
+[[command]]
+id = "interpolation.interpolateGlyph"
+label = "Interpolate Glyph at Location"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, location: {tag: number}, coordinates?: internal|external, model?: default|variable}"
+area = "interpolation"
+milestone = "M9"
+summary = "Query: returns the interpolated layer (shapes, anchors, width) of one glyph at an arbitrary location, applying intermediate layers and alternate-layer switching as an export would. Fails with a compatibility report when the contributing layers are incompatible."
+ref = "Interpolation › Setting up Instances"
+status = "inferred"
+
+[[command]]
+id = "interpolation.describeDesignspace"
+label = "Describe Designspace"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{variableFontSetting?: id|name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Query: returns axes with internal and external ranges, masters and virtual masters with locations, the origin master, instances with an inside/extrapolated flag, mappings, and the glyphs carrying intermediate or alternate layers."
+ref = "Interpolation › Setting up Axes; Setting up Masters; Setting up Instances"
+status = "inferred"
+
+[[behavior]]
+id = "instances.multiAxisCoordinates"
+area = "interpolation"
+milestone = "M9"
+summary = "An instance holds one coordinate per axis, so a Weight × Width font can define styles such as Thin Condensed or Bold Expanded at any combination."
+ref = "Interpolation › Interpolation Applications"
+status = "handbook"
+
+[[behavior]]
+id = "instances.extrapolatedExcludedFromVariable"
+area = "compile"
+milestone = "M9"
+summary = "Static instances inside the designspace are written into a variable font as named instances; an instance whose location is outside the designspace is skipped."
+ref = "Interpolation › Setting up Instances › Static Instances"
+status = "handbook"
+
+[[behavior]]
+id = "instances.namedInstancesInVariable"
+area = "compile"
+milestone = "M9"
+summary = "A variable font lists the document's static instances as predefined axis settings, so a font menu can offer style names instead of raw axis values."
+ref = "Interpolation › Interpolation Applications; Setting up Instances › Static Instances"
+status = "handbook"
+
+[[behavior]]
+id = "instances.parametersStaticOnly"
+area = "compile"
+milestone = "M9"
+summary = "Custom parameters on a static instance, filters included, take effect only when that instance is exported as its own file. They are ignored when the instance is merely listed inside a variable font, because all locations of a variable font must share glyph set, features and compatible outlines."
+ref = "Interpolation › Setting up Instances › Static Instances"
+status = "handbook"
+
+[[behavior]]
+id = "instances.weightWidthClassIndependent"
+area = "font-info"
+milestone = "M7"
+summary = "The Weight Class and Width Class of an instance are stored separately from its axis coordinates; changing one never changes the other."
+ref = "Interpolation › Setting up Instances › Static Instances"
+status = "handbook"
+
+[[behavior]]
+id = "variableFontSetting.wholeFontParameters"
+area = "compile"
+milestone = "M9"
+summary = "A variable font setting acts on the whole variable font, so it accepts the parameters that static instances cannot pass on: filters, glyph removal, added features. If such a parameter leaves outlines incompatible, export stops with an error."
+ref = "Interpolation › Setting up Instances › Variable Font Settings"
+status = "handbook"
+
+[[behavior]]
+id = "variableFontSetting.defaultWhenNone"
+area = "compile"
+milestone = "M9"
+summary = "Exporting a variable font from a document without any variable font setting uses an implicit default setting. Stated in the Import & Export chapter, repeated here because the compiler must synthesise it."
+ref = "Import & Export › Exporting Variable Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "variableFontSetting.disableMasters"
+area = "compile"
+milestone = "M9"
+summary = "A Disable Masters parameter on a variable font setting lists master names separated by a comma and a space; those masters contribute nothing to that export, giving a variable font over a subset of the designspace."
+ref = "Interpolation › Setting up Instances › Subsetting the Designspace"
+status = "handbook"
+
+[[behavior]]
+id = "variableFontSetting.splitFamily"
+area = "compile"
+milestone = "M9"
+summary = "One document may export several variable fonts (e.g. retail and reduced trial versions) through several variable font settings. A family may also be split over several documents, e.g. upright and italic, when glyph sets or features differ a lot."
+ref = "Interpolation › Working with Multiple Fonts › Grouping Fonts into Families"
+status = "handbook"
+
+[[behavior]]
+id = "family.groupingByFamilyName"
+area = "font-info"
+milestone = "M7"
+summary = "Exported fonts are grouped by family name, taken from Font Info › Font › General › Family Name unless an instance or variable font setting overrides it with a familyNames parameter. Only the Default-language name groups fonts; localised names are display-only. Style linking provides the Bold/Italic relationships."
+ref = "Interpolation › Working with Multiple Fonts › Grouping Fonts into Families"
+status = "handbook"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Outline compatibility
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[behavior]]
+id = "compatibility.rules"
+area = "interpolation"
+milestone = "M9"
+summary = "Two layers of a glyph can interpolate only when they match in: the number of paths and, per path, the order of nodes (which we read as node count plus the sequence of line and curve segments); anchors, by count and by name; components, by count and by the glyph each one references; and the order of shapes, paths and components counted together."
+ref = "Interpolation › Outline Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "compatibility.editViewRedBar"
+area = "interpolation"
+milestone = "M9"
+summary = "In Edit View a glyph whose layers are incompatible shows a red bar above its ascender line."
+ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "compatibility.smartFilterIncompatibleMasters"
+area = "font-view"
+milestone = "M9"
+summary = "A built-in Smart Filter named Incompatible masters lists every glyph whose masters cannot interpolate. Requires a glyph predicate for master compatibility in the smart-filter engine."
+ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
+status = "handbook"
+
+[[behavior]]
+id = "compatibility.checkScope"
+area = "interpolation"
+milestone = "M9"
+summary = "Compatibility is tested only between masters that are both needed to interpolate some defined instance. Adding Enforce Compatibility Check and leaving it on widens the test to all masters; adding it unchecked hides the red indicators altogether, for fonts whose masters differ on purpose such as colour fonts."
+ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines; Appendix › Custom Parameters › Enforce Compatibility Check"
+status = "handbook"
+
+[[behavior]]
+id = "compatibility.exportBlocked"
+area = "compile"
+milestone = "M9"
+summary = "Export of interpolated static instances and of variable fonts fails while any exported glyph has incompatible layers; the error names the glyphs."
+ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
+status = "handbook"
+
+[[command]]
+id = "interpolation.checkCompatibility"
+label = "Check Master Compatibility"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [name], masters?: [id], includeSpecialLayers?: bool, enforceAll?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Query: reports per glyph whether its layers are compatible and, if not, the first mismatch per layer pair (path count, node count or segment type at path/segment index, anchor set, component count or reference, shape order), plus warnings for segments whose angle differs by more than 20° and for crossing shape correspondences. Alternate layers are compared among themselves, not with master layers."
+ref = "Interpolation › Outline Compatibility"
+status = "inferred"
+
+[[command]]
+id = "glyph.setShapeOrder"
+label = "Set Shape Order"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id, order: [int]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Headless form of a drag in the Shape Order window: reorders the shapes of one layer to the given permutation of current indices. Rejects lists that are not a permutation."
+ref = "Interpolation › Outline Compatibility › Reordering Shapes"
+status = "inferred"
+
+[[command]]
+id = "glyph.swapShapes"
+label = "Swap Shapes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id, a: int, b: int}"
+area = "interpolation"
+milestone = "M9"
+summary = "Exchanges two shapes in the order of one non-current layer. This is what dragging the end of a connecting line onto the end of another line does in Master Compatibility view; the same gesture applies to start nodes and anchors, whose headless forms need their own parameters."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "inferred"
+
+[[panel]]
+id = "window.shapeOrder"
+label = "Shape Order"
+location = "window"
+controls = [
+  "one column (or row) per layer of the current glyph, masters and special layers alike",
+  "one thumbnail per shape (path or component) in its current order",
+  "drag a thumbnail to change that layer's shape order",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "Shows every path and component of every layer of the current glyph and lets the shapes be rearranged until all layers use the same order. The exact layout and whether it colours shapes like Master Compatibility view are not described."
+ref = "Interpolation › Outline Compatibility › Reordering Shapes"
+status = "handbook"
+
+[[command]]
+id = "view.showMasterCompatibility"
+label = "Show Master Compatibility"
+menu = ["View"]
+shortcut = "Cmd+Ctrl+Alt+N"
+kind = "ui"
+params = "{on?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Toggles an Edit View mode that draws the current glyph's paths, components and anchors for all masters at once with correspondence lines and compatibility colours."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[panel]]
+id = "editView.masterCompatibility"
+label = "Master Compatibility view"
+location = "window"
+controls = [
+  "all master layers of the glyph drawn together, each shape filled in a colour keyed to its shape index",
+  "checkered fill on components",
+  "shape index number at each path's start node and at each component's centre (current layer only)",
+  "diagonal connecting lines between corresponding start nodes, shape centres and anchors (dashed for anchors)",
+  "connecting lines for the selected points",
+  "segments stroked green / yellow / red",
+  "red labels on components and anchors that do not match",
+  "draggable line ends on the non-current layers",
+  "alternate layers drawn after a gap",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "The Edit View overlay switched on by Show Master Compatibility. It visualises shape order, start nodes, anchors and per-segment compatibility across masters and allows fixing mismatched correspondences by dragging line ends."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.shapeColours"
+area = "interpolation"
+milestone = "M9"
+summary = "Each path and component is tinted according to its position in the shape order, so the shape with index n has the same colour on every master; components additionally get a checkered pattern. The palette itself is not specified."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.indexLabels"
+area = "interpolation"
+milestone = "M9"
+summary = "On the current layer only, each path shows its shape order index next to its start node, and each component shows its index at its centre."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.connectingLines"
+area = "interpolation"
+milestone = "M9"
+summary = "Slanted lines join each start node, each shape centre and each anchor to its counterpart on the other masters; anchor lines are dashed. Selecting points draws the lines for those points too."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.segmentColours"
+area = "interpolation"
+milestone = "M9"
+summary = "Segments are green when compatible; yellow when compatible but their angle differs between masters by more than 20°, a hint that a node is missing; red when incompatible because the other master has no such segment or the types differ (curve against line). After a missing node all following segments of that path turn red."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.missingElementPointsToOrigin"
+area = "interpolation"
+milestone = "M9"
+summary = "For a path, component or anchor that one master lacks, the connecting line runs to that master's (0, 0)."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.redMismatchLabels"
+area = "interpolation"
+milestone = "M9"
+summary = "Components that reference different glyphs and anchors with different names across masters are labelled in red text."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.dragLineEnds"
+area = "interpolation"
+milestone = "M9"
+summary = "The ends of connecting lines on layers other than the current one can be dragged onto the end of another line; the two correspondences swap, which reorders shapes (or start nodes) on that layer."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.selectionProbe"
+area = "interpolation"
+milestone = "M9"
+summary = "Selecting nodes on the current layer shows where the corresponding nodes fall on the other masters, the stated way to locate the cause of a segment mismatch. No command adds or removes the missing node automatically."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.shapeShifters"
+area = "interpolation"
+milestone = "M9"
+summary = "Layers can be formally compatible yet interpolate badly when same-index shapes sit in different places on different masters; the view exposes this as crossing connecting lines. Fixes: Correct Path Direction, the Shape Order window, or dragging a line end to the right shape."
+ref = "Interpolation › Outline Compatibility › Master Compatibility"
+status = "handbook"
+
+[[behavior]]
+id = "masterCompatibility.alternateLayersOffset"
+area = "interpolation"
+milestone = "M9"
+summary = "Master Compatibility view also shows intermediate and alternate layers; alternate layers form their own group, separated from the master layers by a gap, because they need only match each other."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Intermediate (brace) layers and virtual masters
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[command]]
+id = "layers.setIntermediate"
+label = "Intermediate"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id, coordinates: {tag: number|null}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Context-menu item on a non-master layer in the Layers palette: turns it into an intermediate layer and opens one number field per axis. A null or empty coordinate means the layer takes that axis value from the master it is attached to. Confirmed with Return."
+ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
+status = "handbook"
+
+[[command]]
+id = "layers.clearIntermediate"
+label = "Remove Intermediate Status"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id}"
+area = "interpolation"
+milestone = "M9"
+summary = "Turns an intermediate layer back into a plain backup layer by removing its coordinates. Presumably done by unticking Intermediate in the context menu; not stated."
+ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
+status = "inferred"
+
+[[panel]]
+id = "popover.intermediateLayer"
+label = "Intermediate layer coordinates"
+location = "dialog"
+controls = [
+  "one number field per axis, in axis order",
+  "the axis range shown beside each field",
+  "Return confirms",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "Small editor shown after choosing Intermediate, and again on double-clicking the brace label. Fields take internal axis coordinates; the displayed range is that of the masters; an empty field inherits from the parent master."
+ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
+status = "handbook"
+
+[[behavior]]
+id = "intermediateLayer.purpose"
+area = "interpolation"
+milestone = "M9"
+summary = "An intermediate layer is an extra support point for one glyph at one designspace location, used to correct that glyph's interpolation without adding a font-wide master (e.g. thickening the bar of e at regular weight between Thin and Black)."
+ref = "Interpolation › Intermediate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "intermediateLayer.inheritsEmptyCoordinates"
+area = "interpolation"
+milestone = "M9"
+summary = "For any axis without an explicit value, an intermediate layer uses the coordinate of the master layer it hangs under; hence it should be created under the master nearest to the intended location."
+ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
+status = "handbook"
+
+[[behavior]]
+id = "intermediateLayer.braceLabel"
+area = "layers"
+milestone = "M9"
+summary = "The Layers palette labels an intermediate layer with its coordinates, comma-separated in axis order inside curly braces, e.g. {110} or {65, 140}; hence the name brace layer. Special-layer labels are bold and indented under their master."
+ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup; Palette › Layers › Special Layers"
+status = "handbook"
+
+[[behavior]]
+id = "intermediateLayer.mustBeCompatible"
+area = "interpolation"
+milestone = "M9"
+summary = "An intermediate layer takes part in interpolation like a master layer for its glyph, so it must be compatible with the layers it interpolates with and is included in the compatibility indicators. Implied by the chapter, not spelled out."
+ref = "Interpolation › Intermediate Layers"
+status = "inferred"
+
+[[behavior]]
+id = "intermediateLayer.sparseInExport"
+area = "compile"
+milestone = "M9"
+summary = "In a variable font an intermediate layer adds variation data only for its own glyph; static instances interpolate that glyph with the extra support point. Components that reference a glyph with intermediate layers are decomposed in variable export by default (Decompose Brace Layers, appendix)."
+ref = "Interpolation › Intermediate Layers; Appendix › Custom Parameters › Decompose Brace Layers"
+status = "handbook"
+
+[[behavior]]
+id = "virtualMaster.concept"
+area = "interpolation"
+milestone = "M9"
+summary = "A virtual master is a designspace location declared at font level that behaves as a master but has no master layers and no kerning of its own. Only glyphs that carry an intermediate layer at that location change there; all other glyphs and all kerning are unaffected."
+ref = "Interpolation › Intermediate Layers › Virtual Masters"
+status = "handbook"
+
+[[behavior]]
+id = "virtualMaster.setupSteps"
+area = "interpolation"
+milestone = "M9"
+summary = "To use one: add the axis (registered or private), give every real master a coordinate on it, add a Virtual Master parameter in Font Info › Font holding the virtual master's coordinates, then add intermediate layers at those coordinates to the glyphs the axis should affect."
+ref = "Interpolation › Intermediate Layers › Virtual Masters"
+status = "handbook"
+
+[[behavior]]
+id = "virtualMaster.extendsAxisRange"
+area = "compile"
+milestone = "M9"
+summary = "A virtual master's coordinates count when computing each axis's range, so an axis on which all real masters share one value still gets a real extent. A variable font then stores deltas for the affected glyphs only, which keeps the file small."
+ref = "Interpolation › Intermediate Layers › Virtual Masters; Appendix › Custom Parameters › Virtual Master"
+status = "handbook"
+
+[[panel]]
+id = "dialog.virtualMaster"
+label = "Virtual Master"
+location = "dialog"
+controls = ["one coordinate field per axis", "OK", "Cancel"]
+area = "interpolation"
+milestone = "M9"
+summary = "Editor opened by clicking the value of a Virtual Master parameter; coordinates are entered as for a real master and confirmed with OK. Several virtual masters need several parameters."
+ref = "Interpolation › Intermediate Layers › Virtual Masters"
+status = "handbook"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Alternate (bracket) layers and switching shapes
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[command]]
+id = "layers.setAlternate"
+label = "Alternate"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id, ranges: {tag: {min?: number, max?: number}}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Context-menu item on a layer in the Layers palette, master layers included: marks it as an alternate layer and opens min and max fields per axis that bound the region where this outline replaces the normal one. Either bound may be empty (open-ended); all empty yields the layer named []. Confirmed with Return."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[command]]
+id = "layers.clearAlternate"
+label = "Remove Alternate Status"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id}"
+area = "interpolation"
+milestone = "M9"
+summary = "Removes the axis ranges from a layer, making it an ordinary master or backup layer again. Presumably done by unticking Alternate in the context menu; not stated."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "inferred"
+
+[[command]]
+id = "layers.editSpecialLayerSettings"
+label = "Edit Special Layer Settings"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name, layer?: id, part: intermediate|alternate}"
+area = "interpolation"
+milestone = "M9"
+summary = "Double-clicking the {…} or the […] part of a special layer's label reopens the coordinate editor or the range editor respectively. On a layer that is both, each part is clicked separately."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[panel]]
+id = "popover.alternateLayer"
+label = "Alternate layer axis ranges"
+location = "dialog"
+controls = [
+  "per axis: a min field and a max field",
+  "Return confirms",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "Editor shown after choosing Alternate. Values are internal axis coordinates. Example from the source: on a Weight axis running 44–130, min 90 with max empty switches the shape from 90 upward."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.definition"
+area = "interpolation"
+milestone = "M9"
+summary = "An alternate layer holds a different outline for a glyph together with the designspace region in which it takes over. It is the one switching method that works for both static instances and variable fonts (e.g. a cent sign whose bar shrinks to two stubs in heavy weights, or a g that trades its two-storey form for a single-storey one at narrow widths)."
+ref = "Interpolation › Switching Shapes"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.onePerMaster"
+area = "interpolation"
+milestone = "M9"
+summary = "Alternate layers are per glyph, and one must be added under each master so the alternate shape can itself interpolate across the whole designspace; all carry the same range."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.bracketLabel"
+area = "layers"
+milestone = "M9"
+summary = "An alternate layer's palette label is bold: square brackets holding its axis ranges, separated by commas, written with the ‹ sign around an axis abbreviation: [120‹wg] for a lower bound, [140‹wg, 60‹wd‹85] for a lower bound on one axis and both bounds on another; hence the name bracket layer."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.axisAbbreviations"
+area = "layers"
+milestone = "M9"
+summary = "In bracket labels five axes are shortened to two letters: Italic ital → it, Optical Size opsz → oz, Slant slnt → sl, Width wdth → wd, Weight wght → wg. Every other axis shows its full four-character tag."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.compatibilityAmongThemselves"
+area = "interpolation"
+milestone = "M9"
+summary = "Alternate layers of a glyph need not be compatible with its master layers, only with one another (grouped by identical range)."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.combinedWithIntermediate"
+area = "interpolation"
+milestone = "M9"
+summary = "One layer can be both intermediate and alternate; it then shows both the […] and the {…} label and serves as a support point for the alternate shape at that location."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.onMasterLayer"
+area = "interpolation"
+milestone = "M9"
+summary = "A master layer can itself be given an axis range. Its counterpart is an extra layer under the same master marked Alternate with both bounds empty, shown as []; in that case the master layer holds the alternate outline while the [] layer holds the normal one. Which arrangement is used changes nothing in exported fonts."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.rangeSemantics"
+area = "interpolation"
+milestone = "M9"
+summary = "A range is a conjunction over axes of min ≤ value and value < max in internal coordinates, with a missing bound meaning unbounded. The inclusive lower and exclusive upper edges follow the feature-code condition syntax and are an assumption for alternate layers."
+ref = "Interpolation › Switching Shapes › Alternate Layers; Feature Code › Conditional Feature Code"
+status = "inferred"
+
+[[behavior]]
+id = "alternateLayer.staticExport"
+area = "compile"
+milestone = "M9"
+summary = "For a static instance, each glyph with alternate layers is interpolated from the alternate layers when the instance location lies inside their range and from the normal layers otherwise; no substitution feature is involved."
+ref = "Interpolation › Switching Shapes"
+status = "handbook"
+
+[[behavior]]
+id = "alternateLayer.variableExport"
+area = "compile"
+milestone = "M9"
+summary = "In a variable font, alternate layers are switched on by an OpenType feature whose substitution applies only inside the stated region (a feature variation). The feature is chosen by the Feature for Feature Variations parameter; without it a default is used (the chapter says rlig, the appendix says rvrn). Compiling the alternate outlines as extra glyphs that the feature swaps in is our implementation choice, following fontc and fonttools."
+ref = "Interpolation › Switching Shapes › Alternate Layers"
+status = "handbook"
+
+[[behavior]]
+id = "switching.threeMethods"
+area = "interpolation"
+milestone = "M9"
+summary = "Shapes can be switched in three ways: alternate layers (static and variable), swapping whole glyphs at export through instance parameters (static and variable font settings), and conditional substitutions in feature code (variable only)."
+ref = "Interpolation › Switching Shapes"
+status = "handbook"
+
+[[behavior]]
+id = "switching.renameGlyphsAtExport"
+area = "compile"
+milestone = "M9"
+summary = "A Rename Glyphs parameter on an instance or variable font setting lists one swap per line as name=othername, e.g. cent=cent.simple; the two glyphs trade places in that export. Adding Remove Glyphs with the names that now hold the unwanted normal outlines turns the swap into a replacement."
+ref = "Interpolation › Switching Shapes › Replacing Glyphs at Export"
+status = "handbook"
+
+[[behavior]]
+id = "switching.conditionalSubstitution"
+area = "features"
+milestone = "M9"
+summary = "Inside an #ifdef VARIABLE … #endif block, a line such as condition 80 < wght; followed by substitution rules confines those rules to a designspace region, compiled as feature variations. Since this exists only in variable fonts, static exports should mirror it with Rename Glyphs on the instances beyond the threshold."
+ref = "Interpolation › Switching Shapes › Conditional Glyph Substitutions"
+status = "handbook"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Editing several masters at once
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[command]]
+id = "edit.showAllMasters"
+label = "Show All Masters"
+menu = ["Edit"]
+shortcut = ""
+kind = "ui"
+params = "{glyph?: name}"
+area = "interpolation"
+milestone = "M9"
+summary = "In Edit View, inserts every master layer of the current glyph into the tab's text, followed by its intermediate and alternate layers, so all can be seen and edited side by side."
+ref = "Interpolation › Editing Multiple Masters › Show All Masters"
+status = "handbook"
+
+[[command]]
+id = "edit.keepLayerSelectionInSync"
+label = "Keep Layer Selection in Sync"
+menu = ["Edit"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Toggle. While on, switching to another master keeps the corresponding nodes and shapes selected, matched by index. It has an effect only when the glyph's layers are compatible."
+ref = "Interpolation › Editing Multiple Masters › Keep Layer Selection in Sync"
+status = "handbook"
+
+[[command]]
+id = "layers.reInterpolate"
+label = "Re-Interpolate"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyphs?: [name], layer?: id, location?: {tag: number}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Replaces the content of a master, intermediate or backup layer with the interpolation of the glyph's other layers at that layer's location; used to seed a new master or brace layer. Recalled from the reference app's Layers palette menu; the Interpolation chapter does not mention it, so label, placement and scope are unverified."
+ref = "Not in the handbook chapter (recalled: Layers palette actions menu)"
+status = "memory"
+
+[[behavior]]
+id = "mastersAsLayers.paletteListing"
+area = "layers"
+milestone = "M3"
+summary = "The Layers palette lists every master as a layer of the current glyph; intermediate and alternate layers appear indented below the master they belong to."
+ref = "Interpolation › Editing Multiple Masters; Palette › Layers"
+status = "handbook"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Higher-order interpolation (HOI)
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[tool]]
+id = "higherOrderInterpolation"
+label = "Higher-Order Interpolation"
+shortcut = "I"
+group = ""
+gestures = [
+  "drag a grey knob on a dotted line: bend that node's interpolation path, the knob becoming its intermediate point",
+  "Return with an intermediate point selected: convert it to a pair of handles",
+  "right-click a knob › Interpolation › Linear | Intermediate Point | Handles | Rotation: change the interpolation type",
+  "Delete with a knob selected: return that node to linear interpolation",
+  "pop-up button at the bottom right of the window: choose the axis being edited",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "Edits, per node and per axis, the path a node follows between neighbouring layers: straight (default), through one intermediate point, shaped by two handles, or rotating about a centre. It requires a font with one axis or more and no fewer than two masters. The result affects static and variable export alike."
+ref = "Interpolation › Higher-Order Interpolation"
+status = "handbook"
+
+[[command]]
+id = "hoi.setInterpolationType"
+label = "Interpolation Type"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag, toward: up|down, type: linear|intermediatePoint|handles|rotation}"
+area = "interpolation"
+milestone = "M9"
+summary = "Sets how the given nodes travel from this layer to the next layer along the axis. Offered in the tool's Info box and in the Interpolation submenu of the context menu; linear removes any custom curve. Whether a curve belongs to the segment between two layers or to one layer's node needs observing."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "handbook"
+
+[[command]]
+id = "hoi.setControlPoints"
+label = "Set Interpolation Control Points"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id, node: nodeRef, axis: tag, toward: up|down, points: [[x, y]]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "inferred"
+
+[[command]]
+id = "hoi.convertToHandles"
+label = "Convert Intermediate Point to Handles"
+menu = []
+shortcut = "Return"
+kind = "engine"
+params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
+area = "interpolation"
+milestone = "M9"
+summary = "With an intermediate point selected in the HOI tool, Return replaces it with two handles for finer control of the curve. Shortcut active only inside the tool."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "handbook"
+
+[[command]]
+id = "hoi.centerRotation"
+label = "Center Rotation in Bounds"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
+area = "interpolation"
+milestone = "M9"
+summary = "Info-box button that moves a rotation knob to the centre of the bounding box of the node's path, which is also where a new rotation centre starts."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "handbook"
+
+[[command]]
+id = "hoi.setRotationDirection"
+label = "Rotation Direction"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag, direction: automatic|clockwise|counterclockwise}"
+area = "interpolation"
+milestone = "M9"
+summary = "Chooses the sense of a rotation-type interpolation. Automatic takes the smaller angle; the other two force a direction."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "handbook"
+
+[[command]]
+id = "hoi.removeCurve"
+label = "Remove Interpolation Curve"
+menu = []
+shortcut = "Delete"
+kind = "engine"
+params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
+area = "interpolation"
+milestone = "M9"
+summary = "With a HOI knob selected, Delete discards the custom curve so the node interpolates linearly again; equal to choosing Linear as the type."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "handbook"
+
+[[command]]
+id = "hoi.selectAxis"
+label = "HOI Axis"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{axis: tag}"
+area = "interpolation"
+milestone = "M9"
+summary = "The pop-up button at the bottom right of the window while the HOI tool is active: picks the axis along which neighbouring layers are found and curves are edited."
+ref = "Interpolation › Higher-Order Interpolation › Node Visualization"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.higherOrderInterpolation"
+label = "HOI Info box"
+location = "inspector"
+controls = [
+  "interpolation type: Linear | Intermediate Point | Handles | Rotation",
+  "center-bounds button (rotation only)",
+  "rotation direction: Automatic (smallest angle) | Clockwise | Counterclockwise",
+  "timing graph beside the box (read-only) with a white linear-time dot and a green dot following the graph",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "Info box shown for a selected HOI knob. Sets the interpolation type and rotation options and displays the resulting timing curve, which cannot be edited directly."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves; Interpolation Timing"
+status = "handbook"
+
+[[behavior]]
+id = "hoi.defaultLinear"
+area = "interpolation"
+milestone = "M9"
+summary = "Ordinary interpolation moves each node along a straight line between its positions on two layers at constant speed. HOI replaces the straight line with a curve and thereby may also change the speed profile."
+ref = "Interpolation › Higher-Order Interpolation"
+status = "handbook"
+
+[[behavior]]
+id = "hoi.nodeMarkers"
+area = "interpolation"
+milestone = "M9"
+summary = "The tool draws small diamonds at node positions: blue for the current layer, light yellow for the next layer below along the chosen axis, dark purple for the next layer above; layers further away are not drawn. With masters Light, Regular, Medium, Bold on Weight and Regular current: yellow at Light, blue at Regular, purple at Medium, nothing for Bold; with Bold current only yellow and blue appear."
+ref = "Interpolation › Higher-Order Interpolation › Node Visualization"
+status = "handbook"
+
+[[behavior]]
+id = "hoi.knobOnDottedLine"
+area = "interpolation"
+milestone = "M9"
+summary = "Each node's default path to its neighbour is drawn as a grey dotted line with a grey knob at its midpoint; the knob is the handle for creating a curve."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "handbook"
+
+[[behavior]]
+id = "hoi.curveTypes"
+area = "interpolation"
+milestone = "M9"
+summary = "Three non-linear types exist: a curve through one intermediate point, a curve steered by two handles, and a rotation about a centre point whose default is the centre of the path's bounding box. Each node may use a different type."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "handbook"
+
+[[behavior]]
+id = "hoi.rotationApproximation"
+area = "interpolation"
+milestone = "M9"
+summary = "When the two node positions and the chosen centre do not admit a true circular arc (unequal radii), the rotation is approximated; the method is not described."
+ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
+status = "handbook"
+
+[[behavior]]
+id = "hoi.timingGraph"
+area = "interpolation"
+milestone = "M9"
+summary = "The timing graph plots progress against axis position for the selected curve: a straight diagonal from bottom-left to top-right for linear motion, shallow stretches where the node moves slowly and steep ones where it moves fast. It is derived from the curve and read-only; a white dot animates at constant speed beside a green dot that follows the graph."
+ref = "Interpolation › Higher-Order Interpolation › Interpolation Timing"
+status = "handbook"
+
+[[behavior]]
+id = "hoi.appliesToAllExports"
+area = "compile"
+milestone = "M9"
+summary = "HOI curves must be honoured by both the static instance interpolator and the variable font compiler. How the reference encodes them in a variable font is not documented."
+ref = "Interpolation › Higher-Order Interpolation"
+status = "handbook"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Variable font options: origin, axis location, axis mappings, STAT
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[behavior]]
+id = "variable.originMaster"
+area = "compile"
+milestone = "M9"
+summary = "A variable font stores the outlines of one origin master in full and every other master as differences from it. The origin is the first master in the Masters tab unless a Variable Font Origin parameter names another."
+ref = "Interpolation › Variable Font Options › Variable Font Origin"
+status = "handbook"
+
+[[behavior]]
+id = "variable.originIsFallback"
+area = "compile"
+milestone = "M9"
+summary = "Software without variable-font support renders the origin master, so a regular master is the safe choice. A central origin needs more delta data than a corner master (a Thin or a Thin Narrow, say), so a corner origin gives smaller files, relevant for webfonts. The trade-off is a designer's decision; no automatic choice is made."
+ref = "Interpolation › Variable Font Options › Variable Font Origin"
+status = "handbook"
+
+[[behavior]]
+id = "variable.originNeedsMinimalSetup"
+area = "compile"
+milestone = "M9"
+summary = "A variable font needs the origin master and at least one further master per variation axis, arranged as in the minimal setup rule; the compiler must report a designspace that the chosen origin cannot span."
+ref = "Interpolation › Variable Font Options › Variable Font Origin"
+status = "handbook"
+
+[[behavior]]
+id = "variable.alwaysTrueTypeFlavour"
+area = "compile"
+milestone = "M9"
+summary = "The reference exports variable fonts with TrueType outlines only. Stated in the Import & Export chapter; listed here because it decides which variation tables are produced."
+ref = "Import & Export › Exporting Variable Fonts"
+status = "handbook"
+
+[[behavior]]
+id = "axisLocation.perMasterRemap"
+area = "compile"
+milestone = "M9"
+summary = "By default a variable font's axes use the internal coordinates unchanged. An Axis Location parameter on a master states, per axis, the external coordinate that master stands for (e.g. a stem-based Weight of 45 exposed as 300, within the 1–1000 range OpenType recommends). It should be present on all masters; similar recommended ranges exist for Italic, Optical Size, Slant and Width."
+ref = "Interpolation › Variable Font Options › Axis Location"
+status = "handbook"
+
+[[behavior]]
+id = "axisLocation.definesExternalRange"
+area = "compile"
+milestone = "M9"
+summary = "The external range of each exported axis is the span of the masters' Axis Location values, while the internal range is the span of their Axes Coordinates. Between masters the internal-to-external relation is piecewise linear through the master pairs unless Axis Mappings says otherwise."
+ref = "Interpolation › Variable Font Options › Axis Location; Appendix › Custom Parameters › Axis Mappings"
+status = "handbook"
+
+[[panel]]
+id = "dialog.axisLocation"
+label = "Axis Location"
+location = "dialog"
+controls = ["one row per axis: axis name and external coordinate field", "OK", "Cancel"]
+area = "interpolation"
+milestone = "M9"
+summary = "Editor opened by clicking the value of an Axis Location parameter on a master; assigns each axis the coordinate the master represents in variable fonts. Layout is not described beyond that."
+ref = "Interpolation › Variable Font Options › Axis Location"
+status = "handbook"
+
+[[behavior]]
+id = "axisMappings.identityByDefault"
+area = "compile"
+milestone = "M9"
+summary = "Without mappings each axis maps every value onto itself: with Weight 44–130 a user-chosen 95 interpolates at 95, and the slider is equally sensitive along its whole length."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[behavior]]
+id = "axisMappings.controlPoints"
+area = "compile"
+milestone = "M9"
+summary = "A mapping is, per axis, a list of control points pairing an internal coordinate with an external one; values between points are interpolated linearly, and points off the diagonal make the user's slider more sensitive in some parts of the range than in others."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[behavior]]
+id = "axisMappings.perAxisOnly"
+area = "compile"
+milestone = "M9"
+summary = "A mapping bends one axis independently of the position on the others; it cannot depend on other axes. The reference attributes this to its avar implementation."
+ref = "Appendix › Custom Parameters › Axis Mappings"
+status = "handbook"
+
+[[behavior]]
+id = "axisMappings.fontAndExportLevel"
+area = "compile"
+milestone = "M9"
+summary = "An Axis Mappings parameter in Font Info › Font applies to every variable font exported from the document; the same parameter on a variable font setting overrides it for that export."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[behavior]]
+id = "axisMappings.externalIncludesAxisLocation"
+area = "interpolation"
+milestone = "M9"
+summary = "The external column of the mappings editor already has Axis Location applied, so internal and external numbers can differ even when the mapping is a straight line."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[panel]]
+id = "dialog.axisMappings"
+label = "Axis Mappings"
+location = "dialog"
+controls = [
+  "axis list",
+  "control-point list for the selected axis with two columns: internal (left), external (right)",
+  "plus button: add a control point",
+  "minus button: delete the selected control point",
+  "graph of the selected axis with the mapping drawn as a blue line and its control points",
+  "click on the blue line: add a control point there",
+  "drag a control point up or down in the graph",
+  "click a list value to edit it",
+  "arrow keys move the selected point; Shift ×10; Cmd ×100",
+  "selected point highlighted in the list and drawn larger in the graph",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "Three-pane editor opened by clicking the value of an Axis Mappings parameter: axes, the mapping table of the selected axis, and a graphical editor of the same points."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[command]]
+id = "axisMappings.addPoint"
+label = "Add Mapping Point"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{axis: tag, internal: number, external?: number, variableFontSetting?: id|name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Adds a control point to an axis's mapping (plus button, or a click on the line in the graph). When external is omitted the point is placed on the current mapping line so the mapping is unchanged until the point is moved."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[command]]
+id = "axisMappings.setPoint"
+label = "Edit Mapping Point"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{axis: tag, index: int, internal?: number, external?: number, variableFontSetting?: id|name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Changes one control point, by typing in the list or by dragging it vertically in the graph. Points must stay in increasing order on both coordinates for the mapping to be valid; the editor's reaction to a violation is not described."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[command]]
+id = "axisMappings.nudgePoint"
+label = "Nudge Mapping Point"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{axis: tag, index: int, dInternal?: number, dExternal?: number}"
+area = "interpolation"
+milestone = "M9"
+summary = "Inside the Axis Mappings dialog the Up, Down, Left and Right keys move the selected control point; holding Shift moves in steps of 10 and Cmd in steps of 100. The base step (presumably 1) and which key pair moves the internal and which the external coordinate are not stated, so no global shortcut is recorded."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[command]]
+id = "axisMappings.removePoint"
+label = "Remove Mapping Point"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{axis: tag, index: int, variableFontSetting?: id|name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Deletes the selected control point (minus button)."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "handbook"
+
+[[command]]
+id = "axisMappings.convertCoordinate"
+label = "Convert Axis Coordinate"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{axis: tag, value: number, from: internal|external, variableFontSetting?: id|name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Query: converts a coordinate between the internal and external systems using Axis Location and Axis Mappings, so agents and the CLI can address locations in either."
+ref = "Interpolation › Variable Font Options › Axis Mappings"
+status = "inferred"
+
+[[behavior]]
+id = "stat.purpose"
+area = "compile"
+milestone = "M9"
+summary = "A variable font carries a style attributes table that names positions on each axis (Weight 200 Thin … 700 Bold; Width 50 Compressed … 150 Expanded) so applications can compose a style name for any axis setting, e.g. Weight 600 with Width 75 gives Semibold Condensed."
+ref = "Interpolation › Variable Font Options › Style Attributes Table"
+status = "handbook"
+
+[[behavior]]
+id = "stat.elidableNames"
+area = "compile"
+milestone = "M9"
+summary = "An axis value name can be flagged elidable: it is dropped when combined with names from other axes, so Bold plus an elidable Normal width reads Bold."
+ref = "Interpolation › Variable Font Options › Style Attributes Table"
+status = "handbook"
+
+[[behavior]]
+id = "stat.automaticFromInstances"
+area = "compile"
+milestone = "M9"
+summary = "By default the style attributes are derived from the instances: their names and axis coordinates are analysed to obtain per-axis value names. The derivation algorithm is not documented and must be designed and compared against the reference."
+ref = "Interpolation › Variable Font Options › Style Attributes Table"
+status = "handbook"
+
+[[behavior]]
+id = "stat.manualOverrides"
+area = "compile"
+milestone = "M9"
+summary = "Two instance parameters refine the automatic result. Style Name as STAT entry, valued with an axis tag, makes the instance's style name the label for its position on that axis; it is meant for instances that differ from the origin on that one axis only. Elidable STAT Axis Value Name, valued with an axis tag, marks the instance's name as elidable on that axis and is repeated once per axis for a Regular."
+ref = "Interpolation › Variable Font Options › Style Attributes Table"
+status = "handbook"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Working with multiple fonts
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[command]]
+id = "edit.compareFonts"
+label = "Compare Fonts…"
+menu = ["Edit"]
+shortcut = ""
+kind = "ui"
+params = "{left?: {document, master}, right?: {document, master}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Opens the Compare Fonts window, which sets two masters, from the same or from two open documents, side by side."
+ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
+status = "handbook"
+
+[[panel]]
+id = "window.compareFonts"
+label = "Compare Fonts"
+location = "window"
+controls = [
+  "two document pop-ups listing every open font file",
+  "a master pop-up under each document pop-up",
+  "two-column list of differences grouped under grey headings: font info, master metrics, glyph outlines, kerning pairs",
+  "disclosure triangle on each heading to collapse or expand the group",
+  "click a row to select it",
+  "Use Left button",
+  "Use Right button",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "Compares one master against another. Picking the same document on both sides compares two of its masters. Whether rows show only differing values or all values is not stated."
+ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
+status = "handbook"
+
+[[command]]
+id = "compareFonts.useLeft"
+label = "Use Left"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{left: {document, master}, right: {document, master}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Writes the selected row's value from the left master to the right one (a font-info field, a metric, a glyph's outline, or a kerning pair), removing that difference."
+ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
+status = "handbook"
+
+[[command]]
+id = "compareFonts.useRight"
+label = "Use Right"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{left: {document, master}, right: {document, master}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
+area = "interpolation"
+milestone = "M9"
+summary = "Writes the selected row's value from the right master to the left one."
+ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
+status = "handbook"
+
+[[command]]
+id = "compareFonts.diff"
+label = "Diff Two Masters"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{left: {document, master}, right: {document, master}, categories?: [fontInfo|masterMetrics|glyph|kerning]}"
+area = "interpolation"
+milestone = "M9"
+summary = "Query: returns the rows the Compare Fonts window would show, as structured data, so agents and the CLI can compare masters without the window."
+ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
+status = "inferred"
+
+[[command]]
+id = "edit.compareFamily"
+label = "Compare Family…"
+menu = ["Edit"]
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "interpolation"
+milestone = "M9"
+summary = "Opens the Compare Family window, a table with one column per open document and one row per glyph, for checking one glyph attribute across a family kept in separate files."
+ref = "Interpolation › Working with Multiple Fonts › Compare Family"
+status = "handbook"
+
+[[panel]]
+id = "window.compareFamily"
+label = "Compare Family"
+location = "window"
+controls = [
+  "attribute menu at top left: Component Names | Anchors | Left Kerning Group | Right Kerning Group | Glyphs",
+  "one column per open document, one row per glyph",
+  "filter button: All | Missing in One | Ignore If Missing in One",
+  "pin button: keep the window above all document windows",
+  "Update button: reload glyph data after edits",
+  "double-click a cell: open that glyph in Edit View of that document",
+]
+area = "interpolation"
+milestone = "M9"
+summary = "Shows the chosen attribute for every glyph in every open document. An empty value prints as two dashes, a glyph absent from a document as (missing glyph); with the Glyphs attribute the cell shows the glyph image, and a struck-through red ring where it is missing. The table does not refresh by itself."
+ref = "Interpolation › Working with Multiple Fonts › Compare Family"
+status = "handbook"
+
+[[command]]
+id = "compareFamily.setAttribute"
+label = "Compare Family: Attribute"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{attribute: componentNames|anchors|leftKerningGroup|rightKerningGroup|glyphs}"
+area = "interpolation"
+milestone = "M9"
+summary = "Chooses which glyph attribute the Compare Family table displays."
+ref = "Interpolation › Working with Multiple Fonts › Compare Family"
+status = "handbook"
+
+[[command]]
+id = "compareFamily.setFilter"
+label = "Compare Family: Filter"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{filter: all|missingInOne|ignoreIfMissingInOne}"
+area = "interpolation"
+milestone = "M9"
+summary = "Filters the rows: All shows every glyph that has relevant data, Missing in One only glyphs absent from at least one document, Ignore If Missing in One only glyphs present in all of them."
+ref = "Interpolation › Working with Multiple Fonts › Compare Family"
+status = "handbook"
+
+[[command]]
+id = "compareFamily.togglePin"
+label = "Compare Family: Keep on Top"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "The pin button: keeps the Compare Family window floating above all document windows."
+ref = "Interpolation › Working with Multiple Fonts › Compare Family"
+status = "handbook"
+
+[[command]]
+id = "compareFamily.update"
+label = "Update"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "interpolation"
+milestone = "M9"
+summary = "Re-reads glyph information from all open documents into the Compare Family table after they have been edited."
+ref = "Interpolation › Working with Multiple Fonts › Compare Family"
+status = "handbook"
+
+[[command]]
+id = "compareFamily.openGlyph"
+label = "Open Glyph from Compare Family"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{document: path|documentId, glyph: name}"
+area = "interpolation"
+milestone = "M9"
+summary = "Double-clicking a cell opens that glyph in an Edit View of the document the column stands for."
+ref = "Interpolation › Working with Multiple Fonts › Compare Family"
+status = "handbook"
+
+[[command]]
+id = "compareFamily.report"
+label = "Family Comparison Report"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{documents?: [path|documentId], attribute: componentNames|anchors|leftKerningGroup|rightKerningGroup|glyphs, filter?: all|missingInOne|ignoreIfMissingInOne}"
+area = "interpolation"
+milestone = "M9"
+summary = "Query: returns the Compare Family table as data, with null for empty values and a missing marker for absent glyphs."
+ref = "Interpolation › Working with Multiple Fonts › Compare Family"
+status = "inferred"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Parameters introduced by this chapter (may duplicate the appendix inventory)
+# ───────────────────────────────────────────────────────────────────────────────
+

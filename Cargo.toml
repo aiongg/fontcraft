@@ -1,0 +1,66 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*", "xtask"]
+default-members = ["crates/*", "apps/fontcraft", "apps/fontcraft-cli", "xtask"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/OWNER/fontcraft"
+
+[workspace.dependencies]
+# internal (register every new crate in xtask/src/layers.rs)
+fontcraft-geom = { path = "crates/geom" }
+fontcraft-model = { path = "crates/model" }
+fontcraft-format = { path = "crates/format" }
+fontcraft-compile = { path = "crates/compile" }
+fontcraft-engine = { path = "crates/engine" }
+fontcraft-mcp = { path = "crates/mcp" }
+fontcraft-ui-egui = { path = "crates/ui-egui" }
+fontcraft-testkit = { path = "crates/testkit" }
+
+# foundation (all MIT OR Apache-2.0 unless noted)
+kurbo = { version = "0.13", features = ["serde"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+log = "0.4"
+base64 = "0.22"
+
+# fonts: the fontations crates (MIT OR Apache-2.0). See docs/decisions/0002-compile-pipeline.md.
+write-fonts = "0.54"
+read-fonts = "0.45"
+skrifa = "0.48"
+
+# ui
+egui = "0.36"
+eframe = { version = "0.36", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+# FontCraft never crashes: shipped code returns `Result`/`Option` instead of panicking
+# (AGENTS.md › Never crash). Tests may unwrap (clippy.toml).
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+# The implicit forms: `v[i]`, `&v[a..b]` and `&s[a..b]` panic when out of range. Use `.get(…)`.
+indexing_slicing = "deny"
+string_slice = "deny"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

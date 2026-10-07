@@ -1,0 +1,1382 @@
+# Source: Glyphs 4 Handbook, chapter "Spacing & Kerning"
+#         https://handbook.glyphsapp.com/ (single-page edition, chapter 8)
+#         One row (kerning.pairLookupOrder) also cites the UFO 3 specification, kerning.plist
+#         (refs/ufo-spec/versions/ufo3/kerning.plist.md).
+# Date:   2026-10-07
+# Rows are written in our own words.
+# Not repeated here because other chapters document them in full: view.showMetrics (Cmd+Shift+M),
+# view.showInfo (Cmd+Shift+I), edit.copy / edit.paste / edit.selectAll, the Text tool, the
+# writing-direction switch, the Font View inspector, Appearance settings, smart filters, and the
+# metrics import/export commands (file.importMetrics, file.exportMetrics in 07-import-export.toml).
+# The chapter says nothing about automatic spacing, kerning value limits, or how the implicit
+# kern feature is generated; no rows exist for those.
+
+# ───────────────────────────── Spacing: display and Info box ─────────────────────────────
+
+[[panel]]
+id = "infoBox.spacing"
+label = "Info box: metrics fields"
+location = "inspector"
+controls = [
+  "left sidebearing field (number or metrics key), left of the metrics icon",
+  "right sidebearing field (number or metrics key), right of the metrics icon",
+  "width field (number or metrics key)",
+  "vertical layout: T (top sidebearing) and B (bottom sidebearing) fields instead",
+  "per-field update button, shown beside a metrics key whose value is out of date",
+  "auto-aligned glyphs: fields read 'auto' with the derived value in parentheses",
+]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The part of the Edit View Info box (View › Show Info, Cmd+Shift+I) that shows and edits the sidebearings and width of the current glyph. Horizontal scripts, both left-to-right and right-to-left, show left and right sidebearings; top-to-bottom text shows top and bottom sidebearings."
+ref = "Spacing & Kerning › Spacing › Info Box"
+status = "handbook"
+
+[[behavior]]
+id = "spacing.metricsOverlayInTextMode"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "While View › Show Metrics (Cmd+Shift+M) is on and the Text tool is in use, every glyph in the Edit View line is labelled with its left sidebearing, right sidebearing and advance width."
+ref = "Spacing & Kerning › Spacing"
+status = "handbook"
+
+[[behavior]]
+id = "spacing.currentGlyphFollowsCursor"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "In text mode the 'current glyph', which the Info box shows and the spacing and kerning shortcuts act on, is the glyph immediately after the text cursor."
+ref = "Spacing & Kerning › Spacing › Info Box"
+status = "handbook"
+
+[[behavior]]
+id = "spacing.infoBoxFollowsLayoutDirection"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The Info box shows left/right sidebearings on either side of a central metrics icon for horizontal text in both directions, and top/bottom sidebearings labelled T and B for top-to-bottom text."
+ref = "Spacing & Kerning › Spacing › Info Box"
+status = "handbook"
+
+[[behavior]]
+id = "spacing.infoBoxArrowSteps"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "With the caret in a numeric Info box field, Up raises and Down lowers the value by 1 unit; with Shift the step is 10 and with Cmd+Shift it is 100. What the keys do in a field holding a metrics key is not stated."
+ref = "Spacing & Kerning › Spacing › Info Box"
+status = "handbook"
+
+[[command]]
+id = "spacing.setLeftSidebearing"
+label = "Set Left Sidebearing"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, value: number|string}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the left sidebearing of a glyph layer to a number, or stores a metrics key (a string such as 'l', '=h+8' or '==u') for it. A number changes the space left of the outline and, we assume, the advance width with it (as the spacing shortcuts do); a key is stored and evaluated. This is what typing into the Info box field does."
+ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
+status = "handbook"
+
+[[command]]
+id = "spacing.setRightSidebearing"
+label = "Set Right Sidebearing"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, value: number|string}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the right sidebearing of a glyph layer to a number (changing the width) or stores a metrics key for it. This is what typing into the Info box field does."
+ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
+status = "handbook"
+
+[[command]]
+id = "spacing.setWidth"
+label = "Set Width"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, value: number|string}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the advance width of a glyph layer to a number or stores a metrics key for it; the handbook names the width as the third metric a key can link. How a numeric width change is split between the sidebearings is not stated here (we assume the right sidebearing absorbs it)."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "handbook"
+
+[[command]]
+id = "spacing.setTopSidebearing"
+label = "Set Top Sidebearing"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, value: number|string}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the top sidebearing (the T field of the vertical Info box). The chapter only says the field is shown for top-to-bottom text; editing it and its effect on the vertical origin and height are assumed by analogy with the horizontal fields."
+ref = "Spacing & Kerning › Spacing › Info Box"
+status = "inferred"
+
+[[command]]
+id = "spacing.setBottomSidebearing"
+label = "Set Bottom Sidebearing"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, value: number|string}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the bottom sidebearing (the B field of the vertical Info box). As with the top sidebearing, the chapter documents the display only; the editing behaviour is assumed."
+ref = "Spacing & Kerning › Spacing › Info Box"
+status = "inferred"
+
+[[command]]
+id = "spacing.getMetrics"
+label = "Get Metrics"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph: name, layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Query, our addition for agents: returns the layer's sidebearings and width, the metrics key stored for each (with whether it is glyph-level or layer-local), the value each key currently evaluates to, and whether each is in sync."
+ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
+status = "inferred"
+
+# ───────────────────────────── Spacing shortcuts ─────────────────────────────
+
+[[command]]
+id = "spacing.increaseLeftSidebearing"
+label = "Increase Left Sidebearing"
+menu = []
+shortcut = "Ctrl+Left"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: adds 1 unit (or amount) of space on the left side of the current glyph, widening it."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.increaseLeftSidebearingBy10"
+label = "Increase Left Sidebearing by 10"
+menu = []
+shortcut = "Ctrl+Shift+Left"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: adds 10 units of space on the left side of the current glyph."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.decreaseLeftSidebearing"
+label = "Decrease Left Sidebearing"
+menu = []
+shortcut = "Ctrl+Right"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: removes 1 unit (or amount) of space from the left side of the current glyph, narrowing it."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.decreaseLeftSidebearingBy10"
+label = "Decrease Left Sidebearing by 10"
+menu = []
+shortcut = "Ctrl+Shift+Right"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: removes 10 units of space from the left side of the current glyph."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.increaseRightSidebearing"
+label = "Increase Right Sidebearing"
+menu = []
+shortcut = "Cmd+Right"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: adds 1 unit (or amount) of space on the right side of the current glyph, widening it."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.increaseRightSidebearingBy10"
+label = "Increase Right Sidebearing by 10"
+menu = []
+shortcut = "Cmd+Shift+Right"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: adds 10 units of space on the right side of the current glyph."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.decreaseRightSidebearing"
+label = "Decrease Right Sidebearing"
+menu = []
+shortcut = "Cmd+Left"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: removes 1 unit (or amount) of space from the right side of the current glyph, narrowing it."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.decreaseRightSidebearingBy10"
+label = "Decrease Right Sidebearing by 10"
+menu = []
+shortcut = "Cmd+Shift+Left"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: removes 10 units of space from the right side of the current glyph."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.shiftOutlineLeft"
+label = "Shift Outline Left"
+menu = []
+shortcut = "Cmd+Ctrl+Left"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: moves the glyph's content 1 unit (or amount) to the left inside an unchanged advance width, so the left sidebearing shrinks and the right one grows by the same amount."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.shiftOutlineLeftBy10"
+label = "Shift Outline Left by 10"
+menu = []
+shortcut = "Cmd+Ctrl+Shift+Left"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: moves the glyph's content 10 units to the left inside an unchanged advance width."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.shiftOutlineRight"
+label = "Shift Outline Right"
+menu = []
+shortcut = "Cmd+Ctrl+Right"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: moves the glyph's content 1 unit (or amount) to the right inside an unchanged advance width, so the left sidebearing grows and the right one shrinks by the same amount."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "spacing.shiftOutlineRightBy10"
+label = "Shift Outline Right by 10"
+menu = []
+shortcut = "Cmd+Ctrl+Shift+Right"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: moves the glyph's content 10 units to the right inside an unchanged advance width."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "spacing.shortcutsNeedTextTool"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The spacing shortcuts act only while the Text tool is active, on the current glyph (the one after the cursor). They are disabled in the locked kerning mode."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts; Kerning › Kerning Modes"
+status = "handbook"
+
+[[behavior]]
+id = "spacing.shortcutModifierScheme"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Modifier scheme for the arrow-key spacing shortcuts: Ctrl addresses the left sidebearing, Cmd the right one, Ctrl and Cmd together shift the outline within the width, and Shift multiplies the 1-unit step to 10. Left/Right arrows give the direction in which the addressed edge moves."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "spacing.shiftKeepsWidth"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Shifting the outline changes both sidebearings by equal and opposite amounts and never changes the advance width, which is why it is the spacing tool for monospaced designs."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "spacing.ctrlArrowSystemConflict"
+area = "ui-chrome"
+milestone = "M14"
+summary = "On macOS, Ctrl+Left and Ctrl+Right are taken by the system's Mission Control shortcuts by default, so the left-sidebearing shortcuts do not reach the application until the user changes those system shortcuts. The UI should say so; other platforms need their own conflict check."
+ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
+status = "handbook"
+
+# ───────────────────────────── Metrics keys ─────────────────────────────
+
+[[behavior]]
+id = "metricsKey.linkByGlyphName"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Typing a glyph name instead of a number into the LSB, RSB or width field stores a metrics key: the field then takes the value of the same metric of the named glyph (LSB from its LSB, RSB from its RSB, width from its width)."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.notSyncedAutomatically"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A linked metric is not recalculated when the glyph it refers to changes. The stored number stays as it is until an update command runs, and the key is flagged as out of sync in the meantime."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.outOfSyncInEditView"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "In Edit View a metrics key whose evaluated value differs from the layer's actual metric is drawn in red with an update button next to it; pressing the button brings that one metric in line."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.outOfSyncInFontView"
+area = "font-view"
+milestone = "M5"
+summary = "In Font View a glyph with any out-of-sync metrics key has its cell marked with a warning triangle at the top right. Such glyphs can be collected with a smart filter."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "handbook"
+
+[[command]]
+id = "spacing.updateMetricsKey"
+label = "Update Metrics Key"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph: name, layer?: id, field: "left"|"right"|"width"|"top"|"bottom"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The update button beside one out-of-sync metrics key: re-evaluates that key and applies the result to that metric of the layer only. The button label is ours (icon-only in the reference)."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "handbook"
+
+[[command]]
+id = "glyph.updateMetrics"
+label = "Update Metrics"
+menu = ["Glyph"]
+shortcut = "Cmd+Ctrl+M"
+kind = "engine"
+params = '{glyphs?: [names], layer?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Re-evaluates every metrics key on the current layer of the current glyph, or of all selected glyphs, and applies the results, clearing all out-of-sync flags there."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "handbook"
+
+[[command]]
+id = "glyph.updateMetricsForAllMasters"
+label = "Update Metrics for all Masters"
+menu = ["Glyph"]
+shortcut = "Cmd+Ctrl+Alt+M"
+kind = "engine"
+params = '{glyphs?: [names]}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The Option-key variant of Update Metrics: re-evaluates the metrics keys of the current or selected glyphs on every master instead of only the current one."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "handbook"
+
+[[command]]
+id = "spacing.evaluateMetricsKey"
+label = "Evaluate Metrics Key"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{key: string, glyph: name, layer?: id, field: "left"|"right"|"width"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Query, our addition for agents and tests: parses a metrics key in the context of a glyph, layer and field and returns the rounded value it yields or a parse/lookup error, without changing the document."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "inferred"
+
+[[command]]
+id = "spacing.listOutOfSyncMetrics"
+label = "List Out-of-Sync Metrics"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], masters?: [ids]}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Query, our addition: lists glyph, layer and field for each metrics key whose evaluated value differs from the stored metric. Headless counterpart of the red markers and the Font View warning triangles."
+ref = "Spacing & Kerning › Spacing › Metrics Keys"
+status = "inferred"
+
+[[behavior]]
+id = "metricsKey.calculationSyntax"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A calculated key is an equals sign, a glyph name, one arithmetic operator and a number, in that order: '=h+8', '=hyphen/2'. Only this single-operation form is documented; chained operations and parentheses are not."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Key Calculations"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.operators"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The four operators are + (add), - (subtract), * (multiply) and / (divide), applied to the referenced glyph's metric on the left and the literal number on the right."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Key Calculations"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.decimalOperands"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The number in a calculation may have a decimal fraction ('=o*1.2', '=koKai-thai/1.5'). Note that glyph names can themselves contain a hyphen, so the parser must not read the hyphen in 'ka-deva' as a minus sign."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Key Calculations"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.resultRounded"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Before a calculated metrics key takes effect, its result is rounded to a whole number of font units. Tie-breaking for exact halves is not stated."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Key Calculations"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.constant"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "'=' followed by just a number ('=64') pins the metric to that constant. Unlike a plain numeric entry, the key is remembered, so the value can be restored by an update after outline edits have changed the sidebearing."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Constant Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.bareNameEqualsReference"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "'=' followed by only a glyph name ('=n') means exactly the same as the bare glyph name ('n')."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Constant Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.mirrored"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A pipe character straight after the equals sign makes the key read the opposite sidebearing of the referenced glyph: '=|n' in a right sidebearing field takes n's left sidebearing, and in a left field it takes n's right sidebearing."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Mirrored Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.selfMirrorCentres"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "'=|' with no glyph name refers to this glyph's own sidebearing on the other side, making the two sidebearings equal and so keeping the outline centred in its advance width."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Mirrored Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.glyphLevelByDefault"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A metrics key entered with a single '=' (or as a bare name) belongs to the glyph and applies on every master. We assume each master layer evaluates it against the referenced glyph's layer of the same master; the chapter does not spell that out."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Local Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.localPrefix"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A key starting with two equals signs ('==u', '==endash+12') is local: it is stored on the layer it was typed on, affects only that master, and serves as an exception to the glyph-level key the other masters keep using."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Local Metrics Keys"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.baselineOffset"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A key may end with '@' and a number to take the referenced sidebearing at one height instead of from the bounding box: '=H@0' measures H's sidebearing along the baseline and '=H@150' along a horizontal line 150 units above it."
+ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Keys at Baseline Offsets"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.autoAlignedDisplay"
+area = "spacing-kerning"
+milestone = "M6"
+summary = "For a glyph under automatic alignment the metric fields are not editable numbers: they show the word 'auto' followed by the value derived from the components in parentheses."
+ref = "Spacing & Kerning › Spacing › Metrics Keys & Automatic Alignment"
+status = "handbook"
+
+[[behavior]]
+id = "metricsKey.autoAlignedOffset"
+area = "spacing-kerning"
+milestone = "M6"
+summary = "An automatically aligned metric can be adjusted without giving up alignment by entering '=' plus a signed number ('=+18', '=-12'): the amount is added to or taken from the derived value. Typical use is a composite whose mark sticks out of the glyph box (idieresis, dcaron, lcaron)."
+ref = "Spacing & Kerning › Spacing › Metrics Keys & Automatic Alignment"
+status = "handbook"
+
+# ───────────────────────────── Kerning: basics, modes, Info box ─────────────────────────────
+
+[[behavior]]
+id = "kerning.directionsStoredSeparately"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Left-to-right kerning and right-to-left kerning are separate data sets. Edits, the Info box and the Kerning window all work on the set of the writing direction currently selected in Edit View, so the direction must be set before kerning mixed-direction fonts."
+ref = "Spacing & Kerning › Kerning"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.highlightColors"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "With the Text tool active, a kerned gap between two glyphs is tinted: light blue when the kerning value is negative, yellow when it is positive. Both colours are user-configurable in the Appearance settings."
+ref = "Spacing & Kerning › Kerning"
+status = "handbook"
+
+[[command]]
+id = "kerning.setMode"
+label = "Kerning Mode"
+menu = []
+shortcut = ""
+kind = "ui"
+params = '{mode?: "none"|"kerning"|"locked"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the Edit View kerning mode, or with no parameter advances to the next of the three modes, as a click on the mode icon at the bottom right of the canvas does."
+ref = "Spacing & Kerning › Kerning › Kerning Modes"
+status = "handbook"
+
+[[panel]]
+id = "editView.kerningModeButton"
+label = "Kerning mode button"
+location = "statusbar"
+controls = ["icon button with three states: no kerning, kerning, locked kerning; a click cycles"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Button in the lower right of the Edit View canvas that shows the current kerning mode and cycles through the three modes when clicked."
+ref = "Spacing & Kerning › Kerning › Kerning Modes"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.modeNone"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "No-kerning mode: Edit View lays text out without applying kerning, and the kerning shortcuts do nothing."
+ref = "Spacing & Kerning › Kerning › Kerning Modes"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.modeKerning"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Kerning mode: Edit View applies and shows kerning pairs; both the kerning and the spacing shortcuts are live."
+ref = "Spacing & Kerning › Kerning › Kerning Modes"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.modeLocked"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Locked-kerning mode: identical to kerning mode except that the spacing shortcuts are switched off, so a slipped modifier cannot alter sidebearings during a kerning session."
+ref = "Spacing & Kerning › Kerning › Kerning Modes"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.kerning"
+label = "Info box: kerning fields"
+location = "inspector"
+controls = [
+  "kern field towards the previous glyph (left edge) with grey placeholder 'Kern' when no pair exists",
+  "kern field towards the next glyph (right edge), same placeholder",
+  "Group field for the left kerning group",
+  "Group field for the right kerning group",
+  "lock toggle per side: closed = kern through the group, open = this glyph is an exception",
+  "vertical layout: the same fields for top and bottom",
+]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The kerning part of the Edit View Info box: the kerning values for the current glyph against each immediate neighbour, the glyph's two kerning group names, and the locks that control group exceptions."
+ref = "Spacing & Kerning › Kerning › Info Box; Kerning Groups; Kerning Group Exceptions"
+status = "handbook"
+
+[[panel]]
+id = "infoBox.precedingGlyph"
+label = "Info box: preceding glyph"
+location = "inspector"
+controls = ["glyph name", "lock toggle", "kerning group name (the group facing the current glyph)"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A second, smaller Info box shown while the Text tool is active for the glyph before the cursor, so both members of the pair being kerned show their group and lock state."
+ref = "Spacing & Kerning › Kerning › Info Box"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.infoBoxFieldEditing"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A value typed into a kern field is applied when Return is pressed or the field loses focus. Emptying the field deletes the kerning between the two glyphs (rather than storing zero). An unset pair shows the grey placeholder 'Kern'."
+ref = "Spacing & Kerning › Kerning › Info Box"
+status = "handbook"
+
+[[command]]
+id = "kerning.setPair"
+label = "Set Kerning Pair"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{left: name|"@group", right: name|"@group", value: number, master?: id, direction?: "ltr"|"rtl"|"vertical"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Stores a kerning value for a pair in one master and one writing direction. Each side is a glyph name or a group written with a leading '@'. In the UI the sides are derived from the two glyphs at the cursor and their locks: a closed lock substitutes the glyph's group, an open lock keeps the glyph itself."
+ref = "Spacing & Kerning › Kerning › Info Box; Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.removePair"
+label = "Remove Kerning Pair"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{left: name|"@group", right: name|"@group", master?: id, direction?: "ltr"|"rtl"|"vertical"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Deletes one stored kerning pair from a master; this is what clearing a kern field in the Info box does."
+ref = "Spacing & Kerning › Kerning › Info Box"
+status = "handbook"
+
+[[command]]
+id = "kerning.getPair"
+label = "Get Kerning"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{left: name, right: name, master?: id, direction?: "ltr"|"rtl"|"vertical"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Query, our addition: returns the kerning that applies between two glyphs and which stored pair supplied it (glyph–glyph, glyph–group, group–glyph or group–group), following kerning.pairLookupOrder."
+ref = "Spacing & Kerning › Kerning › Kerning Groups; Kerning Group Exceptions"
+status = "inferred"
+
+# ───────────────────────────── Kerning shortcuts ─────────────────────────────
+
+[[command]]
+id = "kerning.increaseLeft"
+label = "Increase Kerning on Left Side"
+menu = []
+shortcut = "Ctrl+Alt+Left"
+kind = "engine"
+params = '{left?: name, right?: name, master?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: changes the kerning of the pair made of the preceding glyph and the current glyph by one step of 1 unit, in the direction the handbook calls 'increase'. By analogy with Ctrl+Left for spacing we read this as more room (value +1); the sign must be confirmed in the app."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "kerning.increaseLeftBy10"
+label = "Increase Kerning on Left Side by 10"
+menu = []
+shortcut = "Ctrl+Alt+Shift+Left"
+kind = "engine"
+params = '{left?: name, right?: name, master?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: as kerning.increaseLeft with a step of 10 units."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "kerning.decreaseLeft"
+label = "Decrease Kerning on Left Side"
+menu = []
+shortcut = "Ctrl+Alt+Right"
+kind = "engine"
+params = '{left?: name, right?: name, master?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: changes the kerning of the pair made of the preceding glyph and the current glyph by 1 unit in the 'decrease' direction (read as value −1, less room; sign to be confirmed)."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "kerning.decreaseLeftBy10"
+label = "Decrease Kerning on Left Side by 10"
+menu = []
+shortcut = "Ctrl+Alt+Shift+Right"
+kind = "engine"
+params = '{left?: name, right?: name, master?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: as kerning.decreaseLeft with a step of 10 units."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "kerning.increaseRight"
+label = "Increase Kerning on Right Side"
+menu = []
+shortcut = "Cmd+Alt+Right"
+kind = "engine"
+params = '{left?: name, right?: name, master?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: changes the kerning of the pair made of the current glyph and the following glyph by 1 unit in the 'increase' direction (read as value +1, more room; sign to be confirmed)."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "kerning.increaseRightBy10"
+label = "Increase Kerning on Right Side by 10"
+menu = []
+shortcut = "Cmd+Alt+Shift+Right"
+kind = "engine"
+params = '{left?: name, right?: name, master?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: as kerning.increaseRight with a step of 10 units."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "kerning.decreaseRight"
+label = "Decrease Kerning on Right Side"
+menu = []
+shortcut = "Cmd+Alt+Left"
+kind = "engine"
+params = '{left?: name, right?: name, master?: id, amount?: number}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: changes the kerning of the pair made of the current glyph and the following glyph by 1 unit in the 'decrease' direction (read as value −1, less room; sign to be confirmed)."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+[[command]]
+id = "kerning.decreaseRightBy10"
+label = "Decrease Kerning on Right Side by 10"
+menu = []
+shortcut = "Cmd+Alt+Shift+Left"
+kind = "engine"
+params = '{left?: name, right?: name, master?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Text tool: as kerning.decreaseRight with a step of 10 units."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.shortcutsNeedTextTool"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The kerning shortcuts work with the Text tool, with the cursor between the two glyphs to be kerned, and only while the kerning mode is not 'no kerning'. They adjust the pair selected by the lock states; that a missing pair is created on the first keypress is assumed."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts; Kerning Modes"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.shortcutModifierScheme"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Modifier scheme for the arrow-key kerning shortcuts: Alt marks kerning (as opposed to spacing), Ctrl picks the pair with the glyph on the left of the current one, Cmd the pair with the glyph on the right, and Shift raises the step from 1 to 10. No 100-unit step is documented for kerning."
+ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
+status = "handbook"
+
+# ───────────────────────────── Kerning groups ─────────────────────────────
+
+[[behavior]]
+id = "kerning.groupSemantics"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A kerning pair may name a group on either side; it then applies to every glyph that belongs to that group on that side. Kerning A against V thus also kerns every glyph sharing A's right group against every glyph sharing V's left group, unless an exception exists for a specific combination."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.twoGroupsPerGlyph"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Each glyph has at most two kerning groups, a left one and a right one, which are independent namespaces: a left group and a right group with the same name are unrelated. We assume membership belongs to the glyph and is shared by all masters; the chapter does not say."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.verticalGroups"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Glyphs set top to bottom use a top group and a bottom group in place of left and right. The chapter gives no further detail on vertical kerning (pair storage, shortcuts, feature output)."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.groupNameCharset"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A kerning group name may contain only A–Z, a–z, 0–9, underscore, period and hyphen. Names are otherwise free; the convention is to use the name of a representative glyph (right group 'R' for R and its accented forms) but descriptive names such as 'stem' are equally valid."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.groupsEditedForManyGlyphs"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Group names are typed into the Group fields of the Info box. Several glyphs get the same group in one step either through the Font View inspector with the glyphs selected, or by selecting several glyphs in Edit View."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[command]]
+id = "kerning.setLeftGroup"
+label = "Set Left Kerning Group"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], group: string|null}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Assigns the left kerning group of one or more glyphs, or clears it with null. Rejects names with characters outside the allowed set."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[command]]
+id = "kerning.setRightGroup"
+label = "Set Right Kerning Group"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], group: string|null}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Assigns the right kerning group of one or more glyphs, or clears it with null. Rejects names with characters outside the allowed set."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[command]]
+id = "kerning.setTopGroup"
+label = "Set Top Kerning Group"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], group: string|null}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Assigns the top kerning group used when the glyph is set top to bottom. The chapter states that the group exists; the field behaviour is assumed to match the horizontal groups."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[command]]
+id = "kerning.setBottomGroup"
+label = "Set Bottom Kerning Group"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyphs?: [names], group: string|null}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Assigns the bottom kerning group used when the glyph is set top to bottom. The chapter states that the group exists; the field behaviour is assumed to match the horizontal groups."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[command]]
+id = "kerning.listGroups"
+label = "List Kerning Groups"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{side?: "left"|"right"|"top"|"bottom", group?: string}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Query, our addition: returns the kerning groups per side with their member glyphs. It supplies the data behind Show Group Members and the group rows of the Kerning window."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "inferred"
+
+[[command]]
+id = "view.showGroupMembers"
+label = "Show Group Members"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = '{on?: bool}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Toggles a background display of the other members of the kerning groups involved at the cursor, so collisions across a whole group can be spotted while kerning one pair."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.groupMembersDisplayScope"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Show Group Members draws members for two glyphs only, namely the current glyph and its predecessor in the line. For each, only the group facing the pair is used: the current glyph shows the members of its left group, and the preceding glyph those of its right group (the second half follows from 'the respective group' and is not given as an example)."
+ref = "Spacing & Kerning › Kerning › Kerning Groups"
+status = "handbook"
+
+# ───────────────────────────── Group exceptions and locks ─────────────────────────────
+
+[[behavior]]
+id = "kerning.exceptionOverridesGroup"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A kerning exception is a stored pair in which at least one side is a single glyph that also belongs to a group; for that combination it replaces the value the group pair would give. All other members keep the group value."
+ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.lockStates"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Each side of the pair at the cursor has a lock in the Info box. Closed (the normal state) means edits are stored against that glyph's group; open means edits are stored against the glyph itself. With T closed and ö open, editing the pair writes right-group-of-T against ö: an exception for ö that still applies to every member of T's right group."
+ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.closingLockRemovesException"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Closing an open lock removes the exception, so the glyph falls back to its group's kerning for that pair. The handbook does not say whether the exception pair is deleted at once or what happens to its value."
+ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions"
+status = "handbook"
+
+[[command]]
+id = "kerning.addException"
+label = "Open Kerning Lock"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{left: name, right: name, side: "left"|"right"|"both", value?: number, master?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Marks one or both glyphs of a pair as an exception to their group (opening the lock in the Info box), so that kerning set for the pair is stored against the glyph instead of the group. Whether opening the lock alone already creates a stored pair (seeded with the group value) or only the next edit does is not stated."
+ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions"
+status = "handbook"
+
+[[command]]
+id = "kerning.removeException"
+label = "Close Kerning Lock"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{left: name, right: name, side: "left"|"right"|"both", master?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Closes the lock on one or both sides of a pair, removing the glyph-specific exception so the group kerning applies again."
+ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.pairLookupOrder"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Effective kerning for two glyphs is taken from the most specific stored pair: glyph–glyph, then glyph–group (left glyph, right group), then group–glyph, then group–group, else zero. The handbook only states that exceptions override group kerning; the full four-step order, including the tie between the two mixed forms, is taken from the UFO 3 kerning.plist rules and must be checked against the reference app."
+ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions; UFO 3 spec › kerning.plist › Exceptions"
+status = "docs"
+
+# ───────────────────────────── Kerning window ─────────────────────────────
+
+[[command]]
+id = "window.kerning"
+label = "Kerning"
+menu = ["Window"]
+shortcut = "Cmd+Alt+K"
+kind = "ui"
+params = "{}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Opens the Kerning window, a table of every stored kerning pair of the current master in the currently selected writing direction."
+ref = "Spacing & Kerning › Kerning › Kerning Window"
+status = "handbook"
+
+[[panel]]
+id = "window.kerning"
+label = "Kerning"
+location = "window"
+controls = [
+  "search field with an options menu behind the search icon",
+  "table with sortable columns Left, Value, Right",
+  "group entries in blue with a leading @, glyph entries in gold",
+  "double-click a cell to edit a value or a group name",
+  "minus button (bottom left): delete the selected pairs; with Option, from all masters",
+  "actions menu: Show All Glyphs, Clean Up, Compress",
+]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Table of the kerning pairs of the current master and writing direction, with search, sorting, in-place editing, copy and paste between masters, deletion and maintenance actions. Selecting a row shows that pair in Edit View."
+ref = "Spacing & Kerning › Kerning › Kerning Window"
+status = "handbook"
+
+[[panel]]
+id = "kerningWindow.searchOptions"
+label = "Kerning search options"
+location = "window"
+controls = [
+  "match mode: contains | is exactly | begins with | ends with | does not contain",
+  "pair kind: is a group | is not a group",
+  "side: left | right",
+  "only glyphs selected in Font View",
+  "Reset",
+]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Menu opened from the search icon in the Kerning window that decides how the search term is matched, whether group or glyph entries are shown, which side of the pair is searched and whether the list is limited to the Font View selection."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[panel]]
+id = "kerningWindow.actionsMenu"
+label = "Kerning actions menu"
+location = "window"
+controls = ["Show All Glyphs", "Clean Up", "Compress"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Actions menu of the Kerning window with the three commands the chapter names. Further items may exist in the reference; only these are documented."
+ref = "Spacing & Kerning › Kerning › Kerning Window"
+status = "handbook"
+
+[[command]]
+id = "kerning.listPairs"
+label = "List Kerning Pairs"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{master?: id, direction?: "ltr"|"rtl"|"vertical", term?: string, match?: "contains"|"is"|"beginsWith"|"endsWith"|"doesNotContain", kind?: "group"|"notGroup", side?: "left"|"right", glyphs?: [names], sort?: "left"|"value"|"right", descending?: bool}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Query, our addition: returns the stored kerning pairs of a master and direction, filtered and sorted with the same options the Kerning window offers. It is the data source of the window."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "inferred"
+
+[[command]]
+id = "kerning.filterPairs"
+label = "Filter Kerning Pairs"
+menu = []
+shortcut = ""
+kind = "ui"
+params = '{term?: string, match?: "contains"|"is"|"beginsWith"|"endsWith"|"doesNotContain", kind?: "group"|"notGroup"|null, side?: "left"|"right"|null, selectedGlyphsOnly?: bool}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sets the search term and search options of the Kerning window so that only matching pairs stay listed."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.resetFilter"
+label = "Reset"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Returns all Kerning window search options to their defaults. The default values themselves are not listed in the handbook."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.sortPairs"
+label = "Sort Kerning Pairs"
+menu = []
+shortcut = ""
+kind = "ui"
+params = '{column: "left"|"value"|"right", descending?: bool}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Sorts the Kerning window by one of its three columns; in the UI a click on a column header sorts by it and a second click reverses the order."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.showPairInEditView"
+label = "Show Pair in Edit View"
+menu = []
+shortcut = ""
+kind = "ui"
+params = '{left: name|"@group", right: name|"@group"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Puts a kerning pair into Edit View text, replacing the pair currently shown there if there is one; this is what selecting a row in the Kerning window does. A group side is represented by a single member glyph."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.selectNextPair"
+label = "Next Kerning Pair"
+menu = []
+shortcut = "Down"
+kind = "ui"
+params = "{}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "With the Kerning window focused, moves the row selection down by one and shows that pair in Edit View, so the whole pair list can be stepped through for review."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.selectPreviousPair"
+label = "Previous Kerning Pair"
+menu = []
+shortcut = "Up"
+kind = "ui"
+params = "{}"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "With the Kerning window focused, moves the row selection up by one and shows that pair in Edit View."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.showAllGlyphs"
+label = "Show All Glyphs"
+menu = []
+shortcut = ""
+kind = "ui"
+params = '{left?: name|"@group", right?: name|"@group"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Actions-menu command: inserts into Edit View every glyph pair covered by the selected row, expanding each group side to all of its members, instead of the single example shown by default."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.renameGroup"
+label = "Rename Kerning Group"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{side: "left"|"right", from: string, to: string, scope: "pair"|"font", pair?: {left, right}, master?: id}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Renames a kerning group from the Kerning window by editing its name in a row. With scope 'pair' only the selected pair is pointed at the new name; with scope 'font' the group is renamed everywhere. Only groups on the edited side are affected."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[panel]]
+id = "dialog.renameKerningGroup"
+label = "Rename Kerning Group"
+location = "dialog"
+controls = ["change the name for the selected pair only", "rename the group in the whole font"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Question asked after a group name is edited in the Kerning window: limit the change to the selected pair, or rename the group across the font. Button captions are not given in the handbook."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.copyPairs"
+label = "Copy Kerning Pairs"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{pairs?: [{left, right}], master?: id, direction?: "ltr"|"rtl"|"vertical"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Copies kerning pairs with their values to the clipboard. In the UI this is Edit › Copy (Cmd+C) while rows are selected in the Kerning window; Edit › Select All (Cmd+A) selects every listed pair first."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.pastePairs"
+label = "Paste Kerning Pairs"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{master?: id, direction?: "ltr"|"rtl"|"vertical", onConflict?: "ask"|"overwrite"|"keepExisting"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Adds the kerning pairs on the clipboard to the current master, which may be a different master or a different font than the one they were copied from. In the UI this is Edit › Paste (Cmd+V) in the Kerning window. Pairs that already exist are handled according to the conflict choice."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[panel]]
+id = "dialog.pasteKerningConflict"
+label = "Paste Kerning: existing pairs"
+location = "dialog"
+controls = ["Overwrite: paste everything, replacing conflicting pairs", "Keep Existing: paste only pairs that do not exist yet"]
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Warning shown when pasted kerning pairs would replace pairs already present in the target master. A cancel option is likely but not mentioned."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.deletePairs"
+label = "Delete Kerning Pairs"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{pairs: [{left, right}], master?: id, allMasters?: bool, direction?: "ltr"|"rtl"|"vertical"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Deletes the selected kerning pairs from the current master (the minus button at the bottom left of the Kerning window). With Option held, the same pairs are deleted from every master."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.cleanUp"
+label = "Clean Up"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{master?: id, direction?: "ltr"|"rtl"|"vertical"}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Actions-menu command: deletes every obsolete kerning pair, meaning pairs that name a glyph no longer in the font or a group that no glyph belongs to any more. Whether it covers all masters or only the current one is not stated."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
+status = "handbook"
+
+[[command]]
+id = "kerning.compress"
+label = "Compress"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{master?: id, direction?: "ltr"|"rtl"|"vertical", untilStable?: bool}'
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Actions-menu command: rewrites glyph–glyph and glyph–group pairs to use the kerning groups of the glyphs involved wherever possible, reducing the pair count. One run lifts one side per pair, so it may need repeating; untilStable (our addition) repeats until nothing changes."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.windowListsCurrentDirection"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The Kerning window lists only the pairs of the writing direction currently chosen in Edit View; switching direction switches the list. It shows the current master, and switching master (for example to paste) switches the list too."
+ref = "Spacing & Kerning › Kerning › Kerning Window"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.windowSearchOptions"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "The search term filters the list to pairs that contain it; the options change the test to exact match, prefix, suffix or exclusion, restrict to group or non-group entries, restrict the search to the left or right side, and optionally keep only pairs involving glyphs selected in Font View. Reset restores the defaults."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.windowEntryColors"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "In the pair list a group is written with a leading '@' and coloured blue, a single glyph is coloured gold. The '@' cannot be part of the group name, since it is outside the allowed character set."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.windowSorting"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Clicking the Left, Value or Right header sorts by that column and clicking the same header again inverts the order. Sorting by Value brings the extreme kerning values to the ends of the list for review."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.windowSelectionDrivesEditView"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Selecting a row, by click or by Up/Down, displays that pair in Edit View and replaces the pair previously at the cursor if there was one. For a row with one or two groups just one representative glyph pair is shown."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.windowInPlaceEditing"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Double-clicking a cell makes it editable. Editing the Value cell changes the pair's kerning; editing a group name in the Left or Right cell starts a rename and triggers the scope question."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.renameSidesIndependent"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Left-column groups and right-column groups are separate sets, so renaming a group in one column never changes entries of the same name in the other column."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.copyPasteBetweenMasters"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Kerning is transferred between masters, and between font files, by selecting pairs in the Kerning window, copying, switching to the other master and pasting. This is also the route for kerning values that metrics import cannot take from a Glyphs file."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs; Import & Export › Importing Metrics"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.pasteConflictChoice"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "If any pasted pair already exists in the target master a warning appears with two outcomes: Overwrite pastes all pairs and replaces the clashing ones, Keep Existing pastes only the pairs that do not clash."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.obsoletePairs"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Stored pairs are not removed automatically when a glyph is deleted or a group loses its last member; they stay as obsolete pairs until Clean Up is run."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.compressRules"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "Compress replaces a glyph side of a pair by that glyph's kerning group when it has one, turning glyph–glyph and glyph–group pairs into group pairs. A pair that is a genuine exception (its value differs from the group pair it would collide with) is kept; an exception whose value equals the group value is redundant and is absorbed."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.compressOneStepPerRun"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "A single Compress run may lift only one side of a pair: T–m (T in right group T, m in left group n) becomes @T–m after the first run and @T–@n after the second. The user repeats the command until the list stops changing."
+ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
+status = "handbook"
+
+# ───────────────────────────── Kerning and feature code ─────────────────────────────
+
+[[behavior]]
+id = "kerning.implicitKernFeature"
+area = "features"
+milestone = "M8"
+summary = "Kerning data is compiled into an OpenType kern feature that is generated implicitly at export: it is not listed in Font Info › Features and has no editable code there. The chapter gives no rules for how the lookups are built."
+ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.explicitKernFeature"
+area = "features"
+milestone = "M8"
+summary = "The user may add a feature named kern in Font Info › Features to hold hand-written positioning rules, typically contextual kerning that looks at more than two glyphs (for example extra space after f when a space and then T, V, W or Y follow). How the hand-written code is combined with the implicit pair kerning is not stated."
+ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.groupClassNames"
+area = "features"
+milestone = "M8"
+summary = "Every kerning group is available in feature code as a glyph class named after the side of the pair it occupies: a glyph's left group G is @MMK_R_G (it is used when the glyph is the right member of a pair) and a right group G is @MMK_L_G (used when the glyph is the left member). So left group H gives @MMK_R_H and right group quote gives @MMK_L_quote."
+ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
+status = "handbook"
+
+[[behavior]]
+id = "kerning.kernCodeTokens"
+area = "features"
+milestone = "M8"
+summary = "Hand-written kerning code may use feature-code tokens, so adjustment values can be derived from a master's number values or from glyph sidebearings instead of being hard-coded."
+ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
+status = "handbook"

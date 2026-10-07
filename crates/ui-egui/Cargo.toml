@@ -1,0 +1,20 @@
+[package]
+name = "fontcraft-ui-egui"
+description = "FontCraft user interface: a thin egui shell over the engine (L6)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-geom.workspace = true
+fontcraft-model.workspace = true
+fontcraft-engine.workspace = true
+egui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true

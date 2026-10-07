@@ -1,0 +1,1615 @@
+# Feature inventory: OpenType feature code editor, tokens, extensions and automatic features
+# Sources: Glyphs 4 Handbook, chapter "Feature Code" (https://handbook.glyphsapp.com/feature-code/);
+#          chapter "Font Info", section "Features" (https://handbook.glyphsapp.com/font-info/);
+#          "Appendix": Text Tokens, Regular Expressions, URL Scheme, Custom Feature Code Snippets,
+#          Automatic Feature Generation (https://handbook.glyphsapp.com/appendix/);
+#          fea-rs (refs/fontc/fea-rs, MIT OR Apache-2.0) for how the open compiler treats the same extensions.
+# Date: 2026-10-07
+#
+# Scope note. The Features tab itself (panel `fontInfo.features`, the `font.features.*` commands for
+# adding, removing, editing, updating and compiling entries, snippets, stylistic set names, and the
+# `fontInfo.features.*` behaviours) is inventoried in 06-font-info.toml. Regex search behaviour of the
+# individual fields is in 05-font-view.toml, kerning-group classes in 08-spacing-kerning.toml and the
+# Edit View feature preview in 03b-edit-view-display.toml. This file adds only what those files lack:
+# the remaining editor popovers and queries, the token grammar, the syntax extensions, conditional and
+# variable feature code, the per-tag automatic feature rules, text tokens, regex syntax, the URL scheme
+# and snippet files. Command ids here continue the `font.features.*` prefix used there.
+#
+# All text is our own wording. Rows marked `inferred` are FontCraft design decisions or assumptions
+# that the handbook does not state; rows marked `docs` rest on fea-rs documentation and tests.
+
+# ----------------------------------------------------------------------------
+# Panels
+# ----------------------------------------------------------------------------
+
+[[panel]]
+id = "fontInfo.featureAutocomplete"
+label = "Autocomplete suggestions"
+location = "window"
+controls = [
+  "list of matching glyph names, class names or lookup names",
+  "Up/Down to move, Return to accept",
+  "list narrows as more characters are typed",
+]
+area = "features"
+milestone = "M8"
+summary = "Suggestion menu that appears while a glyph name, class name or lookup name is being typed in the code editor, for example after `sub` or after `lookup`."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.featureNamePreview"
+label = "Glyph and class preview"
+location = "window"
+controls = [
+  "rendered glyph for a glyph name",
+  "list of member glyphs for a class name",
+]
+area = "features"
+milestone = "M8"
+summary = "Popover opened by Option-clicking a glyph name or class name in the code editor: shows the glyph, or for a class all member glyphs."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.featureTokenPreview"
+label = "Token value preview"
+location = "window"
+controls = [
+  "computed number for number-value and glyph-property tokens",
+  "list of matching glyphs for predicate tokens",
+]
+area = "features"
+milestone = "M8"
+summary = "Popover opened by Option-clicking a token in the code editor: a number value or glyph property token shows its computed value, a predicate token shows every glyph it matches."
+ref = "Feature Code › Tokens"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.featureErrorDetails"
+label = "Feature error details"
+location = "window"
+controls = [
+  "expanded error description",
+  "Fix button when a fix is suggested (wrench icon)",
+]
+area = "features"
+milestone = "M8"
+summary = "Opened by clicking an inline error icon in the code editor: gives the long form of the compile error and, for errors marked with a wrench, a Fix button that applies the suggested correction."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[panel]]
+id = "fontInfo.featureSnippetsMenu"
+label = "Feature snippets menu"
+location = "window"
+controls = [
+  "built-in snippets, including the automatic-code placeholder",
+  "one group per user snippet file",
+  "Show Snippet Folder",
+]
+area = "features"
+milestone = "M8"
+summary = "Menu behind the snippets button at the bottom right of the Features tab. Choosing a snippet inserts its code into the editor; Show Snippet Folder reveals the folder where user snippet files live."
+ref = "Appendix › Custom Feature Code Snippets"
+status = "handbook"
+
+# ----------------------------------------------------------------------------
+# Commands
+# ----------------------------------------------------------------------------
+
+[[command]]
+id = "font.features.reorder"
+label = "Reorder Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font?, kind, order: [names]}"
+area = "features"
+milestone = "M8"
+summary = "Changes the order of entries within one sidebar group; the order of features sets the order of feature blocks in the generated file and the expected order of chained name suffixes. Dragging in the sidebar is assumed; the handbook only states that the order matters."
+ref = "Font View › Glyph Naming Rules; Font Info › Features › Editing Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.showErrorDetails"
+label = "Show Error Details"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{kind, name: string, error: int}"
+area = "features"
+milestone = "M8"
+summary = "Opens the expanded description of an inline error; triggered by clicking its error icon in the editor."
+ref = "Font Info › Features › Manual Feature Code"
+status = "handbook"
+
+[[command]]
+id = "font.features.evaluateToken"
+label = "Evaluate Token"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font?, token: string, master?: id, instance?: id}"
+area = "features"
+milestone = "M8"
+summary = "Query: evaluates one feature-code token and returns the number for number-value and glyph-property tokens or the glyph list for predicate tokens. Backs the Option-click token popover."
+ref = "Feature Code › Tokens"
+status = "handbook"
+
+[[command]]
+id = "font.features.expandCode"
+label = "Expand Feature Code"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font?, target: {instance?: id}|{variable: true}, includeImplicit?: bool}"
+area = "features"
+milestone = "M8"
+summary = "Query: returns the complete standard feature file for one export target after resolving tokens, conditional blocks, syntax extensions and, optionally, the implicit features. Not a reference command; needed so agents and the CLI can inspect what the compiler receives."
+ref = "Feature Code › Tokens; Feature Code › Conditional Feature Code"
+status = "inferred"
+
+[[command]]
+id = "font.features.showSnippetFolder"
+label = "Show Snippet Folder"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "features"
+milestone = "M8"
+summary = "Reveals the folder in which user snippet files are placed."
+ref = "Appendix › Custom Feature Code Snippets"
+status = "handbook"
+
+[[command]]
+id = "font.expandTextTokens"
+label = "Expand Text Tokens"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font?, text: string, master?: id, instance?: id}"
+area = "font-info"
+milestone = "M7"
+summary = "Query: returns a text field value with every triple-brace token replaced, in the context of a font, master or instance. Not a reference command; lets agents preview name fields."
+ref = "Appendix › Text Tokens"
+status = "inferred"
+
+[[command]]
+id = "url.open"
+label = "Open URL"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{url: string}"
+area = "automation"
+milestone = "M13"
+summary = "Parses a `fontcraft://` URL and runs the action it names; the entry point registered with the operating system. Proposed counterpart of the reference's URL scheme handler."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[command]]
+id = "url.show"
+label = "Show Glyphs in New Tab"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{files: [{path: string, glyphs: [{glyph?: name, production?: name, layers?: [id]}]}]}"
+area = "automation"
+milestone = "M13"
+summary = "Opens each listed file unless it is already open and adds a new Edit tab to it containing the listed glyph layers in order. Proposed target of `fontcraft://show/`."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Feature editor
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "featureEditor.classContent"
+area = "features"
+milestone = "M8"
+summary = "A class entry holds only member names separated by spaces or line breaks, without `@name =` or brackets; predicate tokens may be mixed in with literal names. It is emitted as `@Name = [ ... ];`."
+ref = "Font Info › Features › Editing Feature Code; Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "featureEditor.outputOrder"
+area = "features"
+milestone = "M8"
+summary = "The generated feature file is assembled as language systems, classes, prefixes and then features, each group in sidebar order. The handbook only says prefix code is placed before feature code; the position of classes and of the languagesystem lines is assumed."
+ref = "Font Info › Features › Editing Feature Code"
+status = "inferred"
+
+[[behavior]]
+id = "featureEditor.featureBody"
+area = "features"
+milestone = "M8"
+summary = "A feature entry stores only the body; the surrounding `feature tag { ... } tag;` wrapper is added when the file is assembled. Assumed from the examples, which show bare rules."
+ref = "Font Info › Features › Editing Feature Code"
+status = "inferred"
+
+[[behavior]]
+id = "featureEditor.afdkoSyntax"
+area = "features"
+milestone = "M8"
+summary = "Feature code is written in the AFDKO feature-file language plus the extensions listed under featureCode.* and the tokens under token.*; FontCraft lowers the extensions to standard syntax before handing the file to the compiler."
+ref = "Font Info › Features › Manual Feature Code; Feature Code › (intro)"
+status = "inferred"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Implicit features
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "implicit.markerMissing"
+area = "features"
+milestone = "M8"
+summary = "What happens to an explicit kern or mark feature that has no `# Automatic Code` line (generated code appended, prepended or dropped) is not stated in the handbook; FontCraft appends the generated lookups after the manual code until observed otherwise."
+ref = "Font Info › Features › Implicit Features"
+status = "inferred"
+
+[[behavior]]
+id = "implicit.markZeroWidth"
+area = "features"
+milestone = "M8"
+summary = "Combining marks used for mark attachment are exported with zero advance width."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Tokens
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "token.kinds"
+area = "features"
+milestone = "M8"
+summary = "Feature-code tokens start with `$` and are replaced by text before compilation. Three kinds exist: number values (`$name`, `${expr}`), glyph properties (`${glyph:path}`) and glyph predicates (`$[...]`)."
+ref = "Feature Code › Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.expansionTiming"
+area = "features"
+milestone = "M8"
+summary = "Tokens are evaluated separately for each export target (static instance, variable font, preview master) just before compiling, never stored expanded in the source."
+ref = "Feature Code › Tokens"
+status = "inferred"
+
+[[behavior]]
+id = "token.numberValue.simple"
+area = "features"
+milestone = "M8"
+summary = "`$name` inserts the master number value called name, defined under Font Info > Masters > Number Values."
+ref = "Feature Code › Number Value Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.numberValue.interpolated"
+area = "features"
+milestone = "M8"
+summary = "With several masters the inserted number is interpolated for the instance being built."
+ref = "Feature Code › Number Value Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.numberValue.arithmetic"
+area = "features"
+milestone = "M8"
+summary = "`${name*2}` evaluates an expression with +, -, * and /. The number value name must come first in the expression."
+ref = "Feature Code › Number Value Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.numberValue.expressionDetails"
+area = "features"
+milestone = "M8"
+summary = "Details the handbook leaves open: fea-rs, which implements this token, accepts several operators and numeric literals (including decimals and negatives) in one expression, gives * and / precedence over + and -, allows spaces, and rounds the result to an integer. FontCraft follows that."
+ref = "fea-rs test-data/parse-tests/good/glyphsapp_number_value.fea; Feature Code › Number Value Tokens"
+status = "docs"
+
+[[behavior]]
+id = "token.numberValue.variable"
+area = "features"
+milestone = "M9"
+summary = "For a variable font a number token becomes a value that varies with the master locations instead of a single number; fea-rs resolves the token to a per-location map for this purpose."
+ref = "fea-rs src/compile/glyphsapp_syntax_ext.rs; Feature Code › Number Value Tokens"
+status = "docs"
+
+[[behavior]]
+id = "token.numberValue.unknownName"
+area = "features"
+milestone = "M8"
+summary = "A token naming a number value that no master defines is a compile error reported at the token. Assumed; the handbook does not say."
+ref = "Feature Code › Number Value Tokens"
+status = "inferred"
+
+[[behavior]]
+id = "token.numberValue.inspect"
+area = "features"
+milestone = "M8"
+summary = "Option-clicking a number value token shows the value it currently evaluates to."
+ref = "Feature Code › Number Value Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.glyphProperty.syntax"
+area = "features"
+milestone = "M8"
+summary = "`${glyphName:property}` inserts a number read from a glyph's layer; property is a dot-separated path."
+ref = "Feature Code › Glyph Property Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.glyphProperty.metrics"
+area = "features"
+milestone = "M8"
+summary = "Metric properties are width, LSB, RSB, TSB and BSB."
+ref = "Feature Code › Glyph Property Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.glyphProperty.anchors"
+area = "features"
+milestone = "M8"
+summary = "Anchor coordinates are read as anchors.<name>.x and anchors.<name>.y, for example `${h:anchors.top_tall.x}` inside an `<anchor ...>`."
+ref = "Feature Code › Glyph Property Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.glyphProperty.arithmetic"
+area = "features"
+milestone = "M8"
+summary = "The same arithmetic as number tokens is allowed after the property: `${comma:RSB*3}`."
+ref = "Feature Code › Glyph Property Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.glyphProperty.layerChoice"
+area = "features"
+milestone = "M8"
+summary = "The value comes from the glyph's layer for the master or interpolated instance being compiled. Assumed by analogy with number values; other key paths than metrics and anchors are not documented."
+ref = "Feature Code › Glyph Property Tokens"
+status = "inferred"
+
+[[behavior]]
+id = "token.glyphProperty.inspect"
+area = "features"
+milestone = "M8"
+summary = "Option-clicking a glyph property token shows its value."
+ref = "Feature Code › Glyph Property Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.syntax"
+area = "features"
+milestone = "M8"
+summary = "`$[predicate]` expands to the names, separated by spaces, of all glyphs for which the predicate is true."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.inClassEntry"
+area = "features"
+milestone = "M8"
+summary = "Inside a class entry a predicate token stands directly among literal names: `hyphen endash $[category == \"Number\"]`."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.inCode"
+area = "features"
+milestone = "M8"
+summary = "In prefix and feature code the token must sit inside class brackets: `@Minuscule = [$[case == lower]];`."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.boolean"
+area = "features"
+milestone = "M8"
+summary = "Boolean glyph properties are compared with true or false: `isAligned == false`, `hasHints == true`, `isColorGlyph == false`."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.numeric"
+area = "features"
+milestone = "M8"
+summary = "Numeric properties are compared with numbers: `countOfLayers > 2`, `countOfUnicodes == 1`. Only == and > appear in the handbook; <, <=, >=, != are assumed."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.colorIndex"
+area = "features"
+milestone = "M8"
+summary = "`colorIndex == N` tests the glyph's colour label by its number."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.case"
+area = "features"
+milestone = "M8"
+summary = "`case == X` compares against the bare words noCase, upper, lower, smallCaps, minor or other."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.direction"
+area = "features"
+milestone = "M8"
+summary = "`direction == X` compares against the bare words LTR, BIDI or RTL."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.string"
+area = "features"
+milestone = "M8"
+summary = "String properties (name, script, category, also note) are compared with quoted strings using == , endswith or contains: `name endswith \".tf\"`, `script == \"armenian\"`, `category == \"Mark\"`."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.stringOperators"
+area = "features"
+milestone = "M8"
+summary = "Further operators accepted by fea-rs for this syntax: =, != and <> , beginswith, single-quoted strings, and case-insensitive operator keywords. Listed there but rejected: matches and like."
+ref = "fea-rs test-data/parse-tests/good/glyphsapp_predicate.fea"
+status = "docs"
+
+[[behavior]]
+id = "token.predicate.keyPaths"
+area = "features"
+milestone = "M8"
+summary = "Nested data is reached with dotted paths: `layer.anchors.center.y > 250`, `layer.maxX > 520`."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.tags"
+area = "features"
+milestone = "M8"
+summary = "Membership uses `in`: `\"draft\" in tags` is true for glyphs that carry that tag."
+ref = "Feature Code › Glyph Predicate Tokens; Font View › Tags"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.logic"
+area = "features"
+milestone = "M8"
+summary = "Predicates combine with AND and OR, NOT negates the predicate that follows, and parentheses group: `\"draft\" in tags OR (\"math\" in tags AND case == upper)`."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.classFunction"
+area = "features"
+milestone = "M8"
+summary = "`class(Name)` stands for the members of the feature class @Name, so `name in class(Round) AND name in class(Tall)` yields the intersection of two classes."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.resultOrder"
+area = "features"
+milestone = "M8"
+summary = "Matching glyphs are listed in the font's glyph order, as fea-rs does. Whether non-exporting glyphs are left out is not documented; FontCraft leaves them out for export targets."
+ref = "fea-rs test-data/compile-tests/mini-latin/good/glyphs_app_predicate.fea"
+status = "inferred"
+
+[[behavior]]
+id = "token.predicate.emptyResult"
+area = "features"
+milestone = "M8"
+summary = "A predicate that matches nothing yields an empty class; where the rule needs a non-empty class (contextual input, mark class, rsub input) that is a compile error, as in fea-rs."
+ref = "fea-rs test-data/compile-tests/mini-latin/bad/empty_*_predicate.fea"
+status = "docs"
+
+[[behavior]]
+id = "token.predicate.inspect"
+area = "features"
+milestone = "M8"
+summary = "Option-clicking a predicate token lists every glyph it currently matches."
+ref = "Feature Code › Glyph Predicate Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "token.predicate.compilerSupport"
+area = "features"
+milestone = "M8"
+summary = "fea-rs evaluates only predicates on `name` with string operators and unmixed and/or chains; everything else (other attributes, numbers, NOT, parentheses, class()) must be expanded by FontCraft before the code reaches the compiler."
+ref = "fea-rs src/compile/validate.rs; src/parse/grammar/glyph.rs"
+status = "docs"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Feature code extensions
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "featureCode.ifdefVariable"
+area = "features"
+milestone = "M9"
+summary = "Lines between `#ifdef VARIABLE` and `#endif` are kept only when a variable font is being built."
+ref = "Feature Code › Conditional Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.ifndefVariable"
+area = "features"
+milestone = "M9"
+summary = "Lines between `#ifndef VARIABLE` and `#endif` are kept only when a static font is being built."
+ref = "Feature Code › Conditional Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.ifdefOtherSymbols"
+area = "features"
+milestone = "M9"
+summary = "VARIABLE is the only symbol the handbook documents; nesting, `#else` and other symbols are not mentioned. FontCraft accepts only the two documented forms and reports anything else as an error."
+ref = "Feature Code › Conditional Feature Code"
+status = "inferred"
+
+[[behavior]]
+id = "featureCode.condition"
+area = "features"
+milestone = "M9"
+summary = "Inside a variable-only block, `condition <ranges>;` limits the rules that follow to a region of the designspace, producing OpenType feature variations."
+ref = "Feature Code › Conditional Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.conditionRange"
+area = "features"
+milestone = "M9"
+summary = "An axis range is `min < tag < max`, with the axis tag between its limits and a less-than sign on each side; either limit may be left out."
+ref = "Feature Code › Conditional Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.conditionLowerInclusive"
+area = "features"
+milestone = "M9"
+summary = "Although both sides are written with `<`, the lower limit is inclusive (min <= value); the upper limit stays strict as written."
+ref = "Feature Code › Conditional Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.conditionMultipleAxes"
+area = "features"
+milestone = "M9"
+summary = "Several ranges separated by commas must all hold: `condition 450 < wght < 800, 60 < wdth < 85;`."
+ref = "Feature Code › Conditional Feature Code"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.conditionScope"
+area = "features"
+milestone = "M9"
+summary = "How far a condition reaches (to the next condition, the end of the feature or `#endif`) and which coordinate scale its limits use are not stated; FontCraft applies it up to the next `condition` or the end of the enclosing block and reads limits in the same axis coordinates as the variable GPOS syntax."
+ref = "Feature Code › Conditional Feature Code"
+status = "inferred"
+
+[[behavior]]
+id = "featureCode.conditionLowering"
+area = "features"
+milestone = "M9"
+summary = "A condition and its rules are lowered to a `conditionset` plus a `variation <tag> <set> { ... }` block for the compiler; fea-rs supports that pair."
+ref = "fea-rs src/parse/grammar/variations.rs"
+status = "inferred"
+
+[[behavior]]
+id = "featureCode.variablePos"
+area = "features"
+milestone = "M9"
+summary = "A pos value may be followed by alternatives of the form `(tag:coord ...) value`: `pos @Lowercase 8 (wght:700) 14;` is 8 at the default and 14 where wght is 700."
+ref = "Feature Code › Variable GPOS"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.variablePosMultiple"
+area = "features"
+milestone = "M9"
+summary = "Any number of alternatives may follow, and one alternative may fix several axes separated by spaces: `(wght:300 opsz:10) 22`."
+ref = "Feature Code › Variable GPOS"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.variablePosFourValue"
+area = "features"
+milestone = "M9"
+summary = "Inside a four-value record each alternative supplies four numbers: `<12 0 24 0 (wght:700) 18 0 36 0>`."
+ref = "Feature Code › Variable GPOS"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.variablePosCoordinates"
+area = "features"
+milestone = "M9"
+summary = "The coordinates are internal (design) axis coordinates, and the exported value interpolates smoothly between the stated locations."
+ref = "Feature Code › Variable GPOS"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.variablePosLowering"
+area = "features"
+milestone = "M9"
+summary = "The syntax is lowered to the standard variable value form `(default tag=coord:value ...)`; for a static instance the value is interpolated to one number."
+ref = "AFDKO OpenTypeFeatureFileSpecification.md §2.e.iv; Feature Code › Variable GPOS"
+status = "inferred"
+
+[[behavior]]
+id = "featureCode.delete"
+area = "features"
+milestone = "M8"
+summary = "`delete glyph;` (short form `del`) removes every occurrence of the glyph from the text run."
+ref = "Feature Code › Deleting Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.deleteContextual"
+area = "features"
+milestone = "M8"
+summary = "With a context, the glyph to remove is marked with `'` and the surrounding glyphs or classes are written around it: `delete brevecomb' Omega;`."
+ref = "Feature Code › Deleting Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.deleteLowering"
+area = "features"
+milestone = "M8"
+summary = "`delete` is not standard; it means the same as `sub glyph by NULL;` (also contextually), which is what FontCraft emits."
+ref = "Feature Code › Deleting Glyphs"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.standaloneLookup"
+area = "features"
+milestone = "M8"
+summary = "`standalone lookup name { ... } name;` inside a feature defines a lookup at that place in the lookup order without applying it through the feature; it runs only where another rule calls it."
+ref = "Feature Code › Standalone Lookups"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.standaloneRedundant"
+area = "features"
+milestone = "M8"
+summary = "On a lookup defined outside any feature the `standalone` keyword changes nothing and is ignored."
+ref = "Feature Code › Standalone Lookups"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.standaloneLowering"
+area = "features"
+milestone = "M8"
+summary = "Standard syntax has no way to define a lookup inside a feature without registering it, so the compiler front end must support this natively (create the lookup in order, skip the feature registration). fea-rs does not have the keyword."
+ref = "Feature Code › Standalone Lookups"
+status = "inferred"
+
+[[behavior]]
+id = "featureCode.optionalLookupEndName"
+area = "features"
+milestone = "M8"
+summary = "A lookup block may end with `};` without repeating its name."
+ref = "Feature Code › Optional Closing Lookup Name"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.multipleLanguages"
+area = "features"
+milestone = "M8"
+summary = "`language` accepts several tags, `language CAT ESP GAL;`, and the rules that follow apply to each as if the statement and rules were repeated per language."
+ref = "Feature Code › Multiple Languages Syntax"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.multipleLanguagesCompiler"
+area = "features"
+milestone = "M8"
+summary = "fea-rs accepts this form directly, including trailing exclude_dflt or required; `dflt` inside the list is an error there."
+ref = "fea-rs test-data/compile-tests/mini-latin (multiple_languages*)"
+status = "docs"
+
+[[behavior]]
+id = "featureCode.multipleSubstitutionClasses"
+area = "features"
+milestone = "M8"
+summary = "One-to-many substitutions may use classes, plain or contextual: `sub @Bracket by @BracketUpper @BracketLower;`. All classes must have the same number of members and are paired by position."
+ref = "Feature Code › Multiple Substitution With Classes"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.multipleSubstitutionSingletons"
+area = "features"
+milestone = "M8"
+summary = "A single glyph or one-member class on either side of such a rule is repeated to match the size of the other classes."
+ref = "Feature Code › Multiple Substitution With Classes"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.lookupflagReplaces"
+area = "features"
+milestone = "M8"
+summary = "A lookupflag statement does not add to earlier flags; it discards them and sets exactly the flags it lists."
+ref = "Feature Code › Lookup Flags"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.emptyLookupflag"
+area = "features"
+milestone = "M8"
+summary = "`lookupflag;` with no flags clears all flags, equivalent to the standard `lookupflag 0;`."
+ref = "Feature Code › Lookup Flags"
+status = "handbook"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Feature code with multiple masters
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "featureCode.mm.singleSource"
+area = "features"
+milestone = "M8"
+summary = "One set of prefixes, classes and features serves all masters and instances; per-design differences come from tokens, implicit features and per-instance parameters, not from separate feature files."
+ref = "Font Info › Features › Implicit Features; Feature Code › Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "featureCode.mm.staticVersusVariable"
+area = "features"
+milestone = "M9"
+summary = "Static instances receive the `#ifndef VARIABLE` branches, interpolated token values and single-number positions; the variable font receives the `#ifdef VARIABLE` branches, feature variations and variable values."
+ref = "Feature Code › Conditional Feature Code; Feature Code › Variable GPOS"
+status = "handbook"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Automatic classes
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "autoClass.general"
+area = "features"
+milestone = "M8"
+summary = "Update can create and refresh automatic classes; the handbook names All and uses @Uppercase in a cpsp example but does not list the full set. The list must be collected from the running application."
+ref = "Font Info › Features › Automatic Feature Code"
+status = "inferred"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Automatic feature generation
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "autoFeature.generalRule"
+area = "features"
+milestone = "M8"
+summary = "Feature generation is driven by glyph names: a dot suffix (or a feature tag used as suffix) creates a substitution from the unsuffixed glyph, underscore-joined names create ligatures, and certain glyph sets or anchors trigger the rest. Each tag has its own autoFeature.<tag> row."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.languageSystems"
+area = "features"
+milestone = "M8"
+summary = "Generated code is preceded by languagesystem statements for the scripts in the font. The handbook does not describe this; expected as an automatic prefix and to be confirmed."
+ref = "Appendix › Automatic Feature Generation"
+status = "inferred"
+
+[[behavior]]
+id = "autoFeature.aalt"
+area = "features"
+milestone = "M8"
+summary = "aalt (All Alternatives). Trigger: At least one other feature in the font substitutes glyphs. Generated: Built from every substituting feature in the list; expected form is one `feature <tag>;` line per such feature, leaving the grouping to the compiler (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.liga"
+area = "features"
+milestone = "M8"
+summary = "liga (Standard Ligatures). Trigger: A ligature glyph, i.e. a name made of component names joined by underscores. Only f_f_i, f_f_l, f_f, fi, fl, lu_lakkhangyao-thai and ru_lakkhangyao-thai land here by default; any other ligature is forced in by a `.liga` suffix (f_b.liga, yi_yi-cy.liga). Generated: One ligature rule per glyph, `sub <components> by <ligature>;`, with the components read from the name parts (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.dlig"
+area = "features"
+milestone = "M8"
+summary = "dlig (Discretionary Ligatures). Trigger: Any underscore-joined ligature name that no other ligature feature claims, e.g. f_odieresis. Generated: One ligature rule per glyph from its name parts (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.hlig"
+area = "features"
+milestone = "M8"
+summary = "hlig (Historical Ligatures). Trigger: Ligatures that contain longs as a component, or ligature names ending in `.hlig` or `.hist`. Generated: One ligature rule per glyph from its name parts (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.rlig"
+area = "features"
+milestone = "M8"
+summary = "rlig (Required Ligatures). Trigger: Ligature names ending in `.rlig`, and the Arabic lam-alef set: lam_alef-ar, lam_alefHamzaabove-ar, lam_alefHamzabelow-ar, lam_alefMadda-ar, lam_alefWasla-ar and the `.fina` form of each. Generated: One ligature rule per glyph from its name parts (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.c2sc"
+area = "features"
+milestone = "M8"
+summary = "c2sc (Small Capitals from Capitals). Trigger: Glyphs ending in `.sc`, `.c2sc` or `.smcp`. To keep two separate sets, put `.c2sc` on uppercase base names and `.smcp` on lowercase base names. Generated: Single substitutions from each capital to its small-cap glyph; with a shared `.sc` set the capital maps to the small cap named after the lowercase letter (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.smcp"
+area = "features"
+milestone = "M8"
+summary = "smcp (Small Capitals). Trigger: Glyphs ending in `.sc` or `.smcp`. Generated: Single substitutions `sub a by a.sc;` from each base glyph to its suffixed form."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.c2pc"
+area = "features"
+milestone = "M8"
+summary = "c2pc (Petite Capitals from Capitals). Trigger: Glyphs ending in `.pc`, `.c2pc` or `.pcap`. Generated: Single substitutions from each capital to its petite-cap glyph (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.pcap"
+area = "features"
+milestone = "M8"
+summary = "pcap (Petite Capitals). Trigger: Glyphs ending in `.pc` or `.pcap`. Generated: Single substitutions from each base glyph to its suffixed form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.sups"
+area = "features"
+milestone = "M8"
+summary = "sups (Superscript). Trigger: Glyphs ending in `.sups`, or figure names with `superior` appended and no period (onesuperior). Generated: Single substitutions from the default glyph to the superior form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.subs"
+area = "features"
+milestone = "M8"
+summary = "subs (Subscript). Trigger: Names with `inferior` appended, or ending in `.sinf` or `.subs`. A single `.subs` set is enough: it feeds both subs and sinf. Generated: Single substitutions from the default glyph to the inferior form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.sinf"
+area = "features"
+milestone = "M8"
+summary = "sinf (Scientific Inferiors). Trigger: Same glyphs as subs: `inferior` names, `.sinf` or `.subs`. Generated: Single substitutions from the default glyph to the inferior form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.afrc"
+area = "features"
+milestone = "M8"
+summary = "afrc (Alternative Fractions). Trigger: The font has figures, slash and at least one nut-fraction glyph, named as numerator word, `over`, denominator word, from the fixed list (oneovertwo, zerooverthree, oneoverthree ... tenovereleven, elevenovertwelve, oneoveronehundred). Generated: One ligature-style rule per nut fraction, replacing the figure-slash-figure sequence with the fraction glyph (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.frac"
+area = "features"
+milestone = "M8"
+summary = "frac (Fractions). Trigger: `.numr` and `.dnom` figures plus the fraction glyph. Without them, the feature falls back to whatever precomposed fractions exist. Generated: With numerators and denominators: contextual rules that turn figures before the fraction slash into numerators and figures after it into denominators, and slash into fraction; in the fallback case: ligature rules onto the precomposed fractions (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.dnom"
+area = "features"
+milestone = "M8"
+summary = "dnom (Denominators). Trigger: Glyphs ending in `.dnom`. Generated: Single substitutions from the default glyph to the `.dnom` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.numr"
+area = "features"
+milestone = "M8"
+summary = "numr (Numerators). Trigger: Glyphs ending in `.numr`. Generated: Single substitutions from the default glyph to the `.numr` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.onum"
+area = "features"
+milestone = "M8"
+summary = "onum (Oldstyle Figures). Trigger: Glyphs ending in `.osf` (proportional oldstyle) or `.tosf` (tabular oldstyle); works for non-figures such as currency signs too. Generated: Single substitutions from lining forms to the matching oldstyle forms, keeping the current width class (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.tnum"
+area = "features"
+milestone = "M8"
+summary = "tnum (Tabular Figures). Trigger: Glyphs ending in `.tf` (tabular lining) or `.tosf` (tabular oldstyle); also for other characters. The default figure set carries no figure suffix at all. Generated: Single substitutions from proportional forms to the matching tabular forms (`sub zero by zero.tf;`)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.pnum"
+area = "features"
+milestone = "M8"
+summary = "pnum (Proportional Figures). Trigger: Glyphs ending in `.osf` (proportional oldstyle) or `.lf` (proportional lining); also for other characters. Generated: Single substitutions from tabular forms to the matching proportional forms (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.lnum"
+area = "features"
+milestone = "M8"
+summary = "lnum (Lining Figures). Trigger: Glyphs ending in `.lf` (proportional lining) or `.tf` (tabular lining); also for other characters. Generated: Single substitutions from oldstyle forms to the matching lining forms (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.ordn"
+area = "features"
+milestone = "M8"
+summary = "ordn (Ordinals). Trigger: The default figures together with numero, ordfeminine and ordmasculine are present. Generated: Contextual substitutions after figures that turn a and o into ordfeminine and ordmasculine, and a rule producing numero from N o period (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.ornm"
+area = "features"
+milestone = "M8"
+summary = "ornm (Ornaments). Trigger: Glyphs named with `.ornm` on a base name from A-Z or a-z, and a bullet glyph in the font. Generated: An alternate substitution offering all ornaments from bullet, plus single substitutions from each letter to its ornament (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.hist"
+area = "features"
+milestone = "M8"
+summary = "hist (Historical Forms). Trigger: Glyphs ending in `.hist`. Generated: Single substitutions from the base glyph to the `.hist` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.case"
+area = "features"
+milestone = "M8"
+summary = "case (Uppercase Forms). Trigger: Glyphs ending in `.case`, and figures ending in `.lf`. Generated: Single substitutions from the default glyph to the `.case` form, and from default figures to lining figures (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.cpsp"
+area = "features"
+milestone = "M8"
+summary = "cpsp (Capital Spacing). Trigger: Uppercase letters exist and the user adds the feature by choosing Capital Spacing from the plus menu at the bottom left of the Features tab. Update never adds it by itself. Generated: A single positioning rule on the uppercase class that widens both sides, of the form `pos @Uppercase <n 0 2n 0>;`; the amount is not documented (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.locl"
+area = "features"
+milestone = "M8"
+summary = "locl (Localized Forms). Trigger: Glyphs ending in `.loclXXX` where XXX is an OpenType language tag (`.loclENG`, `.loclSVE`). Built-in triggers: idotaccent, i.TRK or i.loclTRK with i (TRK, AZE, CRT, KAZ, TAT); Scommaaccent, Tcommaaccent and their lowercase with the cedilla forms present (ROM, MOL); periodcentered.loclCAT (plus `.case`), L_periodcentered_L.loclCAT, l_periodcentered_l.loclCAT or legacy Ldot, ldot with L, l and periodcentered (CAT); Iacute_J.loclNLD, iacute_j.loclNLD or Jacute, jacute with Iacute, iacute, J, j (NLD); six-ar and `.urdu` figures such as four-persian.urdu (URD). Generated: Per script and language, a `script`/`language` section holding single substitutions to the localised glyphs (ligature or contextual rules for the Catalan and Dutch cases); languages sharing rules are listed together (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.cvXX"
+area = "features"
+milestone = "M8"
+summary = "cv01-cv99 (Character Variants). Trigger: Glyphs ending in `.cv01` to `.cv99`. Generated: One feature per number with single substitutions from base to variant. Several variants of one glyph belong in one feature and need manual code such as `sub k from [k.loop k.open k.tall];`."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.ssXX"
+area = "features"
+milestone = "M8"
+summary = "ss01-ss20 (Stylistic Sets). Trigger: Glyphs ending in `.ss01` to `.ss20`. Generated: One feature per number with single substitutions `sub g by g.ss01;`; each set can carry localised names, written as a featureNames block."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.salt"
+area = "features"
+milestone = "M8"
+summary = "salt (Stylistic Alternates). Trigger: An ss01 feature exists. Generated: A copy of the ss01 rules; Adobe Illustrator and Photoshop read this feature for their OpenType panels."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.swsh"
+area = "features"
+milestone = "M8"
+summary = "swsh (Swashes). Trigger: Glyphs ending in `.swsh`. Generated: Single substitutions from base to `.swsh` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.titl"
+area = "features"
+milestone = "M8"
+summary = "titl (Titling). Trigger: Glyphs ending in `.titl`. Generated: Single substitutions from base to `.titl` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.init"
+area = "features"
+milestone = "M8"
+summary = "init (Initial Forms). Trigger: Glyphs ending in `.init`. Generated: Single substitutions from the base glyph to the `.init` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.medi"
+area = "features"
+milestone = "M8"
+summary = "medi (Medial Forms). Trigger: Glyphs ending in `.medi`. Generated: Single substitutions from the base glyph to the `.medi` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.med2"
+area = "features"
+milestone = "M8"
+summary = "med2 (Medial Forms 2). Trigger: Glyphs ending in `.med2`; Syriac only. Generated: Single substitutions from the base glyph to the `.med2` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.fina"
+area = "features"
+milestone = "M8"
+summary = "fina (Terminal Forms). Trigger: Glyphs ending in `.fina`. Generated: Single substitutions from the base glyph to the `.fina` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.fin2"
+area = "features"
+milestone = "M8"
+summary = "fin2 (Terminal Forms 2). Trigger: Glyphs ending in `.fin2`; Syriac only. Generated: Single substitutions from the base glyph to the `.fin2` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.fin3"
+area = "features"
+milestone = "M8"
+summary = "fin3 (Terminal Forms 3). Trigger: Glyphs ending in `.fin3`; Syriac only. Generated: Single substitutions from the base glyph to the `.fin3` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.fwid"
+area = "features"
+milestone = "M8"
+summary = "fwid (Full Widths). Trigger: Glyphs ending in `.full` or `.fullwidth`. Generated: Single substitutions to the full-width forms, plus space replaced by emspace."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.hkna"
+area = "features"
+milestone = "M8"
+summary = "hkna (Horizontal Kana Alternates). Trigger: Katakana or Hiragana glyphs ending in `.hori`. Generated: Single substitutions from the kana to the `.hori` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.hojo"
+area = "features"
+milestone = "M8"
+summary = "hojo (Hojo Kanji Forms). Trigger: Glyphs ending in `.hojo`, holding JIS X 0212-1990 shapes while the unsuffixed glyphs hold JIS X 0213:2004 shapes. Generated: Single substitutions from the default kanji to the `.hojo` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.hwid"
+area = "features"
+milestone = "M8"
+summary = "hwid (Half Widths). Trigger: Glyphs ending in `.half`. Generated: Single substitutions to the half-width forms, plus space replaced by enspace."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.ital"
+area = "features"
+milestone = "M8"
+summary = "ital (Italics). Trigger: Glyphs ending in `.italic`. Generated: Single substitutions from the base glyph to the `.italic` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.pkna"
+area = "features"
+milestone = "M8"
+summary = "pkna (Proportional Kana). Trigger: Katakana or Hiragana glyphs ending in `.proportional`. Generated: Single substitutions from the kana to the `.proportional` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.pwid"
+area = "features"
+milestone = "M8"
+summary = "pwid (Proportional Widths). Trigger: Glyphs ending in `.proportional`. Generated: Single substitutions from the base glyph to the `.proportional` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.qwid"
+area = "features"
+milestone = "M8"
+summary = "qwid (Quarter Widths). Trigger: Glyphs ending in `.qartwidth` (the handbook's spelling; whether `.quartwidth` is also recognised is an open question). Generated: Single substitutions from the base glyph to the quarter-width form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.ruby"
+area = "features"
+milestone = "M8"
+summary = "ruby (Ruby Notation Forms). Trigger: Glyphs ending in `.ruby`. Generated: Single substitutions from the base glyph to the `.ruby` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.twid"
+area = "features"
+milestone = "M8"
+summary = "twid (Third Widths). Trigger: Glyphs ending in `.thirdwidth`. Generated: Single substitutions from the base glyph to the third-width form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.vkna"
+area = "features"
+milestone = "M8"
+summary = "vkna (Vertical Kana Alternates). Trigger: Katakana or Hiragana glyphs ending in `.vert`. Generated: Single substitutions from the kana to the `.vert` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.vrt2"
+area = "features"
+milestone = "M8"
+summary = "vrt2 (Vertical Alternates and Rotation). Trigger: Glyphs ending in `.vert`. Generated: Single substitutions from the base glyph to the `.vert` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.abvs"
+area = "features"
+milestone = "M8"
+summary = "abvs (Above-base Substitutions). Trigger: Certain pairings of a base with a mark, in the scripts of South Asia. Generated: Script-specific ligature rules joining base and above-base mark; the exact glyph lists are not documented and must be taken from the open GlyphData naming plus observation."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.akhn"
+area = "features"
+milestone = "M8"
+summary = "akhn (Akhands). Trigger: South Asian scripts only: a particular group of letters and ligatures (the classic akhand conjuncts). Generated: Ligature rules of consonant, halant, consonant onto the akhand glyph (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.blwf"
+area = "features"
+milestone = "M8"
+summary = "blwf (Below Base Forms). Trigger: South Asian scripts: a halant, glyphs suffixed `.below`, and various further glyphs present with them. Generated: Ligature rules of halant plus consonant onto the `.below` form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.blws"
+area = "features"
+milestone = "M8"
+summary = "blws (Below-base Substitutions). Trigger: South Asian scripts: particular sequences of letters, such as Gujarati glyphs suffixed `.straight`, or specific combinations with halant in Oriya. Generated: Script-specific contextual or ligature rules; details are not documented."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.cjct"
+area = "features"
+milestone = "M8"
+summary = "cjct (Conjunct Forms). Trigger: Conjunct cluster glyphs in South Asian scripts (ligature names made of consonant names). Generated: Ligature rules from half forms or consonant-halant sequences onto the conjunct (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.half"
+area = "features"
+milestone = "M8"
+summary = "half (Half Forms). Trigger: Glyphs whose names end in `Halfform`, together with the script's halant. Generated: Ligature rules of consonant plus halant onto the half form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.nukt"
+area = "features"
+milestone = "M8"
+summary = "nukt (Nukta Forms). Trigger: Nukta ligatures whose names end in `Nukta` plus the script suffix, provided the nukta-less counterparts exist too. Generated: Ligature rules of consonant plus nukta onto the nukta form (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.pref"
+area = "features"
+milestone = "M8"
+summary = "pref (Pre-base Forms). Trigger: South and Southeast Asian scripts: particular letter combinations that include a halant. Generated: Script-specific ligature rules of halant plus consonant onto a pre-base form; details are not documented."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.pres"
+area = "features"
+milestone = "M8"
+summary = "pres (Pre-base Substitutions). Trigger: South Asian scripts: particular combinations of matras and conjuncts. Width variants of a matra are numbered, e.g. iMatra-deva.01 to iMatra-deva.20. Generated: Contextual rules that pick, for each conjunct, the numbered matra variant whose width fits; the matching method is not documented."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.psts"
+area = "features"
+milestone = "M8"
+summary = "psts (Post-base Substitutions). Trigger: A halant together with base and matra arrangements that depend on the script, e.g. in Kannada, eMatra-kannada together with glyphs suffixed `.base` and `.base.e`. South Asian scripts only. Generated: Script-specific ligature or contextual rules; details are not documented."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.rkrf"
+area = "features"
+milestone = "M8"
+summary = "rkrf (Rakar Forms). Trigger: Devanagari, Gujarati and Malayalam only: rakar ligatures present together with their isolated letters and the halant. Generated: Ligature rules of consonant, halant, ra onto the rakar ligature (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.rphf"
+area = "features"
+milestone = "M8"
+summary = "rphf (Reph Forms). Trigger: The trio ra-deva, halant-deva, reph-deva, or its counterpart in another South Asian script. Generated: A ligature rule `sub ra-deva halant-deva by reph-deva;` per script (rule shape inferred, the handbook gives only the trigger)."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.vatu"
+area = "features"
+milestone = "M8"
+summary = "vatu (Vattu Variants). Trigger: The rkrf feature contains particular lookups. Generated: Rules derived from the rakar lookups; details are not documented."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.ccmp"
+area = "features"
+milestone = "M8"
+summary = "ccmp (Glyph Composition and Decomposition). Trigger: Many constellations across scripts. Documented example: i and j, their dotless forms idotless and jdotless, and combining marks that sit on top. Generated: For the Latin case, a lookup that swaps the dotted letter for its dotless form when a top mark follows; other scripts add their own lookups, which are not documented."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.mark"
+area = "features"
+milestone = "M8"
+summary = "mark (Mark to Base Positioning). Trigger: Base glyphs carry anchors without underscore (top, bottom) and combining marks carry the matching underscore anchors (_top, _bottom). Generated: Built at export only and never listed in the Features tab: mark classes per anchor name and mark-to-base lookups from the anchor positions of each master or instance. Mark glyphs get zero advance width at export."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.mkmk"
+area = "features"
+milestone = "M8"
+summary = "mkmk (Mark to Mark Positioning). Trigger: Combining marks (U+0300 and above) that carry both an underscore anchor and its plain counterpart (_top and top). Generated: Built at export only and never listed in the Features tab: mark-to-mark lookups from those anchors."
+ref = "Appendix › Automatic Feature Generation"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.kern"
+area = "features"
+milestone = "M8"
+summary = "kern (Kerning). Trigger: Kerning values exist in a master (defined in Edit View or the Kerning window). Generated: Built at export per master or instance and never listed in the Features tab: pair positioning rules using group classes named `@MMK_L_<group>` and `@MMK_R_<group>`; glyph pairs before class pairs is the expected order (inferred)."
+ref = "Font Info › Features › Implicit Features"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.dist"
+area = "features"
+milestone = "M8"
+summary = "dist (Distances). Trigger: Same data as kerning for scripts that use dist instead of kern; the user cannot steer it. Generated: Built at export like kern and never listed in the Features tab; which scripts are routed to dist is not documented."
+ref = "Font Info › Features › Implicit Features"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.curs"
+area = "features"
+milestone = "M8"
+summary = "curs (Cursive Positioning). Trigger: Glyphs carry `entry` and `exit` anchors. Generated: Built at export and never listed in the Features tab: cursive attachment rules with the entry and exit anchor of each glyph."
+ref = "Font Info › Features › Implicit Features"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.abvm"
+area = "features"
+milestone = "M8"
+summary = "abvm (Above-base Mark Positioning). Trigger: Same anchor convention as mark, for glyphs of scripts that use abvm. Generated: Built at export like mark and never listed in the Features tab; the split between mark, abvm and blwm is not documented."
+ref = "Font Info › Features › Implicit Features"
+status = "handbook"
+
+[[behavior]]
+id = "autoFeature.blwm"
+area = "features"
+milestone = "M8"
+summary = "blwm (Below-base Mark Positioning). Trigger: Same anchor convention as mark, for glyphs of scripts that use blwm. Generated: Built at export like mark and never listed in the Features tab; the split between mark, abvm and blwm is not documented."
+ref = "Font Info › Features › Implicit Features"
+status = "handbook"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Text tokens
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "textToken.syntax"
+area = "font-info"
+milestone = "M7"
+summary = "In text fields that support them, `{{{token}}}` is replaced by a computed value when the field is used."
+ref = "Appendix › Text Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "textToken.versionString"
+area = "font-info"
+milestone = "M7"
+summary = "`{{{versionString}}}` gives the application's version number."
+ref = "Appendix › Text Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "textToken.buildNumber"
+area = "font-info"
+milestone = "M7"
+summary = "`{{{buildNumber}}}` gives the application's build number."
+ref = "Appendix › Text Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "textToken.keyPath"
+area = "font-info"
+milestone = "M7"
+summary = "In a font or instance context the token may be a property path on the font or instance object, e.g. `{{{fullName}}}`. The reference resolves paths through its scripting object model; FontCraft needs a documented list of supported paths."
+ref = "Appendix › Text Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "textToken.numberValue"
+area = "font-info"
+milestone = "M7"
+summary = "In a master context the token may be the name of a number value."
+ref = "Appendix › Text Tokens"
+status = "handbook"
+
+[[behavior]]
+id = "textToken.glyphProperty"
+area = "font-info"
+milestone = "M7"
+summary = "`{{{glyph:path}}}` reads a layer property of a glyph, as in feature-code glyph property tokens: `{{{space:width}}}` gives the advance width of space."
+ref = "Appendix › Text Tokens"
+status = "handbook"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Regular expressions
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "regex.anyCharacter"
+area = "font-view"
+milestone = "M4"
+summary = "`.` matches any one character."
+ref = "Appendix › Regular Expressions"
+status = "handbook"
+
+[[behavior]]
+id = "regex.characterClass"
+area = "font-view"
+milestone = "M4"
+summary = "`[xyz]` matches one character from the set; `[^xyz]` matches one character not in it."
+ref = "Appendix › Regular Expressions"
+status = "handbook"
+
+[[behavior]]
+id = "regex.digit"
+area = "font-view"
+milestone = "M4"
+summary = "`\\d` matches a digit 0-9 and `\\D` any other character."
+ref = "Appendix › Regular Expressions"
+status = "handbook"
+
+[[behavior]]
+id = "regex.wordCharacter"
+area = "font-view"
+milestone = "M4"
+summary = "`\\w` matches a letter, digit or underscore (a-z, A-Z, 0-9, _) and `\\W` any other character; a hyphen is not a word character."
+ref = "Appendix › Regular Expressions"
+status = "handbook"
+
+[[behavior]]
+id = "regex.quantifiers"
+area = "font-view"
+milestone = "M4"
+summary = "`?` repeats the preceding item zero or one time, `*` zero or more, `+` one or more; they apply to a character, a class or a parenthesised group."
+ref = "Appendix › Regular Expressions"
+status = "handbook"
+
+[[behavior]]
+id = "regex.countedRepetition"
+area = "font-view"
+milestone = "M4"
+summary = "`{n}` demands exactly n repetitions; `{n,m}` allows any count from n up to m, where a lower bound of 0 is legal and leaving m out removes the upper bound."
+ref = "Appendix › Regular Expressions"
+status = "handbook"
+
+[[behavior]]
+id = "regex.escape"
+area = "font-view"
+milestone = "M4"
+summary = "A backslash before a special character (`\\.`, `\\?`) matches that character literally."
+ref = "Appendix › Regular Expressions"
+status = "handbook"
+
+[[behavior]]
+id = "regex.captureReplace"
+area = "font-view"
+milestone = "M4"
+summary = "In find and replace, parenthesised parts of the pattern are inserted into the replacement with `\\1`, `\\2` and so on: finding `(\\d)(\\d)` and replacing with `\\2\\1` swaps two digits."
+ref = "Appendix › Regular Expressions"
+status = "handbook"
+
+[[behavior]]
+id = "regex.engine"
+area = "font-view"
+milestone = "M4"
+summary = "FontCraft uses the Rust `regex` crate: the documented subset is fully covered, replacement references written `\\N` are translated to the crate's `${N}`, and look-around or back-references inside the pattern are not available."
+ref = "Appendix › Regular Expressions"
+status = "inferred"
+
+# ----------------------------------------------------------------------------
+# Behaviours: URL scheme
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "url.scheme"
+area = "automation"
+milestone = "M13"
+summary = "The reference answers to two URL schemes, one generic and one tied to a major version, so web pages and other apps can open it. FontCraft registers `fontcraft://`."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.show"
+area = "automation"
+milestone = "M13"
+summary = "`fontcraft://show/?...` opens files and adds a new tab listing given glyph layers; it mirrors the reference's show path and takes the query parameters path, glyph, production and layer."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.show.path"
+area = "automation"
+milestone = "M13"
+summary = "`path` is an absolute file path and comes first. It may be repeated; each occurrence starts a new file with its own glyph list."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.show.glyph"
+area = "automation"
+milestone = "M13"
+summary = "`glyph` adds a glyph to the current file's list by its glyph name; glyphs appear in the tab in URL order."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.show.production"
+area = "automation"
+milestone = "M13"
+summary = "`production` adds a glyph by its production name (e.g. uni01F4) instead of its source name."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.show.layer"
+area = "automation"
+milestone = "M13"
+summary = "`layer` follows a glyph and selects one of its layers by layer ID; repeating it shows several layers of the same glyph. A master layer's ID equals the master ID."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.show.defaultLayer"
+area = "automation"
+milestone = "M13"
+summary = "A glyph with no layer parameter is shown on the layer of the main master."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.show.alreadyOpen"
+area = "automation"
+milestone = "M13"
+summary = "A file that is already open is not opened a second time; it only gets the new tab."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.show.encoding"
+area = "automation"
+milestone = "M13"
+summary = "Query values are percent-decoded as UTF-8, and unknown glyphs or layer IDs are skipped with a warning rather than aborting the whole URL. Not specified by the reference."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+[[behavior]]
+id = "url.safety"
+area = "automation"
+milestone = "M13"
+summary = "URL handling is limited to opening and showing; it never runs arbitrary commands, writes files or loads plug-ins, and paths must be local."
+ref = "Appendix › URL Scheme"
+status = "inferred"
+
+# ----------------------------------------------------------------------------
+# Behaviours: Feature snippets
+# ----------------------------------------------------------------------------
+
+[[behavior]]
+id = "snippet.builtIn"
+area = "features"
+milestone = "M8"
+summary = "The snippets menu ships with predefined code fragments, among them the `# Automatic Code` placeholder. The full built-in list is not in the handbook."
+ref = "Font Info › Features › Manual Feature Code; Font Info › Features › Implicit Features"
+status = "handbook"
+
+[[behavior]]
+id = "snippet.fileNaming"
+area = "features"
+milestone = "M8"
+summary = "User snippets live in files named FeatureSnippets<NAME>.plist in the snippet folder; NAME becomes the group name in the menu."
+ref = "Appendix › Custom Feature Code Snippets"
+status = "handbook"
+
+[[behavior]]
+id = "snippet.fileFormat"
+area = "features"
+milestone = "M8"
+summary = "A snippet file is a property list holding an array of dictionaries, each with a `title` (menu label) and `code` (text to insert, may span lines)."
+ref = "Appendix › Custom Feature Code Snippets"
+status = "handbook"
+
+[[behavior]]
+id = "snippet.insertion"
+area = "features"
+milestone = "M8"
+summary = "A chosen snippet is inserted at the caret, replacing the selection. The handbook only says it is inserted into the code."
+ref = "Font Info › Features › Manual Feature Code"
+status = "inferred"
+
+[[behavior]]
+id = "snippet.nativeFormat"
+area = "features"
+milestone = "M8"
+summary = "FontCraft reads the reference's plist snippet files unchanged and also accepts the same data as TOML (`[[snippet]] title, code`) so snippets can be edited without plist tools."
+ref = "Appendix › Custom Feature Code Snippets"
+status = "inferred"

@@ -1,0 +1,46 @@
+# Milestones. Inventory entries name one in `milestone`. Order is the build order.
+[[milestone]]
+id = "M0"
+title = "Skeleton and vertical slice"
+[[milestone]]
+id = "M1"
+title = "Source model and file I/O (native, UFO, designspace, .glyphs, binary import)"
+[[milestone]]
+id = "M2"
+title = "Compile core: static TTF and OTF, oracle harness"
+[[milestone]]
+id = "M3"
+title = "Edit View drawing: tools, nodes, selection, transforms, path operations, guides"
+[[milestone]]
+id = "M4"
+title = "Font View and glyph management"
+[[milestone]]
+id = "M5"
+title = "Spacing, kerning and text mode"
+[[milestone]]
+id = "M6"
+title = "Components and anchors"
+[[milestone]]
+id = "M7"
+title = "Font Info and custom parameters"
+[[milestone]]
+id = "M8"
+title = "OpenType features"
+[[milestone]]
+id = "M9"
+title = "Interpolation and variable fonts"
+[[milestone]]
+id = "M10"
+title = "Hinting (PostScript and TrueType)"
+[[milestone]]
+id = "M11"
+title = "Colour fonts and images"
+[[milestone]]
+id = "M12"
+title = "Command-line tool suite and quality checks"
+[[milestone]]
+id = "M13"
+title = "Plug-ins, scripting and automation depth"
+[[milestone]]
+id = "M14"
+title = "1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web"

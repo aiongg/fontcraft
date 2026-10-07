@@ -1,0 +1,17 @@
+[package]
+name = "fontcraft-model"
+description = "FontCraft font source model: fonts, masters, glyphs, layers, shapes (L1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-geom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

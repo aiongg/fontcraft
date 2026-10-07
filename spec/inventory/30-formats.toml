@@ -1,0 +1,1063 @@
+# File formats FontCraft reads and writes, and the round-trip rules it commits to.
+# Date: 2026-10-07
+#
+# Sources (all permissively licensed or public documentation; wording is our own):
+# - Glyphs file format, versions 2, 3 and 4, and JSON schemas (Apache-2.0):
+#   refs/GlyphsSDK/GlyphsFileFormat/GlyphsFileFormatv2.md, v3.md, v4.md, Schemas/*.schema.json
+#   https://github.com/schriftgestalt/GlyphsSDK/tree/Glyphs3/GlyphsFileFormat
+# - Unified Font Object 3 and 2 specification: refs/ufo-spec/versions/ufo3, ufo2
+#   https://unifiedfontobject.org/versions/ufo3/
+# - designspace format 5 documentation and reference implementation (MIT):
+#   refs/fonttools/Doc/source/designspaceLib/xml.rst, refs/fonttools/Lib/fontTools/designspaceLib/
+#   https://fonttools.readthedocs.io/en/latest/designspaceLib/xml.html
+# - Rust crates (MIT/Apache-2.0): refs/norad 0.19.0, refs/fontc/glyphs-reader 1.0.0,
+#   refs/fontc/fontir 1.0.0, refs/fontc/fea-rs 1.0.0, refs/fontations (read-fonts 0.45.0, write-fonts 0.54.0)
+# - Glyphs 4 Handbook, chapter "Import & Export" (and "Edit View › Images", "Color Fonts",
+#   "Font Info › Other") for which formats the reference opens, saves, imports and exports
+# - FontForge public documentation only: https://fontforge.org/docs/techref/sfdformat.html
+#
+# Reading aid for the rows below:
+# - Compiled fonts have two rows each: `<id>.open` (decompile into the editor, M1) and
+#   `<id>.export` (written by the compiler). They are split because the milestones differ.
+# - `status = "docs"`: the format and the fact come from a specification or public documentation.
+#   `status = "handbook"`: the only source is the reference handbook.
+#   `status = "inferred"`: our own design. `status = "memory"`: recalled, no public description found.
+# - The field-by-field study behind these rows is docs/spec/30-source-formats.md.
+
+# ───────────────────────────── Native ─────────────────────────────
+
+[[format]]
+id = "fontcraft"
+label = "FontCraft document"
+extensions = ["fontcraft"]
+read = true
+write = true
+spec = "docs/spec/30-source-formats.md#recommended-model"
+area = "import-export"
+milestone = "M1"
+summary = "Our own source format: one UTF-8 JSON document that serialises the in-memory model directly, with a top-level integer `formatVersion` and the writing app version. It is a lossless superset of .glyphs 2/3/4, UFO 3 and designspace 5: every struct carries an `extra` map for keys we do not model. The same extension may hold a gzip stream, detected by its magic bytes."
+ref = "docs/spec/30-source-formats.md › Recommended model"
+status = "inferred"
+
+# ───────────────────────────── Glyphs sources ─────────────────────────────
+
+[[format]]
+id = "glyphs2"
+label = "Glyphs file, format version 2 (no .formatVersion key)"
+extensions = ["glyphs"]
+read = true
+write = true
+spec = "https://github.com/schriftgestalt/GlyphsSDK/blob/Glyphs3/GlyphsFileFormat/GlyphsFileFormatv2.md"
+area = "import-export"
+milestone = "M1"
+summary = "OpenStep-style text property list used by Glyphs 1 and 2: separate `paths` and `components` lists, nodes as strings such as `100 100 CURVE SMOOTH`, positions and transforms as brace strings, hexadecimal `unicode`, up to three fixed axes via weightValue/widthValue/customValue, a single `kerning` plus `vertKerning`, and per-master ascender/capHeight/xHeight/alignmentZones. Read by upgrading in memory to the version 3 shape; written back in version 2 form only when the file was opened as version 2, with a warning for everything version 2 cannot hold (RTL kerning, more than three axes, shape attributes, metrics beyond the fixed five)."
+ref = "GlyphsSDK GlyphsFileFormat/GlyphsFileFormatv2.md; Schemas/glyphs-1.schema.json; Import & Export › Glyphs File"
+status = "docs"
+
+[[format]]
+id = "glyphs3"
+label = "Glyphs file, format version 3"
+extensions = ["glyphs"]
+read = true
+write = true
+spec = "https://github.com/schriftgestalt/GlyphsSDK/blob/Glyphs3/GlyphsFileFormat/GlyphsFileFormatv3.md"
+area = "import-export"
+milestone = "M1"
+summary = "The reference app's default source format: a single UTF-8 OpenStep-style property list holding axes, masters, instances, glyphs with all their layers, three kerning tables (LTR, RTL, vertical), features, classes, prefixes, custom parameters and user data. Everything in the documented schema is modelled; keys outside the schema are kept verbatim in `extra` and written back. This is the format the model is closest to, so an unedited file must come back byte-identical."
+ref = "GlyphsSDK GlyphsFileFormat/GlyphsFileFormatv3.md; Schemas/glyphs-3.schema.json; Import & Export › Glyphs File"
+status = "docs"
+
+[[format]]
+id = "glyphs4"
+label = "Glyphs file, format version 4"
+extensions = ["glyphs"]
+read = true
+write = true
+spec = "https://github.com/schriftgestalt/GlyphsSDK/blob/Glyphs3/GlyphsFileFormat/GlyphsFileFormatv4.md"
+area = "import-export"
+milestone = "M1"
+summary = "Version 3 plus: `kerningContext`, localised axis `names`, glyph-level `axes`, `group` and `groupIdx`, instance `id`, master and layer `active`, images and shape groups as shapes, extra node types (u, h, r) and the tangent flag, per-node `hoi` data, conic gradients, colours as 0–1 floats, the `Color Palettes` parameter as an object, and trailing commas in multi-line arrays. Top-level `familyName` and instance `name` are gone (names live in `properties`), and anchor, guide and component user data moves into `attr`. Documented on 2026-07-17, so expect the schema to move; unknown keys are preserved."
+ref = "GlyphsSDK GlyphsFileFormat/GlyphsFileFormatv4.md; Schemas/glyphs-4.schema.json; Font Info › Other › File Format Version"
+status = "docs"
+
+[[format]]
+id = "glyphspackage"
+label = "Glyphs file package"
+extensions = ["glyphspackage"]
+read = true
+write = true
+spec = "https://github.com/schriftgestalt/GlyphsSDK/blob/Glyphs3/GlyphsFileFormat/GlyphsFileFormatv4.md#package-glyphspackage"
+area = "import-export"
+milestone = "M1"
+summary = "A directory with the same data as a .glyphs file split up: `fontinfo.plist` (everything but glyphs), `order.plist` (glyph names in order), `UIState.plist` (display strings) and one `glyphs/<name>.glyph` per glyph. Version 4 packages additionally move kerning to `kerning.plist`, the font note to `note.md`, and class, prefix and feature code to `features/@Name.fea`, `features/_Name.fea` and `features/<tag>.fea` (with `.2`, `.3` suffixes on name clashes). Saving rewrites only the files whose content changed."
+ref = "GlyphsSDK GlyphsFileFormatv3.md and v4.md › Package; Schemas/fontinfo-3.schema.json, fontinfo-4.schema.json; Import & Export › Glyphs File Package"
+status = "docs"
+
+[[format]]
+id = "glyphsproject"
+label = "Glyphs project"
+extensions = ["glyphsproject"]
+read = true
+write = false
+spec = ""
+area = "import-export"
+milestone = "M13"
+summary = "A separate file that links to a Glyphs source and holds its own list of instances and an export destination. The handbook describes the behaviour, but the key layout is not covered by the published format documents, so reading it is planned only after the file has been inspected; nothing is preserved beyond the instance list and the link."
+ref = "Import & Export › Projects"
+status = "handbook"
+
+# ───────────────────────────── UFO and designspace ─────────────────────────────
+
+[[format]]
+id = "ufo3"
+label = "Unified Font Object 3"
+extensions = ["ufo"]
+read = true
+write = true
+spec = "https://unifiedfontobject.org/versions/ufo3/"
+area = "import-export"
+milestone = "M1"
+summary = "A directory of XML property lists and one GLIF file per glyph per layer: metainfo, fontinfo, groups, kerning, features.fea, lib, layercontents, glyph layers with layerinfo, plus `images/` and `data/`. One UFO is one master. Everything in the specification is read and written; the font, layer, glyph and object libs, the data directory and every identifier are preserved verbatim, while Glyphs-only concepts (smart components, hints tied to nodes, metrics keys, special layers) are carried in lib keys."
+ref = "UFO 3 specification (all pages under versions/ufo3); norad 0.19.0; Import & Export › Unified Font Object"
+status = "docs"
+
+[[format]]
+id = "ufoz"
+label = "UFO ZIP"
+extensions = ["ufoz"]
+read = true
+write = true
+spec = "https://unifiedfontobject.org/versions/ufo3/#storage-formats"
+area = "import-export"
+milestone = "M1"
+summary = "A ZIP archive holding one UFO directory tree under a single root folder of arbitrary name; UTF-8 file names, ZIP64 allowed, compression optional, encryption forbidden. Content rules are identical to `ufo3`. norad reads it behind its `ufoz` feature; writing goes through a sink we provide."
+ref = "UFO 3 specification › Storage Formats; norad src/zip_source.rs, src/font_sink.rs"
+status = "docs"
+
+[[format]]
+id = "ufo2"
+label = "Unified Font Object 2"
+extensions = ["ufo"]
+read = true
+write = true
+spec = "https://unifiedfontobject.org/versions/ufo2/"
+area = "import-export"
+milestone = "M1"
+summary = "The older single-layer UFO: no layercontents, images, data, guidelines, anchor elements or identifiers; anchors are single-point `move` contours and kerning groups are told apart by name convention rather than the `public.kern1.`/`public.kern2.` prefixes. Read by up-converting to the UFO 3 shape. The reference keeps the version when it saves, so we write UFO 2 back with our own serializer (norad refuses to downgrade) and report what version 2 cannot hold."
+ref = "UFO 2 specification; UFO 3 specification › Changes from UFO 2, kerning.plist › Converting to UFO 3 formatted kerning; norad src/upconversion.rs; Import & Export › Unified Font Object"
+status = "docs"
+
+[[format]]
+id = "ufo1"
+label = "Unified Font Object 1"
+extensions = ["ufo"]
+read = true
+write = false
+spec = "https://unifiedfontobject.org/versions/ufo1/"
+area = "import-export"
+milestone = "M13"
+summary = "Read-only import of the first UFO version, which norad up-converts (font info and features stored in lib keys are moved to their UFO 3 homes). Saving always produces UFO 3."
+ref = "norad src/upconversion.rs, src/font.rs (FormatVersion::V1)"
+status = "docs"
+
+[[format]]
+id = "designspace5"
+label = "Designspace document, format 5.x"
+extensions = ["designspace"]
+read = true
+write = true
+spec = "https://fonttools.readthedocs.io/en/latest/designspaceLib/xml.html"
+area = "import-export"
+milestone = "M1"
+summary = "XML file that ties UFO masters into one family: axes (continuous or discrete, with user-to-design `map` nodes, localised names and STAT labels), cross-axis `mappings` (5.1, descriptions 5.2), location labels, sources (optionally a named layer of a UFO), variable-font subsets, instances, substitution rules and three lib dictionaries. Opening one loads every referenced UFO as a master of a single document; all elements are modelled and the document, variable-font and instance libs are preserved."
+ref = "fontTools designspaceLib xml.rst; norad src/designspace.rs"
+status = "docs"
+
+[[format]]
+id = "designspace4"
+label = "Designspace document, format 4.x and earlier"
+extensions = ["designspace"]
+read = true
+write = true
+spec = "https://fonttools.readthedocs.io/en/latest/designspaceLib/xml.html"
+area = "import-export"
+milestone = "M1"
+summary = "The subset without discrete axes, labels, variable-font elements, user-space locations and localised source names; a file with no `format` attribute is treated as 3.0. May still carry the deprecated MutatorMath elements (`glyph mute`, `kerning mute`, `info copy`, `lib copy`, `features copy` on sources, and per-instance `glyphs`), which we keep verbatim and write back but do not act on. On save the format number is raised to 5.0 only when a version 5 feature is in use."
+ref = "fontTools designspaceLib xml.rst (deprecated elements); fontTools/designspaceLib/__init__.py (format selection on write)"
+status = "docs"
+
+# ───────────────────────────── Compiled fonts opened for editing ─────────────────────────────
+
+[[format]]
+id = "ttf.open"
+label = "OpenType, TrueType outlines (opened for editing)"
+extensions = ["ttf"]
+read = true
+write = false
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/"
+area = "import-export"
+milestone = "M1"
+summary = "Decompiles a static glyf-flavoured font into a one-master document: quadratic outlines stay quadratic, components stay components, names, metrics, cmap, kerning and layout are turned back into font info, parameters, kerning groups and feature code as far as possible, and the binary glyph order is recorded. Contextual kerning, most instructions and tables we cannot interpret do not become editable data."
+ref = "Import & Export › Opening Font Files, Opening TrueType Font, Importing OpenType Features; read-fonts 0.45.0"
+status = "handbook"
+
+[[format]]
+id = "otf.open"
+label = "OpenType, CFF outlines (opened for editing)"
+extensions = ["otf"]
+read = true
+write = false
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/cff"
+area = "import-export"
+milestone = "M1"
+summary = "Decompiles a static CFF-flavoured font into a one-master document with cubic outlines. Alignment zones and standard stems come back as master metrics and stems, and glyph-level stem hints are kept but lose their attachment to nodes; subroutines are flattened and CID font dictionaries are merged into one glyph set."
+ref = "Import & Export › Opening Font Files, Importing PostScript Hints; Adobe TN 5176 (CFF), TN 5177 (Type 2 charstrings)"
+status = "handbook"
+
+[[format]]
+id = "variable-ttf.open"
+label = "Variable OpenType, TrueType outlines (opened for editing)"
+extensions = ["ttf"]
+read = true
+write = false
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview"
+area = "import-export"
+milestone = "M9"
+summary = "Rebuilds axes from fvar, user-to-design maps from avar, named instances and STAT labels, and one master per variation-model peak by applying gvar, HVAR, MVAR and GDEF/GPOS deltas; intermediate regions that affect only some glyphs become intermediate layers. The reference handbook does not list variable fonts among the files it opens, so this is our extension and its fidelity target is ours to set."
+ref = "OpenType specification › Font Variations Overview; fontTools varLib (reverse direction); not in Import & Export › Opening Font Files"
+status = "inferred"
+
+[[format]]
+id = "cff2.open"
+label = "Variable OpenType, CFF2 outlines (opened for editing)"
+extensions = ["otf"]
+read = true
+write = false
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/cff2"
+area = "import-export"
+milestone = "M9"
+summary = "Same reconstruction as `variable-ttf.open`, with masters rebuilt from CFF2 blend operators and the item variation store, so outlines stay cubic. Our extension; not listed by the reference handbook."
+ref = "OpenType specification › CFF2; Adobe AFDKO tx (CFF2 reading)"
+status = "inferred"
+
+[[format]]
+id = "ttc.open"
+label = "OpenType collection (opened for editing)"
+extensions = ["ttc", "otc"]
+read = true
+write = false
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/otff#font-collections"
+area = "import-export"
+milestone = "M1"
+summary = "Lists the member fonts of a collection and opens the chosen ones, each as its own document (or, on request, as masters of one document when they are compatible). The handbook names only the TrueType-flavoured `.ttc`; CFF-flavoured `.otc` files use the same container and are handled the same way."
+ref = "Import & Export › Opening Font Files; OpenType specification › Font Collections; read-fonts FileRef"
+status = "handbook"
+
+[[format]]
+id = "woff.open"
+label = "WOFF 1.0 (opened for editing)"
+extensions = ["woff"]
+read = true
+write = false
+spec = "https://www.w3.org/TR/WOFF/"
+area = "import-export"
+milestone = "M1"
+summary = "Unwraps the zlib-compressed table directory to the sfnt inside and then proceeds as `ttf.open` or `otf.open`. The metadata XML block and private data block are kept as opaque attachments so a later export can put them back."
+ref = "W3C WOFF 1.0; UFO 3 fontinfo.plist › WOFF Data"
+status = "docs"
+
+[[format]]
+id = "woff2.open"
+label = "WOFF 2.0 (opened for editing)"
+extensions = ["woff2"]
+read = true
+write = false
+spec = "https://www.w3.org/TR/WOFF2/"
+area = "import-export"
+milestone = "M1"
+summary = "Decodes the Brotli stream and reverses the glyf, loca and hmtx transforms to recover the sfnt, then proceeds as `ttf.open` or `otf.open`. Table order and checksums of the original file are not recoverable, which matters only to byte comparisons."
+ref = "W3C WOFF 2.0"
+status = "docs"
+
+# ───────────────────────────── Compiled fonts written by export ─────────────────────────────
+
+[[format]]
+id = "ttf.export"
+label = "OpenType, TrueType outlines (export)"
+extensions = ["ttf"]
+read = false
+write = true
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/"
+area = "import-export"
+milestone = "M2"
+summary = "Static font with a glyf table, one per exported instance: cubic curves are converted to quadratic, components are kept, and TrueType hinting data is compiled when present. Source-only data (guides, notes, backup layers, images, user data, disabled features and parameters) is dropped."
+ref = "Import & Export › OpenType Export; write-fonts 0.54.0"
+status = "handbook"
+
+[[format]]
+id = "otf.export"
+label = "OpenType, CFF outlines (export)"
+extensions = ["otf"]
+read = false
+write = true
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/cff"
+area = "import-export"
+milestone = "M2"
+summary = "Static font with a CFF table, one per exported instance: cubic outlines as drawn, components decomposed, stem hints and alignment zones written into charstrings and the private dictionary. Quadratic paths in the source are converted to cubic."
+ref = "Import & Export › OpenType Export › Outline Flavor; Adobe TN 5176, TN 5177"
+status = "handbook"
+
+[[format]]
+id = "variable-ttf.export"
+label = "Variable OpenType, TrueType outlines (export)"
+extensions = ["ttf"]
+read = false
+write = true
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview"
+area = "import-export"
+milestone = "M9"
+summary = "One variable font per variable-font setting (or one default setting), always with TrueType outlines in the reference app: fvar, avar, gvar, HVAR, MVAR, STAT and variable GDEF/GPOS, with alternate layers compiled to feature variations. Requires compatible masters; incompatible glyphs are reported, not silently dropped."
+ref = "Import & Export › Exporting Variable Fonts"
+status = "handbook"
+
+[[format]]
+id = "cff2.export"
+label = "Variable OpenType, CFF2 outlines (export)"
+extensions = ["otf"]
+read = false
+write = true
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/cff2"
+area = "import-export"
+milestone = "M9"
+summary = "Variable font with cubic outlines stored as CFF2 blends. The reference app exports variable fonts only with TrueType outlines, so this follows the AFDKO and fontmake tool chains instead and is offered as an extra flavour."
+ref = "OpenType specification › CFF2; AFDKO buildcff2vf; fontmake variable-cff2 output"
+status = "docs"
+
+[[format]]
+id = "ttc.export"
+label = "OpenType collection (export)"
+extensions = ["ttc", "otc"]
+read = false
+write = true
+spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/otff#font-collections"
+area = "import-export"
+milestone = "M12"
+summary = "Packs several compiled fonts into one collection file and shares byte-identical tables between members. A command-line job modelled on the AFDKO collection tools; the reference app's export dialog has no collection option."
+ref = "OpenType specification › Font Collections; AFDKO otf2otc, otc2otf; fontTools ttLib.ttCollection"
+status = "docs"
+
+[[format]]
+id = "woff.export"
+label = "WOFF 1.0 (export)"
+extensions = ["woff"]
+read = false
+write = true
+spec = "https://www.w3.org/TR/WOFF/"
+area = "import-export"
+milestone = "M2"
+summary = "Wraps a compiled TTF or OTF table by table with zlib compression. Optional extended metadata comes from the WOFF fields of the font info when present; a private data block is written only when one was imported."
+ref = "Import & Export › OpenType Export › File Format; W3C WOFF 1.0; UFO 3 fontinfo.plist › WOFF Data"
+status = "handbook"
+
+[[format]]
+id = "woff2.export"
+label = "WOFF 2.0 (export)"
+extensions = ["woff2"]
+read = false
+write = true
+spec = "https://www.w3.org/TR/WOFF2/"
+area = "import-export"
+milestone = "M2"
+summary = "Wraps a compiled TTF or OTF with the WOFF2 table transforms and Brotli compression. Needs a pure-Rust Brotli encoder; the fontations crates in our reference set contain no WOFF2 writer, so the container code is ours."
+ref = "Import & Export › OpenType Export › File Format; W3C WOFF 2.0"
+status = "handbook"
+
+# ───────────────────────────── Feature code ─────────────────────────────
+
+[[format]]
+id = "fea"
+label = "OpenType feature file (AFDKO syntax)"
+extensions = ["fea"]
+read = true
+write = true
+spec = "https://adobe-type-tools.github.io/afdko/OpenTypeFeatureFileSpecification.html"
+area = "import-export"
+milestone = "M8"
+summary = "Plain-text layout code. Importing splits a file into named classes, feature blocks and a prefix that receives everything else (language systems, standalone lookups, table blocks); exporting concatenates prefixes, classes and enabled features in order. Within UFO the whole `features.fea` text is already carried untouched from M1 on, including `include()` statements, whose targets are resolved relative to the UFO."
+ref = "AFDKO OpenTypeFeatureFileSpecification; UFO 3 features.fea; Import & Export › Importing Feature Files; fea-rs 1.0.0"
+status = "docs"
+
+# ───────────────────────────── Legacy formats ─────────────────────────────
+
+[[format]]
+id = "type1"
+label = "Adobe Type 1 (PFB binary, PFA text)"
+extensions = ["pfb", "pfa"]
+read = true
+write = true
+spec = "https://adobe-type-tools.github.io/font-tech-notes/pdfs/T1_SPEC.pdf"
+area = "import-export"
+milestone = "M12"
+summary = "Reads the font dictionary, eexec-encrypted private dictionary and Type 1 charstrings into a one-master document with cubic outlines, stem hints, blue zones and standard stems; `seac` accents become components. Kerning and reliable metrics need the companion AFM or PFM, which are picked up when they sit next to the font. Writing exists for command-line conversion only; multiple-master Type 1 fonts are out of scope."
+ref = "Import & Export › Opening Font Files (.pfb); Adobe Type 1 Font Format; AFDKO tx (-t1)"
+status = "docs"
+
+[[format]]
+id = "afm"
+label = "Adobe Font Metrics"
+extensions = ["afm"]
+read = true
+write = true
+spec = "https://adobe-type-tools.github.io/font-tech-notes/pdfs/5004.AFM_Spec.pdf"
+area = "import-export"
+milestone = "M5"
+summary = "Text file with global metrics, per-glyph advance widths and bounding boxes, and flat kerning pairs. Exported for one master and imported into one master; group kerning is expanded to pairs on export and metrics keys are not representable, so importing can change sidebearings and break links."
+ref = "Import & Export › Exporting Metrics, Importing Metrics; Adobe TN 5004"
+status = "docs"
+
+[[format]]
+id = "pfm"
+label = "Printer Font Metrics (Windows)"
+extensions = ["pfm"]
+read = true
+write = false
+spec = ""
+area = "import-export"
+milestone = "M13"
+summary = "Binary companion of a Type 1 font holding widths, a few global metrics, Windows naming data and a pair-kerning table indexed by character code. Read only, as a metrics and kerning source when a PFB is opened without an AFM; kerning is limited to the encoded glyphs. The layout is recalled from Adobe Technical Note 5178 and the Windows driver documentation; no stable public URL was found, so the reader must be checked against AFDKO-produced sample files."
+ref = "Adobe Technical Note 5178 (not in the adobe-type-tools tech-note archive); AFDKO makeotf documentation mentions PFM only as legacy input"
+status = "memory"
+
+[[format]]
+id = "cff"
+label = "Bare CFF font program"
+extensions = ["cff"]
+read = true
+write = true
+spec = "https://adobe-type-tools.github.io/font-tech-notes/pdfs/5176.CFF.pdf"
+area = "import-export"
+milestone = "M12"
+summary = "A CFF table on its own, without the sfnt wrapper: outlines, hints, glyph names and the top and private dictionaries, but no cmap, metrics tables, kerning or layout. Opened as a one-master document with code points guessed from glyph names; written for command-line conversion."
+ref = "Adobe TN 5176; AFDKO tx (-cff)"
+status = "docs"
+
+[[format]]
+id = "svg-font"
+label = "SVG 1.1 font"
+extensions = ["svg"]
+read = true
+write = true
+spec = "https://www.w3.org/TR/SVG11/fonts.html"
+area = "import-export"
+milestone = "M12"
+summary = "An SVG document with a `font` element: `font-face` metrics, `glyph` elements carrying a path, a unicode string and an advance, a `missing-glyph`, and `hkern`/`vkern` pairs. Paths are in font units with the y axis up; kerning is flat and there are no components, hints or layout features."
+ref = "SVG 1.1 › Fonts; AFDKO tx (-svg)"
+status = "docs"
+
+[[format]]
+id = "bdf"
+label = "Glyph Bitmap Distribution Format"
+extensions = ["bdf"]
+read = true
+write = false
+spec = "https://adobe-type-tools.github.io/font-tech-notes/pdfs/5005.BDF_Spec.pdf"
+area = "import-export"
+milestone = "M13"
+summary = "Text bitmap font, one pixel size per file, with per-glyph bounding box, advance and hex-encoded rows plus X font properties. Imported as a bitmap strike attached to glyphs matched by name or encoding: a tracing aid and a source for embedded bitmap strikes, never converted to outlines automatically."
+ref = "Adobe TN 5005"
+status = "docs"
+
+[[format]]
+id = "pcf"
+label = "Portable Compiled Format (X11 bitmap font)"
+extensions = ["pcf"]
+read = true
+write = false
+spec = "https://fontforge.org/docs/techref/pcf-format.html"
+area = "import-export"
+milestone = "M13"
+summary = "Binary sibling of BDF with a table directory (properties, metrics, bitmaps, encodings, glyph names, accelerators). Imported the same way as `bdf`; no official specification exists, only third-party format descriptions, so support is limited to what those describe."
+ref = "FontForge documentation › PCF format (public docs only)"
+status = "docs"
+origin = "fontforge"
+
+[[format]]
+id = "vfj"
+label = "FontLab JSON source"
+extensions = ["vfj"]
+read = true
+write = false
+spec = ""
+area = "import-export"
+milestone = "M13"
+summary = "The JSON flavour of FontLab's native source. FontLab's own help pages only call it a human-readable JSON file and link to no schema, and we found no public key-by-key description, so import is planned for the self-evident core only (masters, glyph layers with contours and components, anchors, kerning, classes, features) and everything else is reported as skipped."
+ref = "FontLab help › Font Formats (https://help.fontlab.com/fontlab-vi/Font-Formats/)"
+status = "memory"
+origin = "fontlab"
+
+[[format]]
+id = "sfd"
+label = "FontForge Spline Font Database"
+extensions = ["sfd", "sfdir"]
+read = true
+write = false
+spec = "https://fontforge.org/docs/techref/sfdformat.html"
+area = "import-export"
+milestone = "M13"
+summary = "ASCII keyword-and-value source file that starts with `SplineFontDB: <version>`: a font header, then `StartChar`…`EndChar` blocks with `SplineSet` contours, references, anchor points, hints and per-glyph kerning and substitutions that point at named lookups, then optional bitmap strikes; `.sfdir` is the same split into one file per glyph. Import covers outlines, references, anchors, metrics, layers, names and kerning as the public page describes them. That page says it can lag behind the program, whose source we may not read, so lookups and anything undescribed are skipped and reported."
+ref = "FontForge documentation › Spline Font Database File Format (public docs only)"
+status = "docs"
+origin = "fontforge"
+
+# ───────────────────────────── Outline interchange ─────────────────────────────
+
+[[format]]
+id = "svg-outline"
+label = "SVG drawing (glyph outline import and export)"
+extensions = ["svg"]
+read = true
+write = true
+spec = "https://www.w3.org/TR/SVG2/"
+area = "import-export"
+milestone = "M3"
+summary = "Imports the vector geometry of an SVG file into a glyph layer: paths and basic shapes after applying transforms, flipped to the y-up font coordinate system. Fill, stroke styling and everything that is not geometry is discarded. In Font View several files are matched to glyphs by file name; export writes one layer as a plain path."
+ref = "Import & Export › Importing Outlines"
+status = "handbook"
+
+[[format]]
+id = "pdf-outline"
+label = "PDF artwork (glyph outline import)"
+extensions = ["pdf"]
+read = true
+write = false
+spec = "https://pdfa.org/resource/iso-32000-2/"
+area = "import-export"
+milestone = "M13"
+summary = "Imports the path-construction operators of the first page's content stream as outlines; stroke width is kept as a stroke attribute on the path, while fill colour and other styling are dropped. Text, images, shadings and clipping are ignored."
+ref = "Import & Export › Importing Outlines"
+status = "handbook"
+
+[[format]]
+id = "eps-outline"
+label = "Encapsulated PostScript artwork (glyph outline import)"
+extensions = ["eps"]
+read = true
+write = false
+spec = ""
+area = "import-export"
+milestone = "M13"
+summary = "Imports outlines from EPS files of the kind drawing applications save: a small interpreter for path, transform and paint operators, not a full PostScript implementation. Files that rely on procedures beyond that subset are rejected with a message rather than imported wrongly."
+ref = "Import & Export › Importing Outlines; Adobe Technical Note 5002, Encapsulated PostScript File Format 3.0 (no stable public URL verified)"
+status = "handbook"
+
+[[format]]
+id = "clipboard"
+label = "Clipboard flavours for shapes, glyphs and kerning"
+extensions = []
+read = true
+write = true
+spec = "docs/spec/30-source-formats.md#recommended-model"
+area = "import-export"
+milestone = "M3"
+summary = "Copy places three flavours on the clipboard: our own JSON fragment of the model (shapes, anchors, whole layers or glyphs, or kerning pairs, with every attribute), an SVG path for drawing applications, and plain text. Paste prefers our JSON, then SVG, then PDF, as vector applications offer them; pasted artwork far outside the glyph box triggers the bounds-correction prompt and coordinates are rounded to the grid unless the grid is zero."
+ref = "Import & Export › Vector Drawing Applications"
+status = "inferred"
+
+# ───────────────────────────── Kerning and metrics interchange ─────────────────────────────
+
+[[format]]
+id = "kerning-text"
+label = "Plain-text kerning and metrics table"
+extensions = ["tsv", "txt"]
+read = true
+write = true
+spec = "docs/spec/30-source-formats.md#211-kerning"
+area = "import-export"
+milestone = "M5"
+summary = "Our own tab-separated exchange format for one master: kerning lines `first<TAB>second<TAB>value` where a side starting with `@` names a kerning group, group membership lines, and optional metrics lines giving LSB, RSB, width and metrics keys per glyph. It exists because AFM cannot hold groups or keys and the reference's own metrics file is undocumented; it is also what the Kerning window copies as text."
+ref = "Import & Export › Exporting Metrics (the reference's undocumented Metrics File is the model for the content)"
+status = "inferred"
+
+[[format]]
+id = "fea-kern"
+label = "Kerning as feature code"
+extensions = ["fea"]
+read = true
+write = true
+spec = "https://adobe-type-tools.github.io/afdko/OpenTypeFeatureFileSpecification.html#6.b"
+area = "import-export"
+milestone = "M8"
+summary = "Writes a master's kerning as a `kern` feature with class definitions and pair-positioning rules, and reads simple pair rules (glyph or class on each side, x-advance only) from a `kern` or `dist` feature back into kerning and groups. Contextual rules, device adjustments and value records that change more than the advance are left as feature code."
+ref = "AFDKO OpenTypeFeatureFileSpecification › GPOS pair adjustment; Import & Export › Importing OpenType Features"
+status = "docs"
+
+# ───────────────────────────── Tool formats ─────────────────────────────
+
+[[format]]
+id = "ttx"
+label = "TTX (fontTools XML dump of OpenType tables)"
+extensions = ["ttx"]
+read = true
+write = true
+spec = "https://fonttools.readthedocs.io/en/latest/ttx.html"
+area = "import-export"
+milestone = "M12"
+summary = "XML rendering of a compiled font, one element per table, used to inspect, diff and patch binaries. Written and read by the command-line tools for the tables we model; tables we do not model go through as hex dumps so a dump-and-compile cycle keeps them."
+ref = "fontTools ttx documentation; AFDKO docs (ttx listed as a companion tool)"
+status = "docs"
+
+# ───────────────────────────── Images placed in glyphs ─────────────────────────────
+
+[[format]]
+id = "image-png"
+label = "PNG image placed in a glyph layer"
+extensions = ["png"]
+read = true
+write = true
+spec = "https://www.w3.org/TR/png/"
+area = "import-export"
+milestone = "M3"
+summary = "Placed as a tracing template or as the bitmap of a colour glyph. A Glyphs source stores only a path relative to the document, with position, scale, slant, rotation, crop and alpha; a UFO requires the file itself inside `images/` and allows PNG only, so other image types are converted to PNG when saving to UFO. Images are left out of exports except for bitmap colour fonts."
+ref = "Edit View › Images; UFO 3 images directory, GLIF image element; Color Fonts › Standard Bitmap Graphics"
+status = "docs"
+
+[[format]]
+id = "image-jpeg"
+label = "JPEG image placed in a glyph layer"
+extensions = ["jpg", "jpeg"]
+read = true
+write = false
+spec = "https://www.w3.org/Graphics/JPEG/itu-t81.pdf"
+area = "import-export"
+milestone = "M3"
+summary = "Placed by reference like PNG and used as a tracing template or as bitmap colour-glyph data. Not valid inside a UFO, so it is re-encoded as PNG there and the original relative path is remembered in the glyph lib."
+ref = "Edit View › Images; Color Fonts › Standard Bitmap Graphics"
+status = "handbook"
+
+[[format]]
+id = "image-tiff"
+label = "TIFF image placed in a glyph layer"
+extensions = ["tif", "tiff"]
+read = true
+write = false
+spec = "https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf"
+area = "import-export"
+milestone = "M11"
+summary = "Placed by reference like PNG; baseline TIFF (uncompressed, LZW, PackBits, 8-bit grey, RGB and RGBA) is decoded for display and for bitmap colour fonts. Other variants show the missing-image marker but keep their reference."
+ref = "Edit View › Images; Color Fonts › Standard Bitmap Graphics"
+status = "handbook"
+
+[[format]]
+id = "image-pdf"
+label = "PDF page placed as an image"
+extensions = ["pdf"]
+read = true
+write = false
+spec = "https://pdfa.org/resource/iso-32000-2/"
+area = "import-export"
+milestone = "M13"
+summary = "The reference accepts every image type its operating system can draw, which includes PDF and PSD. We keep the reference for any file type, and render a PDF's first page as a template once a renderer is available; until then, and always for PSD, the missing-image marker is shown and the reference survives saving."
+ref = "Edit View › Images › Adding Images"
+status = "handbook"
+
+# ───────────────────────────── Proof output ─────────────────────────────
+
+[[format]]
+id = "proof-pdf"
+label = "PDF proof sheet"
+extensions = ["pdf"]
+read = false
+write = true
+spec = "https://pdfa.org/resource/iso-32000-2/"
+area = "import-export"
+milestone = "M14"
+summary = "Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for."
+ref = "Appendix › Custom Parameters (PDF export scale); our design for the page content"
+status = "inferred"
+
+[[format]]
+id = "proof-html"
+label = "HTML specimen"
+extensions = ["html"]
+read = false
+write = true
+spec = "https://html.spec.whatwg.org/"
+area = "import-export"
+milestone = "M12"
+summary = "A single self-contained HTML page that embeds the freshly exported WOFF2 as a data URL and shows sample text, a character set table, feature toggles and, for variable fonts, axis sliders. Produced by the command-line tools and the export command for browser proofing."
+ref = "our design; fontbakery and fontmake leave proofing to external pages"
+status = "inferred"
+
+# ═════════════════════════════ Round-trip rules ═════════════════════════════
+
+# ── All formats ──
+
+[[behavior]]
+id = "roundtrip.unknownKeysPreserved"
+area = "import-export"
+milestone = "M1"
+summary = "Every key, attribute or element a reader does not model is stored untouched in the `extra` map of the struct it was found on and written back at the same place by the writer for that format. Readers never fail on an unknown key and never drop one silently; a strict mode only lists them."
+ref = "docs/spec/30-source-formats.md › Recommended model"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.extraIsPerFormat"
+area = "import-export"
+milestone = "M1"
+summary = "`extra` entries are tagged with the format family they came from (glyphs, ufo, designspace, binary). A writer emits only its own family's entries directly; entries from another family are written into that format's free-form container (Glyphs `userData`, UFO `lib`, designspace `lib`) under a `org.fontcraft.` key so that saving back to the original format restores them."
+ref = "docs/spec/30-source-formats.md › Concepts that exist in only one format"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.noOpSaveIsByteIdentical"
+area = "import-export"
+milestone = "M1"
+summary = "Opening a file written by the reference tools (Glyphs for .glyphs and .glyphspackage, fontTools ufoLib and designspaceLib for UFO and designspace) and saving it unedited in the same format and version reproduces every file byte for byte. This is tested on a corpus; any difference is a bug in the writer, not an accepted normalisation."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › File Format Details; our test policy"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.editsAreLocal"
+area = "import-export"
+milestone = "M1"
+summary = "Changing one value changes only the lines that encode that value (plus timestamps the format requires). Lists keep their order, untouched glyphs keep their exact text, and no writer re-sorts, re-wraps or re-rounds data that was not edited."
+ref = "docs/spec/30-source-formats.md › Recommended model"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.stableKeyOrder"
+area = "import-export"
+milestone = "M1"
+summary = "Key order is deterministic in every writer: dictionary keys of .glyphs files are sorted alphabetically as the format documents, native JSON writes struct fields in declaration order and map entries sorted by key, and UFO property lists are written with sorted keys. Order that carries meaning (glyphs, layers, shapes, nodes, features, parameters, kerning pairs as read) is kept as a list and never sorted."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › File Format Details (sorted keys)"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.floatFormatting"
+area = "import-export"
+milestone = "M1"
+summary = "Numbers are written as the shortest decimal text that reads back to the same 64-bit float, without exponent notation; whole values are written without a decimal point and negative zero as 0. The same routine serves every text writer, so a value never changes its spelling between two saves."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › Syntax (number grammar has no exponent); norad designspace tests (decimal values saved exactly)"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.coordinatesNotRounded"
+area = "import-export"
+milestone = "M1"
+summary = "Coordinates, widths, kerning values and transform factors are 64-bit floats in memory and are stored exactly as read. Rounding happens only through explicit actions (grid snapping while editing, the round-coordinates commands, the compiler's conversion to font units), never as a side effect of opening, saving or converting between source formats."
+ref = "Glyphs schema (`f64` for pos, width, kerning); UFO 3 conventions › integer or float"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.textEncoding"
+area = "import-export"
+milestone = "M1"
+summary = "All text formats are written as UTF-8 without a byte-order mark and with LF line ends; on read a BOM and CRLF are accepted and remembered in `extra` so they can be restored on a no-op save. Glyph names and strings are never case-folded or Unicode-normalised."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › File Format Details (UTF-8); UFO 3 conventions"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.atomicSave"
+area = "import-export"
+milestone = "M1"
+summary = "A single-file save writes a temporary file in the destination folder, flushes it to disk and renames it over the target, so a crash leaves either the old or the new file. Package and UFO saves apply the same per file and write index files (contents.plist, layercontents.plist, order.plist, fontinfo.plist) last; when a whole package is replaced (Save As, version change) it is built in a sibling temporary directory and swapped in by rename."
+ref = "norad src/font.rs (Font::save doc: save to a temporary location then move)"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.unchangedFilesUntouched"
+area = "import-export"
+milestone = "M1"
+summary = "In multi-file formats (.glyphspackage, UFO, a designspace with its UFOs) a file is rewritten only when its serialised bytes differ from what is on disk, and files that no longer belong (a deleted or renamed glyph) are removed. Modification times of untouched files do not change."
+ref = "Import & Export › Glyphs File Package (only changed files are modified)"
+status = "handbook"
+
+[[behavior]]
+id = "roundtrip.externalChangeDetected"
+area = "import-export"
+milestone = "M1"
+summary = "Before overwriting, the saver compares the size, modification time and hash recorded at load with the file on disk; if they differ it stops and returns a conflict (reload, overwrite or save elsewhere) instead of writing. For packages and UFOs the check is per file, so an untouched glyph edited by another tool is reloaded rather than clobbered."
+ref = "our design"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.lossReport"
+area = "import-export"
+milestone = "M1"
+summary = "Every save or export to a format that cannot hold part of the document returns a structured list of losses (object path, concept, what was done: dropped, decomposed, moved to lib). The UI shows it as a warning before the write is committed and the command line prints it; with `strict` set the write fails instead."
+ref = "Import & Export › Unified Font Object (unsupported features trigger a warning)"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.idsStable"
+area = "import-export"
+milestone = "M1"
+summary = "Master ids, layer ids, instance ids, shape-group ids and UFO object identifiers are read as opaque strings and never regenerated. New objects get a fresh uppercase UUID in a Glyphs-backed document and an identifier only when one is needed (object lib, hint reference) in a UFO-backed one."
+ref = "GlyphsSDK GlyphsFileFormatv3.md (fontMaster.id, layer.layerId, associatedMasterId); UFO 3 conventions › Identifiers"
+status = "docs"
+
+# ── Native format ──
+
+[[behavior]]
+id = "roundtrip.nativeVersioned"
+area = "import-export"
+milestone = "M1"
+summary = "A .fontcraft file starts with `formatVersion` (integer) and `appVersion`. Older versions are migrated in memory by a chain of one-step upgrade functions and written back in the current version only on an explicit save; a file with a higher version than the application knows opens read-only with a clear message."
+ref = "docs/spec/30-source-formats.md › Recommended model"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.nativeGzip"
+area = "import-export"
+milestone = "M1"
+summary = "A .fontcraft file may be gzip-compressed; the reader looks at the first two bytes rather than the file name. The writer keeps the state the file had when opened, compresses new files above a size threshold set in the settings, and always writes gzip with a zeroed timestamp and no file name so equal documents give equal bytes."
+ref = "docs/spec/30-source-formats.md › Recommended model"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.nativeDiffFriendly"
+area = "import-export"
+milestone = "M1"
+summary = "Uncompressed native JSON is indented with one object member per line, but point-like tuples (a node, a position, a scale, a colour, a kerning pair) stay on one line, so a diff of an outline edit shows one line per node. The glyph list is written in glyph order with one glyph object after another and a trailing newline ends the file."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › File Format Details (compact tuples) as the model"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.nativeLosslessFromGlyphs"
+area = "import-export"
+milestone = "M1"
+summary = "Converting .glyphs (version 2, 3 or 4, single file or package) to .fontcraft and back to the same .glyphs version and flavour gives a byte-identical file. The native file therefore records the source format version, the package flag, the original `.appVersion` and any formatting facts the Glyphs writer needs."
+ref = "docs/spec/30-source-formats.md › Recommended model"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.nativeLosslessFromUfo"
+area = "import-export"
+milestone = "M1"
+summary = "Converting a designspace with its UFOs (or a single UFO) to .fontcraft and back gives the same set of files with identical content: file names from contents.plist, layer directory names, identifiers, all libs, `data/` and `images/` entries and the designspace's relative paths are stored in the native file."
+ref = "docs/spec/30-source-formats.md › Recommended model"
+status = "inferred"
+
+# ── .glyphs writer ──
+
+[[behavior]]
+id = "roundtrip.glyphsSyntax"
+area = "import-export"
+milestone = "M1"
+summary = "The .glyphs writer follows the documented text conventions exactly: no indentation, one key or element per line, `key = value;` pairs, empty containers omitted except inside `userData`, tuples marked compact in the schema on one line, booleans as 1 and 0, and strings bare only when they match the bare-string grammar and do not look like a number. Tab and line-feed characters are written literally in the string values the reference writes that way (feature code, notes)."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › File Format Details, Syntax; Schemas (`glyphsCompact`)"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.glyphsVersionDifferences"
+area = "import-export"
+milestone = "M1"
+summary = "The writer is parameterised by format version: version 4 puts a comma after the last element of a multi-line array and writes colours as 0–1 floats, version 3 writes neither a trailing comma nor float colours, and version 2 writes legacy string forms for nodes, positions and transforms and accepts quoted booleans on read. Each key is written only in the versions the schema's version conditions allow."
+ref = "GlyphsSDK GlyphsFileFormatv4.md › File Format Details (trailing comma), color; Schemas (`glyphsCondition` minVersion/maxVersion)"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.glyphsFormatVersionKept"
+area = "import-export"
+milestone = "M1"
+summary = "A document is saved in the Glyphs format version it was opened in until the user changes the file-format-version setting; new documents use version 3. When the document contains data the chosen version cannot hold, the save lists it through the loss report and nothing is silently moved into another key."
+ref = "Font Info › Other › File Format Version; Import & Export › Glyphs File"
+status = "handbook"
+
+[[behavior]]
+id = "roundtrip.glyphsDefaultsOmitted"
+area = "import-export"
+milestone = "M1"
+summary = "Keys whose value equals the documented default are not written (for example `export` when true, component `scale` when 1,1, `angle` when 0, `locked` when false), with the exception that a key present at its default in the file as read is remembered and written again. Required keys are always written."
+ref = "GlyphsSDK GlyphsFileFormatv3.md (defaults per key); Schemas (`default`, `required`)"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.glyphsDerivedNamesNotWritten"
+area = "import-export"
+milestone = "M1"
+summary = "Layer names that the application derives from the layer's role (a master layer shows its master's name, an intermediate layer shows its coordinates) are not stored; the `name` key is written only for layers whose name is real data, such as backups. `associatedMasterId` is omitted when it equals the layer id."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › layer.name, layer.associatedMasterId"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.glyphsDependentValues"
+area = "import-export"
+milestone = "M1"
+summary = "Values that reference each other are kept consistent by the model, not by the writer: master ids against layer ids, `associatedMasterId`, kerning tables, `instanceInterpolations` and component `masterId`; parallel lists (`axesValues`, `metricValues`, `stemValues`, `numberValues`, `axisRules`, `coordinates`) against the font-level list they index. Adding, removing or reordering an axis, metric, stem or number rewrites every parallel list in one undoable step."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › File Format Details (dependent values); fontMaster, layerAttr"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.glyphsPackageLayout"
+area = "import-export"
+milestone = "M1"
+summary = "A package keeps its split exactly: glyph files under `glyphs/` named by the same glyph-name-to-file-name rule the reference uses, order in `order.plist`, display strings in `UIState.plist`, and for version 4 the kerning, note and feature files in their own places. Display strings are UI state: changing them does not mark the document as edited for version control purposes and they are left out entirely when the `Write DisplayStrings` parameter is off."
+ref = "GlyphsSDK GlyphsFileFormatv4.md › Package; Import & Export › Glyphs File Package; Appendix › Custom Parameters (Write DisplayStrings)"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.glyphsLastChange"
+area = "import-export"
+milestone = "M1"
+summary = "A glyph's `lastChange` is updated only when that glyph was actually edited, and not at all when the font carries a disabled `Write lastChange` parameter. Opening, converting and saving alone never touch it."
+ref = "Font View › glyph properties (Write lastChange); GlyphsSDK GlyphsFileFormatv3.md › glyph.lastChange"
+status = "handbook"
+
+[[behavior]]
+id = "roundtrip.glyphsAppVersionKept"
+area = "import-export"
+milestone = "M1"
+summary = "The `.appVersion` build number found in a file is written back unchanged, because the reference may use it to decide how to interpret the file; our own tool name and version go into a `org.fontcraft.` entry of the font's `userData`. New files get the build number of the newest reference build whose output our writer has been tested against."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › .appVersion"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.glyphsUserDataVerbatim"
+area = "import-export"
+milestone = "M1"
+summary = "`userData` on the font, masters, instances, glyphs, layers and (by version) anchors, guides, components and nodes is an arbitrary property-list value: kept as a tree including empty containers and binary data blocks, never interpreted, and written back in place. Custom parameters are kept as an ordered list of name, value and disabled flag, allowing repeated names and names we do not know."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › userData, customParameter; File Format Details (userData keeps empty structures)"
+status = "docs"
+
+# ── UFO and designspace writers ──
+
+[[behavior]]
+id = "roundtrip.ufoLibsVerbatim"
+area = "import-export"
+milestone = "M1"
+summary = "lib.plist, every glyph `lib`, every layerinfo `lib`, and everything under `data/` are preserved as found, including keys of other tools. Keys we understand (the `public.` registry and the Glyphs converter keys) are parsed into model fields and written back from them; all others stay as opaque property-list values."
+ref = "UFO 3 lib.plist, GLIF lib, layerinfo.plist, data directory"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.ufoIdentifiers"
+area = "import-export"
+milestone = "M1"
+summary = "An `identifier` on a point, contour, component, anchor or guideline is never removed or changed once present, and stays unique within its glyph. `public.objectLibs` is kept in step with them: an entry follows its object through edits and is deleted when the object is, and a new identifier is minted only when an object first needs an object lib."
+ref = "UFO 3 conventions › Identifiers; GLIF › public.objectLibs; lib.plist › public.objectLibs"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.ufoFileNames"
+area = "import-export"
+milestone = "M1"
+summary = "GLIF file names and layer directory names are taken from contents.plist and layercontents.plist and reused on save; only new glyphs and layers get names from the specification's user-name-to-file-name algorithm. The `name` attribute inside a GLIF is ignored on read, as the specification asks, and rewritten to match contents.plist on save."
+ref = "UFO 3 conventions › Common User Name to File Name Algorithm; glyphs/contents.plist; GLIF › glyph"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.ufoXmlFormatting"
+area = "import-export"
+milestone = "M1"
+summary = "UFO files are written in the layout fontTools ufoLib produces (XML declaration, indentation, attribute order per element, property-list DOCTYPE), which is what most UFOs on disk look like; norad's own default indents with one tab, so its write options are set explicitly. A document remembers the indentation and quote style its files used when read and writes that back."
+ref = "norad src/write.rs (WriteOptions: indentation and quote character; default is one tab)"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.ufoVersionKept"
+area = "import-export"
+milestone = "M1"
+summary = "A UFO is saved in the major version it was opened in, 2 or 3; UFOs created by export are always version 3. Saving version 2 folds anchors back into single-point contours, drops identifiers, guidelines, images and extra layers through the loss report, and restores the original kerning group names remembered at load."
+ref = "Import & Export › Unified Font Object (version maintained; export writes version 3)"
+status = "handbook"
+
+[[behavior]]
+id = "roundtrip.ufoKerningGroups"
+area = "import-export"
+milestone = "M1"
+summary = "A glyph's right-side kerning group R becomes membership of `public.kern1.R` and its left-side group L membership of `public.kern2.L`; reading inverts this. Kerning pair sides that name a group use the same prefixed names, and all groups without a kerning prefix are kept as ordinary named glyph groups in their stored order."
+ref = "UFO 3 groups.plist › Kerning Groups; fontc glyphs2fontir src/source.rs (right group is side 1, left group is side 2)"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.ufoGlyphsLibKeys"
+area = "import-export"
+milestone = "M1"
+summary = "When a document that began as a Glyphs source is written to UFO, Glyphs-only data goes into `com.schriftgestaltung.` lib keys in the spellings existing converters use, so other tools and a later import find them where they expect; data with no established key goes under `org.fontcraft.`. Reading a UFO restores model fields from both families."
+ref = "docs/spec/30-source-formats.md › Concepts that exist in only one format; lib keys seen in fontc, fontTools and fontmake test data"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.ufoMastersShareStructure"
+area = "import-export"
+milestone = "M1"
+summary = "Saving a multi-master document to designspace writes font-wide data once per UFO as each UFO requires it (glyph order, features, groups, names, units per em) and keeps it identical across masters unless the files differed when read. Differences found on load (per-master groups, feature text or glyph sets) are preserved as per-master overrides rather than merged away."
+ref = "fontc fontir src/ir.rs (KerningInstance: groups are per source); UFO 3 specification (one UFO is one master)"
+status = "inferred"
+
+[[behavior]]
+id = "roundtrip.designspaceVerbatim"
+area = "import-export"
+milestone = "M1"
+summary = "A designspace keeps its relative `filename` paths as written (forward slashes, never made absolute), its source, instance and rule order, the `name` attributes used for cross references, its three kinds of `lib`, and any deprecated or unknown child elements. The `format` number is raised only when the document uses something a newer minor version introduced."
+ref = "fontTools designspaceLib xml.rst; fontTools/designspaceLib/__init__.py (minimum version on write)"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.designspaceCoordinates"
+area = "import-export"
+milestone = "M1"
+summary = "Locations are stored in the space the file used: design coordinates (`xvalue`, optional `yvalue`) or user coordinates (`uservalue`) per dimension, and are written back in that space. An axis keeps its `map` nodes exactly; the model converts between the two spaces on demand and never rewrites one as the other."
+ref = "fontTools designspaceLib xml.rst › dimension, map"
+status = "docs"
+
+# ── Outlines ──
+
+[[behavior]]
+id = "roundtrip.curveTypesKept"
+area = "import-export"
+milestone = "M1"
+summary = "Cubic and quadratic segments are both first-class and are stored as drawn: opening a TrueType font or a UFO with `qcurve` points keeps quadratic curves, including runs of several off-curve points with implied on-curve points and contours made only of off-curve points. Conversion happens only on an explicit command or in the compiler."
+ref = "Import & Export › Opening TrueType Font; UFO 3 GLIF › Point Types"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.startNodeConvention"
+area = "import-export"
+milestone = "M1"
+summary = "The model stores a closed path with its start node first. The Glyphs reader and writer convert from and to the Glyphs convention, in which the start node of a closed path is the last entry of the node list; the UFO reader and writer use the list as it is. Open paths begin with their first node in both formats, typed `move` in GLIF."
+ref = "fontc glyphs-reader src/font.rs (last node is the start node), glyphs2fontir src/toir.rs; UFO 3 GLIF › Point Types (move)"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.shapeOrderKept"
+area = "import-export"
+milestone = "M1"
+summary = "Paths and components live in one ordered `shapes` list, as in Glyphs version 3 and later. GLIF and Glyphs version 2 store components and contours separately, so writing those formats records the interleaved order in a lib or user-data key and reading restores it; without the key, components come first, then contours."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › layer.shapes; UFO 3 GLIF › outline; lib key com.schriftgestaltung.Glyphs.shapeOrder seen in fontc test data"
+status = "docs"
+
+[[behavior]]
+id = "roundtrip.componentTransformKept"
+area = "import-export"
+milestone = "M1"
+summary = "A component stores the decomposed transform Glyphs uses (position, scale, rotation angle, slant) and the six-number matrix is derived from it in the order translate, slant, rotate, scale. A matrix read from UFO or Glyphs version 2 is decomposed once and the original six numbers are kept, so writing back to a matrix format reproduces them exactly instead of a recomputed approximation."
+ref = "GlyphsSDK GlyphsFileFormatv3.md › component (pos, scale, angle, slant); UFO 3 GLIF › component; fontc glyphs-reader src/font.rs (composition order)"
+status = "docs"
+
+# ── Compiled fonts ──
+
+[[behavior]]
+id = "roundtrip.binaryOpenIsLossy"
+area = "import-export"
+milestone = "M1"
+summary = "A compiled font opens as an unsaved, view-only document that must be saved to a source format before it can be changed in place; export never overwrites the file that was opened. Opening and exporting again is not expected to reproduce the original binary, and the open command returns the list of tables and data that did not become editable."
+ref = "Import & Export › Opening Font Files"
+status = "handbook"
+
+[[behavior]]
+id = "roundtrip.binaryGlyphOrderRecorded"
+area = "import-export"
+milestone = "M1"
+summary = "The glyph order of an opened binary is written into the font's `glyphOrder` parameter so a later export keeps glyph ids, and original glyph names are kept when the keep-names setting is on. Otherwise names are mapped to the built-in naming scheme and the original name is stored as the production name."
+ref = "Import & Export › Opening Font Files, Font File Importing Behaviors"
+status = "handbook"
+
+[[behavior]]
+id = "roundtrip.binaryPassThroughTables"
+area = "import-export"
+milestone = "M12"
+summary = "Tables the importer does not turn into editable data are kept as raw bytes in the font's `extra` (family `binary`) together with the checksum of the glyph set they belong to. The command-line tools can copy them into an export unchanged when asked; the editor's normal export ignores them, because stale tables next to edited glyphs are worse than missing ones."
+ref = "our design; fontTools ttx keeps unknown tables as hex"
+status = "inferred"
