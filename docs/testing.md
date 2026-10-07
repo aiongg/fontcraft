@@ -69,6 +69,10 @@ table of results. The corpus-wide run is how the "compile" row of the parity tab
 - **Source round trips.** `.glyphs → model → .glyphs` is compared byte for byte, and semantically
   where the format allows several spellings. UFO likewise. The fontc `.glyphs` reader and norad
   are second readers of what we wrote.
+  `cargo xtask roundtrip` runs this over the whole corpus and prints, per format and version,
+  how many files come back identical; files saved by the format's reference tool are reported
+  apart, since only they are held to byte identity. Accepted differences, each with its reason,
+  are in `xtask/roundtrip-allow.toml`.
 - **Path operations.** Overlap removal is compared with the result's area and winding, and with
   an independent implementation where one is available; property tests (a union's area is at most
   the sum, removing overlap twice changes nothing).
@@ -84,7 +88,7 @@ by commit in `xtask/corpus.toml` and fetched into the git-ignored `corpus/`:
 
 ```sh
 cargo xtask corpus            # what is pinned, what is present
-cargo xtask corpus --fetch    # download at the pinned commits (several hundred megabytes)
+cargo xtask corpus --fetch    # download at the pinned commits (about 300 MB)
 ```
 
 | Corpus | Use |
@@ -93,6 +97,8 @@ cargo xtask corpus --fetch    # download at the pinned commits (several hundred 
 | `fonttools` (`Tests/`) | feature files with expected output, designspace and variation-model cases, subset and merge fixtures |
 | `oswald` | one real variable family in `.glyphs`: the first whole-family comparison |
 | `inter` | a large real family in package form: performance budgets and round-trip stress |
+| `glyphssdk` | the format documents' own sample files for versions 2 and 3, single file and package |
+| `markow`, `glyphspack`, `glyphs-mcp`, `openplotfont` | the only version 4 files: one real family, one font as file and package, small documents and packages (16 files in all) |
 
 A test that needs a corpus skips with a message when it is absent. To add a corpus, check its
 licence, add a pin with the licence and what it holds, and say here which tests use it.

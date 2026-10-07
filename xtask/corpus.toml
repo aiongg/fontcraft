@@ -1,4 +1,4 @@
-# Real-file test corpora, pinned by commit. `cargo xtask corpus --fetch` downloads them into
+# Real-file test corpora, pinned by commit. Optional `paths` limits the checkout to those paths. `cargo xtask corpus --fetch` downloads them into
 # corpus/<name> (git-ignored). Nothing here is ever committed to this repository.
 # Licences were read from each repository's licence file on 2026-10-07.
 
@@ -29,3 +29,43 @@ repo = "https://github.com/rsms/inter"
 commit = "353b61b9f4430d5f420d56605a6e7993e0941470"
 licence = "OFL-1.1"
 holds = "src/Inter-Roman.glyphspackage and Inter-Italic.glyphspackage: a large real family in package form (thousands of glyphs, features, two axes)"
+
+# Added 2026-10-07 for M1. Licences read from each repository's licence file that day. The
+# version 4 files carry an `.appVersion` of a version 4 build (3874 to 4108).
+
+[[corpus]]
+name = "glyphssdk"
+repo = "https://github.com/schriftgestalt/GlyphsSDK"
+commit = "569244a7181e08fc7c5230bcdfad6b9f7e5ea11f"
+licence = "Apache-2.0"
+holds = "GlyphsFileFormat/: the format documents, JSON schemas, and sample files for versions 2 and 3 (single file and package) written to exercise the documented keys"
+
+[[corpus]]
+name = "markow"
+repo = "https://github.com/pprmint/MN-Markow"
+commit = "2948b86c093046efec9a53ae4e195812b5f7f0ac"
+licence = "OFL-1.1"
+holds = "sources/Markow.glyphs: a real family saved in format version 4"
+
+[[corpus]]
+name = "glyphspack"
+repo = "https://github.com/Formkunft/glyphspack"
+commit = "3ced1a5538537ae4b99ad971fa43264f3b4ddc95"
+licence = "Apache-2.0 (the fixtures are cut from Andika, OFL-1.1)"
+holds = "tests/fixtures/: the same small font as a version 4 .glyphs file and as a version 4 package"
+
+[[corpus]]
+name = "glyphs-mcp"
+repo = "https://github.com/thierryc/Glyphs-mcp"
+commit = "734995966373329f5ec562cf337e22d9ecae7741"
+licence = "Apache-2.0"
+holds = "reports/document-creation-20260930/: small version 4 documents and packages created through the app"
+paths = ["/LICENSE", "/reports/document-creation-20260930/"]
+
+[[corpus]]
+name = "openplotfont"
+repo = "https://github.com/thierryc/OpenPlotFont"
+commit = "c6ec987a7843f44735309d3e5e40d206b2fa370f"
+licence = "MIT"
+holds = "fonts/*/: single-stroke families as version 4 packages"
+paths = ["/LICENSE", "/fonts/"]

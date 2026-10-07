@@ -1,0 +1,7 @@
+# Corpus files whose round trip may differ from the original, each with the reason.
+# `cargo xtask roundtrip` reports them as "allowed" instead of "different". A reason must say why
+# the difference is not our bug (for example: the file was edited by hand after the app saved it).
+#
+# [[allow]]
+# path = "fontc/resources/testdata/glyphs3/Example.glyphs"   # relative to corpus/
+# reason = "…"

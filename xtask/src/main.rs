@@ -7,6 +7,7 @@ mod brands;
 mod corpus;
 mod layers;
 mod parity;
+mod roundtrip;
 mod spec;
 
 use std::path::{Path, PathBuf};
@@ -28,6 +29,9 @@ commands:
   wasm            cargo check --target wasm32-unknown-unknown for every crate that must run in the browser
   corpus [--fetch]
                   list the pinned real-file test corpora; --fetch downloads them into corpus/ (git-ignored)
+  roundtrip [--mode plist|model] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
+                  read every corpus source and write it back; count byte-identical results
+                  (known differences with a reason: xtask/roundtrip-allow.toml)
 ";
 
 fn main() -> ExitCode {
@@ -42,6 +46,7 @@ fn main() -> ExitCode {
         Some("layers") => cmd_layers(),
         Some("wasm") => cmd_wasm(),
         Some("corpus") => corpus::run(&root(), rest.contains(&"--fetch")),
+        Some("roundtrip") => roundtrip::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");
             Ok(())

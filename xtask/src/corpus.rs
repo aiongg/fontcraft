@@ -2,7 +2,8 @@
 //!
 //! The pins are in `xtask/corpus.toml`. `--fetch` downloads each repository at exactly its pinned
 //! commit into `corpus/<name>` (git-ignored). A git commit id names its content, so a fetched
-//! corpus is verified by construction. Tests that use a corpus skip with a message when it is
+//! corpus is verified by construction. A pin with `paths` checks out only those paths (a sparse,
+//! blob-less fetch), for repositories where the test files are a small part of a large tree. Tests that use a corpus skip with a message when it is
 //! absent; `docs/testing.md` explains which tests use which corpus.
 
 use std::path::Path;
@@ -16,6 +17,8 @@ pub struct Pin {
     pub commit: String,
     pub licence: String,
     pub holds: String,
+    /// Paths to check out; empty means the whole tree.
+    pub paths: Vec<String>,
 }
 
 pub fn pins(root: &Path) -> Result<Vec<Pin>, String> {
@@ -26,7 +29,14 @@ pub fn pins(root: &Path) -> Result<Vec<Pin>, String> {
     let mut out = Vec::new();
     for r in rows {
         let get = |k: &str| r.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let pin = Pin { name: get("name"), repo: get("repo"), commit: get("commit"), licence: get("licence"), holds: get("holds") };
+        let paths = match r.get("paths") {
+            None => Vec::new(),
+            Some(v) => v
+                .as_array()
+                .and_then(|a| a.iter().map(|p| p.as_str().map(str::to_string)).collect::<Option<Vec<_>>>())
+                .ok_or_else(|| format!("xtask/corpus.toml: `paths` of `{}` must be a list of strings", get("name")))?,
+        };
+        let pin = Pin { name: get("name"), repo: get("repo"), commit: get("commit"), licence: get("licence"), holds: get("holds"), paths };
         let hex = pin.commit.len() == 40 && pin.commit.chars().all(|c| c.is_ascii_hexdigit());
         let plain = !pin.name.is_empty() && pin.name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
         if !hex || !plain || !pin.repo.starts_with("https://") || pin.licence.is_empty() {
@@ -60,7 +70,14 @@ pub fn run(root: &Path, fetch: bool) -> Result<(), String> {
                 git(&dir, &["remote", "add", "origin", &pin.repo])?;
             }
             eprintln!("fetching {} at {}…", pin.name, &pin.commit[..12]);
-            git(&dir, &["fetch", "-q", "--depth", "1", "origin", &pin.commit])?;
+            if pin.paths.is_empty() {
+                git(&dir, &["fetch", "-q", "--depth", "1", "origin", &pin.commit])?;
+            } else {
+                git(&dir, &["fetch", "-q", "--depth", "1", "--filter=blob:none", "origin", &pin.commit])?;
+                let mut args = vec!["sparse-checkout", "set", "--no-cone"];
+                args.extend(pin.paths.iter().map(String::as_str));
+                git(&dir, &args)?;
+            }
             git(&dir, &["checkout", "-q", "--detach", "FETCH_HEAD"])?;
         }
         let state = match git(&dir, &["rev-parse", "HEAD"]).ok() {
