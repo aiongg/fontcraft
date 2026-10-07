@@ -425,6 +425,7 @@ impl Font {
                     }
                     inner
                 }
+                Shape::Raw(_) => continue,
             };
             // Charge what this glyph adds, including what its components brought, so nested
             // references cannot multiply the work past the budget.
@@ -439,13 +440,19 @@ impl Font {
         if !UPM_RANGE.contains(&self.units_per_em) {
             return Err(ModelError::BadUnitsPerEm(u32::from(self.units_per_em)));
         }
-        check_name("family", &self.family_name)?;
+        // A source may leave the family name empty; a compiled font then gets a stand-in.
+        if !self.family_name.is_empty() {
+            check_name("family", &self.family_name)?;
+        }
         if self.masters.is_empty() {
             return Err(ModelError::NoMaster);
         }
         let mut ids = HashSet::new();
         for m in self.masters.iter() {
-            check_name("master", &m.name)?;
+            // A master may have no name of its own: the reference derives one from its axis values.
+            if !m.name.is_empty() {
+                check_name("master", &m.name)?;
+            }
             check_name("master id", &m.id)?;
             if !ids.insert(m.id.as_str()) {
                 return Err(ModelError::DuplicateMaster(m.id.clone()));
@@ -507,6 +514,7 @@ impl Font {
                             return Err(bad("a component transform is not a number".into()));
                         }
                     }
+                    Shape::Raw(_) => {}
                 }
             }
             if l.anchors.iter().any(|a| !(in_range(a.x) && in_range(a.y))) {

@@ -79,8 +79,10 @@ pub struct Sample {
     /// Format version as the file states it ("2", "3", "4" for `.glyphs`; "2", "3" for UFO; the
     /// `format` attribute for designspace). `None` when it could not be read.
     pub version: Option<String>,
-    /// Saved by the reference tool for that format: the reference app for `.glyphs` (it writes
-    /// `.appVersion`), fontTools ufoLib for UFO. Only these are held to byte identity.
+
+    /// Saved by the reference tool for that format and not edited since: the reference app for
+    /// `.glyphs` (it writes `.appVersion`; fontc's hand-made test data excepted), fontTools ufoLib
+    /// for UFO. Only these are held to byte identity.
     pub reference_written: bool,
 }
 
@@ -136,7 +138,11 @@ fn sniff(path: &Path, kind: Kind) -> (Option<String>, bool) {
                 .find_map(|l| l.strip_prefix(".formatVersion = ").map(|v| v.trim_end_matches(';').trim().to_string()))
                 .unwrap_or_else(|| "2".to_string());
             let app = text.lines().any(|l| l.starts_with(".appVersion = "));
-            (Some(version), app)
+            // fontc's test data carries the app's header but was written or edited by hand (blank
+            // lines, unsorted keys, quoted plain names, missing required keys), so it is not held
+            // to the reference's bytes.
+            let hand_written = path.components().any(|c| c.as_os_str() == "fontc");
+            (Some(version), app && !hand_written)
         }
         Kind::Ufo => {
             let meta = head(&path.join("metainfo.plist"), 4096);

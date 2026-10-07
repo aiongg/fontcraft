@@ -17,4 +17,5 @@ serde_json.workspace = true
 toml = "1"
 fontcraft-engine.workspace = true
 fontcraft-plist.workspace = true
+fontcraft-io-glyphs.workspace = true
 fontcraft-ui-egui.workspace = true

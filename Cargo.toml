@@ -16,6 +16,7 @@ fontcraft-geom = { path = "crates/geom" }
 fontcraft-plist = { path = "crates/plist" }
 fontcraft-model = { path = "crates/model" }
 fontcraft-format = { path = "crates/format" }
+fontcraft-io-glyphs = { path = "crates/io-glyphs" }
 fontcraft-compile = { path = "crates/compile" }
 fontcraft-engine = { path = "crates/engine" }
 fontcraft-mcp = { path = "crates/mcp" }

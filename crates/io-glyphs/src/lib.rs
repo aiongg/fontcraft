@@ -1,0 +1,637 @@
+//! The primary reference's source format, `.glyphs` (L3): reading into the model and writing back.
+//!
+//! The reader moves each key the model has a field for out of its dictionary and into that field;
+//! every other key goes to the object's [`Extra`] as a property-list value with its spelling and
+//! layout. The writer builds the dictionaries back from the fields and the extra entries, and
+//! sorts their keys byte-wise, as the reference does (`docs/plans/M1.md` § 5). Keys whose value is
+//! the documented default are left out, as the reference leaves them out.
+//!
+//! Written from the format documents and JSON schemas in GlyphsSDK (Apache-2.0) and from files in
+//! the test corpus. Format versions 3 and 4 are supported; version 2 is not yet.
+//!
+//! Shapes the model cannot hold yet (format 4 images and groups, paths with quartic, Hobby or
+//! spiral nodes, paths whose node list does not make an outline) are kept as [`Shape::Raw`].
+#![forbid(unsafe_code)]
+
+use std::sync::Arc;
+
+use fontcraft_model::{
+    Anchor, Component, Extra, Family, Font, Glyph, GlyphTable, Layer, Master, MetricDef, MetricValue, ModelError, Node, NodeKind, Path, RawShape,
+    Shape, Source, SourceFormat, Transform,
+};
+use fontcraft_plist::openstep::{self, Dialect};
+use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
+
+#[derive(Debug, thiserror::Error)]
+pub enum GlyphsError {
+    #[error(transparent)]
+    Syntax(#[from] fontcraft_plist::Error),
+    #[error("{at}: {message}")]
+    Bad { at: String, message: String },
+    #[error("not supported yet: {0}")]
+    Unsupported(String),
+    #[error(transparent)]
+    Model(#[from] ModelError),
+}
+
+type Result<T> = std::result::Result<T, GlyphsError>;
+
+fn bad(at: &str, message: impl Into<String>) -> GlyphsError {
+    GlyphsError::Bad { at: at.to_string(), message: message.into() }
+}
+
+/// Reads a single-file `.glyphs` document.
+pub fn read(text: &str) -> Result<Font> {
+    let doc = openstep::parse(text)?;
+    let Value::Dict(root) = doc.root else { return Err(bad("the file", "the top level is not a dictionary")) };
+    let font = read_font(root)?;
+    font.check()?;
+    Ok(font)
+}
+
+/// Writes a document as a single `.glyphs` file in the format version it was read in (version 3
+/// for a document that did not come from a `.glyphs` file).
+pub fn write(font: &Font) -> Result<String> {
+    let version = font.source.glyphs_version.unwrap_or(3);
+    let dialect = match version {
+        3 => Dialect::Glyphs3,
+        4 => Dialect::Glyphs4,
+        v => return Err(GlyphsError::Unsupported(format!("writing format version {v}"))),
+    };
+    let root = write_font(font, version)?;
+    Ok(openstep::write(&openstep::Document::new(Value::Dict(root)), dialect))
+}
+
+// ── reading ────────────────────────────────────────────────────────────────────────────────────
+
+fn take(d: &mut Dict, key: &str) -> Option<Value> {
+    let i = d.entries.iter().position(|(k, _)| k.as_str() == key)?;
+    Some(d.entries.remove(i).1)
+}
+
+fn into_extra(d: Dict) -> Extra {
+    let mut x = Extra::new();
+    for (k, v) in d.entries {
+        x.push(Family::Glyphs, k, v);
+    }
+    x
+}
+
+fn as_f64(v: &Value, at: &str) -> Result<f64> {
+    match v {
+        Value::Number(n) => Ok(n.value().as_f64()),
+        _ => Err(bad(at, "expected a number")),
+    }
+}
+
+fn as_int(v: &Value, at: &str) -> Result<i64> {
+    match v.as_num() {
+        Some(Num::Int(i)) => Ok(i),
+        _ => Err(bad(at, "expected a whole number")),
+    }
+}
+
+fn as_u16(v: &Value, at: &str) -> Result<u16> {
+    u16::try_from(as_int(v, at)?).map_err(|_| bad(at, "expected a number from 0 to 65535"))
+}
+
+fn as_string(v: Value, at: &str) -> Result<String> {
+    match v {
+        Value::String(s) => Ok(s.as_str().to_string()),
+        _ => Err(bad(at, "expected a string")),
+    }
+}
+
+fn as_dict(v: Value, at: &str) -> Result<Dict> {
+    match v {
+        Value::Dict(d) => Ok(d),
+        _ => Err(bad(at, "expected a dictionary")),
+    }
+}
+
+fn as_items(v: Value, at: &str) -> Result<Vec<Value>> {
+    match v {
+        Value::Array(a) => Ok(a.items),
+        _ => Err(bad(at, "expected a list")),
+    }
+}
+
+fn as_bool01(v: &Value, at: &str) -> Result<bool> {
+    match as_int(v, at)? {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(bad(at, "expected 0 or 1")),
+    }
+}
+
+/// A compact pair such as `(10,20)`.
+fn as_pair(v: &Value, at: &str) -> Result<(f64, f64)> {
+    match v.as_array().map(|a| a.items.as_slice()) {
+        Some([x, y]) => Ok((as_f64(x, at)?, as_f64(y, at)?)),
+        _ => Err(bad(at, "expected a pair of numbers")),
+    }
+}
+
+/// The family name of a version 4 file, which keeps it among the `properties`.
+fn v4_family_name(root: &Dict) -> Option<String> {
+    let props = root.get("properties")?.as_array()?;
+    props.items.iter().find_map(|p| {
+        let d = p.as_dict()?;
+        if d.get("key")?.as_str()? != "familyNames" {
+            return None;
+        }
+        let first = d.get("values")?.as_array()?.items.first()?.as_dict()?;
+        first.get("value")?.as_str().map(str::to_string)
+    })
+}
+
+fn read_font(mut root: Dict) -> Result<Font> {
+    let version = match take(&mut root, ".formatVersion") {
+        Some(v) => as_int(&v, ".formatVersion")?,
+        None => return Err(GlyphsError::Unsupported("format version 2".into())),
+    };
+    if !(3..=4).contains(&version) {
+        return Err(GlyphsError::Unsupported(format!("format version {version}")));
+    }
+    let family_name = if version >= 4 {
+        v4_family_name(&root).unwrap_or_default()
+    } else {
+        take(&mut root, "familyName").map(|v| as_string(v, "familyName")).transpose()?.unwrap_or_default()
+    };
+    let units_per_em = as_u16(&take(&mut root, "unitsPerEm").ok_or_else(|| bad("the file", "no unitsPerEm"))?, "unitsPerEm")?;
+    let version_major = take(&mut root, "versionMajor").map(|v| as_u16(&v, "versionMajor")).transpose()?.unwrap_or(0);
+    let version_minor = take(&mut root, "versionMinor").map(|v| as_u16(&v, "versionMinor")).transpose()?.unwrap_or(0);
+    let metrics = match take(&mut root, "metrics") {
+        Some(v) => as_items(v, "metrics")?.into_iter().enumerate().map(|(i, m)| read_metric(m, &format!("metrics[{i}]"))).collect::<Result<_>>()?,
+        None => Vec::new(),
+    };
+    let masters = match take(&mut root, "fontMaster") {
+        Some(v) => {
+            as_items(v, "fontMaster")?.into_iter().enumerate().map(|(i, m)| read_master(m, &format!("fontMaster[{i}]"))).collect::<Result<_>>()?
+        }
+        None => Vec::new(),
+    };
+    let glyphs = match take(&mut root, "glyphs") {
+        Some(v) => as_items(v, "glyphs")?
+            .into_iter()
+            .enumerate()
+            .map(|(i, g)| read_glyph(g, &format!("glyphs[{i}]")).map(Arc::new))
+            .collect::<Result<Vec<_>>>()?,
+        None => Vec::new(),
+    };
+    Ok(Font {
+        source: Source { format: SourceFormat::Glyphs, glyphs_version: u32::try_from(version).ok() },
+        family_name,
+        units_per_em,
+        version_major,
+        version_minor,
+        metrics: Arc::new(metrics),
+        masters: Arc::new(masters),
+        glyphs: GlyphTable::from_glyphs(glyphs),
+        extra: Arc::new(into_extra(root)),
+    })
+}
+
+fn opt_string(d: &mut Dict, key: &str, at: &str) -> Result<Option<String>> {
+    take(d, key).map(|v| as_string(v, &format!("{at}.{key}"))).transpose()
+}
+
+fn read_metric(v: Value, at: &str) -> Result<MetricDef> {
+    let mut d = as_dict(v, at)?;
+    let kind = opt_string(&mut d, "type", at)?.unwrap_or_default();
+    let name = opt_string(&mut d, "name", at)?;
+    let filter = opt_string(&mut d, "filter", at)?;
+    Ok(MetricDef { kind, name, filter, extra: into_extra(d) })
+}
+
+fn read_master(v: Value, at: &str) -> Result<Master> {
+    let mut d = as_dict(v, at)?;
+    let id = opt_string(&mut d, "id", at)?.ok_or_else(|| bad(at, "a master has no id"))?;
+    let name = opt_string(&mut d, "name", at)?.unwrap_or_default();
+    // Metric values become fields only when every entry is a plain `{over, pos}`; anything else
+    // stays as written.
+    let mut metric_values = Vec::new();
+    if let Some(values) = take(&mut d, "metricValues") {
+        match plain_metric_values(&values) {
+            Some(mv) => metric_values = mv,
+            None => d.entries.push(("metricValues".into(), values)),
+        }
+    }
+    Ok(Master { id, name, metric_values, extra: into_extra(d) })
+}
+
+fn plain_metric_values(v: &Value) -> Option<Vec<MetricValue>> {
+    v.as_array()?
+        .items
+        .iter()
+        .map(|m| {
+            let d = m.as_dict()?;
+            if d.entries.iter().any(|(k, _)| !matches!(k.as_str(), "pos" | "over")) {
+                return None;
+            }
+            let get = |k: &str| d.get(k).map_or(Some(0.0), |v| v.as_num().map(Num::as_f64));
+            Some(MetricValue { pos: get("pos")?, over: get("over")? })
+        })
+        .collect()
+}
+
+fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
+    let mut d = as_dict(v, at)?;
+    let name = opt_string(&mut d, "glyphname", at)?.ok_or_else(|| bad(at, "a glyph has no glyphname"))?;
+    let at = format!("glyph `{name}`");
+    // Code points written in any other way than numbers are kept as written.
+    let unicodes = match take(&mut d, "unicode") {
+        None => Vec::new(),
+        Some(v) => match code_points(&v) {
+            Some(u) => u,
+            None => {
+                d.entries.push(("unicode".into(), v));
+                Vec::new()
+            }
+        },
+    };
+    let export = take(&mut d, "export").map(|v| as_bool01(&v, &format!("{at}.export"))).transpose()?.unwrap_or(true);
+    let layers = match take(&mut d, "layers") {
+        Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at)).collect::<Result<_>>()?,
+        None => Vec::new(),
+    };
+    Ok(Glyph { name, unicodes, export, layers, extra: into_extra(d) })
+}
+
+fn code_points(v: &Value) -> Option<Vec<u32>> {
+    let one = |v: &Value| match v.as_num() {
+        Some(Num::Int(i)) => u32::try_from(i).ok(),
+        _ => None,
+    };
+    match v {
+        Value::Array(a) => a.items.iter().map(one).collect(),
+        v => one(v).map(|u| vec![u]),
+    }
+}
+
+fn read_layer(v: Value, at: &str) -> Result<Layer> {
+    let mut d = as_dict(v, at)?;
+    let id = opt_string(&mut d, "layerId", at)?.ok_or_else(|| bad(at, "a layer has no layerId"))?;
+    let at = format!("{at} layer `{id}`");
+    let master = opt_string(&mut d, "associatedMasterId", &at)?.unwrap_or_else(|| id.clone());
+    // The reference always writes a width; a hand-edited file may not, and reads as zero.
+    let width = take(&mut d, "width").map(|v| as_f64(&v, &format!("{at}.width"))).transpose()?.unwrap_or(0.0);
+    let shapes = match take(&mut d, "shapes") {
+        Some(v) => as_items(v, &at)?.into_iter().map(read_shape).collect(),
+        None => Vec::new(),
+    };
+    let anchors = match take(&mut d, "anchors") {
+        Some(v) => as_items(v, &at)?.into_iter().map(|a| read_anchor(a, &at)).collect::<Result<_>>()?,
+        None => Vec::new(),
+    };
+    Ok(Layer { id, master, width, shapes, anchors, extra: into_extra(d) })
+}
+
+fn raw(value: Value) -> Shape {
+    Shape::Raw(RawShape { family: Family::Glyphs, value })
+}
+
+/// A shape the model can hold, or the shape kept as written.
+fn read_shape(v: Value) -> Shape {
+    let typed = match &v {
+        Value::Dict(d) if d.get("ref").is_some() => read_component(d.clone()),
+        Value::Dict(d) if d.get("nodes").is_some() => read_path(d.clone()),
+        _ => None,
+    };
+    typed.unwrap_or_else(|| raw(v))
+}
+
+fn read_component(mut d: Dict) -> Option<Shape> {
+    let glyph = take(&mut d, "ref")?.as_str()?.to_string();
+    let pair = |d: &mut Dict, k: &str, default: (f64, f64)| -> Option<(f64, f64)> {
+        match take(d, k) {
+            Some(v) => as_pair(&v, k).ok(),
+            None => Some(default),
+        }
+    };
+    let pos = pair(&mut d, "pos", (0.0, 0.0))?;
+    let scale = pair(&mut d, "scale", (1.0, 1.0))?;
+    let slant = pair(&mut d, "slant", (0.0, 0.0))?;
+    let angle = match take(&mut d, "angle") {
+        Some(v) => v.as_num()?.as_f64(),
+        None => 0.0,
+    };
+    Some(Shape::Component(Component { glyph, transform: Transform::Decomposed { pos, scale, angle, slant }, extra: into_extra(d) }))
+}
+
+fn read_path(mut d: Dict) -> Option<Shape> {
+    let closed = as_bool01(&take(&mut d, "closed")?, "closed").ok()?;
+    let mut nodes = as_items(take(&mut d, "nodes")?, "nodes").ok()?.iter().map(read_node).collect::<Option<Vec<_>>>()?;
+    // The format writes a closed path's start node last; the model keeps it first.
+    if closed && !nodes.is_empty() {
+        nodes.rotate_right(1);
+    }
+    let path = Path { closed, nodes, extra: into_extra(d) };
+    // A node list that does not make an outline is kept as written, not rejected with the file.
+    path.to_bez().ok()?;
+    Some(Shape::Path(path))
+}
+
+fn read_node(v: &Value) -> Option<Node> {
+    let items = &v.as_array()?.items;
+    let (x, y, flags, attr) = match items.as_slice() {
+        [x, y, f] => (x, y, f, None),
+        [x, y, f, a] => (x, y, f, Some(a)),
+        _ => return None,
+    };
+    let flags = flags.as_str()?;
+    let mut chars = flags.chars();
+    let kind = match chars.next()? {
+        'l' => NodeKind::Line,
+        'c' => NodeKind::Curve,
+        'q' => NodeKind::QCurve,
+        'o' => NodeKind::OffCurve,
+        _ => return None,
+    };
+    let rest = chars.as_str();
+    let (smooth, rest) = match rest.strip_prefix('s') {
+        Some(r) => (true, r),
+        None => (false, rest),
+    };
+    let mut extra = Extra::new();
+    if !rest.is_empty() {
+        extra.push(Family::Glyphs, "flags", Value::String(rest.into()));
+    }
+    if let Some(a) = attr {
+        extra.push(Family::Glyphs, "attr", a.clone());
+    }
+    Some(Node { x: x.as_num()?.as_f64(), y: y.as_num()?.as_f64(), kind, smooth, extra })
+}
+
+fn read_anchor(v: Value, at: &str) -> Result<Anchor> {
+    let mut d = as_dict(v, at)?;
+    let name = opt_string(&mut d, "name", at)?.unwrap_or_default();
+    let (x, y) = match take(&mut d, "pos") {
+        Some(p) => as_pair(&p, &format!("{at} anchor `{name}`"))?,
+        None => (0.0, 0.0),
+    };
+    Ok(Anchor { name, x, y, extra: into_extra(d) })
+}
+
+// ── writing ────────────────────────────────────────────────────────────────────────────────────
+
+fn num(f: f64, at: &str) -> Result<Value> {
+    Number::float(f).map(Value::Number).ok_or_else(|| bad(at, "a value is not a finite number"))
+}
+
+fn int(i: impl Into<i64>) -> Value {
+    Value::Number(Number::int(i.into()))
+}
+
+fn string(s: &str) -> Value {
+    Value::String(Str::new(s))
+}
+
+fn list(items: Vec<Value>) -> Value {
+    Value::Array(Array { items, layout: Layout::Multiline })
+}
+
+fn pair(a: f64, b: f64, at: &str) -> Result<Value> {
+    Ok(Value::Array(Array { items: vec![num(a, at)?, num(b, at)?], layout: Layout::Compact }))
+}
+
+/// The fields' entries plus the extra entries of this family, keys sorted byte-wise. A field
+/// wins over an extra entry with the same key.
+fn finish(mut entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
+    for e in extra.of(Family::Glyphs) {
+        if !entries.iter().any(|(k, _)| k.as_str() == e.key.as_str()) {
+            entries.push((e.key.clone(), e.value.clone()));
+        }
+    }
+    entries.sort_by(|a, b| a.0.as_str().as_bytes().cmp(b.0.as_str().as_bytes()));
+    Dict { entries, layout: Layout::Multiline }
+}
+
+/// Writes the family name into a version 4 file's `familyNames` property (its first value),
+/// adding the property when the file has none.
+fn sync_v4_family_name(extra: &Extra, family: &str) -> Extra {
+    let mut extra = extra.clone();
+    if v4_family_name_of_extra(&extra).as_deref() == Some(family) {
+        return extra;
+    }
+    let mut props = match extra.get(Family::Glyphs, "properties") {
+        Some(Value::Array(a)) => a.clone(),
+        _ => Array { items: Vec::new(), layout: Layout::Multiline },
+    };
+    let new_value = || {
+        let mut v = Dict::new();
+        v.insert("language", string("dflt"));
+        v.insert("value", string(family));
+        Value::Dict(v)
+    };
+    let found = props.items.iter_mut().find_map(|p| match p {
+        Value::Dict(d) if d.get("key").and_then(Value::as_str) == Some("familyNames") => Some(d),
+        _ => None,
+    });
+    match found {
+        Some(d) => match d.get_mut("values") {
+            Some(Value::Array(values)) => match values.items.first_mut() {
+                Some(Value::Dict(first)) => first.insert("value", string(family)),
+                _ => values.items.insert(0, new_value()),
+            },
+            _ => d.insert("values", list(vec![new_value()])),
+        },
+        None => {
+            let mut entry = Dict::new();
+            entry.insert("key", string("familyNames"));
+            entry.insert("values", list(vec![new_value()]));
+            props.items.insert(0, Value::Dict(entry));
+        }
+    }
+    extra.insert(Family::Glyphs, "properties", Value::Array(props));
+    extra
+}
+
+fn v4_family_name_of_extra(extra: &Extra) -> Option<String> {
+    let mut d = Dict::new();
+    d.insert("properties", extra.get(Family::Glyphs, "properties")?.clone());
+    v4_family_name(&d)
+}
+
+fn write_font(font: &Font, version: u32) -> Result<Dict> {
+    let mut e: Vec<(Str, Value)> = vec![(".formatVersion".into(), int(version))];
+    let synced;
+    let extra: &Extra = if version >= 4 && !font.family_name.is_empty() {
+        synced = sync_v4_family_name(&font.extra, &font.family_name);
+        &synced
+    } else {
+        &font.extra
+    };
+    if version < 4 && !font.family_name.is_empty() {
+        e.push(("familyName".into(), string(&font.family_name)));
+    }
+    e.push(("unitsPerEm".into(), int(font.units_per_em)));
+    e.push(("versionMajor".into(), int(font.version_major)));
+    e.push(("versionMinor".into(), int(font.version_minor)));
+    if !font.metrics.is_empty() {
+        e.push(("metrics".into(), list(font.metrics.iter().map(write_metric).collect())));
+    }
+    e.push(("fontMaster".into(), list(font.masters.iter().map(write_master).collect::<Result<_>>()?)));
+    e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g).map(Value::Dict)).collect::<Result<_>>()?)));
+    Ok(finish(e, extra))
+}
+
+fn write_metric(m: &MetricDef) -> Value {
+    let mut e = Vec::new();
+    if !m.kind.is_empty() {
+        e.push(("type".into(), string(&m.kind)));
+    }
+    if let Some(n) = &m.name {
+        e.push(("name".into(), string(n)));
+    }
+    if let Some(f) = &m.filter {
+        e.push(("filter".into(), string(f)));
+    }
+    Value::Dict(finish(e, &m.extra))
+}
+
+fn write_master(m: &Master) -> Result<Value> {
+    let mut e = vec![("id".into(), string(&m.id))];
+    if !m.name.is_empty() {
+        e.push(("name".into(), string(&m.name)));
+    }
+    if !m.metric_values.is_empty() {
+        let values = m
+            .metric_values
+            .iter()
+            .map(|v| {
+                let mut d = Vec::new();
+                if v.over != 0.0 {
+                    d.push(("over".into(), num(v.over, "metricValues")?));
+                }
+                if v.pos != 0.0 {
+                    d.push(("pos".into(), num(v.pos, "metricValues")?));
+                }
+                Ok(Value::Dict(Dict { entries: d, layout: Layout::Multiline }))
+            })
+            .collect::<Result<_>>()?;
+        e.push(("metricValues".into(), list(values)));
+    }
+    Ok(Value::Dict(finish(e, &m.extra)))
+}
+
+/// One glyph's dictionary (a package writes each to its own file).
+pub fn write_glyph(g: &Glyph) -> Result<Dict> {
+    let at = format!("glyph `{}`", g.name);
+    let mut e = vec![("glyphname".into(), string(&g.name))];
+    match g.unicodes.as_slice() {
+        [] => {}
+        [u] => e.push(("unicode".into(), int(*u))),
+        // Several code points go on one line, unlike other lists.
+        many => e.push(("unicode".into(), Value::Array(Array { items: many.iter().map(|u| int(*u)).collect(), layout: Layout::Compact }))),
+    }
+    if !g.export {
+        e.push(("export".into(), int(0)));
+    }
+    e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at)).collect::<Result<_>>()?)));
+    Ok(finish(e, &g.extra))
+}
+
+fn write_layer(l: &Layer, at: &str) -> Result<Value> {
+    let at = format!("{at} layer `{}`", l.id);
+    let mut e = vec![("layerId".into(), string(&l.id))];
+    if l.id != l.master {
+        e.push(("associatedMasterId".into(), string(&l.master)));
+    }
+    e.push(("width".into(), num(l.width, &at)?));
+    if !l.shapes.is_empty() {
+        e.push(("shapes".into(), list(l.shapes.iter().map(|s| write_shape(s, &at)).collect::<Result<_>>()?)));
+    }
+    if !l.anchors.is_empty() {
+        e.push(("anchors".into(), list(l.anchors.iter().map(|a| write_anchor(a, &at)).collect::<Result<_>>()?)));
+    }
+    Ok(Value::Dict(finish(e, &l.extra)))
+}
+
+fn write_shape(s: &Shape, at: &str) -> Result<Value> {
+    match s {
+        Shape::Raw(r) if r.family == Family::Glyphs => Ok(r.value.clone()),
+        Shape::Raw(_) => Err(GlyphsError::Unsupported(format!("{at}: a shape read from another format"))),
+        Shape::Component(c) => write_component(c, at),
+        Shape::Path(p) => write_path(p, at),
+    }
+}
+
+fn write_component(c: &Component, at: &str) -> Result<Value> {
+    let (pos, scale, angle, slant) = match c.transform {
+        Transform::Decomposed { pos, scale, angle, slant } => (pos, scale, angle, slant),
+        Transform::Matrix(m) => decompose(m).ok_or_else(|| GlyphsError::Unsupported(format!("{at}: a component transform with shear")))?,
+    };
+    let mut e = vec![("ref".into(), string(&c.glyph))];
+    if pos != (0.0, 0.0) {
+        e.push(("pos".into(), pair(pos.0, pos.1, at)?));
+    }
+    if scale != (1.0, 1.0) {
+        e.push(("scale".into(), pair(scale.0, scale.1, at)?));
+    }
+    if angle != 0.0 {
+        e.push(("angle".into(), num(angle, at)?));
+    }
+    if slant != (0.0, 0.0) {
+        e.push(("slant".into(), pair(slant.0, slant.1, at)?));
+    }
+    Ok(Value::Dict(finish(e, &c.extra)))
+}
+
+/// A matrix as position, scale and rotation, when it has no shear.
+type Decomposed = ((f64, f64), (f64, f64), f64, (f64, f64));
+fn decompose([a, b, c, d, dx, dy]: [f64; 6]) -> Option<Decomposed> {
+    if b == 0.0 && c == 0.0 {
+        return Some(((dx, dy), (a, d), 0.0, (0.0, 0.0)));
+    }
+    let sx = a.hypot(b);
+    if sx == 0.0 {
+        return None;
+    }
+    let angle = b.atan2(a);
+    let sy = (a * d - b * c) / sx;
+    // Without shear the second column is the first turned a quarter and scaled by sy / sx.
+    let (cc, dd) = (-angle.sin() * sy, angle.cos() * sy);
+    let close = |x: f64, y: f64| (x - y).abs() <= 1e-9 * (1.0 + x.abs().max(y.abs()));
+    (close(c, cc) && close(d, dd)).then(|| ((dx, dy), (sx, sy), angle.to_degrees(), (0.0, 0.0)))
+}
+
+fn write_path(p: &Path, at: &str) -> Result<Value> {
+    let mut nodes: Vec<Value> = p.nodes.iter().map(|n| write_node(n, at)).collect::<Result<_>>()?;
+    if p.closed && !nodes.is_empty() {
+        nodes.rotate_left(1);
+    }
+    let e = vec![("closed".into(), int(i64::from(p.closed))), ("nodes".into(), list(nodes))];
+    Ok(Value::Dict(finish(e, &p.extra)))
+}
+
+fn write_node(n: &Node, at: &str) -> Result<Value> {
+    let mut flags = String::from(match n.kind {
+        NodeKind::Line => "l",
+        NodeKind::Curve => "c",
+        NodeKind::QCurve => "q",
+        NodeKind::OffCurve => "o",
+    });
+    if n.smooth {
+        flags.push('s');
+    }
+    if let Some(rest) = n.extra.get(Family::Glyphs, "flags").and_then(Value::as_str) {
+        flags.push_str(rest);
+    }
+    let mut items = vec![num(n.x, at)?, num(n.y, at)?, string(&flags)];
+    if let Some(attr) = n.extra.get(Family::Glyphs, "attr") {
+        items.push(attr.clone());
+    }
+    Ok(Value::Array(Array { items, layout: Layout::Compact }))
+}
+
+fn write_anchor(a: &Anchor, at: &str) -> Result<Value> {
+    let mut e = vec![("name".into(), string(&a.name))];
+    if (a.x, a.y) != (0.0, 0.0) {
+        e.push(("pos".into(), pair(a.x, a.y, at)?));
+    }
+    Ok(Value::Dict(finish(e, &a.extra)))
+}
+
+#[cfg(test)]
+mod tests;

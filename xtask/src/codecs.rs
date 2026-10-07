@@ -5,7 +5,8 @@
 //!   the M1.1 measure: the layer must not lose or respell anything. Each written file is read
 //!   again and must mean the same as the original, so a "different" result is layout only
 //!   (indentation, blank lines, spaces a hand edit left), never lost data.
-//! - `model`: through the font model (M1.3 and M1.4). No codec yet.
+//! - `model`: through the font model: read into a `Font`, written back from it (`fontcraft_io_glyphs`
+//!   for `.glyphs`). The `spellings` count is not measured in this mode.
 
 use std::path::Path;
 
@@ -20,6 +21,7 @@ pub fn codec(mode: &str, kind: Kind) -> Option<Codec> {
     match (mode, kind) {
         ("plist", Kind::Glyphs) => Some(glyphs_file),
         ("plist", Kind::GlyphsPackage) => Some(glyphs_package),
+        ("model", Kind::Glyphs) => Some(glyphs_file_model),
         _ => None,
     }
 }
@@ -65,4 +67,10 @@ fn glyphs_package(path: &Path) -> Result<Coded, String> {
         *bytes = write_checked(&doc, dialect).map_err(|e| format!("{name}: {e}"))?.into_bytes();
     }
     Ok(Coded { written: Written::Tree(tree), spellings })
+}
+
+fn glyphs_file_model(path: &Path) -> Result<Coded, String> {
+    let font = fontcraft_io_glyphs::read(&read_text(path)?).map_err(|e| e.to_string())?;
+    let out = fontcraft_io_glyphs::write(&font).map_err(|e| format!("writing: {e}"))?;
+    Ok(Coded { written: Written::File(out.into_bytes()), spellings: 0 })
 }

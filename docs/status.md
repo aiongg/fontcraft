@@ -23,7 +23,7 @@ packages in order). Its material is `docs/spec/30-source-formats.md` and
 |---|---|
 | M1.0 corpus, harness, spikes | done (plan § 8) |
 | M1.1 property lists | OpenStep done; XML waits for the owner's answer on question 11 |
-| M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured (plan § 4, M1.2 progress); next, `crates/io-glyphs` with everything in `Extra`, then fields one at a time |
+| M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured; `crates/io-glyphs` reads and writes versions 3 and 4 (every reference-written file identical). Next: version 2, packages, then more typed fields |
 | M1.4 to M1.6 | not started |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the

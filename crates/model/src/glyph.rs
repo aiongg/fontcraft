@@ -3,7 +3,8 @@
 use fontcraft_geom::{Affine, BezPath, Point};
 use serde::{Deserialize, Serialize};
 
-use crate::{Extra, MAX_COORDINATE, in_range};
+use crate::{Extra, Family, MAX_COORDINATE, in_range};
+use fontcraft_plist::Value;
 
 fn yes() -> bool {
     true
@@ -76,6 +77,40 @@ impl Glyph {
 pub enum Shape {
     Path(Path),
     Component(Component),
+    /// A shape the model cannot represent yet (an image or a shape group of format version 4,
+    /// a path with quartic, Hobby or spiral nodes), kept exactly as read so that saving to the
+    /// same format puts it back. Outlines and compiled fonts leave it out.
+    Raw(RawShape),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RawShape {
+    pub family: Family,
+    pub value: Value,
+}
+
+/// In the native file a raw shape is `{"family", "value"}`, with the value as property-list text.
+#[derive(Serialize, Deserialize)]
+struct RawShapeRepr {
+    family: Family,
+    value: String,
+}
+
+impl Serialize for RawShape {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut value = String::new();
+        fontcraft_plist::openstep::write_value(&mut value, &self.value, fontcraft_plist::openstep::Dialect::Glyphs3);
+        RawShapeRepr { family: self.family, value }.serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for RawShape {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let r = RawShapeRepr::deserialize(d)?;
+        let value =
+            fontcraft_plist::openstep::parse_value(&r.value).map_err(|e| <D::Error as serde::de::Error>::custom(format!("raw shape: {e}")))?;
+        Ok(RawShape { family: r.family, value })
+    }
 }
 
 /// A contour. Nodes are in path direction; off-curve nodes come before the on-curve node that ends

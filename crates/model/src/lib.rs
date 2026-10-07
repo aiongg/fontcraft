@@ -19,7 +19,7 @@ mod glyph;
 pub use extra::{Extra, ExtraEntry, Family};
 pub use font::{Font, GlyphMut, GlyphTable, Master, MetricDef, MetricValue, Source, SourceFormat, metric};
 pub use fontcraft_plist as plist;
-pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, Shape, Transform};
+pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.
 pub const UPM_RANGE: std::ops::RangeInclusive<u16> = 16..=16384;
