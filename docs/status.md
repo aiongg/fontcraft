@@ -17,8 +17,8 @@ _Updated: 2026-10-07, at the end of the planning session._
 
 **M1, the source model and the formats** (`ROADMAP.md` › What to build next). First steps:
 
-1. `docs/plans/M1.md` is drafted and waits for the owner's review. Its first package, M1.0
-   (corpus additions, the round-trip harness and two spikes), can start once it is accepted.
+1. `docs/plans/M1.md` is accepted (one agent throughout). Work its packages in order, starting
+   with M1.0 (corpus additions, the round-trip harness and two spikes).
    Its material is
    `docs/spec/30-source-formats.md` (field tables, crate findings, the recommended model, 17 open
    questions) and `spec/inventory/30-formats.toml`.
@@ -100,4 +100,4 @@ Append one terse entry per session: what landed, numbers, what is still open.
 - **2026-10-07, set-up on the build box.** History rewritten to the owner's identity; repository
   pushed (private). Gate green locally (4 min 17 s). O1 (no licence; tutorial videos) and O4
   recorded. Corpus fetched, oracles installed. M1 plan drafted: 7 packages. No version 4
-  `.glyphs` file in the corpus. Still open: the owner's review of the plan.
+  `.glyphs` file in the corpus. The owner accepted the plan.
