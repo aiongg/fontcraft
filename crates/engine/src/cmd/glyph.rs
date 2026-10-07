@@ -92,7 +92,7 @@ fn remove_glyph(s: &mut Session, p: &Value) -> Result<Value> {
     })?;
     let font = s.font()?;
     let mut dangling = Vec::new();
-    for g in &font.glyphs {
+    for g in font.glyphs.iter() {
         for shape in g.layers.iter().flat_map(|l| &l.shapes) {
             if let fontcraft_model::Shape::Component(c) = shape
                 && names.contains(&c.glyph)

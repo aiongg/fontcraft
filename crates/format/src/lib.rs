@@ -15,6 +15,7 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 mod atomic;
+mod v1;
 
 use fontcraft_model::Font;
 use serde::{Deserialize, Serialize};
@@ -22,8 +23,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(not(target_arch = "wasm32"))]
 pub use atomic::write_atomic;
 
-/// The version this build writes.
-pub const VERSION: u32 = 1;
+/// The version this build writes. Older versions are upgraded on load, one step at a time.
+pub const VERSION: u32 = 2;
 pub const FORMAT: &str = "fontcraft";
 pub const EXTENSION: &str = "fontcraft";
 /// Largest file [`load`] accepts (a guard against hostile input).
@@ -53,17 +54,16 @@ struct FileOut<'a> {
     font: &'a Font,
 }
 
+/// The file as read: the header, and the font's JSON left unparsed until the version says which
+/// shape it has. The file is tokenised once and the font built once.
 #[derive(Deserialize)]
-struct Header {
+struct FileIn<'a> {
     #[serde(default)]
     format: String,
     #[serde(default)]
     version: u32,
-}
-
-#[derive(Deserialize)]
-struct FileIn {
-    font: Font,
+    #[serde(borrow)]
+    font: Option<&'a serde_json::value::RawValue>,
 }
 
 /// The bytes of a `.fontcraft` file holding `font`.
@@ -79,16 +79,21 @@ pub fn load(bytes: &[u8]) -> Result<Font, FormatError> {
     if bytes.len() > MAX_BYTES {
         return Err(FormatError::TooLarge(bytes.len()));
     }
-    let header: Header = serde_json::from_slice(bytes).map_err(|e| FormatError::NotFontcraft(e.to_string()))?;
-    if header.format != FORMAT {
-        return Err(FormatError::NotFontcraft(format!("the `format` key is `{}`, expected `{FORMAT}`", header.format)));
-    }
-    if header.version > VERSION {
-        return Err(FormatError::TooNew { found: header.version, supported: VERSION });
-    }
     let file: FileIn = serde_json::from_slice(bytes).map_err(|e| FormatError::NotFontcraft(e.to_string()))?;
-    file.font.check()?;
-    Ok(file.font)
+    if file.format != FORMAT {
+        return Err(FormatError::NotFontcraft(format!("the `format` key is `{}`, expected `{FORMAT}`", file.format)));
+    }
+    if file.version > VERSION {
+        return Err(FormatError::TooNew { found: file.version, supported: VERSION });
+    }
+    let raw = file.font.ok_or_else(|| FormatError::NotFontcraft("the file has no `font`".into()))?.get();
+    let bad = |e: serde_json::Error| FormatError::NotFontcraft(e.to_string());
+    let font = match file.version {
+        0 | 1 => serde_json::from_str::<v1::Font>(raw).map_err(bad)?.upgrade(),
+        _ => serde_json::from_str::<Font>(raw).map_err(bad)?,
+    };
+    font.check()?;
+    Ok(font)
 }
 
 #[cfg(test)]
@@ -111,6 +116,34 @@ mod tests {
         assert!(matches!(load(b"\x00\x01\x00\x00"), Err(FormatError::NotFontcraft(_))));
         assert!(matches!(load(b"[1,2,3]"), Err(FormatError::NotFontcraft(_))));
         assert!(matches!(load(br#"{"format":"fontcraft","version":1}"#), Err(FormatError::NotFontcraft(_))));
+    }
+
+    #[test]
+    fn a_version_1_file_is_upgraded() {
+        // Written by the M0 build: fixed master metrics, layers without ids, matrix transforms,
+        // unknown keys beside known ones.
+        let v1 = br#"{"format":"fontcraft","version":1,"generator":"FontCraft 0.0.1","font":{
+            "family_name":"Old","units_per_em":1000,"version_major":1,"version_minor":0,"fromTheFuture":{"k":[1,true,null,2.5]},
+            "masters":[{"id":"m01","name":"Regular","ascender":800,"cap_height":700,"x_height":500,"descender":-200}],
+            "glyphs":[{"name":"A","unicodes":[65],"layers":[{"master":"m01","width":600,
+                "shapes":[{"path":{"closed":true,"nodes":[{"x":0,"y":0,"type":"line","name":"start"},{"x":100,"y":0,"type":"line"},{"x":50,"y":100,"type":"line"}]}}]}]},
+              {"name":"B","layers":[{"master":"m01","width":600,"shapes":[{"component":{"glyph":"A","transform":[1,0,0,1,10,0]}}],"anchors":[{"name":"top","x":1,"y":2}]}]}]}}"#;
+        let font = load(v1).unwrap();
+        let m = font.default_master().unwrap();
+        assert_eq!(font.metric_pos(m, fontcraft_model::metric::X_HEIGHT, 0.0), 500.0);
+        let a = font.glyph("A").unwrap();
+        assert_eq!(a.layers[0].id, "m01");
+        assert!(a.layer("m01").is_some());
+        let fontcraft_model::Shape::Path(p) = &a.layers[0].shapes[0] else { panic!() };
+        assert_eq!(p.nodes[0].extra.get(fontcraft_model::Family::Native, "name").and_then(|v| v.as_str()), Some("start"));
+        let b = font.glyph("B").unwrap();
+        let fontcraft_model::Shape::Component(c) = &b.layers[0].shapes[0] else { panic!() };
+        assert_eq!(c.transform, fontcraft_model::Transform::Matrix([1.0, 0.0, 0.0, 1.0, 10.0, 0.0]));
+        assert!(font.extra.get(fontcraft_model::Family::Native, "fromTheFuture").is_some());
+        // Saved again, it is a version 2 file that loads to the same font.
+        let again = save(&font).unwrap();
+        assert!(String::from_utf8_lossy(&again).contains("\"version\": 2"));
+        assert_eq!(load(&again).unwrap(), font);
     }
 
     #[test]

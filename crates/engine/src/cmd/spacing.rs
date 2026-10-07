@@ -38,7 +38,7 @@ fn set_width(s: &mut Session, p: &Value) -> Result<Value> {
     };
     s.edit("Set Width", |font| {
         for name in &names {
-            let g = font.glyph_mut(name)?;
+            let mut g = font.glyph_mut(name)?;
             match g.layer_mut(&layer) {
                 Some(l) => l.width = width,
                 None => g.layers.push(Layer::new(&layer, width)),

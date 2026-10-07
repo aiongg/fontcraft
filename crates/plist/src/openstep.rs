@@ -82,6 +82,27 @@ pub fn parse_value(text: &str) -> Result<Value, Error> {
     parse(text).map(|d| d.root)
 }
 
+/// Reads one token (bare or quoted) as a string, keeping its spelling when it is not the
+/// canonical one: the way to rebuild a dictionary key exactly as a file wrote it.
+pub fn parse_str_token(token: &str) -> Result<Str, Error> {
+    let mut p = Parser { text: token, bytes: token.as_bytes(), pos: 0 };
+    let s = match p.peek() {
+        Some(b'"') => p.quoted()?,
+        _ => p.key()?,
+    };
+    if p.pos != token.len() {
+        return Err(p.err("expected a single string token"));
+    }
+    Ok(s)
+}
+
+/// The text a string is written as: its spelling, or the canonical form.
+pub fn str_token(s: &Str) -> String {
+    let mut out = String::new();
+    write_str(&mut out, s);
+    out
+}
+
 /// Writes a document. For a document that [`parse`] returned unchanged, the result is the input.
 pub fn write(doc: &Document, dialect: Dialect) -> String {
     let mut out = String::new();
@@ -635,6 +656,17 @@ mod tests {
         assert_eq!(v.as_str(), Some("a\"b\\c\u{2019}\u{1f600}\t"));
         let lone = parse_value(r#""\Ud83dx""#).unwrap();
         assert_eq!(lone.as_str(), Some("\u{fffd}x"));
+    }
+
+    #[test]
+    fn single_tokens_keep_their_spelling() {
+        let s = parse_str_token("\"m01\"").unwrap();
+        assert_eq!((s.as_str(), s.spelling()), ("m01", Some("\"m01\"")));
+        assert_eq!(str_token(&s), "\"m01\"");
+        let s = parse_str_token("Regular").unwrap();
+        assert_eq!((s.as_str(), s.spelling()), ("Regular", None));
+        assert!(parse_str_token("a b").is_err());
+        assert!(parse_str_token("\"a").is_err());
     }
 
     #[test]

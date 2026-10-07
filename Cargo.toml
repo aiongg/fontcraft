@@ -26,7 +26,7 @@ fontcraft-testkit = { path = "crates/testkit" }
 kurbo = { version = "0.13", features = ["serde"] }
 thiserror = "2"
 serde = { version = "1", features = ["derive", "rc"] }
-serde_json = { version = "1", features = ["float_roundtrip"] }
+serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
 log = "0.4"
 base64 = "0.22"
 

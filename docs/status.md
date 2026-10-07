@@ -23,8 +23,8 @@ packages in order). Its material is `docs/spec/30-source-formats.md` and
 |---|---|
 | M1.0 corpus, harness, spikes | done (plan § 8) |
 | M1.1 property lists | OpenStep done; XML waits for the owner's answer on question 11 |
-| M1.2 the model | **next** |
-| M1.3 to M1.6 | not started |
+| M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured (plan § 4, M1.2 progress); next, `crates/io-glyphs` with everything in `Extra`, then fields one at a time |
+| M1.4 to M1.6 | not started |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -64,15 +64,12 @@ around them. None can lose data; most are about scale.
 
 | Limit | Where | Fix it in |
 |---|---|---|
-| Glyph lookup by name is a linear scan | `crates/model` | M1 (index beside the glyph list) |
-| Every edit clones the font's top level (glyphs themselves are shared) | `Session::edit` | M1 |
+| An edit to a glyph copies the glyph pointer list (one pointer per glyph; about half a megabyte at 65,000 glyphs) | `GlyphTable` | M1.2, after measuring on Inter (plan question 13) |
 | The history list is copied for each command's result | `crates/engine` | M1 |
 | The menu tree is rebuilt every frame | `crates/ui-egui/src/menus.rs` | M3 |
-| A file is parsed twice on load (once to check, once to build) | `crates/format` | M1 |
 | A key in an `extra` map that collides with a known field is not rejected | `crates/model` | M1 |
 | `write_atomic` replaces a symlink with a file and does not keep the old file's mode | `crates/format` | M1 |
 | No command switches the active document; the same file can be opened twice | `crates/engine` | M1 |
-| An edit that changes nothing still makes an undo step | `Session::edit` | M1 |
 | `OS/2` Unicode ranges: only two bits are set | `crates/compile` | M2 |
 | The vendor-names scanner does not see through `concat!` or string escapes | `xtask/src/brands.rs` | when it matters |
 

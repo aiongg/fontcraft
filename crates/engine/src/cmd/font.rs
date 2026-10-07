@@ -1,7 +1,7 @@
 //! Font Info and whole-font queries.
 
 use fontcraft_geom::Shape as _;
-use fontcraft_model::UPM_RANGE;
+use fontcraft_model::{UPM_RANGE, metric};
 use serde_json::{Map, Value, json};
 
 use super::*;
@@ -48,7 +48,9 @@ fn info_get(s: &mut Session, p: &Value) -> Result<Value> {
         "versionMajor": font.version_major,
         "versionMinor": font.version_minor,
         "masters": font.masters.iter().map(|m| json!({
-            "id": m.id, "name": m.name, "ascender": m.ascender, "capHeight": m.cap_height, "xHeight": m.x_height, "descender": m.descender,
+            "id": m.id, "name": m.name,
+            "ascender": font.metric_pos(m, metric::ASCENDER, 0.0), "capHeight": font.metric_pos(m, metric::CAP_HEIGHT, 0.0),
+            "xHeight": font.metric_pos(m, metric::X_HEIGHT, 0.0), "descender": font.metric_pos(m, metric::DESCENDER, 0.0),
         })).collect::<Vec<_>>(),
         "glyphCount": font.glyphs.len(),
     });

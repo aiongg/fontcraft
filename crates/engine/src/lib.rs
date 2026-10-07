@@ -177,11 +177,15 @@ impl Session {
 
     /// Changes the active font as one undo step. `f` edits a private copy (glyphs it does not
     /// touch stay shared with the snapshot). The copy replaces the font only if `f` succeeds and
-    /// the result passes the model's checks, so a failed edit leaves nothing behind.
+    /// the result passes the model's checks, so a failed edit leaves nothing behind. An edit that
+    /// leaves the font as it was makes no undo step and does not count as a change.
     pub fn edit<T>(&mut self, label: &str, f: impl FnOnce(&mut Font) -> Result<T>) -> Result<T> {
         let doc = self.doc_mut()?;
         let mut next = Font::clone(&doc.font);
         let out = f(&mut next)?;
+        if next.same_as(&doc.font) {
+            return Ok(out);
+        }
         next.check_changed(&doc.font)?;
         let before = std::mem::replace(&mut doc.font, Arc::new(next));
         doc.history.undo.push(HistoryEntry { label: label.into(), font: before });

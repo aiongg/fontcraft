@@ -72,6 +72,18 @@ fn undo_and_redo_restore_the_font_exactly() {
 }
 
 #[test]
+fn an_edit_that_changes_nothing_makes_no_undo_step() {
+    let mut s = Session::with_document();
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["A"], "value": 600}));
+    let doc = s.doc().unwrap();
+    assert_eq!((doc.history.undo.len(), doc.revision, doc.modified()), (0, 0, false), "A is already 600 wide");
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["A"], "value": 610}));
+    assert_eq!(s.doc().unwrap().history.undo.len(), 1);
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["A"], "value": 610}));
+    assert_eq!(s.doc().unwrap().history.undo.len(), 1);
+}
+
+#[test]
 fn undo_snapshots_share_untouched_glyphs() {
     let mut s = Session::with_document();
     run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(0.0, 0.0, 10.0, 10.0)}));

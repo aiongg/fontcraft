@@ -7,7 +7,7 @@
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec2};
 use fontcraft_engine::{EngineError, Session, guard};
 use fontcraft_geom::{Affine, PathEl, Point};
-use fontcraft_model::{Font, NodeKind, Shape};
+use fontcraft_model::{Font, NodeKind, Shape, metric};
 use serde_json::{Value, json};
 
 use crate::menus::{self, UI_COMMANDS, is_ui_command};
@@ -280,10 +280,14 @@ impl FontcraftApp {
             let painter = ui.painter_at(rect);
             let Some(master) = font.masters.first() else { return };
             let Some(layer) = font.glyph(glyph).and_then(|g| g.layer(&master.id)) else { return };
+            let upm = f64::from(font.units_per_em);
+            let ascender = font.metric_pos(master, metric::ASCENDER, upm * 0.8);
+            let descender = font.metric_pos(master, metric::DESCENDER, -upm * 0.2);
+            let cap_height = font.metric_pos(master, metric::CAP_HEIGHT, upm * 0.7);
+            let x_height = font.metric_pos(master, metric::X_HEIGHT, upm * 0.5);
             // Font units → screen: y flips, the glyph's advance is centred, the baseline sits low.
             let scale = f64::from(state.zoom);
-            let origin =
-                Point::new(f64::from(rect.center().x) - layer.width * scale / 2.0, f64::from(rect.center().y) + (master.cap_height / 2.0) * scale);
+            let origin = Point::new(f64::from(rect.center().x) - layer.width * scale / 2.0, f64::from(rect.center().y) + (cap_height / 2.0) * scale);
             let to_screen = Affine::translate(origin.to_vec2()) * Affine::scale_non_uniform(scale, -scale);
             let screen = |p: Point| {
                 let q = to_screen * p;
@@ -291,11 +295,11 @@ impl FontcraftApp {
             };
             if state.show_metrics {
                 let line = Stroke::new(1.0, tokens.metric_line);
-                for y in [0.0, master.x_height, master.cap_height, master.ascender, master.descender] {
+                for y in [0.0, x_height, cap_height, ascender, descender] {
                     painter.line_segment([screen(Point::new(0.0, y)), screen(Point::new(layer.width, y))], line);
                 }
                 for x in [0.0, layer.width] {
-                    painter.line_segment([screen(Point::new(x, master.descender)), screen(Point::new(x, master.ascender))], line);
+                    painter.line_segment([screen(Point::new(x, descender)), screen(Point::new(x, ascender))], line);
                 }
             }
             if let Ok(outline) = font.outline(glyph, &master.id) {
@@ -360,10 +364,12 @@ fn paint_glyph(painter: &egui::Painter, font: &Font, glyph: &fontcraft_model::Gl
     if outline.elements().is_empty() {
         return;
     }
-    let height = (m.ascender - m.descender).max(1.0);
+    let upm = f64::from(font.units_per_em);
+    let (ascender, descender) = (font.metric_pos(m, metric::ASCENDER, upm * 0.8), font.metric_pos(m, metric::DESCENDER, -upm * 0.2));
+    let height = (ascender - descender).max(1.0);
     let scale = f64::from(rect.height()) / height;
     let width = glyph.layer(master).map_or(0.0, |l| l.width);
-    let origin = Point::new(f64::from(rect.center().x) - width * scale / 2.0, f64::from(rect.max.y) + m.descender * scale);
+    let origin = Point::new(f64::from(rect.center().x) - width * scale / 2.0, f64::from(rect.max.y) + descender * scale);
     let to_screen = Affine::translate(origin.to_vec2()) * Affine::scale_non_uniform(scale, -scale);
     // Cells show the outline; filled glyph rendering (with holes) comes with the renderer crate.
     for contour in flatten(&(to_screen * outline)) {

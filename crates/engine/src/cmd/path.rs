@@ -59,7 +59,7 @@ fn add_path(s: &mut Session, p: &Value) -> Result<Value> {
         None => s.font()?.default_master()?.id.clone(),
     };
     let index = s.edit("Add Path", |font| {
-        let g = font.glyph_mut(&glyph)?;
+        let mut g = font.glyph_mut(&glyph)?;
         if g.layer(&layer).is_none() {
             g.layers.push(Layer::new(&layer, 600.0));
         }

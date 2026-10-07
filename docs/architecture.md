@@ -70,11 +70,14 @@ inherited from the workspace), and is registered in the layering table in the sa
 
 ## The model (L1)
 
-**Today:** `Font { family_name, units_per_em, version_major, version_minor, masters, glyphs }`,
-`Master { id, name, ascender, cap_height, x_height, descender }`, `Glyph { name, unicodes, export,
-layers }`, `Layer { master, width, shapes, anchors }`, `Shape::{Path, Component}`, `Path { closed,
-nodes }`, `Node { x, y, kind (written `type`), smooth }`, `Component { glyph, transform }`,
-`Anchor { name, x, y }`. Glyphs are `Arc`-shared. Every struct keeps unknown keys in `extra`.
+**Today (M1.2 in progress):** `Font { source, family_name, units_per_em, version_major,
+version_minor, metrics, masters, glyphs, extra }` with `metrics`, `masters`, `extra` and the glyph
+table behind `Arc`s; the glyph table has a name index. Metrics are font-level definitions with
+per-master values, as format version 3 stores them (`Font::metric`). `Glyph { name, unicodes,
+export, layers }`; `Layer { id, master, width, shapes, anchors }`, where a master layer's id is its
+master's; `Shape::{Path, Component}`; `Component { glyph, transform }` with the transform kept as
+written (`Decomposed` or `Matrix`). Every struct keeps what it has no field for in an `Extra`:
+entries tagged by format family, each a property-list value with its spelling and layout.
 
 **Planned (M1):** the full model of [`docs/spec/30-source-formats.md`](spec/30-source-formats.md)
 § Recommended model. In short ([decision 0003](decisions/0003-source-model.md)):
@@ -280,17 +283,15 @@ the calling thread.
 
 ## Known scaling limits of the M0 code
 
-Measured by the review of 2026-10-07 and left for M1, where the model is rebuilt:
+Measured by the review of 2026-10-07. Fixed in M1.2: glyph lookup by name (now an index), the
+copy of the font's top level on every edit (the parts are now behind `Arc`s), the double parse on
+load, and undo steps for edits that change nothing. Still open:
 
-- **Glyph lookup by name is a linear scan** (`Font::glyph`). Compiling 65,535 empty glyphs took
-  22 s before the compiler stopped looking each glyph up; adding glyphs one at a time is still
-  quadratic. The full model keeps a name index.
-- **An edit copies the font's top level**: the glyph pointer list, the masters and the font-level
-  `extra` map (about 3 ms at 20,000 glyphs with a large `extra`). The full model puts those behind
-  `Arc`s and bounds history by bytes, not only by count.
+- **An edit to a glyph copies the glyph pointer list** (one pointer per glyph). Measure on a large
+  family before choosing a chunked or persistent vector (`docs/plans/M1.md`, question 13). History
+  is bounded by count, not yet by bytes.
 - **A command that is not a query copies each document's history list** for its rollback snapshot
   (pointers and labels: about 0.5 ms at 10,000 undo steps). A persistent list removes it.
 - **The menu tree is rebuilt every frame**, asking each command whether it is enabled. Fine at 27
   commands; cache it per document revision before there are hundreds.
-- **The native format is parsed twice on load** (header, then font), and flattened `extra` maps
-  buffer each struct. Acceptable at today's sizes.
+

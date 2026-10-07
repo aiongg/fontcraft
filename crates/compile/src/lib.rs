@@ -15,7 +15,7 @@
 #![forbid(unsafe_code)]
 
 use fontcraft_geom::{BezPath, PathEl, to_quadratic};
-use fontcraft_model::{Font, Glyph, ModelError};
+use fontcraft_model::{Font, Glyph, ModelError, metric};
 use write_fonts::FontBuilder;
 use write_fonts::tables::cmap::Cmap;
 use write_fonts::tables::glyf::{GlyfLocaBuilder, Glyph as TtGlyph, SimpleGlyph};
@@ -284,8 +284,14 @@ pub fn compile_ttf(font: &Font, options: &Options) -> Result<Compiled, CompileEr
         selection |= SelectionFlags::REGULAR;
     }
 
-    let (ascender, descender) = (i16_of(master.ascender), i16_of(master.descender));
-    let line_gap = i16_of((f64::from(font.units_per_em) * 1.2 - (master.ascender - master.descender)).max(0.0));
+    // A font may lack a metric definition; fall back to the usual proportions of the em.
+    let upm = f64::from(font.units_per_em);
+    let m_ascender = font.metric_pos(master, metric::ASCENDER, upm * 0.8);
+    let m_descender = font.metric_pos(master, metric::DESCENDER, -upm * 0.2);
+    let m_x_height = font.metric_pos(master, metric::X_HEIGHT, upm * 0.5);
+    let m_cap_height = font.metric_pos(master, metric::CAP_HEIGHT, upm * 0.7);
+    let (ascender, descender) = (i16_of(m_ascender), i16_of(m_descender));
+    let line_gap = i16_of((upm * 1.2 - (m_ascender - m_descender)).max(0.0));
     let time = LongDateTime::new(options.timestamp.saturating_add(HEAD_EPOCH_OFFSET));
     let head = Head {
         font_revision: Fixed::from_f64(f64::from(font.version_major) + f64::from(font.version_minor) / 1000.0),
@@ -352,7 +358,7 @@ pub fn compile_ttf(font: &Font, options: &Options) -> Result<Compiled, CompileEr
         y_superscript_y_size: i16_of(f64::from(font.units_per_em) * 0.6),
         y_superscript_y_offset: i16_of(f64::from(font.units_per_em) * 0.35),
         y_strikeout_size: i16_of(f64::from(font.units_per_em) * 0.05),
-        y_strikeout_position: i16_of(master.x_height * 0.6),
+        y_strikeout_position: i16_of(m_x_height * 0.6),
         ul_unicode_range_1: basic_latin | latin_1,
         ach_vend_id: Tag::new(b"NONE"),
         fs_selection: selection,
@@ -361,12 +367,12 @@ pub fn compile_ttf(font: &Font, options: &Options) -> Result<Compiled, CompileEr
         s_typo_ascender: ascender,
         s_typo_descender: descender,
         s_typo_line_gap: line_gap,
-        us_win_ascent: u16_of(master.ascender.max(f64::from(bounds.3))),
-        us_win_descent: u16_of((-master.descender).max(-f64::from(bounds.1))),
+        us_win_ascent: u16_of(m_ascender.max(f64::from(bounds.3))),
+        us_win_descent: u16_of((-m_descender).max(-f64::from(bounds.1))),
         ul_code_page_range_1: Some(basic_latin), // bit 0: Latin 1
         ul_code_page_range_2: Some(0),
-        sx_height: Some(i16_of(master.x_height)),
-        s_cap_height: Some(i16_of(master.cap_height)),
+        sx_height: Some(i16_of(m_x_height)),
+        s_cap_height: Some(i16_of(m_cap_height)),
         us_default_char: Some(0),
         us_break_char: Some(if owners.contains_key(&0x20) { 0x20 } else { 0 }),
         us_max_context: Some(0),
@@ -435,7 +441,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use fontcraft_model::{Component, Extra, Layer, Node, NodeKind, Path, Shape};
+    use fontcraft_model::{Component, Layer, Node, NodeKind, Path, Shape};
     use skrifa::instance::{LocationRef, Size};
     use skrifa::raw::TableProvider;
     use skrifa::raw::types::GlyphId16;
@@ -443,16 +449,17 @@ mod tests {
     use skrifa::{FontRef, MetadataProvider};
 
     fn path(closed: bool, nodes: Vec<Node>) -> Shape {
-        Shape::Path(Path { closed, nodes, extra: Extra::new() })
+        Shape::Path(Path::new(closed, nodes))
     }
 
     fn sample() -> Font {
         let mut f = Font::new("Slice Sans");
         let n = Node::new;
-        let a = f.glyph_mut("A").unwrap();
+        let mut a = f.glyph_mut("A").unwrap();
         a.layers[0].width = 620.0;
         a.layers[0].shapes.push(Shape::Path(Path::rect(60.0, 0.0, 560.0, 700.0)));
-        let o = f.glyph_mut("O").unwrap();
+        drop(a);
+        let mut o = f.glyph_mut("O").unwrap();
         // A four-curve oval: cubic input must come out as quadratic TrueType curves.
         let k = 0.5523;
         let (cx, cy, rx, ry) = (350.0, 350.0, 300.0, 360.0);
@@ -474,6 +481,7 @@ mod tests {
                 n(cx + rx, cy - ry * k, NodeKind::OffCurve),
             ],
         ));
+        drop(o);
         f.glyph_mut("B").unwrap().layers[0].shapes.push(Shape::Component(Component::new("A", 10.0, 0.0)));
         f
     }
@@ -540,8 +548,10 @@ mod tests {
         assert!(matches!(compile_ttf(&f, &Options::default()), Err(CompileError::Model(ModelError::BadOutline { .. }))));
 
         let mut f = sample();
-        for g in &mut f.glyphs {
-            Arc::make_mut(g).export = false;
+        for i in 0..f.glyphs.len() {
+            if let Some(mut g) = f.glyphs.get_mut_at(i) {
+                g.export = false;
+            }
         }
         assert!(matches!(compile_ttf(&f, &Options::default()), Err(CompileError::NoGlyphs)));
     }
@@ -665,7 +675,7 @@ mod tests {
         for i in 0..(MAX_POST_NAMES as u32 + 100) {
             let mut g = Glyph::new(format!("glyph{i:05}x"));
             g.layers.push(Layer::new(&master, 500.0));
-            f.glyphs.push(Arc::new(g));
+            f.glyphs.push(g);
         }
         let out = compile_ttf(&f, &Options::default()).unwrap();
         assert!(out.warnings.iter().any(|w| w.contains("glyph names were left out")));
@@ -678,7 +688,7 @@ mod tests {
     fn style_names_drive_style_linking() {
         let compile = |style: &str| {
             let mut f = sample();
-            f.masters[0].name = style.to_string();
+            Arc::make_mut(&mut f.masters)[0].name = style.to_string();
             compile_ttf(&f, &Options::default()).unwrap().bytes
         };
         let bytes = compile("Bold Italic");
