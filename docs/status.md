@@ -17,11 +17,12 @@ _Updated: 2026-10-07, at the end of the planning session._
 
 **M1, the source model and the formats** (`ROADMAP.md` › What to build next). First steps:
 
-1. Write `docs/plans/M1.md` (`docs/execution-plan.md` § 3). The material is
+1. `docs/plans/M1.md` is drafted and waits for the owner's review. Its first package, M1.0
+   (corpus additions, the round-trip harness and two spikes), can start once it is accepted.
+   Its material is
    `docs/spec/30-source-formats.md` (field tables, crate findings, the recommended model, 17 open
    questions) and `spec/inventory/30-formats.toml`.
-2. `cargo xtask corpus --fetch` (needs network; several hundred megabytes) and install the oracles
-   you will use (`docs/testing.md`).
+2. Done on the build box: corpus fetched (226 MB), fontc 1.0.0 and fontmake 3.12.1 installed.
 3. Suggested packages, disjoint enough for parallel agents:
    - `crates/plist`: OpenStep and XML property lists, reading and writing, preserving spelling.
    - `crates/model`: grow to the recommended outline (axes, instances, kerning, features, layer
@@ -96,3 +97,7 @@ Append one terse entry per session: what landed, numbers, what is still open.
   2 apps, xtask; 27 commands; 78 tests; gate green. Found and fenced a panic in the glyph writer
   for points more than 32,767 units apart; fixed most of a 31-finding code review. Still open:
   everything in "Where to start" and the table of known limits.
+- **2026-10-07, set-up on the build box.** History rewritten to the owner's identity; repository
+  pushed (private). Gate green locally (4 min 17 s). O1 (no licence; tutorial videos) and O4
+  recorded. Corpus fetched, oracles installed. M1 plan drafted: 7 packages, 57–94 h. No version 4
+  `.glyphs` file in the corpus. Still open: the owner's review of the plan.
