@@ -14,9 +14,11 @@ locations and the origin master (§6.1 to §6.5) in `crates/model/src/axes.rs` a
 in `crates/io-ufo/src/designspace/instances.rs`; the glyph's note, colour and production name
 (§7) in `crates/io-ufo/src/glif.rs` and `ufo.rs`; UFO layer names, backgrounds, vertical metrics,
 layer user data, layer guides and images (§8.1, §8.4, §8.5, §8.7, §9.6) in `crates/io-ufo/src/ufo.rs`
-and `glif.rs`. Not yet: STAT (§6.6), applying instance data (§5.3), bracket glyphs and rules
-(§8.2), sparse sources for brace layers (§8.3), colour layer mapping (§8.6), the glyph lib keys
-(§7, §8.4, §12.3), `public.openTypeCategories` from categories (§11.4: only a UFO's own map is
+and `glif.rs`; the font's and the masters' lib keys (settings, app version, `DisplayStrings`, user
+data, the generic and converted custom-parameter keys, icon, name parts, master order and axis
+values; §1, §3.5, §4, §12.3; differences in §3.7) in `crates/io-ufo/src/libkeys.rs`. Not yet: STAT (§6.6), applying instance data (§5.3), bracket glyphs and rules
+(§8.2), sparse sources for brace layers (§8.3), colour layer mapping (§8.6), the glyph, layer
+and shape lib keys (§7, §8.4, §9, §12.3), `public.openTypeCategories` from categories (§11.4: only a UFO's own map is
 read and written back). Where FontCraft differs from glyphsLib on purpose: `docs/plans/M1.md` § M1.7.
 
 Direction labels used in the tables:
@@ -331,6 +333,25 @@ is not None (so default values are written too). `builder/custom_params.py:768-8
 | Font-only handlers: `glyphOrder`, `Virtual Master`, and `Name Table Entry` (U→G direction). Non-font only: `Filter`/`PreFilter`. | `builder/custom_params.py:869-885,733,949,1226-1235` |
 | Vertical metrics: when the font is vertical (§8.7) and a master has none of `vheaVert(Typo)Ascender` / `Descender` / `LineGap` as master parameters, the master UFO gets `openTypeVheaVertTypoAscender = int(upm/2)`, `…Descender = -int(upm/2)`, `…LineGap = upm`. This runs after the font-level parameters, so it **overwrites** font-level vhea values. | `builder/masters.py:74-92` |
 
+### 3.7 Where FontCraft differs (M1.7)
+
+The lib keys of §1, §3.5 and §4 are written as glyphsLib writes them, and read back only where
+writing the model gives the same value; other keys stay the master's user data.
+
+| glyphsLib | FontCraft |
+|---|---|
+| Keys written whatever their value (`useNiceNames`, `iconName`, `weight`, `fontMasterOrder`, axis values…) in every UFO | In a new UFO of a document with a `.glyphs` format version; a UFO read from disk keeps the ones it had; other new UFOs get only keys whose fields hold a value |
+| ufo2ft `filters` and `featureWriters` in every UFO | Not written (build settings; M2) |
+| `Axis Mappings`, `Variable Font Origin` also in each UFO's generic key | Not repeated in a designspace's UFOs (the document holds them); a single UFO's lib holds them |
+| Font user data keys starting with `com.schriftgestaltung.` or `public.` left out of the designspace `<lib>` | Every key written to the `<lib>`, and every `<lib>` key read as font user data |
+| Curly quotes in parameter names made straight | Names kept as they are |
+| A repeated single-valued parameter: the last value | The first; the rest reported |
+| `fontMasterID` only with `minimize_glyphs_diffs` | Also in a new single UFO whose master id is not the reader's `m01`; read as the master id of a single UFO |
+| `Color Palettes` read back as `"r,g,b,a"` strings | Lists of numbers (two for grey) |
+| ufo2ft keys (`colorPalettes`, `openTypeMeta`, `useProductionNames`) read as both a font and a master parameter | The font's, from the default source; another master's only where it differs |
+| `fontMasterOrder`, `weightValue`… read back into master attributes | Read only to check that they still say what the master's place and design location say |
+| `fontUserData` of the first UFO fills the font's user data in a designspace | Stays that master's user data |
+
 ---
 
 ## 4. Masters (GSFontMaster)
@@ -343,7 +364,7 @@ is not None (so default values are written too). `builder/custom_params.py:768-8
 | Name joining rule | width, weight, customName, drop empties and redundant "Regular"; if italicAngle ≠ 0: `["Regular"]` → "Italic", else append "Italic" unless customName contains "Italic" or "Oblique". `Master Name` parameter overrides everything. | — | `classes.py:1801-1846` |
 | style-map names | `info.styleMapFamilyName` / `styleMapStyleName` from `build_stylemap_names` with `is_bold = name in {"Bold", "Bold Italic", "Bold Oblique"}`, `is_italic = italicAngle != 0`. Not written with `minimize_glyphs_diffs`. | Ignored (styleMap master fields are not read; they would fall into custom params via the `styleMapFamilyName`/`styleMapStyleName` handlers, §3.5.2) | `builder/names.py:31-43` |
 | `iconName` | `com.schriftgestaltung.customParameter.GSFontMaster.iconName` | same key → attribute | §3.5.4 |
-| `visible` | **Missing** | — | — |
+| `visible` | **Missing** (FontCraft reports it lost) | — | — |
 | `axes` (`axesValues` v3) / `weightValue`, `widthValue`, `customValue`, `customValue1..3` (v2) | Designspace `source.location[axisName]` = `axes[i]` for axis definition index i (§6). Also font lib `com.schriftgestaltung.weightValue` (always, not None), `com.schriftgestaltung.widthValue` (if truthy), `com.schriftgestaltung.customValue{,1,2,3}` (if truthy), and the §3.5.4 keys. Defaults: index 0 and 1 → 100, others → 0. | Design location from `source.location` by axis name (`_to_glyphs_source`). The `com.schriftgestaltung.weightValue` etc. keys are not read back (they start with the reserved prefix, so they do not enter userData either). | `builder/masters.py:51-64`, `builder/sources.py:128-134,216-237`, `classes.py:2038-2102` |
 | user location | Master UFO `openTypeOS2WeightClass` / `openTypeOS2WidthClass` set from the user location **only when every master has `Axis Location`** (font uses axis locations) | When the font uses axis locations, user location = reverse axis map of the design location → master `weightClass`/`widthClass` parameter and `Axis Location` entry updated | `builder/masters.py:66-72`, `builder/sources.py:228-237`, `builder/axes.py:453-503` |
 | `ascender` | `info.ascender` (always) | if not None | `builder/masters.py:29,121-122` |

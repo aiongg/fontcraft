@@ -20,6 +20,7 @@ use fontcraft_plist::xml::{self, Element, Node as XNode};
 use fontcraft_plist::{Array, Dict, Str, Value, xmlplist};
 
 use super::{AxisInfo, DOC, MAX_ITEMS, append_child, location_element, patch_location, read_location, remove_child};
+use crate::libkeys::sorted_keys;
 use crate::{Result, UfoError};
 
 pub(super) const EXPORT: &str = "com.schriftgestaltung.export";
@@ -282,9 +283,14 @@ fn read_lib_entry(key: &str, v: &Value, inst: &mut Instance) -> bool {
 
 /// The `<dict>` of an element's `<lib>`, read with its spellings.
 fn lib_dict(el: &Element, unit: &str) -> Result<Option<Dict>> {
+    lib_dict_at(el, unit, LIB_DICT_LEVEL)
+}
+
+/// The `<dict>` of an element's `<lib>` that sits at depth `level` in the document.
+pub(super) fn lib_dict_at(el: &Element, unit: &str, level: usize) -> Result<Option<Dict>> {
     let Some(d) = el.child("lib").and_then(|l| l.child("dict")) else { return Ok(None) };
     let mut irregular = 0;
-    match xmlplist::read_value(d, unit, LIB_DICT_LEVEL, &mut irregular) {
+    match xmlplist::read_value(d, unit, level, &mut irregular) {
         Ok(Value::Dict(d)) => Ok(Some(d)),
         Ok(_) => Ok(None),
         Err(e) => Err(UfoError::Syntax { file: DOC.into(), error: e }),
@@ -388,24 +394,6 @@ pub(super) fn read_variable(el: &Element, ctx: &Ctx<'_>) -> Result<Instance> {
     Ok(inst)
 }
 
-/// A value with every dictionary in it sorted by key, as fontTools writes property lists.
-fn sorted_keys(v: Value) -> Value {
-    // Depth is bounded by the reader's limit for parsed values, and small for built ones.
-    match v {
-        Value::Dict(mut d) => {
-            d.entries = d.entries.into_iter().map(|(k, v)| (k, sorted_keys(v))).collect();
-            d.entries.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
-            d.spacing = Default::default();
-            Value::Dict(d)
-        }
-        Value::Array(mut a) => {
-            a.items = a.items.into_iter().map(sorted_keys).collect();
-            Value::Array(a)
-        }
-        other => other,
-    }
-}
-
 /// A dictionary of the typed lib keys and the user data, sorted by key as fontTools writes it.
 fn new_lib(inst: &Instance, derived: &(Option<StyleClass>, Option<StyleClass>)) -> Dict {
     let mut entries: Vec<(Str, Value)> = TYPED.iter().filter_map(|k| Some((Str::new(*k), sorted_keys(lib_entry(k, inst, derived)?)))).collect();
@@ -419,7 +407,7 @@ fn new_lib(inst: &Instance, derived: &(Option<StyleClass>, Option<StyleClass>)) 
 }
 
 /// A `<lib>` element holding `dict`.
-fn lib_element(dict: &Dict) -> Element {
+pub(super) fn lib_element(dict: &Dict) -> Element {
     let mut out = String::new();
     xmlplist::write_value(&mut out, &Value::Dict(dict.clone()), "  ", 0);
     let mut d = xml::parse_element(&out).unwrap_or_else(|_| Element::new("dict"));
@@ -536,7 +524,7 @@ fn patch_lib(el: &mut Element, model: &Instance, derived: &(Option<StyleClass>, 
 }
 
 /// Sets or removes a key, a new key going where it keeps the keys sorted.
-fn set_entry(dict: &mut Dict, key: &str, value: Option<Value>) {
+pub(super) fn set_entry(dict: &mut Dict, key: &str, value: Option<Value>) {
     let at = dict.entries.iter().position(|(k, _)| k.as_str() == key);
     match (at, value) {
         (Some(i), Some(v)) => {

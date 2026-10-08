@@ -8,8 +8,9 @@
 //! - [`glif`]: one glyph's file in one layer.
 //! - [`names`]: the specification's user-name-to-file-name rule.
 //! - [`ufo`]: a UFO directory, as one master; `fontinfo` maps its font information to the
-//!   reference's properties and parameters, and `design` its blue zones, stem snaps and
-//!   guidelines to the master's fields.
+//!   reference's properties and parameters, `design` its blue zones, stem snaps and guidelines to
+//!   the master's fields, and `libkeys` the lib keys glyphsLib writes for the rest (settings,
+//!   parameters with no font-info key, a master's icon and name parts).
 //! - [`features`]: `features.fea`, split into the model's prefixes, classes and features as
 //!   glyphsLib writes them.
 //! - [`designspace`]: a designspace and its UFOs, as one document; its axes, instances and
@@ -30,6 +31,7 @@ pub mod features;
 mod fontinfo;
 pub mod glif;
 pub mod kerning;
+pub(crate) mod libkeys;
 pub mod names;
 pub mod ufo;
 pub mod zip;

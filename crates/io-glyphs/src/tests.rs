@@ -471,11 +471,17 @@ fn zones_beyond_the_overshoots_are_lost_only_after_version_2() {
     assert!(write(&font).unwrap().contains("\"{400, 8}\""));
     for version in [3, 4] {
         font.source.glyphs_version = Some(version);
-        assert_eq!(crate::info_losses(&font), ["master `Bold Italic`: alignment zones other than overshoots (1)"]);
+        // Name parts are version 2's too.
+        assert_eq!(
+            crate::info_losses(&font),
+            ["master `Bold Italic`: alignment zones other than overshoots (1)", "master `Bold Italic`: name parts"]
+        );
         let out = write(&font).unwrap();
         assert!(!out.contains("alignmentZones") && !out.contains("{400, 8}"), "version {version} has no place for them");
     }
-    std::sync::Arc::make_mut(&mut font.masters)[0].zones.clear();
+    let m = &mut std::sync::Arc::make_mut(&mut font.masters)[0];
+    m.zones.clear();
+    m.name_parts = Default::default();
     assert!(crate::info_losses(&font).is_empty());
 }
 

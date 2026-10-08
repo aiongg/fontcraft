@@ -10,7 +10,10 @@
 //!
 //! The axes ([`axes`]) and the instances and variable fonts ([`instances`]) are model fields; the
 //! axes' maps are the font's `Axis Mappings` parameter, and a default source that glyphsLib would
-//! not take as the origin is named by a `Variable Font Origin` parameter.
+//! not take as the origin is named by a `Variable Font Origin` parameter. The document's `<lib>`
+//! is the font's user data, every key of it, as glyphsLib's `to_designspace` puts it there; the
+//! font's other lib keys are in each UFO's lib ([`crate::libkeys`]), the two parameters above
+//! not repeated.
 //!
 //! The designspace document itself is kept as read (the XML tree, comments and deprecated
 //! elements included) in the font's [`Extra`] under [`Family::Designspace`] (`document`), and the
@@ -30,10 +33,10 @@ use std::sync::Arc;
 use fontcraft_model::axes::{AXIS_MAPPINGS, ORIGIN};
 use fontcraft_model::{
     Extra, Family, FileStore, Font, FontInfo, Glyph, GlyphTable, Instance, KernTable, Kerning, Master, MetricDef, MetricValue, Param, Source,
-    SourceFormat,
+    SourceFormat, UserData,
 };
 use fontcraft_plist::xml::{self, Element, Node as XNode, Text};
-use fontcraft_plist::{Array, Value, xmlplist};
+use fontcraft_plist::{Array, Dict, Value, xmlplist};
 
 use crate::fontinfo;
 use crate::ufo::{self, FEATURES_KEY, ReadUfo, Target};
@@ -396,7 +399,13 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         masters: Arc::new(masters),
         instances: Arc::new(read_instances(root, &instances::Ctx { family: &family, axes: &axes, labels: &labels, unit: &indent_unit(root) })?),
         glyphs: GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect()),
-        info: Arc::new(FontInfo { properties: font_info.properties, params, date: font_info.date, ..Default::default() }),
+        info: Arc::new(FontInfo {
+            properties: font_info.properties,
+            params,
+            date: font_info.date,
+            user_data: font_user_data(root)?,
+            ..Default::default()
+        }),
         kerning: Arc::new(Kerning { ltr: KernTable(kerning), ..Default::default() }),
         features: Arc::new(features),
         groups: Arc::new(groups),
@@ -409,6 +418,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
     if font.masters.len() > 1 && fontcraft_model::axes::origin_without_parameter(&font).is_some_and(|m| m.id != default_id) {
         Arc::make_mut(&mut font.info).params.0.push(Param::new(ORIGIN, Value::String(default_id.as_str().into())));
     }
+    crate::libkeys::read(&mut font, true, &default_id);
     font.check()?;
     Ok(font)
 }
@@ -446,8 +456,14 @@ pub fn info_losses(font: &Font) -> Vec<String> {
         let origin = fontcraft_model::axes::origin(font).map(|m| m.id.as_str());
         origin == Some(id) && fontcraft_model::axes::origin_without_parameter(font).map(|m| m.id.as_str()) != Some(id)
     });
-    let carried = |line: &str| line == format!("parameter `{AXIS_MAPPINGS}`") && maps_back || line == format!("parameter `{ORIGIN}`") && origin_back;
-    let mut out: Vec<String> = ufo::font_losses(font).into_iter().filter(|l| !carried(l)).collect();
+    let mut out: Vec<String> = ufo::font_losses(font, true);
+    // The document holds these two; its UFOs do not repeat them.
+    if font.info.params.get(AXIS_MAPPINGS).is_some() && !maps_back {
+        out.push(format!("parameter `{AXIS_MAPPINGS}`"));
+    }
+    if font.info.params.get(ORIGIN).is_some() && !origin_back {
+        out.push(format!("parameter `{ORIGIN}`"));
+    }
     for i in font.instances.iter() {
         let fields = [("id", i.id.is_some()), ("type", i.kind.as_deref().is_some_and(|k| k != "variable")), ("visibility", !i.visible)];
         let set: Vec<&str> = fields.iter().filter(|(_, on)| *on).map(|(what, _)| *what).collect();
@@ -520,6 +536,62 @@ fn doc_mappings(root: &Element, model_axes: &[fontcraft_model::Axis], sources: &
         list.push(axes::MapSource { axis, map: axes::read_map(el)?, extent });
     }
     Ok(axes::mappings_param(&list))
+}
+
+/// The depth of the document's own `<dict>` inside `<lib>`.
+const ROOT_LIB_LEVEL: usize = 2;
+
+/// The font's user data: the document's `<lib>`, every key of it.
+fn font_user_data(root: &Element) -> Result<UserData> {
+    let dict = instances::lib_dict_at(root, &indent_unit(root), ROOT_LIB_LEVEL)?.unwrap_or_default();
+    Ok(match Value::Dict(dict).without_spellings() {
+        Value::Dict(d) => UserData(d),
+        _ => UserData::default(),
+    })
+}
+
+/// The font's user data as a new `<lib>` dictionary: sorted by key, as designspaceLib writes it.
+fn root_lib_dict(font: &Font) -> Dict {
+    match crate::libkeys::sorted_keys(Value::Dict(font.info.user_data.0.clone()).without_spellings()) {
+        Value::Dict(d) => d,
+        _ => Dict::new(),
+    }
+}
+
+/// Brings the document's `<lib>` to the font's user data: keys the model no longer has go,
+/// changed values are replaced, new keys go in sorted place; an unchanged lib stays as written.
+fn patch_root_lib(root: &mut Element, font: &Font, unit: &str) -> Result<()> {
+    let kept = instances::lib_dict_at(root, unit, ROOT_LIB_LEVEL)?;
+    let model = &font.info.user_data.0;
+    let mut dict = kept.clone().unwrap_or_default();
+    let gone: Vec<String> = dict.entries.iter().map(|(k, _)| k.as_str()).filter(|k| model.get(k).is_none()).map(str::to_string).collect();
+    for k in gone {
+        instances::set_entry(&mut dict, &k, None);
+    }
+    for (k, v) in &model.entries {
+        if dict.get(k.as_str()) != Some(v) {
+            instances::set_entry(&mut dict, k.as_str(), Some(crate::libkeys::sorted_keys(v.without_spellings())));
+        }
+    }
+    if Some(&dict) == kept.as_ref() || kept.is_none() && dict.is_empty() {
+        return Ok(());
+    }
+    let at = root.elements().position(|e| e.name() == "lib");
+    match at {
+        Some(i) if dict.is_empty() => remove_child(root, i),
+        None => append_child(root, instances::lib_element(&dict), unit, 0),
+        Some(_) => {
+            let mut out = String::new();
+            xmlplist::write_value(&mut out, &Value::Dict(dict), unit, ROOT_LIB_LEVEL);
+            let new = xml::parse_element(&out).map_err(|e| UfoError::Syntax { file: DOC.into(), error: e })?;
+            if let Some(lib) = root.elements_mut().find(|e| e.name() == "lib")
+                && let Some(slot) = lib.children.iter_mut().find(|n| matches!(n, XNode::Element(e) if e.name() == "dict"))
+            {
+                *slot = XNode::Element(new);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn opt_text(t: Option<&str>) -> Value {
@@ -646,11 +718,11 @@ pub fn write(font: &Font) -> Result<Written> {
             return Err(UfoError::Unsupported(format!("`{f}` has only layer sources")));
         };
         let layer_masters: Vec<(&Master, String)> = on_file.iter().filter_map(|m| ds_str(&m.extra, "layer").map(|l| (*m, l.to_string()))).collect();
-        let target = Target { master: main, default, layer_masters: layer_masters.clone(), prefix: format!("{f}/") };
+        let target = Target { master: main, default, layer_masters: layer_masters.clone(), prefix: format!("{f}/"), designspace: true };
         let files = ufo::write_master(font, &target).map_err(|e| prefix_error(f, e))?;
         // Masters that share a UFO must still agree on what is in it.
         for other in mains.iter().skip(1) {
-            let target = Target { master: other, default, layer_masters: layer_masters.clone(), prefix: format!("{f}/") };
+            let target = Target { master: other, default, layer_masters: layer_masters.clone(), prefix: format!("{f}/"), designspace: true };
             if ufo::write_master(font, &target).map_err(|e| prefix_error(f, e))? != files {
                 return Err(UfoError::Unsupported(format!("the masters `{}` and `{}` share `{f}` but now differ", main.id, other.id)));
             }
@@ -932,6 +1004,7 @@ fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> R
         let at = doc.root.elements().position(|e| e.name() == "instances").unwrap_or(usize::MAX);
         insert_child(&mut doc.root, at, list, &unit, 0);
     }
+    patch_root_lib(&mut doc.root, font, &unit)?;
     Ok(doc.write())
 }
 
@@ -1008,6 +1081,10 @@ fn new_document(font: &Font, file_of: &HashMap<&str, String>) -> String {
             list.children.push(XNode::Element(instances::static_element(font, inst, &names, &infos)));
         }
         root.children.push(XNode::Element(list));
+    }
+    let lib = root_lib_dict(font);
+    if !lib.is_empty() {
+        root.children.push(XNode::Element(instances::lib_element(&lib)));
     }
     xml::Document::new(xmlplist::DECLARATION, root).write_pretty("  ")
 }
@@ -1281,6 +1358,7 @@ mod tests {
         font.instances = Arc::new(read_instances(root, &ctx).unwrap());
         font.axes = Arc::new(model_axes);
         font.masters = Arc::new(masters);
+        Arc::make_mut(&mut font.info).user_data = font_user_data(root).unwrap();
         (font, file_of)
     }
 

@@ -327,7 +327,10 @@ fn font_information_reaches_fontinfo_and_comes_back() {
     let ufo = dir.join("Info.ufo");
     let saved = run(&mut s, "file.saveAs", json!({ "path": ufo }));
     let info = saved["losses"].as_array().unwrap().iter().find(|l| l["what"] == "font information a UFO has no place for yet").cloned();
-    assert_eq!(info.map(|l| l["items"].clone()), Some(json!(["parameter `Variable Font Origin`"])), "{saved}");
+    assert_eq!(info, None, "{saved}");
+    // A parameter with no font-info key goes to glyphsLib's lib key.
+    let lib = std::fs::read_to_string(ufo.join("lib.plist")).unwrap();
+    assert!(lib.contains("<key>com.schriftgestaltung.customParameter.GSFont.Variable Font Origin</key>\n    <string>m01</string>"), "{lib}");
     let fontinfo = std::fs::read_to_string(ufo.join("fontinfo.plist")).unwrap();
     for expected in [
         "<key>openTypeOS2TypoAscender</key>\n  <integer>820</integer>",
@@ -346,6 +349,7 @@ fn font_information_reaches_fontinfo_and_comes_back() {
     assert!(back.contains("name = typoAscender;\nvalue = 820;"), "{back}");
     assert!(back.contains("language = DEU;\nvalue = \"A. Gestalterin\";"), "{back}");
     assert!(back.contains("date = \"2026-10-08 12:00:00 +0000\";"), "{back}");
+    assert!(back.contains("name = \"Variable Font Origin\";\nvalue = m01;"), "{back}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

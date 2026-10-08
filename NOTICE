@@ -54,7 +54,11 @@ bundled, the file says so in its header and the project is listed here with its 
   prefixes, automatic, disabled and notes, featureNames records from feature labels) and the way
   it is split back into prefixes, classes and features are ported from its feature builder
   (crates/io-ufo/src/features.rs); groups that are not kerning groups are kept as classes named
-  in font user data as its group builder keeps them (crates/io-glyphs/src/groups.rs).
+  in font user data as its group builder keeps them (crates/io-glyphs/src/groups.rs). The UFO
+  lib keys for the font's settings, app version, edit-tab texts, user data and custom parameters
+  and for a master's icon, name parts, parameters, position and axis values, with the colour
+  palette and meta table conversions, are ported from its custom-parameter, font, master, name
+  and user-data builders (crates/io-ufo/src/libkeys.rs).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data

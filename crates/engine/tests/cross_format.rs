@@ -12,9 +12,10 @@ use fontcraft_io_ufo::designspace;
 use fontcraft_io_ufo::features::{FEATURE_LOSSES, label_record};
 use fontcraft_io_ufo::kerning::KERNING_LOSSES;
 use fontcraft_io_ufo::ufo::{GLYPH_LOSSES, LAYER_LOSSES, SHAPE_LOSSES};
+use fontcraft_model::plist::{Array, Dict, Value};
 use fontcraft_model::{
-    Anchor, Background, ColorLabel, Family, Font, Glyph, GlyphInfo, Guide, Image, Instance, Layer, Master, Param, Params, Properties, Shape, axes,
-    metric,
+    Anchor, Background, ColorLabel, Family, Font, Glyph, GlyphInfo, Guide, Image, Instance, Layer, Master, Param, Params, Properties, Settings,
+    Shape, UserData, axes, metric,
 };
 
 fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -492,6 +493,79 @@ fn features_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
     }
 }
 
+/// A value with every dictionary sorted by key, as text: the form to compare user data in, since
+/// a UFO's libs are written sorted.
+fn canonical(v: &Value) -> String {
+    fn sort(v: &Value) -> Value {
+        match v {
+            Value::Dict(d) => {
+                let mut entries: Vec<_> = d.entries.iter().map(|(k, v)| (k.clone(), sort(v))).collect();
+                entries.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+                Value::Dict(Dict { entries, ..Default::default() })
+            }
+            Value::Array(a) => Value::Array(Array { items: a.items.iter().map(sort).collect(), ..Default::default() }),
+            // `500` and `500.0` are one value.
+            Value::Number(n) => {
+                Value::Number(fontcraft_model::plist::Number::float(n.value().as_f64()).unwrap_or_else(|| fontcraft_model::plist::Number::int(0)))
+            }
+            other => other.without_spellings(),
+        }
+    }
+    format!("{:?}", sort(v))
+}
+
+fn user_data_form(u: &UserData) -> String {
+    canonical(&Value::Dict(u.0.clone()))
+}
+
+/// The settings a UFO's lib holds (glyphsLib's three keys), a default stated as no value.
+fn travelling_settings(s: &Settings) -> (Option<f64>, Option<bool>, Option<bool>) {
+    (s.keyboard_increment.filter(|v| *v != 1.0), s.disables_automatic_alignment.filter(|b| *b), s.disables_nice_names.filter(|b| *b))
+}
+
+/// A master's icon and name parts, a default stated as no value.
+fn master_names(m: &Master) -> (Option<&str>, Option<&str>, Option<&str>, Option<&str>) {
+    fn not<'a>(v: &'a Option<String>, d: &str) -> Option<&'a str> {
+        v.as_deref().filter(|x| *x != d)
+    }
+    (not(&m.icon, ""), not(&m.name_parts.weight, "Regular"), not(&m.name_parts.width, "Regular"), not(&m.name_parts.custom, ""))
+}
+
+/// What glyphsLib's lib keys carry for the font and its masters: the app version, the edit-tab
+/// texts, three settings, the font's user data, and the masters' icons and name parts; the other
+/// settings and the masters' visibility only where the loss report lists them.
+fn lib_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
+    if font.source.app_version != back.source.app_version {
+        diffs.push(format!("font: app version {:?} → {:?}", font.source.app_version, back.source.app_version));
+    }
+    if font.display_strings != back.display_strings {
+        diffs.push(format!("font: edit-tab texts {:?} → {:?}", font.display_strings, back.display_strings));
+    }
+    let (a, b) = (&font.info.settings, &back.info.settings);
+    if travelling_settings(a) != travelling_settings(b) {
+        diffs.push(format!("font: settings {:?} → {:?}", travelling_settings(a), travelling_settings(b)));
+    }
+    let rest = |s: &Settings| Settings { keyboard_increment: None, disables_automatic_alignment: None, disables_nice_names: None, ..s.clone() };
+    if rest(a) != rest(b) {
+        diffs.push(format!("the font's settings: {:?} → {:?}", rest(a), rest(b)));
+    }
+    if user_data_form(&font.info.user_data) != user_data_form(&back.info.user_data) {
+        diffs.push(format!("font: user data {} → {}", user_data_form(&font.info.user_data), user_data_form(&back.info.user_data)));
+    }
+    for (m, b) in font.masters.iter().zip(back.masters.iter()) {
+        let (x, y) = (master_names(m), master_names(b));
+        if x.0 != y.0 {
+            diffs.push(format!("master `{}`: icon {:?} → {:?}", m.name, x.0, y.0));
+        }
+        if (x.1, x.2, x.3) != (y.1, y.2, y.3) {
+            diffs.push(format!("master `{}`: name parts {:?} → {:?}", m.name, (x.1, x.2, x.3), (y.1, y.2, y.3)));
+        }
+        if m.visible != b.visible {
+            diffs.push(format!("master `{}`: visibility", m.name));
+        }
+    }
+}
+
 fn info_trip(font: &Font) -> Vec<String> {
     let written = fontcraft_io_ufo::designspace::write(font).unwrap();
     let back = fontcraft_io_ufo::designspace::read(&written.document, &written.ufos).unwrap();
@@ -502,6 +576,7 @@ fn info_trip(font: &Font) -> Vec<String> {
     layers_trip(font, &back, &mut diffs);
     kerning_trip(font, &back, &mut diffs);
     features_trip(font, &back, &mut diffs);
+    lib_trip(font, &back, &mut diffs);
     if font.info.date != back.info.date {
         diffs.push(format!("font: date {:?} → {:?}", font.info.date, back.info.date));
     }
@@ -538,6 +613,7 @@ fn font_information_survives_a_designspace() {
     let (mut noted, mut coloured, mut produced) = (0, 0, 0);
     let (mut layered, mut backgrounds, mut layer_guides, mut images) = (0, 0, 0, 0);
     let (mut kerned, mut grouped, mut featured, mut labelled) = (0, 0, 0, 0);
+    let (mut user_data, mut settings, mut tabs, mut lib_params, mut icons) = (0, 0, 0, 0, 0);
     for path in &all {
         let text = std::fs::read_to_string(path).unwrap();
         if !text.lines().take(3).any(|l| l.starts_with(".appVersion = "))
@@ -567,6 +643,12 @@ fn font_information_survives_a_designspace() {
         grouped += usize::from(font.glyphs.iter().any(|g| !g.kern_groups.is_empty()));
         featured += usize::from(!font.features.features.is_empty() && !font.features.prefixes.is_empty());
         labelled += usize::from(font.features.features.iter().any(|s| !s.labels.is_empty()));
+        user_data += usize::from(!font.info.user_data.is_empty());
+        settings += usize::from(travelling_settings(&font.info.settings) != (None, None, None));
+        tabs += usize::from(!font.display_strings.is_empty());
+        let carried = |p: &Params| p.0.iter().any(fontcraft_io_ufo::ufo::lib_carries);
+        lib_params += usize::from(carried(&font.info.params) || font.masters.iter().any(|m| carried(&m.params)));
+        icons += usize::from(font.masters.iter().any(|m| m.icon.is_some()));
         let losses = designspace::info_losses(&font);
         for d in info_trip(&font) {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
@@ -588,6 +670,34 @@ fn font_information_survives_a_designspace() {
     assert!(layered > 0 && backgrounds > 0 && layer_guides > 0 && images > 0, "the corpus exercises layers, backgrounds, layer guides and images");
     eprintln!("{kerned} with kerning, {grouped} with kerning groups, {featured} with prefixes and features, {labelled} with feature labels");
     assert!(kerned > 0 && grouped > 0 && featured > 0 && labelled > 0, "the corpus exercises kerning, kerning groups, features and labels");
+    eprintln!(
+        "{user_data} with font user data, {settings} with settings a lib holds, {tabs} with edit-tab texts, {lib_params} with parameters a lib holds, {icons} with master icons"
+    );
+    assert!(user_data > 0 && settings > 0 && tabs > 0 && lib_params > 0 && icons > 0, "the corpus exercises glyphsLib's font and master lib keys");
+}
+
+/// The font's and each master's own parameters that a UFO's lib holds, compared by name and
+/// value in any order.
+fn params_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
+    let form = |p: &Params| {
+        let mut v: Vec<(String, String)> =
+            p.0.iter().filter(|p| fontcraft_io_ufo::ufo::lib_carries(p)).map(|p| (p.name.clone(), canonical(&p.value))).collect();
+        v.sort();
+        v
+    };
+    let mut pairs = vec![("font".to_string(), &font.info.params, &back.info.params)];
+    pairs.extend(font.masters.iter().zip(back.masters.iter()).map(|(m, b)| (format!("master `{}`", m.name), &m.params, &b.params)));
+    for (what, a, b) in pairs {
+        let (x, y) = (form(a), form(b));
+        for (name, value) in x.iter().filter(|e| !y.contains(e)) {
+            diffs.push(format!("{what}: parameter `{name}` {value}"));
+        }
+        for (name, _) in y.iter().filter(|e| !x.contains(e)).filter(|(n, _)| n != axes::AXIS_MAPPINGS) {
+            if !x.iter().any(|(n, _)| n == name) {
+                diffs.push(format!("{what}: new parameter `{name}`"));
+            }
+        }
+    }
 }
 
 fn designspaces(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -659,6 +769,8 @@ fn axes_and_instances_survive_a_glyphs_file() {
         glyphs_trip(&font, &again, &mut diffs);
         kerning_trip(&font, &again, &mut diffs);
         features_trip(&font, &again, &mut diffs);
+        lib_trip(&font, &again, &mut diffs);
+        params_trip(&font, &again, &mut diffs);
         for d in diffs {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
             if listed {
@@ -717,6 +829,8 @@ fn kerning_groups_and_features_survive_a_glyphs_file() {
         let mut diffs = Vec::new();
         kerning_trip(&font, &again, &mut diffs);
         features_trip(&font, &again, &mut diffs);
+        lib_trip(&font, &again, &mut diffs);
+        params_trip(&font, &again, &mut diffs);
         for d in diffs {
             if !losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l))) {
                 failures.push(format!("{}: {d}", path.strip_prefix(&corpus).unwrap().display()));

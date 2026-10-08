@@ -280,11 +280,11 @@ would have to define because none was found (`roundtrip.ufoGlyphsLibKeys`, `roun
 
 | Concept | Carrier |
 |---|---|
-| Master id, master order, icon | lib `com.schriftgestaltung.fontMasterID`, `…fontMasterOrder`, `…customParameter.GSFontMaster.iconName` (seen) |
-| Custom parameters with no font-info field; `disabled` state; duplicates; order | lib `com.schriftgestaltung.customParameter.GSFont.<name>` / `…GSFontMaster.<name>` (seen); disabled and duplicate entries need `org.fontcraft.customParameters` (an ordered list) |
+| Master id, master order, icon, name parts | lib `com.schriftgestaltung.fontMasterID` (a single UFO; a designspace's source `name`), `…fontMasterOrder`, `…customParameter.GSFontMaster.iconName`, `…weight`, `…width`, `…customName` (implemented, M1.7 step 8a) |
+| Custom parameters with no font-info field; `disabled` state; duplicates; order | lib `com.schriftgestaltung.customParameter.GSFont.<name>` / `…GSFontMaster.<name>`, and glyphsLib's own keys for `Color Palettes`, `meta Table`, `Don't use Production Names`, `Virtual Master` (implemented, M1.7 step 8a); disabled and duplicate entries are reported lost (an ordered `org.fontcraft.customParameters` list would hold them) |
 | Instance parameters, `exports`, `visible`, `weightClass`, `isBold`/`isItalic`/`linkStyle` | DS instance attributes where they exist; `lib` → `public.fontInfo` for font-info values; the rest in the instance `lib` |
-| `settings`, `DisplayStrings`, `.appVersion` | lib `com.schriftgestaltung.disablesAutomaticAlignment`, `…useNiceNames`, `…keyboardIncrement`, `…DisplayStrings`, `…appVersion` (seen) |
-| Font, master `userData` | lib `com.schriftgestaltung.font.userData` (seen); master: `org.fontcraft.master.userData` |
+| `settings`, `DisplayStrings`, `.appVersion` | lib `com.schriftgestaltung.customParameter.GSFont.disablesAutomaticAlignment`, `…GSFont.useNiceNames`, `com.schriftgestaltung.keyboardIncrement`, `…GSFont.DisplayStrings`, `com.schriftgestaltung.appVersion` (implemented, M1.7 step 8a); the other settings have no glyphsLib key and are reported lost |
+| Font, master `userData` | font: the designspace `<lib>`, or in a single UFO lib `com.schriftgestaltung.Glyphs.fontUserData`; master: the UFO lib's own keys (implemented, M1.7 steps 2 and 8a) |
 | Extensible metrics with filters and overshoots, named stems, numbers | font-info fixed fields get the unfiltered values; the full lists go to lib `org.fontcraft.metrics`, `…stems`, `…numbers` |
 | Glyph category, subcategory, script, case, direction, tags, lock, sort names, last change | glyph lib `com.schriftgestaltung.Glyphs.category`, `…subCategory`, `…lastChange` (seen); the others `org.fontcraft.glyph.*`; plus `public.openTypeCategories` derived for compilers once the glyph database exists (M4; until then only a UFO's own map is written back) |
 | Colour label by index | `public.markColor` with the label colour glyphsLib uses for the index; reading that exact text gives the index back (implemented, M1.7), so no extra key is needed |
@@ -302,7 +302,7 @@ would have to define because none was found (`roundtrip.ufoGlyphsLibKeys`, `roun
 | Guide filter, measurement, lock, circle and rectangle guides | object lib `org.fontcraft.guide`; non-line guides are omitted from the visible guideline list |
 | Feature structure (`automatic`, `disabled`, `notes`, `labels`, snippet boundaries) | comment markers in `features.fea` as glyphsLib writes them (`# Prefix: <name>`, `# automatic`, `# notes:`, `# disabled`, `featureNames`; implemented, M1.7). Notes of prefixes and classes have no marker and are reported lost |
 | Image crop, alpha, lock, original path and type | object-less: glyph lib `org.fontcraft.image` |
-| Long axis tags, glyph-local axes, `Virtual Master`, `Variable Font Origin`, `fontType` | DS document `lib` |
+| Long axis tags, glyph-local axes, `fontType` | DS document `lib` (planned). `Virtual Master` travels in the UFOs' libs (M1.7 step 8a) and `Variable Font Origin` as the designspace's default source (step 3c) |
 
 ### 3.2 UFO / designspace only → carried in `.glyphs` as
 

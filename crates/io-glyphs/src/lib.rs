@@ -87,6 +87,11 @@ pub fn info_losses(font: &Font) -> Vec<String> {
             let name = if m.name.is_empty() { &m.id } else { &m.name };
             out.push(format!("master `{name}`: alignment zones other than overshoots ({})", m.zones.len()));
         }
+        // Name parts are version 2's.
+        for m in font.masters.iter().filter(|m| !m.name_parts.is_empty()) {
+            let name = if m.name.is_empty() { &m.id } else { &m.name };
+            out.push(format!("master `{name}`: name parts"));
+        }
     }
     // Contextual kerning is version 4's; feature labels are not in version 2.
     let version = font.source.glyphs_version.unwrap_or(3);

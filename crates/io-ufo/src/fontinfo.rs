@@ -248,13 +248,25 @@ const RENAMED: &[(&str, &str)] = &[
     ("GASP Table", "openTypeGaspRangeRecords"),
 ];
 
-/// Further reference names for the same UFO keys, accepted when writing.
+/// Further reference names for the same UFO keys, accepted when writing. The last ones are the
+/// parameters version 2 files hold names in (glyphsLib's `GLYPHS_UFO_CUSTOM_PARAMS_GLYPHS3_PROPERTIES`);
+/// their keys read back as properties ([`NAMES`]), from [`PROPERTY_ALIASES`] on.
 const ALIASES: &[(&str, &str)] = &[
     ("vheaVertTypoAscender", "openTypeVheaVertTypoAscender"),
     ("vheaVertTypoDescender", "openTypeVheaVertTypoDescender"),
     ("vheaVertTypoLineGap", "openTypeVheaVertTypoLineGap"),
     ("gasp Table", "openTypeGaspRangeRecords"),
+    ("versionString", "openTypeNameVersion"),
+    ("vendorID", "openTypeOS2VendorID"),
+    ("uniqueID", "openTypeNameUniqueID"),
+    ("license", "openTypeNameLicense"),
+    ("licenseURL", "openTypeNameLicenseURL"),
+    ("trademark", "trademark"),
+    ("description", "openTypeNameDescription"),
+    ("sampleText", "openTypeNameSampleText"),
 ];
+/// Where in [`ALIASES`] the parameters that come back as properties start.
+const PROPERTY_ALIASES: usize = 4;
 
 const SELECTION: &str = "openTypeOS2Selection";
 const TYPO_METRICS: &str = "Use Typo Metrics";
@@ -843,6 +855,16 @@ fn records_to_model(info: &Dict, v: &Value, mode: Records) -> Vec<Item> {
     items
 }
 
+/// Whether [`write`] writes the parameter `name` (or reports it lost) rather than leaving it to
+/// the lib: it has a `fontinfo.plist` key, is one of the parameters folded into one, or is a key
+/// `mine` (the file as read) has.
+pub(crate) fn holds(name: &str, mine: Option<&Dict>) -> bool {
+    [NAME_ENTRY, TYPO_METRICS, WWS_NAMES, SELECTION_REST, CODE_PAGE_PARAM, CODE_PAGES, CODE_PAGE_REST].contains(&name)
+        || RENAMED.iter().chain(ALIASES.iter()).any(|(g, _)| *g == name)
+        || kind_of(name).is_some()
+        || mine.is_some_and(|m| m.get(name).is_some())
+}
+
 /// The UFO key a parameter of the model is written to, when it has one of its own.
 fn ufo_key_of(name: &str) -> &str {
     RENAMED.iter().chain(ALIASES.iter()).find(|(g, _)| *g == name).map_or(name, |(_, u)| *u)
@@ -951,6 +973,10 @@ pub(crate) fn write(info: &Info, upm: f64, mine: Option<&Dict>) -> Written {
             lost.push(format!("{what} (switched off)"));
             continue;
         }
+        // The lib holds it ([`crate::libkeys`]).
+        if crate::libkeys::carried(p, mine) {
+            continue;
+        }
         let name = p.name.as_str();
         if name == NAME_ENTRY {
             match p.value.as_str().and_then(entry_record) {
@@ -1028,6 +1054,11 @@ pub(crate) fn write(info: &Info, upm: f64, mine: Option<&Dict>) -> Written {
                 match value {
                     Some(v) => set(&mut out, &mut lost, ufo, v, &what),
                     None => lost.push(format!("{what}: not a value `{ufo}` can hold")),
+                }
+                if let Some((_, property, ..)) = NAMES.iter().find(|(u, ..)| *u == ufo)
+                    && ALIASES.iter().skip(PROPERTY_ALIASES).any(|(g, _)| *g == name)
+                {
+                    lost.push(format!("{what}, as the `{property}` property"));
                 }
             }
         }
@@ -1248,7 +1279,9 @@ mod tests {
         assert_eq!(out.get("postscriptUnderlineThickness"), Some(&int(50)));
         assert_eq!(out.get("openTypeHeadCreated").and_then(Value::as_str), Some("2026/10/08 14:15:00"));
         assert!(!out.contains_key("openTypeHheaAscender"));
-        assert_eq!(lost.len(), 2, "{lost:?}");
+        // `Axis Location` has no key here: the lib holds it.
+        assert!(!out.keys().any(|k| k.contains("Axis")));
+        assert_eq!(lost, ["parameter `hheaAscender` (switched off)"]);
     }
 
     #[test]
