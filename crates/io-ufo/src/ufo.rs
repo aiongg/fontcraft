@@ -20,6 +20,9 @@
 //! | the font's properties, parameters and date; a master's where its file differs from the default master's | the other `fontinfo.plist` keys, through [`crate::fontinfo`] |
 //! | the master's user data | `lib.plist`, except the keys below |
 //! | master name; metrics `ascender`, `cap height`, `x-height`, `descender`, `italic angle` | `styleName`; `ascender`, `capHeight`, `xHeight`, `descender`, `italicAngle` (counter-clockwise, so the sign is flipped) |
+//! | metric overshoots and the master's other alignment zones; a `baseline` metric when a zone at 0 needs one | `postscriptBlueValues`, `postscriptOtherBlues` ([`crate::design`]) |
+//! | stem definitions (unnamed, horizontal first) and the master's stem values | `postscriptStemSnapH`, `postscriptStemSnapV` |
+//! | the master's guides | `guidelines` |
 //! | glyph order | `lib.plist` `public.glyphOrder` first, then the rest in `contents.plist` order |
 //! | glyph export | `lib.plist` `public.skipExportGlyphs` |
 //! | glyph code points | the default layer's GLIF |
@@ -33,12 +36,13 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Extra, Family, Features, FileStore, Font, FontInfo, Glyph, GlyphTable, KernFirst, KernTable, Kerning, Layer, Master, MasterKerning, MetricDef,
-    MetricValue, Snippet, Source, SourceFormat, UserData, metric,
+    AlignmentZone, Extra, Family, Features, FileStore, Font, FontInfo, Glyph, GlyphTable, KernFirst, KernTable, Kerning, Layer, Master,
+    MasterKerning, MetricDef, MetricValue, Param, Snippet, Source, SourceFormat, StemDef, UserData, metric,
 };
 use fontcraft_plist::xml::{self, Node as XNode};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value, xmlplist};
 
+use crate::design::{self, Design};
 use crate::fontinfo::{self, Info};
 use crate::glif::{self, Style};
 use crate::names::{glyph_file_name, layer_dir_name};
@@ -253,8 +257,13 @@ pub(crate) struct ReadUfo {
     pub version_major: Option<i64>,
     pub version_minor: Option<i64>,
     pub note: Option<String>,
-    /// The other font information (see [`crate::fontinfo`]).
+    /// The other font information (see [`crate::fontinfo`]), without the design values.
     pub info: Info,
+    /// The master's blue zones, stem snaps and guidelines ([`crate::design`]), placed on the
+    /// master by [`place_design`] once the document's metrics are known.
+    pub design: Design,
+    /// Those of the design keys kept as written: parameters of the master.
+    pub design_raw: Vec<Param>,
     /// Which metric kinds the file has (the master's values follow [`METRICS`]).
     pub metrics: Vec<(&'static str, f64)>,
     pub features: Option<String>,
@@ -306,7 +315,11 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         }
     }
     let upm = self::units_per_em(units_per_em).map_or(1000.0, f64::from);
-    let font_info = fontinfo::read(info.as_ref().unwrap_or(&Dict::new()), upm);
+    let mut font_info = fontinfo::read(info.as_ref().unwrap_or(&Dict::new()), upm);
+    let design = std::mem::take(&mut font_info.design);
+    let (design_raw, rest): (Vec<Param>, Vec<Param>) =
+        std::mem::take(&mut font_info.params.0).into_iter().partition(|p| fontinfo::is_raw(p) && design::KEYS.contains(&p.name.as_str()));
+    font_info.params.0 = rest;
     if let Some(info) = info {
         master.extra.push(Family::Ufo, FONTINFO, Value::Dict(info));
     }
@@ -529,6 +542,8 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         version_minor,
         note,
         info: font_info,
+        design,
+        design_raw,
         metrics,
         features,
         glyphs: ordered,
@@ -556,18 +571,93 @@ fn is_plain_dir(name: &str) -> bool {
     is_plain_file(name)
 }
 
+/// The order of a UFO document's metric kinds: the `fontinfo.plist` metrics, with the baseline,
+/// which has no key, after the x-height (as the reference orders them).
+const KIND_ORDER: [&str; 6] = [metric::ASCENDER, metric::CAP_HEIGHT, metric::X_HEIGHT, metric::BASELINE, metric::DESCENDER, metric::ITALIC_ANGLE];
+
+/// The metric kinds of a document made of these UFOs, in [`KIND_ORDER`]: every kind a file has,
+/// and the baseline when a zone at 0 has no metric of its file to be the overshoot of.
+pub(crate) fn metric_kinds<'a>(read: impl Iterator<Item = &'a ReadUfo> + Clone) -> Vec<&'static str> {
+    let mut kinds: Vec<&'static str> = Vec::new();
+    for r in read.clone() {
+        for (k, _) in &r.metrics {
+            if !kinds.contains(k) {
+                kinds.push(k);
+            }
+        }
+    }
+    let baseline = read.into_iter().any(|r| {
+        r.design.zones.iter().any(|z| z.pos == 0.0 && z.size != 0.0) && !r.metrics.iter().any(|(k, v)| *k != metric::ITALIC_ANGLE && *v == 0.0)
+    });
+    if baseline {
+        kinds.push(metric::BASELINE);
+    }
+    kinds.sort_by_key(|k| KIND_ORDER.iter().position(|m| m == k));
+    kinds
+}
+
+/// How many horizontal and vertical stems the font's stem definitions have: those of the first
+/// UFO in `read` with any.
+pub(crate) fn stem_counts<'a>(mut read: impl Iterator<Item = &'a ReadUfo>) -> (usize, usize) {
+    read.find(|r| !r.design.stems_h.is_empty() || !r.design.stems_v.is_empty()).map_or((0, 0), |r| (r.design.stems_h.len(), r.design.stems_v.len()))
+}
+
+/// The font's stem definitions for UFO masters: unnamed, the horizontal ones first.
+pub(crate) fn stem_defs((h, v): (usize, usize)) -> Vec<StemDef> {
+    (0..h + v).map(|i| StemDef { horizontal: i < h, ..Default::default() }).collect()
+}
+
+/// Puts a UFO's design values on its master, for a document whose metric kinds are `kinds` and
+/// whose stems are `stems` ([`stem_counts`]). A zone at a position one of the file's metrics (or
+/// the baseline) has becomes that metric's overshoot, the first such metric without one; a zone
+/// of size 0 and the rest stay zones. Stems the definitions cannot hold (another count) are kept
+/// as written, as the master's parameters.
+pub(crate) fn place_design(
+    master: &mut Master,
+    metrics: &[(&'static str, f64)],
+    design: Design,
+    raw: Vec<Param>,
+    kinds: &[&'static str],
+    stems: (usize, usize),
+) {
+    let has = |k: &str| k == metric::BASELINE || metrics.iter().any(|(m, _)| *m == k);
+    let mut values: Vec<MetricValue> =
+        kinds.iter().map(|k| MetricValue { pos: metrics.iter().find(|(m, _)| m == k).map_or(0.0, |(_, v)| *v), over: 0.0 }).collect();
+    let mut zones = Vec::new();
+    for z in design.zones {
+        let at = kinds.iter().zip(values.iter()).position(|(k, v)| *k != metric::ITALIC_ANGLE && has(k) && v.pos == z.pos && v.over == 0.0);
+        match at.filter(|_| z.size != 0.0).and_then(|i| values.get_mut(i)) {
+            Some(v) => v.over = z.size,
+            None => zones.push(z),
+        }
+    }
+    master.metric_values = values;
+    master.zones = zones;
+    master.guides = design.guides;
+    master.params.0.extend(raw);
+    let counts = (design.stems_h.len(), design.stems_v.len());
+    if counts == stems || counts == (0, 0) {
+        master.stem_values = design.stems_h.into_iter().chain(design.stems_v).collect();
+    } else {
+        let kept = ufo_get(&master.extra, FONTINFO).and_then(Value::as_dict).cloned().unwrap_or_default();
+        for key in [design::STEMS_H, design::STEMS_V] {
+            let already = master.params.0.iter().any(|p| p.name == key && fontinfo::is_raw(p));
+            if let Some(v) = kept.get(key).filter(|_| !already) {
+                master.params.0.push(fontinfo::raw_param(key, v));
+            }
+        }
+    }
+}
+
 /// Reads a single UFO as a document with one master.
 pub fn read(files: &Files) -> Result<Font> {
     let master_id = "m01";
-    let r = read_master(files, master_id)?;
-    let mut metrics: Vec<MetricDef> = Vec::new();
-    let mut values: Vec<MetricValue> = Vec::new();
-    for (kind, v) in &r.metrics {
-        metrics.push(MetricDef::new(kind));
-        values.push(MetricValue { pos: *v, over: 0.0 });
-    }
+    let mut r = read_master(files, master_id)?;
+    let kinds = metric_kinds(std::iter::once(&r));
+    let stems = stem_counts(std::iter::once(&r));
+    let metrics: Vec<MetricDef> = kinds.iter().map(|k| MetricDef::new(k)).collect();
     let mut master = r.master;
-    master.metric_values = values;
+    place_design(&mut master, &r.metrics, std::mem::take(&mut r.design), std::mem::take(&mut r.design_raw), &kinds, stems);
     let units_per_em = units_per_em(r.units_per_em)?;
     let mut features = Features::default();
     if let Some(code) = r.features {
@@ -581,7 +671,7 @@ pub fn read(files: &Files) -> Result<Font> {
         version_minor: r.version_minor.and_then(|v| u16::try_from(v).ok()).unwrap_or(0),
         axes: Arc::default(),
         metrics: Arc::new(metrics),
-        stems: Arc::default(),
+        stems: Arc::new(stem_defs(stems)),
         numbers: Arc::default(),
         masters: Arc::new(vec![master]),
         instances: Arc::default(),
@@ -774,7 +864,9 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     keys.dedup();
     for key in keys {
         let mut value = mine_now.get(key).cloned();
+        // A master's design values are its own, never the font's.
         if !is_default
+            && !design::KEYS.contains(&key)
             && value.as_ref() == default_now.get(key)
             && default_info.get(key) == default_now.get(key)
             && read_info.get(key) != default_info.get(key)
@@ -1009,9 +1101,26 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
 /// The font information of `master` as UFO keys (those [`crate::fontinfo`] handles), and what has
 /// no place there. `read` is the master's `fontinfo.plist` as read.
 fn info_entries(font: &Font, master: &Master, read: &Dict) -> fontinfo::Written {
-    let font_info = Info { properties: font.info.properties.clone(), params: font.info.params.clone(), date: font.info.date.clone() };
-    let own = Info { properties: master.properties.clone(), params: master.params.clone(), date: None };
+    let font_info =
+        Info { properties: font.info.properties.clone(), params: font.info.params.clone(), date: font.info.date.clone(), ..Default::default() };
+    let own = Info { properties: master.properties.clone(), params: master.params.clone(), date: None, design: design_of(font, master) };
     fontinfo::write(&fontinfo::effective(&font_info, &own), f64::from(font.units_per_em), Some(read))
+}
+
+/// A master's design values as a UFO holds them: as zones, the overshoots of every metric except
+/// the italic angle, then the master's other zones (glyphsLib's alignment zones of a format 3
+/// master); its stem values split by their definitions' direction; its guides.
+fn design_of(font: &Font, m: &Master) -> Design {
+    let overshoots = font.metrics.iter().zip(m.metric_values.iter()).filter(|(d, v)| d.kind != metric::ITALIC_ANGLE && v.over != 0.0);
+    let stems = |horizontal: bool| -> Vec<f64> {
+        font.stems.iter().zip(m.stem_values.iter()).filter(|(d, _)| d.horizontal == horizontal).map(|(_, v)| *v).collect()
+    };
+    Design {
+        zones: overshoots.map(|(_, v)| AlignmentZone { pos: v.pos, size: v.over }).chain(m.zones.iter().copied()).collect(),
+        stems_h: stems(true),
+        stems_v: stems(false),
+        guides: m.guides.clone(),
+    }
 }
 
 /// What saving `font` as UFOs leaves out of its font information and user data, one line each.
@@ -1031,20 +1140,26 @@ pub fn info_losses(font: &Font) -> Vec<String> {
     if !font.info.settings.is_empty() {
         out.push("the font's settings".into());
     }
-    // Typed from `.glyphs` and not yet written to UFO or designspace (M1.7 steps 3b and 3c).
-    if !font.stems.is_empty() {
-        out.push(format!("the font's stems ({})", font.stems.len()));
+    // Stems travel as unnamed stem snaps, the horizontal ones first.
+    let named = font.stems.iter().filter(|d| !d.name.is_empty() || d.filter.is_some() || !d.extra.is_empty()).count();
+    if named > 0 {
+        out.push(format!("the font's stem names and filters ({named})"));
     }
     if !font.numbers.is_empty() {
         out.push(format!("the font's numbers ({})", font.numbers.len()));
     }
+    let italic = font.metrics.iter().position(|d| d.kind == metric::ITALIC_ANGLE);
     for m in font.masters.iter() {
         let name = if m.name.is_empty() { &m.id } else { &m.name };
-        if !m.guides.is_empty() {
-            out.push(format!("master `{name}`: guides ({})", m.guides.len()));
+        if italic.and_then(|i| m.metric_values.get(i)).is_some_and(|v| v.over != 0.0) {
+            out.push(format!("master `{name}`: the italic angle's overshoot"));
         }
-        if !m.zones.is_empty() {
-            out.push(format!("master `{name}`: alignment zones other than overshoots ({})", m.zones.len()));
+        // A master stored as a layer of another source's UFO has no font information of its own.
+        if m.extra.get(Family::Designspace, "layer").is_some() {
+            let parts = [("guides", m.guides.len()), ("alignment zones other than overshoots", m.zones.len()), ("stems", m.stem_values.len())];
+            for (what, n) in parts.into_iter().filter(|(_, n)| *n > 0) {
+                out.push(format!("master `{name}`: {what} ({n}), as a layer of another UFO"));
+            }
         }
         if !m.name_parts.is_empty() {
             out.push(format!("master `{name}`: name parts"));
@@ -1258,6 +1373,73 @@ mod tests {
         assert_eq!(s(&write(&font).unwrap()["fontinfo.plist"]), info);
         font.set_metric_pos("m01", metric::ASCENDER, 810.0).unwrap();
         assert!(s(&write(&font).unwrap()["fontinfo.plist"]).contains("<key>ascender</key>\n    <integer>810</integer>"));
+    }
+
+    #[test]
+    fn zones_stems_and_guides_reach_fontinfo_and_come_back() {
+        use fontcraft_model::{AlignmentZone, Guide, StemDef};
+        let mut font = Font::new("Design");
+        font.stems = Arc::new(vec![StemDef { name: "stem".into(), ..Default::default() }, StemDef { horizontal: true, ..Default::default() }]);
+        let m = &mut Arc::make_mut(&mut font.masters)[0];
+        m.stem_values = vec![80.0, 40.5];
+        m.zones = vec![AlignmentZone { pos: 400.0, size: -8.0 }];
+        m.guides = vec![
+            Guide { x: 250.0, angle: 90.0, ..Default::default() },
+            Guide { y: 600.0, name: Some("top".into()), locked: true, color: Some("1,0,0,1".into()), ..Default::default() },
+        ];
+        let files = write(&font).unwrap();
+        let info = s(&files["fontinfo.plist"]);
+        let list = |key: &str, items: &[&str]| {
+            let body: String = items.iter().map(|i| format!("\n      <integer>{i}</integer>")).collect();
+            format!("<key>{key}</key>\n    <array>{body}\n    </array>")
+        };
+        // The overshoots of the five metrics and the master's other zone, by glyphsLib's rule.
+        assert!(info.contains(&list("postscriptBlueValues", &["-16", "0", "500", "516", "700", "716", "800", "816"])), "{info}");
+        assert!(info.contains(&list("postscriptOtherBlues", &["-216", "-200", "392", "400"])), "{info}");
+        assert!(info.contains("<key>postscriptStemSnapH</key>\n    <array>\n      <real>40.5</real>"), "{info}");
+        assert!(info.contains(&list("postscriptStemSnapV", &["80"])), "{info}");
+        assert!(info.contains("<dict>\n        <key>x</key>\n        <integer>250</integer>\n      </dict>"), "{info}");
+        assert!(info.contains("<key>color</key>\n        <string>1,0,0,1</string>\n        <key>name</key>\n        <string>top [locked]</string>"));
+
+        let back = read(&files).unwrap();
+        let b = back.default_master().unwrap();
+        assert_eq!(b.metric_values, font.masters[0].metric_values, "each zone at a metric is its overshoot again");
+        assert_eq!(b.zones, [AlignmentZone { pos: 400.0, size: -8.0 }], "a zone at no metric stays a zone");
+        assert_eq!(back.stems.iter().map(|d| (d.name.as_str(), d.horizontal)).collect::<Vec<_>>(), [("", true), ("", false)]);
+        assert_eq!(b.stem_values, [40.5, 80.0], "horizontal stems first");
+        assert_eq!(b.guides, font.masters[0].guides);
+        assert!(back.info.params.is_empty() && b.params.is_empty(), "nothing kept as written");
+        assert_eq!(write(&back).unwrap(), files);
+        assert_eq!(info_losses(&font), ["the font's stem names and filters (1)"]);
+        assert!(info_losses(&back).is_empty());
+
+        // Writing regenerates the arrays from the model.
+        let mut edited = back.clone();
+        let m = &mut Arc::make_mut(&mut edited.masters)[0];
+        m.zones.clear();
+        m.metric_values[0].over = 12.0;
+        let info = s(&write(&edited).unwrap()["fontinfo.plist"]).to_string();
+        assert!(info.contains(&list("postscriptBlueValues", &["-16", "0", "500", "516", "700", "716", "800", "812"])), "{info}");
+        assert!(info.contains(&list("postscriptOtherBlues", &["-216", "-200"])), "{info}");
+    }
+
+    #[test]
+    fn a_zone_at_zero_makes_a_baseline_and_odd_values_stay_as_written() {
+        let mut files = write(&Font::new("Zero")).unwrap();
+        let info = s(&files["fontinfo.plist"]).to_string();
+        // A UFO has no baseline key: the zone at 0 needs the metric.
+        let back = read(&files).unwrap();
+        assert_eq!(back.metric(back.default_master().unwrap(), metric::BASELINE), Some(MetricValue { pos: 0.0, over: -16.0 }));
+        // Pairs glyphsLib's rule would reorder are kept as written, both blue keys together.
+        let odd = info.replace("<integer>-216</integer>\n      <integer>-200</integer>", "<integer>-200</integer>\n      <integer>-216</integer>");
+        assert_ne!(odd, info);
+        files.insert("fontinfo.plist".into(), odd.clone().into_bytes());
+        let font = read(&files).unwrap();
+        let m = font.default_master().unwrap();
+        let raw: Vec<&str> = m.params.0.iter().filter(|p| fontinfo::is_raw(p)).map(|p| p.name.as_str()).collect();
+        assert_eq!(raw, ["postscriptBlueValues", "postscriptOtherBlues"]);
+        assert!(m.metric_values.iter().all(|v| v.over == 0.0) && m.zones.is_empty());
+        assert_eq!(s(&write(&font).unwrap()["fontinfo.plist"]), odd);
     }
 
     #[test]

@@ -7,7 +7,8 @@ may keep our own carriers instead, and say so in the code.
 
 The tables restate behaviour in our own words; key names, parameter names and constants are
 facts. `file:line` references are relative to the installed `glyphsLib/` package. Implemented so
-far: font information (§1 to §3) in `crates/io-ufo/src/fontinfo.rs`.
+far: font information (§1 to §3) in `crates/io-ufo/src/fontinfo.rs`; master alignment zones,
+stems and guides (§4.1, §4 stem rows, §9.6) in `crates/io-ufo/src/design.rs`.
 
 Direction labels used in the tables:
 
@@ -379,6 +380,11 @@ U→G (`builder/blue_values.py:36-55`), with values taken in pairs `(y1, y2)`:
 
 Example (verified): BlueValues `[-10, 0, 500, 510]`, OtherBlues `[-210, -200]` →
 zones (500, 10), (0, -10), (-200, -10) → back to the same lists.
+
+FontCraft then places the zones in the model (`crates/io-ufo/src/ufo.rs`, `place_design`): a zone
+at the position of one of the UFO's metrics becomes that metric's overshoot; a zone at 0 becomes
+the overshoot of a `baseline` metric added for it; a zone of size 0 and the rest are the master's
+other zones. A file whose lists the rule would not give back unchanged keeps them as written.
 
 ---
 
@@ -805,6 +811,12 @@ U→G:
 | `position = (x or 0, y or 0)`. |
 | `angle` present → `angle mod 360`. Absent and the guideline looks vertical (y missing or 0) → 90. Otherwise 0. **Defect (verified):** a UFO guideline with only `y: 0` is turned into a vertical guide (angle 90) at x = 0. |
 | GSGuide `alignment`, `filter`, `lockAngle`, `showMeasurement`: **missing** both ways. |
+
+FontCraft differs in two places. A guideline with only `y` reads as a horizontal line (angle 0),
+as the UFO specification says, so the defect above does not apply. A guideline's `color` and
+`identifier` are fields of the model's guide; they join the name as above only when a `.glyphs`
+file is written, and the UFO writer takes them from the end of a name only when the fields are
+empty.
 
 ---
 

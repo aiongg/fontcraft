@@ -152,6 +152,12 @@ pub struct Guide {
     /// Where the guide's label sits (`left`, `center` or `right`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<String>,
+    /// A UFO guideline's colour, as the UFO writes it (`"r,g,b,a"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// A UFO guideline's identifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identifier: Option<String>,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }

@@ -268,16 +268,10 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         if read.get(default_index).is_some_and(Option::is_some) { default_index } else { main_of.values().copied().min().unwrap_or(0) };
     let Some(Some(default)) = read.get(default_index) else { return Err(bad(DOC, "no source can be read")) };
 
-    // Metric kinds over every master.
-    let mut kinds: Vec<&'static str> = Vec::new();
-    for r in read.iter().flatten() {
-        for (k, _) in &r.metrics {
-            if !kinds.contains(k) {
-                kinds.push(k);
-            }
-        }
-    }
-    kinds.sort_by_key(|k| ufo::METRICS.iter().position(|(_, m)| m == k));
+    // Metric kinds over every master; stem definitions from the default source, else the first
+    // with stems.
+    let kinds = ufo::metric_kinds(read.iter().flatten());
+    let stems = ufo::stem_counts(std::iter::once(default).chain(read.iter().flatten()));
     let default_features = default.features.clone();
     let (family_name, units_per_em, version_major, version_minor, note, ufo_version) = (
         default.family_name.clone(),
@@ -307,7 +301,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
             master.params = own.params;
         }
         master.location = s.location.clone();
-        master.metric_values = values_of_owned(&kinds, &r.metrics);
+        ufo::place_design(&mut master, &r.metrics, r.design, r.design_raw, &kinds, stems);
         main_values.insert(s.filename.clone(), master.metric_values.clone());
         ds(&mut master.extra, "filename", Value::String(s.filename.as_str().into()));
         if i != default_index && r.features != default_features {
@@ -389,7 +383,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         version_minor: version_minor.and_then(|v| u16::try_from(v).ok()).unwrap_or(0),
         axes: Arc::new(axes.iter().map(|a| Axis { name: a.name.clone(), tag: a.tag.clone(), hidden: a.hidden, extra: Extra::new() }).collect()),
         metrics: Arc::new(kinds.iter().map(|k| MetricDef::new(k)).collect()),
-        stems: Arc::default(),
+        stems: Arc::new(ufo::stem_defs(stems)),
         numbers: Arc::default(),
         masters: Arc::new(masters),
         instances: Arc::new(read_instances(root, &axes, &labels)?),
@@ -404,10 +398,6 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
     };
     font.check()?;
     Ok(font)
-}
-
-fn values_of_owned(kinds: &[&'static str], metrics: &[(&'static str, f64)]) -> Vec<MetricValue> {
-    kinds.iter().map(|k| MetricValue { pos: metrics.iter().find(|(m, _)| m == k).map_or(0.0, |(_, v)| *v), over: 0.0 }).collect()
 }
 
 fn opt_text(t: Option<&str>) -> Value {
@@ -841,6 +831,59 @@ mod tests {
         let out = write(&font).unwrap();
         assert_eq!(out.document, doc);
         assert_eq!(out.ufos, ufos);
+    }
+
+    #[test]
+    fn each_master_keeps_its_own_zones_stems_and_guides() {
+        use fontcraft_model::Guide;
+        let (doc, mut ufos) = two_masters();
+        let edit = |ufos: &mut BTreeMap<String, Files>, file: &str, from: &str, to: &str| {
+            let ufo = ufos.get_mut(file).unwrap();
+            let info = String::from_utf8(ufo["fontinfo.plist"].clone()).unwrap();
+            assert!(info.contains(from), "{info}");
+            ufo.insert("fontinfo.plist".into(), info.replacen(from, to, 1).into_bytes());
+        };
+        let stems = |h: &str, v: &str| {
+            format!(
+                "<key>postscriptStemSnapH</key>\n    <array>\n      <integer>{h}</integer>\n    </array>\n    \
+                 <key>postscriptStemSnapV</key>\n    <array>\n      <integer>{v}</integer>\n    </array>\n    <key>postscriptUnderlinePosition</key>"
+            )
+        };
+        edit(&mut ufos, "Duo-Light.ufo", "<key>postscriptUnderlinePosition</key>", &stems("30", "60"));
+        edit(&mut ufos, "Duo-Bold.ufo", "<key>postscriptUnderlinePosition</key>", &stems("50", "120"));
+        // The bold master's x-height overshoot is larger, and it has a guide.
+        edit(&mut ufos, "Duo-Bold.ufo", "<integer>516</integer>", "<integer>520</integer>");
+        edit(
+            &mut ufos,
+            "Duo-Bold.ufo",
+            "<key>openTypeOS2Type</key>",
+            "<key>guidelines</key>\n    <array>\n      <dict>\n        <key>y</key>\n        <integer>520</integer>\n      </dict>\n    </array>\n    <key>openTypeOS2Type</key>",
+        );
+        let font = read(&doc, &ufos).unwrap();
+        assert_eq!(font.stems.len(), 2);
+        let (light, bold) = (&font.masters[0], &font.masters[1]);
+        assert_eq!((light.stem_values.as_slice(), bold.stem_values.as_slice()), ([30.0, 60.0].as_slice(), [50.0, 120.0].as_slice()));
+        let x = |m: &Master| font.metric(m, fontcraft_model::metric::X_HEIGHT).unwrap().over;
+        assert_eq!((x(light), x(bold)), (16.0, 20.0));
+        assert!(light.guides.is_empty());
+        assert_eq!(bold.guides, [Guide { y: 520.0, ..Default::default() }]);
+        assert!(font.masters.iter().all(|m| m.params.is_empty()) && font.info.params.is_empty());
+        let out = write(&font).unwrap();
+        assert_eq!(out.ufos, ufos);
+
+        // An edit of the default master leaves the other's values alone.
+        let mut edited = font.clone();
+        Arc::make_mut(&mut edited.masters)[0].stem_values = vec![32.0, 60.0];
+        let out = write(&edited).unwrap();
+        assert_eq!(out.ufos["Duo-Bold.ufo"], ufos["Duo-Bold.ufo"]);
+        assert!(String::from_utf8_lossy(&out.ufos["Duo-Light.ufo"]["fontinfo.plist"]).contains("<integer>32</integer>"));
+
+        // A master with another number of stems keeps its stems as written.
+        edit(&mut ufos, "Duo-Bold.ufo", "<integer>50</integer>\n    </array>", "<integer>50</integer>\n      <integer>52</integer>\n    </array>");
+        let font = read(&doc, &ufos).unwrap();
+        assert!(font.masters[1].stem_values.is_empty());
+        assert_eq!(font.masters[1].params.0.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["postscriptStemSnapH", "postscriptStemSnapV"]);
+        assert_eq!(write(&font).unwrap().ufos, ufos);
     }
 
     #[test]

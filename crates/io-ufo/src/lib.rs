@@ -8,7 +8,8 @@
 //! - [`glif`]: one glyph's file in one layer.
 //! - [`names`]: the specification's user-name-to-file-name rule.
 //! - [`ufo`]: a UFO directory, as one master; `fontinfo` maps its font information to the
-//!   reference's properties and parameters.
+//!   reference's properties and parameters, and `design` its blue zones, stem snaps and
+//!   guidelines to the master's fields.
 //! - [`designspace`]: a designspace and its UFOs, as one document.
 //! - [`zip`]: reading a UFOZ, a UFO in a ZIP archive.
 //!
@@ -20,6 +21,7 @@ use std::collections::BTreeMap;
 
 use fontcraft_model::ModelError;
 
+mod design;
 pub mod designspace;
 mod fontinfo;
 pub mod glif;

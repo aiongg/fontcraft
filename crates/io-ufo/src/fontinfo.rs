@@ -14,6 +14,7 @@
 //! | `openTypeOS2CodePageRanges` | `codePageRanges` as code page numbers, `codePageRangesUnsupportedBits` |
 //! | `openTypeGaspRangeRecords` | `GASP Table`, a dictionary of maximum size → behaviour flags |
 //! | `openTypeHeadCreated` | the font's date |
+//! | blue values, stem snaps, `guidelines` | the master's design values ([`crate::design`]) |
 //! | anything else | a parameter under its UFO name |
 //!
 //! The keys in [`ELSEWHERE`] are model fields of their own and are not handled here.
@@ -33,26 +34,12 @@ use std::collections::BTreeMap;
 use fontcraft_model::{DEFAULT_LANGUAGE, Family, Localized, Param, Params, Properties, Property, PropertyValue};
 use fontcraft_plist::{Array, Dict, Num, Number, Value};
 
-/// Keys the model holds in fields of its own (handled in `ufo.rs`), or that a later step types
-/// (blue zones, stems, guidelines).
-pub(crate) const ELSEWHERE: [&str; 16] = [
-    "familyName",
-    "styleName",
-    "unitsPerEm",
-    "versionMajor",
-    "versionMinor",
-    "note",
-    "ascender",
-    "capHeight",
-    "xHeight",
-    "descender",
-    "italicAngle",
-    "postscriptBlueValues",
-    "postscriptOtherBlues",
-    "postscriptStemSnapH",
-    "postscriptStemSnapV",
-    "guidelines",
-];
+use crate::design::{self, Design};
+
+/// Keys the model holds in fields of its own, handled in `ufo.rs`. The master's blue zones, stem
+/// snaps and guidelines are handled here, through [`crate::design`].
+pub(crate) const ELSEWHERE: [&str; 11] =
+    ["familyName", "styleName", "unitsPerEm", "versionMajor", "versionMinor", "note", "ascender", "capHeight", "xHeight", "descender", "italicAngle"];
 
 /// The `Extra` key (UFO family) of a parameter written as it is.
 pub(crate) const RAW: &str = "raw";
@@ -433,7 +420,7 @@ fn int(i: i64) -> Value {
 }
 
 /// A number as fontTools would store it: an integer when whole.
-fn number(v: f64) -> Value {
+pub(crate) fn number(v: f64) -> Value {
     if v.fract() == 0.0 && v.abs() < 1e15 {
         // In range, so the conversion is exact.
         #[allow(clippy::cast_possible_truncation)]
@@ -447,7 +434,7 @@ fn int_list(v: &[i64]) -> Value {
     Value::Array(Array { items: v.iter().map(|i| int(*i)).collect(), ..Default::default() })
 }
 
-fn string(s: &str) -> Value {
+pub(crate) fn string(s: &str) -> Value {
     Value::String(s.into())
 }
 
@@ -526,6 +513,8 @@ pub(crate) struct Info {
     pub properties: Properties,
     pub params: Params,
     pub date: Option<String>,
+    /// The master's own design values; never the font's.
+    pub design: Design,
 }
 
 /// One model item made from one UFO key.
@@ -541,7 +530,7 @@ enum Item {
     Date(String),
 }
 
-fn raw_param(key: &str, v: &Value) -> Param {
+pub(crate) fn raw_param(key: &str, v: &Value) -> Param {
     let mut p = Param::new(key, v.without_spellings());
     p.extra.push(Family::Ufo, RAW, int(1));
     p
@@ -565,7 +554,8 @@ pub(crate) fn read(info: &Dict, upm: f64) -> Info {
     let mut records = Records::Fold;
     // Each pass turns at least one more key raw, so this ends; the bound is a backstop.
     for _ in 0..=info.len() + 2 {
-        let built = assemble(derive(info, upm, &raw, records));
+        let mut built = assemble(derive(info, upm, &raw, records));
+        built.design = design::read(info, &raw);
         let (written, _) = write(&built, upm, Some(info));
         let bad = mismatches(info, &written);
         if bad.is_empty() {
@@ -574,8 +564,14 @@ pub(crate) fn read(info: &Dict, upm: f64) -> Info {
         for key in bad {
             if key == RECORDS && records == Records::Fold {
                 records = Records::Entries;
-            } else if !raw.contains(&key) {
-                raw.push(key);
+                continue;
+            }
+            // One list of zones makes both blue keys, so they are kept as written together.
+            let keys = if key == design::BLUES || key == design::OTHER_BLUES { vec![design::BLUES, design::OTHER_BLUES] } else { vec![key.as_str()] };
+            for k in keys {
+                if !raw.iter().any(|r| r == k) {
+                    raw.push(k.to_string());
+                }
             }
         }
     }
@@ -610,6 +606,9 @@ fn derive(info: &Dict, upm: f64, raw: &[String], records: Records) -> Vec<Item> 
         }
         if raw.iter().any(|r| r == key) {
             items.push(Item::Param(raw_param(key, v)));
+            continue;
+        }
+        if design::KEYS.contains(&key) {
             continue;
         }
         let kind = kind_of(key).unwrap_or(Kind::Any);
@@ -866,7 +865,7 @@ pub(crate) fn effective(font: &Info, master: &Info) -> Info {
         .collect();
     params.extend(master.params.0.iter().cloned());
     let date = if master.params.0.iter().any(|p| p.name == CREATED) { None } else { font.date.clone() };
-    Info { properties, params: Params(params), date }
+    Info { properties, params: Params(params), date, design: master.design.clone() }
 }
 
 /// What a master's own font information has that the font's does not: the properties and the
@@ -882,7 +881,7 @@ pub(crate) fn split(font: &Info, mine: Info) -> Info {
     {
         params.push(raw_param(CREATED, &string(&t)));
     }
-    Info { properties: Properties(properties), params: Params(params), date: None }
+    Info { properties: Properties(properties), params: Params(params), date: None, design: mine.design }
 }
 
 /// What the writer produced, and what it had no place for.
@@ -1008,7 +1007,8 @@ pub(crate) fn write(info: &Info, upm: f64, mine: Option<&Dict>) -> Written {
                         continue;
                     }
                 };
-                if ELSEWHERE.contains(&ufo) {
+                // The master's design values are written from its fields alone.
+                if ELSEWHERE.contains(&ufo) || design::KEYS.contains(&ufo) {
                     lost.push(what);
                     continue;
                 }
@@ -1042,6 +1042,11 @@ pub(crate) fn write(info: &Info, upm: f64, mine: Option<&Dict>) -> Written {
     if !records.is_empty() {
         let items = records.iter().map(record_value).collect();
         set(&mut out, &mut lost, RECORDS, Value::Array(Array { items, ..Default::default() }), "localised names");
+    }
+    let mut typed = Vec::new();
+    design::write(&info.design, &raw_keys, mine, &mut typed, &mut lost);
+    for (k, v) in typed {
+        set(&mut out, &mut lost, &k, v, &format!("`{k}`"));
     }
     if let Some(d) = &info.date {
         match model_date_to_ufo(d) {

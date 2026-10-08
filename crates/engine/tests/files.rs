@@ -349,6 +349,62 @@ fn font_information_reaches_fontinfo_and_comes_back() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn zones_stems_and_guides_reach_fontinfo_and_come_back() {
+    let dir = temp("design");
+    let source = dir.join("Design.glyphs");
+    let text = V3
+        .replacen(
+            "id = m01;\nmetricValues = (\n{\nover = 16;\npos = 800;\n}\n);\nname = Regular;\n",
+            "guides = (\n{\nlocked = 1;\nname = \"top [#g1]\";\npos = (0,600);\n},\n{\nangle = 90;\npos = (250,0);\n}\n);\nid = m01;\n\
+             metricValues = (\n{\nover = 16;\npos = 800;\n},\n{\nover = -12;\n}\n);\nname = Regular;\nstemValues = (\n80,\n30\n);\n",
+            1,
+        )
+        .replacen(
+            "metrics = (\n{\ntype = ascender;\n}\n);",
+            "metrics = (\n{\ntype = ascender;\n},\n{\ntype = baseline;\n}\n);\nstems = (\n{\nname = stem;\n},\n{\nhorizontal = 1;\nname = bar;\n}\n);",
+            1,
+        );
+    std::fs::write(&source, &text).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": source }));
+    let ufo = dir.join("Design.ufo");
+    let saved = run(&mut s, "file.saveAs", json!({ "path": ufo }));
+    let info = saved["losses"].as_array().unwrap().iter().find(|l| l["what"] == "font information a UFO has no place for yet").cloned();
+    assert_eq!(info.map(|l| l["items"].clone()), Some(json!(["the font's stem names and filters (2)"])), "{saved}");
+    let fontinfo = std::fs::read_to_string(ufo.join("fontinfo.plist")).unwrap();
+    let list = |key: &str, items: &[i64]| {
+        let body: String = items.iter().map(|i| format!("\n      <integer>{i}</integer>")).collect();
+        format!("<key>{key}</key>\n    <array>{body}\n    </array>")
+    };
+    for expected in [
+        list("postscriptBlueValues", &[-12, 0, 800, 816]),
+        list("postscriptStemSnapH", &[30]),
+        list("postscriptStemSnapV", &[80]),
+        "<key>identifier</key>\n        <string>g1</string>\n        <key>name</key>\n        <string>top [locked]</string>\n        <key>y</key>\n        <integer>600</integer>".into(),
+        "<dict>\n        <key>x</key>\n        <integer>250</integer>\n      </dict>".into(),
+    ] {
+        assert!(fontinfo.contains(&expected), "{expected} in {fontinfo}");
+    }
+    assert!(!fontinfo.contains("postscriptOtherBlues"), "{fontinfo}");
+
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": ufo }));
+    let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("Back.glyphs") }));
+    assert!(saved["losses"].as_array().unwrap().iter().all(|l| l["family"] == "ufo"), "only the UFO's file records: {saved}");
+    let back = std::fs::read_to_string(dir.join("Back.glyphs")).unwrap();
+    for expected in [
+        "{\nlocked = 1;\nname = \"top [#g1]\";\npos = (0,600);\n}",
+        "{\nangle = 90;\npos = (250,0);\n}",
+        "{\nover = -12;\n}",
+        "stemValues = (\n30,\n80\n);",
+        "stems = (\n{\nhorizontal = 1;\nname = \"\";\n},\n{\nname = \"\";\n}\n);",
+    ] {
+        assert!(back.contains(expected), "{expected} in {back}");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// The test document with a second master, Bold, whose glyphs are wider.
 fn two_masters() -> String {
     V3.replacen(

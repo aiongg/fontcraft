@@ -33,7 +33,11 @@ bundled, the file says so in its header and the project is listed here with its 
   the rule that joins a format 2 master's name parts into its name is ported from its master
   class (crates/model/src/font.rs, NameParts::joined). The mapping between UFO font information and the .glyphs
   format's properties and custom parameters, with its code page and language tables, is ported
-  from its builder (crates/io-ufo/src/fontinfo.rs; docs/spec/31-glyphslib-crosswalk.md).
+  from its builder (crates/io-ufo/src/fontinfo.rs; docs/spec/31-glyphslib-crosswalk.md). The
+  rules that turn alignment zones into PostScript blue values and back, master stems into stem
+  snaps, and master guides into UFO guidelines (with the name suffixes for colour, identifier and
+  lock) are ported from its builder too (crates/io-ufo/src/design.rs, and the guide names in
+  crates/io-glyphs/src/design.rs).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data

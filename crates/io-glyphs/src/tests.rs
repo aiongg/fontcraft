@@ -355,6 +355,21 @@ fn version_3_stems_numbers_guides_and_instances_are_fields() {
 }
 
 #[test]
+fn a_guide_colour_and_identifier_go_into_its_name() {
+    let mut font = read(&v3_design()).unwrap();
+    let m = &mut std::sync::Arc::make_mut(&mut font.masters)[0];
+    m.guides[0].color = Some("1,0,0,1".into());
+    m.guides[0].identifier = Some("g1".into());
+    m.guides[1].identifier = Some("g2".into());
+    let text = write(&font).unwrap();
+    assert!(text.contains("name = \"center [1,0,0,1] [#g1]\";"), "{text}");
+    assert!(text.contains("name = \" [#g2]\";"), "{text}");
+    // Read back, the suffixes are part of the name, as glyphsLib reads them.
+    let back = read(&text).unwrap();
+    assert_eq!(back.masters[0].guides[0].name.as_deref(), Some("center [1,0,0,1] [#g1]"));
+}
+
+#[test]
 fn editing_a_typed_design_field_writes_the_new_value() {
     let text = v3_design();
     let mut font = read(&text).unwrap();

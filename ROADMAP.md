@@ -72,7 +72,8 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 1. **M1.7, the typed model**: every documented field of the three source formats as a model
    field, one vocabulary for both format families, and Glyphs-only data in glyphsLib's UFO lib
    keys. Steps 1 and 2 done (font information in every format); step 3a done (`.glyphs`
-   masters, instances, stems, guides); 3b and 3c (the same fields from UFO and designspace) next.
+   masters, instances, stems, guides); 3b done (UFO zones, stems, guidelines); 3c (designspace
+   axes and instances) next.
 2. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
    remaining static tables, the `cff` crate, WOFF and WOFF2, `fontcraft-cli oracle`, and a first
    corpus-wide comparison with fontc and fontmake. From this
@@ -113,8 +114,9 @@ on, so the engine track, where oracles prove correctness, goes first.
   model, and so are the font's properties, custom parameters, settings, date and user data: UFO
   font information maps to the reference's names through a crosswalk ported from glyphsLib.
   From `.glyphs`, stems, numbers, master guides, alignment zones, version 2 axes and name parts,
-  and the instances' classes, style linking and interpolation settings are fields too (not yet
-  written to UFO or designspace).
+  and the instances' classes, style linking and interpolation settings are fields too. UFO blue
+  values, stem snaps and guidelines read into and write from the same fields, by glyphsLib's
+  rules; numbers, name parts and instance fields are not yet written to UFO or designspace.
 - **Compiler:** static TrueType from the first master, deterministic.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
@@ -131,7 +133,7 @@ measured by what works (the parity table below and the measures in each mileston
 | # | Milestone | Status | Commands (live) |
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress: font information done; `.glyphs` masters and instances typed | 10 (10) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress: font information done; `.glyphs` masters and instances typed; UFO zones, stems and guidelines typed | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ⬜ plan accepted, next | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |

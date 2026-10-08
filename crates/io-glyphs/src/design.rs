@@ -11,6 +11,10 @@
 //!   same way, so [`crate::v2`] uses the same functions; its master stems, guides and axis values
 //!   are its own.
 //!
+//! A guide's UFO colour and identifier have no key of their own: they are written into its name
+//! as glyphsLib 6.15.0 writes them (`builder/guidelines.py`, Apache-2.0; see `NOTICE`), and read
+//! back as part of the name.
+//!
 //! A list becomes model fields only when every item reads and writing the items back gives the
 //! same text; a single key only when writing its field back gives the same text. Anything else
 //! stays in `Extra` as written. A key the writer leaves out (a flag at its default) stays in
@@ -161,13 +165,32 @@ pub(crate) fn push_guide_rest(e: &mut Vec<(Str, Value)>, g: &Guide) -> Option<()
     if g.angle != 0.0 {
         e.push(("angle".into(), num(g.angle, "guide").ok()?));
     }
-    push_text(e, "name", &g.name);
+    push_text(e, "name", &folded_name(g));
     push_text(e, "filter", &g.filter);
     push_text(e, "orientation", &g.orientation);
     push_flag(e, "locked", g.locked);
     push_flag(e, "lockAngle", g.angle_locked);
     push_flag(e, "showMeasurement", g.show_measurement);
     Some(())
+}
+
+/// The guide's name with a UFO guideline's colour and identifier added as glyphsLib adds them
+/// (`builder/guidelines.py`, `to_glyphs_guidelines`): ` [<colour>]`, then ` [#<identifier>]`. An
+/// empty colour or identifier adds nothing.
+fn folded_name(g: &Guide) -> Option<String> {
+    let color = g.color.as_deref().filter(|c| !c.is_empty());
+    let identifier = g.identifier.as_deref().filter(|i| !i.is_empty());
+    if color.is_none() && identifier.is_none() {
+        return g.name.clone();
+    }
+    let mut name = g.name.clone().unwrap_or_default();
+    if let Some(c) = color {
+        name.push_str(&format!(" [{c}]"));
+    }
+    if let Some(i) = identifier {
+        name.push_str(&format!(" [#{i}]"));
+    }
+    Some(name)
 }
 
 fn read_guide(v: &Value) -> Option<Guide> {
