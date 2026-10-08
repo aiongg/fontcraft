@@ -5,7 +5,7 @@ Rust, and drivable by AI agents as fully as by people. It follows the convention
 Crafting Apps (VectorCraft, PhotoCraft and their siblings) and aims at parity with the leading
 commercial font editor and with the standard open font-engineering tools.
 
-**Status: source formats under way (`.glyphs` and compiled fonts open and save), not yet a font editor.** See
+**Status: source formats done (`.glyphs`, UFO and designspace open and save; compiled fonts open), not yet a font editor.** See
 [ROADMAP.md](ROADMAP.md) for the honest assessment.
 
 ## What is here

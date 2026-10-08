@@ -69,7 +69,9 @@ bundled, the file says so in its header and the project is listed here with its 
   names, regions, the master layers that stand in, component renaming, kerning, the copies its
   align_alternate_layers transformation adds to composites) and intermediate layers as sparse
   designspace sources are ported from its bracket-layer, transformation and source builders
-  (crates/io-ufo/src/designspace/rules.rs and sparse.rs).
+  (crates/io-ufo/src/designspace/rules.rs and sparse.rs). The decomposition of a component or
+  image matrix into position, scale, rotation and slant is ported from its
+  decomposeGlyphs3Transform (crates/io-glyphs/src/lib.rs, decompose).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data
@@ -79,7 +81,8 @@ bundled, the file says so in its header and the project is listed here with its 
   user-name-to-file-name rule. crates/io-ufo/src/kerning.rs ports ufoLib's renaming of UFO 2
   kerning groups (converters.py). The piecewise-linear map of crates/model/src/axes.rs ports varLib's piecewiseLinearMap, and the
   designspace writer follows the element order of designspaceLib. crates/io-ufo/src/designspace/rules.rs
-  ports varLib's overlayFeatureVariations, overlayBox and cleanupBox (featureVars.py).
+  ports varLib's overlayFeatureVariations, overlayBox and cleanupBox (featureVars.py), and
+  crates/io-glyphs/src/lib.rs (quadratic_roots) the quadratic solver of misc/bezierTools.py.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

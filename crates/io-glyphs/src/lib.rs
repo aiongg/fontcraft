@@ -7,7 +7,9 @@
 //! the documented default are left out, as the reference leaves them out.
 //!
 //! Written from the format documents and JSON schemas in GlyphsSDK (Apache-2.0) and from files in
-//! the test corpus. Format versions 2 ([`v2`]), 3 and 4 are read and written.
+//! the test corpus. Format versions 2 ([`v2`]), 3 and 4 are read and written. The decomposition of
+//! a matrix into the format's transform fields (`decompose`) is ported from glyphsLib's
+//! `decomposeGlyphs3Transform` (Apache-2.0) and fontTools' `solveQuadratic` (MIT); see `NOTICE`.
 //!
 //! Paths, nodes, components, anchors and format 4 image shapes are read and written by
 //! [`shape`]. Shapes the model cannot hold yet (format 4 shape groups, paths with quartic, Hobby
