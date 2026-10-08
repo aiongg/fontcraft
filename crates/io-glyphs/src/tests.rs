@@ -162,6 +162,114 @@ fn matrices_without_shear_decompose() {
     assert_eq!(decompose([1.0, 0.0, 0.5, 1.0, 0.0, 0.0]).map(|_| ()), None, "a shear is not a rotation and a scale");
 }
 
+const V2: &str = "{
+.appVersion = \"1192\";
+familyName = Old;
+fontMaster = (
+{
+alignmentZones = (
+\"{810, 12}\",
+\"{578, 11}\",
+\"{0, -13}\",
+\"{-190, -16}\"
+);
+ascender = 810;
+capHeight = 810;
+descender = -190;
+id = \"3FB85DAF-C7EF\";
+weightValue = 180;
+xHeight = 578;
+}
+);
+glyphs = (
+{
+glyphname = A;
+layers = (
+{
+anchors = (
+{
+name = top;
+position = \"{400, 810}\";
+}
+);
+layerId = \"3FB85DAF-C7EF\";
+paths = (
+{
+closed = 1;
+nodes = (
+\"400 810 LINE\",
+\"169 810 LINE SMOOTH\",
+\"22 0 LINE\"
+);
+}
+);
+width = 568;
+}
+);
+unicode = 0041;
+},
+{
+glyphname = Aacute;
+layers = (
+{
+components = (
+{
+name = A;
+},
+{
+name = acutecomb;
+transform = \"{1, 0, 0, 1, 285, 232}\";
+}
+);
+layerId = \"3FB85DAF-C7EF\";
+width = 568;
+}
+);
+unicode = 00C1;
+},
+{
+glyphname = uni2000;
+layers = (
+{
+layerId = \"3FB85DAF-C7EF\";
+width = 1000;
+}
+);
+unicode = 2000;
+}
+);
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}
+";
+
+#[test]
+fn a_version_2_file_round_trips_through_the_model() {
+    let font = read(V2).unwrap();
+    assert_eq!(font.source.glyphs_version, Some(2));
+    let m = font.default_master().unwrap();
+    let get = |k| font.metric(m, k).unwrap();
+    assert_eq!((get(fontcraft_model::metric::ASCENDER).pos, get(fontcraft_model::metric::ASCENDER).over), (810.0, 12.0));
+    assert_eq!(get(fontcraft_model::metric::CAP_HEIGHT).over, 0.0, "the one zone at 810 went to the ascender");
+    assert_eq!(get(fontcraft_model::metric::BASELINE).over, -13.0);
+    assert_eq!(font.glyph("Aacute").unwrap().unicodes, [0xC1]);
+    assert_eq!(font.glyph("uni2000").unwrap().unicodes, [0x2000], "hexadecimal even when it reads as a number");
+    let Shape::Component(c) = &font.glyph("Aacute").unwrap().layers[0].shapes[1] else { panic!() };
+    assert_eq!(c.transform, Transform::Matrix([1.0, 0.0, 0.0, 1.0, 285.0, 232.0]));
+    assert_eq!(write(&font).unwrap(), V2);
+}
+
+#[test]
+fn version_2_spellings_that_are_not_canonical_are_kept_while_they_hold() {
+    let text = V2.replace("{1, 0, 0, 1, 285, 232}", "{1.0, 0, 0, 1, 285, 232}").replace("{400, 810}", "{400.0, 810}");
+    let mut font = read(&text).unwrap();
+    assert_eq!(write(&font).unwrap(), text);
+    // Once the value changes, the canonical spelling takes over.
+    font.glyph_mut("A").unwrap().layers[0].anchors[0].x = 401.0;
+    assert!(write(&font).unwrap().contains("position = \"{401, 810}\";"));
+}
+
 #[test]
 fn malformed_files_are_errors_not_panics() {
     for bad in ["(", "()", "{\n.formatVersion = 3;\n}", "{\n.formatVersion = 9;\nunitsPerEm = 1000;\n}", "{\nunitsPerEm = 1000;\n}"] {

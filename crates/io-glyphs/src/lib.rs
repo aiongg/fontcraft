@@ -7,7 +7,7 @@
 //! the documented default are left out, as the reference leaves them out.
 //!
 //! Written from the format documents and JSON schemas in GlyphsSDK (Apache-2.0) and from files in
-//! the test corpus. Format versions 3 and 4 are supported; version 2 is not yet.
+//! the test corpus. Format versions 2 ([`v2`]), 3 and 4 are read and written.
 //!
 //! Shapes the model cannot hold yet (format 4 images and groups, paths with quartic, Hobby or
 //! spiral nodes, paths whose node list does not make an outline) are kept as [`Shape::Raw`].
@@ -21,6 +21,8 @@ use fontcraft_model::{
 };
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
+
+mod v2;
 
 #[derive(Debug, thiserror::Error)]
 pub enum GlyphsError {
@@ -54,11 +56,11 @@ pub fn read(text: &str) -> Result<Font> {
 pub fn write(font: &Font) -> Result<String> {
     let version = font.source.glyphs_version.unwrap_or(3);
     let dialect = match version {
-        3 => Dialect::Glyphs3,
+        2 | 3 => Dialect::Glyphs3,
         4 => Dialect::Glyphs4,
         v => return Err(GlyphsError::Unsupported(format!("writing format version {v}"))),
     };
-    let root = write_font(font, version)?;
+    let root = if version == 2 { v2::write_font(font)? } else { write_font(font, version)? };
     Ok(openstep::write(&openstep::Document::new(Value::Dict(root)), dialect))
 }
 
@@ -148,7 +150,7 @@ fn v4_family_name(root: &Dict) -> Option<String> {
 fn read_font(mut root: Dict) -> Result<Font> {
     let version = match take(&mut root, ".formatVersion") {
         Some(v) => as_int(&v, ".formatVersion")?,
-        None => return Err(GlyphsError::Unsupported("format version 2".into())),
+        None => return v2::read_font(root),
     };
     if !(3..=4).contains(&version) {
         return Err(GlyphsError::Unsupported(format!("format version {version}")));

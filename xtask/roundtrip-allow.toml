@@ -5,3 +5,7 @@
 # [[allow]]
 # path = "fontc/resources/testdata/glyphs3/Example.glyphs"   # relative to corpus/
 # reason = "…"
+
+[[allow]]
+path = "glyphssdk/GlyphsFileFormat/GlyphsFileFormatv2.glyphs"
+reason = "The format document's sample file, arranged by hand: its root, glyph and layer keys are in an order no file the app saved uses (for example vertKerning right after kerning). Every other version 2 file the app saved round-trips."
