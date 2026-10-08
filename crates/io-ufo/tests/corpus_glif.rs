@@ -14,9 +14,9 @@ fn kept_tags(layer: &Layer) -> usize {
     let mut n = tags(&layer.extra) + layer.anchors.iter().map(|a| tags(&a.extra)).sum::<usize>();
     for s in &layer.shapes {
         match s {
-            Shape::Path(p) => n += tags(&p.extra) + p.nodes.iter().map(|n| tags(&n.extra)).sum::<usize>(),
+            Shape::Path(p) => n += tags(&p.extra) + p.nodes.iter().map(|n| tags(&n.info.extra)).sum::<usize>(),
             Shape::Component(c) => n += tags(&c.extra),
-            Shape::Raw(_) => {}
+            Shape::Image(_) | Shape::Raw(_) => {}
         }
     }
     n

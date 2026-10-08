@@ -885,7 +885,7 @@ impl Font {
                     }
                     inner
                 }
-                Shape::Raw(_) => continue,
+                Shape::Image(_) | Shape::Raw(_) => continue,
             };
             // Charge what this glyph adds, including what its components brought, so nested
             // references cannot multiply the work past the budget.
@@ -1026,18 +1026,31 @@ impl Font {
     }
 }
 
-/// Every path is a well-formed node list within the coordinate limits, and every component names
-/// a glyph and has a finite transform.
+/// Every path is a well-formed node list within the coordinate limits, every component names a
+/// glyph and has a finite transform, every image has a finite placement, and the shapes' data
+/// keeps its limits (`crate::shape_info`).
 fn check_shapes(shapes: &[Shape], bad: &dyn Fn(String) -> ModelError) -> Result<(), ModelError> {
     for shape in shapes {
         match shape {
             Shape::Path(p) => {
                 p.to_bez().map_err(bad)?;
+                if !p.info.is_default() {
+                    crate::shape_info::check_attrs(&p.info.attrs).map_err(bad)?;
+                }
             }
             Shape::Component(c) => {
                 check_name("component glyph", &c.glyph)?;
                 if c.transform.numbers().iter().any(|v| !v.is_finite()) {
                     return Err(bad("a component transform is not a number".into()));
+                }
+                if !c.info.is_default() {
+                    crate::shape_info::check_component_info(&c.info).map_err(bad)?;
+                }
+            }
+            Shape::Image(i) => {
+                let numbers = i.transform.numbers().into_iter().chain(i.crop.into_iter().flatten()).chain(i.alpha);
+                if !numbers.into_iter().all(f64::is_finite) {
+                    return Err(bad("an image's placement, crop or alpha is not a number".into()));
                 }
             }
             Shape::Raw(_) => {}

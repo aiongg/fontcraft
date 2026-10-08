@@ -1441,6 +1441,7 @@ pub(crate) fn font_losses(font: &Font) -> Vec<String> {
     }
     out.extend(glyph_losses(font));
     out.extend(layer_losses(font));
+    out.extend(shape_losses(font));
     if !font.info.user_data.is_empty() {
         out.push(format!("the font's user data ({} keys)", font.info.user_data.0.len()));
     }
@@ -1549,6 +1550,65 @@ pub(crate) fn layer_losses(font: &Font) -> Vec<String> {
     }
     counts.into_iter().filter(|(_, n)| *n > 0).map(|(what, n)| format!("{what} ({n})")).collect()
 }
+
+/// The shape data a GLIF file has no place for, one line per kind with the number of objects that
+/// have it, in the layers a UFO holds. (glyphsLib carries the components' alignment, anchors,
+/// locks and smart values in `com.schriftgestaltung.*` lib keys and user data in
+/// `public.objectLibs`; not yet.)
+pub(crate) fn shape_losses(font: &Font) -> Vec<String> {
+    use fontcraft_model::Shape;
+    let mut counts = [0usize; SHAPE_LOSSES.len()];
+    let ufo2 = font.source.ufo_version == Some(2);
+    let layer_master = |id: &str| font.masters.iter().any(|m| m.id == id && m.extra.get(Family::Designspace, "layer").is_some());
+    let layers = font
+        .glyphs
+        .iter()
+        .flat_map(|g| g.layers.iter())
+        .filter(|l| l.is_master_layer() || (ufo_layer_name(font, l).is_some() && !layer_master(&l.master)));
+    for l in layers {
+        let background = l.info.background.as_ref();
+        for s in l.shapes.iter().chain(background.into_iter().flat_map(|b| b.shapes.iter())) {
+            match s {
+                Shape::Path(p) => {
+                    counts[0] += usize::from(p.info.locked || !p.info.attrs.is_empty());
+                    counts[1] += p.nodes.iter().filter(|n| n.locked || !n.orientation.is_left() || !n.info.user_data.is_empty()).count();
+                    counts[2] += p.nodes.iter().filter(|n| n.tangent).count();
+                    counts[3] += usize::from(!p.closed && p.nodes.first().is_some_and(|n| n.smooth));
+                    counts[9] += usize::from(ufo2 && (p.info.identifier.is_some() || p.nodes.iter().any(|n| n.info.identifier.is_some())));
+                }
+                Shape::Component(c) => {
+                    let i = &*c.info;
+                    counts[4] += usize::from(i.alignment != fontcraft_model::Alignment::Default || i.anchor.is_some());
+                    counts[5] += usize::from(!i.smart_values.is_empty());
+                    counts[6] +=
+                        usize::from(i.locked || i.master_id.is_some() || !i.orientation.is_left() || !i.attrs.is_empty() || !i.user_data.is_empty());
+                    counts[9] += usize::from(ufo2 && i.identifier.is_some());
+                }
+                Shape::Image(_) => counts[8] += 1,
+                Shape::Raw(_) => {}
+            }
+        }
+        for a in l.anchors.iter().chain(background.into_iter().flat_map(|b| b.anchors.iter())) {
+            counts[7] += usize::from(a.info.locked || !a.info.orientation.is_left() || !a.info.user_data.is_empty());
+            counts[9] += usize::from(ufo2 && (a.info.identifier.is_some() || a.info.color.is_some()));
+        }
+    }
+    SHAPE_LOSSES.iter().zip(counts).filter(|(_, n)| *n > 0).map(|(what, n)| format!("{what} ({n})")).collect()
+}
+
+/// The kinds of shape data [`shape_losses`] reports, as its lines begin.
+pub const SHAPE_LOSSES: [&str; 10] = [
+    "the paths' locks and drawing attributes",
+    "the nodes' locks, orientations and user data",
+    "tangent nodes, written as smooth",
+    "smooth first nodes of open paths",
+    "the components' alignment and attachment anchors",
+    "the components' smart-component values",
+    "the components' locks, source masters, orientations, drawing attributes and user data",
+    "the anchors' locks, orientations and user data",
+    "images among the shapes",
+    "shape identifiers and anchor colours, which UFO 2 has no place for",
+];
 
 /// The kinds of layer data [`layer_losses`] reports, as its lines begin.
 pub const LAYER_LOSSES: [&str; 14] = [

@@ -39,17 +39,21 @@ pub(crate) type Drawing = (Vec<Shape>, Vec<Anchor>);
 /// A dictionary's entries as they are built.
 pub(crate) type Entries = Vec<(Str, Value)>;
 
+/// Pushes a drawing's shapes and anchors as entries, in a format version.
+pub(crate) type PushShapes = fn(&mut Entries, &[Shape], &[Anchor], &str, u32) -> Result<()>;
+
 /// How one version reads and writes the shapes and anchors of a layer-like dictionary.
 pub(crate) struct Shapes {
-    /// Takes the shapes and anchors out of a dictionary; `None` when one of them does not read.
-    pub take: fn(&mut Dict) -> Option<Drawing>,
+    /// Takes the shapes and anchors out of a dictionary in a format version; `None` when one of
+    /// them does not read.
+    pub take: fn(&mut Dict, u32) -> Option<Drawing>,
     /// Pushes them as entries.
-    pub push: fn(&mut Entries, &[Shape], &[Anchor], &str) -> Result<()>,
+    pub push: PushShapes,
     /// Builds the dictionary in the version's key order.
     pub finish: fn(Vec<(Str, Value)>, &Extra) -> Dict,
 }
 
-fn dialect(version: u32) -> Dialect {
+pub(crate) fn dialect(version: u32) -> Dialect {
     match version {
         2 => Dialect::Glyphs2,
         4 => Dialect::Glyphs4,
@@ -57,7 +61,7 @@ fn dialect(version: u32) -> Dialect {
     }
 }
 
-fn same_text(a: &Value, b: &Value, version: u32) -> bool {
+pub(crate) fn same_text(a: &Value, b: &Value, version: u32) -> bool {
     let (mut x, mut y) = (String::new(), String::new());
     openstep::write_value(&mut x, a, dialect(version));
     openstep::write_value(&mut y, b, dialect(version));
@@ -65,7 +69,13 @@ fn same_text(a: &Value, b: &Value, version: u32) -> bool {
 }
 
 /// The value under `key`, taken out of `d` when writing it back gives the same text.
-fn take_same<T>(d: &mut Dict, key: &str, version: u32, read: impl Fn(&Value) -> Option<T>, write: impl Fn(&T) -> Option<Value>) -> Option<T> {
+pub(crate) fn take_same<T>(
+    d: &mut Dict,
+    key: &str,
+    version: u32,
+    read: impl Fn(&Value) -> Option<T>,
+    write: impl Fn(&T) -> Option<Value>,
+) -> Option<T> {
     let v = d.get(key)?;
     let t = read(v)?;
     if !write(&t).is_some_and(|w| same_text(&w, v, version)) {
@@ -110,7 +120,7 @@ fn push_list<T>(e: &mut Vec<(Str, Value)>, key: &str, items: &[T], write: impl F
 
 /// A number the model accepts: finite and within [`MAX_COORDINATE`]. Anything else keeps its
 /// key as written.
-fn number(v: &Value) -> Option<f64> {
+pub(crate) fn number(v: &Value) -> Option<f64> {
     v.as_num().map(Num::as_f64).filter(|f| in_range(*f))
 }
 
@@ -124,11 +134,11 @@ pub(crate) fn anchor_in_range(a: &Anchor) -> bool {
     in_range(a.x) && in_range(a.y)
 }
 
-fn take_text(d: &mut Dict, key: &str, version: u32) -> Option<String> {
+pub(crate) fn take_text(d: &mut Dict, key: &str, version: u32) -> Option<String> {
     take_same(d, key, version, |v| str_of(v).filter(|s| !s.is_empty()), |s: &String| Some(string(s)))
 }
 
-fn take_flag(d: &mut Dict, key: &str, version: u32) -> bool {
+pub(crate) fn take_flag(d: &mut Dict, key: &str, version: u32) -> bool {
     take_same(d, key, version, |v| matches!(v.as_num(), Some(Num::Int(1))).then_some(()), |_| Some(int(1))).is_some()
 }
 
@@ -385,7 +395,7 @@ fn write_crop_v2(c: &[f64; 4]) -> String {
     format!("{{{}, {}}}", crate::v2::braced(&[x, y]), crate::v2::braced(&[w, h]))
 }
 
-fn read_image(v: &Value, version: u32) -> Option<Image> {
+pub(crate) fn read_image(v: &Value, version: u32) -> Option<Image> {
     let mut d = v.as_dict()?.clone();
     let mut i = Image { path: take_text(&mut d, "imagePath", version), ..Default::default() };
     if version == 2 {
@@ -433,7 +443,7 @@ fn read_image(v: &Value, version: u32) -> Option<Image> {
     Some(i)
 }
 
-fn write_image(i: &Image, version: u32) -> Option<Value> {
+pub(crate) fn write_image(i: &Image, version: u32) -> Option<Value> {
     let mut e = Vec::new();
     if let Some(p) = &i.path {
         e.push(("imagePath".into(), string(p)));
@@ -541,7 +551,7 @@ fn push_content(e: &mut Vec<(Str, Value)>, c: Content, version: u32, at: &str) -
 
 fn read_background(v: &Value, version: u32, shapes: &Shapes) -> Option<Background> {
     let mut d = v.as_dict()?.clone();
-    let (shape_list, anchors) = (shapes.take)(&mut d)?;
+    let (shape_list, anchors) = (shapes.take)(&mut d, version)?;
     let c = take_content(&mut d, version);
     Some(Background {
         shapes: shape_list,
@@ -556,7 +566,7 @@ fn read_background(v: &Value, version: u32, shapes: &Shapes) -> Option<Backgroun
 
 fn write_background(b: &Background, version: u32, shapes: &Shapes, at: &str) -> Result<Value> {
     let mut e = Vec::new();
-    (shapes.push)(&mut e, &b.shapes, &b.anchors, at)?;
+    (shapes.push)(&mut e, &b.shapes, &b.anchors, at, version)?;
     let c = Content { guides: b.guides.clone(), hints: b.hints.clone(), annotations: b.annotations.clone(), image: b.image.clone() };
     push_content(&mut e, c, version, at)?;
     Ok(Value::Dict((shapes.finish)(e, &b.extra)))

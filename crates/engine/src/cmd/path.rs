@@ -50,8 +50,7 @@ fn add_path(s: &mut Session, p: &Value) -> Result<Value> {
     if list.len() > MAX_NODES {
         return Err(p.bad(format!("`nodes` holds {} nodes; at most {MAX_NODES} are allowed", list.len())));
     }
-    let path =
-        Path { closed: p.bool_or("closed", true)?, nodes: list.iter().map(|v| node(&p, v)).collect::<Result<Vec<_>>>()?, extra: Default::default() };
+    let path = Path::new(p.bool_or("closed", true)?, list.iter().map(|v| node(&p, v)).collect::<Result<Vec<_>>>()?);
     path.to_bez().map_err(|why| p.bad(why))?;
     let count = path.nodes.len();
     let layer = match p.opt_str("layer")? {

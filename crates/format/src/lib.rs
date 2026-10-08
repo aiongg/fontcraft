@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(a.layers[0].id, "m01");
         assert!(a.layer("m01").is_some());
         let fontcraft_model::Shape::Path(p) = &a.layers[0].shapes[0] else { panic!() };
-        assert_eq!(p.nodes[0].extra.get(fontcraft_model::Family::Native, "name").and_then(|v| v.as_str()), Some("start"));
+        assert_eq!(p.nodes[0].info.extra.get(fontcraft_model::Family::Native, "name").and_then(|v| v.as_str()), Some("start"));
         let b = font.glyph("B").unwrap();
         let fontcraft_model::Shape::Component(c) = &b.layers[0].shapes[0] else { panic!() };
         assert_eq!(c.transform, fontcraft_model::Transform::Matrix([1.0, 0.0, 0.0, 1.0, 10.0, 0.0]));

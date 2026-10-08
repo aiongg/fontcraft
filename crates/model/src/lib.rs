@@ -22,6 +22,7 @@ mod info;
 mod kerning;
 mod layer_info;
 mod rare;
+mod shape_info;
 
 pub use extra::{Extra, ExtraEntry, Family};
 pub use features::{Features, Snippet};
@@ -36,6 +37,10 @@ pub use info::{DEFAULT_LANGUAGE, Localized, Param, Params, Properties, Property,
 pub use kerning::{KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
 pub use rare::{Rare, RareDefault};
+pub use shape_info::{
+    Alignment, AnchorInfo, AnchorInfoBox, ComponentInfo, ComponentInfoBox, Dimension, NodeInfo, NodeInfoBox, Orientation, PathInfo, PathInfoBox,
+    ShapeAttrs, SmartValue,
+};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.
 pub const UPM_RANGE: std::ops::RangeInclusive<u16> = 16..=16384;

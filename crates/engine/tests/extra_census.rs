@@ -64,9 +64,14 @@ fn shapes(c: &mut Census, source: usize, prefix: &str, list: &[Shape], anchors: 
         match s {
             Shape::Path(p) => {
                 add(c, source, &format!("{prefix}path"), &p.extra);
-                p.nodes.iter().for_each(|n| add(c, source, &format!("{prefix}node"), &n.extra));
+                add(c, source, &format!("{prefix}path attr"), &p.info.attrs.extra);
+                p.nodes.iter().for_each(|n| add(c, source, &format!("{prefix}node"), &n.info.extra));
             }
-            Shape::Component(k) => add(c, source, &format!("{prefix}component"), &k.extra),
+            Shape::Component(k) => {
+                add(c, source, &format!("{prefix}component"), &k.extra);
+                add(c, source, &format!("{prefix}component attr"), &k.info.attrs.extra);
+            }
+            Shape::Image(i) => add(c, source, &format!("{prefix}image shape"), &i.extra),
             Shape::Raw(r) => {
                 let row = c.entry((format!("{:?}", r.family).to_lowercase(), format!("{prefix}raw shape"), String::new())).or_default();
                 row.0 += 1;

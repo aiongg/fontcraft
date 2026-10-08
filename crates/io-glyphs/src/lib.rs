@@ -9,16 +9,16 @@
 //! Written from the format documents and JSON schemas in GlyphsSDK (Apache-2.0) and from files in
 //! the test corpus. Format versions 2 ([`v2`]), 3 and 4 are read and written.
 //!
-//! Shapes the model cannot hold yet (format 4 images and groups, paths with quartic, Hobby or
-//! spiral nodes, paths whose node list does not make an outline) are kept as [`Shape::Raw`].
+//! Paths, nodes, components, anchors and format 4 image shapes are read and written by
+//! [`shape`]. Shapes the model cannot hold yet (format 4 shape groups, paths with quartic, Hobby
+//! or spiral nodes, paths whose node list does not make an outline) are kept as [`Shape::Raw`].
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Anchor, Axis, Component, Extra, Family, Features, Font, FontInfo, Glyph, GlyphTable, Instance, KernFirst, KernGroups, KernTable, Kerning, Layer,
-    Master, MasterKerning, MetricDef, MetricValue, ModelError, Node, NodeKind, Path, PropertyValue, RawShape, Shape, Snippet, Source, SourceFormat,
-    Transform,
+    Anchor, Axis, Extra, Family, Features, Font, FontInfo, Glyph, GlyphTable, Instance, KernFirst, KernGroups, KernTable, Kerning, Layer, Master,
+    MasterKerning, MetricDef, MetricValue, ModelError, PropertyValue, RawShape, Shape, Snippet, Source, SourceFormat,
 };
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
@@ -28,6 +28,7 @@ mod glyph;
 mod info;
 mod layer;
 mod package;
+mod shape;
 mod v2;
 
 pub use package::{Files, glyph_file_stem, read_package, write_package};
@@ -77,6 +78,7 @@ pub fn write(font: &Font) -> Result<String> {
 pub fn info_losses(font: &Font) -> Vec<String> {
     let mut out = glyph::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3));
     out.extend(layer::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3)));
+    out.extend(shape::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3)));
     // Versions 3 and 4 hold alignment zones only as the metrics' overshoots; version 2 writes
     // the other zones into `alignmentZones`.
     if font.source.glyphs_version.unwrap_or(3) != 2 {
@@ -681,14 +683,18 @@ fn code_points(v: &Value) -> Option<Vec<u32>> {
 const SHAPES: layer::Shapes = layer::Shapes { take: take_shapes, push: push_shapes, finish };
 
 /// A background's `shapes` and `anchors`; an empty list stays as written.
-fn take_shapes(d: &mut Dict) -> Option<(Vec<Shape>, Vec<Anchor>)> {
+fn take_shapes(d: &mut Dict, version: u32) -> Option<(Vec<Shape>, Vec<Anchor>)> {
     let filled = |d: &Dict, k: &str| matches!(d.get(k), Some(Value::Array(a)) if !a.items.is_empty());
-    let shapes = if filled(d, "shapes") { as_items(take(d, "shapes")?, "shapes").ok()?.into_iter().map(read_shape).collect() } else { Vec::new() };
+    let shapes = if filled(d, "shapes") {
+        as_items(take(d, "shapes")?, "shapes").ok()?.into_iter().map(|s| shape::read_shape(s, version)).collect()
+    } else {
+        Vec::new()
+    };
     let anchors = if filled(d, "anchors") {
         as_items(take(d, "anchors")?, "anchors")
             .ok()?
             .into_iter()
-            .map(|a| read_anchor(a, "background").ok().filter(crate::layer::anchor_in_range))
+            .map(|a| shape::read_anchor(a, "background", version).ok().filter(crate::layer::anchor_in_range))
             .collect::<Option<_>>()?
     } else {
         Vec::new()
@@ -696,12 +702,12 @@ fn take_shapes(d: &mut Dict) -> Option<(Vec<Shape>, Vec<Anchor>)> {
     Some((shapes, anchors))
 }
 
-fn push_shapes(e: &mut Vec<(Str, Value)>, shapes: &[Shape], anchors: &[Anchor], at: &str) -> Result<()> {
+fn push_shapes(e: &mut Vec<(Str, Value)>, shapes: &[Shape], anchors: &[Anchor], at: &str, version: u32) -> Result<()> {
     if !shapes.is_empty() {
-        e.push(("shapes".into(), list(shapes.iter().map(|s| write_shape(s, at)).collect::<Result<_>>()?)));
+        e.push(("shapes".into(), list(shapes.iter().map(|s| shape::write_shape(s, at, version)).collect::<Result<_>>()?)));
     }
     if !anchors.is_empty() {
-        e.push(("anchors".into(), list(anchors.iter().map(|a| write_anchor(a, at)).collect::<Result<_>>()?)));
+        e.push(("anchors".into(), list(anchors.iter().map(|a| shape::write_anchor(a, at, version)).collect::<Result<_>>()?)));
     }
     Ok(())
 }
@@ -714,101 +720,19 @@ fn read_layer(v: Value, at: &str, version: u32) -> Result<Layer> {
     // The reference always writes a width; a hand-edited file may not, and reads as zero.
     let width = take(&mut d, "width").map(|v| as_f64(&v, &format!("{at}.width"))).transpose()?.unwrap_or(0.0);
     let shapes = match take(&mut d, "shapes") {
-        Some(v) => as_items(v, &at)?.into_iter().map(read_shape).collect(),
+        Some(v) => as_items(v, &at)?.into_iter().map(|s| shape::read_shape(s, version)).collect(),
         None => Vec::new(),
     };
     let anchors = match take(&mut d, "anchors") {
-        Some(v) => as_items(v, &at)?.into_iter().map(|a| read_anchor(a, &at)).collect::<Result<_>>()?,
+        Some(v) => as_items(v, &at)?.into_iter().map(|a| shape::read_anchor(a, &at, version)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
     let info = layer::take_layer_info(&mut d, version, &SHAPES);
     Ok(Layer { id, master, width, shapes, anchors, info: fontcraft_model::Rare::new(info), extra: into_extra(d) })
 }
 
-fn raw(value: Value) -> Shape {
+pub(crate) fn raw(value: Value) -> Shape {
     Shape::Raw(RawShape { family: Family::Glyphs, value })
-}
-
-/// A shape the model can hold, or the shape kept as written.
-fn read_shape(v: Value) -> Shape {
-    let typed = match &v {
-        Value::Dict(d) if d.get("ref").is_some() => read_component(d.clone()),
-        Value::Dict(d) if d.get("nodes").is_some() => read_path(d.clone()),
-        _ => None,
-    };
-    typed.unwrap_or_else(|| raw(v))
-}
-
-fn read_component(mut d: Dict) -> Option<Shape> {
-    let glyph = take(&mut d, "ref")?.as_str()?.to_string();
-    let pair = |d: &mut Dict, k: &str, default: (f64, f64)| -> Option<(f64, f64)> {
-        match take(d, k) {
-            Some(v) => as_pair(&v, k).ok(),
-            None => Some(default),
-        }
-    };
-    let pos = pair(&mut d, "pos", (0.0, 0.0))?;
-    let scale = pair(&mut d, "scale", (1.0, 1.0))?;
-    let slant = pair(&mut d, "slant", (0.0, 0.0))?;
-    let angle = match take(&mut d, "angle") {
-        Some(v) => v.as_num()?.as_f64(),
-        None => 0.0,
-    };
-    Some(Shape::Component(Component { glyph, transform: Transform::Decomposed { pos, scale, angle, slant }, extra: into_extra(d) }))
-}
-
-fn read_path(mut d: Dict) -> Option<Shape> {
-    let closed = as_bool01(&take(&mut d, "closed")?, "closed").ok()?;
-    let mut nodes = as_items(take(&mut d, "nodes")?, "nodes").ok()?.iter().map(read_node).collect::<Option<Vec<_>>>()?;
-    // The format writes a closed path's start node last; the model keeps it first.
-    if closed && !nodes.is_empty() {
-        nodes.rotate_right(1);
-    }
-    let path = Path { closed, nodes, extra: into_extra(d) };
-    // A node list that does not make an outline is kept as written, not rejected with the file.
-    path.to_bez().ok()?;
-    Some(Shape::Path(path))
-}
-
-fn read_node(v: &Value) -> Option<Node> {
-    let items = &v.as_array()?.items;
-    let (x, y, flags, attr) = match items.as_slice() {
-        [x, y, f] => (x, y, f, None),
-        [x, y, f, a] => (x, y, f, Some(a)),
-        _ => return None,
-    };
-    let flags = flags.as_str()?;
-    let mut chars = flags.chars();
-    let kind = match chars.next()? {
-        'l' => NodeKind::Line,
-        'c' => NodeKind::Curve,
-        'q' => NodeKind::QCurve,
-        'o' => NodeKind::OffCurve,
-        _ => return None,
-    };
-    let rest = chars.as_str();
-    let (smooth, rest) = match rest.strip_prefix('s') {
-        Some(r) => (true, r),
-        None => (false, rest),
-    };
-    let mut extra = Extra::new();
-    if !rest.is_empty() {
-        extra.push(Family::Glyphs, "flags", Value::String(rest.into()));
-    }
-    if let Some(a) = attr {
-        extra.push(Family::Glyphs, "attr", a.clone());
-    }
-    Some(Node { x: x.as_num()?.as_f64(), y: y.as_num()?.as_f64(), kind, smooth, extra })
-}
-
-fn read_anchor(v: Value, at: &str) -> Result<Anchor> {
-    let mut d = as_dict(v, at)?;
-    let name = opt_string(&mut d, "name", at)?.unwrap_or_default();
-    let (x, y) = match take(&mut d, "pos") {
-        Some(p) => as_pair(&p, &format!("{at} anchor `{name}`"))?,
-        None => (0.0, 0.0),
-    };
-    Ok(Anchor { name, x, y, extra: into_extra(d) })
 }
 
 // ── writing ────────────────────────────────────────────────────────────────────────────────────
@@ -983,44 +907,9 @@ fn write_layer(l: &Layer, at: &str, version: u32) -> Result<Value> {
         e.push(("associatedMasterId".into(), string(&l.master)));
     }
     e.push(("width".into(), num(l.width, &at)?));
-    if !l.shapes.is_empty() {
-        e.push(("shapes".into(), list(l.shapes.iter().map(|s| write_shape(s, &at)).collect::<Result<_>>()?)));
-    }
-    if !l.anchors.is_empty() {
-        e.push(("anchors".into(), list(l.anchors.iter().map(|a| write_anchor(a, &at)).collect::<Result<_>>()?)));
-    }
+    push_shapes(&mut e, &l.shapes, &l.anchors, &at, version)?;
     layer::push_layer_info(&mut e, &l.info, version, &SHAPES, &at)?;
     Ok(Value::Dict(finish(e, &l.extra)))
-}
-
-fn write_shape(s: &Shape, at: &str) -> Result<Value> {
-    match s {
-        Shape::Raw(r) if r.family == Family::Glyphs => Ok(r.value.clone()),
-        Shape::Raw(_) => Err(GlyphsError::Unsupported(format!("{at}: a shape read from another format"))),
-        Shape::Component(c) => write_component(c, at),
-        Shape::Path(p) => write_path(p, at),
-    }
-}
-
-fn write_component(c: &Component, at: &str) -> Result<Value> {
-    let (pos, scale, angle, slant) = match c.transform {
-        Transform::Decomposed { pos, scale, angle, slant } => (pos, scale, angle, slant),
-        Transform::Matrix(m) => decompose(m).ok_or_else(|| GlyphsError::Unsupported(format!("{at}: a component transform with shear")))?,
-    };
-    let mut e = vec![("ref".into(), string(&c.glyph))];
-    if pos != (0.0, 0.0) {
-        e.push(("pos".into(), pair(pos.0, pos.1, at)?));
-    }
-    if scale != (1.0, 1.0) {
-        e.push(("scale".into(), pair(scale.0, scale.1, at)?));
-    }
-    if angle != 0.0 {
-        e.push(("angle".into(), num(angle, at)?));
-    }
-    if slant != (0.0, 0.0) {
-        e.push(("slant".into(), pair(slant.0, slant.1, at)?));
-    }
-    Ok(Value::Dict(finish(e, &c.extra)))
 }
 
 /// A matrix as position, scale and rotation, when it has no shear.
@@ -1039,43 +928,6 @@ pub(crate) fn decompose([a, b, c, d, dx, dy]: [f64; 6]) -> Option<Decomposed> {
     let (cc, dd) = (-angle.sin() * sy, angle.cos() * sy);
     let close = |x: f64, y: f64| (x - y).abs() <= 1e-9 * (1.0 + x.abs().max(y.abs()));
     (close(c, cc) && close(d, dd)).then(|| ((dx, dy), (sx, sy), angle.to_degrees(), (0.0, 0.0)))
-}
-
-fn write_path(p: &Path, at: &str) -> Result<Value> {
-    let mut nodes: Vec<Value> = p.nodes.iter().map(|n| write_node(n, at)).collect::<Result<_>>()?;
-    if p.closed && !nodes.is_empty() {
-        nodes.rotate_left(1);
-    }
-    let e = vec![("closed".into(), int(i64::from(p.closed))), ("nodes".into(), list(nodes))];
-    Ok(Value::Dict(finish(e, &p.extra)))
-}
-
-fn write_node(n: &Node, at: &str) -> Result<Value> {
-    let mut flags = String::from(match n.kind {
-        NodeKind::Line => "l",
-        NodeKind::Curve => "c",
-        NodeKind::QCurve => "q",
-        NodeKind::OffCurve => "o",
-    });
-    if n.smooth {
-        flags.push('s');
-    }
-    if let Some(rest) = n.extra.get(Family::Glyphs, "flags").and_then(Value::as_str) {
-        flags.push_str(rest);
-    }
-    let mut items = vec![num(n.x, at)?, num(n.y, at)?, string(&flags)];
-    if let Some(attr) = n.extra.get(Family::Glyphs, "attr") {
-        items.push(attr.clone());
-    }
-    Ok(Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }))
-}
-
-fn write_anchor(a: &Anchor, at: &str) -> Result<Value> {
-    let mut e = vec![("name".into(), string(&a.name))];
-    if (a.x, a.y) != (0.0, 0.0) {
-        e.push(("pos".into(), pair(a.x, a.y, at)?));
-    }
-    Ok(Value::Dict(finish(e, &a.extra)))
 }
 
 #[cfg(test)]

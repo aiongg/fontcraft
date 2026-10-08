@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use fontcraft_io_ufo::designspace;
-use fontcraft_io_ufo::ufo::{GLYPH_LOSSES, LAYER_LOSSES};
+use fontcraft_io_ufo::ufo::{GLYPH_LOSSES, LAYER_LOSSES, SHAPE_LOSSES};
 use fontcraft_model::{
     Anchor, Background, ColorLabel, Family, Font, Glyph, GlyphInfo, Guide, Image, Instance, Layer, Master, Param, Params, Properties, Shape, axes,
     metric,
@@ -258,18 +258,57 @@ fn glyphs_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
     }
 }
 
-/// A drawing as numbers: paths (closed, nodes) and components (glyph, matrix), then anchors.
+/// A drawing as a UFO holds it: paths (closed; nodes with position, type, smooth join, name and
+/// identifier; identifier) and components (glyph, matrix, identifier), then anchors (name,
+/// position, colour, identifier). An open path's first node is compared without its join, which
+/// [`shape_fields`] compares.
 fn drawing(shapes: &[Shape], anchors: &[Anchor]) -> String {
     let shapes: Vec<String> = shapes
         .iter()
+        .filter(|s| !matches!(s, Shape::Image(_)))
         .map(|s| match s {
-            Shape::Path(p) => format!("{:?}", (p.closed, p.nodes.iter().map(|n| (n.x, n.y, n.kind, n.smooth)).collect::<Vec<_>>())),
-            Shape::Component(c) => format!("{:?}", (&c.glyph, c.affine().as_coeffs())),
+            Shape::Path(p) => {
+                let nodes: Vec<_> = p
+                    .nodes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| (n.x, n.y, n.kind, n.smooth && (p.closed || i > 0), &n.info.name, &n.info.identifier))
+                    .collect();
+                format!("{:?}", (p.closed, nodes, &p.info.identifier))
+            }
+            Shape::Component(c) => format!("{:?}", (&c.glyph, c.affine().as_coeffs(), &c.info.identifier)),
+            Shape::Image(_) => String::new(),
             Shape::Raw(_) => "raw".into(),
         })
         .collect();
-    let anchors: Vec<(&str, f64, f64)> = anchors.iter().map(|a| (a.name.as_str(), a.x, a.y)).collect();
+    let anchors: Vec<_> = anchors.iter().map(|a| (a.name.as_str(), a.x, a.y, &a.info.color, &a.info.identifier)).collect();
     format!("{shapes:?} {anchors:?}")
+}
+
+/// The shape data a UFO has no place for, one projection per kind of [`SHAPE_LOSSES`]
+/// (identifiers, which a UFO 3 holds, are in [`drawing`]).
+fn shape_fields(shapes: &[Shape], anchors: &[Anchor]) -> [String; 9] {
+    let mut out: [Vec<String>; 9] = Default::default();
+    for s in shapes {
+        match s {
+            Shape::Path(p) => {
+                out[0].push(format!("{:?}", (p.info.locked, &p.info.attrs)));
+                out[1].push(format!("{:?}", p.nodes.iter().map(|n| (n.locked, n.orientation, &n.info.user_data)).collect::<Vec<_>>()));
+                out[2].push(format!("{:?}", p.nodes.iter().map(|n| n.tangent).collect::<Vec<_>>()));
+                out[3].push(format!("{:?}", !p.closed && p.nodes.first().is_some_and(|n| n.smooth)));
+            }
+            Shape::Component(c) => {
+                let i = &*c.info;
+                out[4].push(format!("{:?}", (i.alignment, &i.anchor)));
+                out[5].push(format!("{:?}", i.smart_values));
+                out[6].push(format!("{:?}", (i.locked, &i.master_id, i.orientation, &i.attrs, &i.user_data)));
+            }
+            Shape::Image(i) => out[8].push(format!("{i:?}")),
+            Shape::Raw(_) => {}
+        }
+    }
+    out[7] = anchors.iter().map(|a| format!("{:?}", (a.info.locked, a.info.orientation, &a.info.user_data))).collect();
+    out.map(|v| v.join(" "))
 }
 
 /// What of an image a UFO holds: the file and the matrix.
@@ -341,6 +380,17 @@ fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
                 ),
             ];
             for (what, before, after) in checks {
+                if before != after {
+                    diffs.push(format!("{what}: {at} {before} → {after}"));
+                }
+            }
+            let fields = |l: &Layer| {
+                let bg = l.info.background.as_ref();
+                let shapes: Vec<Shape> = l.shapes.iter().chain(bg.into_iter().flat_map(|b| b.shapes.iter())).cloned().collect();
+                let anchors: Vec<Anchor> = l.anchors.iter().chain(bg.into_iter().flat_map(|b| b.anchors.iter())).cloned().collect();
+                shape_fields(&shapes, &anchors)
+            };
+            for ((what, before), after) in SHAPE_LOSSES.iter().zip(fields(l)).zip(fields(x)) {
                 if before != after {
                     diffs.push(format!("{what}: {at} {before} → {after}"));
                 }

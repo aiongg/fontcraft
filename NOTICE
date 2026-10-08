@@ -48,7 +48,9 @@ bundled, the file says so in its header and the project is listed here with its 
   rules that read a format 2 layer's role (intermediate, alternate, colour palette) from its name
   are ported from its layer class (crates/io-glyphs/src/layer.rs), and the names of the UFO
   layers that layers and backgrounds go to, with the vertical-font rule and the vertical metric
-  defaults, from its layer and glyph builders (crates/io-ufo/src/ufo.rs).
+  defaults, from its layer and glyph builders (crates/io-ufo/src/ufo.rs). The GLIF form of a
+  node (its name as the point's name, and no `smooth` on an open contour's first point) follows
+  its path builder (crates/io-ufo/src/glif.rs).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data

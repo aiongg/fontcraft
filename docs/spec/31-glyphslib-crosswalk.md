@@ -744,7 +744,7 @@ Layer userData keys starting with `com.schriftgestaltung.` or `public.` are neve
 | `curve` | `curve` | same |
 | `qcurve` | `qcurve` | same |
 | `offcurve` | `segmentType` None | same |
-| first node of an open path (must be `line`, asserted) | `move` | `builder/paths.py:35-43` |
+| first node of an open path (must be `line`, asserted) | `move`, without `smooth` | `builder/paths.py:35-43` |
 | U→G: `move` | `line`; None → `offcurve` | `pens.py:84-89` |
 | `smooth` | `smooth` | `builder/paths.py:50-57,80` |
 | userData `name` | point `name` | `builder/paths.py:41,55`, `builder/paths.py:81`, `classes.py:2267-2279` |

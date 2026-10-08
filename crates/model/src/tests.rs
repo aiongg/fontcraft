@@ -184,6 +184,7 @@ fn check_holds_every_limit() {
     assert!(broken(&|f| f.glyph_mut("A").unwrap().layers[0].shapes.push(Shape::Component(Component {
         glyph: "B".into(),
         transform: Transform::Matrix([f64::NAN; 6]),
+        info: Default::default(),
         extra: Extra::new()
     }))));
     assert!(broken(&|f| f.glyph_mut("A").unwrap().layers[0].anchors.push(Anchor::new("top", f64::INFINITY, 0.0))));
@@ -290,8 +291,12 @@ fn component_fan_out_and_far_transforms_are_bounded() {
     f.glyph_mut("A").unwrap().layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
     for huge in [[1e300, 0.0, 0.0, 1e300, 0.0, 0.0], [1e308, 1e308, -1e308, -1e308, 0.0, 0.0], [1.0, 0.0, 0.0, 1.0, 1e12, 0.0]] {
         let mut g = f.clone();
-        g.glyph_mut("B").unwrap().layers[0].shapes =
-            vec![Shape::Component(Component { glyph: "A".into(), transform: Transform::Matrix(huge), extra: Extra::new() })];
+        g.glyph_mut("B").unwrap().layers[0].shapes = vec![Shape::Component(Component {
+            glyph: "A".into(),
+            transform: Transform::Matrix(huge),
+            info: Default::default(),
+            extra: Extra::new(),
+        })];
         assert!(matches!(g.outline("B", "m01"), Err(ModelError::BadOutline { .. })), "{huge:?}");
     }
 }
@@ -323,4 +328,94 @@ fn version_2_master_name_parts_join_as_the_reference_joins_them() {
     assert_eq!(parts(Some("Bold"), None, None).joined(true), "Bold Italic");
     assert_eq!(parts(Some("Light"), None, Some("Oblique")).joined(true), "Light Oblique");
     assert_eq!(parts(None, None, Some("Display")).joined(false), "Display");
+}
+
+#[test]
+fn a_node_stays_32_bytes() {
+    assert_eq!(std::mem::size_of::<Node>(), 32, "nodes are the most numerous objects; rare data goes in `NodeInfo`");
+    // The other shapes hold their rare data behind one pointer too.
+    assert_eq!(std::mem::size_of::<PathInfoBox>(), 8);
+    assert_eq!(std::mem::size_of::<ComponentInfoBox>(), 8);
+    assert_eq!(std::mem::size_of::<AnchorInfoBox>(), 8);
+    assert!(std::mem::size_of::<Shape>() <= 104, "{}", std::mem::size_of::<Shape>());
+    let n = Node::new(1.0, 2.0, NodeKind::Line);
+    assert!(n.info.is_default());
+}
+
+#[test]
+fn shape_fields_survive_the_native_form() {
+    let mut f = Font::new("Test");
+    let mut start = Node::new(0.0, 0.0, NodeKind::Line);
+    (start.smooth, start.tangent, start.locked, start.orientation) = (true, true, true, Orientation::Center);
+    start.info.name = Some("hr00".into());
+    start.info.identifier = Some("p1".into());
+    start.info.user_data.0.insert("k", plist::Value::String("v".into()));
+    start.info.extra.push(Family::Glyphs, "flags", plist::Value::String("Z".into()));
+    let mut p = path(true, vec![start, Node::new(100.0, 0.0, NodeKind::Line), Node::new(50.0, 80.0, NodeKind::Line)]);
+    p.info.locked = true;
+    p.info.identifier = Some("c1".into());
+    p.info.attrs = ShapeAttrs {
+        stroke_width: Some(Dimension::Number(46.0)),
+        stroke_pos: Some(Dimension::Expression("1".into())),
+        line_cap_start: Some(3),
+        fill_color: Some([1.0, 0.0, 0.0, 1.0]),
+        color: Some(ColorLabel::Index(4)),
+        reverse_paths: true,
+        ..Default::default()
+    };
+    let mut c = Component::new("B", 10.0, 0.0);
+    c.info.alignment = Alignment::Horizontal;
+    c.info.anchor = Some("top_2".into());
+    c.info.smart_values = vec![SmartValue { property: "Width".into(), value: 29.5 }];
+    c.info.master_id = Some("m02".into());
+    c.info.orientation = Orientation::Right;
+    c.info.identifier = Some("k1".into());
+    let mut a = Anchor::new("top", 1.0, 2.0);
+    a.info.locked = true;
+    a.info.color = Some("1,0,0,1".into());
+    let image = Image { path: Some("a.png".into()), alpha: Some(40.0), ..Default::default() };
+    {
+        let mut g = f.glyph_mut("A").unwrap();
+        let l = &mut g.layers[0];
+        l.shapes = vec![Shape::Path(p), Shape::Component(c), Shape::Image(Box::new(image))];
+        l.anchors.push(a);
+    }
+    assert_eq!(f.check(), Ok(()));
+    let json = serde_json::to_string(&f).unwrap();
+    let back: Font = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, f);
+    // A plain node is a flat object with its position and type only.
+    let plain = serde_json::to_string(&Node::new(1.0, 2.0, NodeKind::OffCurve)).unwrap();
+    assert_eq!(plain, r#"{"x":1.0,"y":2.0,"type":"offcurve"}"#);
+    // Files written before the node's rare data had fields keep their unknown keys.
+    let old: Node =
+        serde_json::from_str(r#"{"x":1,"y":2,"type":"line","smooth":true,"extra":[{"family":"glyphs","key":"attr","value":"{a = 1;}"}]}"#).unwrap();
+    assert!(old.smooth && old.info.extra.get(Family::Glyphs, "attr").is_some());
+}
+
+#[test]
+fn check_holds_the_shape_data_limits() {
+    let broken = |edit: &dyn Fn(&mut Shape)| {
+        let mut f = Font::new("Test");
+        let mut s = Shape::Component(Component::new("B", 0.0, 0.0));
+        edit(&mut s);
+        f.glyph_mut("A").unwrap().layers[0].shapes.push(s);
+        f.check().is_err()
+    };
+    assert!(!broken(&|_| {}));
+    assert!(broken(&|s| if let Shape::Component(c) = s {
+        c.info.smart_values = (0..=MAX_PART_PROPERTIES).map(|i| SmartValue { property: format!("p{i}"), value: 0.0 }).collect();
+    }));
+    assert!(broken(&|s| if let Shape::Component(c) = s {
+        c.info.smart_values = vec![SmartValue { property: "w".into(), value: f64::NAN }];
+    }));
+    assert!(broken(&|s| if let Shape::Component(c) = s {
+        c.info.attrs.stroke_width = Some(Dimension::Number(f64::INFINITY));
+    }));
+    assert!(broken(&|s| *s = Shape::Path({
+        let mut p = Path::rect(0.0, 0.0, 1.0, 1.0);
+        p.info.attrs.fill_color = Some([2.0, 0.0, 0.0, 1.0]);
+        p
+    })));
+    assert!(broken(&|s| *s = Shape::Image(Box::new(Image { alpha: Some(f64::NAN), ..Default::default() }))));
 }

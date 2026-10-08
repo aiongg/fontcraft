@@ -16,7 +16,7 @@
 //!
 //! | Key | On | Holds |
 //! |---|---|---|
-//! | `@name` | any object | an attribute the model has no field for (a point's `name` and `identifier`, a contour's `identifier`, an anchor's `color`…), in source order |
+//! | `@name` | any object | an attribute the model has no field for (a `move` point's `smooth`, an identifier in GLIF format 1…), in source order |
 //! | `<` | path, node, component, anchor | the file's start tag, where it differs from the writer's |
 //! | `<glyph`, `<advance`, `<outline`, `<lib` | layer | the same, for elements without an object of their own |
 //! | `<unicode` | layer | the file's `unicode` start tags, `""` where they equal the writer's |
@@ -47,12 +47,18 @@
 //!
 //! Contours the model cannot hold as a [`Path`] (a `curve` after one or three off-curve points, an
 //! open contour ending in off-curve points) and unknown elements inside `<outline>` are kept as a
-//! [`Shape::Raw`] holding their XML text. A shape another format's reader kept that way is left
-//! out of the file.
+//! [`Shape::Raw`] holding their XML text. A shape another format's reader kept that way, and an
+//! image among the shapes, are left out of the file.
+//!
+//! Shape fields: a point's `smooth`, `name` and `identifier`, and the identifiers of contours,
+//! components and anchors, and an anchor's `color`, are model fields (identifiers in GLIF format 2
+//! only). As glyphsLib 6.15.0's path builder writes it (`builder/paths.py`, Apache-2.0; see
+//! `NOTICE`), an open contour's `move` point gets no `smooth`; a file's own `smooth` there stays an
+//! attribute of the file (`@smooth`).
 
 use fontcraft_model::{
-    Anchor, ColorLabel, Component, Extra, Family, Guide, Image, Layer, MAX_COORDINATE, MAX_LAYER_GUIDES, Node, NodeKind, Path, RawShape, Shape,
-    Transform, UserData,
+    Anchor, AnchorInfo, ColorLabel, Component, Extra, Family, Guide, Image, Layer, MAX_COORDINATE, MAX_LAYER_GUIDES, Node, NodeInfo, NodeKind, Path,
+    Rare, RawShape, Shape, Transform, UserData,
 };
 use fontcraft_plist::xml::{self, Element, Node as XNode};
 use fontcraft_plist::{Array, Dict, Layout, Number, Value, xmlplist};
@@ -472,6 +478,12 @@ fn anchor_el(a: &Anchor, style: &Style) -> Element {
     if !a.name.is_empty() || a.extra.get(Family::Ufo, "noName").and_then(Value::as_bool) != Some(true) {
         el.set_attr("name", &a.name);
     }
+    if let Some(c) = &a.info.color {
+        el.set_attr("color", c);
+    }
+    if let Some(i) = &a.info.identifier {
+        el.set_attr("identifier", i);
+    }
     put_other_attrs(&mut el, &a.extra);
     el
 }
@@ -482,7 +494,9 @@ fn anchor_point_el(a: &Anchor, style: &Style) -> Element {
     Element::new("point").with_attr("x", num(a.x)).with_attr("y", num(a.y)).with_attr("type", "move").with_attr("name", &a.name)
 }
 
-fn point_el(n: &Node, starts_open_path: bool, style: &Style) -> Element {
+/// A point. `smooth` is left off an open contour's `move` point, as glyphsLib leaves it off
+/// (nothing comes before it to be smooth with); identifiers need GLIF format 2.
+fn point_el(n: &Node, starts_open_path: bool, style: &Style, format: u32) -> Element {
     let mut el = Element::new("point").with_attr("x", fmt_number(n.x, style.float_numbers)).with_attr("y", fmt_number(n.y, style.float_numbers));
     let kind = match n.kind {
         _ if starts_open_path => Some("move"),
@@ -494,25 +508,37 @@ fn point_el(n: &Node, starts_open_path: bool, style: &Style) -> Element {
     if let Some(k) = kind {
         el.set_attr("type", k);
     }
-    if n.smooth {
+    if n.smooth && !starts_open_path {
         el.set_attr("smooth", "yes");
     }
-    put_other_attrs(&mut el, &n.extra);
+    if let Some(name) = &n.info.name {
+        el.set_attr("name", name);
+    }
+    if let Some(i) = n.info.identifier.as_ref().filter(|_| format >= 2) {
+        el.set_attr("identifier", i);
+    }
+    put_other_attrs(&mut el, &n.info.extra);
     el
 }
 
-fn contour_el(p: &Path) -> Element {
+fn contour_el(p: &Path, format: u32) -> Element {
     let mut el = Element::new("contour");
+    if let Some(i) = p.info.identifier.as_ref().filter(|_| format >= 2) {
+        el.set_attr("identifier", i);
+    }
     put_other_attrs(&mut el, &p.extra);
     el
 }
 
-fn component_el(c: &Component, style: &Style) -> Element {
+fn component_el(c: &Component, style: &Style, format: u32) -> Element {
     let mut el = Element::new("component").with_attr("base", &c.glyph);
     for ((name, default), v) in TRANSFORM.iter().zip(c.affine().as_coeffs()) {
         if v != *default {
             el.set_attr(*name, fmt_number(v, style.float_numbers));
         }
+    }
+    if let Some(i) = c.info.identifier.as_ref().filter(|_| format >= 2) {
+        el.set_attr("identifier", i);
     }
     put_other_attrs(&mut el, &c.extra);
     el
@@ -737,7 +763,7 @@ fn read_outline_child(el: &Element, format: u32, at: &str, style: &Style) -> Res
                 }
                 return Ok(OutlineItem::Anchor(a));
             }
-            Ok(OutlineItem::Shape(read_contour(el, at, style)?.map_or_else(|| raw_shape(el), Shape::Path)))
+            Ok(OutlineItem::Shape(read_contour(el, at, style, format)?.map_or_else(|| raw_shape(el), Shape::Path)))
         }
         "component" => {
             let base = el.attr("base").ok_or_else(|| bad(at, "a component without `base`"))?;
@@ -745,9 +771,18 @@ fn read_outline_child(el: &Element, format: u32, at: &str, style: &Style) -> Res
             for (slot, (name, default)) in m.iter_mut().zip(TRANSFORM) {
                 *slot = number(el, name, at)?.unwrap_or(default);
             }
-            let mut c = Component { glyph: base.to_string(), transform: Transform::Matrix(m), extra: Extra::new() };
-            keep_other_attrs(&mut c.extra, el, &["base", "xScale", "xyScale", "yxScale", "yScale", "xOffset", "yOffset"]);
-            if let Some(t) = tag_if_different(el, &component_el(&c, style)) {
+            let mut c = Component { glyph: base.to_string(), transform: Transform::Matrix(m), info: Default::default(), extra: Extra::new() };
+            let ids = format >= 2;
+            if let Some(i) = el.attr("identifier").filter(|_| ids) {
+                c.info.identifier = Some(i.to_string());
+            }
+            let known: &[&str] = if ids {
+                &["base", "xScale", "xyScale", "yxScale", "yScale", "xOffset", "yOffset", "identifier"]
+            } else {
+                &["base", "xScale", "xyScale", "yxScale", "yScale", "xOffset", "yOffset"]
+            };
+            keep_other_attrs(&mut c.extra, el, known);
+            if let Some(t) = tag_if_different(el, &component_el(&c, style, format)) {
                 ufo(&mut c.extra, "<", s(&t));
             }
             Ok(OutlineItem::Shape(Shape::Component(c)))
@@ -757,7 +792,7 @@ fn read_outline_child(el: &Element, format: u32, at: &str, style: &Style) -> Res
 }
 
 /// A contour as a path, or `None` when the model cannot hold it (it is then kept raw).
-fn read_contour(el: &Element, at: &str, style: &Style) -> Result<Option<Path>> {
+fn read_contour(el: &Element, at: &str, style: &Style, format: u32) -> Result<Option<Path>> {
     if el.has_text() || el.elements().any(|p| p.name() != "point") {
         return Ok(None);
     }
@@ -780,11 +815,26 @@ fn read_contour(el: &Element, at: &str, style: &Style) -> Result<Option<Path>> {
             Some("yes") => true,
             Some(_) => return Ok(None),
         };
+        let starts_open = i == 0 && !path.closed;
         let mut node = Node::new(x, y, kind);
-        node.smooth = smooth;
-        keep_other_attrs(&mut node.extra, p, &["x", "y", "type", "smooth"]);
-        if let Some(t) = tag_if_different(p, &point_el(&node, i == 0 && !path.closed, style)) {
-            ufo(&mut node.extra, "<", s(&t));
+        // A `move` point's `smooth` has no join to describe: it stays an attribute of the file.
+        node.smooth = smooth && !starts_open;
+        let mut info = NodeInfo { name: p.attr("name").map(str::to_string), ..Default::default() };
+        if format >= 2 {
+            info.identifier = p.attr("identifier").map(str::to_string);
+        }
+        let known: &[&str] = match (starts_open, format >= 2) {
+            (false, true) => &["x", "y", "type", "smooth", "name", "identifier"],
+            (false, false) => &["x", "y", "type", "smooth", "name"],
+            (true, true) => &["x", "y", "type", "name", "identifier"],
+            (true, false) => &["x", "y", "type", "name"],
+        };
+        keep_other_attrs(&mut info.extra, p, known);
+        if info != NodeInfo::default() {
+            node.info = Rare::new(info);
+        }
+        if let Some(t) = tag_if_different(p, &point_el(&node, starts_open, style, format)) {
+            ufo(&mut node.info.extra, "<", s(&t));
         }
         path.nodes.push(node);
     }
@@ -792,8 +842,13 @@ fn read_contour(el: &Element, at: &str, style: &Style) -> Result<Option<Path>> {
     if path.to_bez().is_err() || path.nodes.iter().any(|n| n.kind == NodeKind::OffCurve && n.smooth) {
         return Ok(None);
     }
-    keep_other_attrs(&mut path.extra, el, &[]);
-    if let Some(t) = tag_if_different(el, &contour_el(&path)) {
+    if format >= 2
+        && let Some(i) = el.attr("identifier")
+    {
+        path.info.identifier = Some(i.to_string());
+    }
+    keep_other_attrs(&mut path.extra, el, if format >= 2 { &["identifier"] } else { &[] });
+    if let Some(t) = tag_if_different(el, &contour_el(&path, format)) {
         ufo(&mut path.extra, "<", s(&t));
     }
     if path.nodes.is_empty() {
@@ -810,7 +865,10 @@ fn read_anchor(el: &Element, at: &str, style: &Style) -> Result<Anchor> {
     if el.attr("name").is_none() {
         ufo(&mut a.extra, "noName", Value::Bool(true));
     }
-    keep_other_attrs(&mut a.extra, el, &["x", "y", "name"]);
+    let info =
+        AnchorInfo { color: el.attr("color").map(str::to_string), identifier: el.attr("identifier").map(str::to_string), ..Default::default() };
+    a.info = Rare::new(info);
+    keep_other_attrs(&mut a.extra, el, &["x", "y", "name", "color", "identifier"]);
     if let Some(t) = tag_if_different(el, &anchor_el(&a, style)) {
         ufo(&mut a.extra, "<", s(&t));
     }
@@ -916,8 +974,8 @@ pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Resul
     let mut outline = Element::new("outline");
     // A shape another format's reader kept as written has no GLIF form; the engine's loss report
     // lists it.
-    for shape in layer.shapes.iter().filter(|s| !matches!(s, Shape::Raw(r) if r.family != Family::Ufo)) {
-        outline.children.push(XNode::Element(write_shape(shape, style, name)?));
+    for shape in layer.shapes.iter().filter(|s| !matches!(s, Shape::Image(_)) && !matches!(s, Shape::Raw(r) if r.family != Family::Ufo)) {
+        outline.children.push(XNode::Element(write_shape(shape, style, name, format)?));
     }
     let anchor_at: Vec<usize> = x
         .get(Family::Ufo, "anchorAt")
@@ -1010,13 +1068,13 @@ fn order_children(children: &mut Vec<Element>, x: &Extra) {
     }
 }
 
-fn write_shape(shape: &Shape, style: &Style, glyph: &str) -> Result<Element> {
+fn write_shape(shape: &Shape, style: &Style, glyph: &str, format: u32) -> Result<Element> {
     match shape {
         Shape::Path(p) => {
-            let mut contour = contour_el(p);
+            let mut contour = contour_el(p, format);
             for (i, n) in p.nodes.iter().enumerate() {
-                let mut el = point_el(n, i == 0 && !p.closed, style);
-                apply_tag(&mut el, &n.extra, "<");
+                let mut el = point_el(n, i == 0 && !p.closed, style, format);
+                apply_tag(&mut el, &n.info.extra, "<");
                 contour.children.push(XNode::Element(el));
             }
             if p.nodes.is_empty() {
@@ -1026,10 +1084,11 @@ fn write_shape(shape: &Shape, style: &Style, glyph: &str) -> Result<Element> {
             Ok(contour)
         }
         Shape::Component(c) => {
-            let mut el = component_el(c, style);
+            let mut el = component_el(c, style, format);
             apply_tag(&mut el, &c.extra, "<");
             Ok(el)
         }
+        Shape::Image(_) => Err(UfoError::Unsupported(format!("glyph `{glyph}`: an image among the shapes"))),
         Shape::Raw(r) => {
             let text = match (&r.family, &r.value) {
                 (Family::Ufo, Value::String(t)) => t.as_str(),
@@ -1076,7 +1135,7 @@ mod tests {
         let mut n = g.layer.extra.iter().filter(|e| e.key.as_str().starts_with('<')).count();
         for s in &g.layer.shapes {
             if let Shape::Path(p) = s {
-                n += p.nodes.iter().filter(|n| n.extra.get(Family::Ufo, "<").is_some()).count();
+                n += p.nodes.iter().filter(|n| n.info.extra.get(Family::Ufo, "<").is_some()).count();
             }
         }
         n
@@ -1091,7 +1150,7 @@ mod tests {
         assert_eq!(g.layer.anchors.len(), 1);
         let Shape::Path(p) = &g.layer.shapes[0] else { panic!("{:?}", g.layer.shapes[0]) };
         assert!(p.closed);
-        assert_eq!(p.nodes[3].extra.get(Family::Ufo, "@name").and_then(Value::as_str), Some("p"));
+        assert_eq!(p.nodes[3].info.name.as_deref(), Some("p"));
         assert_eq!(hints(&g), 0, "nothing in a fontTools file needs a kept tag");
         assert_eq!(round_trip(A), A);
     }
@@ -1285,5 +1344,68 @@ hello
         let g = read(spelled, "a.glif", "m", "m").unwrap();
         assert_eq!(g.layer.info.guides.len(), 1);
         assert_eq!(round_trip(spelled), spelled);
+    }
+
+    const SHAPES: &str = "<?xml version='1.0' encoding='UTF-8'?>
+<glyph name=\"a\" format=\"2\">
+  <advance width=\"600\"/>
+  <anchor x=\"300\" y=\"500\" name=\"top\" color=\"1,0,0,1\" identifier=\"a1\"/>
+  <outline>
+    <contour identifier=\"c1\">
+      <point x=\"447\" y=\"434\" type=\"line\" smooth=\"yes\" name=\"hr00\" identifier=\"p1\"/>
+      <point x=\"250\" y=\"520\" identifier=\"p2\"/>
+      <point x=\"300\" y=\"520\"/>
+      <point x=\"214\" y=\"504\" type=\"curve\"/>
+    </contour>
+    <contour>
+      <point x=\"0\" y=\"0\" type=\"move\" smooth=\"yes\"/>
+      <point x=\"10\" y=\"0\" type=\"line\"/>
+    </contour>
+    <component base=\"acute\" xOffset=\"100\" identifier=\"k1\"/>
+  </outline>
+</glyph>
+";
+
+    #[test]
+    fn point_names_identifiers_and_anchor_colours_are_fields() {
+        let g = read(SHAPES, "a.glif", "m01", "m01").unwrap();
+        let a = &g.layer.anchors[0];
+        assert_eq!((a.info.color.as_deref(), a.info.identifier.as_deref()), (Some("1,0,0,1"), Some("a1")));
+        assert!(a.extra.is_empty());
+        let Shape::Path(p) = &g.layer.shapes[0] else { panic!() };
+        assert_eq!(p.info.identifier.as_deref(), Some("c1"));
+        let n = &p.nodes[0];
+        assert_eq!((n.smooth, n.info.name.as_deref(), n.info.identifier.as_deref()), (true, Some("hr00"), Some("p1")));
+        assert_eq!(p.nodes[1].info.identifier.as_deref(), Some("p2"));
+        assert!(p.nodes.iter().all(|n| n.info.extra.is_empty()), "nothing kept: every attribute is a field");
+        // A `move` point's `smooth` has no join to describe: it stays an attribute of the file.
+        let Shape::Path(open) = &g.layer.shapes[1] else { panic!() };
+        assert!(!open.nodes[0].smooth && open.nodes[0].info.extra.get(Family::Ufo, "@smooth").is_some());
+        let Shape::Component(c) = &g.layer.shapes[2] else { panic!() };
+        assert_eq!(c.info.identifier.as_deref(), Some("k1"));
+        assert_eq!(round_trip(SHAPES), SHAPES);
+    }
+
+    #[test]
+    fn edited_shape_fields_are_written_in_the_writers_order() {
+        let mut g = read(SHAPES, "a.glif", "m01", "m01").unwrap();
+        let Shape::Path(p) = &mut g.layer.shapes[0] else { panic!() };
+        p.nodes[2].info.name = Some("n".into());
+        p.nodes[0].info.identifier = None;
+        p.info.identifier = Some("c2".into());
+        g.layer.anchors[0].info.color = None;
+        // An open path's first node that is smooth (as `.glyphs` files may have it) is written
+        // without `smooth`, as glyphsLib writes it.
+        let Shape::Path(open) = &mut g.layer.shapes[1] else { panic!() };
+        open.nodes[0].smooth = true;
+        open.nodes[0].info = Rare::default();
+        let out = write(Head::of(&g), &g.layer, g.format, &g.style).unwrap();
+        assert!(out.contains("<point x=\"300\" y=\"520\" name=\"n\"/>"), "{out}");
+        assert!(out.contains("<point x=\"447\" y=\"434\" type=\"line\" smooth=\"yes\" name=\"hr00\"/>"), "{out}");
+        assert!(out.contains("<contour identifier=\"c2\">") && out.contains("<anchor x=\"300\" y=\"500\" name=\"top\" identifier=\"a1\"/>"), "{out}");
+        assert!(out.contains("<point x=\"0\" y=\"0\" type=\"move\"/>"), "{out}");
+        // GLIF format 1 has no identifiers.
+        let one = write(Head::of(&g), &g.layer, 1, &g.style).unwrap();
+        assert!(!one.contains("identifier="), "{one}");
     }
 }

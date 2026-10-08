@@ -224,18 +224,32 @@ impl Layer {
                         nodes: p
                             .nodes
                             .into_iter()
-                            .map(|n| fontcraft_model::Node { x: n.x, y: n.y, kind: n.kind, smooth: n.smooth, extra: extra_of(n.extra) })
+                            .map(|n| {
+                                let mut node = fontcraft_model::Node::new(n.x, n.y, n.kind);
+                                node.smooth = n.smooth;
+                                let extra = extra_of(n.extra);
+                                if !extra.is_empty() {
+                                    node.info.extra = extra;
+                                }
+                                node
+                            })
                             .collect(),
+                        info: Default::default(),
                         extra: extra_of(p.extra),
                     }),
                     Shape::Component(c) => fontcraft_model::Shape::Component(fontcraft_model::Component {
                         glyph: c.glyph,
                         transform: Transform::Matrix(c.transform),
+                        info: Default::default(),
                         extra: extra_of(c.extra),
                     }),
                 })
                 .collect(),
-            anchors: self.anchors.into_iter().map(|a| fontcraft_model::Anchor { name: a.name, x: a.x, y: a.y, extra: extra_of(a.extra) }).collect(),
+            anchors: self
+                .anchors
+                .into_iter()
+                .map(|a| fontcraft_model::Anchor { name: a.name, x: a.x, y: a.y, info: Default::default(), extra: extra_of(a.extra) })
+                .collect(),
             extra: extra_of(self.extra),
         }
     }

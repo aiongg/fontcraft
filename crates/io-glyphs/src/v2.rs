@@ -11,8 +11,11 @@
 //!   metric is one of the master's other zones.
 //! - Code points are uppercase hexadecimal, several joined by commas.
 //! - A layer has separate `paths` and `components` lists. In the model the paths come first.
-//! - Nodes are strings `"x y TYPE"` with an optional ` SMOOTH`; types `LINE`, `CURVE`, `QCURVE`,
-//!   `OFFCURVE`. A closed path's start node is written last, as in version 3.
+//! - Nodes are strings `"x y TYPE"` with an optional ` SMOOTH` and an optional dictionary of
+//!   attributes (`"131 250 LINE {name = hr00;}"`, entries separated by line breaks); types `LINE`,
+//!   `CURVE`, `QCURVE`, `OFFCURVE`. A closed path's start node is written last, as in version 3.
+//!   Components and anchors keep version 3's keys for alignment, attachment anchor, smart values,
+//!   lock and user data ([`crate::shape`]).
 //! - A component names its glyph in `name` and has a `transform` string `"{a, b, c, d, tx, ty}"`;
 //!   an anchor has a `position` string `"{x, y}"`.
 //! - Axes are not listed: a master has up to six axis values in fixed keys (`weightValue`,
@@ -42,9 +45,10 @@ use std::sync::Arc;
 
 use fontcraft_model::{
     AlignmentZone, Anchor, Axis, Component, Extra, Family, Font, FontInfo, Glyph, GlyphTable, Guide, Instance, Layer, MAX_NAME_LEN, Master,
-    MetricDef, MetricValue, NameParts, Node, NodeKind, Param, Params, Path, Properties, RawShape, Settings, Shape, Source, SourceFormat, StemDef,
-    Transform, metric,
+    MetricDef, MetricValue, NameParts, Node, NodeInfo, NodeKind, Param, Params, Path, PathInfo, Properties, RawShape, Settings, Shape, Source,
+    SourceFormat, StemDef, Transform, metric,
 };
+use fontcraft_plist::openstep::Dialect;
 use fontcraft_plist::openstep::canonical_number;
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
@@ -438,7 +442,7 @@ fn finish_layer(entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
 }
 
 /// A background's `paths`, `components` and `anchors`; an empty list stays as written.
-fn take_shapes(d: &mut Dict) -> Option<(Vec<Shape>, Vec<Anchor>)> {
+fn take_shapes(d: &mut Dict, _version: u32) -> Option<(Vec<Shape>, Vec<Anchor>)> {
     let filled = |d: &Dict, k: &str| matches!(d.get(k), Some(Value::Array(a)) if !a.items.is_empty());
     let mut shapes = Vec::new();
     if filled(d, "paths") {
@@ -460,7 +464,7 @@ fn take_shapes(d: &mut Dict) -> Option<(Vec<Shape>, Vec<Anchor>)> {
 }
 
 /// Paths and components as version 2's two lists (paths first), and the anchors.
-fn push_shapes(e: &mut Vec<(Str, Value)>, shapes: &[Shape], anchors: &[Anchor], at: &str) -> Result<()> {
+fn push_shapes(e: &mut Vec<(Str, Value)>, shapes: &[Shape], anchors: &[Anchor], at: &str, _version: u32) -> Result<()> {
     let (mut paths, mut components) = (Vec::new(), Vec::new());
     for s in shapes {
         match s {
@@ -474,6 +478,7 @@ fn push_shapes(e: &mut Vec<(Str, Value)>, shapes: &[Shape], anchors: &[Anchor], 
                 }
             }
             Shape::Raw(_) => return Err(GlyphsError::Unsupported(format!("{at}: a shape read from another format"))),
+            Shape::Image(_) => return Err(GlyphsError::Unsupported(format!("{at}: an image among the shapes in format version 2"))),
         }
     }
     if !paths.is_empty() {
@@ -513,9 +518,11 @@ fn raw(value: Value) -> Shape {
     Shape::Raw(RawShape { family: Family::Glyphs, value })
 }
 
+/// A node string `"x y TYPE[ SMOOTH][ {attributes}]"`. Only a string written the canonical way
+/// becomes a node; anything else keeps the path as written.
 fn read_node(v: &Value) -> Option<Node> {
     let s = v.as_str()?;
-    let mut parts = s.split(' ');
+    let mut parts = s.splitn(4, ' ');
     let x = parts.next()?.parse::<f64>().ok().filter(|f| f.is_finite())?;
     let y = parts.next()?.parse::<f64>().ok().filter(|f| f.is_finite())?;
     let kind = match parts.next()? {
@@ -525,18 +532,53 @@ fn read_node(v: &Value) -> Option<Node> {
         "OFFCURVE" => NodeKind::OffCurve,
         _ => return None,
     };
-    let smooth = match parts.next() {
-        None => false,
-        Some("SMOOTH") => true,
-        Some(_) => return None,
+    let (smooth, attr) = match parts.next() {
+        None => (false, None),
+        Some(r) => match r.strip_prefix("SMOOTH") {
+            Some("") => (true, None),
+            Some(t) => (true, Some(t.strip_prefix(' ')?)),
+            None => (false, Some(r)),
+        },
     };
-    if parts.next().is_some() {
-        return None;
+    let mut node = Node::new(x, y, kind);
+    node.smooth = smooth;
+    if let Some(text) = attr {
+        if !text.starts_with('{') {
+            return None;
+        }
+        let value = fontcraft_plist::openstep::parse_value(text).ok()?;
+        let info = crate::shape::node_attr_fields(&value, 2).unwrap_or_else(|| {
+            let mut i = NodeInfo::default();
+            i.extra.push(Family::Glyphs, "attr", value);
+            i
+        });
+        node.info = fontcraft_model::Rare::new(info);
     }
-    let node = Node { x, y, kind, smooth, extra: Extra::new() };
-    // Only a node string written the canonical way becomes a node; anything else keeps the path
-    // as written.
-    (node_string(&node) == s).then_some(node)
+    // The text as written, too: a string spelled with other escapes stays as written.
+    let spelled_otherwise = matches!(v, Value::String(t) if t.spelling().is_some());
+    let same = node_string(&node) == s && (!spelled_otherwise || crate::layer::same_text(&Value::String(Str::new(node_string(&node))), v, 2));
+    same.then_some(node)
+}
+
+/// A dictionary on one line, entries separated by line breaks, as a node string holds it.
+fn inline_dict(v: &Value) -> String {
+    let mut out = String::new();
+    let Value::Dict(d) = v else {
+        fontcraft_plist::openstep::write_value(&mut out, v, Dialect::Glyphs2);
+        return out;
+    };
+    out.push('{');
+    for (i, (k, v)) in d.entries.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        fontcraft_plist::openstep::write_value(&mut out, &Value::String(k.clone()), Dialect::Glyphs2);
+        out.push_str(" = ");
+        fontcraft_plist::openstep::write_value(&mut out, v, Dialect::Glyphs2);
+        out.push(';');
+    }
+    out.push('}');
+    out
 }
 
 fn node_string(n: &Node) -> String {
@@ -547,7 +589,12 @@ fn node_string(n: &Node) -> String {
         NodeKind::OffCurve => "OFFCURVE",
     };
     let smooth = if n.smooth { " SMOOTH" } else { "" };
-    format!("{} {} {kind}{smooth}", fmt(n.x), fmt(n.y))
+    let mut s = format!("{} {} {kind}{smooth}", fmt(n.x), fmt(n.y));
+    if let Some(attr) = crate::shape::write_node_attr(&n.info) {
+        s.push(' ');
+        s.push_str(&inline_dict(&attr));
+    }
+    s
 }
 
 fn read_path(v: Value) -> Option<Shape> {
@@ -557,7 +604,12 @@ fn read_path(v: Value) -> Option<Shape> {
     if closed && !nodes.is_empty() {
         nodes.rotate_right(1);
     }
-    let path = Path { closed, nodes, extra: into_extra(d) };
+    let info = if d.is_empty() {
+        fontcraft_model::Rare::default()
+    } else {
+        fontcraft_model::Rare::new(PathInfo { locked: crate::layer::take_flag(&mut d, "locked", 2), ..Default::default() })
+    };
+    let path = Path { closed, nodes, info, extra: into_extra(d) };
     path.to_bez().ok()?;
     Some(Shape::Path(path))
 }
@@ -577,7 +629,8 @@ fn read_component(v: Value) -> Option<Shape> {
         }
         None => [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
     };
-    Some(Shape::Component(Component { glyph, transform: Transform::Matrix(m), extra: into_extra(d) }))
+    let info = if d.is_empty() { fontcraft_model::Rare::default() } else { fontcraft_model::Rare::new(crate::shape::take_component_info(&mut d, 2)) };
+    Some(Shape::Component(Component { glyph, transform: Transform::Matrix(m), info, extra: into_extra(d) }))
 }
 
 fn read_anchor(v: Value, at: &str) -> Result<Anchor> {
@@ -593,7 +646,8 @@ fn read_anchor(v: Value, at: &str) -> Result<Anchor> {
         }
         None => (0.0, 0.0),
     };
-    Ok(Anchor { name, x, y, extra: into_extra(d) })
+    let info = if d.is_empty() { fontcraft_model::Rare::default() } else { fontcraft_model::Rare::new(crate::shape::take_anchor_info(&mut d, 2)) };
+    Ok(Anchor { name, x, y, info, extra: into_extra(d) })
 }
 
 // ── writing ────────────────────────────────────────────────────────────────────────────────────
@@ -726,7 +780,7 @@ pub(crate) fn write_layer(l: &Layer, at: &str) -> Result<Value> {
         e.push(("associatedMasterId".into(), string(&l.master)));
     }
     e.push(("width".into(), num(l.width, &at)?));
-    push_shapes(&mut e, &l.shapes, &l.anchors, &at)?;
+    push_shapes(&mut e, &l.shapes, &l.anchors, &at, 2)?;
     crate::layer::push_layer_info(&mut e, &l.info, 2, &SHAPES, &at)?;
     Ok(Value::Dict(finish_ordered(e, &l.extra, LAYER_ORDER)))
 }
@@ -739,7 +793,10 @@ fn write_path(p: &Path, at: &str) -> Result<Value> {
     if p.closed && !nodes.is_empty() {
         nodes.rotate_left(1);
     }
-    let e = vec![("closed".into(), int(i64::from(p.closed))), ("nodes".into(), list(nodes))];
+    let mut e = vec![("closed".into(), int(i64::from(p.closed))), ("nodes".into(), list(nodes))];
+    if p.info.locked {
+        e.push(("locked".into(), int(1)));
+    }
     Ok(Value::Dict(finish(e, &p.extra)))
 }
 
@@ -752,14 +809,16 @@ fn write_component(c: &Component, at: &str) -> Result<Value> {
         }
         e.push(("transform".into(), Value::String(Str::new(spelled(c.extra.get(Family::Glyphs, "transform"), &m)))));
     }
+    crate::shape::push_component_info(&mut e, &c.info, 2, at)?;
     Ok(Value::Dict(finish(e, &c.extra)))
 }
 
 fn write_anchor(a: &Anchor) -> Value {
-    let e = vec![
+    let mut e = vec![
         ("name".into(), string(&a.name)),
         ("position".into(), Value::String(Str::new(spelled(a.extra.get(Family::Glyphs, "position"), &[a.x, a.y])))),
     ];
+    crate::shape::push_anchor_info(&mut e, &a.info, 2);
     Value::Dict(finish(e, &a.extra))
 }
 

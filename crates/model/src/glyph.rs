@@ -3,7 +3,10 @@
 use fontcraft_geom::{Affine, BezPath, Point};
 use serde::{Deserialize, Serialize};
 
-use crate::{Extra, Family, GlyphInfoBox, KernGroups, LayerInfoBox, MAX_COORDINATE, in_range};
+use crate::{
+    AnchorInfoBox, ComponentInfoBox, Extra, Family, GlyphInfoBox, Image, KernGroups, LayerInfoBox, MAX_COORDINATE, NodeInfo, NodeInfoBox,
+    Orientation, PathInfoBox, UserData, in_range,
+};
 use fontcraft_plist::Value;
 
 fn yes() -> bool {
@@ -100,9 +103,12 @@ impl Glyph {
 pub enum Shape {
     Path(Path),
     Component(Component),
-    /// A shape the model cannot represent yet (an image or a shape group of format version 4,
-    /// a path with quartic, Hobby or spiral nodes), kept exactly as read so that saving to the
-    /// same format puts it back. Outlines and compiled fonts leave it out.
+    /// An image placed among the shapes (`.glyphs` format version 4). Outlines and compiled fonts
+    /// leave it out.
+    Image(Box<Image>),
+    /// A shape the model cannot represent yet (a shape group of format version 4, a path with
+    /// quartic, Hobby or spiral nodes), kept exactly as read so that saving to the same format
+    /// puts it back. Outlines and compiled fonts leave it out.
     Raw(RawShape),
 }
 
@@ -143,20 +149,120 @@ pub struct Path {
     #[serde(default = "yes")]
     pub closed: bool,
     pub nodes: Vec<Node>,
+    /// Lock, drawing attributes and identifier ([`crate::PathInfo`]); most paths have none.
+    #[serde(default, skip_serializing_if = "PathInfoBox::is_default")]
+    pub info: PathInfoBox,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// A point of a path: 32 bytes, its rare data ([`NodeInfo`]) behind one pointer.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Node {
     pub x: f64,
     pub y: f64,
-    #[serde(rename = "type")]
     pub kind: NodeKind,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    /// The segments on either side meet without a corner (an on-curve node).
     pub smooth: bool,
-    #[serde(default, skip_serializing_if = "Extra::is_empty")]
-    pub extra: Extra,
+    /// The reference's tangent join, where only the curve side follows the straight side
+    /// (`.glyphs` version 4 `t`). It means something only with `smooth`; other formats write
+    /// such a node as smooth.
+    pub tangent: bool,
+    pub locked: bool,
+    pub orientation: Orientation,
+    /// Name, identifier, user data and unknown keys.
+    pub info: NodeInfoBox,
+}
+
+/// A node in the native file: one flat object (`x`, `y`, `type`, then what is set of `smooth`,
+/// `tangent`, `locked`, `orientation`, `name`, `identifier`, `user_data`, `extra`).
+#[derive(Serialize)]
+struct NodeOut<'a> {
+    x: f64,
+    y: f64,
+    #[serde(rename = "type")]
+    kind: NodeKind,
+    #[serde(skip_serializing_if = "is_false")]
+    smooth: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    tangent: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    locked: bool,
+    #[serde(skip_serializing_if = "Orientation::is_left")]
+    orientation: Orientation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    identifier: Option<&'a str>,
+    #[serde(skip_serializing_if = "UserData::is_empty")]
+    user_data: &'a UserData,
+    #[serde(skip_serializing_if = "Extra::is_empty")]
+    extra: &'a Extra,
+}
+
+#[derive(Deserialize)]
+struct NodeIn {
+    x: f64,
+    y: f64,
+    #[serde(rename = "type")]
+    kind: NodeKind,
+    #[serde(default)]
+    smooth: bool,
+    #[serde(default)]
+    tangent: bool,
+    #[serde(default)]
+    locked: bool,
+    #[serde(default)]
+    orientation: Orientation,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    identifier: Option<String>,
+    #[serde(default)]
+    user_data: UserData,
+    #[serde(default)]
+    extra: Extra,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+impl Serialize for Node {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let i = &*self.info;
+        NodeOut {
+            x: self.x,
+            y: self.y,
+            kind: self.kind,
+            smooth: self.smooth,
+            tangent: self.tangent,
+            locked: self.locked,
+            orientation: self.orientation,
+            name: i.name.as_deref(),
+            identifier: i.identifier.as_deref(),
+            user_data: &i.user_data,
+            extra: &i.extra,
+        }
+        .serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Node {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let n = NodeIn::deserialize(d)?;
+        let info = NodeInfo { name: n.name, identifier: n.identifier, user_data: n.user_data, extra: n.extra };
+        Ok(Node {
+            x: n.x,
+            y: n.y,
+            kind: n.kind,
+            smooth: n.smooth,
+            tangent: n.tangent,
+            locked: n.locked,
+            orientation: n.orientation,
+            info: crate::Rare::new(info),
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -233,6 +339,10 @@ pub struct Component {
     /// matrix-writing format stays a matrix.
     #[serde(default, skip_serializing_if = "is_default_transform")]
     pub transform: Transform,
+    /// Alignment, attachment anchor, smart values, source master, lock, orientation, drawing
+    /// attributes, identifier and user data ([`crate::ComponentInfo`]).
+    #[serde(default, skip_serializing_if = "ComponentInfoBox::is_default")]
+    pub info: ComponentInfoBox,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
@@ -240,7 +350,7 @@ pub struct Component {
 impl Component {
     /// A reference to `glyph` moved by `(dx, dy)`.
     pub fn new(glyph: impl Into<String>, dx: f64, dy: f64) -> Self {
-        Self { glyph: glyph.into(), transform: Transform::translate(dx, dy), extra: Extra::new() }
+        Self { glyph: glyph.into(), transform: Transform::translate(dx, dy), info: ComponentInfoBox::default(), extra: Extra::new() }
     }
 
     pub fn affine(&self) -> Affine {
@@ -253,19 +363,22 @@ pub struct Anchor {
     pub name: String,
     pub x: f64,
     pub y: f64,
+    /// Lock, orientation, colour, identifier and user data ([`crate::AnchorInfo`]).
+    #[serde(default, skip_serializing_if = "AnchorInfoBox::is_default")]
+    pub info: AnchorInfoBox,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
 
 impl Anchor {
     pub fn new(name: impl Into<String>, x: f64, y: f64) -> Self {
-        Self { name: name.into(), x, y, extra: Extra::new() }
+        Self { name: name.into(), x, y, info: AnchorInfoBox::default(), extra: Extra::new() }
     }
 }
 
 impl Node {
     pub fn new(x: f64, y: f64, kind: NodeKind) -> Self {
-        Self { x, y, kind, smooth: false, extra: Extra::new() }
+        Self { x, y, kind, smooth: false, tangent: false, locked: false, orientation: Orientation::Left, info: NodeInfoBox::default() }
     }
     pub fn point(&self) -> Point {
         Point::new(self.x, self.y)
@@ -277,7 +390,7 @@ impl Node {
 
 impl Path {
     pub fn new(closed: bool, nodes: Vec<Node>) -> Self {
-        Self { closed, nodes, extra: Extra::new() }
+        Self { closed, nodes, info: PathInfoBox::default(), extra: Extra::new() }
     }
 
     /// A closed rectangle, counter-clockwise from the bottom left.

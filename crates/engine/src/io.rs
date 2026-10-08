@@ -330,9 +330,14 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
                 match s {
                     Shape::Path(p) => {
                         count(&p.extra);
-                        p.nodes.iter().for_each(|n| count(&n.extra));
+                        count(&p.info.attrs.extra);
+                        p.nodes.iter().for_each(|n| count(&n.info.extra));
                     }
-                    Shape::Component(c) => count(&c.extra),
+                    Shape::Component(c) => {
+                        count(&c.extra);
+                        count(&c.info.attrs.extra);
+                    }
+                    Shape::Image(i) => count(&i.extra),
                     Shape::Raw(_) => {}
                 }
             }

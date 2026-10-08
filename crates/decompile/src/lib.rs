@@ -175,6 +175,7 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
                         layer.shapes.push(Shape::Component(Component {
                             glyph: base.clone(),
                             transform: Transform::Matrix(m),
+                            info: Default::default(),
                             extra: Default::default(),
                         }));
                     }

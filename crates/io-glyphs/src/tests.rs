@@ -1,4 +1,5 @@
 use super::*;
+use fontcraft_model::Transform;
 
 const V3: &str = "{
 .appVersion = \"3343\";
