@@ -2,12 +2,12 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-07, at the end of the planning session._
+_Updated: 2026-10-08, after M1.4 (UFO and designspace)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (78 tests; about 7,000 lines of Rust). Built and run on
-  Linux x86-64 with Rust 1.97.
+- `cargo xtask ci` passes all nine steps (208 tests; about 21,000 lines of Rust in 12 crates).
+  Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
 - The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
@@ -15,18 +15,20 @@ _Updated: 2026-10-07, at the end of the planning session._
 
 ## Where to start
 
-**M1, the source model and the formats.** The plan is `docs/plans/M1.md` (accepted; one agent,
-packages in order). Its material is `docs/spec/30-source-formats.md` and
-`spec/inventory/30-formats.toml`.
+**M2, the compile core and the oracle harness.** The plan is `docs/plans/M2.md` (accepted
+2026-10-08; one agent). Start with M2.0 (the harness) and M2.1 (the pipeline); first check
+whether glyphsLib reads `.glyphs` version 4.
+
+M1 (`docs/plans/M1.md`) is done as far as the formats go:
 
 | Package | State |
 |---|---|
 | M1.0 corpus, harness, spikes | done (plan § 8) |
-| M1.1 property lists | OpenStep done; XML is done with M1.4 |
-| M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured; `crates/io-glyphs` reads and writes versions 2 to 4, single files and packages (every reference-written source identical). Next: more typed fields, then the native format's layout |
-| M1.4 UFO and designspace | **next**: our own reader and writer (question 11 answered 2026-10-08), norad as a second reader in tests |
+| M1.1 property lists | done: OpenStep and XML |
+| M1.2 the model, with M1.3 `.glyphs` | the fields M1 needs are typed; the rest of the outline in `docs/spec/30-source-formats.md` (ordered custom parameters, layer kinds, hints, guides…) travels in `Extra` and is typed by the milestone that uses it (proposed to the owner). `crates/io-glyphs`: versions 2 to 4, files and packages, every reference-written source identical |
+| M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
 | M1.5 compiled fonts | done |
-| M1.6 commands and CLI | done for every format but UFO: open, save, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list` (`dump` moved to M12) |
+| M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -75,7 +77,8 @@ around them. None can lose data; most are about scale.
 
 `docs/spec/00-open-decisions.md` › For the owner: the name (O2), access to the sibling apps' shared
 standards (O3), the application id (rest of O4), FontLab (O5), platforms (O6). O1 is answered (no
-licence; tutorial videos watched by the owner) and so is the repository's home.
+licence; tutorial videos watched by the owner) and so is the repository's home. Also asked: whether
+M1 may close with the remaining model fields typed by the milestones that use them.
 
 ## Dev log
 
@@ -106,3 +109,11 @@ Append one terse entry per session: what landed, numbers, what is still open.
   open. `file.open`/`file.save` on every source and compiled fonts. Oswald shown in the app.
   Next: question 11, then UFO; meanwhile the native format's layout and the CLI's
   inspection commands (both done since). M2 plan drafted (`docs/plans/M2.md`), waiting for review.
+- **2026-10-08, M1.4.** Owner chose our own UFO I/O (decision 0003 amended) and accepted the M2
+  plan. `crates/plist`: lossless XML tree and XML property lists. `crates/io-ufo`: GLIF, UFO 2
+  and 3, designspace, UFOZ read; kept spellings used only while they still mean what the model
+  holds. Corpus: 19,453 GLIF, 125 UFOs, 59 designspace documents with their UFOs, all identical
+  through the model and through `.fontcraft`. Engine: open, save, save as, `file.exportUfo`;
+  CLI `convert` to `.ufo`/`.designspace`. Oswald converted to designspace and compiled by fontc
+  matches its `.glyphs` build in 822 of 850 glyphs at ExtraLight (the rest explained). Open:
+  glyphsLib lib keys, non-master layers to UFO, UFO 2 kerning groups (plan § M1.4).

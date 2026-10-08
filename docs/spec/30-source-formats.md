@@ -405,6 +405,10 @@ Use for us: the UFO and designspace reader/writer layer, behind our own model, p
 (zip sink, change-only atomic save, UFO 2 writer, preserved deprecated elements). The strict GLIF
 parser needs either an upstream option or our own tolerant GLIF reader.
 
+**Decided 2026-10-08 (decision 0003, amended):** not used as the UFO layer. A spike found that it
+writes no corpus UFO or designspace file back unchanged (`docs/plans/M1.md` § 8.2); FontCraft
+has its own reader and writer in `crates/io-ufo`, and norad reads FontCraft's output in tests.
+
 ### 4.3 `fontir` 1.0.0 (fontc; with `glyphs2fontir`, `ufo2fontir` 1.0.0, `fontra2fontir` 0.5.0)
 
 A compiler's intermediate representation, produced through a `Source` trait whose methods create

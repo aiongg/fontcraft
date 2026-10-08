@@ -4,7 +4,7 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-08 (M1 done except UFO and designspace; M2 plan accepted)._
+_Last updated: 2026-10-08 (M1 formats done, UFO and designspace included; M2 next)._
 
 ## Where we are
 
@@ -14,30 +14,35 @@ _Last updated: 2026-10-08 (M1 done except UFO and designspace; M2 plan accepted)
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,621 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, guard, CLI, control channel, MCP, UI shell, tests | **~35%** of what the siblings' "infrastructure" row covers |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~3%** |
-| Commands that exist (not: that behave like the reference) | **31 of 920** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **32 of 920** (`docs/parity.md`) |
 | Observed against the running reference app | **nothing** |
 
 ## Honest assessment (2026-10-08)
 
-**In one line:** the project reads and writes the primary reference's sources without loss and opens compiled fonts; it is not yet a font editor.
+**In one line:** the project reads and writes `.glyphs`, UFO and designspace sources without loss and opens compiled fonts; it is not yet a font editor.
 
 **What is real.** `.glyphs` files of versions 2, 3 and 4 and `.glyphspackage` folders open and
 save back byte for byte (every corpus source the reference app wrote, Inter and Oswald among
-them), and either form saves as the other. Compiled TrueType, CFF, collection and WOFF 1 fonts
+them), and either form saves as the other. UFO 2 and 3 and designspace documents with their
+UFOs open as one document and save back byte for byte (every readable corpus file: 125 UFOs, 59
+designspace documents); a save rewrites only the files an edit touched, and norad reads what we
+write. A `.glyphs` document saves as UFO or designspace, reporting what UFO cannot hold yet.
+Compiled TrueType, CFF, collection and WOFF 1 fonts
 open view-only (all 342 corpus fonts). The native `.fontcraft` format holds everything a `.glyphs`
 source holds. A new font can be created, glyphs added, removed and encoded, outlines added from
 node lists, widths and font info set, everything undone and redone, several edits batched into
 one undo step, and a static TrueType font exported that fonttools and skrifa read back correctly. All of that works headless (`fontcraft-cli run`), over MCP, over the control
 channel into the running window. From the window's menus only the commands that need no
 parameters work (New, Close, Undo, Redo, New Glyph, the View and Window toggles): there are no
-dialogs yet. Font View and Edit View draw. 151 tests pass, including a sweep that runs every engine
+dialogs yet. Font View and Edit View draw. 208 tests pass, including a sweep that runs every engine
 command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
 **What is not.** There is no drawing with the pointer, no selection of nodes, no path operations,
 no kerning editing, no components beyond flattening at export, no feature compilation, no
-variable fonts, no CFF export, no hinting, no UFO or designspace support (M1.4, next), no WOFF2,
-no screenshots over the control channel, no web app, no packaging. Kerning, features and
+variable fonts, no CFF export, no hinting, no WOFF2, no screenshots over the control channel,
+no web app, no packaging. Glyphs-only data (custom parameters, special layers, smart and corner
+components) does not yet travel into UFO lib keys. Kerning, features and
 instances are read and written, not yet edited or compiled. Edit View shows a glyph; it does not edit one.
 
 **How much to trust the inventory.** It was compiled from public documentation in one day, each
@@ -52,9 +57,9 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~3% | 31 of 920 commands; 0 of 33 tools; 2 of 170 panels as stubs |
+| **Breadth:** commands, tools and panels exist | ~3% | 32 of 920 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
-| **File interop** | ~20% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage` in and out (every reference-written corpus source saves back byte for byte); compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. No UFO, designspace, OTF/CFF export, variable, WOFF2 |
+| **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. Missing: Glyphs data in UFO lib keys, special layers to UFO, OTF/CFF export, variable, WOFF2, version conversion |
 | **Compiler correctness** | unmeasured | 10 of 50 tables written, for one static flavour; read back by two independent readers; one code review's findings fixed (bounds, names, style linking); **no oracle comparison yet** (the harness is M2) |
 | **Agent automation** | ~40% | every existing command is reachable from CLI, control channel and MCP; no pointer injection, dialogs, screenshots, resources or prompts yet |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests); one dependency panic found and fenced; one adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, no corpus runs, and the known scaling limits in `docs/status.md` |
@@ -64,17 +69,14 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 ### What to build next (in priority order)
 
-1. **M1.4, UFO and designspace**: the last M1 package. Our own reader and writer in the layout
-   fontTools writes, with norad as a second reader in tests (decision 0003); the XML half of the
-   `plist` crate; UFO 2 and UFOZ. Next.
-2. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
+1. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
    remaining static tables, the `cff` crate, WOFF and WOFF2, `fontcraft-cli oracle`, and a first
-   corpus-wide comparison with fontc and fontmake. From this
+   corpus-wide comparison with fontc and fontmake. Next. From this
    point compiler correctness is a number, not an opinion.
-3. **M3, Edit View drawing**, in parallel with 1 and 2 once the model settles: the `tools` crate,
+2. **M3, Edit View drawing**, in parallel with 1 once the model settles: the `tools` crate,
    selection, the Draw tool, node editing, transforms, the renderer, `ui.pointer` and
    `ui.screenshot` on the control channel, path operations.
-4. Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
+3. Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
    orders them.
 
 **The primary reference cannot be observed directly** (open decision O1: no licence). Editor
@@ -88,7 +90,7 @@ on, so the engine track, where oracles prove correctness, goes first.
 - **Specification:** 24 inventory files (919 commands, 33 tools, 170 panels, 45 settings, 241
   parameters, 1,741 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 22
   behaviour notes (about 127,000 words), all in our own words.
-- **Workspace:** 8 library crates in enforced layers, two apps, `xtask`; about 7,000 lines of Rust.
+- **Workspace:** 12 library crates in enforced layers, two apps, `xtask`; about 21,000 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry (18 engine commands), atomic
@@ -99,8 +101,12 @@ on, so the engine track, where oracles prove correctness, goes first.
   packages, Oswald and Inter among them); unmodelled keys travel in `Extra` with their spelling.
   `file.open` recognises sources by content; `file.save` keeps the format and version, rewrites
   only changed package files, refuses to overwrite a file changed on disk, and reports losses.
-  Compiled fonts (TrueType, CFF, collections, WOFF 1) open view-only. Kerning, axes, instances,
-  master locations, features, display strings and the note are fields of the model.
+  UFO 2 and 3 (a UFO is a master) and designspace documents with their UFOs (one document)
+  open and save back byte for byte in fontTools' layout, keeping each file's own layout and
+  spellings while they still mean what the model holds; UFOZ opens; `file.exportUfo` writes
+  masters as UFOs. Compiled fonts (TrueType, CFF, collections, WOFF 1) open view-only. Kerning,
+  axes, instances, master locations, features, display strings and the note are fields of the
+  model.
 - **Compiler:** static TrueType from the first master, deterministic.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
@@ -117,8 +123,8 @@ measured by what works (the parity table below and the measures in each mileston
 | # | Milestone | Status | Commands (live) |
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 in progress: done except M1.4 (UFO, designspace) | 10 (9) |
-| M2 | Compile core: static TTF and OTF, oracle harness | ⬜ plan accepted | 6 (1) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; remaining model fields proposed for later milestones | 10 (10) |
+| M2 | Compile core: static TTF and OTF, oracle harness | ⬜ plan accepted, next | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
@@ -133,7 +139,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default) | ⬜ | |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 920 (31) |
+| | **Total** | | 920 (32) |
 
 ## Parity estimate
 
@@ -160,14 +166,14 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | PostScript hinting | 3 | 27 | 0 | 0% | everything |
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
-| Source formats | 6 | 14 | 4 | 35% | UFO, designspace, WOFF2 import; custom parameters and layer attributes carried untyped; version conversion |
+| Source formats | 6 | 14 | 5 | 55% | WOFF2 import; Glyphs data in UFO lib keys; special layers to UFO; UFO 1; custom parameters and layer attributes carried untyped; version conversion |
 | Compiling | 9 | 11 | 1 | 2% | static TrueType core tables; no oracle comparison |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
 | Command-line tools | 8 | 42 | 4 | 1% | `commands`, `run`, `convert`, `info`, `tables list`, `glyphs list`; no dump, subset, instance, merge |
 | Quality checks | 3 | 33 | 0 | 0% | everything |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
 | Agent surfaces | 4 | 11 | 2 | 25% | execute, list, inspect over three surfaces; no pointer, dialogs, screenshots, resources |
-| **Feature parity** | **117** | **920** | **31** | **~3%** | |
+| **Feature parity** | **117** | **920** | **32** | **~3%** | |
 
 ## Out of scope (by design or by law)
 

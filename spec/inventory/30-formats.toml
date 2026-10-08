@@ -130,8 +130,8 @@ write = true
 spec = "https://unifiedfontobject.org/versions/ufo3/#storage-formats"
 area = "import-export"
 milestone = "M1"
-summary = "A ZIP archive holding one UFO directory tree under a single root folder of arbitrary name; UTF-8 file names, ZIP64 allowed, compression optional, encryption forbidden. Content rules are identical to `ufo3`. norad reads it behind its `ufoz` feature; writing goes through a sink we provide."
-ref = "UFO 3 specification › Storage Formats; norad src/zip_source.rs, src/font_sink.rs"
+summary = "A ZIP archive holding one UFO directory tree under a single root folder of arbitrary name; UTF-8 file names, ZIP64 allowed, compression optional, encryption forbidden. Content rules are identical to `ufo3`. Read with our own bounded ZIP reader (stored, deflated and ZIP64 entries); not written yet, so a UFOZ is saved with Save As to another format."
+ref = "UFO 3 specification › Storage Formats; PKWARE APPNOTE (ZIP format)"
 status = "docs"
 
 [[format]]
@@ -143,7 +143,7 @@ write = true
 spec = "https://unifiedfontobject.org/versions/ufo2/"
 area = "import-export"
 milestone = "M1"
-summary = "The older single-layer UFO: no layercontents, images, data, guidelines, anchor elements or identifiers; anchors are single-point `move` contours and kerning groups are told apart by name convention rather than the `public.kern1.`/`public.kern2.` prefixes. Read by up-converting to the UFO 3 shape. The reference keeps the version when it saves, so we write UFO 2 back with our own serializer (norad refuses to downgrade) and report what version 2 cannot hold."
+summary = "The older single-layer UFO: no layercontents, images, data, guidelines, anchor elements or identifiers; anchors are single-point `move` contours and kerning groups are told apart by name convention rather than the `public.kern1.`/`public.kern2.` prefixes. Read into the same model as UFO 3 (GLIF format 1 anchors become anchors) and written back as UFO 2, as the reference keeps the version when it saves. Kerning groups are kept as written; they are not yet recognised as the glyphs' kerning groups (UFO 2 tells them apart by name convention only)."
 ref = "UFO 2 specification; UFO 3 specification › Changes from UFO 2, kerning.plist › Converting to UFO 3 formatted kerning; norad src/upconversion.rs; Import & Export › Unified Font Object"
 status = "docs"
 
@@ -156,7 +156,7 @@ write = false
 spec = "https://unifiedfontobject.org/versions/ufo1/"
 area = "import-export"
 milestone = "M13"
-summary = "Read-only import of the first UFO version, which norad up-converts (font info and features stored in lib keys are moved to their UFO 3 homes). Saving always produces UFO 3."
+summary = "Read-only import of the first UFO version, up-converted on read (font info and features stored in lib keys move to their UFO 3 homes). Saving always produces UFO 3. Not supported yet: opening a UFO 1 is refused."
 ref = "norad src/upconversion.rs, src/font.rs (FormatVersion::V1)"
 status = "docs"
 
@@ -950,8 +950,8 @@ status = "docs"
 id = "roundtrip.ufoXmlFormatting"
 area = "import-export"
 milestone = "M1"
-summary = "UFO files are written in the layout fontTools ufoLib produces (XML declaration, indentation, attribute order per element, property-list DOCTYPE), which is what most UFOs on disk look like; norad's own default indents with one tab, so its write options are set explicitly. A document remembers the indentation and quote style its files used when read and writes that back."
-ref = "norad src/write.rs (WriteOptions: indentation and quote character; default is one tab)"
+summary = "UFO files are written in the layout fontTools ufoLib produces (XML declaration, indentation, attribute order per element, number spelling, property-list DOCTYPE), which is what most UFOs on disk look like. A document remembers the layout its files used when read (declaration, document type, indentation unit and level, final line break, whole numbers spelled as floats) and writes that back; a start tag or value spelled otherwise than the writer would is kept and written back while it still means what the model holds."
+ref = "fontTools ufoLib glifLib.py and misc/plistlib (output rules); corpus UFOs written by ufoLib and robofab"
 status = "inferred"
 
 [[behavior]]
