@@ -5,7 +5,10 @@
 //! conversion, extremes, rounding to the grid) lands here as the milestones need it.
 #![forbid(unsafe_code)]
 
-pub use kurbo::{Affine, BezPath, CubicBez, Line, ParamCurve, PathEl, Point, QuadBez, Rect, Shape, Vec2, flatten};
+pub use kurbo::{
+    Affine, BezPath, CubicBez, Line, ParamCurve, ParamCurveNearest, PathEl, Point, QuadBez, QuadSpline, Rect, Shape, Vec2,
+    cubics_to_quadratic_splines, flatten,
+};
 
 /// Default tolerance, in font units, when a cubic curve is approximated by quadratic ones for
 /// TrueType outlines. One unit matches what the reference compilers use for a 1000-unit em.

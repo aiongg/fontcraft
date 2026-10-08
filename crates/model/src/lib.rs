@@ -22,6 +22,7 @@ mod info;
 mod kerning;
 mod layer_info;
 mod rare;
+mod resolve;
 mod shape_info;
 
 pub use extra::{Extra, ExtraEntry, Family};
@@ -37,6 +38,7 @@ pub use info::{DEFAULT_LANGUAGE, Localized, Param, Params, Properties, Property,
 pub use kerning::{KernContext, KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
 pub use rare::{Rare, RareDefault};
+pub use resolve::{Metrics, Resolved, ResolvedComponent, ResolvedGlyph, StyleLinking, Target};
 pub use shape_info::{
     Alignment, AnchorInfo, AnchorInfoBox, ComponentInfo, ComponentInfoBox, Dimension, NodeInfo, NodeInfoBox, Orientation, PathInfo, PathInfoBox,
     ShapeAttrs, SmartValue,
@@ -109,6 +111,12 @@ pub enum ModelError {
     BadGlyphInfo { glyph: String, message: String },
     #[error("glyph `{glyph}` layer `{layer}`: {message}")]
     BadLayerInfo { glyph: String, layer: String, message: String },
+    #[error("there is no instance number {0}")]
+    NoSuchInstance(usize),
+    #[error("instance `{0}` describes a variable font, not a static one")]
+    NotStatic(String),
+    #[error("instance `{0}` lies between masters; static instances between masters need interpolation, which is not built yet")]
+    BetweenMasters(String),
 }
 
 /// A name is usable when it is not empty, not longer than [`MAX_NAME_LEN`] bytes and has no

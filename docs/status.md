@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M2.0 done (the oracle harness; first corpus numbers in `docs/plans/M2.md`)._
+_Updated: 2026-10-08, M2.1 done (the staged pipeline and the resolved projection; numbers in `docs/plans/M2.md`)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (387 tests; about 43,800 lines of Rust in 13 crates).
+- `cargo xtask ci` passes all nine steps (406 tests; about 45,300 lines of Rust in 13 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -15,13 +15,15 @@ _Updated: 2026-10-08, M2.0 done (the oracle harness; first corpus numbers in `do
 
 ## Where to start
 
-**M2, the compile core** (`docs/plans/M2.md`, accepted): M2.0, the oracle harness, is done.
-Next is M2.1 (the pipeline and the resolved projection), then M2.2 (core tables to fontc
-parity). Use `fontcraft-cli oracle --corpus` (`docs/testing.md` › The oracle harness) to measure
-each change: the plan's M2.0 section lists the first numbers and what the differences are, by
-cause and package. Two answers came out of M2.0: glyphsLib does not read `.glyphs` version 4
-(nor does fontc), and fontc 1.0.0 writes the vendor id `NONE`, not four spaces, so the plan's
-answer to question 6 needs the owner again before M2.2 changes it.
+**M2, the compile core** (`docs/plans/M2.md`, accepted): M2.0 (the oracle harness) and M2.1
+(the staged pipeline: `Font::resolve`, preflight, glyph order with a drawn `.notdef`,
+composites kept, cu2qu, reversed contours) are done. Next is M2.2, the core tables to fontc
+parity, one table at a time, measured with `fontcraft-cli oracle --corpus` (`docs/testing.md` ›
+The oracle harness). The plan's M2.1 section lists what is left in `glyf` by cause: `.glyphs`
+masters without metric values read as 0 where the format means 800 and −200 (42 sources, the
+`.notdef` box and every metric default), `USE_MY_METRICS` (27), and differences that come from
+fontc building a variable font (21). Before M2.2 changes the vendor id, the owner answers
+question 6 again: fontc 1.0.0 writes `NONE`, not four spaces.
 
 M1 (`docs/plans/M1.md`) so far:
 
@@ -58,9 +60,10 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   before implementing.
 - **Nothing has been observed in the reference app.** About 440 open questions are listed at the
   ends of the notes.
-- **Our compiler matches the reference compilers in few tables yet.** Over 300 corpus sources
-  compared with fontc, cmap is identical or equivalent in 286 and post in 191; head, hhea, OS/2,
-  name and glyf differ in nearly all (`docs/plans/M2.md` › M2.0). M2.1 and M2.2 close that.
+- **Our compiler matches the reference compilers in some tables only.** Over 332 corpus sources
+  compared with fontc, glyf is identical or equivalent in 236, cmap in 318, hmtx in 303, maxp in
+  275, head in 277; hhea, OS/2 and name differ in all (metric and name defaults: M2.2;
+  `docs/plans/M2.md` › M2.1).
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
 
@@ -142,3 +145,12 @@ Append one terse entry per session: what landed, numbers, what is still open.
   334, fontmake 330 (TrueType) and 331 (CFF), FontCraft 313; 300 compared with fontc (per-table
   numbers in the plan). glyphsLib does not read `.glyphs` version 4 (8 of 16 files, none with
   outlines); fontc writes vendor `NONE`. 24 tests (20 in the gate, 4 opt-in). Next: M2.1.
+- **2026-10-08, M2.1, pipeline and resolved projection.** `Font::resolve(&Target)` in the model
+  (a master, or an instance at a master; between masters an error until M9); `crates/compile`
+  split into preflight, order, outline and build stages. Missing components dropped with a
+  warning, non-exported glyphs inlined, cycles and depth refused, `.notdef` drawn as fontc draws
+  it, composites kept (mixed glyphs and transforms beyond ±2 decomposed), cu2qu at 0.001 em,
+  contours reversed, half-up rounding, composite boxes and `maxp` limits. Oracle against fontc:
+  FontCraft builds 347 of 354 (was 313), 332 compared (was 300); glyf identical 218 and
+  equivalent 18 (was 2 and 0), head 277 (22), maxp 275 (58), hmtx 171 + 132 (1 + 14). 406 tests.
+  Next: M2.2.

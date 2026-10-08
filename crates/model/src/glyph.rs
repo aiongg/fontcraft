@@ -401,6 +401,19 @@ impl Path {
 
     /// The contour as Bézier segments, or what is wrong with its node list.
     pub fn to_bez(&self) -> Result<BezPath, String> {
+        self.segments(false)
+    }
+
+    /// [`Path::to_bez`] in the form compilers read: a closed contour that starts with a line
+    /// node also ends with an explicit line back to its start, before the close (fontTools'
+    /// segment pens with `outputImpliedClosingLine`, which fontc follows). Point lists made
+    /// from it then keep a closing point that sits on the start, as the reference compilers'
+    /// do.
+    pub fn to_contour(&self) -> Result<BezPath, String> {
+        self.segments(true)
+    }
+
+    fn segments(&self, closing_line: bool) -> Result<BezPath, String> {
         let mut out = BezPath::new();
         if self.nodes.is_empty() {
             return Ok(out);
@@ -431,7 +444,7 @@ impl Path {
                         return Err("a line node follows off-curve nodes".into());
                     }
                     // The closing line back to the start is implied by `close_path`.
-                    if !(self.closed && step == steps) {
+                    if closing_line || !(self.closed && step == steps) {
                         out.line_to(node.point());
                     }
                 }

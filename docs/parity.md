@@ -62,10 +62,10 @@ How each row is known. `handbook` and `docs` come from public documentation, `in
 | Status | Rows |
 |---|---:|
 | handbook | 2113 |
-| docs | 1097 |
+| docs | 1088 |
 | inferred | 376 |
 | memory | 33 |
-| observed | 2 |
+| observed | 11 |
 
 ## Live commands
 

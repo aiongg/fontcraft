@@ -52,7 +52,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L2 | `audit` | M3/M12 | the checks of `spec/inventory/21-qa-checks.toml` |
 | L2 | `plugins` | M13 | sandboxed WebAssembly plug-ins (same manifest as the sibling apps) |
 | L3 | `format` | today | the native `.fontcraft` format, atomic writes |
-| L3 | `compile` | today (M0 slice) | model → OpenType binary |
+| L3 | `compile` | today (M2.1: staged pipeline) | model → OpenType binary |
 | L3 | `decompile` | M1 | OpenType binary → model, for opening compiled fonts |
 | L3 | `io-glyphs` | M1 | `.glyphs` 2, 3, 4 and `.glyphspackage`, reading and writing, lossless |
 | L3 | `io-ufo` | M1 | UFO and designspace, reading and writing, lossless |
@@ -161,10 +161,21 @@ limit is 10,000 steps; a step costs a few pointers plus the data that changed.
 
 ## Compiling (L3)
 
-**Today:** `compile_ttf(font, options)` builds a static TrueType font from the first master:
-`glyf`, `loca`, `cmap`, `head`, `hhea`, `hmtx`, `maxp`, `name`, `OS/2`, `post`, with components
-flattened and cubic curves converted. It is a pure function: the timestamp is an input, the same
-font gives the same bytes.
+**Today:** `compile(font, target, flavour, options)` builds a static TrueType font of one master,
+or of an instance that sits at a master (`compile_ttf` is the first master). It runs in stages,
+each a function of what the stages before it produced:
+
+| Stage | Where | What it does |
+|---|---|---|
+| Resolve | `Font::resolve` in `crates/model` | the glyphs, contours, components, metrics and names at the target; no `Extra`, no editing data |
+| Preflight | `crates/compile/src/preflight.rs` | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
+| Glyph order | `order.rs` | the font's order, `.notdef` first and drawn when absent, at most 65,535 glyphs |
+| Outline preparation | `outline.rs` | mixed glyphs and transforms beyond ±2 decomposed (everything for CFF), cu2qu, contours reversed |
+| Table builders, assembly | `build.rs` | `glyf` with composites, `loca`, `cmap`, `head`, `hhea`, `hmtx`, `maxp`, `name`, `OS/2`, `post` |
+
+It is a pure function: the timestamp is an input, the same font gives the same bytes. The resolved
+projection lives in the model because it reads every part of the font and nothing outside it; the
+compiler's own choices (what to decompose, the order, the defaults) stay in `crates/compile`.
 
 **Planned** ([decision 0002](decisions/0002-compile-pipeline.md), specified in
 [`spec/40-compile.md`](spec/40-compile.md)):
@@ -260,7 +271,7 @@ manifest and parameter schema the sibling apps use: filters (glyph in, glyph out
   overflows on points more than 32,767 units apart and on oversized name strings, panics on more
   glyph names than its `post` format can index, and that curve conversion and flattening allocate
   without bound on huge coordinates. Each now has a limit checked before the call
-  (`MAX_TT_COORDINATE`, `MAX_TT_POINTS`, `MAX_POST_NAMES` in `crates/compile`; `MAX_COORDINATE`,
+  (`MAX_TT_COORDINATE`, `MAX_TT_POINTS`, `MAX_FONT_GLYPHS`, `MAX_COMPONENTS`, `MAX_POST_NAMES` in `crates/compile`; `MAX_COORDINATE`,
   `MAX_OUTLINE_ELEMENTS`, `MAX_NAME_LEN` in `crates/model`) and a regression test.
 - The panic guard cannot catch an out-of-memory abort, which is why unbounded work is treated as
   a crash.

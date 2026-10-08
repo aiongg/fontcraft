@@ -396,28 +396,31 @@ fn oracle(args: &[String]) -> Outcome {
 
     let ours = |path: &Path| -> Result<fontcraft_oracle::Ours, OursError> {
         let built = fontcraft_engine::guard::catch_panic(|| -> Result<Result<fontcraft_oracle::Ours, OursError>, String> {
-            let (mut font, mut warnings) = fontcraft_engine::io::open(path, None).map_err(|e| e.to_string())?;
-            // The compiler builds the first master. For a .glyphs source the reference compilers
-            // take the variable font origin as the default: compile that master, so both sides
-            // build the same one.
+            let (font, warnings) = fontcraft_engine::io::open(path, None).map_err(|e| e.to_string())?;
+            // The compiler builds one master. For a .glyphs source the reference compilers take
+            // the variable font origin as the default: compile that master, so both sides build
+            // the same one. Otherwise the first master (a designspace's first source).
             let glyphs = matches!(
                 fontcraft_oracle::tools::SourceKind::of(path),
                 Some(fontcraft_oracle::tools::SourceKind::Glyphs | fontcraft_oracle::tools::SourceKind::GlyphsPackage)
             );
-            let origin = fontcraft_engine::model::axes::origin(&font).map(|m| m.id.clone());
-            if glyphs && let Some(i) = origin.and_then(|id| font.masters.iter().position(|m| m.id == id)).filter(|i| *i > 0) {
-                let masters = std::sync::Arc::make_mut(&mut font.masters);
-                let master = masters.remove(i);
+            let origin = fontcraft_engine::model::axes::origin(&font).filter(|_| glyphs);
+            let master = match origin {
+                Some(m) => m,
+                None => font.default_master().map_err(|e| e.to_string())?,
+            };
+            let mut warnings = warnings;
+            if font.masters.first().is_some_and(|first| first.id != master.id) {
                 warnings.push(format!("compiled master `{}`, the variable font origin, instead of the first", master.name));
-                masters.insert(0, master);
             }
-            let hint =
-                fontcraft_oracle::Hint { family: font.family_name.clone(), style: font.default_master().map(|m| m.name.clone()).unwrap_or_default() };
+            let hint = fontcraft_oracle::Hint { family: font.family_name.clone(), style: master.name.clone() };
             if flavour == Flavour::Cff {
                 return Ok(Err(OursError::Unsupported { message: "CFF outlines are written from M2.3".into(), hint }));
             }
             let options = fontcraft_engine::compile::Options { timestamp, ..Default::default() };
-            let compiled = fontcraft_engine::compile::compile_ttf(&font, &options).map_err(|e| e.to_string())?;
+            let target = fontcraft_engine::model::Target::Master(master.id.clone());
+            let compiled = fontcraft_engine::compile::compile(&font, &target, fontcraft_engine::compile::Flavour::TrueType, &options)
+                .map_err(|e| e.to_string())?;
             warnings.extend(compiled.warnings);
             Ok(Ok(fontcraft_oracle::Ours { bytes: compiled.bytes, warnings, hint }))
         });

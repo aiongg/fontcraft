@@ -56,7 +56,9 @@ fn quadratic_contours_stay_quadratic() {
     let bytes = compile_ttf(&f, &Options::default()).unwrap().bytes;
     let back = decompile(&bytes, None).unwrap().font;
     let Shape::Path(p) = &back.glyph("O").unwrap().layers[0].shapes[0] else { panic!() };
-    assert!(p.nodes.iter().any(|n| n.kind == NodeKind::QCurve));
+    // Quadratic: on-curve nodes ending quadratic segments, or (when the converter left every
+    // on-curve point implied, as cu2qu does on a symmetric oval) off-curve nodes only.
+    assert!(p.nodes.iter().any(|n| n.kind == NodeKind::QCurve) || p.nodes.iter().all(|n| n.kind == NodeKind::OffCurve));
     assert!(!p.nodes.iter().any(|n| n.kind == NodeKind::Curve));
     let area = |b: fontcraft_geom::BezPath| fontcraft_geom::Shape::area(&b).abs();
     let before = area(f.outline("O", "m01").unwrap());

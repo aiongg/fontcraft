@@ -827,8 +827,9 @@ Notes on the outline:
   convert once the Glyphs sign is confirmed.
 - **Numbers.** `Value::Number` keeps the token text for unknown data so `1.0` does not become `1`;
   modelled fields are `f64` and use `roundtrip.floatFormatting`.
-- **Compiler view.** `Font::to_ir()` produces the resolved, location-keyed form of section 4.3;
-  nothing in the compiler reads `Extra`.
+- **Compiler view.** `Font::resolve(target)` produces the resolved form of section 4.3 for one
+  master or an instance at a master (M2.1; location-keyed for variable fonts in M9); nothing in
+  the compiler reads `Extra`.
 - **Size.** `Node` stays at 32 bytes and `Extra`/`UserData` at one pointer when empty, which matters
   for CJK-sized families with every master in memory.
 
