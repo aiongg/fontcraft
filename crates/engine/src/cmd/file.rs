@@ -49,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save As…",
             ["File"],
             Some("Cmd+Shift+S"),
-            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\", version?: 2|3|4, force?: bool} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document). losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\", version?: 2|3|4, compress?: bool, force?: bool} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document). compress: gzip a .fontcraft file (default: as it was opened). losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save_as
         ),
@@ -196,6 +196,22 @@ fn save_as(s: &mut Session, p: &Value) -> Result<Value> {
         None => SaveFormat::of_path(&path).ok_or_else(|| p.bad("give a `format`, or a path ending in .fontcraft, .glyphs or .glyphspackage"))?,
     };
     let version = p.opt_int("version", 2, 4)?.map(|v| v as u32);
+    if let Some(compress) = p.get("compress") {
+        let compress = compress.as_bool().ok_or_else(|| p.bad("`compress` must be true or false"))?;
+        if format != SaveFormat::Native && compress {
+            return Err(p.bad("only a .fontcraft file can be compressed"));
+        }
+        // Not an edit: how the file is stored, kept with the document.
+        let doc = s.doc_mut()?;
+        let mut font = Font::clone(&doc.font);
+        font.source.compressed = compress;
+        let font = Arc::new(font);
+        let unchanged = !doc.modified();
+        doc.font = font.clone();
+        if unchanged {
+            doc.saved = font;
+        }
+    }
     write_document(s, &p, path, format, version)
 }
 

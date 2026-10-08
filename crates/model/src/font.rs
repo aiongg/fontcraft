@@ -22,6 +22,10 @@ pub struct Source {
     /// The `.glyphs` format version (2, 3 or 4) the document was read in, and is written in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub glyphs_version: Option<u32>,
+    /// A native file that was gzip-compressed, and is written so again. Not stored in the file:
+    /// the reader sets it from the file's first bytes.
+    #[serde(skip)]
+    pub compressed: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

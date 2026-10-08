@@ -207,7 +207,7 @@ fn read_font(mut root: Dict) -> Result<Font> {
         vertical: take_kern_table(&mut root, "kerningVertical"),
     };
     Ok(Font {
-        source: Source { format: SourceFormat::Glyphs, glyphs_version: u32::try_from(version).ok() },
+        source: Source { format: SourceFormat::Glyphs, glyphs_version: u32::try_from(version).ok(), compressed: false },
         family_name,
         units_per_em,
         version_major,

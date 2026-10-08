@@ -173,6 +173,9 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         return Err(EngineError::Io(format!("{} is a folder but not a font source", path.display())));
     }
     let bytes = read_file(path)?;
+    if fontcraft_format::is_compressed(&bytes) {
+        return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
+    }
     if fontcraft_decompile::sniff(&bytes).is_some() {
         let d = fontcraft_decompile::decompile(&bytes, face)?;
         return Ok((d.font, d.warnings));

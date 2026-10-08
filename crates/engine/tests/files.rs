@@ -238,3 +238,20 @@ fn files_are_inspected_without_being_opened() {
     assert!(s.execute("tables.list", &json!({ "font": src })).is_err(), "a source has no table directory");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_compressed_native_file_stays_compressed() {
+    let dir = temp("gzip");
+    let mut s = Session::with_document();
+    let path = dir.join("Small.fontcraft");
+    run(&mut s, "file.saveAs", json!({ "path": path, "compress": true }));
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(&bytes[..2], &[0x1f, 0x8b]);
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": path }));
+    run(&mut s, "spacing.setWidth", json!({ "glyphs": ["A"], "value": 610 }));
+    run(&mut s, "file.save", json!({}));
+    assert_eq!(&std::fs::read(&path).unwrap()[..2], &[0x1f, 0x8b], "saved compressed again");
+    assert!(s.execute("file.saveAs", &json!({ "path": dir.join("x.glyphs"), "compress": true })).is_err());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

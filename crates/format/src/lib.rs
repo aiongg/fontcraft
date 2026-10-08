@@ -15,6 +15,7 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 mod atomic;
+mod gzip;
 mod layout;
 mod v1;
 
@@ -67,7 +68,8 @@ pub fn save(font: &Font) -> Result<Vec<u8>, FormatError> {
     let mut out = format!("{{\n  \"format\": \"{FORMAT}\",\n  \"version\": {VERSION},\n  \"generator\": {generator},\n  \"font\": ");
     layout::write(&mut out, &value, 1);
     out.push_str("\n}\n");
-    Ok(out.into_bytes())
+    // A file read compressed is written compressed (`roundtrip.nativeGzip`).
+    Ok(if font.source.compressed { gzip::compress(out.as_bytes()) } else { out.into_bytes() })
 }
 
 /// Reads a `.fontcraft` file and checks the font it holds.
@@ -75,6 +77,14 @@ pub fn load(bytes: &[u8]) -> Result<Font, FormatError> {
     if bytes.len() > MAX_BYTES {
         return Err(FormatError::TooLarge(bytes.len()));
     }
+    let inflated;
+    let compressed = gzip::is_gzip(bytes);
+    let bytes = if compressed {
+        inflated = gzip::decompress(bytes)?;
+        inflated.as_slice()
+    } else {
+        bytes
+    };
     let file: FileIn = serde_json::from_slice(bytes).map_err(|e| FormatError::NotFontcraft(e.to_string()))?;
     if file.format != FORMAT {
         return Err(FormatError::NotFontcraft(format!("the `format` key is `{}`, expected `{FORMAT}`", file.format)));
@@ -88,8 +98,15 @@ pub fn load(bytes: &[u8]) -> Result<Font, FormatError> {
         0 | 1 => serde_json::from_str::<v1::Font>(raw).map_err(bad)?.upgrade(),
         _ => serde_json::from_str::<Font>(raw).map_err(bad)?,
     };
+    let mut font = font;
+    font.source.compressed = compressed;
     font.check()?;
     Ok(font)
+}
+
+/// Whether `bytes` are a gzip-compressed file (a compressed native file starts this way).
+pub fn is_compressed(bytes: &[u8]) -> bool {
+    gzip::is_gzip(bytes)
 }
 
 #[cfg(test)]

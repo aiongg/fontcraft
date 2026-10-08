@@ -772,6 +772,7 @@ name = "fontcraft-format"
 version = "0.0.1"
 dependencies = [
  "fontcraft-model",
+ "miniz_oxide 0.8.9",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
