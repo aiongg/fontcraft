@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M1.7 step 4 done (glyph fields)._
+_Updated: 2026-10-08, M1.7 step 5a done (layer fields in `.glyphs` and the native file)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (265 tests; about 28,600 lines of Rust in 12 crates).
+- `cargo xtask ci` passes all nine steps (278 tests; about 30,800 lines of Rust in 12 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -31,7 +31,7 @@ M1 (`docs/plans/M1.md`) so far:
 | M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
 | M1.5 compiled fonts | done |
 | M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
-| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5 (layers) next (plan § M1.7 › Progress) |
+| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5a done (layer fields in `.glyphs` and the native file); 5b (layers in UFO and designspace) next (plan § M1.7 › Progress) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -148,3 +148,8 @@ Append one terse entry per session: what landed, numbers, what is still open.
   write from it, by glyphsLib's rules; the rest is in the loss report until step 8. Census:
   glyph keys from 10,808 entries to 25 (explained in the plan). Round trips unchanged. Our UFOs
   of seven `.glyphs` sources hold glyphsLib's notes, colours and production names. Next: step 5.
+  Step 5a: a layer's name, attributes (intermediate, alternate, colour, smart poles), vertical
+  metrics, metrics keys, colour, visibility, guides, hints (stored), annotations, image,
+  background and user data are `Layer::info`, behind one pointer; `.glyphs` versions 2 to 4 and
+  the native file type them (`crates/io-glyphs/src/layer.rs`). Census: layer keys from 21,201
+  entries to none. Round trips unchanged. Saving as UFO lists the layer data as lost. Next: 5b.

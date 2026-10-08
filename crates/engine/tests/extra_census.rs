@@ -37,6 +37,7 @@ fn census(c: &mut Census, source: usize, f: &Font) {
     f.axes.iter().for_each(|a| add(c, source, "axis", &a.extra));
     f.metrics.iter().for_each(|m| add(c, source, "metric", &m.extra));
     f.masters.iter().for_each(|m| add(c, source, "master", &m.extra));
+    f.masters.iter().flat_map(|m| &m.guides).for_each(|g| add(c, source, "master guide", &g.extra));
     f.instances.iter().for_each(|i| add(c, source, "instance", &i.extra));
     for s in f.features.prefixes.iter().chain(&f.features.classes).chain(&f.features.features) {
         add(c, source, "snippet", &s.extra);
@@ -45,22 +46,48 @@ fn census(c: &mut Census, source: usize, f: &Font) {
         add(c, source, "glyph", &g.extra);
         for l in &g.layers {
             add(c, source, if l.is_master_layer() { "layer" } else { "other layer" }, &l.extra);
-            l.anchors.iter().for_each(|a| add(c, source, "anchor", &a.extra));
-            for s in &l.shapes {
-                match s {
-                    Shape::Path(p) => {
-                        add(c, source, "path", &p.extra);
-                        p.nodes.iter().for_each(|n| add(c, source, "node", &n.extra));
-                    }
-                    Shape::Component(k) => add(c, source, "component", &k.extra),
-                    Shape::Raw(r) => {
-                        let row = c.entry((format!("{:?}", r.family).to_lowercase(), "raw shape".into(), String::new())).or_default();
-                        row.0 += 1;
-                        row.1.insert(source);
-                    }
-                }
+            add(c, source, "layer attr", &l.info.attrs.extra);
+            shapes(c, source, "", &l.shapes, &l.anchors);
+            content(c, source, "", &l.info.guides, &l.info.annotations, l.info.image.as_ref());
+            if let Some(b) = &l.info.background {
+                add(c, source, "background", &b.extra);
+                shapes(c, source, "bg ", &b.shapes, &b.anchors);
+                content(c, source, "bg ", &b.guides, &b.annotations, b.image.as_ref());
             }
         }
+    }
+}
+
+fn shapes(c: &mut Census, source: usize, prefix: &str, list: &[Shape], anchors: &[fontcraft_model::Anchor]) {
+    anchors.iter().for_each(|a| add(c, source, &format!("{prefix}anchor"), &a.extra));
+    for s in list {
+        match s {
+            Shape::Path(p) => {
+                add(c, source, &format!("{prefix}path"), &p.extra);
+                p.nodes.iter().for_each(|n| add(c, source, &format!("{prefix}node"), &n.extra));
+            }
+            Shape::Component(k) => add(c, source, &format!("{prefix}component"), &k.extra),
+            Shape::Raw(r) => {
+                let row = c.entry((format!("{:?}", r.family).to_lowercase(), format!("{prefix}raw shape"), String::new())).or_default();
+                row.0 += 1;
+                row.1.insert(source);
+            }
+        }
+    }
+}
+
+fn content(
+    c: &mut Census,
+    source: usize,
+    prefix: &str,
+    guides: &[fontcraft_model::Guide],
+    notes: &[fontcraft_model::Annotation],
+    image: Option<&fontcraft_model::Image>,
+) {
+    guides.iter().for_each(|g| add(c, source, &format!("{prefix}guide"), &g.extra));
+    notes.iter().for_each(|a| add(c, source, &format!("{prefix}annotation"), &a.extra));
+    if let Some(i) = image {
+        add(c, source, &format!("{prefix}image"), &i.extra);
     }
 }
 

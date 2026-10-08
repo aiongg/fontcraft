@@ -187,7 +187,33 @@ fn check_holds_every_limit() {
         extra: Extra::new()
     }))));
     assert!(broken(&|f| f.glyph_mut("A").unwrap().layers[0].anchors.push(Anchor::new("top", f64::INFINITY, 0.0))));
+    // The layer's own data.
+    assert!(broken(&|f| f.glyph_mut("A").unwrap().layers[0].info.vert_width = Some(f64::NAN)));
+    assert!(broken(&|f| f.glyph_mut("A").unwrap().layers[0].info.attrs.coordinates = vec![None; MAX_AXIS_VALUES + 1]));
+    assert!(broken(&|f| f.glyph_mut("A").unwrap().layers[0].info.guides = vec![Guide::default(); MAX_LAYER_GUIDES + 1]));
+    assert!(broken(&|f| f.glyph_mut("A").unwrap().layers[0].info.color = Some(ColorLabel::Rgba([2.0, 0.0, 0.0, 1.0]))));
+    assert!(
+        broken(&|f| f.glyph_mut("A").unwrap().layers[0].info.image = Some(Image { crop: Some([0.0, 0.0, f64::NAN, 1.0]), ..Default::default() }))
+    );
+    assert!(broken(&|f| {
+        let bg = Background { shapes: vec![Shape::Path(path(true, vec![Node::new(0.0, 0.0, NodeKind::Curve)]))], ..Default::default() };
+        f.glyph_mut("A").unwrap().layers[0].info.background = Some(bg);
+    }));
+    assert!(broken(&|f| {
+        let bg = Background { anchors: vec![Anchor::new("top", f64::NAN, 0.0)], ..Default::default() };
+        f.glyph_mut("A").unwrap().layers[0].info.background = Some(bg);
+    }));
     assert_eq!(ok.check(), Ok(()));
+}
+
+#[test]
+fn layer_data_is_rare() {
+    let mut l = Layer::new("m01", 600.0);
+    assert!(l.info.is_default());
+    l.info.name = Some("Backup".into());
+    assert!(!l.info.is_default());
+    l.info.name = None;
+    assert_eq!(l, Layer::new("m01", 600.0), "data set back to the default compares equal to none");
 }
 
 #[test]

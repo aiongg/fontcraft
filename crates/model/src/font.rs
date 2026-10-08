@@ -15,6 +15,7 @@ use crate::glyph::{Glyph, Layer, Path, Shape};
 use crate::glyph_info::check_glyph_info;
 use crate::info::{Params, Properties, UserData};
 use crate::kerning::Kerning;
+use crate::layer_info::check_layer_info;
 use crate::{
     Extra, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_GLYPHS, MAX_OUTLINE_ELEMENTS, MAX_UNICODES, ModelError, UPM_RANGE, check_name, in_range,
 };
@@ -960,22 +961,13 @@ impl Font {
             if !in_range(l.width) {
                 return Err(bad(format!("the advance width {} is not a number or is beyond ±{MAX_COORDINATE}", l.width)));
             }
-            for shape in &l.shapes {
-                match shape {
-                    Shape::Path(p) => {
-                        p.to_bez().map_err(&bad)?;
-                    }
-                    Shape::Component(c) => {
-                        check_name("component glyph", &c.glyph)?;
-                        if c.transform.numbers().iter().any(|v| !v.is_finite()) {
-                            return Err(bad("a component transform is not a number".into()));
-                        }
-                    }
-                    Shape::Raw(_) => {}
-                }
-            }
+            check_shapes(&l.shapes, &bad)?;
             if l.anchors.iter().any(|a| !(in_range(a.x) && in_range(a.y))) {
                 return Err(bad("an anchor position is not a number or is out of range".into()));
+            }
+            check_layer_info(&l.info).map_err(|message| ModelError::BadLayerInfo { glyph: g.name.clone(), layer: l.id.clone(), message })?;
+            if let Some(b) = &l.info.background {
+                check_shapes(&b.shapes, &bad)?;
             }
         }
         Ok(())
@@ -1032,4 +1024,24 @@ impl Font {
             && (Arc::ptr_eq(&self.glyphs.order, &before.glyphs.order)
                 || self.glyphs.len() == before.glyphs.len() && self.glyphs.iter().zip(before.glyphs.iter()).all(|(a, b)| arc_eq(a, b)))
     }
+}
+
+/// Every path is a well-formed node list within the coordinate limits, and every component names
+/// a glyph and has a finite transform.
+fn check_shapes(shapes: &[Shape], bad: &dyn Fn(String) -> ModelError) -> Result<(), ModelError> {
+    for shape in shapes {
+        match shape {
+            Shape::Path(p) => {
+                p.to_bez().map_err(bad)?;
+            }
+            Shape::Component(c) => {
+                check_name("component glyph", &c.glyph)?;
+                if c.transform.numbers().iter().any(|v| !v.is_finite()) {
+                    return Err(bad("a component transform is not a number".into()));
+                }
+            }
+            Shape::Raw(_) => {}
+        }
+    }
+    Ok(())
 }

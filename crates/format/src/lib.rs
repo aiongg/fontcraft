@@ -234,6 +234,64 @@ mod tests {
     }
 
     #[test]
+    fn layer_data_round_trips() {
+        use fontcraft_model::plist::{Dict, Value};
+        use fontcraft_model::{
+            Anchor, Annotation, AxisRule, Background, ColorLabel, Extra, Family, Guide, Hint, Image, Layer, PaletteEntry, Path, Shape, SmartPole,
+            Transform, UserData,
+        };
+        let mut font = Font::new("Layers");
+        {
+            let mut a = font.glyph_mut("A").unwrap();
+            let master = a.layers[0].master.clone();
+            let mut backup = Layer::new(master, 500.0);
+            backup.id = "L2".into();
+            let i = &mut *backup.info;
+            i.name = Some("{550}".into());
+            i.attrs.coordinates = vec![Some(550.0), None];
+            i.attrs.axis_rules = vec![AxisRule { min: Some(100.0), max: None }];
+            i.attrs.color_palette = Some(PaletteEntry::Foreground);
+            i.attrs.smart_poles = vec![SmartPole { property: "Width".into(), top: true }];
+            i.vert_width = Some(1000.0);
+            i.vert_origin = Some(-20.0);
+            i.metrics_keys.right = Some("=|".into());
+            i.color = Some(ColorLabel::Index(2));
+            i.visible = true;
+            i.guides = vec![Guide { x: 10.0, angle: 90.0, ..Default::default() }];
+            let mut hint = Dict::new();
+            hint.insert("type", Value::String("Stem".into()));
+            i.hints = vec![Hint { family: Family::Glyphs, value: Value::Dict(hint) }];
+            i.annotations =
+                vec![Annotation { kind: "Text".into(), x: 1.0, y: 2.0, angle: 0.0, text: Some("hi".into()), width: 30.0, extra: Extra::new() }];
+            i.image = Some(Image {
+                path: Some("a.png".into()),
+                transform: Transform::Matrix([1.0, 0.0, 0.0, 1.0, 5.0, 6.0]),
+                crop: Some([0.0, 0.0, 10.0, 10.0]),
+                alpha: Some(40.0),
+                locked: true,
+                extra: Extra::new(),
+            });
+            i.background = Some(Background {
+                shapes: vec![Shape::Path(Path::rect(0.0, 0.0, 10.0, 10.0))],
+                anchors: vec![Anchor::new("top", 5.0, 10.0)],
+                ..Default::default()
+            });
+            let mut d = Dict::new();
+            d.insert("k", Value::Bool(true));
+            i.user_data = UserData(d);
+            a.layers.push(backup);
+        }
+        let bytes = save(&font).unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        assert_eq!(text.matches("\"info\"").count(), 1, "only layers with data have it");
+        assert_eq!(load(&bytes).unwrap(), font);
+        assert_eq!(save(&load(&bytes).unwrap()).unwrap(), bytes);
+        // Out-of-range values are refused on load.
+        let bad = text.replace("\"vert_width\": 1000", "\"vert_width\": 1e300");
+        assert!(matches!(load(bad.as_bytes()), Err(FormatError::Invalid(_))), "{bad}");
+    }
+
+    #[test]
     fn newer_and_foreign_files_are_rejected_with_a_reason() {
         assert!(matches!(load(br#"{"format":"fontcraft","version":99,"font":{}}"#), Err(FormatError::TooNew { found: 99, .. })));
         assert!(matches!(load(br#"{"format":"other","version":1}"#), Err(FormatError::NotFontcraft(_))));

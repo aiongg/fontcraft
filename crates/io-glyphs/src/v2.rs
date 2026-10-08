@@ -194,13 +194,13 @@ fn fmt(f: f64) -> String {
 }
 
 /// The numbers of a string such as `"{1, 0, 0, 1, 10, 0}"`, if it has exactly `n`.
-fn braced_numbers(s: &str, n: usize) -> Option<Vec<f64>> {
+pub(crate) fn braced_numbers(s: &str, n: usize) -> Option<Vec<f64>> {
     let inner = s.trim().strip_prefix('{')?.strip_suffix('}')?;
     let nums: Vec<f64> = inner.split(',').map(|p| p.trim().parse::<f64>().ok().filter(|f| f.is_finite())).collect::<Option<_>>()?;
     (nums.len() == n).then_some(nums)
 }
 
-fn braced(nums: &[f64]) -> String {
+pub(crate) fn braced(nums: &[f64]) -> String {
     format!("{{{}}}", nums.iter().map(|f| fmt(*f)).collect::<Vec<_>>().join(", "))
 }
 
@@ -430,7 +430,65 @@ fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
     Ok(Glyph { name, unicodes, export, kern_groups, info: fontcraft_model::Rare::new(info), layers, file_name: None, extra: into_extra(d) })
 }
 
-fn read_layer(v: Value, at: &str) -> Result<Layer> {
+/// How version 2 reads and writes the shapes and anchors of a background.
+const SHAPES: crate::layer::Shapes = crate::layer::Shapes { take: take_shapes, push: push_shapes, finish: finish_layer };
+
+fn finish_layer(entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
+    finish_ordered(entries, extra, LAYER_ORDER)
+}
+
+/// A background's `paths`, `components` and `anchors`; an empty list stays as written.
+fn take_shapes(d: &mut Dict) -> Option<(Vec<Shape>, Vec<Anchor>)> {
+    let filled = |d: &Dict, k: &str| matches!(d.get(k), Some(Value::Array(a)) if !a.items.is_empty());
+    let mut shapes = Vec::new();
+    if filled(d, "paths") {
+        shapes.extend(as_items(take(d, "paths")?, "paths").ok()?.into_iter().map(|p| read_path(p.clone()).unwrap_or_else(|| raw(p))));
+    }
+    if filled(d, "components") {
+        shapes.extend(as_items(take(d, "components")?, "components").ok()?.into_iter().map(|c| read_component(c.clone()).unwrap_or_else(|| raw(c))));
+    }
+    let anchors = if filled(d, "anchors") {
+        as_items(take(d, "anchors")?, "anchors")
+            .ok()?
+            .into_iter()
+            .map(|a| read_anchor(a, "background").ok().filter(crate::layer::anchor_in_range))
+            .collect::<Option<_>>()?
+    } else {
+        Vec::new()
+    };
+    Some((shapes, anchors))
+}
+
+/// Paths and components as version 2's two lists (paths first), and the anchors.
+fn push_shapes(e: &mut Vec<(Str, Value)>, shapes: &[Shape], anchors: &[Anchor], at: &str) -> Result<()> {
+    let (mut paths, mut components) = (Vec::new(), Vec::new());
+    for s in shapes {
+        match s {
+            Shape::Path(p) => paths.push(write_path(p, at)?),
+            Shape::Component(c) => components.push(write_component(c, at)?),
+            Shape::Raw(r) if r.family == Family::Glyphs => {
+                if r.value.as_dict().is_some_and(|d| d.get("nodes").is_some()) {
+                    paths.push(r.value.clone());
+                } else {
+                    components.push(r.value.clone());
+                }
+            }
+            Shape::Raw(_) => return Err(GlyphsError::Unsupported(format!("{at}: a shape read from another format"))),
+        }
+    }
+    if !paths.is_empty() {
+        e.push(("paths".into(), list(paths)));
+    }
+    if !components.is_empty() {
+        e.push(("components".into(), list(components)));
+    }
+    if !anchors.is_empty() {
+        e.push(("anchors".into(), list(anchors.iter().map(write_anchor).collect())));
+    }
+    Ok(())
+}
+
+pub(crate) fn read_layer(v: Value, at: &str) -> Result<Layer> {
     let mut d = crate::as_dict(v, at)?;
     let id = opt_string(&mut d, "layerId", at)?.ok_or_else(|| bad(at, "a layer has no layerId"))?;
     let at = format!("{at} layer `{id}`");
@@ -447,7 +505,8 @@ fn read_layer(v: Value, at: &str) -> Result<Layer> {
         Some(v) => as_items(v, &at)?.into_iter().map(|a| read_anchor(a, &at)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
-    Ok(Layer { id, master, width, shapes, anchors, extra: into_extra(d) })
+    let info = crate::layer::take_layer_info(&mut d, 2, &SHAPES);
+    Ok(Layer { id, master, width, shapes, anchors, info: fontcraft_model::Rare::new(info), extra: into_extra(d) })
 }
 
 fn raw(value: Value) -> Shape {
@@ -660,37 +719,15 @@ fn write_glyph(g: &Glyph) -> Result<Dict> {
     Ok(finish_ordered(e, &g.extra, GLYPH_ORDER))
 }
 
-fn write_layer(l: &Layer, at: &str) -> Result<Value> {
+pub(crate) fn write_layer(l: &Layer, at: &str) -> Result<Value> {
     let at = format!("{at} layer `{}`", l.id);
     let mut e = vec![("layerId".into(), string(&l.id))];
     if l.id != l.master {
         e.push(("associatedMasterId".into(), string(&l.master)));
     }
     e.push(("width".into(), num(l.width, &at)?));
-    let (mut paths, mut components) = (Vec::new(), Vec::new());
-    for s in &l.shapes {
-        match s {
-            Shape::Path(p) => paths.push(write_path(p, &at)?),
-            Shape::Component(c) => components.push(write_component(c, &at)?),
-            Shape::Raw(r) if r.family == Family::Glyphs => {
-                if r.value.as_dict().is_some_and(|d| d.get("nodes").is_some()) {
-                    paths.push(r.value.clone());
-                } else {
-                    components.push(r.value.clone());
-                }
-            }
-            Shape::Raw(_) => return Err(GlyphsError::Unsupported(format!("{at}: a shape read from another format"))),
-        }
-    }
-    if !paths.is_empty() {
-        e.push(("paths".into(), list(paths)));
-    }
-    if !components.is_empty() {
-        e.push(("components".into(), list(components)));
-    }
-    if !l.anchors.is_empty() {
-        e.push(("anchors".into(), list(l.anchors.iter().map(write_anchor).collect())));
-    }
+    push_shapes(&mut e, &l.shapes, &l.anchors, &at)?;
+    crate::layer::push_layer_info(&mut e, &l.info, 2, &SHAPES, &at)?;
     Ok(Value::Dict(finish_ordered(e, &l.extra, LAYER_ORDER)))
 }
 
@@ -889,7 +926,7 @@ fn usable_name(s: &str) -> bool {
     !s.trim().is_empty() && s.len() <= MAX_NAME_LEN && !s.chars().any(char::is_control)
 }
 
-fn read_guide(v: &Value) -> Option<Guide> {
+pub(crate) fn read_guide(v: &Value) -> Option<Guide> {
     let mut d = v.as_dict()?.clone();
     let mut g = Guide::default();
     if let Some(p) = take(&mut d, "position") {
@@ -901,7 +938,7 @@ fn read_guide(v: &Value) -> Option<Guide> {
     Some(g)
 }
 
-fn write_guide(g: &Guide) -> Option<Value> {
+pub(crate) fn write_guide(g: &Guide) -> Option<Value> {
     let mut e = Vec::new();
     if (g.x, g.y) != (0.0, 0.0) {
         if !(g.x.is_finite() && g.y.is_finite()) {

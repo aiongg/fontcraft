@@ -193,7 +193,7 @@ fn folded_name(g: &Guide) -> Option<String> {
     Some(name)
 }
 
-fn read_guide(v: &Value) -> Option<Guide> {
+pub(crate) fn read_guide(v: &Value) -> Option<Guide> {
     let mut d = v.as_dict()?.clone();
     let mut g = Guide::default();
     if let Some(p) = take(&mut d, "pos") {
@@ -204,7 +204,7 @@ fn read_guide(v: &Value) -> Option<Guide> {
     Some(g)
 }
 
-fn write_guide(g: &Guide) -> Option<Value> {
+pub(crate) fn write_guide(g: &Guide) -> Option<Value> {
     let mut e = Vec::new();
     // Left out at the origin, as the format's default.
     if (g.x, g.y) != (0.0, 0.0) {

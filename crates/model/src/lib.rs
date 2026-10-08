@@ -20,6 +20,7 @@ mod glyph;
 mod glyph_info;
 mod info;
 mod kerning;
+mod layer_info;
 mod rare;
 
 pub use extra::{Extra, ExtraEntry, Family};
@@ -33,6 +34,7 @@ pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape,
 pub use glyph_info::{ColorLabel, GlyphInfo, GlyphInfoBox, MetricsKeys, PartProperty};
 pub use info::{DEFAULT_LANGUAGE, Localized, Param, Params, Properties, Property, PropertyValue, UserData};
 pub use kerning::{KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
+pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
 pub use rare::{Rare, RareDefault};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.
@@ -55,6 +57,14 @@ pub const MAX_UNICODES: usize = 1024;
 pub const MAX_GLYPH_TAGS: usize = 256;
 /// Most properties one smart glyph may have.
 pub const MAX_PART_PROPERTIES: usize = 64;
+/// Most guides one layer (or its background) may have.
+pub const MAX_LAYER_GUIDES: usize = 4096;
+/// Most hints one layer (or its background) may have.
+pub const MAX_LAYER_HINTS: usize = 4096;
+/// Most annotations one layer (or its background) may have.
+pub const MAX_ANNOTATIONS: usize = 1024;
+/// Most axis values one layer's coordinates or axis rules may list.
+pub const MAX_AXIS_VALUES: usize = 64;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ModelError {
@@ -92,6 +102,8 @@ pub enum ModelError {
     TooManyUnicodes { glyph: String },
     #[error("glyph `{glyph}`: {message}")]
     BadGlyphInfo { glyph: String, message: String },
+    #[error("glyph `{glyph}` layer `{layer}`: {message}")]
+    BadLayerInfo { glyph: String, layer: String, message: String },
 }
 
 /// A name is usable when it is not empty, not longer than [`MAX_NAME_LEN`] bytes and has no

@@ -214,6 +214,7 @@ impl Layer {
             id: self.master.clone(),
             master: self.master,
             width: self.width,
+            info: fontcraft_model::LayerInfoBox::default(),
             shapes: self
                 .shapes
                 .into_iter()

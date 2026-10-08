@@ -1254,6 +1254,7 @@ pub(crate) fn font_losses(font: &Font) -> Vec<String> {
         }
     }
     out.extend(glyph_losses(font));
+    out.extend(layer_losses(font));
     if !font.info.user_data.is_empty() {
         out.push(format!("the font's user data ({} keys)", font.info.user_data.0.len()));
     }
@@ -1310,6 +1311,36 @@ pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
         .iter()
         .filter_map(|(what, has)| {
             let n = font.glyphs.iter().filter(|g| has(&g.info)).count();
+            (n > 0).then(|| format!("{what} ({n})"))
+        })
+        .collect()
+}
+
+/// The layer data a UFO has no place for yet, one line per kind with the number of layers that
+/// have it. Only the layers a UFO holds count: master layers and layers read from a UFO layer
+/// (the others are reported as layers).
+pub(crate) fn layer_losses(font: &Font) -> Vec<String> {
+    use fontcraft_model::LayerInfo;
+    type Has = fn(&LayerInfo) -> bool;
+    let kinds: [(&str, Has); 12] = [
+        ("the layers' names", |i| i.name.is_some()),
+        ("the layers' attributes", |i| !i.attrs.is_empty()),
+        ("the layers' vertical metrics", |i| i.vert_width.is_some() || i.vert_origin.is_some()),
+        ("the layers' metrics keys", |i| !i.metrics_keys.is_empty()),
+        ("the layers' colours", |i| i.color.is_some()),
+        ("the layers' visibility", |i| i.visible),
+        ("the layers' guides", |i| !i.guides.is_empty()),
+        ("the layers' hints", |i| !i.hints.is_empty()),
+        ("the layers' annotations", |i| !i.annotations.is_empty()),
+        ("the layers' images", |i| i.image.is_some()),
+        ("the layers' backgrounds", |i| i.background.is_some()),
+        ("the layers' user data", |i| !i.user_data.is_empty()),
+    ];
+    let written = |l: &&Layer| l.is_master_layer() || l.extra.get(Family::Ufo, "layer").is_some() || font.masters.iter().any(|m| m.id == l.id);
+    kinds
+        .iter()
+        .filter_map(|(what, has)| {
+            let n = font.glyphs.iter().flat_map(|g| g.layers.iter()).filter(written).filter(|l| has(&l.info)).count();
             (n > 0).then(|| format!("{what} ({n})"))
         })
         .collect()

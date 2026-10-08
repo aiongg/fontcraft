@@ -3,7 +3,7 @@
 use fontcraft_geom::{Affine, BezPath, Point};
 use serde::{Deserialize, Serialize};
 
-use crate::{Extra, Family, GlyphInfoBox, KernGroups, MAX_COORDINATE, in_range};
+use crate::{Extra, Family, GlyphInfoBox, KernGroups, LayerInfoBox, MAX_COORDINATE, in_range};
 use fontcraft_plist::Value;
 
 fn yes() -> bool {
@@ -51,6 +51,10 @@ pub struct Layer {
     pub shapes: Vec<Shape>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub anchors: Vec<Anchor>,
+    /// Name, attributes, vertical metrics, guides, hints, annotations, image, background and the
+    /// rest of the layer's data ([`crate::LayerInfo`]); most layers have none.
+    #[serde(default, skip_serializing_if = "LayerInfoBox::is_default")]
+    pub info: LayerInfoBox,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
@@ -59,7 +63,7 @@ impl Layer {
     /// A master layer for `master`.
     pub fn new(master: impl Into<String>, width: f64) -> Self {
         let master = master.into();
-        Self { id: master.clone(), master, width, shapes: Vec::new(), anchors: Vec::new(), extra: Extra::new() }
+        Self { id: master.clone(), master, width, shapes: Vec::new(), anchors: Vec::new(), info: LayerInfoBox::default(), extra: Extra::new() }
     }
 
     pub fn is_master_layer(&self) -> bool {

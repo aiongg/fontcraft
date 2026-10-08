@@ -26,6 +26,7 @@ use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 mod design;
 mod glyph;
 mod info;
+mod layer;
 mod package;
 mod v2;
 
@@ -75,6 +76,7 @@ pub fn write(font: &Font) -> Result<String> {
 /// designspace states, and glyph metadata the version has no key for.
 pub fn info_losses(font: &Font) -> Vec<String> {
     let mut out = glyph::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3));
+    out.extend(layer::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3)));
     // Versions 3 and 4 hold alignment zones only as the metrics' overshoots; version 2 writes
     // the other zones into `alignmentZones`.
     if font.source.glyphs_version.unwrap_or(3) != 2 {
@@ -658,7 +660,7 @@ fn read_glyph(v: Value, at: &str, version: i64) -> Result<Glyph> {
     let kern_groups = take_kern_groups(&mut d, KERN_GROUP_KEYS, &at)?;
     let info = glyph::take_glyph_info(&mut d, u32::try_from(version).unwrap_or(3));
     let layers = match take(&mut d, "layers") {
-        Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at)).collect::<Result<_>>()?,
+        Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at, u32::try_from(version).unwrap_or(3))).collect::<Result<_>>()?,
         None => Vec::new(),
     };
     Ok(Glyph { name, unicodes, export, kern_groups, info: fontcraft_model::Rare::new(info), layers, file_name: None, extra: into_extra(d) })
@@ -675,7 +677,36 @@ fn code_points(v: &Value) -> Option<Vec<u32>> {
     }
 }
 
-fn read_layer(v: Value, at: &str) -> Result<Layer> {
+/// How versions 3 and 4 read and write the shapes and anchors of a background.
+const SHAPES: layer::Shapes = layer::Shapes { take: take_shapes, push: push_shapes, finish };
+
+/// A background's `shapes` and `anchors`; an empty list stays as written.
+fn take_shapes(d: &mut Dict) -> Option<(Vec<Shape>, Vec<Anchor>)> {
+    let filled = |d: &Dict, k: &str| matches!(d.get(k), Some(Value::Array(a)) if !a.items.is_empty());
+    let shapes = if filled(d, "shapes") { as_items(take(d, "shapes")?, "shapes").ok()?.into_iter().map(read_shape).collect() } else { Vec::new() };
+    let anchors = if filled(d, "anchors") {
+        as_items(take(d, "anchors")?, "anchors")
+            .ok()?
+            .into_iter()
+            .map(|a| read_anchor(a, "background").ok().filter(crate::layer::anchor_in_range))
+            .collect::<Option<_>>()?
+    } else {
+        Vec::new()
+    };
+    Some((shapes, anchors))
+}
+
+fn push_shapes(e: &mut Vec<(Str, Value)>, shapes: &[Shape], anchors: &[Anchor], at: &str) -> Result<()> {
+    if !shapes.is_empty() {
+        e.push(("shapes".into(), list(shapes.iter().map(|s| write_shape(s, at)).collect::<Result<_>>()?)));
+    }
+    if !anchors.is_empty() {
+        e.push(("anchors".into(), list(anchors.iter().map(|a| write_anchor(a, at)).collect::<Result<_>>()?)));
+    }
+    Ok(())
+}
+
+fn read_layer(v: Value, at: &str, version: u32) -> Result<Layer> {
     let mut d = as_dict(v, at)?;
     let id = opt_string(&mut d, "layerId", at)?.ok_or_else(|| bad(at, "a layer has no layerId"))?;
     let at = format!("{at} layer `{id}`");
@@ -690,7 +721,8 @@ fn read_layer(v: Value, at: &str) -> Result<Layer> {
         Some(v) => as_items(v, &at)?.into_iter().map(|a| read_anchor(a, &at)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
-    Ok(Layer { id, master, width, shapes, anchors, extra: into_extra(d) })
+    let info = layer::take_layer_info(&mut d, version, &SHAPES);
+    Ok(Layer { id, master, width, shapes, anchors, info: fontcraft_model::Rare::new(info), extra: into_extra(d) })
 }
 
 fn raw(value: Value) -> Shape {
@@ -940,11 +972,11 @@ fn write_glyph(g: &Glyph, version: u32) -> Result<Dict> {
     }
     push_kern_groups(&mut e, &g.kern_groups, KERN_GROUP_KEYS);
     glyph::push_glyph_info(&mut e, &g.info, version);
-    e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at)).collect::<Result<_>>()?)));
+    e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at, version)).collect::<Result<_>>()?)));
     Ok(finish(e, &g.extra))
 }
 
-fn write_layer(l: &Layer, at: &str) -> Result<Value> {
+fn write_layer(l: &Layer, at: &str, version: u32) -> Result<Value> {
     let at = format!("{at} layer `{}`", l.id);
     let mut e = vec![("layerId".into(), string(&l.id))];
     if l.id != l.master {
@@ -957,6 +989,7 @@ fn write_layer(l: &Layer, at: &str) -> Result<Value> {
     if !l.anchors.is_empty() {
         e.push(("anchors".into(), list(l.anchors.iter().map(|a| write_anchor(a, &at)).collect::<Result<_>>()?)));
     }
+    layer::push_layer_info(&mut e, &l.info, version, &SHAPES, &at)?;
     Ok(Value::Dict(finish(e, &l.extra)))
 }
 
@@ -991,8 +1024,8 @@ fn write_component(c: &Component, at: &str) -> Result<Value> {
 }
 
 /// A matrix as position, scale and rotation, when it has no shear.
-type Decomposed = ((f64, f64), (f64, f64), f64, (f64, f64));
-fn decompose([a, b, c, d, dx, dy]: [f64; 6]) -> Option<Decomposed> {
+pub(crate) type Decomposed = ((f64, f64), (f64, f64), f64, (f64, f64));
+pub(crate) fn decompose([a, b, c, d, dx, dy]: [f64; 6]) -> Option<Decomposed> {
     if b == 0.0 && c == 0.0 {
         return Some(((dx, dy), (a, d), 0.0, (0.0, 0.0)));
     }

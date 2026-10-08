@@ -313,8 +313,20 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
         count(&g.extra);
         for l in &g.layers {
             count(&l.extra);
-            l.anchors.iter().for_each(|a| count(&a.extra));
-            for s in &l.shapes {
+            count(&l.info.attrs.extra);
+            l.info.guides.iter().for_each(|g| count(&g.extra));
+            l.info.annotations.iter().for_each(|a| count(&a.extra));
+            l.info.image.iter().for_each(|i| count(&i.extra));
+            let background = l.info.background.as_ref();
+            if let Some(b) = background {
+                count(&b.extra);
+                b.guides.iter().for_each(|g| count(&g.extra));
+                b.annotations.iter().for_each(|a| count(&a.extra));
+                b.image.iter().for_each(|i| count(&i.extra));
+            }
+            let anchors = l.anchors.iter().chain(background.into_iter().flat_map(|b| b.anchors.iter()));
+            anchors.for_each(|a| count(&a.extra));
+            for s in l.shapes.iter().chain(background.into_iter().flat_map(|b| b.shapes.iter())) {
                 match s {
                     Shape::Path(p) => {
                         count(&p.extra);
@@ -331,7 +343,7 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
     let mut shapes: BTreeMap<&'static str, usize> = BTreeMap::new();
     for g in font.glyphs.iter() {
         for l in &g.layers {
-            for s in &l.shapes {
+            for s in l.shapes.iter().chain(l.info.background.iter().flat_map(|b| b.shapes.iter())) {
                 if let Shape::Raw(r) = s
                     && !targets.contains(&r.family)
                 {

@@ -32,7 +32,7 @@ use crate::design::str_of;
 use crate::{finish, int, into_extra, list, num, string, take};
 
 /// The metrics keys of versions 3 and 4, in [`MetricsKeys::all`] order.
-const METRIC_KEYS: [Option<&str>; 7] = [
+pub(crate) const METRIC_KEYS: [Option<&str>; 7] = [
     Some("metricLeft"),
     Some("metricRight"),
     Some("metricWidth"),
@@ -87,7 +87,7 @@ fn take_text(d: &mut Dict, key: &str, version: u32) -> Option<String> {
     take_same(d, key, version, |v| str_of(v).filter(|s| !s.is_empty()), |s: &String| string(s))
 }
 
-fn read_color(v: &Value, version: u32) -> Option<ColorLabel> {
+pub(crate) fn read_color(v: &Value, version: u32) -> Option<ColorLabel> {
     let byte = |v: &Value| match v.as_num() {
         Some(Num::Int(i)) => u8::try_from(i).ok(),
         _ => None,
@@ -115,7 +115,7 @@ fn to_byte(c: f64) -> i64 {
     b
 }
 
-fn write_color(c: &ColorLabel, version: u32) -> Value {
+pub(crate) fn write_color(c: &ColorLabel, version: u32) -> Value {
     match c {
         ColorLabel::Index(i) => int(*i),
         ColorLabel::Rgba(parts) => {
