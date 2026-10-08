@@ -26,7 +26,7 @@ packages in order). Its material is `docs/spec/30-source-formats.md` and
 | M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured; `crates/io-glyphs` reads and writes versions 2 to 4, single files and packages (every reference-written source identical). Next: more typed fields, then the native format's layout |
 | M1.4 UFO and designspace | waits for the owner's answer on question 11 (round 002) |
 | M1.5 compiled fonts | done |
-| M1.6 commands and CLI | `.glyphs`, packages and compiled fonts done; UFO with M1.4 |
+| M1.6 commands and CLI | done for every format but UFO: open, save, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list` (`dump` moved to M12) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
