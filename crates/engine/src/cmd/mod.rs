@@ -14,6 +14,7 @@ mod font;
 mod glyph;
 mod meta;
 mod path;
+mod session;
 mod spacing;
 
 use serde::Serialize;
@@ -110,6 +111,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(spacing::specs());
         v.extend(font::specs());
         v.extend(meta::specs());
+        v.extend(session::specs());
         v
     })
 }

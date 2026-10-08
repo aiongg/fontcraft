@@ -90,6 +90,14 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("file.open", p)?;
     let path = std::path::PathBuf::from(p.str("path")?);
     let face = p.opt_int("face", 0, i64::from(u16::MAX))?.map(|f| f as u32);
+    // A file that is already open is shown, not opened a second time (`file.openTwiceActivates`).
+    if let Some(i) = super::session::find_open(s, &path) {
+        s.set_active(i)?;
+        let doc = s.doc()?;
+        return Ok(
+            json!({ "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "alreadyOpen": true, "glyphs": doc.font.glyphs.len() }),
+        );
+    }
     let (font, warnings) = crate::io::open(&path, face)?;
     // Every reader checks the font it returns.
     s.push_document(font, Some(path));

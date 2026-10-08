@@ -292,3 +292,74 @@ fn saves_and_exports_are_not_listed_as_queries() {
         assert!(query(id), "{id} only reads");
     }
 }
+
+#[test]
+fn a_batch_is_one_undo_step_and_fails_as_a_whole() {
+    let mut s = Session::with_document();
+    let start = s.font().unwrap().clone();
+    let out = run(
+        &mut s,
+        "command.batch",
+        json!({ "label": "Make Alt", "steps": [
+            { "command": "glyph.newGlyph", "params": { "name": "A.alt" } },
+            { "command": "spacing.setWidth", "params": { "glyphs": ["A.alt"], "value": 640 } },
+        ]}),
+    );
+    assert_eq!(out["results"].as_array().map(Vec::len), Some(2));
+    let doc = s.doc().unwrap();
+    assert_eq!(doc.history.undo.iter().map(|h| h.label.as_ref()).collect::<Vec<_>>(), ["Make Alt"]);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.font().unwrap(), &start, "one undo takes back both steps");
+
+    // A failing step leaves nothing behind, not even the steps before it.
+    let err = s
+        .execute(
+            "command.batch",
+            &json!({ "steps": [
+                { "command": "glyph.newGlyph", "params": { "name": "B.alt" } },
+                { "command": "spacing.setWidth", "params": { "glyphs": ["nope"], "value": 1 } },
+            ]}),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("step 1"), "{err}");
+    assert!(s.font().unwrap().glyph("B.alt").is_none());
+    assert!(s.batch_is_idle());
+    assert!(s.execute("command.batch", &json!({ "steps": [{ "command": "edit.undo" }] })).is_err());
+}
+
+#[test]
+fn a_batch_inside_a_batch_belongs_to_the_outer_one() {
+    let mut s = Session::with_document();
+    run(
+        &mut s,
+        "command.batch",
+        json!({ "label": "Outer", "steps": [
+            { "command": "command.batch", "params": { "label": "Inner", "steps": [{ "command": "glyph.newGlyph", "params": { "name": "x.alt" } }] } },
+            { "command": "glyph.newGlyph", "params": { "name": "y.alt" } },
+        ]}),
+    );
+    assert_eq!(s.doc().unwrap().history.undo.iter().map(|h| h.label.as_ref()).collect::<Vec<_>>(), ["Outer"]);
+}
+
+#[test]
+fn documents_are_activated_by_index_and_a_file_opens_once() {
+    let dir = temp_dir("activate");
+    let mut s = Session::with_document();
+    let path = dir.join("One.fontcraft");
+    run(&mut s, "file.saveAs", json!({ "path": path }));
+    run(&mut s, "file.new", json!({ "familyName": "Two" }));
+    assert_eq!(s.font().unwrap().family_name, "Two");
+    run(&mut s, "document.activate", json!({ "index": 0 }));
+    assert_eq!(s.font().unwrap().family_name, "Untitled");
+    run(&mut s, "document.activate", json!({ "index": 1 }));
+    let again = run(&mut s, "file.open", json!({ "path": path }));
+    assert_eq!(again["alreadyOpen"], true);
+    assert_eq!(s.documents().len(), 2, "no second copy");
+    assert_eq!(s.font().unwrap().family_name, "Untitled");
+    run(&mut s, "document.activate", json!({ "index": 1 }));
+    run(&mut s, "document.activate", json!({ "path": path }));
+    assert_eq!(s.font().unwrap().family_name, "Untitled");
+    assert!(s.execute("document.activate", &json!({ "index": 7 })).is_err());
+    assert!(s.execute("document.activate", &json!({})).is_err());
+}

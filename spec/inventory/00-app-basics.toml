@@ -160,6 +160,35 @@ summary = "Runs several commands as one transaction and one undo step: if any st
 ref = "FontCraft design, following the sibling apps"
 status = "inferred"
 
+[[command]]
+id = "document.activate"
+label = "Show Document"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{index?: number, path?: string} make an open document the active one, by its index in the session or the path it was opened from → {title, index}"
+area = "ui-chrome"
+milestone = "M1"
+summary = "Makes another open document the one commands act on, chosen by its position among the open documents or by its file. The window's tab or document list calls it; agents call it to switch between fonts."
+ref = "FontCraft design, following the sibling apps"
+status = "inferred"
+
+[[behavior]]
+id = "file.openTwiceActivates"
+area = "import-export"
+milestone = "M1"
+summary = "Opening a file that is already open makes its document the active one instead of opening a second copy, so two documents never write the same file."
+ref = "FontCraft design"
+status = "inferred"
+
+[[behavior]]
+id = "commands.batchIsOneUndoStep"
+area = "automation"
+milestone = "M1"
+summary = "The edits of all steps of a command batch are one undo step per document they changed, labelled with the batch's label. Undo and redo cannot be steps of a batch."
+ref = "FontCraft design"
+status = "inferred"
+
 [[behavior]]
 id = "commands.failedCommandChangesNothing"
 area = "automation"

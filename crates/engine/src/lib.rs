@@ -69,6 +69,16 @@ pub const JOURNAL_LIMIT: usize = 10_000;
 /// How deeply commands may call other commands.
 const MAX_DEPTH: u32 = 16;
 
+/// Records `before` as the step that undoes the document's last change, and drops the redo steps.
+pub(crate) fn push_undo(doc: &mut DocState, label: Arc<str>, before: Arc<Font>) {
+    doc.history.undo.push(HistoryEntry { label, font: before });
+    if doc.history.undo.len() > UNDO_LIMIT {
+        let extra = doc.history.undo.len() - UNDO_LIMIT;
+        doc.history.undo.drain(..extra);
+    }
+    doc.history.redo.clear();
+}
+
 /// One undo step: the font as it was before the change.
 #[derive(Clone, Debug)]
 pub struct HistoryEntry {
@@ -85,6 +95,9 @@ pub struct History {
 /// One open font.
 #[derive(Clone, Debug)]
 pub struct DocState {
+    /// Stable for the session, unlike the document's position, which closing another document
+    /// changes.
+    pub id: u64,
     pub font: Arc<Font>,
     pub history: History,
     /// Where the document is saved (`None`: never saved).
@@ -115,6 +128,15 @@ pub struct Session {
     journal: Vec<(String, Value)>,
     depth: u32,
     untitled: u32,
+    next_id: u64,
+    /// While `command.batch` runs: the font of each document it changed, as it was before.
+    pub(crate) batch: Option<Batch>,
+}
+
+/// The state of a running `command.batch` (see [`Session::edit`]).
+pub(crate) struct Batch {
+    pub(crate) label: Arc<str>,
+    pub(crate) before: Vec<(u64, Arc<Font>)>,
 }
 
 impl Session {
@@ -175,7 +197,9 @@ impl Session {
         let font = Arc::new(font);
         #[cfg(not(target_arch = "wasm32"))]
         let stamp = path.as_deref().and_then(io::stamp);
+        self.next_id += 1;
         self.docs.push(DocState {
+            id: self.next_id,
             saved: font.clone(),
             font,
             history: History::default(),
@@ -199,9 +223,11 @@ impl Session {
     /// Changes the active font as one undo step. `f` edits a private copy (glyphs it does not
     /// touch stay shared with the snapshot). The copy replaces the font only if `f` succeeds and
     /// the result passes the model's checks, so a failed edit leaves nothing behind. An edit that
-    /// leaves the font as it was makes no undo step and does not count as a change.
+    /// leaves the font as it was makes no undo step and does not count as a change. Inside
+    /// `command.batch` the step is not pushed: the batch makes one step of all its edits.
     pub fn edit<T>(&mut self, label: &str, f: impl FnOnce(&mut Font) -> Result<T>) -> Result<T> {
-        let doc = self.doc_mut()?;
+        let i = self.active.filter(|i| *i < self.docs.len()).ok_or(EngineError::NoDocument)?;
+        let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
         let mut next = Font::clone(&doc.font);
         let out = f(&mut next)?;
         if next.same_as(&doc.font) {
@@ -209,14 +235,38 @@ impl Session {
         }
         next.check_changed(&doc.font)?;
         let before = std::mem::replace(&mut doc.font, Arc::new(next));
-        doc.history.undo.push(HistoryEntry { label: label.into(), font: before });
-        if doc.history.undo.len() > UNDO_LIMIT {
-            let extra = doc.history.undo.len() - UNDO_LIMIT;
-            doc.history.undo.drain(..extra);
-        }
-        doc.history.redo.clear();
         doc.revision += 1;
+        match &mut self.batch {
+            Some(batch) => {
+                if !batch.before.iter().any(|(id, _)| *id == doc.id) {
+                    batch.before.push((doc.id, before));
+                }
+            }
+            None => push_undo(doc, label.into(), before),
+        }
         Ok(out)
+    }
+
+    /// No `command.batch` is running (for tests and the command sweep).
+    pub fn batch_is_idle(&self) -> bool {
+        self.batch.is_none()
+    }
+
+    /// The position of the document with this id.
+    pub(crate) fn position_of(&self, id: u64) -> Option<usize> {
+        self.docs.iter().position(|d| d.id == id)
+    }
+
+    pub(crate) fn docs_mut(&mut self) -> &mut [DocState] {
+        &mut self.docs
+    }
+
+    pub(crate) fn set_active(&mut self, i: usize) -> Result<()> {
+        if i >= self.docs.len() {
+            return Err(EngineError::NoDocument);
+        }
+        self.active = Some(i);
+        Ok(())
     }
 
     /// Runs the command `id`. See the crate docs for what every command guarantees.
