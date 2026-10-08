@@ -105,4 +105,4 @@ Append one terse entry per session: what landed, numbers, what is still open.
   and a single file of the same font read the same. `crates/decompile`: all 342 corpus binaries
   open. `file.open`/`file.save` on every source and compiled fonts. Oswald shown in the app
   (round 003). Next: question 11, then UFO; meanwhile the native format's layout and the CLI's
-  inspection commands.
+  inspection commands (both done since). M2 plan drafted (`docs/plans/M2.md`), waiting for review.
