@@ -213,11 +213,17 @@ impl Transform {
     }
 }
 
+fn is_default_transform(t: &Transform) -> bool {
+    *t == Transform::default()
+}
+
 /// A reference to another glyph.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Component {
     pub glyph: String,
-    #[serde(default, skip_serializing_if = "Transform::is_identity")]
+    /// Left out of the native file only in its default form, so an identity matrix read from a
+    /// matrix-writing format stays a matrix.
+    #[serde(default, skip_serializing_if = "is_default_transform")]
     pub transform: Transform,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,

@@ -7,6 +7,8 @@
 //!   (indentation, blank lines, spaces a hand edit left), never lost data.
 //! - `model`: through the font model: read into a `Font`, written back from it (`fontcraft_io_glyphs`
 //!   for `.glyphs`). The `spellings` count is not measured in this mode.
+//! - `native`: through the native format as well: read into a `Font`, saved as `.fontcraft`
+//!   bytes, loaded again, written back (`roundtrip.nativeLosslessFromGlyphs`).
 
 use std::path::Path;
 
@@ -15,7 +17,7 @@ use fontcraft_plist::{Num, Value};
 
 use crate::roundtrip::{Codec, Coded, Kind, Written, read_tree};
 
-pub const MODES: [&str; 2] = ["plist", "model"];
+pub const MODES: [&str; 3] = ["plist", "model", "native"];
 
 pub fn codec(mode: &str, kind: Kind) -> Option<Codec> {
     match (mode, kind) {
@@ -23,6 +25,8 @@ pub fn codec(mode: &str, kind: Kind) -> Option<Codec> {
         ("plist", Kind::GlyphsPackage) => Some(glyphs_package),
         ("model", Kind::Glyphs) => Some(glyphs_file_model),
         ("model", Kind::GlyphsPackage) => Some(glyphs_package_model),
+        ("native", Kind::Glyphs) => Some(glyphs_file_native),
+        ("native", Kind::GlyphsPackage) => Some(glyphs_package_native),
         _ => None,
     }
 }
@@ -80,5 +84,27 @@ fn glyphs_package_model(path: &Path) -> Result<Coded, String> {
     let files = read_tree(path)?;
     let font = fontcraft_io_glyphs::read_package(&files).map_err(|e| e.to_string())?;
     let out = fontcraft_io_glyphs::write_package(&font).map_err(|e| format!("writing: {e}"))?;
+    Ok(Coded { written: Written::Tree(out), spellings: 0 })
+}
+
+/// A font through the native format and back.
+fn via_native(font: &fontcraft_engine::model::Font) -> Result<fontcraft_engine::model::Font, String> {
+    let bytes = fontcraft_engine::format::save(font).map_err(|e| format!("saving .fontcraft: {e}"))?;
+    let back = fontcraft_engine::format::load(&bytes).map_err(|e| format!("loading .fontcraft: {e}"))?;
+    if !back.same_as(font) {
+        return Err("the .fontcraft file reads back to a different font".into());
+    }
+    Ok(back)
+}
+
+fn glyphs_file_native(path: &Path) -> Result<Coded, String> {
+    let font = fontcraft_io_glyphs::read(&read_text(path)?).map_err(|e| e.to_string())?;
+    let out = fontcraft_io_glyphs::write(&via_native(&font)?).map_err(|e| format!("writing: {e}"))?;
+    Ok(Coded { written: Written::File(out.into_bytes()), spellings: 0 })
+}
+
+fn glyphs_package_native(path: &Path) -> Result<Coded, String> {
+    let font = fontcraft_io_glyphs::read_package(&read_tree(path)?).map_err(|e| e.to_string())?;
+    let out = fontcraft_io_glyphs::write_package(&via_native(&font)?).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::Tree(out), spellings: 0 })
 }

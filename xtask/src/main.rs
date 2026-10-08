@@ -30,7 +30,7 @@ commands:
   wasm            cargo check --target wasm32-unknown-unknown for every crate that must run in the browser
   corpus [--fetch]
                   list the pinned real-file test corpora; --fetch downloads them into corpus/ (git-ignored)
-  roundtrip [--mode plist|model] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
+  roundtrip [--mode plist|model|native] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
                   read every corpus source and write it back; count byte-identical results
                   (known differences with a reason: xtask/roundtrip-allow.toml)
 ";
