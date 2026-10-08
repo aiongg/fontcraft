@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M1.7 step 2 (font information) done._
+_Updated: 2026-10-08, M1.7 step 3a (`.glyphs` masters, instances, stems, guides) done._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (208 tests; about 21,000 lines of Rust in 12 crates).
+- `cargo xtask ci` passes all nine steps (227 tests; about 25,000 lines of Rust in 12 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -31,7 +31,7 @@ M1 (`docs/plans/M1.md`) so far:
 | M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
 | M1.5 compiled fonts | done |
 | M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
-| M1.7 the typed model | **in progress**: steps 1 and 2 done (font information in `.glyphs`, UFO and designspace); step 3 next (plan § M1.7 › Progress) |
+| M1.7 the typed model | **in progress**: steps 1, 2 and 3a done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields); 3b (UFO zones, stems, guidelines) and 3c (designspace axes and instances) next (plan § M1.7 › Progress) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -124,3 +124,8 @@ Append one terse entry per session: what landed, numbers, what is still open.
   (`crates/io-ufo/src/fontinfo.rs`, `docs/spec/31-glyphslib-crosswalk.md`); `lib.plist` is the
   master's user data. Round trips unchanged; `.glyphs` → designspace keeps every master's font
   information except what the loss report lists. Next: step 3 (axes, masters, instances).
+  Step 3a: `.glyphs` stems, numbers, master guides, extra alignment zones, version 2 axes (from
+  `Axes` or synthesised), axis values, name parts and instances, and the instance fields are
+  model fields, in the native file too; defaults a file writes anyway stay in `Extra`. Census:
+  these keys drop from 781 entries to 38 (12 of them version 2 `baseline = 0`), each explained
+  in the plan. Round trips unchanged. Next: 3b, 3c.

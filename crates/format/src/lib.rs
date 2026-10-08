@@ -123,6 +123,41 @@ mod tests {
     }
 
     #[test]
+    fn stems_guides_zones_and_instance_fields_round_trip() {
+        use fontcraft_model::{AlignmentZone, Guide, Instance, NameParts, NumberDef, StemDef, StyleClass};
+        use std::sync::Arc;
+        let mut font = Font::new("Typed");
+        font.stems = Arc::new(vec![
+            StemDef { name: "stem".into(), ..Default::default() },
+            StemDef { horizontal: true, filter: Some("x".into()), ..Default::default() },
+        ]);
+        font.numbers = Arc::new(vec![NumberDef { name: "gap".into(), ..Default::default() }]);
+        let m = &mut Arc::make_mut(&mut font.masters)[0];
+        m.stem_values = vec![80.0, 60.5];
+        m.number_values = vec![-0.0];
+        m.zones = vec![AlignmentZone { pos: 400.0, size: -8.0 }];
+        m.guides = vec![Guide { x: 1.0, y: 2.5, angle: 90.0, angle_locked: true, orientation: Some("right".into()), ..Default::default() }];
+        m.name_parts = NameParts { weight: Some("Bold".into()), ..Default::default() };
+        let bold = Instance {
+            name: "Bold".into(),
+            visible: false,
+            weight_class: Some(StyleClass::Name("Bold".into())),
+            width_class: Some(StyleClass::Number(5.0)),
+            is_bold: true,
+            link_style: Some("Regular".into()),
+            interpolation: vec![("m01".into(), 0.25)],
+            manual_interpolation: true,
+            id: Some("i1".into()),
+            kind: Some("variable".into()),
+            ..Default::default()
+        };
+        font.instances = Arc::new(vec![bold, Instance::default()]);
+        let bytes = save(&font).unwrap();
+        assert_eq!(load(&bytes).unwrap(), font);
+        assert_eq!(save(&load(&bytes).unwrap()).unwrap(), bytes);
+    }
+
+    #[test]
     fn newer_and_foreign_files_are_rejected_with_a_reason() {
         assert!(matches!(load(br#"{"format":"fontcraft","version":99,"font":{}}"#), Err(FormatError::TooNew { found: 99, .. })));
         assert!(matches!(load(br#"{"format":"other","version":1}"#), Err(FormatError::NotFontcraft(_))));

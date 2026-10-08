@@ -262,6 +262,8 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         version_minor,
         axes: Arc::default(),
         metrics: Arc::new(defs),
+        stems: Arc::default(),
+        numbers: Arc::default(),
         masters: Arc::new(vec![Master { id: MASTER.into(), name: style, metric_values: values, ..Default::default() }]),
         instances: Arc::default(),
         glyphs: GlyphTable::from_glyphs(glyphs),

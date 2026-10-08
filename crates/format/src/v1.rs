@@ -178,6 +178,8 @@ impl Font {
             axes: Arc::default(),
             instances: Arc::default(),
             metrics: Arc::new(kinds.iter().map(|k| MetricDef::new(k)).collect()),
+            stems: Arc::default(),
+            numbers: Arc::default(),
             masters: Arc::new(masters),
             glyphs: GlyphTable::from_glyphs(glyphs),
             info: Default::default(),

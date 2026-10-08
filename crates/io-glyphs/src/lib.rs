@@ -23,6 +23,7 @@ use fontcraft_model::{
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
+mod design;
 mod info;
 mod package;
 mod v2;
@@ -188,15 +189,16 @@ pub(crate) fn take_plain_string(d: &mut Dict, key: &str) -> Option<String> {
     }
 }
 
-/// The parts of the font information every version writes the same way.
-pub(crate) fn push_font_info_common(e: &mut Vec<(Str, Value)>, font: &Font) {
+/// The parts of the font information every version writes the same way, with the font's
+/// parameters as `params` (version 2 may rewrite its `Axes` parameter).
+pub(crate) fn push_font_info_common(e: &mut Vec<(Str, Value)>, font: &Font, params: &fontcraft_model::Params) {
     if let Some(v) = &font.source.app_version {
         e.push((".appVersion".into(), string(v)));
     }
     if let Some(d) = &font.info.date {
         e.push(("date".into(), string(d)));
     }
-    info::push_params(e, &font.info.params);
+    info::push_params(e, params);
     info::push_user_data(e, &font.info.user_data);
 }
 
@@ -223,6 +225,8 @@ fn read_font(mut root: Dict) -> Result<Font> {
     let note = take_note(&mut root);
     let axes = take_typed_list(&mut root, "axes", read_axis);
     let instances = take_typed_list(&mut root, "instances", read_instance);
+    let stems = design::take_stem_defs(&mut root);
+    let numbers = design::take_number_defs(&mut root);
     let metrics = match take(&mut root, "metrics") {
         Some(v) => as_items(v, "metrics")?.into_iter().enumerate().map(|(i, m)| read_metric(m, &format!("metrics[{i}]"))).collect::<Result<_>>()?,
         None => Vec::new(),
@@ -259,6 +263,8 @@ fn read_font(mut root: Dict) -> Result<Font> {
         axes: Arc::new(axes),
         instances: Arc::new(instances),
         metrics: Arc::new(metrics),
+        stems: Arc::new(stems),
+        numbers: Arc::new(numbers),
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
         kerning: Arc::new(kerning),
@@ -460,10 +466,13 @@ fn read_instance(v: &Value) -> Option<Instance> {
         Some(x) => as_bool01(&x, "exports").ok()?,
         None => true,
     };
-    let properties = info::take_properties(&mut d);
-    let params = info::take_params(&mut d);
-    let user_data = info::take_user_data(&mut d);
-    Some(Instance { name, location, exports, properties, params, user_data, extra: into_extra(d) })
+    let mut i = Instance { name, location, exports, ..Default::default() };
+    design::take_instance_fields(&mut d, &mut i);
+    i.properties = info::take_properties(&mut d);
+    i.params = info::take_params(&mut d);
+    i.user_data = info::take_user_data(&mut d);
+    i.extra = into_extra(d);
+    Some(i)
 }
 
 fn write_axis(a: &Axis) -> Value {
@@ -489,6 +498,7 @@ fn write_instance(i: &Instance) -> Result<Value> {
     if !i.exports {
         e.push(("exports".into(), int(0)));
     }
+    design::push_instance_fields(&mut e, i)?;
     info::push_properties(&mut e, &i.properties);
     info::push_params(&mut e, &i.params);
     info::push_user_data(&mut e, &i.user_data);
@@ -524,10 +534,28 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
         }
     }
     let (icon, visible) = take_master_display(&mut d)?;
+    let stem_values = design::take_values(&mut d, "stemValues");
+    let number_values = design::take_values(&mut d, "numberValues");
+    let guides = design::take_guides(&mut d);
     let properties = info::take_properties(&mut d);
     let params = info::take_params(&mut d);
     let user_data = info::take_user_data(&mut d);
-    Ok(Master { id, name, location, metric_values, icon, visible, properties, params, user_data, extra: into_extra(d) })
+    Ok(Master {
+        id,
+        name,
+        location,
+        metric_values,
+        icon,
+        visible,
+        stem_values,
+        number_values,
+        guides,
+        properties,
+        params,
+        user_data,
+        extra: into_extra(d),
+        ..Default::default()
+    })
 }
 
 /// A master's `iconName` and `visible`.
@@ -775,7 +803,8 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     if version < 4 && !font.family_name.is_empty() {
         e.push(("familyName".into(), string(&font.family_name)));
     }
-    push_font_info_common(&mut e, font);
+    push_font_info_common(&mut e, font, &font.info.params);
+    design::push_defs(&mut e, &font.stems, &font.numbers);
     if version >= 4 && !font.family_name.is_empty() {
         info::push_properties(&mut e, &sync_v4_family_name(&font.info.properties, &font.family_name));
     } else {
@@ -845,6 +874,9 @@ fn write_master(m: &Master) -> Result<Value> {
             .collect::<Result<_>>()?;
         e.push(("metricValues".into(), list(values)));
     }
+    design::push_values(&mut e, "stemValues", &m.stem_values)?;
+    design::push_values(&mut e, "numberValues", &m.number_values)?;
+    design::push_guides(&mut e, &m.guides)?;
     push_master_info(&mut e, m);
     Ok(Value::Dict(finish(e, &m.extra)))
 }

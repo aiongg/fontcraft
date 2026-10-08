@@ -581,6 +581,8 @@ pub fn read(files: &Files) -> Result<Font> {
         version_minor: r.version_minor.and_then(|v| u16::try_from(v).ok()).unwrap_or(0),
         axes: Arc::default(),
         metrics: Arc::new(metrics),
+        stems: Arc::default(),
+        numbers: Arc::default(),
         masters: Arc::new(vec![master]),
         instances: Arc::default(),
         glyphs: GlyphTable::from_glyphs(r.glyphs.into_iter().map(Arc::new).collect()),
@@ -1029,7 +1031,39 @@ pub fn info_losses(font: &Font) -> Vec<String> {
     if !font.info.settings.is_empty() {
         out.push("the font's settings".into());
     }
+    // Typed from `.glyphs` and not yet written to UFO or designspace (M1.7 steps 3b and 3c).
+    if !font.stems.is_empty() {
+        out.push(format!("the font's stems ({})", font.stems.len()));
+    }
+    if !font.numbers.is_empty() {
+        out.push(format!("the font's numbers ({})", font.numbers.len()));
+    }
+    for m in font.masters.iter() {
+        let name = if m.name.is_empty() { &m.id } else { &m.name };
+        if !m.guides.is_empty() {
+            out.push(format!("master `{name}`: guides ({})", m.guides.len()));
+        }
+        if !m.zones.is_empty() {
+            out.push(format!("master `{name}`: alignment zones other than overshoots ({})", m.zones.len()));
+        }
+        if !m.name_parts.is_empty() {
+            out.push(format!("master `{name}`: name parts"));
+        }
+    }
     for i in font.instances.iter() {
+        let fields = [
+            ("id", i.id.is_some()),
+            ("type", i.kind.is_some()),
+            ("visibility", !i.visible),
+            ("weight class", i.weight_class.is_some()),
+            ("width class", i.width_class.is_some()),
+            ("style linking", i.is_bold || i.is_italic || i.link_style.is_some()),
+            ("manual interpolation", i.manual_interpolation || !i.interpolation.is_empty()),
+        ];
+        let set: Vec<&str> = fields.iter().filter(|(_, on)| *on).map(|(what, _)| *what).collect();
+        if !set.is_empty() {
+            out.push(format!("instance `{}`: {}", i.name, set.join(", ")));
+        }
         for p in &i.params.0 {
             out.push(format!("instance `{}`: parameter `{}`", i.name, p.name));
         }

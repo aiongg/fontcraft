@@ -389,6 +389,8 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         version_minor: version_minor.and_then(|v| u16::try_from(v).ok()).unwrap_or(0),
         axes: Arc::new(axes.iter().map(|a| Axis { name: a.name.clone(), tag: a.tag.clone(), hidden: a.hidden, extra: Extra::new() }).collect()),
         metrics: Arc::new(kinds.iter().map(|k| MetricDef::new(k)).collect()),
+        stems: Arc::default(),
+        numbers: Arc::default(),
         masters: Arc::new(masters),
         instances: Arc::new(read_instances(root, &axes, &labels)?),
         glyphs: GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect()),

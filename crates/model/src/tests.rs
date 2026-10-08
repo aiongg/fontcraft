@@ -282,3 +282,19 @@ fn extra_entries_survive_the_native_form() {
     assert_eq!(back.extra.get(Family::Glyphs, "futureKey"), Some(&value));
     assert_eq!(back.glyph("A").unwrap().layers[0].extra.len(), 1);
 }
+
+#[test]
+fn version_2_master_name_parts_join_as_the_reference_joins_them() {
+    use crate::NameParts;
+    let parts = |w: Option<&str>, d: Option<&str>, c: Option<&str>| NameParts {
+        weight: w.map(Into::into),
+        width: d.map(Into::into),
+        custom: c.map(Into::into),
+    };
+    assert_eq!(parts(None, None, None).joined(false), "Regular");
+    assert_eq!(parts(None, None, None).joined(true), "Italic");
+    assert_eq!(parts(Some("Bold"), Some("Condensed"), None).joined(false), "Condensed Bold");
+    assert_eq!(parts(Some("Bold"), None, None).joined(true), "Bold Italic");
+    assert_eq!(parts(Some("Light"), None, Some("Oblique")).joined(true), "Light Oblique");
+    assert_eq!(parts(None, None, Some("Display")).joined(false), "Display");
+}

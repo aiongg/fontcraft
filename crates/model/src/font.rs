@@ -1,4 +1,7 @@
 //! The font document: its info, masters, glyph table and checks.
+//!
+//! [`NameParts::joined`] ports the master name rule of glyphsLib's `GSFontMaster._joinName`
+//! (`glyphsLib/classes.py`, version 6.15.0, Apache-2.0).
 
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
@@ -98,6 +101,130 @@ pub struct MetricValue {
     pub over: f64,
 }
 
+/// A stem definition. The masters carry the widths, in the same order ([`Master::stem_values`]).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct StemDef {
+    /// May be empty: format version 2 stems have no names.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// Measured vertically (a horizontal stem, such as a crossbar).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub horizontal: bool,
+    /// The glyphs it applies to, as a glyph predicate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+    #[serde(default, skip_serializing_if = "Extra::is_empty")]
+    pub extra: Extra,
+}
+
+/// A named number, usable in feature code and metrics keys. The masters carry the values, in the
+/// same order ([`Master::number_values`]).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct NumberDef {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Extra::is_empty")]
+    pub extra: Extra,
+}
+
+/// A guideline: a line through a point at an angle in degrees, stored as the source states it
+/// (`docs/spec/30-source-formats.md` § 2.9 has the open question on its direction).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Guide {
+    #[serde(default)]
+    pub x: f64,
+    #[serde(default)]
+    pub y: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub angle: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
+    /// The angle cannot be changed by dragging.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub angle_locked: bool,
+    /// Measurements along the guide are shown.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub show_measurement: bool,
+    /// The glyphs it is shown in, as a glyph predicate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+    /// Where the guide's label sits (`left`, `center` or `right`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<String>,
+    #[serde(default, skip_serializing_if = "Extra::is_empty")]
+    pub extra: Extra,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+/// An alignment zone that is not a metric's overshoot: a position and a size (negative for a zone
+/// below the position).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AlignmentZone {
+    #[serde(default)]
+    pub pos: f64,
+    #[serde(default)]
+    pub size: f64,
+}
+
+/// A master's name parts in format version 2: weight, width and custom name. A part that is
+/// `None` is absent (the reference reads the weight and width as `Regular` then).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct NameParts {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom: Option<String>,
+}
+
+impl NameParts {
+    pub fn is_empty(&self) -> bool {
+        *self == NameParts::default()
+    }
+
+    /// The master name the parts make, by the reference's rule: width, weight and custom name
+    /// without empty parts and without a `Regular` that has company; with an italic angle,
+    /// `Italic` is added unless the custom name says `Italic` or `Oblique` (a lone `Regular`
+    /// becomes `Italic`).
+    pub fn joined(&self, italic: bool) -> String {
+        let weight = self.weight.as_deref().unwrap_or("Regular");
+        let width = self.width.as_deref().unwrap_or("Regular");
+        let custom = self.custom.as_deref().unwrap_or("");
+        let mut names: Vec<&str> = [width, weight, custom].into_iter().filter(|n| !n.is_empty()).collect();
+        while names.len() > 1 {
+            match names.iter().position(|n| *n == "Regular") {
+                Some(i) => {
+                    names.remove(i);
+                }
+                None => break,
+            }
+        }
+        if italic {
+            if names == ["Regular"] {
+                return "Italic".into();
+            }
+            if !custom.contains("Italic") && !custom.contains("Oblique") {
+                names.push("Italic");
+            }
+        }
+        names.join(" ")
+    }
+}
+
+/// A weight or width class as a source states it: a number (`700`, or a width class `1` to `9`),
+/// or a name, as format version 2 writes them (`Bold`, `Condensed`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum StyleClass {
+    Number(f64),
+    Name(String),
+}
+
 /// A design axis of the family (weight, width…).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Axis {
@@ -112,7 +239,7 @@ pub struct Axis {
 }
 
 /// A named instance: a static font to export, or another export setting.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Instance {
     /// The style name (may be empty: format version 4 keeps it among the instance's properties).
     #[serde(default)]
@@ -129,8 +256,58 @@ pub struct Instance {
     pub params: Params,
     #[serde(default, skip_serializing_if = "UserData::is_empty")]
     pub user_data: UserData,
+    /// The instance's id (format version 4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the instance makes, as the reference names it (`variable` for a variable font's
+    /// settings); `None` is a static font.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Shown in the editor's preview of all instances.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub visible: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight_class: Option<StyleClass>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width_class: Option<StyleClass>,
+    /// Style linking: the bold and italic flags and the style they link to.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_bold: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_italic: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_style: Option<String>,
+    /// Master weights set by hand (master id, weight), used when `manual_interpolation` is on.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interpolation: Vec<(String, f64)>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub manual_interpolation: bool,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
+}
+
+impl Default for Instance {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            location: Vec::new(),
+            exports: true,
+            properties: Properties::default(),
+            params: Params::default(),
+            user_data: UserData::default(),
+            id: None,
+            kind: None,
+            visible: true,
+            weight_class: None,
+            width_class: None,
+            is_bold: false,
+            is_italic: false,
+            link_style: None,
+            interpolation: Vec::new(),
+            manual_interpolation: false,
+            extra: Extra::new(),
+        }
+    }
 }
 
 fn yes() -> bool {
@@ -157,6 +334,21 @@ pub struct Master {
     /// Shown in the editor's preview of all masters.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub visible: bool,
+    /// Format version 2's name parts, from which the reference derives the name.
+    #[serde(default, skip_serializing_if = "NameParts::is_empty")]
+    pub name_parts: NameParts,
+    /// Parallel to [`Font::stems`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stem_values: Vec<f64>,
+    /// Parallel to [`Font::numbers`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub number_values: Vec<f64>,
+    /// Alignment zones beyond the metrics' overshoots ([`MetricValue::over`]), which hold most.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zones: Vec<AlignmentZone>,
+    /// Guides shown in every glyph of the master.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub guides: Vec<Guide>,
     #[serde(default, skip_serializing_if = "Properties::is_empty")]
     pub properties: Properties,
     #[serde(default, skip_serializing_if = "Params::is_empty")]
@@ -248,6 +440,10 @@ pub struct Font {
     pub axes: Arc<Vec<Axis>>,
     #[serde(default)]
     pub metrics: Arc<Vec<MetricDef>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stems: Arc<Vec<StemDef>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub numbers: Arc<Vec<NumberDef>>,
     pub masters: Arc<Vec<Master>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub instances: Arc<Vec<Instance>>,
@@ -487,6 +683,8 @@ impl Font {
             version_minor: 0,
             axes: Arc::default(),
             metrics: Arc::new(defs.iter().map(|k| MetricDef::new(k)).collect()),
+            stems: Arc::default(),
+            numbers: Arc::default(),
             masters: Arc::new(vec![master]),
             instances: Arc::default(),
             info: Arc::default(),
@@ -754,6 +952,8 @@ impl Font {
             && self.version_major == before.version_major
             && self.version_minor == before.version_minor
             && arc_eq(&self.metrics, &before.metrics)
+            && arc_eq(&self.stems, &before.stems)
+            && arc_eq(&self.numbers, &before.numbers)
             && arc_eq(&self.masters, &before.masters)
             && arc_eq(&self.extra, &before.extra)
             && arc_eq(&self.files, &before.files)

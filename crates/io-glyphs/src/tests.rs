@@ -312,3 +312,137 @@ fn malformed_files_are_errors_not_panics() {
         }
     }
 }
+
+/// [`V3`] with stems, numbers, master guides and two instances.
+fn v3_design() -> String {
+    V3.replace(
+        "id = m01;\nmetricValues",
+        "guides = (\n{\nangle = 90;\nlocked = 1;\nname = center;\npos = (300,0);\n},\n{\npos = (0,500);\n}\n);\nid = m01;\nmetricValues",
+    )
+    .replace("name = Regular;\n}\n);\nglyphs", "name = Regular;\nnumberValues = (\n40\n);\nstemValues = (\n80,\n60\n);\n}\n);\nglyphs")
+    .replace(
+        "metrics = (",
+        "instances = (\n{\naxesValues = (\n700\n);\ninstanceInterpolations = {\nm01 = 1;\n};\nisBold = 1;\nlinkStyle = Regular;\nmanualInterpolation = 1;\nname = Bold;\nvisible = 0;\nweightClass = 700;\n},\n{\nname = Variable;\ntype = variable;\n}\n);\nmetrics = (",
+    )
+    .replace(
+        "unitsPerEm = 1000;",
+        "numbers = (\n{\nname = gap;\n}\n);\nstems = (\n{\nname = stem;\n},\n{\nhorizontal = 1;\nname = bar;\n}\n);\nunitsPerEm = 1000;",
+    )
+}
+
+#[test]
+fn version_3_stems_numbers_guides_and_instances_are_fields() {
+    let text = v3_design();
+    let font = read(&text).unwrap();
+    let names: Vec<(&str, bool)> = font.stems.iter().map(|s| (s.name.as_str(), s.horizontal)).collect();
+    assert_eq!(names, [("stem", false), ("bar", true)]);
+    assert_eq!(font.numbers[0].name, "gap");
+    let m = font.default_master().unwrap();
+    assert_eq!((m.stem_values.clone(), m.number_values.clone()), (vec![80.0, 60.0], vec![40.0]));
+    assert_eq!(m.guides.len(), 2);
+    assert_eq!((m.guides[0].x, m.guides[0].angle, m.guides[0].locked, m.guides[0].name.as_deref()), (300.0, 90.0, true, Some("center")));
+    assert_eq!((m.guides[1].x, m.guides[1].y), (0.0, 500.0));
+    let bold = &font.instances[0];
+    assert_eq!(bold.weight_class, Some(fontcraft_model::StyleClass::Number(700.0)));
+    assert!(bold.is_bold && !bold.is_italic && bold.manual_interpolation && !bold.visible);
+    assert_eq!((bold.link_style.as_deref(), bold.interpolation.clone()), (Some("Regular"), vec![("m01".to_string(), 1.0)]));
+    assert_eq!(font.instances[1].kind.as_deref(), Some("variable"));
+    assert!(font.instances[1].visible);
+    for x in [&font.extra, &m.extra, &bold.extra] {
+        assert!(x.is_empty(), "everything typed: {x:?}");
+    }
+    assert_eq!(write(&font).unwrap(), text);
+}
+
+#[test]
+fn editing_a_typed_design_field_writes_the_new_value() {
+    let text = v3_design();
+    let mut font = read(&text).unwrap();
+    std::sync::Arc::make_mut(&mut font.masters)[0].stem_values[0] = 85.0;
+    let i = &mut std::sync::Arc::make_mut(&mut font.instances)[0];
+    i.weight_class = Some(fontcraft_model::StyleClass::Number(600.0));
+    i.visible = true;
+    let out = write(&font).unwrap();
+    let changed: Vec<(&str, &str)> = text.lines().zip(out.lines()).filter(|(a, b)| a != b).collect();
+    assert_eq!(changed.first(), Some(&("80,", "85,")));
+    assert!(out.contains("weightClass = 600;") && !out.contains("visible = 0;"), "{out}");
+    assert_eq!(read(&out).unwrap().instances[0].weight_class, Some(fontcraft_model::StyleClass::Number(600.0)));
+}
+
+#[test]
+fn a_key_the_writer_leaves_out_is_kept_as_written() {
+    let text = v3_design().replace("isBold = 1;", "isBold = 0;");
+    let mut font = read(&text).unwrap();
+    assert!(!font.instances[0].is_bold);
+    assert_eq!(write(&font).unwrap(), text);
+    std::sync::Arc::make_mut(&mut font.instances)[0].is_bold = true;
+    assert!(write(&font).unwrap().contains("isBold = 1;"));
+}
+
+/// [`V2`] with name parts, three axis values (the width at its default, written anyway), stems,
+/// a guide, a zone at no metric and an instance that is not exported.
+fn v2_design() -> String {
+    V2.replace("capHeight = 810;\n", "capHeight = 810;\ncustom = Italic;\ncustomValue = 12;\n")
+        .replace("\"{578, 11}\",\n", "\"{578, 11}\",\n\"{400, 8}\",\n")
+        .replace(
+            "descender = -190;\n",
+            "descender = -190;\nguideLines = (\n{\nangle = 90;\nposition = \"{100, 0}\";\n}\n);\nhorizontalStems = (\n20\n);\n",
+        )
+        .replace("weightValue = 180;\n", "verticalStems = (\n80,\n90\n);\nweight = Bold;\nweightValue = 180;\nwidthValue = 100;\n")
+        .replace(
+            "unitsPerEm = 1000;",
+            "instances = (\n{\nactive = 0;\ninterpolationCustom = 12;\ninterpolationWeight = 180;\nisBold = 1;\nname = Bold;\nweightClass = Bold;\n}\n);\nunitsPerEm = 1000;",
+        )
+}
+
+#[test]
+fn version_2_axis_values_name_parts_stems_and_instances_are_fields() {
+    let text = v2_design();
+    let font = read(&text).unwrap();
+    let axes: Vec<(&str, &str)> = font.axes.iter().map(|a| (a.name.as_str(), a.tag.as_str())).collect();
+    assert_eq!(axes, [("Weight", "wght"), ("Width", "wdth"), ("Custom", "XXXX")], "as many as the highest key used");
+    let m = font.default_master().unwrap();
+    assert_eq!(m.location, [180.0, 100.0, 12.0]);
+    assert!(m.extra.get(Family::Glyphs, "widthValue").is_some(), "a default written anyway stays as written");
+    assert_eq!((m.name.as_str(), m.name_parts.weight.as_deref(), m.name_parts.custom.as_deref()), ("Bold Italic", Some("Bold"), Some("Italic")));
+    let stems: Vec<bool> = font.stems.iter().map(|s| s.horizontal).collect();
+    assert_eq!((stems, m.stem_values.clone()), (vec![true, false, false], vec![20.0, 80.0, 90.0]));
+    assert_eq!((m.guides[0].x, m.guides[0].y, m.guides[0].angle), (100.0, 0.0, 90.0));
+    assert_eq!(m.zones, [fontcraft_model::AlignmentZone { pos: 400.0, size: 8.0 }]);
+    let i = &font.instances[0];
+    assert!(!i.exports && i.is_bold);
+    assert_eq!((i.location.clone(), i.weight_class.clone()), (vec![180.0, 100.0, 12.0], Some(fontcraft_model::StyleClass::Name("Bold".into()))));
+    assert!(m.extra.get(Family::Glyphs, "alignmentZones").is_none() && font.extra.get(Family::Glyphs, "instances").is_none());
+    assert_eq!(write(&font).unwrap(), text);
+}
+
+#[test]
+fn version_2_writes_axis_values_except_defaults() {
+    let mut font = read(&v2_design()).unwrap();
+    let m = &mut std::sync::Arc::make_mut(&mut font.masters)[0];
+    m.location = vec![100.0, 120.0, 12.0];
+    std::sync::Arc::make_mut(&mut font.instances)[0].exports = true;
+    let out = write(&font).unwrap();
+    assert!(!out.contains("weightValue"), "the default is left out: {out}");
+    assert!(out.contains("widthValue = 120;") && !out.contains("widthValue = 100;"));
+    assert!(out.contains("active = 1;"), "the kept key is overwritten: {out}");
+    let back = read(&out).unwrap();
+    assert_eq!(back.masters[0].location, [100.0, 120.0, 12.0]);
+    assert!(back.instances[0].exports);
+}
+
+#[test]
+fn a_version_2_axes_parameter_names_the_axes_and_stays_a_parameter() {
+    let param = "customParameters = (\n{\nname = Axes;\nvalue = (\n{\nName = Optical;\nTag = opsz;\n}\n);\n}\n);\n";
+    let text = V2.replace("familyName = Old;\n", &format!("{param}familyName = Old;\n"));
+    let mut font = read(&text).unwrap();
+    assert_eq!((font.axes.len(), font.axes[0].tag.as_str(), font.masters[0].location.clone()), (1, "opsz", vec![180.0]));
+    assert!(font.info.params.get("Axes").is_some());
+    assert_eq!(write(&font).unwrap(), text);
+    std::sync::Arc::make_mut(&mut font.axes)[0].tag = "OPSZ".into();
+    let out = write(&font).unwrap();
+    assert!(out.contains("Tag = OPSZ;"), "{out}");
+    assert_eq!(read(&out).unwrap().axes[0].tag, "OPSZ");
+    // Without values on any axis key, a file has no axes.
+    assert!(read(&V2.replace("weightValue = 180;\n", "")).unwrap().axes.is_empty());
+}

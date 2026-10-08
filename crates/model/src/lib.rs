@@ -22,7 +22,8 @@ mod kerning;
 pub use extra::{Extra, ExtraEntry, Family};
 pub use features::{Features, Snippet};
 pub use font::{
-    Axis, FileStore, Font, FontInfo, GlyphMut, GlyphTable, Instance, Master, MetricDef, MetricValue, Settings, Source, SourceFormat, metric,
+    AlignmentZone, Axis, FileStore, Font, FontInfo, GlyphMut, GlyphTable, Guide, Instance, Master, MetricDef, MetricValue, NameParts, NumberDef,
+    Settings, Source, SourceFormat, StemDef, StyleClass, metric,
 };
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
