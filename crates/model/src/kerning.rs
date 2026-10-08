@@ -106,6 +106,30 @@ pub fn side_group(side: &str) -> Option<&str> {
     ["@MMK_L_", "@MMK_R_", "@MMK_T_", "@MMK_B_", "public.kern1.", "public.kern2."].iter().find_map(|p| side.strip_prefix(p))
 }
 
+/// A kerning side as the reference's format spells it: a UFO group (`public.kern1.A`,
+/// `public.kern2.O`) becomes `@MMK_L_A`, `@MMK_R_O`; anything else is kept.
+pub fn glyphs_side(side: &str) -> std::borrow::Cow<'_, str> {
+    if let Some(g) = side.strip_prefix("public.kern1.") {
+        format!("@MMK_L_{g}").into()
+    } else if let Some(g) = side.strip_prefix("public.kern2.") {
+        format!("@MMK_R_{g}").into()
+    } else {
+        side.into()
+    }
+}
+
+/// A kerning side as a UFO spells it: `@MMK_L_A` becomes `public.kern1.A` and `@MMK_R_O`
+/// `public.kern2.O`; anything else is kept.
+pub fn ufo_side(side: &str) -> std::borrow::Cow<'_, str> {
+    if let Some(g) = side.strip_prefix("@MMK_L_") {
+        format!("public.kern1.{g}").into()
+    } else if let Some(g) = side.strip_prefix("@MMK_R_") {
+        format!("public.kern2.{g}").into()
+    } else {
+        side.into()
+    }
+}
+
 /// A glyph's kerning groups: the group it belongs to on each side.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct KernGroups {
@@ -145,6 +169,15 @@ mod tests {
         assert_eq!(t.remove("m02", "F", "a"), Some(-10.0));
         assert_eq!(t.0.len(), 1, "an emptied master is removed");
         assert_eq!(t.remove("m02", "F", "a"), None);
+    }
+
+    #[test]
+    fn sides_are_spelled_per_format() {
+        assert_eq!(ufo_side("@MMK_L_A"), "public.kern1.A");
+        assert_eq!(ufo_side("@MMK_R_O"), "public.kern2.O");
+        assert_eq!(glyphs_side("public.kern1.A"), "@MMK_L_A");
+        assert_eq!(glyphs_side(&ufo_side("@MMK_R_O")), "@MMK_R_O");
+        assert_eq!(ufo_side("T"), "T");
     }
 
     #[test]

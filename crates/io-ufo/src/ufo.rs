@@ -776,9 +776,32 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         let skip_value = (!skip.is_empty()).then(|| Value::Array(Array { items: skip.iter().map(|s| str_value(s)).collect(), ..Default::default() }));
         patch(&mut lib, "public.skipExportGlyphs", skip_value);
     }
-    if !from_ufo && lib.get("public.glyphOrder").is_none() {
-        let order = Value::Array(Array { items: font.glyphs.iter().map(|g| str_value(&g.name)).collect(), ..Default::default() });
-        patch(&mut lib, "public.glyphOrder", Some(order));
+    // The glyph order. Reading puts the glyphs the kept list names first, in its order (it may
+    // name glyphs the font lacks and leave some out, as the specification allows), so the list
+    // agrees with the model while those glyphs still lead the model's order. A disagreeing list is
+    // rewritten from the model; a UFO that had none gets none; a master whose file had its own
+    // list keeps it while the default master's still agrees.
+    let order: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).collect();
+    let agrees = |kept: &[String]| {
+        let named: Vec<&String> = order.iter().filter(|n| kept.contains(n)).collect();
+        let listed: Vec<&String> = kept.iter().filter(|n| order.contains(n)).collect();
+        let mut seen = std::collections::HashSet::new();
+        let listed: Vec<&String> = listed.into_iter().filter(|n| seen.insert(*n)).collect();
+        named.len() == listed.len() && order.iter().take(named.len()).eq(listed.iter().copied())
+    };
+    let kept_order = lib.get("public.glyphOrder").map(|v| strings(Some(v)));
+    let default_order = kept_dict(default, LIB).0.get("public.glyphOrder").map(|v| strings(Some(v)));
+    let keep = if is_default {
+        match &kept_order {
+            Some(k) => agrees(k),
+            None => from_ufo,
+        }
+    } else {
+        default_order.as_deref().is_none_or(agrees) && from_ufo
+    };
+    if !keep {
+        let value = Value::Array(Array { items: order.iter().map(|n| str_value(n)).collect(), ..Default::default() });
+        patch(&mut lib, "public.glyphOrder", Some(value));
     }
     if !lib.is_empty() {
         out.insert(LIB.into(), plist(LIB, &Value::Dict(lib)));
@@ -917,10 +940,12 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
             out.insert(path.clone(), plist(&path, info));
         }
     }
-    // Other files, as read.
-    for (path, bytes) in &font.files.0 {
-        if let Some(rel) = path.strip_prefix(target.prefix.as_str()) {
-            out.entry(rel.to_string()).or_insert_with(|| bytes.to_vec());
+    // Other files, as read. Only a UFO's: another format's side files have no place here.
+    if matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Designspace) {
+        for (path, bytes) in &font.files.0 {
+            if let Some(rel) = path.strip_prefix(target.prefix.as_str()) {
+                out.entry(rel.to_string()).or_insert_with(|| bytes.to_vec());
+            }
         }
     }
     Ok(out)
@@ -997,20 +1022,31 @@ fn write_kerning(font: &Font, master: &Master) -> Dict {
         // No pairs: the kept file, if it had none either, with its whitespace.
         return if kept.is_empty() { kept } else { out };
     };
+    // Group sides read from the reference's format get the UFO prefixes.
     for f in &mk.firsts {
-        let kept_first = kept.get(&f.first).and_then(Value::as_dict);
+        let first = fontcraft_model::ufo_side(&f.first);
+        let kept_first = kept.get(&first).and_then(Value::as_dict);
         let mut seconds = Dict::new();
         for (second, v) in &f.seconds {
-            let value = match kept_first.and_then(|d| d.get(second)) {
+            let second = fontcraft_model::ufo_side(second);
+            let value = match kept_first.and_then(|d| d.get(&second)) {
                 Some(old) if as_f64(old) == Some(*v) => old.clone(),
                 _ => num_value(*v),
             };
-            seconds.entries.push((Str::new(second.as_str()), value));
+            seconds.entries.push((Str::new(second.as_ref()), value));
         }
-        out.entries.push((Str::new(f.first.as_str()), Value::Dict(seconds)));
+        out.entries.push((Str::new(first.as_ref()), Value::Dict(seconds)));
     }
     // Unchanged pairs: the kept file, with its whitespace.
     if out == kept && kept.entries.iter().zip(&out.entries).all(|((a, _), (b, _))| a == b) { kept } else { out }
+}
+
+/// Writes one master of a document as a UFO of its own, with the document's font-wide values.
+pub fn write_one(font: &Font, master_id: &str) -> Result<Files> {
+    let master = font.master(master_id)?;
+    // A master read from a designspace keeps its UFO's other files under the UFO's name.
+    let prefix = master.extra.get(Family::Designspace, "filename").and_then(Value::as_str).map(|f| format!("{f}/")).unwrap_or_default();
+    write_master(font, &Target { master, default: master, layer_masters: Vec::new(), prefix })
 }
 
 /// Writes a document as a single UFO; it must have exactly one master.

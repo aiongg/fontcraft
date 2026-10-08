@@ -255,7 +255,8 @@ fn kern_table(v: &Value) -> Option<KernTable> {
     Some(KernTable(out))
 }
 
-/// A kerning table as the format writes it: in the table's own order, not sorted.
+/// A kerning table as the format writes it: in the table's own order, not sorted. Group sides
+/// read from a UFO get this format's prefixes.
 fn write_kern_table(t: &KernTable) -> Result<Value> {
     let mut masters = Dict::new();
     for m in &t.0 {
@@ -263,9 +264,9 @@ fn write_kern_table(t: &KernTable) -> Result<Value> {
         for f in &m.firsts {
             let mut seconds = Dict::new();
             for (s, v) in &f.seconds {
-                seconds.entries.push((Str::new(s.as_str()), num(*v, "kerning")?));
+                seconds.entries.push((Str::new(fontcraft_model::glyphs_side(s).as_ref()), num(*v, "kerning")?));
             }
-            firsts.entries.push((Str::new(f.first.as_str()), Value::Dict(seconds)));
+            firsts.entries.push((Str::new(fontcraft_model::glyphs_side(&f.first).as_ref()), Value::Dict(seconds)));
         }
         masters.entries.push((Str::new(m.master.as_str()), Value::Dict(firsts)));
     }

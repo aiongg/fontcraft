@@ -255,3 +255,132 @@ fn a_compressed_native_file_stays_compressed() {
     assert!(s.execute("file.saveAs", &json!({ "path": dir.join("x.glyphs"), "compress": true })).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Every file under `dir`, relative, with its bytes.
+fn tree(dir: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                out.insert(p.strip_prefix(dir).unwrap().to_string_lossy().replace('\\', "/"), std::fs::read(&p).unwrap());
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn a_ufo_opens_and_saves_only_what_changed() {
+    let dir = temp("ufo");
+    let single = dir.join("Test.glyphs");
+    std::fs::write(&single, V3).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": single }));
+    let ufo = dir.join("Test.ufo");
+    let first = run(&mut s, "file.saveAs", json!({ "path": ufo }));
+    assert_eq!((first["format"].as_str(), first["version"].as_u64()), (Some("ufo"), Some(3)), "{first}");
+    for f in ["metainfo.plist", "fontinfo.plist", "lib.plist", "layercontents.plist", "glyphs/contents.plist", "glyphs/A_.glif", "glyphs/B_.glif"] {
+        assert!(ufo.join(f).is_file(), "{f} missing");
+    }
+
+    let mut s = Session::new();
+    let opened = run(&mut s, "file.open", json!({ "path": ufo }));
+    assert_eq!((opened["format"].as_str(), opened["version"].as_u64()), (Some("ufo"), Some(3)));
+    let before = tree(&ufo);
+    let saved = run(&mut s, "file.save", json!({}));
+    assert_eq!((saved["filesWritten"].as_u64(), saved["filesRemoved"].as_u64()), (Some(0), Some(0)), "{saved}");
+    assert_eq!(tree(&ufo), before, "an unchanged UFO is not touched");
+    run(&mut s, "spacing.setWidth", json!({ "glyphs": ["A"], "value": 650 }));
+    let saved = run(&mut s, "file.save", json!({}));
+    assert_eq!(saved["filesWritten"], 1, "{saved}");
+    assert!(std::fs::read_to_string(ufo.join("glyphs/A_.glif")).unwrap().contains("<advance width=\"650\"/>"));
+    run(&mut s, "glyph.removeGlyph", json!({ "glyphs": ["B"] }));
+    let saved = run(&mut s, "file.save", json!({}));
+    assert_eq!(
+        (saved["filesWritten"].as_u64(), saved["filesRemoved"].as_u64()),
+        (Some(1), Some(1)),
+        "contents.plist rewritten, B_.glif removed: {saved}"
+    );
+    assert!(!ufo.join("glyphs/B_.glif").exists());
+    // A two-master document does not fit one UFO.
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The test document with a second master, Bold, whose glyphs are wider.
+fn two_masters() -> String {
+    V3.replacen(
+        "name = Regular;\n}\n);",
+        "name = Regular;\n},\n{\nid = m02;\nmetricValues = (\n{\nover = 16;\npos = 800;\n}\n);\nname = Bold;\n}\n);",
+        1,
+    )
+    .replace("layerId = m01;\nwidth = 600;\n}\n);", "layerId = m01;\nwidth = 600;\n},\n{\nlayerId = m02;\nwidth = 700;\n}\n);")
+}
+
+#[test]
+fn a_designspace_saves_its_ufos_and_comes_back() {
+    let dir = temp("designspace");
+    let single = dir.join("Duo.glyphs");
+    std::fs::write(&single, two_masters()).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": single }));
+    assert!(s.execute("file.saveAs", &json!({ "path": dir.join("One.ufo") })).is_err(), "two masters do not fit one UFO");
+    let ds = dir.join("Duo.designspace");
+    let saved = run(&mut s, "file.saveAs", json!({ "path": ds }));
+    assert_eq!(saved["format"], "designspace");
+    assert!(dir.join("TestSans-Regular.ufo/glyphs/A_.glif").is_file() && dir.join("TestSans-Bold.ufo/glyphs/A_.glif").is_file(), "{saved}");
+
+    let mut s = Session::new();
+    let opened = run(&mut s, "file.open", json!({ "path": ds }));
+    assert_eq!((opened["format"].as_str(), opened["masters"].as_u64()), (Some("designspace"), Some(2)));
+    let before = tree(&dir);
+    assert_eq!(run(&mut s, "file.save", json!({}))["filesWritten"], 0);
+    assert_eq!(tree(&dir), before);
+    run(&mut s, "spacing.setWidth", json!({ "glyphs": ["B"], "value": 610, "layer": "m02" }));
+    let saved = run(&mut s, "file.save", json!({}));
+    assert_eq!(saved["filesWritten"], 1, "{saved}");
+    let changed: Vec<String> = tree(&dir).into_iter().filter(|(k, v)| before.get(k) != Some(v)).map(|(k, _)| k).collect();
+    assert_eq!(changed, ["TestSans-Bold.ufo/glyphs/B_.glif"]);
+
+    // A UFO edited elsewhere since opening is not overwritten.
+    std::fs::write(dir.join("TestSans-Regular.ufo/glyphs/A_.glif"), "changed").unwrap();
+    run(&mut s, "spacing.setWidth", json!({ "glyphs": ["A"], "value": 611 }));
+    assert!(s.execute("file.save", &json!({})).is_err());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn masters_export_as_ufos() {
+    let dir = temp("export-ufo");
+    let single = dir.join("Duo.glyphs");
+    std::fs::write(&single, two_masters()).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": single }));
+    let out = run(&mut s, "file.exportUfo", json!({ "destination": dir.join("ufo") }));
+    assert_eq!(out["files"].as_array().unwrap().len(), 2, "{out}");
+    assert!(dir.join("ufo/TestSans-Bold.ufo/glyphs/A_.glif").is_file());
+    assert!(std::fs::read_to_string(dir.join("ufo/TestSans-Bold.ufo/glyphs/A_.glif")).unwrap().contains("width=\"700\""));
+    let one = run(&mut s, "file.exportUfo", json!({ "destination": dir.join("one"), "masters": ["m01"] }));
+    assert_eq!(one["files"].as_array().unwrap().len(), 1);
+    assert!(s.execute("file.exportUfo", &json!({ "destination": dir.join("x"), "masters": ["nope"] })).is_err());
+    assert!(s.execute("file.exportUfo", &json!({ "destination": dir.join("x"), "productionNames": true })).is_err());
+    // The document keeps its own file and format.
+    assert_eq!(s.doc().unwrap().path.as_deref(), Some(single.as_path()));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_ufo_is_not_written_into_a_folder_that_is_not_one() {
+    let dir = temp("ufo-refuse");
+    let target = dir.join("Folder.ufo");
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::write(target.join("notes.txt"), "mine").unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.new", json!({ "familyName": "New" }));
+    assert!(s.execute("file.saveAs", &json!({ "path": target })).is_err());
+    assert_eq!(std::fs::read_to_string(target.join("notes.txt")).unwrap(), "mine");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

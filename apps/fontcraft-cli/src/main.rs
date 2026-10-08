@@ -37,7 +37,7 @@ USAGE:
 
   fontcraft-cli convert IN OUT
       Open IN (a source) and write OUT in the format its extension names (.ttf, .fontcraft,
-      .glyphs, .glyphspackage).
+      .glyphs, .glyphspackage, .ufo for one master, .designspace with a UFO per master).
 
   fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]
       Print a JSON summary of FILE (a compiled font or a source) without opening it: format, names,
@@ -199,8 +199,12 @@ fn convert(args: &[String]) -> Outcome {
     let extension = std::path::Path::new(output).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let result = match extension.as_str() {
         "ttf" => execute(&mut session, "file.exportStatic", &json!({"destination": output}))?,
-        "fontcraft" | "glyphs" | "glyphspackage" => execute(&mut session, "file.saveAs", &json!({"path": output}))?,
-        other => return Err(usage(format!("cannot write `.{other}` yet (writable: .ttf, .fontcraft, .glyphs, .glyphspackage; see ROADMAP.md)"))),
+        "fontcraft" | "glyphs" | "glyphspackage" | "ufo" | "designspace" => execute(&mut session, "file.saveAs", &json!({"path": output}))?,
+        other => {
+            return Err(usage(format!(
+                "cannot write `.{other}` yet (writable: .ttf, .fontcraft, .glyphs, .glyphspackage, .ufo, .designspace; see ROADMAP.md)"
+            )));
+        }
     };
     out(&result.to_string())
 }

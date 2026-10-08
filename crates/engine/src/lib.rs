@@ -50,6 +50,8 @@ pub enum EngineError {
     #[error(transparent)]
     Glyphs(#[from] fontcraft_io_glyphs::GlyphsError),
     #[error(transparent)]
+    Ufo(#[from] fontcraft_io_ufo::UfoError),
+    #[error(transparent)]
     Decompile(#[from] fontcraft_decompile::DecompileError),
     #[error("{0}")]
     Io(String),
@@ -196,7 +198,7 @@ impl Session {
         };
         let font = Arc::new(font);
         #[cfg(not(target_arch = "wasm32"))]
-        let stamp = path.as_deref().and_then(io::stamp);
+        let stamp = path.as_deref().and_then(|p| io::document_stamp(p, &font));
         self.next_id += 1;
         self.docs.push(DocState {
             id: self.next_id,

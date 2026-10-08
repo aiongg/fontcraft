@@ -484,7 +484,7 @@ pub fn write(font: &Font) -> Result<Written> {
     for m in font.masters.iter() {
         let f = match ds_str(&m.extra, "filename") {
             Some(f) => f.to_string(),
-            None => new_filename(font, m, &filenames),
+            None => ufo_file_name(font, m, &filenames),
         };
         if !filenames.contains(&f) {
             filenames.push(f.clone());
@@ -517,8 +517,9 @@ pub fn write(font: &Font) -> Result<Written> {
     Ok(Written { document, ufos })
 }
 
-/// A file name for a master's UFO: `Family-Style.ufo`, made unique.
-fn new_filename(font: &Font, m: &Master, taken: &[String]) -> String {
+/// A file name for a master's UFO: `Family-Style.ufo` with only letters, digits, `-` and `_`,
+/// made unique among `taken`.
+pub fn ufo_file_name(font: &Font, m: &Master, taken: &[String]) -> String {
     let clean = |s: &str| s.chars().filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_').collect::<String>();
     let family = if font.family_name.is_empty() { "Font".to_string() } else { clean(&font.family_name) };
     let style = if m.name.is_empty() { clean(&m.id) } else { clean(&m.name) };

@@ -23,7 +23,7 @@ pub use features::{Features, Snippet};
 pub use font::{Axis, FileStore, Font, GlyphMut, GlyphTable, Instance, Master, MetricDef, MetricValue, Source, SourceFormat, metric};
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
-pub use kerning::{KernFirst, KernGroups, KernTable, Kerning, MasterKerning, side_group};
+pub use kerning::{KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.
 pub const UPM_RANGE: std::ops::RangeInclusive<u16> = 16..=16384;

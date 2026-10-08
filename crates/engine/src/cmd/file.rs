@@ -31,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF). A compiled font opens view-only: save it with Save As to a source format. warnings lists what reading a compiled font left out → {title, path, format, version?, glyphs, viewOnly, warnings}",
+            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF). A compiled font opens view-only: save it with Save As to a source format. warnings lists what reading a compiled font left out → {title, path, format, version?, glyphs, masters, viewOnly, warnings}",
             always,
             open
         ),
@@ -40,7 +40,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save",
             ["File"],
             Some("Cmd+S"),
-            "{path?: string, force?: bool} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). Refuses when the file changed on disk since it was read, unless force is true. Single files are written atomically; a package rewrites only changed files → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path?: string, force?: bool} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files are written atomically; a package or UFO rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save
         ),
@@ -49,9 +49,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save As…",
             ["File"],
             Some("Cmd+Shift+S"),
-            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\", version?: 2|3|4, compress?: bool, force?: bool} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document). compress: gzip a .fontcraft file (default: as it was opened). losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\"|\"ufo\"|\"designspace\", version?: 2|3|4, compress?: bool, force?: bool} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document; .glyphs has 2 to 4, UFO 2 and 3). A single UFO holds one master; a designspace writes a UFO per master beside it. compress: gzip a .fontcraft file (default: as it was opened). losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save_as
+        ),
+        cmd!(
+            "file.exportUfo",
+            "Export UFO",
+            [],
+            None,
+            "{destination: string, masters?: [string], productionNames?: bool, decomposeSmartStuff?: bool} write each chosen master (default: all) as its own UFO 3 into the destination folder, named Family-Style.ufo. The document keeps its file and format. productionNames: rename glyphs to production names (not supported yet). decomposeSmartStuff: turn editor-only constructs into plain outlines (default true; the model holds none yet) → {files: [{path, master, filesWritten}], losses}",
+            has_doc,
+            export_ufo
         ),
         cmd!(
             "file.close",
@@ -107,9 +116,10 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
         fontcraft_model::SourceFormat::Binary => Some("binary"),
         _ => save_format.map(|f| f.name()),
     };
+    let version = doc.font.source.glyphs_version.or(doc.font.source.ufo_version);
     Ok(json!({
         "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "format": format,
-        "version": doc.font.source.glyphs_version, "glyphs": doc.font.glyphs.len(), "viewOnly": save_format.is_none(), "warnings": warnings,
+        "version": version, "glyphs": doc.font.glyphs.len(), "masters": doc.font.masters.len(), "viewOnly": save_format.is_none(), "warnings": warnings,
     }))
 }
 
@@ -124,31 +134,44 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     let doc = s.doc()?;
     // Another program may have changed the file since it was read or last written here.
     if doc.path.as_deref() == Some(path.as_path()) && !p.bool_or("force", false)? {
-        let now = io::stamp(&path);
+        let now = io::document_stamp(&path, &doc.font);
         if now.is_some() && now != doc.stamp {
             return Err(p.bad(format!("{} changed on disk since it was opened; save elsewhere, or pass force: true to overwrite", path.display())));
         }
     }
     let mut font = Font::clone(&doc.font);
+    // The version a format family is written in: the one asked for, else the one read, else the
+    // newest that is not a draft (3 for both). Converting between versions is not supported yet.
+    let pick = |have: Option<u32>, range: std::ops::RangeInclusive<u32>| -> Result<u32> {
+        let want = version.or(have).unwrap_or(3);
+        if !range.contains(&want) {
+            return Err(p.bad(format!("`version` {want} does not exist for {}", format.name())));
+        }
+        if have.is_some_and(|h| h != want) {
+            return Err(EngineError::Unsupported(format!("converting between format versions ({} to {want})", have.unwrap_or_default())));
+        }
+        Ok(want)
+    };
     let version = match format {
         SaveFormat::Native => None,
         SaveFormat::Glyphs | SaveFormat::GlyphsPackage => {
-            let have = font.source.glyphs_version;
-            let want = version.or(have).unwrap_or(3);
-            if have.is_some_and(|h| h != want) {
-                return Err(EngineError::Unsupported(format!("converting between format versions ({} to {want})", have.unwrap_or_default())));
-            }
-            Some(want)
+            let v = pick(font.source.glyphs_version, 2..=4)?;
+            font.source.glyphs_version = Some(v);
+            Some(v)
+        }
+        SaveFormat::Ufo | SaveFormat::Designspace => {
+            let v = pick(font.source.ufo_version, 2..=3)?;
+            font.source.ufo_version = Some(v);
+            Some(v)
         }
     };
     font.source.format = match format {
         SaveFormat::Native => font.source.format,
         SaveFormat::Glyphs => fontcraft_model::SourceFormat::Glyphs,
         SaveFormat::GlyphsPackage => fontcraft_model::SourceFormat::GlyphsPackage,
+        SaveFormat::Ufo => fontcraft_model::SourceFormat::Ufo,
+        SaveFormat::Designspace => fontcraft_model::SourceFormat::Designspace,
     };
-    if format != SaveFormat::Native {
-        font.source.glyphs_version = version;
-    }
     let saved = io::save(&font, &path, format)?;
     let font = Arc::new(font);
     let doc = s.doc_mut()?;
@@ -156,7 +179,7 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     doc.font = font.clone();
     doc.saved = font;
     doc.path = Some(path.clone());
-    doc.stamp = io::stamp(&path);
+    doc.stamp = io::document_stamp(&path, &doc.font);
     Ok(json!({
         "path": path.to_string_lossy(), "format": format.name(), "version": version, "bytes": saved.bytes,
         "filesWritten": saved.files_written, "filesRemoved": saved.files_removed, "losses": saved.losses,
@@ -190,10 +213,11 @@ fn save_as(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("file.saveAs", p)?;
     let path = std::path::PathBuf::from(p.str("path")?);
     let format = match p.opt_str("format")? {
-        Some(f) => {
-            SaveFormat::parse(f).ok_or_else(|| p.bad(format!("`format` must be \"fontcraft\", \"glyphs\" or \"glyphspackage\", got \"{f}\"")))?
-        }
-        None => SaveFormat::of_path(&path).ok_or_else(|| p.bad("give a `format`, or a path ending in .fontcraft, .glyphs or .glyphspackage"))?,
+        Some(f) => SaveFormat::parse(f).ok_or_else(|| {
+            p.bad(format!("`format` must be \"fontcraft\", \"glyphs\", \"glyphspackage\", \"ufo\" or \"designspace\", got \"{f}\""))
+        })?,
+        None => SaveFormat::of_path(&path)
+            .ok_or_else(|| p.bad("give a `format`, or a path ending in .fontcraft, .glyphs, .glyphspackage, .ufo or .designspace"))?,
     };
     let version = p.opt_int("version", 2, 4)?.map(|v| v as u32);
     if let Some(compress) = p.get("compress") {
@@ -223,6 +247,43 @@ fn save(_: &mut Session, _: &Value) -> Result<Value> {
 #[cfg(target_arch = "wasm32")]
 fn save_as(s: &mut Session, p: &Value) -> Result<Value> {
     save(s, p)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("file.exportUfo", p)?;
+    let destination = std::path::PathBuf::from(p.str("destination")?);
+    if p.bool_or("productionNames", false)? {
+        return Err(EngineError::Unsupported("renaming glyphs to production names on export (needs the glyph database, ROADMAP.md M4)".into()));
+    }
+    let _ = p.bool_or("decomposeSmartStuff", true)?;
+    let font = s.font()?;
+    let masters: Vec<String> = match p.get("masters") {
+        None => font.masters.iter().map(|m| m.id.clone()).collect(),
+        Some(Value::Array(ids)) => {
+            let mut out = Vec::new();
+            for id in ids {
+                let id = id.as_str().ok_or_else(|| p.bad("`masters` must be a list of master ids"))?;
+                font.master(id)?;
+                out.push(id.to_string());
+            }
+            out
+        }
+        Some(_) => return Err(p.bad("`masters` must be a list of master ids")),
+    };
+    if destination.exists() && !destination.is_dir() {
+        return Err(p.bad(format!("{} is a file: give a folder", destination.display())));
+    }
+    std::fs::create_dir_all(&destination).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", destination.display())))?;
+    let exported = crate::io::export_ufos(font, &masters, &destination)?;
+    let files: Vec<Value> =
+        exported.files.iter().map(|(path, master, n)| json!({ "path": path.to_string_lossy(), "master": master, "filesWritten": n })).collect();
+    Ok(json!({ "files": files, "losses": exported.losses }))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn export_ufo(_: &mut Session, _: &Value) -> Result<Value> {
+    Err(EngineError::Unsupported("writing UFO folders in the browser".into()))
 }
 
 fn close(s: &mut Session, p: &Value) -> Result<Value> {

@@ -758,6 +758,7 @@ dependencies = [
  "fontcraft-format",
  "fontcraft-geom",
  "fontcraft-io-glyphs",
+ "fontcraft-io-ufo",
  "fontcraft-model",
  "fontcraft-testkit",
  "log",

@@ -16,6 +16,7 @@ fontcraft-model.workspace = true
 fontcraft-format.workspace = true
 fontcraft-compile.workspace = true
 fontcraft-io-glyphs.workspace = true
+fontcraft-io-ufo.workspace = true
 fontcraft-decompile.workspace = true
 skrifa.workspace = true
 serde.workspace = true
