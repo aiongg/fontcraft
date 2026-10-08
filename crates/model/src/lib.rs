@@ -15,11 +15,13 @@
 mod extra;
 mod font;
 mod glyph;
+mod kerning;
 
 pub use extra::{Extra, ExtraEntry, Family};
 pub use font::{FileStore, Font, GlyphMut, GlyphTable, Master, MetricDef, MetricValue, Source, SourceFormat, metric};
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
+pub use kerning::{KernFirst, KernGroups, KernTable, Kerning, MasterKerning, side_group};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.
 pub const UPM_RANGE: std::ops::RangeInclusive<u16> = 16..=16384;

@@ -3,7 +3,7 @@
 use fontcraft_geom::{Affine, BezPath, Point};
 use serde::{Deserialize, Serialize};
 
-use crate::{Extra, Family, MAX_COORDINATE, in_range};
+use crate::{Extra, Family, KernGroups, MAX_COORDINATE, in_range};
 use fontcraft_plist::Value;
 
 fn yes() -> bool {
@@ -22,6 +22,8 @@ pub struct Glyph {
     /// Is the glyph written to compiled fonts?
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub export: bool,
+    #[serde(default, skip_serializing_if = "KernGroups::is_empty")]
+    pub kern_groups: KernGroups,
     /// Master layers and all others, in file order.
     #[serde(default)]
     pub layers: Vec<Layer>,
@@ -63,7 +65,15 @@ impl Layer {
 
 impl Glyph {
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), unicodes: Vec::new(), export: true, layers: Vec::new(), file_name: None, extra: Extra::new() }
+        Self {
+            name: name.into(),
+            unicodes: Vec::new(),
+            export: true,
+            kern_groups: KernGroups::default(),
+            layers: Vec::new(),
+            file_name: None,
+            extra: Extra::new(),
+        }
     }
 
     /// The master layer of `master`.

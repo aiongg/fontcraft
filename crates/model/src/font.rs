@@ -8,6 +8,7 @@ use fontcraft_geom::{BezPath, Point};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::glyph::{Glyph, Layer, Path, Shape};
+use crate::kerning::Kerning;
 use crate::{
     Extra, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_GLYPHS, MAX_OUTLINE_ELEMENTS, MAX_UNICODES, ModelError, UPM_RANGE, check_name, in_range,
 };
@@ -113,6 +114,8 @@ pub struct Font {
     pub masters: Arc<Vec<Master>>,
     /// In glyph order.
     pub glyphs: GlyphTable,
+    #[serde(default, skip_serializing_if = "Kerning::is_empty")]
+    pub kerning: Arc<Kerning>,
     /// Files a multi-file source holds beside what the model reads (a package's feature files and
     /// UI state, a UFO's `data/` and `images/`), by relative path, written back unchanged.
     #[serde(default, skip_serializing_if = "FileStore::is_empty")]
@@ -337,6 +340,7 @@ impl Font {
             metrics: Arc::new(defs.iter().map(|k| MetricDef::new(k)).collect()),
             masters: Arc::new(vec![master]),
             glyphs: GlyphTable::from_glyphs(glyphs),
+            kerning: Arc::default(),
             files: Arc::default(),
             extra: Arc::default(),
         }
@@ -599,6 +603,7 @@ impl Font {
             && arc_eq(&self.masters, &before.masters)
             && arc_eq(&self.extra, &before.extra)
             && arc_eq(&self.files, &before.files)
+            && arc_eq(&self.kerning, &before.kerning)
             && (Arc::ptr_eq(&self.glyphs.order, &before.glyphs.order)
                 || self.glyphs.len() == before.glyphs.len() && self.glyphs.iter().zip(before.glyphs.iter()).all(|(a, b)| arc_eq(a, b)))
     }

@@ -16,8 +16,8 @@
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Anchor, Component, Extra, Family, Font, Glyph, GlyphTable, Layer, Master, MetricDef, MetricValue, ModelError, Node, NodeKind, Path, RawShape,
-    Shape, Source, SourceFormat, Transform,
+    Anchor, Component, Extra, Family, Font, Glyph, GlyphTable, KernFirst, KernGroups, KernTable, Kerning, Layer, Master, MasterKerning, MetricDef,
+    MetricValue, ModelError, Node, NodeKind, Path, RawShape, Shape, Source, SourceFormat, Transform,
 };
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
@@ -195,6 +195,11 @@ fn read_font(mut root: Dict) -> Result<Font> {
             .collect::<Result<Vec<_>>>()?,
         None => Vec::new(),
     };
+    let kerning = Kerning {
+        ltr: take_kern_table(&mut root, "kerningLTR"),
+        rtl: take_kern_table(&mut root, "kerningRTL"),
+        vertical: take_kern_table(&mut root, "kerningVertical"),
+    };
     Ok(Font {
         source: Source { format: SourceFormat::Glyphs, glyphs_version: u32::try_from(version).ok() },
         family_name,
@@ -204,10 +209,73 @@ fn read_font(mut root: Dict) -> Result<Font> {
         metrics: Arc::new(metrics),
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
+        kerning: Arc::new(kerning),
         files: Arc::default(),
         extra: Arc::new(into_extra(root)),
     })
 }
+
+/// A kerning table `{master: {first: {second: value}}}`, taken out of `d` when every value in it
+/// is a number; otherwise it stays in `d` as written.
+fn take_kern_table(d: &mut Dict, key: &str) -> KernTable {
+    let Some(v) = d.get(key) else { return KernTable::default() };
+    match kern_table(v) {
+        Some(t) => {
+            take(d, key);
+            t
+        }
+        None => KernTable::default(),
+    }
+}
+
+fn kern_table(v: &Value) -> Option<KernTable> {
+    let masters = v.as_dict()?;
+    let mut out = Vec::with_capacity(masters.len());
+    for (master, firsts) in &masters.entries {
+        let firsts = firsts.as_dict()?;
+        let mut fs = Vec::with_capacity(firsts.len());
+        for (first, seconds) in &firsts.entries {
+            let seconds = seconds.as_dict()?;
+            let pairs = seconds.entries.iter().map(|(s, v)| Some((s.as_str().to_string(), v.as_num()?.as_f64()))).collect::<Option<Vec<_>>>()?;
+            fs.push(KernFirst { first: first.as_str().to_string(), seconds: pairs });
+        }
+        out.push(MasterKerning { master: master.as_str().to_string(), firsts: fs });
+    }
+    Some(KernTable(out))
+}
+
+/// A kerning table as the format writes it: in the table's own order, not sorted.
+fn write_kern_table(t: &KernTable) -> Result<Value> {
+    let mut masters = Dict::new();
+    for m in &t.0 {
+        let mut firsts = Dict::new();
+        for f in &m.firsts {
+            let mut seconds = Dict::new();
+            for (s, v) in &f.seconds {
+                seconds.entries.push((Str::new(s.as_str()), num(*v, "kerning")?));
+            }
+            firsts.entries.push((Str::new(f.first.as_str()), Value::Dict(seconds)));
+        }
+        masters.entries.push((Str::new(m.master.as_str()), Value::Dict(firsts)));
+    }
+    Ok(Value::Dict(masters))
+}
+
+/// A glyph's kerning groups under the given keys (left, right, top, bottom).
+fn take_kern_groups(d: &mut Dict, keys: [&str; 4], at: &str) -> Result<KernGroups> {
+    let [l, r, t, b] = keys;
+    Ok(KernGroups { left: opt_string(d, l, at)?, right: opt_string(d, r, at)?, top: opt_string(d, t, at)?, bottom: opt_string(d, b, at)? })
+}
+
+fn push_kern_groups(e: &mut Vec<(Str, Value)>, g: &KernGroups, keys: [&str; 4]) {
+    for (value, key) in [&g.left, &g.right, &g.top, &g.bottom].into_iter().zip(keys) {
+        if let Some(v) = value {
+            e.push((key.into(), string(v)));
+        }
+    }
+}
+
+const KERN_GROUP_KEYS: [&str; 4] = ["kernLeft", "kernRight", "kernTop", "kernBottom"];
 
 fn opt_string(d: &mut Dict, key: &str, at: &str) -> Result<Option<String>> {
     take(d, key).map(|v| as_string(v, &format!("{at}.{key}"))).transpose()
@@ -268,11 +336,12 @@ fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
         },
     };
     let export = take(&mut d, "export").map(|v| as_bool01(&v, &format!("{at}.export"))).transpose()?.unwrap_or(true);
+    let kern_groups = take_kern_groups(&mut d, KERN_GROUP_KEYS, &at)?;
     let layers = match take(&mut d, "layers") {
         Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
-    Ok(Glyph { name, unicodes, export, layers, file_name: None, extra: into_extra(d) })
+    Ok(Glyph { name, unicodes, export, kern_groups, layers, file_name: None, extra: into_extra(d) })
 }
 
 fn code_points(v: &Value) -> Option<Vec<u32>> {
@@ -490,6 +559,11 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     }
     e.push(("fontMaster".into(), list(font.masters.iter().map(write_master).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g).map(Value::Dict)).collect::<Result<_>>()?)));
+    for (key, table) in [("kerningLTR", &font.kerning.ltr), ("kerningRTL", &font.kerning.rtl), ("kerningVertical", &font.kerning.vertical)] {
+        if !table.is_empty() {
+            e.push((key.into(), write_kern_table(table)?));
+        }
+    }
     Ok(finish(e, extra))
 }
 
@@ -545,6 +619,7 @@ pub fn write_glyph(g: &Glyph) -> Result<Dict> {
     if !g.export {
         e.push(("export".into(), int(0)));
     }
+    push_kern_groups(&mut e, &g.kern_groups, KERN_GROUP_KEYS);
     e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at)).collect::<Result<_>>()?)));
     Ok(finish(e, &g.extra))
 }

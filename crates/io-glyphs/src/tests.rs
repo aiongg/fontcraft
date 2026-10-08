@@ -271,6 +271,35 @@ fn version_2_spellings_that_are_not_canonical_are_kept_while_they_hold() {
 }
 
 #[test]
+fn kerning_and_kerning_groups_are_fields() {
+    let text = V3
+        .replace("glyphname = A;\n", "glyphname = A;\nkernLeft = A;\nkernRight = A;\n")
+        .replace(
+            "metrics = (",
+            "kerningLTR = {\nm01 = {\n\"@MMK_L_A\" = {\n\"@MMK_R_V\" = -50;\nT = -30.5;\n};\n};\n};\nkerningRTL = {\nm01 = {\n\"@MMK_R_alef\" = {\n\"@MMK_L_beh\" = 12;\n};\n};\n};\nmetrics = (",
+        );
+    let mut font = read(&text).unwrap();
+    assert_eq!(font.kerning.ltr.get("m01", "@MMK_L_A", "@MMK_R_V"), Some(-50.0));
+    assert_eq!(font.kerning.ltr.get("m01", "@MMK_L_A", "T"), Some(-30.5));
+    assert_eq!(font.kerning.rtl.pair_count(), 1);
+    assert_eq!(fontcraft_model::side_group("@MMK_R_alef"), Some("alef"));
+    let a = font.glyph("A").unwrap();
+    assert_eq!((a.kern_groups.left.as_deref(), a.kern_groups.right.as_deref()), (Some("A"), Some("A")));
+    assert!(font.extra.get(Family::Glyphs, "kerningLTR").is_none(), "typed, not carried");
+    assert_eq!(write(&font).unwrap(), text);
+    std::sync::Arc::make_mut(&mut font.kerning).ltr.set("m01", "@MMK_L_A", "T", -40.0);
+    assert!(write(&font).unwrap().contains("T = -40;"));
+}
+
+#[test]
+fn a_kerning_table_with_other_values_is_kept_as_written() {
+    let text = V3.replace("metrics = (", "kerningLTR = {\nm01 = {\nA = {\nV = \"odd\";\n};\n};\n};\nmetrics = (");
+    let font = read(&text).unwrap();
+    assert!(font.kerning.ltr.is_empty());
+    assert_eq!(write(&font).unwrap(), text);
+}
+
+#[test]
 fn malformed_files_are_errors_not_panics() {
     for bad in ["(", "()", "{\n.formatVersion = 3;\n}", "{\n.formatVersion = 9;\nunitsPerEm = 1000;\n}", "{\nunitsPerEm = 1000;\n}"] {
         assert!(read(bad).is_err(), "{bad:?}");

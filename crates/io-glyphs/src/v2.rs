@@ -33,7 +33,13 @@ use fontcraft_model::{
 use fontcraft_plist::openstep::canonical_number;
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
-use crate::{GlyphsError, Result, as_f64, as_items, as_u16, bad, finish, int, into_extra, list, num, opt_string, string, take};
+use crate::{
+    GlyphsError, Result, as_f64, as_items, as_u16, bad, finish, int, into_extra, list, num, opt_string, push_kern_groups, string, take,
+    take_kern_groups, take_kern_table, write_kern_table,
+};
+use fontcraft_model::Kerning;
+
+const KERN_GROUP_KEYS: [&str; 4] = ["leftKerningGroup", "rightKerningGroup", "topKerningGroup", "bottomKerningGroup"];
 
 /// The metric definitions of a version 2 document, in this order.
 const KINDS: [&str; 6] = [metric::ASCENDER, metric::CAP_HEIGHT, metric::X_HEIGHT, metric::BASELINE, metric::DESCENDER, metric::ITALIC_ANGLE];
@@ -176,6 +182,8 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
             .collect::<Result<Vec<_>>>()?,
         None => Vec::new(),
     };
+    let kerning =
+        Kerning { ltr: take_kern_table(&mut root, "kerning"), rtl: Default::default(), vertical: take_kern_table(&mut root, "vertKerning") };
     Ok(Font {
         source: Source { format: SourceFormat::Glyphs, glyphs_version: Some(2) },
         family_name,
@@ -185,6 +193,7 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
         metrics: Arc::new(KINDS.iter().map(|k| MetricDef::new(k)).collect()),
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
+        kerning: Arc::new(kerning),
         files: Arc::default(),
         extra: Arc::new(into_extra(root)),
     })
@@ -251,11 +260,12 @@ fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
         }
     }
     let export = take(&mut d, "export").map(|v| crate::as_bool01(&v, &format!("{at}.export"))).transpose()?.unwrap_or(true);
+    let kern_groups = take_kern_groups(&mut d, KERN_GROUP_KEYS, &at)?;
     let layers = match take(&mut d, "layers") {
         Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
-    Ok(Glyph { name, unicodes, export, layers, file_name: None, extra: into_extra(d) })
+    Ok(Glyph { name, unicodes, export, kern_groups, layers, file_name: None, extra: into_extra(d) })
 }
 
 fn read_layer(v: Value, at: &str) -> Result<Layer> {
@@ -390,6 +400,15 @@ pub(crate) fn write_font(font: &Font) -> Result<Dict> {
     e.push(("versionMinor".into(), int(font.version_minor)));
     e.push(("fontMaster".into(), list(font.masters.iter().map(|m| write_master(font, m)).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g).map(Value::Dict)).collect::<Result<_>>()?)));
+    if !font.kerning.ltr.is_empty() {
+        e.push(("kerning".into(), write_kern_table(&font.kerning.ltr)?));
+    }
+    if !font.kerning.vertical.is_empty() {
+        e.push(("vertKerning".into(), write_kern_table(&font.kerning.vertical)?));
+    }
+    if !font.kerning.rtl.is_empty() {
+        return Err(GlyphsError::Unsupported("right-to-left kerning in format version 2".into()));
+    }
     Ok(finish(e, &font.extra))
 }
 
@@ -438,6 +457,7 @@ fn write_glyph(g: &Glyph) -> Result<Dict> {
     if !g.export {
         e.push(("export".into(), int(0)));
     }
+    push_kern_groups(&mut e, &g.kern_groups, KERN_GROUP_KEYS);
     e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at)).collect::<Result<_>>()?)));
     Ok(finish_ordered(e, &g.extra, GLYPH_ORDER))
 }
