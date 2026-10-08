@@ -59,7 +59,7 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 |---|---|---|
 | **Breadth:** commands, tools and panels exist | ~3% | 32 of 920 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
-| **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. Missing: Glyphs data in UFO lib keys, special layers to UFO, OTF/CFF export, variable, WOFF2, version conversion |
+| **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. Missing: Glyphs data in UFO lib keys, alternate layers as designspace rules, OTF/CFF export, variable, WOFF2, version conversion |
 | **Compiler correctness** | unmeasured | 10 of 50 tables written, for one static flavour; read back by two independent readers; one code review's findings fixed (bounds, names, style linking); **no oracle comparison yet** (the harness is M2) |
 | **Agent automation** | ~40% | every existing command is reachable from CLI, control channel and MCP; no pointer injection, dialogs, screenshots, resources or prompts yet |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests); one dependency panic found and fenced; one adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, no corpus runs, and the known scaling limits in `docs/status.md` |
@@ -73,7 +73,7 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
    field, one vocabulary for both format families, and Glyphs-only data in glyphsLib's UFO lib
    keys. Steps 1 to 4 done (font information in every format; `.glyphs` masters, instances,
    stems, guides; UFO zones, stems, guidelines; designspace axes and instances; glyph
-   metadata); step 5a (`.glyphs` layer fields) done, 5b (layers in UFO and designspace) next.
+   metadata; layers in every format); step 6 (shapes) next.
 2. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
    remaining static tables, the `cff` crate, WOFF and WOFF2, `fontcraft-cli oracle`, and a first
    corpus-wide comparison with fontc and fontmake. From this
@@ -95,7 +95,7 @@ on, so the engine track, where oracles prove correctness, goes first.
 - **Specification:** 24 inventory files (919 commands, 33 tools, 170 panels, 45 settings, 241
   parameters, 1,741 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 22
   behaviour notes (about 127,000 words), all in our own words.
-- **Workspace:** 12 library crates in enforced layers, two apps, `xtask`; about 30,800 lines of Rust.
+- **Workspace:** 12 library crates in enforced layers, two apps, `xtask`; about 31,600 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry (18 engine commands), atomic
@@ -124,8 +124,10 @@ on, so the engine track, where oracles prove correctness, goes first.
   smart-glyph properties, user data) is a model field; in a UFO the note, mark colour,
   production names and `GDEF` classes travel, the rest is reported lost. A layer's name,
   attributes, vertical metrics, metrics keys, colour, guides, hints, annotations, image,
-  background and user data are model fields read from and written to `.glyphs`; a UFO does not
-  get them yet (reported). Numbers and master name parts are not yet written to UFO.
+  background and user data are model fields of `.glyphs` and the native file; in a UFO the
+  backgrounds, backup, intermediate and colour layers, guides, images, vertical metrics and user
+  data travel by glyphsLib's rules, the rest is reported lost. Numbers and master name parts are
+  not yet written to UFO.
 - **Compiler:** static TrueType from the first master, deterministic.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
@@ -142,7 +144,7 @@ measured by what works (the parity table below and the measures in each mileston
 | # | Milestone | Status | Commands (live) |
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress: font information done; `.glyphs` masters and instances typed; UFO zones, stems and guidelines typed; designspace axes and instances typed; glyph metadata typed; `.glyphs` layer fields typed; layers in UFO, shapes and lib keys not yet | 10 (10) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress: font information done; `.glyphs` masters and instances typed; UFO zones, stems and guidelines typed; designspace axes and instances typed; glyph metadata typed; layers typed, and in UFO by glyphsLib's layer names (alternate layers and intermediate sources not yet); shapes and lib keys not yet | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ⬜ plan accepted, next | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |

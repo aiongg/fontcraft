@@ -30,9 +30,11 @@
 //! | kerning groups | `groups.plist` `public.kern1.*` (the glyph's right side) and `public.kern2.*` (left side) |
 //! | kerning | `kerning.plist`, as the left-to-right table, sides spelled as the UFO spells them |
 //! | features | `features.fea`, as one unnamed prefix |
-//! | layers | the default layer's GLIF is the master layer; other UFO layers' GLIFs are further layers whose `Extra` names their UFO layer (`layer`) |
+//! | layers | the default layer's GLIF is the master layer; `public.background` holds the master layers' backgrounds, `<name>.background` those of the layers named `<name>`; other UFO layers' GLIFs are further layers named after their UFO layer. Writing names the UFO layers as glyphsLib 6.15.0 does (`builder/layers.py`, `builders.py`; Apache-2.0, see `NOTICE`) |
+//! | vertical metrics | the GLIF height and `public.verticalOrigin`, by glyphsLib's rules (`builder/glyph.py`) |
 //! | `data/`, `images/`, other files | [`Font::files`] |
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
@@ -428,7 +430,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
                 layer.extra.push(Family::Ufo, "format", Value::Number(Number::int(i64::from(g.format))));
             }
             if !is_default {
-                layer.extra.push(Family::Ufo, "layer", Value::String(layer_name.as_str().into()));
+                layer.info.name = Some(layer_name.clone());
                 if !g.unicodes.is_empty() {
                     let items = g.unicodes.iter().map(|u| Value::Number(Number::int(i64::from(*u)))).collect();
                     layer.extra.push(Family::Ufo, "unicodes", Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }));
@@ -477,8 +479,15 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     }
     master.extra.push(Family::Ufo, "glifStyle", glif_style.unwrap_or_else(Style::fonttools).to_value());
 
-    // A glyph's master layer comes first.
+    // Backgrounds: a glyph of `public.background` is the master layer's background, one of
+    // `<name>.background` that of the layer `<name>`. Then the vertical origins, measured from
+    // the ascender as the reference measures them. A glyph's master layer comes first.
+    let frame = vertical_frame(&font_info.params, &metrics);
     for g in &mut glyphs {
+        attach_backgrounds(g, master_id);
+        for l in &mut g.layers {
+            type_vertical(l, frame);
+        }
         g.layers.sort_by_key(|l| l.id != master_id);
     }
     // Glyph order: the lib's order first, then the rest as `contents.plist` lists them.
@@ -585,6 +594,159 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         files: rest,
         format_version,
     })
+}
+
+/// The UFO layer that holds the master layers' backgrounds.
+pub(crate) const BACKGROUND: &str = "public.background";
+/// What a background's UFO layer name adds to its layer's.
+const BACKGROUND_SUFFIX: &str = ".background";
+
+/// The ascender and descender a layer's vertical metrics are measured from: the `typoAscender`
+/// and `typoDescender` parameters, else the ascender and descender metrics (glyphsLib's
+/// `_get_typo_ascender_descender`).
+type Frame = (Option<f64>, Option<f64>);
+
+fn vertical_frame(params: &fontcraft_model::Params, metrics: &[(&str, f64)]) -> Frame {
+    let one = |param: &str, kind: &str| {
+        let p = params.get(param).and_then(|v| match v {
+            Value::String(s) => s.as_str().trim().parse::<f64>().ok(),
+            v => v.as_num().map(Num::as_f64),
+        });
+        p.or_else(|| metrics.iter().find(|(k, _)| *k == kind).map(|(_, v)| *v)).filter(|v| v.is_finite())
+    };
+    (one("typoAscender", metric::ASCENDER), one("typoDescender", metric::DESCENDER))
+}
+
+/// [`vertical_frame`] of `master` in the model.
+fn model_frame(font: &Font, master: &Master) -> Frame {
+    let info = Info { params: font.info.params.clone(), ..Default::default() };
+    let own = Info { params: master.params.clone(), ..Default::default() };
+    let params = fontinfo::effective(&info, &own).params;
+    let metrics: Vec<(&str, f64)> =
+        [metric::ASCENDER, metric::DESCENDER].into_iter().filter_map(|k| font.metric(master, k).map(|m| (k, m.pos))).collect();
+    vertical_frame(&params, &metrics)
+}
+
+/// The vertical advance a layer of `master` has when it states none: the typographic ascender
+/// minus the descender, as glyphsLib measures it.
+pub fn default_vertical_width(font: &Font, master: &Master) -> Option<f64> {
+    default_height(model_frame(font, master))
+}
+
+/// The default advance height: the ascender minus the descender.
+fn default_height((a, d): Frame) -> Option<f64> {
+    Some(a? - d?)
+}
+
+/// A lib's `public.verticalOrigin` as the reference's vertical origin (the ascender minus it),
+/// when it is not the ascender itself (the default), the ascender is known and the subtraction
+/// gives the lib's number back exactly.
+fn vertical_origin_of(lib: Option<&Dict>, ascender: Option<f64>) -> Option<f64> {
+    let y = lib?.get(glif::VERTICAL_ORIGIN)?.as_num()?.as_f64();
+    let a = ascender?;
+    let o = a - y;
+    (y.is_finite() && y != a && o.abs() <= fontcraft_model::MAX_COORDINATE && a - o == y).then_some(o)
+}
+
+/// Reads the vertical metrics as glyphsLib's `to_glyphs_glyph_height_and_vertical_origin` does:
+/// a height that is the default and a vertical origin at the ascender are no values (the file's
+/// own stay, `defaultHeight` marking the height).
+fn type_vertical(l: &mut Layer, frame: Frame) {
+    if l.info.vert_width.is_some() && l.info.vert_width == default_height(frame) {
+        l.info.vert_width = None;
+        l.extra.push(Family::Ufo, "defaultHeight", Value::Bool(true));
+    }
+    if let Some(o) = vertical_origin_of(ufo_get(&l.extra, "lib").and_then(Value::as_dict), frame.0) {
+        l.info.vert_origin = Some(o);
+    }
+    l.info.tidy();
+}
+
+/// Whether glyphsLib treats the font as vertical (`_is_vertical`): the font or a master has the
+/// three `vhea` parameters (either spelling of each), or a master layer has a vertical metric.
+pub(crate) fn is_vertical(font: &Font) -> bool {
+    let pairs =
+        [["vheaVertAscender", "vheaVertTypoAscender"], ["vheaVertDescender", "vheaVertTypoDescender"], ["vheaVertLineGap", "vheaVertTypoLineGap"]];
+    let all = |p: &fontcraft_model::Params| pairs.iter().all(|pair| pair.iter().any(|n| p.get(n).is_some()));
+    if all(&font.info.params) || font.masters.iter().any(|m| all(&m.params)) {
+        return true;
+    }
+    let masters: HashSet<&str> = font.masters.iter().map(|m| m.id.as_str()).collect();
+    font.glyphs
+        .iter()
+        .flat_map(|g| g.layers.iter())
+        .any(|l| masters.contains(l.id.as_str()) && (l.info.vert_width.is_some() || l.info.vert_origin.is_some()))
+}
+
+/// Moves the glyphs of background layers into the backgrounds of their layers: `public.background`
+/// to the master layer, `<name>.background` to the layer named `<name>` (glyphsLib's
+/// `to_glyphs_layer`). A background whose layer is missing or has one stays a layer.
+fn attach_backgrounds(g: &mut Glyph, master_id: &str) {
+    let mut i = 0;
+    while i < g.layers.len() {
+        let target = match g.layers.get(i).and_then(|l| l.info.name.as_deref()) {
+            Some(BACKGROUND) => g.layers.iter().position(|f| f.id == master_id && f.master == master_id),
+            Some(n) => n
+                .strip_suffix(BACKGROUND_SUFFIX)
+                .and_then(|fg| g.layers.iter().position(|f| !f.is_master_layer() && f.master == master_id && f.info.name.as_deref() == Some(fg))),
+            None => None,
+        };
+        match target.filter(|&t| t != i && g.layers.get(t).is_some_and(|f| f.info.background.is_none())) {
+            Some(t) => {
+                let bg = background_of(g.layers.remove(i));
+                let t = if t > i { t - 1 } else { t };
+                if let Some(f) = g.layers.get_mut(t) {
+                    f.info.background = Some(bg);
+                }
+            }
+            None => i += 1,
+        }
+    }
+}
+
+/// A background layer's GLIF as a background: shapes, anchors, guides and image as fields; the
+/// advance (`width`, `height`) and everything the GLIF reader kept in its `Extra`.
+fn background_of(l: Layer) -> fontcraft_model::Background {
+    let mut extra = l.extra;
+    if l.width != 0.0 {
+        extra.push(Family::Ufo, "width", num_value(l.width));
+    }
+    if let Some(h) = l.info.vert_width {
+        extra.push(Family::Ufo, "height", num_value(h));
+    }
+    fontcraft_model::Background {
+        shapes: l.shapes,
+        anchors: l.anchors,
+        guides: l.info.guides.clone(),
+        image: l.info.image.clone(),
+        extra,
+        ..Default::default()
+    }
+}
+
+/// A background as the layer its GLIF is written from (the inverse of [`background_of`]).
+fn background_layer(b: &fontcraft_model::Background, master: &str) -> Layer {
+    let number = |k: &str| ufo_get(&b.extra, k).and_then(Value::as_num).map(|n| n.as_f64());
+    let mut l = Layer::new(master, number("width").unwrap_or(0.0));
+    l.id = format!("{master}#{BACKGROUND}");
+    l.shapes = b.shapes.clone();
+    l.anchors = b.anchors.clone();
+    l.info.guides = b.guides.clone();
+    l.info.image = b.image.clone();
+    l.info.vert_width = number("height").filter(|h| h.abs() <= fontcraft_model::MAX_COORDINATE);
+    if let Some(lib) = ufo_get(&b.extra, "lib").and_then(Value::as_dict) {
+        let mut user = Dict::new();
+        for (k, v) in lib.entries.iter().filter(|(k, _)| !glif::TYPED_LIB.contains(&k.as_str())) {
+            user.insert(k.as_str(), v.without_spellings());
+        }
+        l.info.user_data = UserData(user);
+    }
+    let typed_height = l.info.vert_width.is_some();
+    for e in b.extra.iter().filter(|e| !(e.family == Family::Ufo && (e.key.as_str() == "width" || e.key.as_str() == "height" && typed_height))) {
+        l.extra.push(e.family, e.key.as_str(), e.value.clone());
+    }
+    l.info.tidy();
+    l
 }
 
 fn int_of(n: Num) -> Option<i64> {
@@ -742,7 +904,7 @@ pub(crate) fn units_per_em(v: Option<f64>) -> Result<u16> {
 /// Sets `key` in a dictionary to `new`: the kept value stays when it means the same (equality
 /// ignores spelling, and `500` equals `500.0`), `None` removes the key, and a new key goes in
 /// sorted position, as fontTools sorts keys.
-fn patch(d: &mut Dict, key: &str, new: Option<Value>) {
+pub(crate) fn patch(d: &mut Dict, key: &str, new: Option<Value>) {
     let at = d.entries.iter().position(|(k, _)| k.as_str() == key);
     match (at, new) {
         (Some(i), None) => {
@@ -1057,16 +1219,9 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         .unwrap_or_default();
     let default_name = kept_layers.iter().find(|(_, d)| d == DEFAULT_DIR).map_or("public.default".to_string(), |(n, _)| n.clone());
     // Which UFO layers the glyphs use, in the kept order, then in order of appearance.
+    let plan = layer_plan(font, target);
     let mut used: Vec<String> = vec![default_name.clone()];
-    for g in font.glyphs.iter() {
-        for l in &g.layers {
-            if let Some(n) = ufo_layer_of(l, target)
-                && !used.iter().any(|u| u == n)
-            {
-                used.push(n.to_string());
-            }
-        }
-    }
+    used.extend(plan.iter().map(|(n, _)| n.clone()));
     for (n, d) in &kept_layers {
         if used.contains(n) || d == DEFAULT_DIR || missing.contains(&d.as_str()) {
             layers.push((n.clone(), d.clone()));
@@ -1096,25 +1251,34 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     let kept_contents = ufo_get(&master.extra, "contents").and_then(Value::as_dict);
     let text_of = |l: &Layer, key: &str| ufo_get(&l.extra, key).and_then(Value::as_str).map(str::to_string);
 
+    let frame = model_frame(font, master);
+    let vertical = !from_ufo && is_vertical(font);
     for (layer_name, dir) in &layers {
         let is_default = dir == DEFAULT_DIR;
         let mut contents = Dict::new();
         let mut files_taken: HashSet<String> = HashSet::new();
-        let mut entries: Vec<(String, String, &Glyph, &Layer)> = Vec::new();
-        for g in font.glyphs.iter() {
-            let layer = if is_default { g.layer(&master.id) } else { g.layers.iter().find(|l| ufo_layer_of(l, target) == Some(layer_name)) };
-            let Some(layer) = layer else { continue };
+        // (glyph name, file, glyph, layer, whether the layer is a background).
+        let mut entries: Vec<(String, String, &Glyph, Cow<'_, Layer>, bool)> = Vec::new();
+        let mut parts: Vec<(&Glyph, Cow<'_, Layer>, bool)> = Vec::new();
+        if is_default {
+            parts.extend(font.glyphs.iter().filter_map(|g| g.layer(&master.id).map(|l| (g.as_ref(), Cow::Borrowed(l), false))));
+        } else if let Some((_, items)) = plan.iter().find(|(n, _)| n == layer_name) {
+            for (g, part) in items {
+                parts.push((*g, part.layer(&master.id), matches!(part, Part::Background(_))));
+            }
+        }
+        for (g, layer, is_background) in parts {
             // The layer's own file name, else the one the glyph has in this UFO's default layer.
             let file_of = |l: Option<&Layer>| l.and_then(|l| ufo_get(&l.extra, "fileName")).and_then(Value::as_str).map(str::to_string);
-            let kept = file_of(Some(layer)).or_else(|| file_of(g.layer(&master.id))).or_else(|| g.file_name.clone());
-            entries.push((g.name.clone(), kept.unwrap_or_default(), g, layer));
+            let kept = file_of(Some(&layer)).or_else(|| file_of(g.layer(&master.id))).or_else(|| g.file_name.clone());
+            entries.push((g.name.clone(), kept.unwrap_or_default(), g, layer, is_background));
         }
-        for (_, file, _, _) in &entries {
+        for (_, file, _, _, _) in &entries {
             if !file.is_empty() {
                 files_taken.insert(file.to_lowercase());
             }
         }
-        for (name, file, g, layer) in &mut entries {
+        for (name, file, g, layer, is_background) in &mut entries {
             if file.is_empty() {
                 *file = glyph_file_name(name, &files_taken).ok_or_else(|| bad(name, "no free file name for the glyph"))?;
                 files_taken.insert(file.to_lowercase());
@@ -1127,6 +1291,9 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
                     Some(read) if code_points(Some(read)) == g.unicodes => own,
                     _ => g.unicodes.clone(),
                 }
+            } else if own.is_empty() && !from_ufo && !*is_background {
+                // glyphsLib gives every layer's file the glyph's code points.
+                g.unicodes.clone()
             } else {
                 own
             };
@@ -1154,16 +1321,35 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
             } else {
                 (text_of(layer, "note").unwrap_or_default(), MarkColor::Keep)
             };
-            let head = glif::Head { name: glif_name, unicodes: &unicodes, note: &note, mark_color };
+            // The vertical metrics, by glyphsLib's `to_ufo_glyph_height_and_vertical_origin`: in
+            // a vertical font every layer gets them, the defaults where the layer has none. A
+            // background's stay as read.
+            let kept_lib = ufo_get(&layer.extra, "lib").and_then(Value::as_dict);
+            let default_kept = ufo_get(&layer.extra, "defaultHeight").is_some();
+            let (vertical_origin, height) = if *is_background {
+                (None, layer.info.vert_width.or_else(|| ufo_get(&layer.extra, "height").and_then(Value::as_num).map(|n| n.as_f64())))
+            } else {
+                let origin = match (layer.info.vert_origin, frame.0) {
+                    (Some(o), Some(a)) => Some(Some(a - o)),
+                    (Some(_), None) => None,
+                    (None, Some(a)) if vertical => Some(Some(a)),
+                    // A value that read as one, since removed.
+                    (None, a) => vertical_origin_of(kept_lib, a).map(|_| None),
+                };
+                let kept_height = ufo_get(&layer.extra, "height").and_then(Value::as_num).map(|n| n.as_f64());
+                let height = layer.info.vert_width.or(kept_height).or_else(|| if vertical || default_kept { default_height(frame) } else { None });
+                (origin, height)
+            };
+            let head = glif::Head { name: glif_name, unicodes: &unicodes, note: &note, mark_color, vertical_origin, height };
             let text = glif::write(head, layer, format, &style)?;
             out.insert(format!("{dir}/{file}"), text.into_bytes());
         }
         // The kept contents, for its order and spellings; then the model's glyphs.
         if let Some(kept) = kept_contents.and_then(|c| c.get(dir)).and_then(Value::as_dict) {
             contents = kept.clone();
-            contents.entries.retain(|(k, _)| entries.iter().any(|(n, _, _, _)| n == k.as_str()));
+            contents.entries.retain(|(k, _)| entries.iter().any(|(n, _, _, _, _)| n == k.as_str()));
         }
-        for (name, file, _, _) in &entries {
+        for (name, file, _, _, _) in &entries {
             patch(&mut contents, name, Some(str_value(file)));
         }
         if entries.is_empty() && missing.contains(&dir.as_str()) {
@@ -1316,35 +1502,71 @@ pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
         .collect()
 }
 
-/// The layer data a UFO has no place for yet, one line per kind with the number of layers that
-/// have it. Only the layers a UFO holds count: master layers and layers read from a UFO layer
-/// (the others are reported as layers).
+/// The layer data a UFO has no standard place for, one line per kind with the number of layers
+/// that have it. Layers a UFO cannot hold at all ([`layers_left_out`]) are not counted here.
+/// (glyphsLib carries most of it in `com.schriftgestaltung.*` lib keys.)
 pub(crate) fn layer_losses(font: &Font) -> Vec<String> {
-    use fontcraft_model::LayerInfo;
-    type Has = fn(&LayerInfo) -> bool;
-    let kinds: [(&str, Has); 12] = [
-        ("the layers' names", |i| i.name.is_some()),
-        ("the layers' attributes", |i| !i.attrs.is_empty()),
-        ("the layers' vertical metrics", |i| i.vert_width.is_some() || i.vert_origin.is_some()),
-        ("the layers' metrics keys", |i| !i.metrics_keys.is_empty()),
-        ("the layers' colours", |i| i.color.is_some()),
-        ("the layers' visibility", |i| i.visible),
-        ("the layers' guides", |i| !i.guides.is_empty()),
-        ("the layers' hints", |i| !i.hints.is_empty()),
-        ("the layers' annotations", |i| !i.annotations.is_empty()),
-        ("the layers' images", |i| i.image.is_some()),
-        ("the layers' backgrounds", |i| i.background.is_some()),
-        ("the layers' user data", |i| !i.user_data.is_empty()),
-    ];
-    let written = |l: &&Layer| l.is_master_layer() || l.extra.get(Family::Ufo, "layer").is_some() || font.masters.iter().any(|m| m.id == l.id);
-    kinds
-        .iter()
-        .filter_map(|(what, has)| {
-            let n = font.glyphs.iter().flat_map(|g| g.layers.iter()).filter(written).filter(|l| has(&l.info)).count();
-            (n > 0).then(|| format!("{what} ({n})"))
-        })
-        .collect()
+    use fontcraft_model::{Background, Image, LayerInfo};
+    let image_extras = |i: &Image| i.crop.is_some() || i.alpha.is_some() || i.locked;
+    let unfiled = |i: &Option<Image>| i.as_ref().is_some_and(|i| i.path.is_none());
+    let guide_extras = |guides: &[fontcraft_model::Guide]| {
+        guides.iter().any(|g| g.filter.is_some() || g.angle_locked || g.show_measurement || g.orientation.is_some())
+    };
+    let bg = |i: &LayerInfo, f: &dyn Fn(&Background) -> bool| i.background.as_ref().is_some_and(f);
+    let ufo2 = font.source.ufo_version == Some(2);
+    let mut counts: Vec<(&str, usize)> = LAYER_LOSSES.iter().map(|w| (*w, 0)).collect();
+    let layer_master = |id: &str| font.masters.iter().any(|m| m.id == id && m.extra.get(Family::Designspace, "layer").is_some());
+    let mut seen: HashSet<(&str, &str, String)> = HashSet::new();
+    for (g, l) in font.glyphs.iter().flat_map(|g| g.layers.iter().map(move |l| (g, l))) {
+        let written = if l.is_master_layer() { None } else { ufo_layer_name(font, l) };
+        if !l.is_master_layer() && (written.is_none() || layer_master(&l.master)) {
+            continue;
+        }
+        // A second layer of one name in a glyph goes to `<name> #<n>`.
+        let renamed = written.as_ref().is_some_and(|n| !seen.insert((g.name.as_str(), l.master.as_str(), n.clone())));
+        let i = &*l.info;
+        let has = [
+            // A master layer's name, an intermediate or colour layer's, which its UFO layer's
+            // name replaces, and a second one of a name in a glyph.
+            i.name.is_some() && (l.is_master_layer() || written != i.name || renamed),
+            !i.attrs.is_empty(),
+            i.vert_width == Some(0.0),
+            i.vert_origin.is_some() && font.masters.iter().find(|m| m.id == l.master).is_none_or(|m| model_frame(font, m).0.is_none()),
+            !i.metrics_keys.is_empty(),
+            i.color.is_some(),
+            i.visible,
+            !i.hints.is_empty() || bg(i, &|b| !b.hints.is_empty()),
+            !i.annotations.is_empty() || bg(i, &|b| !b.annotations.is_empty()),
+            i.image.as_ref().is_some_and(image_extras) || bg(i, &|b| b.image.as_ref().is_some_and(image_extras)),
+            unfiled(&i.image) || bg(i, &|b| unfiled(&b.image)),
+            guide_extras(&i.guides) || bg(i, &|b| guide_extras(&b.guides)),
+            ufo2 && (!i.guides.is_empty() || i.image.is_some() || bg(i, &|b| !b.guides.is_empty() || b.image.is_some())),
+            !l.is_master_layer() && written.as_deref().is_some_and(|n| l.id != format!("{}#{n}", l.master)),
+        ];
+        for ((_, n), on) in counts.iter_mut().zip(has) {
+            *n += usize::from(on);
+        }
+    }
+    counts.into_iter().filter(|(_, n)| *n > 0).map(|(what, n)| format!("{what} ({n})")).collect()
 }
+
+/// The kinds of layer data [`layer_losses`] reports, as its lines begin.
+pub const LAYER_LOSSES: [&str; 14] = [
+    "the layers' names",
+    "the layers' attributes",
+    "the layers' vertical widths of 0",
+    "the layers' vertical origins, without an ascender to measure them from",
+    "the layers' metrics keys",
+    "the layers' colours",
+    "the layers' visibility",
+    "the layers' hints",
+    "the layers' annotations",
+    "the layers' image crops, opacity and locks",
+    "the layers' images without a file",
+    "the layers' guide filters, angle locks, measurements and label positions",
+    "the layers' guides and images, which UFO 2 has no place for",
+    "the ids of layers other than master layers",
+];
 
 /// The kinds of glyph metadata [`glyph_losses`] reports, as its lines begin.
 pub const GLYPH_LOSSES: [&str; 11] = [
@@ -1361,13 +1583,121 @@ pub const GLYPH_LOSSES: [&str; 11] = [
     "the glyphs' notes, with spaces at line ends and blank lines left out",
 ];
 
-/// The UFO layer a non-master layer is written to in this UFO: its own `layer` for the target
-/// master's layers, the layer master's layer for a layer master's master layers.
-fn ufo_layer_of<'a>(l: &'a Layer, target: &'a Target<'_>) -> Option<&'a str> {
-    if l.master == target.master.id && l.id != target.master.id {
-        return ufo_get(&l.extra, "layer").and_then(Value::as_str);
+/// What one glyph puts into a UFO layer: a layer, or a layer's background.
+enum Part<'a> {
+    Layer(&'a Layer),
+    Background(&'a fontcraft_model::Background),
+}
+
+impl<'a> Part<'a> {
+    fn layer(&self, master: &str) -> Cow<'a, Layer> {
+        match self {
+            Part::Layer(l) => Cow::Borrowed(*l),
+            Part::Background(b) => Cow::Owned(background_layer(b, master)),
+        }
     }
-    target.layer_masters.iter().find(|(m, _)| l.id == m.id && l.master == m.id).map(|(_, name)| name.as_str())
+}
+
+/// UFO layers by name, each with what the glyphs put into it.
+type Plan<'a> = Vec<(String, Vec<(&'a Glyph, Part<'a>)>)>;
+
+/// The UFO layers of `target`'s UFO other than the default one, in the order glyphsLib makes
+/// them (`to_ufo_layers`): first the master layers' backgrounds (`public.background`) and the
+/// layer masters' layers, then the other layers of the master glyph by glyph, each followed by
+/// its background (`<UFO layer>.background`). A glyph that already has a layer of that name
+/// gets the next free `<name> #<n>`, as in glyphsLib's `to_ufo_layer`.
+fn layer_plan<'a>(font: &'a Font, target: &Target<'a>) -> Plan<'a> {
+    let mut plan: Plan<'a> = Vec::new();
+    let master = target.master;
+    for g in font.glyphs.iter() {
+        if let Some(b) = g.layer(&master.id).and_then(|l| l.info.background.as_ref()) {
+            plan_add(&mut plan, BACKGROUND.to_string(), g, Part::Background(b), false);
+        }
+        for (m, name) in &target.layer_masters {
+            if let Some(l) = g.layers.iter().find(|l| l.id == m.id && l.master == m.id) {
+                plan_add(&mut plan, name.clone(), g, Part::Layer(l), false);
+                if let Some(b) = &l.info.background {
+                    plan_add(&mut plan, format!("{name}{BACKGROUND_SUFFIX}"), g, Part::Background(b), false);
+                }
+            }
+        }
+    }
+    for g in font.glyphs.iter() {
+        for l in g.layers.iter().filter(|l| l.master == master.id && !l.is_master_layer()) {
+            let Some(name) = ufo_layer_name(font, l) else { continue };
+            let Some(given) = plan_add(&mut plan, name, g, Part::Layer(l), true) else { continue };
+            if let Some(b) = &l.info.background {
+                plan_add(&mut plan, format!("{given}{BACKGROUND_SUFFIX}"), g, Part::Background(b), false);
+            }
+        }
+    }
+    plan
+}
+
+/// Adds a glyph's part to the UFO layer `name`, or, when the glyph already has one there, to the
+/// next free `<name> #<n>` (`dedupe`) or nowhere. The name it went to.
+fn plan_add<'a>(plan: &mut Plan<'a>, name: String, g: &'a Glyph, part: Part<'a>, dedupe: bool) -> Option<String> {
+    let has = |plan: &Plan<'a>, n: &str| plan.iter().any(|(p, items)| p == n && items.iter().any(|(h, _)| std::ptr::eq(*h, g)));
+    let mut name = name;
+    if has(plan, &name) {
+        if !dedupe {
+            return None;
+        }
+        let base = name.clone();
+        let mut n = 1;
+        while plan.iter().any(|(p, _)| *p == name) {
+            name = format!("{base} #{n}");
+            n += 1;
+        }
+    }
+    match plan.iter_mut().find(|(p, _)| *p == name) {
+        Some((_, items)) => items.push((g, part)),
+        None => plan.push((name.clone(), vec![(g, part)])),
+    }
+    Some(name)
+}
+
+/// The UFO layer glyphsLib writes a layer other than a master layer to (`to_ufo_layer`): a
+/// colour palette layer to `color.<index>` (65535 for the text colour), an intermediate layer
+/// of a version 3 or 4 document to its coordinates in braces (`{550, 100}`; version 2's name
+/// already says them), any other to its name. `None` for an alternate layer (glyphsLib makes
+/// those separate glyphs with designspace rules) and for a layer without a name, which a UFO
+/// cannot hold.
+pub fn ufo_layer_name(font: &Font, l: &Layer) -> Option<String> {
+    use fontcraft_model::PaletteEntry;
+    let a = &l.info.attrs;
+    if !a.axis_rules.is_empty() {
+        return None;
+    }
+    if let Some(p) = a.color_palette {
+        let index = match p {
+            PaletteEntry::Index(i) => i,
+            PaletteEntry::Foreground => u16::MAX,
+        };
+        return Some(format!("color.{index}"));
+    }
+    if !a.coordinates.is_empty() && font.source.glyphs_version != Some(2) {
+        let master = font.masters.iter().find(|m| m.id == l.master);
+        let parts = a
+            .coordinates
+            .iter()
+            .enumerate()
+            .map(|(i, c)| c.or_else(|| master.and_then(|m| m.location.get(i).copied())).map(|v| glif::fmt_number(v, false)))
+            .collect::<Option<Vec<_>>>()?;
+        return Some(format!("{{{}}}", parts.join(", ")));
+    }
+    l.info.name.clone().filter(|n| !n.is_empty())
+}
+
+/// How many layers other than master layers a UFO cannot hold: alternate layers, layers
+/// without a name, and the other layers of masters stored as a layer of another source's UFO.
+pub fn layers_left_out(font: &Font) -> usize {
+    let layer_master = |id: &str| font.masters.iter().any(|m| m.id == id && m.extra.get(Family::Designspace, "layer").is_some());
+    font.glyphs
+        .iter()
+        .flat_map(|g| g.layers.iter())
+        .filter(|l| !l.is_master_layer() && (ufo_layer_name(font, l).is_none() || layer_master(&l.master)))
+        .count()
 }
 
 fn code_points(v: Option<&Value>) -> Vec<u32> {
@@ -1473,7 +1803,7 @@ pub fn write(font: &Font) -> Result<Files> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fontcraft_model::{Component, Node, NodeKind, Path, Shape};
+    use fontcraft_model::{Component, Node, NodeKind, Path, Shape, Transform};
 
     fn s(b: &[u8]) -> &str {
         std::str::from_utf8(b).unwrap()
@@ -1709,5 +2039,101 @@ mod tests {
         let mut not_xml = good;
         not_xml.insert("fontinfo.plist".into(), b"\xff\xfe".to_vec());
         assert!(read(&not_xml).is_err());
+    }
+
+    /// A font whose glyph `A` has, beside its master layer, the layers a `.glyphs` source has.
+    fn layered() -> Font {
+        use fontcraft_model::{AxisRule, Background, Guide, Image, PaletteEntry};
+        let mut font = Font::new("Layers");
+        Arc::make_mut(&mut font.masters)[0].location = vec![400.0];
+        let mut a = font.glyph_mut("A").unwrap();
+        let rect = || Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0));
+        {
+            let m = a.layer_mut("m01").unwrap();
+            m.info.guides.push(Guide { x: 10.0, angle: 90.0, ..Default::default() });
+            m.info.image = Some(Image { path: Some("a.png".into()), transform: Transform::translate(5.0, 0.0), ..Default::default() });
+            m.info.background = Some(Background { shapes: vec![rect()], ..Default::default() });
+            m.info.user_data.0.insert("org.example", Value::Bool(true));
+        }
+        let other = |id: &str, name: Option<&str>| {
+            let mut l = Layer::new("m01", 600.0);
+            l.id = id.into();
+            l.info.name = name.map(str::to_string);
+            l.shapes.push(rect());
+            l
+        };
+        let backup = other("L1", Some("Backup"));
+        let mut second = other("L2", Some("Backup"));
+        second.info.background = Some(Background { shapes: vec![rect()], ..Default::default() });
+        let mut brace = other("L3", Some("Apr 1 24"));
+        brace.info.attrs.coordinates = vec![Some(550.0)];
+        let mut color = other("L4", None);
+        color.info.attrs.color_palette = Some(PaletteEntry::Foreground);
+        let mut bracket = other("L5", Some("Alt"));
+        bracket.info.attrs.axis_rules = vec![AxisRule { min: Some(500.0), max: None }];
+        let unnamed = other("L6", None);
+        a.layers.extend([backup, second, brace, color, bracket, unnamed]);
+        drop(a);
+        font
+    }
+
+    #[test]
+    fn backgrounds_and_other_layers_go_to_ufo_layers_as_glyphslib_names_them() {
+        let font = layered();
+        let files = write(&font).unwrap();
+        let lc = s(&files["layercontents.plist"]);
+        let names: Vec<&str> = lc.lines().filter_map(|l| l.trim().strip_prefix("<string>")?.strip_suffix("</string>")).step_by(2).collect();
+        assert_eq!(names, ["public.default", "public.background", "Backup", "Backup #1", "Backup #1.background", "{550}", "color.65535"]);
+        assert!(s(&files["glyphs/A_.glif"]).contains("<image fileName=\"a.png\" xOffset=\"5\"/>"));
+        assert!(s(&files["glyphs/A_.glif"]).contains("<guideline x=\"10\"/>"));
+        assert!(s(&files["glyphs/A_.glif"]).contains("<key>org.example</key>"));
+        assert!(s(&files["glyphs.public.background/A_.glif"]).contains("<contour>"));
+        assert!(s(&files["glyphs.B_ackup/A_.glif"]).contains("<unicode hex=\"0041\"/>"), "glyphsLib gives every layer the code points");
+        assert_eq!(layers_left_out(&font), 2, "the alternate and the unnamed layer");
+        let losses = info_losses(&font);
+        for line in ["the layers' names (2)", "the layers' attributes (2)", "the ids of layers other than master layers (4)"] {
+            assert!(losses.iter().any(|l| l == line), "{line} in {losses:?}");
+        }
+
+        // Read back: the backgrounds are backgrounds again, the rest named layers.
+        let back = read(&files).unwrap();
+        let a = back.glyph("A").unwrap();
+        let m = a.layer("m01").unwrap();
+        assert_eq!(m.info.background.as_ref().map(|b| b.shapes.len()), Some(1));
+        assert_eq!((m.info.guides.len(), m.info.image.as_ref().and_then(|i| i.path.as_deref())), (1, Some("a.png")));
+        assert!(m.info.user_data.get("org.example").is_some());
+        let names: Vec<Option<&str>> = a.layers.iter().filter(|l| !l.is_master_layer()).map(|l| l.info.name.as_deref()).collect();
+        assert_eq!(names, [Some("Backup"), Some("Backup #1"), Some("{550}"), Some("color.65535")]);
+        assert!(a.layers.iter().find(|l| l.info.name.as_deref() == Some("Backup #1")).unwrap().info.background.is_some());
+        assert_eq!(write(&back).unwrap(), files, "a UFO we wrote comes back unchanged");
+    }
+
+    #[test]
+    fn vertical_metrics_follow_glyphslib() {
+        let mut font = Font::new("Vert");
+        font.set_metric_pos("m01", metric::ASCENDER, 800.0).unwrap();
+        font.set_metric_pos("m01", metric::DESCENDER, -200.0).unwrap();
+        font.glyph_mut("A").unwrap().layer_mut("m01").unwrap().info.vert_width = Some(900.0);
+        font.glyph_mut("B").unwrap().layer_mut("m01").unwrap().info.vert_origin = Some(-20.0);
+        let files = write(&font).unwrap();
+        // A vertical font: every layer gets a height and an origin, the defaults where it has none.
+        assert!(s(&files["glyphs/A_.glif"]).contains("<advance height=\"900\" width=\"600\"/>"), "{}", s(&files["glyphs/A_.glif"]));
+        assert!(s(&files["glyphs/A_.glif"]).contains("<key>public.verticalOrigin</key>\n      <integer>800</integer>"));
+        assert!(s(&files["glyphs/B_.glif"]).contains("height=\"1000\""));
+        assert!(s(&files["glyphs/B_.glif"]).contains("<integer>820</integer>"), "the ascender minus the origin");
+        let back = read(&files).unwrap();
+        let info = |n: &str| back.glyph(n).unwrap().layer("m01").unwrap().info.clone();
+        assert_eq!((info("A").vert_width, info("A").vert_origin), (Some(900.0), None), "the defaults read as none");
+        assert_eq!((info("B").vert_width, info("B").vert_origin), (None, Some(-20.0)));
+        assert_eq!(write(&back).unwrap(), files, "the defaults are written back where they were");
+        // Without an ascender the origin cannot be placed, and the loss report says so.
+        let mut flat = Font::new("Flat");
+        let i = flat.metrics.iter().position(|d| d.kind == metric::ASCENDER).unwrap();
+        Arc::make_mut(&mut flat.metrics).remove(i);
+        for m in Arc::make_mut(&mut flat.masters) {
+            m.metric_values.remove(i);
+        }
+        flat.glyph_mut("A").unwrap().layer_mut("m01").unwrap().info.vert_origin = Some(5.0);
+        assert!(info_losses(&flat).iter().any(|l| l.starts_with("the layers' vertical origins, without an ascender")), "{:?}", info_losses(&flat));
     }
 }

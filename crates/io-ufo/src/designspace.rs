@@ -336,12 +336,11 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         ds(&mut master.extra, "layer", Value::String(layer.as_str().into()));
         for (_, glyphs) in &mut per_master_glyphs {
             for g in glyphs.iter_mut() {
-                for l in
-                    g.layers.iter_mut().filter(|l| l.master == main_id && l.extra.get(Family::Ufo, "layer").and_then(Value::as_str) == Some(layer))
+                for l in g.layers.iter_mut().filter(|l| l.master == main_id && !l.is_master_layer() && l.info.name.as_deref() == Some(layer.as_str()))
                 {
                     l.id = s.id.clone();
                     l.master = s.id.clone();
-                    l.extra.remove(Family::Ufo, "layer");
+                    l.info.name = None;
                 }
             }
         }

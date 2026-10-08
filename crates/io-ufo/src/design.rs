@@ -204,7 +204,7 @@ fn is_horizontal(x: Option<f64>, angle: Option<f64>) -> bool {
 /// (with both, 90 when `y` is 0, else 0); a name ending in ` [locked]` is a locked guide.
 /// glyphsLib reads `y` 0 alone as a vertical line; here it is horizontal, as the UFO
 /// specification says. `None` for a key it does not know or a value of the wrong type.
-fn guide_of(v: &Value) -> Option<Guide> {
+pub(crate) fn guide_of(v: &Value) -> Option<Guide> {
     let d = v.as_dict()?;
     let (mut x, mut y, mut angle) = (None, None, None);
     let mut g = Guide::default();
@@ -266,7 +266,7 @@ fn split_color(name: &str) -> Option<(&str, &str)> {
 /// colour or identifier the guide does not have is taken from the end of its name; a locked guide
 /// gets ` [locked]` after its name; an empty name is left out. Keys in sorted order, as fontTools
 /// writes them. `None` when a value is not finite.
-fn guideline(g: &Guide) -> Option<Value> {
+pub(crate) fn guideline(g: &Guide) -> Option<Value> {
     if !(g.x.is_finite() && g.y.is_finite() && g.angle.is_finite()) {
         return None;
     }

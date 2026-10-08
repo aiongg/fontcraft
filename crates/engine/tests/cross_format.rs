@@ -1,6 +1,7 @@
 //! `.glyphs` → designspace → model: the font information, the alignment zones, the stems, the
-//! guides, the axes (ranges and maps), the instances and the glyphs' metadata come back, except
-//! what the loss report lists. Every `.glyphs` source the reference app
+//! guides, the axes (ranges and maps), the instances, the glyphs' metadata and the layers (their
+//! drawings, guides, images, backgrounds, vertical metrics and user data) come back, except what
+//! the loss report lists. Every `.glyphs` source the reference app
 //! saved in format version 3 (outside fontc's hand-made test data). Skipped when `corpus/` is
 //! absent.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -8,8 +9,11 @@
 use std::path::{Path, PathBuf};
 
 use fontcraft_io_ufo::designspace;
-use fontcraft_io_ufo::ufo::GLYPH_LOSSES;
-use fontcraft_model::{ColorLabel, Family, Font, Glyph, GlyphInfo, Guide, Instance, Master, Param, Params, Properties, axes, metric};
+use fontcraft_io_ufo::ufo::{GLYPH_LOSSES, LAYER_LOSSES};
+use fontcraft_model::{
+    Anchor, Background, ColorLabel, Family, Font, Glyph, GlyphInfo, Guide, Image, Instance, Layer, Master, Param, Params, Properties, Shape, axes,
+    metric,
+};
 
 fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
@@ -254,6 +258,110 @@ fn glyphs_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
     }
 }
 
+/// A drawing as numbers: paths (closed, nodes) and components (glyph, matrix), then anchors.
+fn drawing(shapes: &[Shape], anchors: &[Anchor]) -> String {
+    let shapes: Vec<String> = shapes
+        .iter()
+        .map(|s| match s {
+            Shape::Path(p) => format!("{:?}", (p.closed, p.nodes.iter().map(|n| (n.x, n.y, n.kind, n.smooth)).collect::<Vec<_>>())),
+            Shape::Component(c) => format!("{:?}", (&c.glyph, c.affine().as_coeffs())),
+            Shape::Raw(_) => "raw".into(),
+        })
+        .collect();
+    let anchors: Vec<(&str, f64, f64)> = anchors.iter().map(|a| (a.name.as_str(), a.x, a.y)).collect();
+    format!("{shapes:?} {anchors:?}")
+}
+
+/// What of an image a UFO holds: the file and the matrix.
+fn image_form(i: &Option<Image>) -> String {
+    format!("{:?}", i.as_ref().map(|i| (&i.path, i.transform.affine().as_coeffs())))
+}
+
+fn guides_form(g: &[Guide]) -> Vec<(f64, f64, f64, String, bool)> {
+    g.iter().map(guide_form).collect()
+}
+
+fn background_form(b: &Option<Background>) -> String {
+    format!("{:?}", b.as_ref().map(|b| (drawing(&b.shapes, &b.anchors), guides_form(&b.guides), image_form(&b.image))))
+}
+
+/// The layers a UFO holds: each master layer and each other layer that has a UFO layer, matched
+/// by the UFO layer's name (a second layer of one name in a glyph comes back as `<name> #<n>`).
+/// Each difference names the kind of data as the loss report does, so a listed loss excuses it.
+fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
+    for g in font.glyphs.iter() {
+        let Some(b) = back.glyph(&g.name) else { continue };
+        let mut used: Vec<&str> = Vec::new();
+        for l in &g.layers {
+            let at = format!("glyph `{}` layer `{}`", g.name, l.id);
+            let found = if l.is_master_layer() {
+                b.layer(&l.id)
+            } else {
+                let Some(name) = fontcraft_io_ufo::ufo::ufo_layer_name(font, l) else { continue };
+                let hit = b.layers.iter().find(|x| {
+                    let n = x.info.name.as_deref().unwrap_or("");
+                    x.master == l.master
+                        && !used.contains(&x.id.as_str())
+                        && (n == name || n.strip_prefix(name.as_str()).is_some_and(|r| r.starts_with(" #")))
+                });
+                if let Some(x) = hit {
+                    used.push(&x.id);
+                    if x.info.name != l.info.name {
+                        diffs.push(format!("{}: {at} {:?} → {:?}", LAYER_LOSSES[0], l.info.name, x.info.name));
+                    }
+                    if x.id != l.id {
+                        diffs.push(format!("{}: {at} → `{}`", LAYER_LOSSES[13], x.id));
+                    }
+                }
+                hit
+            };
+            let Some(x) = found else {
+                diffs.push(format!("{at}: missing"));
+                continue;
+            };
+            if l.is_master_layer() && l.info.name.is_some() {
+                diffs.push(format!("{}: {at} {:?}", LAYER_LOSSES[0], l.info.name));
+            }
+            let master = font.masters.iter().find(|m| m.id == l.master);
+            let default = master.and_then(|m| fontcraft_io_ufo::ufo::default_vertical_width(font, m));
+            let width = |l: &Layer| l.info.vert_width.filter(|v| *v != 0.0 && Some(*v) != default);
+            let checks: [(&str, String, String); 9] = [
+                ("the layer's width", format!("{}", l.width), format!("{}", x.width)),
+                ("the layer's drawing", drawing(&l.shapes, &l.anchors), drawing(&x.shapes, &x.anchors)),
+                (LAYER_LOSSES[1], format!("{:?}", l.info.attrs), format!("{:?}", x.info.attrs)),
+                (LAYER_LOSSES[2], format!("{:?}", width(l)), format!("{:?}", width(x))),
+                (LAYER_LOSSES[3], format!("{:?}", l.info.vert_origin.filter(|o| *o != 0.0)), format!("{:?}", x.info.vert_origin)),
+                (LAYER_LOSSES[11], format!("{:?}", guides_form(&l.info.guides)), format!("{:?}", guides_form(&x.info.guides))),
+                ("the layer's image", image_form(&l.info.image), image_form(&x.info.image)),
+                ("the layer's background", background_form(&l.info.background), background_form(&x.info.background)),
+                (
+                    "the layer's user data",
+                    format!("{:?}", fontcraft_model::plist::Value::Dict(l.info.user_data.0.clone()).without_spellings()),
+                    format!("{:?}", fontcraft_model::plist::Value::Dict(x.info.user_data.0.clone()).without_spellings()),
+                ),
+            ];
+            for (what, before, after) in checks {
+                if before != after {
+                    diffs.push(format!("{what}: {at} {before} → {after}"));
+                }
+            }
+            let lost: [(&str, bool); 6] = [
+                (LAYER_LOSSES[4], !l.info.metrics_keys.is_empty()),
+                (LAYER_LOSSES[5], l.info.color.is_some()),
+                (LAYER_LOSSES[6], l.info.visible),
+                (LAYER_LOSSES[7], !l.info.hints.is_empty() || l.info.background.as_ref().is_some_and(|b| !b.hints.is_empty())),
+                (LAYER_LOSSES[8], !l.info.annotations.is_empty() || l.info.background.as_ref().is_some_and(|b| !b.annotations.is_empty())),
+                (LAYER_LOSSES[9], l.info.image.as_ref().is_some_and(|i| i.crop.is_some() || i.alpha.is_some() || i.locked)),
+            ];
+            for (what, on) in lost {
+                if on {
+                    diffs.push(format!("{what}: {at}"));
+                }
+            }
+        }
+    }
+}
+
 fn info_trip(font: &Font) -> Vec<String> {
     let written = fontcraft_io_ufo::designspace::write(font).unwrap();
     let back = fontcraft_io_ufo::designspace::read(&written.document, &written.ufos).unwrap();
@@ -261,6 +369,7 @@ fn info_trip(font: &Font) -> Vec<String> {
     axes_trip(font, &back, &mut diffs);
     instances_trip(font, &back, &mut diffs);
     glyphs_trip(font, &back, &mut diffs);
+    layers_trip(font, &back, &mut diffs);
     if font.info.date != back.info.date {
         diffs.push(format!("font: date {:?} → {:?}", font.info.date, back.info.date));
     }
@@ -295,6 +404,7 @@ fn font_information_survives_a_designspace() {
     let (mut checked, mut failures) = (0, Vec::new());
     let (mut zoned, mut stemmed, mut guided, mut instanced, mut mapped) = (0, 0, 0, 0, 0);
     let (mut noted, mut coloured, mut produced) = (0, 0, 0);
+    let (mut layered, mut backgrounds, mut layer_guides, mut images) = (0, 0, 0, 0);
     for path in &all {
         let text = std::fs::read_to_string(path).unwrap();
         if !text.lines().take(3).any(|l| l.starts_with(".appVersion = "))
@@ -315,6 +425,11 @@ fn font_information_survives_a_designspace() {
         noted += usize::from(font.glyphs.iter().any(|g| !g.info.note.is_empty()));
         coloured += usize::from(font.glyphs.iter().any(|g| g.info.color.is_some()));
         produced += usize::from(font.glyphs.iter().any(|g| g.info.production.is_some()));
+        let any_layer = |f: &dyn Fn(&Layer) -> bool| usize::from(font.glyphs.iter().flat_map(|g| g.layers.iter()).any(f));
+        layered += any_layer(&|l| !l.is_master_layer() && fontcraft_io_ufo::ufo::ufo_layer_name(&font, l).is_some());
+        backgrounds += any_layer(&|l| l.info.background.as_ref().is_some_and(|b| !b.shapes.is_empty()));
+        layer_guides += any_layer(&|l| !l.info.guides.is_empty());
+        images += any_layer(&|l| l.info.image.is_some());
         let losses = designspace::info_losses(&font);
         for d in info_trip(&font) {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
@@ -332,6 +447,8 @@ fn font_information_survives_a_designspace() {
     );
     assert!(zoned > 0 && stemmed > 0 && instanced > 0 && mapped > 0, "the corpus exercises zones, stems, instances and axis maps");
     assert!(noted > 0 && coloured > 0 && produced > 0, "the corpus exercises glyph notes, colours and production names");
+    eprintln!("{layered} with other layers in a UFO, {backgrounds} with backgrounds, {layer_guides} with layer guides, {images} with images");
+    assert!(layered > 0 && backgrounds > 0 && layer_guides > 0 && images > 0, "the corpus exercises layers, backgrounds, layer guides and images");
 }
 
 fn designspaces(dir: &Path, out: &mut Vec<PathBuf>) {

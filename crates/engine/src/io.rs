@@ -368,15 +368,11 @@ fn side_file_losses(font: &Font) -> Option<Value> {
     })
 }
 
-/// Layers a UFO has no place for yet: non-master layers that did not come from a UFO layer.
+/// Layers a UFO has no place for yet: alternate layers, layers without a name, and the other
+/// layers of masters stored as a layer of another UFO.
 fn ufo_layer_losses(font: &Font) -> Option<Value> {
-    let n: usize = font
-        .glyphs
-        .iter()
-        .flat_map(|g| &g.layers)
-        .filter(|l| !l.is_master_layer() && l.extra.get(Family::Ufo, "layer").is_none() && !font.masters.iter().any(|m| m.id == l.id))
-        .count();
-    (n > 0).then(|| json!({ "family": "glyphs", "entries": n, "what": "layers other than master layers (backup, intermediate, alternate, colour), not written to UFO yet" }))
+    let n = fontcraft_io_ufo::ufo::layers_left_out(font);
+    (n > 0).then(|| json!({ "family": "glyphs", "entries": n, "what": "alternate layers and layers without a name, which a UFO cannot hold yet" }))
 }
 
 /// Font information (properties, parameters, settings, user data, instance fields) a UFO, or a

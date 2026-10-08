@@ -21,10 +21,9 @@
 //! | `<glyph`, `<advance`, `<outline`, `<lib` | layer | the same, for elements without an object of their own |
 //! | `<unicode` | layer | the file's `unicode` start tags, `""` where they equal the writer's |
 //! | `noteXml` | layer | the `<note>` element as XML text, where it differs from the writer's for the note it holds |
-//! | `+image`, `+guideline`, `+…` | layer | an element the model does not read (and a second `<note>`), as XML text, in source order |
+//! | `+image`, `+guideline`, `+…` | layer | an element the model does not read (an image or guideline whose writer's tag would mean something else, a second `<note>`…), as XML text, in source order |
 //! | `order` | layer | the names of the glyph's child elements, when they were not in the writer's order |
-//! | `height` | layer | the advance height |
-//! | `lib` | layer | the glyph lib, a property-list dictionary |
+//! | `lib` | layer | the glyph lib as read, a property-list dictionary (its keys other than [`TYPED_LIB`] are also the layer's user data) |
 //! | `outline` | layer | the text inside an empty `<outline>` (fontTools writes a line break and two spaces); an empty outline is written only where a file had one |
 //! | `text` | path | the text inside an empty `<contour>` |
 //! | `noName` | anchor | the anchor has no `name` attribute |
@@ -32,6 +31,13 @@
 //! | `libGaps` | layer | the whitespace around the lib's dictionary, when not the pretty printer's |
 //!
 //! A lib that is not a well-formed property list is kept as an unknown element (`+lib`).
+//!
+//! Model fields: the advance height is the layer's `vert_width`; `<guideline>` elements are its
+//! guides, read and written by glyphsLib's guideline rules ([`crate::design`]); `<image>` is its
+//! image (`fileName` the path, the six transformation attributes a matrix, `color` kept as
+//! `@color`); the lib's keys other than [`TYPED_LIB`] are its user data. The writer patches the
+//! kept lib: a key whose value still means the same keeps its spelling. GLIF format 1 has no
+//! guidelines or images; they are not written there.
 //!
 //! The note ([`Glif::note`]) is read as fontTools reads it (each line stripped, blank lines left
 //! out) and written as it writes it (the note between line breaks). The mark colour stays in the
@@ -41,9 +47,13 @@
 //!
 //! Contours the model cannot hold as a [`Path`] (a `curve` after one or three off-curve points, an
 //! open contour ending in off-curve points) and unknown elements inside `<outline>` are kept as a
-//! [`Shape::Raw`] holding their XML text.
+//! [`Shape::Raw`] holding their XML text. A shape another format's reader kept that way is left
+//! out of the file.
 
-use fontcraft_model::{Anchor, ColorLabel, Component, Extra, Family, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
+use fontcraft_model::{
+    Anchor, ColorLabel, Component, Extra, Family, Guide, Image, Layer, MAX_COORDINATE, MAX_LAYER_GUIDES, Node, NodeKind, Path, RawShape, Shape,
+    Transform, UserData,
+};
 use fontcraft_plist::xml::{self, Element, Node as XNode};
 use fontcraft_plist::{Array, Dict, Layout, Number, Value, xmlplist};
 
@@ -123,6 +133,10 @@ fn s(text: &str) -> Value {
 
 /// The mark colour's key in a glyph lib.
 pub const MARK_COLOR: &str = "public.markColor";
+/// The vertical origin's key in a glyph lib.
+pub const VERTICAL_ORIGIN: &str = "public.verticalOrigin";
+/// Glyph lib keys that are fields of their own rather than the layer's user data.
+pub const TYPED_LIB: [&str; 2] = [MARK_COLOR, VERTICAL_ORIGIN];
 
 /// The reference's label colours as glyphsLib writes them to `public.markColor`, by index.
 const LABEL_COLORS: [&str; 12] = [
@@ -356,6 +370,99 @@ fn advance_el(width: f64, height: Option<f64>, style: &Style) -> Option<Element>
     Some(el)
 }
 
+/// A guide as a `<guideline>`, by glyphsLib's guideline rules, attributes in glifLib's order.
+fn guideline_el(g: &Guide, style: &Style) -> Option<Element> {
+    let v = crate::design::guideline(g)?;
+    let d = v.as_dict()?;
+    let mut el = Element::new("guideline");
+    for key in ["x", "y", "angle"] {
+        if let Some(n) = d.get(key).and_then(Value::as_num) {
+            el.set_attr(key, fmt_number(n.as_f64(), style.float_numbers));
+        }
+    }
+    for key in ["name", "color", "identifier"] {
+        if let Some(t) = d.get(key).and_then(Value::as_str) {
+            el.set_attr(key, t);
+        }
+    }
+    Some(el)
+}
+
+/// A `<guideline>` as a guide, when writing the guide gives an element that means the same.
+fn read_guideline(el: &Element, style: &Style) -> Option<Guide> {
+    let mut d = fontcraft_plist::Dict::new();
+    for a in el.attrs() {
+        match a.name.as_str() {
+            "x" | "y" | "angle" => {
+                d.insert(a.name.as_str(), Value::Number(plist_number(a.value.trim().parse::<f64>().ok().filter(|f| f.is_finite())?)))
+            }
+            "name" | "color" | "identifier" => d.insert(a.name.as_str(), s(&a.value)),
+            _ => return None,
+        }
+    }
+    let mut g = crate::design::guide_of(&Value::Dict(d))?;
+    if !(g.x.abs() <= MAX_COORDINATE && g.y.abs() <= MAX_COORDINATE) {
+        return None;
+    }
+    let ours = guideline_el(&g, style)?;
+    if !xml::same_attributes(&ours, el) {
+        return None;
+    }
+    keep_tag(&mut g.extra, "<", el, &ours);
+    Some(g)
+}
+
+/// An image as an `<image>`: the file name, the transformation attributes that are not the
+/// identity's, and the attributes kept as `@name`.
+fn image_el(i: &Image, style: &Style) -> Option<Element> {
+    let mut el = Element::new("image").with_attr("fileName", i.path.as_deref()?);
+    for ((name, default), v) in TRANSFORM.iter().zip(i.transform.affine().as_coeffs()) {
+        if !v.is_finite() {
+            return None;
+        }
+        if v != *default {
+            el.set_attr(*name, fmt_number(v, style.float_numbers));
+        }
+    }
+    put_other_attrs(&mut el, &i.extra);
+    Some(el)
+}
+
+/// An `<image>` as an image, when writing it gives an element that means the same.
+fn read_image(el: &Element, style: &Style) -> Option<Image> {
+    let path = el.attr("fileName")?.to_string();
+    let mut m = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+    for (slot, (name, default)) in m.iter_mut().zip(TRANSFORM) {
+        *slot = match el.attr(name) {
+            Some(v) => v.trim().parse::<f64>().ok().filter(|f| f.is_finite())?,
+            None => default,
+        };
+    }
+    let mut i = Image { path: Some(path), transform: Transform::Matrix(m), ..Default::default() };
+    let known = ["fileName", "xScale", "xyScale", "yxScale", "yScale", "xOffset", "yOffset"];
+    keep_other_attrs(&mut i.extra, el, &known);
+    let ours = image_el(&i, style)?;
+    if !xml::same_attributes(&ours, el) {
+        return None;
+    }
+    keep_tag(&mut i.extra, "<", el, &ours);
+    Some(i)
+}
+
+/// Sets the lib's keys from the layer's user data: a key the user data no longer has goes, a new
+/// one goes in sorted position, and a kept value that means the same stays as written. The keys
+/// of [`TYPED_LIB`] are left to their fields.
+fn patch_user_data(lib: &mut Dict, user: &UserData) {
+    let stale: Vec<String> =
+        lib.entries.iter().map(|(k, _)| k.as_str()).filter(|k| !TYPED_LIB.contains(k) && user.get(k).is_none()).map(str::to_string).collect();
+    for k in stale {
+        crate::ufo::patch(lib, &k, None);
+    }
+    for (k, v) in user.0.entries.iter().filter(|(k, _)| !TYPED_LIB.contains(&k.as_str())) {
+        crate::ufo::patch(lib, k.as_str(), Some(v.without_spellings()));
+    }
+}
+
 fn unicode_el(u: u32) -> Element {
     Element::new("unicode").with_attr("hex", format!("{u:04X}"))
 }
@@ -453,8 +560,11 @@ pub fn read(text: &str, at: &str, layer_id: &str, master: &str) -> Result<Glif> 
             "advance" => {
                 layer.width = number(el, "width", &at)?.unwrap_or(0.0);
                 let height = number(el, "height", &at)?;
-                if let Some(h) = height {
-                    ufo(&mut layer.extra, "height", Value::Number(plist_number(h)));
+                match height {
+                    // Beyond the model's limit: kept as written.
+                    Some(h) if h.abs() > MAX_COORDINATE => ufo(&mut layer.extra, "height", Value::Number(plist_number(h))),
+                    Some(_) => layer.info.vert_width = height,
+                    None => {}
                 }
                 match advance_el(layer.width, height, &style) {
                     Some(ours) => keep_tag(&mut layer.extra, "<advance", el, &ours),
@@ -484,6 +594,14 @@ pub fn read(text: &str, at: &str, layer_id: &str, master: &str) -> Result<Glif> 
                 let a = read_anchor(el, &at, &style)?;
                 layer.anchors.push(a);
             }
+            "guideline" => match (format >= 2 && layer.info.guides.len() < MAX_LAYER_GUIDES).then(|| read_guideline(el, &style)).flatten() {
+                Some(g) => layer.info.guides.push(g),
+                None => keep_element(&mut layer.extra, el),
+            },
+            "image" => match (format >= 2 && layer.info.image.is_none()).then(|| read_image(el, &style)).flatten() {
+                Some(i) => layer.info.image = Some(i),
+                None => keep_element(&mut layer.extra, el),
+            },
             "outline" => {
                 keep_tag(&mut layer.extra, "<outline", el, &Element::new("outline"));
                 // An empty outline is written only where the file had one.
@@ -521,6 +639,15 @@ pub fn read(text: &str, at: &str, layer_id: &str, master: &str) -> Result<Glif> 
                             let items = gaps.iter().map(|g| s(g)).collect();
                             ufo(&mut layer.extra, "libGaps", Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }));
                         }
+                        if let Some(d) = value.as_dict() {
+                            let mut user = Dict::new();
+                            for (k, v) in d.entries.iter().filter(|(k, _)| !TYPED_LIB.contains(&k.as_str())) {
+                                user.insert(k.as_str(), v.without_spellings());
+                            }
+                            if !user.is_empty() {
+                                layer.info.user_data = UserData(user);
+                            }
+                        }
                         ufo(&mut layer.extra, "lib", value);
                     }
                     // A lib that is not a well-formed property list (some old tools wrote keys
@@ -532,11 +659,7 @@ pub fn read(text: &str, at: &str, layer_id: &str, master: &str) -> Result<Glif> 
                     }
                 }
             }
-            other => {
-                let mut text = String::new();
-                el.write(&mut text);
-                ufo(&mut layer.extra, &format!("+{other}"), s(&text));
-            }
+            _ => keep_element(&mut layer.extra, el),
         }
     }
     if unicode_tags.iter().any(|t| t.as_str() != Some("")) {
@@ -549,6 +672,13 @@ pub fn read(text: &str, at: &str, layer_id: &str, master: &str) -> Result<Glif> 
         ufo(&mut layer.extra, "order", Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }));
     }
     Ok(Glif { name, unicodes, note, format, layer, style })
+}
+
+/// An element the model does not read, kept as text under `+<name>`.
+fn keep_element(x: &mut Extra, el: &Element) {
+    let mut text = String::new();
+    el.write(&mut text);
+    ufo(x, &format!("+{}", el.name()), s(&text));
 }
 
 /// The whitespace inside `<lib>` before and after its dictionary.
@@ -697,24 +827,36 @@ pub struct Head<'a> {
     /// The note to write (empty: none).
     pub note: &'a str,
     pub mark_color: MarkColor<'a>,
+    /// The lib's `public.verticalOrigin`: `None` leaves the lib as it is, `Some(None)` removes
+    /// the key, `Some(Some(y))` sets it (a kept value equal to `y` stays as written).
+    pub vertical_origin: Option<Option<f64>>,
+    /// The advance height.
+    pub height: Option<f64>,
 }
 
 impl<'a> Head<'a> {
     /// A file that holds what was read: the note as read, the lib as it is.
     pub fn of(g: &'a Glif) -> Self {
-        Head { name: &g.name, unicodes: &g.unicodes, note: g.note.as_deref().unwrap_or(""), mark_color: MarkColor::Keep }
+        let kept = g.layer.extra.get(Family::Ufo, "height").and_then(Value::as_num).map(|n| n.as_f64());
+        Head {
+            name: &g.name,
+            unicodes: &g.unicodes,
+            note: g.note.as_deref().unwrap_or(""),
+            mark_color: MarkColor::Keep,
+            vertical_origin: None,
+            height: g.layer.info.vert_width.or(kept),
+        }
     }
 }
 
 /// Writes a layer as a GLIF file of `format` (1 or 2).
 pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Result<String> {
-    let Head { name, unicodes, note, mark_color } = head;
+    let Head { name, unicodes, note, mark_color, vertical_origin, height } = head;
     let x = &layer.extra;
     let mut root = glyph_el(name, format, x);
     apply_tag(&mut root, x, "<glyph");
     let mut children: Vec<Element> = Vec::new();
 
-    let height = x.get(Family::Ufo, "height").and_then(Value::as_num).map(|n| n.as_f64());
     match advance_el(layer.width, height, style) {
         Some(mut adv) => {
             apply_tag(&mut adv, x, "<advance");
@@ -751,6 +893,18 @@ pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Resul
         _ if !note.is_empty() => children.push(note_el(note)),
         _ => {}
     }
+    if format >= 2 {
+        if let Some(i) = &layer.info.image {
+            let mut el = image_el(i, style).ok_or_else(|| bad(name, "an image without a file name or with a transform that is not a number"))?;
+            apply_tag(&mut el, &i.extra, "<");
+            children.push(el);
+        }
+        for g in &layer.info.guides {
+            let mut el = guideline_el(g, style).ok_or_else(|| bad(name, "a guide value is not a number"))?;
+            apply_tag(&mut el, &g.extra, "<");
+            children.push(el);
+        }
+    }
     // Elements the model does not read, kept as text.
     for e in x.of(Family::Ufo) {
         if let (Some(el_name), Some(text)) = (e.key.as_str().strip_prefix('+'), e.value.as_str()) {
@@ -760,7 +914,9 @@ pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Resul
         }
     }
     let mut outline = Element::new("outline");
-    for shape in &layer.shapes {
+    // A shape another format's reader kept as written has no GLIF form; the engine's loss report
+    // lists it.
+    for shape in layer.shapes.iter().filter(|s| !matches!(s, Shape::Raw(r) if r.family != Family::Ufo)) {
         outline.children.push(XNode::Element(write_shape(shape, style, name)?));
     }
     let anchor_at: Vec<usize> = x
@@ -797,6 +953,12 @@ pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Resul
     let mut lib = x.get(Family::Ufo, "lib").and_then(Value::as_dict).cloned().unwrap_or_default();
     if x.get(Family::Ufo, "+lib").is_none() {
         patch_mark_color(&mut lib, mark_color);
+        match vertical_origin {
+            None => {}
+            Some(None) => crate::ufo::patch(&mut lib, VERTICAL_ORIGIN, None),
+            Some(Some(y)) => crate::ufo::patch(&mut lib, VERTICAL_ORIGIN, Some(Value::Number(plist_number(y)))),
+        }
+        patch_user_data(&mut lib, &layer.info.user_data);
     }
     if !lib.is_empty() {
         let lib = Value::Dict(lib);
@@ -1033,5 +1195,95 @@ hello
         // A lib that is not a dictionary is kept as it is rather than refused.
         let g = read("<glyph name=\"a\" format=\"2\"><lib><string>x</string></lib></glyph>", "lib.glif", "m", "m").unwrap();
         assert!(g.layer.extra.get(Family::Ufo, "+lib").is_some());
+    }
+
+    #[test]
+    fn guidelines_images_heights_and_libs_are_layer_fields() {
+        let text = "<?xml version='1.0' encoding='UTF-8'?>
+<glyph name=\"a\" format=\"2\">
+  <advance height=\"1000\" width=\"600\"/>
+  <image fileName=\"a.png\" xScale=\"0.5\" yScale=\"0.5\" xOffset=\"10\" color=\"1,0,0,1\"/>
+  <guideline x=\"10\" name=\"stem [locked]\"/>
+  <guideline y=\"500\" color=\"0,0,1,1\" identifier=\"g1\"/>
+  <guideline x=\"1\" y=\"2\" angle=\"45\"/>
+  <lib>
+    <dict>
+      <key>a.key</key>
+      <real>1.0</real>
+      <key>public.markColor</key>
+      <string>1,0,0,1</string>
+    </dict>
+  </lib>
+</glyph>
+";
+        let g = read(text, "a.glif", "m", "m").unwrap();
+        let i = &*g.layer.info;
+        assert_eq!(i.vert_width, Some(1000.0));
+        assert_eq!(i.guides.len(), 3);
+        assert_eq!((i.guides[0].x, i.guides[0].angle, i.guides[0].name.as_deref(), i.guides[0].locked), (10.0, 90.0, Some("stem"), true));
+        assert_eq!((i.guides[1].y, i.guides[1].color.as_deref(), i.guides[1].identifier.as_deref()), (500.0, Some("0,0,1,1"), Some("g1")));
+        let image = i.image.as_ref().unwrap();
+        assert_eq!(image.path.as_deref(), Some("a.png"));
+        assert_eq!(image.transform, Transform::Matrix([0.5, 0.0, 0.0, 0.5, 10.0, 0.0]));
+        assert_eq!(i.user_data.0.len(), 1, "the mark colour is the glyph's, not user data");
+        assert!(i.user_data.get("a.key").is_some());
+        assert_eq!(round_trip(text), text, "written back as read");
+
+        // Edits are written; the kept spellings stay where the value does.
+        let mut l = g.layer.clone();
+        l.info.guides.remove(0);
+        l.info.vert_width = Some(900.0);
+        l.info.user_data.0.insert("b.key", Value::Bool(true));
+        let head = Head { height: l.info.vert_width, ..Head::of(&g) };
+        let out = write(head, &l, 2, &g.style).unwrap();
+        assert!(out.contains("<advance height=\"900\" width=\"600\"/>"), "{out}");
+        assert!(!out.contains("stem"));
+        assert!(out.contains("<real>1.0</real>") && out.contains("<key>b.key</key>\n      <true/>"), "{out}");
+        l.info.user_data = UserData::default();
+        l.info.image = None;
+        let out = write(Head::of(&g), &l, 2, &g.style).unwrap();
+        assert!(!out.contains("a.key") && !out.contains("<image") && out.contains("public.markColor"), "{out}");
+        // Format 1 has no guidelines or images.
+        let out = write(Head::of(&g), &g.layer, 1, &g.style).unwrap();
+        assert!(!out.contains("<guideline") && !out.contains("<image"), "{out}");
+    }
+
+    #[test]
+    fn values_beyond_the_models_limits_stay_as_written() {
+        let text = "<?xml version='1.0' encoding='UTF-8'?>\n<glyph name=\"a\" format=\"2\">\n  <advance height=\"9000000\" width=\"600\"/>\n  <guideline x=\"2000000\"/>\n</glyph>\n";
+        let g = read(text, "a.glif", "m", "m").unwrap();
+        assert!(g.layer.info.is_default(), "{:?}", *g.layer.info);
+        assert_eq!(round_trip(text), text);
+    }
+
+    #[test]
+    fn a_shape_another_format_kept_is_left_out() {
+        let mut l = Layer::new("m", 500.0);
+        l.shapes.push(Shape::Raw(RawShape { family: Family::Glyphs, value: s("{closed = 1;}") }));
+        let head = Head { name: "a", unicodes: &[], note: "", mark_color: MarkColor::Keep, vertical_origin: None, height: None };
+        let out = write(head, &l, 2, &Style::fonttools()).unwrap();
+        assert!(!out.contains("<outline"), "{out}");
+    }
+
+    #[test]
+    fn guidelines_and_images_that_would_change_stay_as_written() {
+        // glyphsLib would write `y` 0 alone as a horizontal line; an unknown attribute has no
+        // field; an image needs a file name.
+        let text = "<?xml version='1.0' encoding='UTF-8'?>
+<glyph name=\"a\" format=\"2\">
+  <image xScale=\"2\"/>
+  <guideline x=\"0\" y=\"0\" angle=\"90\"/>
+  <guideline x=\"5\" odd=\"1\"/>
+</glyph>
+";
+        let g = read(text, "a.glif", "m", "m").unwrap();
+        assert!(g.layer.info.guides.is_empty() && g.layer.info.image.is_none());
+        assert_eq!(g.layer.extra.len(), 3, "kept as elements");
+        assert_eq!(round_trip(text), text);
+        // A guideline's own spelling stays while it means the same.
+        let spelled = "<?xml version='1.0' encoding='UTF-8'?>\n<glyph name=\"a\" format=\"2\">\n  <guideline name=\"n\" x=\"10.0\"/>\n</glyph>\n";
+        let g = read(spelled, "a.glif", "m", "m").unwrap();
+        assert_eq!(g.layer.info.guides.len(), 1);
+        assert_eq!(round_trip(spelled), spelled);
     }
 }
