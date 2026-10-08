@@ -5,7 +5,8 @@
 //! is a UFO and one with `fontinfo.plist` a `.glyphspackage`, a file that starts with an sfnt,
 //! collection or WOFF signature is a compiled font, a JSON file whose `format` is `fontcraft` is a
 //! native file, XML whose root is `<designspace>` a designspace (opened with the UFOs it names,
-//! relative to its folder), and other text that starts with `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
+//! relative to its folder), a ZIP archive a UFOZ, and other text that starts with `{` is a
+//! `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
 //! [`fontcraft_format::MAX_BYTES`] in all) and follows no symlinked folders, so a hostile folder
 //! can neither exhaust memory nor loop.
 
@@ -67,7 +68,7 @@ impl SaveFormat {
             SourceFormat::GlyphsPackage => Some(SaveFormat::GlyphsPackage),
             SourceFormat::Ufo => Some(SaveFormat::Ufo),
             SourceFormat::Designspace => Some(SaveFormat::Designspace),
-            SourceFormat::Binary => None,
+            SourceFormat::Ufoz | SourceFormat::Binary => None,
         }
     }
 
@@ -215,6 +216,12 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         return Err(EngineError::Io(format!("{} is a folder but not a font source", path.display())));
     }
     let bytes = read_file(path)?;
+    if fontcraft_io_ufo::zip::is_zip(&bytes) {
+        let files = fontcraft_io_ufo::zip::read_ufoz(&bytes)?;
+        let mut font = fontcraft_io_ufo::ufo::read(&files)?;
+        font.source.format = SourceFormat::Ufoz;
+        return Ok((font, Vec::new()));
+    }
     if fontcraft_format::is_compressed(&bytes) {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }

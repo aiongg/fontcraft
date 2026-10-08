@@ -9,6 +9,7 @@
 //! - [`names`]: the specification's user-name-to-file-name rule.
 //! - [`ufo`]: a UFO directory, as one master.
 //! - [`designspace`]: a designspace and its UFOs, as one document.
+//! - [`zip`]: reading a UFOZ, a UFO in a ZIP archive.
 //!
 //! The functions work on file contents by relative path; reading and writing directories is the
 //! caller's job, so they also run in the browser.
@@ -22,6 +23,7 @@ pub mod designspace;
 pub mod glif;
 pub mod names;
 pub mod ufo;
+pub mod zip;
 
 /// A UFO's files: relative path (with `/`) → contents.
 pub type Files = BTreeMap<String, Vec<u8>>;

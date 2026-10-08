@@ -14,3 +14,8 @@ workspace = true
 fontcraft-model.workspace = true
 fontcraft-plist.workspace = true
 thiserror.workspace = true
+miniz_oxide = "0.8"
+
+[dev-dependencies]
+# A second reader of what we write (decision 0003): tests only.
+norad = "0.19"

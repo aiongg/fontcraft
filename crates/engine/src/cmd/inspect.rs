@@ -371,10 +371,12 @@ fn inspect_source(path: &str, font: &fontcraft_model::Font, wanted: &[&str]) -> 
             SourceFormat::Glyphs => "glyphs",
             SourceFormat::GlyphsPackage => "glyphspackage",
             SourceFormat::Ufo => "ufo",
+            SourceFormat::Ufoz => "ufoz",
             SourceFormat::Designspace => "designspace",
             SourceFormat::Binary => "binary",
         };
-        Ok(json!({ "kind": kind, "version": font.source.glyphs_version, "glyphs": font.glyphs.len() }))
+        let version = font.source.glyphs_version.or(font.source.ufo_version);
+        Ok(json!({ "kind": kind, "version": version, "glyphs": font.glyphs.len(), "masters": font.masters.len() }))
     });
     section(&mut out, wanted, "names", || {
         Ok(json!({ "family": font.family_name, "version": format!("{}.{:03}", font.version_major, font.version_minor) }))

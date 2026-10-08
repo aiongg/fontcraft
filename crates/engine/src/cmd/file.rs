@@ -114,6 +114,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let save_format = crate::io::SaveFormat::of_source(doc.font.source.format);
     let format = match doc.font.source.format {
         fontcraft_model::SourceFormat::Binary => Some("binary"),
+        fontcraft_model::SourceFormat::Ufoz => Some("ufoz"),
         _ => save_format.map(|f| f.name()),
     };
     let version = doc.font.source.glyphs_version.or(doc.font.source.ufo_version);

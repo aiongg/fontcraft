@@ -40,6 +40,8 @@ pub enum SourceFormat {
     Glyphs,
     GlyphsPackage,
     Ufo,
+    /// A UFO in a ZIP archive, read only: saved with Save As.
+    Ufoz,
     Designspace,
     Binary,
 }

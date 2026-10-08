@@ -1022,20 +1022,23 @@ fn write_kerning(font: &Font, master: &Master) -> Dict {
         // No pairs: the kept file, if it had none either, with its whitespace.
         return if kept.is_empty() { kept } else { out };
     };
-    // Group sides read from the reference's format get the UFO prefixes.
+    // Group sides read from the reference's format get the UFO prefixes. A UFO's own sides stay
+    // as they are: older UFOs name kerning groups `@MMK_L_…` themselves.
+    let from_ufo = ufo_get(&master.extra, METAINFO).is_some();
+    let side = |s: &str| if from_ufo { s.to_string() } else { fontcraft_model::ufo_side(s).into_owned() };
     for f in &mk.firsts {
-        let first = fontcraft_model::ufo_side(&f.first);
+        let first = side(&f.first);
         let kept_first = kept.get(&first).and_then(Value::as_dict);
         let mut seconds = Dict::new();
         for (second, v) in &f.seconds {
-            let second = fontcraft_model::ufo_side(second);
+            let second = side(second);
             let value = match kept_first.and_then(|d| d.get(&second)) {
                 Some(old) if as_f64(old) == Some(*v) => old.clone(),
                 _ => num_value(*v),
             };
-            seconds.entries.push((Str::new(second.as_ref()), value));
+            seconds.entries.push((Str::new(second.as_str()), value));
         }
-        out.entries.push((Str::new(first.as_ref()), Value::Dict(seconds)));
+        out.entries.push((Str::new(first.as_str()), Value::Dict(seconds)));
     }
     // Unchanged pairs: the kept file, with its whitespace.
     if out == kept && kept.entries.iter().zip(&out.entries).all(|((a, _), (b, _))| a == b) { kept } else { out }
