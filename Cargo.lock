@@ -754,6 +754,7 @@ version = "0.0.1"
 dependencies = [
  "fontcraft-engine",
  "fontcraft-mcp",
+ "fontcraft-oracle",
  "serde_json",
 ]
 
@@ -857,6 +858,19 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "fontcraft-oracle"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-compile",
+ "fontcraft-engine",
+ "fontcraft-geom",
+ "fontcraft-model",
+ "serde",
+ "skrifa 0.48.0",
+ "toml",
 ]
 
 [[package]]

@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M1.7 done (the typed model; its four measures met)._
+_Updated: 2026-10-08, M2.0 done (the oracle harness; first corpus numbers in `docs/plans/M2.md`)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (367 tests; about 41,300 lines of Rust in 12 crates).
+- `cargo xtask ci` passes all nine steps (387 tests; about 43,800 lines of Rust in 13 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -15,11 +15,13 @@ _Updated: 2026-10-08, M1.7 done (the typed model; its four measures met)._
 
 ## Where to start
 
-**M2, the compile core** (`docs/plans/M2.md`, accepted): start with M2.0 (the oracle harness)
-and M2.1 (the pipeline and resolved projection). First check whether glyphsLib (fontmake's
-reader) reads `.glyphs` version 4: fontc does not, and version 4 sources no oracle reads are
-compared only through our own read-back (M2 plan § 2).
-M1 is done: M1.7 closed with its measures (`docs/plans/M1.md` § M1.7).
+**M2, the compile core** (`docs/plans/M2.md`, accepted): M2.0, the oracle harness, is done.
+Next is M2.1 (the pipeline and the resolved projection), then M2.2 (core tables to fontc
+parity). Use `fontcraft-cli oracle --corpus` (`docs/testing.md` › The oracle harness) to measure
+each change: the plan's M2.0 section lists the first numbers and what the differences are, by
+cause and package. Two answers came out of M2.0: glyphsLib does not read `.glyphs` version 4
+(nor does fontc), and fontc 1.0.0 writes the vendor id `NONE`, not four spaces, so the plan's
+answer to question 6 needs the owner again before M2.2 changes it.
 
 M1 (`docs/plans/M1.md`) so far:
 
@@ -56,8 +58,9 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   before implementing.
 - **Nothing has been observed in the reference app.** About 440 open questions are listed at the
   ends of the notes.
-- **No oracle has been run against our compiler.** The exported font was read back with skrifa
-  and fonttools, which proves it is well-formed, not that it matches a reference compiler.
+- **Our compiler matches the reference compilers in few tables yet.** Over 300 corpus sources
+  compared with fontc, cmap is identical or equivalent in 286 and post in 191; head, hhea, OS/2,
+  name and glyf differ in nearly all (`docs/plans/M2.md` › M2.0). M2.1 and M2.2 close that.
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
 
@@ -132,3 +135,10 @@ Append one terse entry per session: what landed, numbers, what is still open.
   measures: slanted component matrices decompose; version 2 name parameters, instance names and
   palettes; virtual masters widen axis ranges; loss reports list the data UFO file records hold,
   not the records. Next: M2.0 and M2.1.
+- **2026-10-08, M2.0, the oracle harness.** New crate `crates/oracle` (L3) and `fontcraft-cli
+  oracle` (`--corpus`, `--against fontc|fontmake`, `--format ttf|otf`, `--json`): both builds
+  static at the same master, fixed timestamp, read back and compared per table, normalised;
+  source-reading differences apart; allow-list with reasons. Corpus set 354 sources: fontc built
+  334, fontmake 330 (TrueType) and 331 (CFF), FontCraft 313; 300 compared with fontc (per-table
+  numbers in the plan). glyphsLib does not read `.glyphs` version 4 (8 of 16 files, none with
+  outlines); fontc writes vendor `NONE`. 24 tests (20 in the gate, 4 opt-in). Next: M2.1.

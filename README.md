@@ -51,9 +51,9 @@ Details: [`docs/development.md`](docs/development.md), [`docs/mcp.md`](docs/mcp.
   reports how much of the inventory exists.
 - **Never crash.** No panics in shipped code; a command that fails changes nothing; every command
   is swept with hostile parameters on every test run.
-- **Checked against oracles, from M2.** Compiled fonts will be compared with what the open
-  reference compilers produce from the same source ([testing](docs/testing.md)). Today the output
-  is read back with two independent readers.
+- **Checked against oracles.** `fontcraft-cli oracle` compares compiled fonts, table by table,
+  with what the open reference compilers produce from the same source
+  ([testing](docs/testing.md)). Few tables match yet; M2 brings them to parity.
 - **Clean-room.** Specified from public documentation; no code, prose or assets copied from any
   reference ([policy](docs/clean-room.md)).
 - **Rust only.** Built and run on Linux so far; macOS, Windows and the browser are targets (the

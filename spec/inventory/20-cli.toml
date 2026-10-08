@@ -390,22 +390,19 @@ status = "docs"
 
 [[cli]]
 id = "oracle"
-usage = "fontcraft-cli oracle SOURCE... --against fontmake|fontc|makeotf|FONT [--output-dir DIR] [options]"
+usage = "fontcraft-cli oracle (SOURCE... | --corpus [DIR]) [--against fontc|fontmake] [--format ttf|otf] [--reference-bin PATH] [--output-dir DIR] [--timestamp SECS] [--timeout SECS] [--differences N] [--match TEXT] [--json]"
 options = [
-  "SOURCE...: sources to compile both ways",
-  "--against fontmake|fontc|makeotf|FONT: the reference compiler to run, or a prebuilt reference font to compare with",
-  "--reference-bin PATH: path of the reference compiler when it is not on PATH",
-  "--mode default|gftools: build the reference with plain options chosen to match ours, or through a gftools builder configuration",
-  "--config FILE: builder configuration for --mode gftools",
-  "--rebuild both|ours|reference|none: which side to rebuild when its output already exists in the output directory",
-  "--expect-hash SHA256: when our output hashes to this value, skip the comparison and report 'unchanged' (the caller's stored result still holds); the hash of our output is always written next to it",
-  "--off-by-one-budget PCT: share of glyf coordinates and gvar deltas allowed to differ by one unit before they count; default 0.1",
-  "--unwrap-extensions: compare lookups without their Extension wrappers",
-  "--keep-overlaps / --remove-overlaps, --keep-direction, --production-names / --no-production-names: build options applied identically to both sides",
-  "--corpus FILE: JSON list of repositories and revisions to run over",
-  "--cache DIR: where source repositories are checked out and reused between runs",
-  "--report html|json: summary format for a corpus run; --html-only regenerates the HTML from stored JSON results",
-  "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
+  "SOURCE...: sources to compile both ways (.glyphs, .glyphspackage, .designspace, .ufo)",
+  "--corpus [DIR]: the comparison set in the fetched corpus folder DIR (default ./corpus): every source under fontc/resources/testdata, and Oswald",
+  "--against fontc|fontmake: the reference compiler; default fontc for --format ttf, fontmake for --format otf",
+  "--format ttf|otf: outline flavour of both builds; default ttf. otf builds only the reference until FontCraft writes CFF",
+  "--reference-bin PATH: the reference compiler's executable; otherwise FONTCRAFT_FONTC or FONTCRAFT_FONTMAKE, then PATH, then the documented install locations",
+  "--output-dir DIR: keep both fonts and the tool's log in a folder per source under DIR; otherwise they go to a temporary folder that is removed",
+  "--timestamp SECS: SOURCE_DATE_EPOCH for both builds; default 1700000000",
+  "--timeout SECS: time limit for one reference build; default 300",
+  "--differences N: how many differences to show per table; default 5",
+  "--match TEXT: compare only the sources whose path contains TEXT",
+  "--json: one JSON document with every source's report and the summary, instead of text",
 ]
 command = ""
 equivalents = [
@@ -414,9 +411,9 @@ equivalents = [
 ]
 area = "compile"
 milestone = "M2"
-summary = "Development aid for differential testing: compiles each source with FontCraft and with a reference compiler found on PATH (or takes an already built reference font), normalises both results and reports per table how similar they are. With --corpus it runs over a list of source repositories and writes a JSON and HTML summary. It is a shell around font.compile and font.diff and is not needed to produce fonts."
-ref = "fontc ttx_diff README and core.py; fontc_crater README and args.rs"
-status = "inferred"
+summary = "Development aid for differential testing: compiles each source with FontCraft and with a reference compiler run as a subprocess (fontc for TrueType, fontmake for CFF), both static and with the same timestamp, reads both fonts back and reports per table whether they are identical, equivalent once normalised, allowed (every difference on the allow-list with its reason) or different, with the first differences, and apart from that the differences in how the two programs read the source (glyph set, glyph order). A missing tool is reported and nothing is compared. Exit status 1 when a table differs or a build fails. Not built yet: a prebuilt reference font, the gftools builder mode, rebuild control, an expected hash, an off-by-one budget, extension unwrapping, shared build options, a repository cache and an HTML report."
+ref = "fontc ttx_diff README and core.py; fontc_crater README and args.rs; fontc --help and fontmake --help (1.0.0, 3.12.1)"
+status = "observed"
 
 [[cli]]
 id = "dump"

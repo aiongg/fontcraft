@@ -1,0 +1,26 @@
+[package]
+name = "fontcraft-oracle"
+description = "FontCraft oracle harness: compiled fonts compared table by table with a reference compiler's (L3)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Tests that run the reference compilers. They skip, with a message, when a tool is missing.
+oracle = []
+
+[dependencies]
+serde.workspace = true
+skrifa.workspace = true
+toml = "1"
+
+[dev-dependencies]
+fontcraft-compile.workspace = true
+fontcraft-engine.workspace = true
+fontcraft-geom.workspace = true
+fontcraft-model.workspace = true

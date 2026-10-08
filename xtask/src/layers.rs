@@ -30,6 +30,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("io-glyphs", Class::Layer(3)),
     ("io-ufo", Class::Layer(3)),
     ("decompile", Class::Layer(3)),
+    ("oracle", Class::Layer(3)),
     ("engine", Class::Layer(5)),
     ("ui-egui", Class::Layer(6)),
     ("mcp", Class::Layer(6)),

@@ -63,9 +63,9 @@ How each row is known. `handbook` and `docs` come from public documentation, `in
 |---|---:|
 | handbook | 2113 |
 | docs | 1097 |
-| inferred | 378 |
+| inferred | 376 |
 | memory | 33 |
-| observed | 0 |
+| observed | 2 |
 
 ## Live commands
 

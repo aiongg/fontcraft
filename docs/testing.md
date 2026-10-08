@@ -17,6 +17,7 @@ into tests without getting into the repository.
 | **Command sweep** | `crates/engine/tests/command_sweep.rs` | every engine command × three fixture states × 45 to 200 junk parameter objects each (about 5,600 calls): no panic, no change on error, invariants hold on success. A new command is swept without further work |
 | Headless UI | `crates/ui-egui/src/tests.rs` | frames draw without a window; every menu item is a command; the control protocol drives the app and answers malformed requests |
 | Protocol | `crates/mcp` | MCP negotiation, tools, JSON-RPC errors for malformed input, bad bytes on the wire |
+| Oracle comparison | `crates/oracle` | the normalised comparison on fonts built in code (identical builds, keyed differences, start points, reversed contours, glyph set and order, cmap, the allow-list, broken input); the tool runner with stand-in tools (output, failure, time limit). Opt-in (`--features oracle`): fontc and fontmake builds of a fixture compare as expected |
 | Repository checks | `xtask` tests | the inventory loads; the layering rules catch each kind of violation; the vendor-names scanner; the asset rules; the corpus pins |
 
 The desktop app was also run on a virtual display during the skeleton's verification and driven
@@ -38,9 +39,14 @@ can be built to a provable standard.
 | skrifa | already a dev-dependency | outlines, metrics and names of our own output |
 | harfrust | planned with text mode (M5) | shaping results of our own output |
 
-None of these is needed to build or to run the ordinary tests. Oracle tests are opt-in (`cargo
-test --features oracle`, planned with the harness in M2), skip with a message when a tool is
-missing, and are meant to run always once a CI service exists.
+None of these is needed to build or to run the ordinary tests. Oracle tests are opt-in
+(`cargo test -p fontcraft-oracle --features oracle`), skip with a message when a tool is missing,
+and are meant to run always once a CI service exists.
+
+Where the harness looks for a tool: `--reference-bin PATH` on the command line, then the
+environment variable (`FONTCRAFT_FONTC`, `FONTCRAFT_FONTMAKE`), then `PATH`, then the install
+locations `~/.cargo/bin/fontc`, `~/.local/share/uv/tools/fontmake/bin/fontmake` and
+`~/.local/bin/fontmake`.
 
 ### How outputs are compared
 
@@ -61,8 +67,54 @@ reference tools' documentation; see `docs/spec/20-cli.md` › Oracles):
    that differs for a known, accepted reason is on an allow-list **with the reason**
    (`docs/spec/40-compile.md` § 4); anything else fails.
 
-`fontcraft-cli oracle` (planned, M2) runs this for one source or for a whole corpus and prints the
-table of results. The corpus-wide run is how the "compile" row of the parity table is scored.
+`fontcraft-cli oracle` runs this for one source or for a whole corpus and prints the table of
+results. The corpus-wide run is how the "compile" row of the parity table is scored.
+
+### The oracle harness
+
+`crates/oracle` and `fontcraft-cli oracle`. How the two builds are made the same is in
+`docs/plans/M2.md` › M2.0.
+
+```sh
+fontcraft-cli oracle corpus/fontc/resources/testdata/glyphs3/WghtVar.glyphs   # one source, fontc
+fontcraft-cli oracle --corpus                       # the comparison set (fontc's test data, Oswald)
+fontcraft-cli oracle --corpus --against fontmake    # the other TrueType oracle
+fontcraft-cli oracle --corpus --format otf          # fontmake's CFF builds (compared from M2.3)
+fontcraft-cli oracle --corpus --json --differences 10000 > report.json
+fontcraft-cli oracle SOURCE --output-dir out/       # keep both fonts and the tool's log
+```
+
+Each table comes out as one of:
+
+| Status | Meaning |
+|---|---|
+| identical | the same bytes (`head`: apart from the checksum and the dates) |
+| equivalent | different bytes, nothing different once normalised |
+| allowed | every difference is on `crates/oracle/allow.toml`, which gives the reason |
+| different | the first differences are listed, keyed by field, record or glyph |
+| skipped | not compared, and the report says why: layout tables until M8, variation tables until M9, tables FontCraft does not write yet |
+
+What normalisation removes or canonicalises:
+
+| Table | Normalisation |
+|---|---|
+| head | `checksumAdjustment`, `created` and `modified` removed; `indexToLocFormat` (an offset size) not compared |
+| hhea | `numberOfHMetrics` not compared (`hmtx` compares the values) |
+| hmtx | advance and left side bearing per glyph, by glyph name |
+| name | a set of records; the reference compiler's stamp at the end of name ID 5 (`;fontc 1.0.0`) removed; IDs 256 and up left out (feature and variation names) |
+| cmap | code point → glyph name over every Unicode subtable, the list of subtables, the variation sequences |
+| glyf, CFF | outlines drawn by skrifa without hinting, components resolved, compared within half a unit with any start point; reversed contours are named as such. For `glyf` also each glyph's kind (empty, simple, composite with its components and flags), bounds and instruction length |
+| loca | offsets: compared through `glyf` |
+| maxp, OS/2, post | field by field |
+
+Glyphs are matched by name. A different glyph set or glyph order is reported once, as a
+source-reading difference: the two programs read the source differently (fontc turns bracket
+layers and colour layers into glyphs, for example). The per-glyph tables then compare the glyphs
+both fonts have. Exit status 1 means a table differs or a build failed.
+
+To accept a difference, add an entry to `crates/oracle/allow.toml` with the table, the difference
+key as the report prints it (a trailing `*` matches a prefix), optionally the oracle and a part of
+the source path, and the reason. A difference FontCraft is meant to fix does not go there.
 
 ### Other oracles
 
@@ -93,7 +145,7 @@ cargo xtask corpus --fetch    # download at the pinned commits (about 300 MB)
 
 | Corpus | Use |
 |---|---|
-| `fontc` (`resources/testdata`) | about 160 small sources, each isolating one compiler behaviour: the first target of the oracle harness |
+| `fontc` (`resources/testdata`) | 353 small sources (`.glyphs`, packages, designspace, UFO), each isolating one compiler behaviour: with Oswald, the oracle harness's comparison set |
 | `fonttools` (`Tests/`) | feature files with expected output, designspace and variation-model cases, subset and merge fixtures |
 | `oswald` | one real variable family in `.glyphs`: the first whole-family comparison |
 | `inter` | a large real family in package form: performance budgets and round-trip stress |

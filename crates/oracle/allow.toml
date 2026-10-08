@@ -1,0 +1,12 @@
+# Accepted differences between FontCraft's compiled fonts and a reference compiler's.
+#
+# Each entry: `table` (tag, trailing spaces dropped), `key` (a difference key as the report prints
+# it; a trailing `*` matches every key that starts with the rest), optional `oracle` ("fontc",
+# "fontmake") and `source` (part of the source path), and the `reason`. A difference that FontCraft
+# is meant to fix is not listed here: it stays "different" until the compiler matches.
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.usMaxContext"
+oracle = "fontmake"
+reason = "usMaxContext is the longest context of the GSUB and GPOS lookups. FontCraft compiles features from M8 (plan M2 § 1, Deferred); fontc builds are made without features, fontmake's cannot be."

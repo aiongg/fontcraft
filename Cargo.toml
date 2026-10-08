@@ -20,6 +20,7 @@ fontcraft-io-glyphs = { path = "crates/io-glyphs" }
 fontcraft-io-ufo = { path = "crates/io-ufo" }
 fontcraft-decompile = { path = "crates/decompile" }
 fontcraft-compile = { path = "crates/compile" }
+fontcraft-oracle = { path = "crates/oracle" }
 fontcraft-engine = { path = "crates/engine" }
 fontcraft-mcp = { path = "crates/mcp" }
 fontcraft-ui-egui = { path = "crates/ui-egui" }

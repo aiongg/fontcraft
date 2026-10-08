@@ -19,7 +19,7 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
    L5   engine: Session ── execute(id, params) ── command registry ── history, journal, guard
               │
    L4   tools: pointer and key events → commands (begin / preview / commit)        (planned)
-   L3   format · compile · decompile · io-glyphs · io-ufo · render · tables        (2 of 7 today)
+   L3   format · compile · decompile · io-glyphs · io-ufo · oracle · render · tables   (6 of 8 today)
    L2   pathops · interp · spacing · components · features · hinting · audit · plugins   (planned)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
    L0   geom (kurbo)  ·  standalone format crates: plist, cff, ttinstr, container, glyphdata  (geom today)
@@ -56,6 +56,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L3 | `decompile` | M1 | OpenType binary → model, for opening compiled fonts |
 | L3 | `io-glyphs` | M1 | `.glyphs` 2, 3, 4 and `.glyphspackage`, reading and writing, lossless |
 | L3 | `io-ufo` | M1 | UFO and designspace, reading and writing, lossless |
+| L3 | `oracle` | M2 | compiled fonts compared table by table with a reference compiler's build (the oracle harness behind `fontcraft-cli oracle`); runs the reference tools as subprocesses |
 | L3 | `tables` | M1/M12 | dump, table edit, subset, merge, instance: the engine behind the CLI tools |
 | L3 | `render` | M3 | glyph and text rasterising for the canvas, previews, proofs, headless screenshots |
 | L4 | `tools` | M3 | pointer tools: events in, commands and overlays out |
@@ -186,8 +187,8 @@ source model
   CFF2 in full, TrueType instructions, WOFF and WOFF2, collections, `kern`, the bitmap and SVG
   colour tables (`docs/spec/40-compile.md` § 3).
 - **Oracles decide.** For every table, FontCraft's output from a corpus source is compared with
-  fontc's and fontmake's (TrueType flavour) and fontmake's and makeotf's (CFF). See
-  [`testing.md`](testing.md).
+  fontc's and fontmake's (TrueType flavour) and fontmake's and makeotf's (CFF), by the `oracle`
+  crate and `fontcraft-cli oracle`. See [`testing.md`](testing.md).
 - **Incremental by design.** Table builders are functions of small parts of the resolved font, so
   editing one glyph recompiles that glyph's entries and the tables that depend on bounds. The
   editor's live preview and the final export are the same code.
