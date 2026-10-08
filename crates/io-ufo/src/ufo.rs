@@ -25,7 +25,8 @@
 //! | the master's guides | `guidelines` |
 //! | glyph order | `lib.plist` `public.glyphOrder` first, then the rest in `contents.plist` order |
 //! | glyph export | `lib.plist` `public.skipExportGlyphs` |
-//! | glyph code points | the default layer's GLIF |
+//! | glyph production names, OpenType categories | `lib.plist` `public.postscriptNames`, `public.openTypeCategories` |
+//! | glyph code points, note, colour label | the default layer's GLIF: `<unicode>`, `<note>`, the lib's `public.markColor` |
 //! | kerning groups | `groups.plist` `public.kern1.*` (the glyph's right side) and `public.kern2.*` (left side) |
 //! | kerning | `kerning.plist`, as the left-to-right table, sides spelled as the UFO spells them |
 //! | features | `features.fea`, as one unnamed prefix |
@@ -44,7 +45,7 @@ use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value, xmlplist};
 
 use crate::design::{self, Design};
 use crate::fontinfo::{self, Info};
-use crate::glif::{self, Style};
+use crate::glif::{self, MarkColor, Style};
 use crate::names::{glyph_file_name, layer_dir_name};
 use crate::{Files, Result, UfoError, bad};
 
@@ -63,7 +64,11 @@ const DEFAULT_DIR: &str = "glyphs";
 const KERN1: &str = "public.kern1.";
 const KERN2: &str = "public.kern2.";
 /// `lib.plist` keys that are model fields of their own rather than user data.
-const TYPED_LIB: [&str; 2] = ["public.glyphOrder", "public.skipExportGlyphs"];
+const TYPED_LIB: [&str; 4] = ["public.glyphOrder", "public.skipExportGlyphs", POSTSCRIPT_NAMES, OPENTYPE_CATEGORIES];
+/// The font lib's production names, by glyph name.
+const POSTSCRIPT_NAMES: &str = "public.postscriptNames";
+/// The font lib's `GDEF` classes, by glyph name.
+const OPENTYPE_CATEGORIES: &str = "public.openTypeCategories";
 /// The creator written into a UFO FontCraft makes.
 pub const CREATOR: &str = "org.fontcraft";
 
@@ -248,6 +253,11 @@ fn strings(v: Option<&Value>) -> Vec<String> {
     v.and_then(Value::as_array).map(|a| a.items.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default()
 }
 
+/// The colour a master layer's lib gives its glyph, when its `public.markColor` reads as one.
+pub(crate) fn glif_mark_color(layer: &Layer) -> Option<fontcraft_model::ColorLabel> {
+    ufo_get(&layer.extra, "lib").and_then(Value::as_dict).and_then(|d| d.get(glif::MARK_COLOR)).and_then(Value::as_str).and_then(glif::mark_color)
+}
+
 /// What one UFO holds, before it joins a document.
 pub(crate) struct ReadUfo {
     pub master: Master,
@@ -330,6 +340,8 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     let lib = plists.dict(LIB).ok().flatten();
     let order = strings(lib.as_ref().and_then(|d| d.get("public.glyphOrder")));
     let skip: HashSet<String> = strings(lib.as_ref().and_then(|d| d.get("public.skipExportGlyphs"))).into_iter().collect();
+    let glyph_map = |key: &str| lib.as_ref().and_then(|d| d.get(key)).and_then(Value::as_dict).cloned();
+    let (ps_names, ot_categories) = (glyph_map(POSTSCRIPT_NAMES), glyph_map(OPENTYPE_CATEGORIES));
     if let Some(lib) = &lib {
         let mut data = Dict::new();
         for (k, v) in lib.entries.iter().filter(|(k, _)| !TYPED_LIB.contains(&k.as_str())) {
@@ -401,6 +413,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
             consumed.insert(path.clone());
             let id = if is_default { master_id.to_string() } else { layer_id(master_id, layer_name) };
             let g = glif::read(glif_text, &path, &id, master_id)?;
+            let note = g.note;
             let mut layer = g.layer;
             if g.name != name {
                 // The file names another glyph than `contents.plist` does (a copied file).
@@ -420,6 +433,10 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
                     let items = g.unicodes.iter().map(|u| Value::Number(Number::int(i64::from(*u)))).collect();
                     layer.extra.push(Family::Ufo, "unicodes", Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }));
                 }
+                // A note of another layer is that layer's own.
+                if let Some(n) = &note {
+                    layer.extra.push(Family::Ufo, "note", Value::String(n.as_str().into()));
+                }
             }
             let i = match index.get(name) {
                 Some(&i) => i,
@@ -434,6 +451,12 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
             let Some(glyph) = glyphs.get_mut(i) else { continue };
             if is_default {
                 glyph.unicodes = g.unicodes;
+                if let Some(n) = note {
+                    glyph.info.note = n;
+                }
+                if let Some(c) = glif_mark_color(&layer) {
+                    glyph.info.color = Some(c);
+                }
                 if glyph_file_name(name, &HashSet::new()).as_deref() != Some(file) {
                     glyph.file_name = Some(file.to_string());
                 }
@@ -470,6 +493,17 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         }
     }
     ordered.extend(slots.into_iter().flatten());
+    // Production names and OpenType categories.
+    for g in &mut ordered {
+        let says = |map: &Option<Dict>| map.as_ref().and_then(|m| m.get(&g.name)).and_then(Value::as_str).map(str::to_string);
+        let (production, category) = (says(&ps_names), says(&ot_categories));
+        if production.is_some() {
+            g.info.production = production;
+        }
+        if category.is_some() {
+            g.info.opentype_category = category;
+        }
+    }
 
     // Kerning groups and kerning.
     let groups = plists.dict(GROUPS)?;
@@ -729,6 +763,35 @@ fn patch(d: &mut Dict, key: &str, new: Option<Value>) {
     }
 }
 
+/// Sets a font lib dictionary that maps glyph names to one glyph field (`public.postscriptNames`,
+/// `public.openTypeCategories`). The kept dictionary stays while it says what the model says for
+/// every glyph of the font (entries for other glyphs are its own business), and in a master that
+/// read a dictionary of its own while the default master's still agrees. Otherwise it is made
+/// again: its entries for glyphs the font does not have, and the model's, sorted by name.
+fn patch_glyph_map(lib: &mut Dict, key: &str, font: &Font, is_default: bool, default_lib: &Dict, field: impl Fn(&Glyph) -> Option<&str>) {
+    let kept = lib.get(key).and_then(Value::as_dict).cloned();
+    let default_kept = default_lib.get(key).and_then(Value::as_dict);
+    let says = |d: Option<&Dict>, g: &Glyph| d.and_then(|d| d.get(&g.name)).and_then(Value::as_str).map(str::to_string);
+    let agrees = |d: Option<&Dict>| font.glyphs.iter().all(|g| says(d, g).as_deref() == field(g));
+    if !is_default && agrees(default_kept) && font.glyphs.iter().any(|g| says(kept.as_ref(), g) != says(default_kept, g)) {
+        return;
+    }
+    if agrees(kept.as_ref()) {
+        return;
+    }
+    let mut entries: Vec<(Str, Value)> =
+        kept.map(|d| d.entries.into_iter().filter(|(k, _)| font.glyph(k.as_str()).is_none()).collect()).unwrap_or_default();
+    for g in font.glyphs.iter() {
+        if let Some(v) = field(g) {
+            entries.push((g.name.as_str().into(), str_value(v)));
+        }
+    }
+    entries.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+    entries.dedup_by(|a, b| a.0.as_str() == b.0.as_str());
+    let value = (!entries.is_empty()).then(|| Value::Dict(Dict { entries, ..Default::default() }));
+    patch(lib, key, value);
+}
+
 /// A number as fontTools would store it: an integer when whole.
 fn num_value(v: f64) -> Value {
     if v.fract() == 0.0 && v.abs() < 1e15 {
@@ -955,6 +1018,9 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         let value = Value::Array(Array { items: order.iter().map(|n| str_value(n)).collect(), ..Default::default() });
         patch(&mut lib, "public.glyphOrder", Some(value));
     }
+    let (default_lib, _) = kept_dict(default, LIB);
+    patch_glyph_map(&mut lib, POSTSCRIPT_NAMES, font, is_default, &default_lib, |g| g.info.production.as_deref());
+    patch_glyph_map(&mut lib, OPENTYPE_CATEGORIES, font, is_default, &default_lib, |g| g.info.opentype_category.as_deref());
     if !lib.is_empty() {
         out.insert(LIB.into(), plist(LIB, &Value::Dict(lib)));
     }
@@ -1028,6 +1094,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     }
     let layerinfo = ufo_get(&master.extra, "layerinfo").and_then(Value::as_dict);
     let kept_contents = ufo_get(&master.extra, "contents").and_then(Value::as_dict);
+    let text_of = |l: &Layer, key: &str| ufo_get(&l.extra, key).and_then(Value::as_str).map(str::to_string);
 
     for (layer_name, dir) in &layers {
         let is_default = dir == DEFAULT_DIR;
@@ -1071,7 +1138,24 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
                 Some([read_as, written]) if read_as.as_str() == Some(name.as_str()) => written.as_str().unwrap_or(name),
                 _ => name.as_str(),
             };
-            let text = glif::write(glif_name, &unicodes, layer, format, &style)?;
+            // The glyph's note and colour go to every master's file, except that a master whose
+            // file had its own when read keeps it while the glyph's is what was read.
+            let color_text = g.info.color.as_ref().and_then(glif::mark_color_text);
+            let (note, mark_color) = if is_default {
+                let note = match (text_of(layer, "noteRead"), text_of(layer, "note")) {
+                    (Some(read), Some(own)) if read == g.info.note => own,
+                    _ => g.info.note.clone(),
+                };
+                let mark = match text_of(layer, "markColorRead") {
+                    Some(read) if read == color_text.as_deref().unwrap_or("") => MarkColor::Keep,
+                    _ => color_text.as_deref().map_or(MarkColor::Remove, MarkColor::Set),
+                };
+                (note, mark)
+            } else {
+                (text_of(layer, "note").unwrap_or_default(), MarkColor::Keep)
+            };
+            let head = glif::Head { name: glif_name, unicodes: &unicodes, note: &note, mark_color };
+            let text = glif::write(head, layer, format, &style)?;
             out.insert(format!("{dir}/{file}"), text.into_bytes());
         }
         // The kept contents, for its order and spellings; then the model's glyphs.
@@ -1169,6 +1253,7 @@ pub(crate) fn font_losses(font: &Font) -> Vec<String> {
             }
         }
     }
+    out.extend(glyph_losses(font));
     if !font.info.user_data.is_empty() {
         out.push(format!("the font's user data ({} keys)", font.info.user_data.0.len()));
     }
@@ -1202,6 +1287,48 @@ pub(crate) fn font_losses(font: &Font) -> Vec<String> {
     }
     out
 }
+
+/// The glyph metadata a UFO has no standard place for, one line per kind with the number of
+/// glyphs that have it. (glyphsLib carries most of it in `com.schriftgestaltung.*` lib keys.)
+pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
+    use fontcraft_model::GlyphInfo;
+    type Has = fn(&GlyphInfo) -> bool;
+    let kinds: [(&str, Has); 11] = [
+        (GLYPH_LOSSES[0], |i| i.category.is_some() || i.sub_category.is_some() || i.script.is_some()),
+        (GLYPH_LOSSES[1], |i| i.case.is_some() || i.direction.is_some()),
+        (GLYPH_LOSSES[2], |i| !i.metrics_keys.is_empty()),
+        (GLYPH_LOSSES[3], |i| !i.tags.is_empty()),
+        (GLYPH_LOSSES[4], |i| i.locked),
+        (GLYPH_LOSSES[5], |i| i.last_change.is_some()),
+        (GLYPH_LOSSES[6], |i| i.sort_name.is_some() || i.sort_name_keep.is_some()),
+        (GLYPH_LOSSES[7], |i| !i.parts.is_empty()),
+        (GLYPH_LOSSES[8], |i| !i.user_data.is_empty()),
+        (GLYPH_LOSSES[9], |i| i.color.as_ref().is_some_and(|c| glif::mark_color_text(c).is_none())),
+        (GLYPH_LOSSES[10], |i| !glif::note_survives(&i.note)),
+    ];
+    kinds
+        .iter()
+        .filter_map(|(what, has)| {
+            let n = font.glyphs.iter().filter(|g| has(&g.info)).count();
+            (n > 0).then(|| format!("{what} ({n})"))
+        })
+        .collect()
+}
+
+/// The kinds of glyph metadata [`glyph_losses`] reports, as its lines begin.
+pub const GLYPH_LOSSES: [&str; 11] = [
+    "the glyphs' categories, subcategories and scripts",
+    "the glyphs' case and writing direction",
+    "the glyphs' metrics keys",
+    "the glyphs' tags",
+    "the glyphs' locks",
+    "the glyphs' last-change dates",
+    "the glyphs' sort names",
+    "the glyphs' smart-glyph properties",
+    "the glyphs' user data",
+    "the glyphs' colour labels that have no UFO mark colour",
+    "the glyphs' notes, with spaces at line ends and blank lines left out",
+];
 
 /// The UFO layer a non-master layer is written to in this UFO: its own `layer` for the target
 /// master's layers, the layer master's layer for a layer master's master layers.
@@ -1360,6 +1487,83 @@ mod tests {
         assert!(!back.glyph("C").unwrap().export);
         assert_eq!(back.outline("B", "m01").unwrap().elements().len(), font.outline("B", "m01").unwrap().elements().len());
         assert_eq!(write(&back).unwrap(), files, "a UFO we wrote comes back unchanged");
+    }
+
+    #[test]
+    fn glyph_notes_colours_production_names_and_categories_travel() {
+        use fontcraft_model::ColorLabel;
+        let mut font = Font::new("Meta");
+        {
+            let mut a = font.glyph_mut("A").unwrap();
+            a.info.note = "first line\nsecond".into();
+            a.info.color = Some(ColorLabel::Index(4));
+            a.info.production = Some("uni0041".into());
+            a.info.opentype_category = Some("base".into());
+        }
+        {
+            let mut b = font.glyph_mut("B").unwrap();
+            b.info.color = Some(ColorLabel::Rgba([1.0, 128.0 / 255.0, 0.0, 1.0]));
+            b.info.production = Some("B".into());
+            b.info.category = Some("Letter".into());
+        }
+        let files = write(&font).unwrap();
+        let a = s(&files["glyphs/A_.glif"]);
+        assert!(a.contains("  <note>\nfirst line\nsecond\n</note>\n"), "{a}");
+        assert!(a.contains("<key>public.markColor</key>\n      <string>0.67,0.95,0.38,1</string>"), "{a}");
+        assert!(s(&files["glyphs/B_.glif"]).contains("<string>1,0.502,0,1</string>"), "8-bit components as glyphsLib writes them");
+        let lib = s(&files["lib.plist"]);
+        assert!(
+            lib.contains("<key>public.openTypeCategories</key>\n    <dict>\n      <key>A</key>\n      <string>base</string>\n    </dict>"),
+            "{lib}"
+        );
+        assert!(lib.contains("<key>public.postscriptNames</key>\n    <dict>\n      <key>A</key>\n      <string>uni0041</string>\n      <key>B</key>\n      <string>B</string>"), "{lib}");
+        assert_eq!(info_losses(&font), ["the glyphs' categories, subcategories and scripts (1)"]);
+
+        let back = read(&files).unwrap();
+        let (a, b) = (back.glyph("A").unwrap(), back.glyph("B").unwrap());
+        assert_eq!(a.info.note, "first line\nsecond");
+        assert_eq!(a.info.color, Some(ColorLabel::Index(4)));
+        assert_eq!((a.info.production.as_deref(), a.info.opentype_category.as_deref()), (Some("uni0041"), Some("base")));
+        assert_eq!(b.info.color, Some(ColorLabel::Rgba([1.0, 0.502, 0.0, 1.0])));
+        assert!(back.default_master().unwrap().user_data.is_empty(), "the lib keys are glyph fields, not user data");
+        assert_eq!(write(&back).unwrap(), files, "written back unchanged");
+
+        // Edits are written; a removed colour leaves the lib.
+        let mut edited = back.clone();
+        {
+            let mut a = edited.glyph_mut("A").unwrap();
+            a.info.note = "changed".into();
+            a.info.color = None;
+            a.info.production = None;
+        }
+        let out = write(&edited).unwrap();
+        let a = s(&out["glyphs/A_.glif"]);
+        assert!(a.contains("<note>\nchanged\n</note>") && !a.contains("markColor"), "{a}");
+        assert!(!s(&out["lib.plist"]).contains("uni0041"));
+    }
+
+    #[test]
+    fn notes_and_mark_colours_keep_their_spelling() {
+        let mut files = write(&Font::new("Spell")).unwrap();
+        let glif = s(&files["glyphs/a.glif"]).replace(
+            "  <advance",
+            "  <note>\n    Indented\n\n    note\n  </note>\n  <lib>\n    <dict>\n      <key>public.markColor</key>\n      <string>1, 0, 0, 1</string>\n      <key>z</key>\n      <string>1</string>\n    </dict>\n  </lib>\n  <advance",
+        );
+        files.insert("glyphs/a.glif".into(), glif.clone().into_bytes());
+        let font = read(&files).unwrap();
+        let a = font.glyph("a").unwrap();
+        assert_eq!(a.info.note, "Indented\nnote", "read as fontTools reads it");
+        assert_eq!(a.info.color, Some(fontcraft_model::ColorLabel::Rgba([1.0, 0.0, 0.0, 1.0])));
+        assert_eq!(s(&write(&font).unwrap()["glyphs/a.glif"]), glif);
+        // A production name map with entries for glyphs the font lacks stays as written.
+        let lib = s(&files["lib.plist"]).replace(
+            "<dict>\n",
+            "<dict>\n    <key>public.postscriptNames</key>\n    <dict>\n      <key>zz</key>\n      <string>uniFFFF</string>\n      <key>a</key>\n      <string>a</string>\n    </dict>\n",
+        );
+        files.insert("lib.plist".into(), lib.clone().into_bytes());
+        let font = read(&files).unwrap();
+        assert_eq!(font.glyph("a").unwrap().info.production.as_deref(), Some("a"));
+        assert_eq!(s(&write(&font).unwrap()["lib.plist"]), lib);
     }
 
     #[test]

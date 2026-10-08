@@ -191,6 +191,49 @@ mod tests {
     }
 
     #[test]
+    fn glyph_metadata_round_trips() {
+        use fontcraft_model::plist::{Dict, Value};
+        use fontcraft_model::{ColorLabel, PartProperty, UserData};
+        let mut font = Font::new("Meta");
+        {
+            let mut a = font.glyph_mut("A").unwrap();
+            let i = &mut *a.info;
+            i.production = Some("uni0041".into());
+            i.category = Some("Letter".into());
+            i.case = Some("upper".into());
+            i.opentype_category = Some("base".into());
+            i.metrics_keys.left = Some("=H".into());
+            i.metrics_keys.vert_origin = Some("n".into());
+            i.color = Some(ColorLabel::Rgba([1.0, 128.0 / 255.0, 0.0, 1.0]));
+            i.tags = vec!["new".into()];
+            i.note = "two\nlines".into();
+            i.locked = true;
+            i.last_change = Some("2026-10-08 12:00:00 +0000".into());
+            i.sort_name = Some("XA".into());
+            i.parts = vec![PartProperty {
+                name: "Width".into(),
+                bottom_value: 0.0,
+                top_value: 100.0,
+                bottom_name: Some("Low".into()),
+                top_name: None,
+                extra: Default::default(),
+            }];
+            let mut d = Dict::new();
+            d.insert("flag", Value::Bool(true));
+            i.user_data = UserData(d);
+        }
+        font.glyph_mut("B").unwrap().info.color = Some(ColorLabel::Index(3));
+        let bytes = save(&font).unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        assert_eq!(text.matches("\"info\"").count(), 2, "only glyphs with metadata have it");
+        assert_eq!(load(&bytes).unwrap(), font);
+        assert_eq!(save(&load(&bytes).unwrap()).unwrap(), bytes);
+        // Out-of-range values are refused on load.
+        let bad = text.replace("\"index\": 3", "\"rgba\": [2, 0, 0, 1]");
+        assert!(matches!(load(bad.as_bytes()), Err(FormatError::Invalid(_))), "{bad}");
+    }
+
+    #[test]
     fn newer_and_foreign_files_are_rejected_with_a_reason() {
         assert!(matches!(load(br#"{"format":"fontcraft","version":99,"font":{}}"#), Err(FormatError::TooNew { found: 99, .. })));
         assert!(matches!(load(br#"{"format":"other","version":1}"#), Err(FormatError::NotFontcraft(_))));

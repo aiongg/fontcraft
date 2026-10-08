@@ -200,6 +200,7 @@ impl Glyph {
             unicodes: self.unicodes,
             export: self.export,
             kern_groups: Default::default(),
+            info: Default::default(),
             layers: self.layers.into_iter().map(Layer::upgrade).collect(),
             file_name: None,
             extra: extra_of(self.extra),

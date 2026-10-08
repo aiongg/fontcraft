@@ -286,8 +286,8 @@ would have to define because none was found (`roundtrip.ufoGlyphsLibKeys`, `roun
 | `settings`, `DisplayStrings`, `.appVersion` | lib `com.schriftgestaltung.disablesAutomaticAlignment`, `…useNiceNames`, `…keyboardIncrement`, `…DisplayStrings`, `…appVersion` (seen) |
 | Font, master `userData` | lib `com.schriftgestaltung.font.userData` (seen); master: `org.fontcraft.master.userData` |
 | Extensible metrics with filters and overshoots, named stems, numbers | font-info fixed fields get the unfiltered values; the full lists go to lib `org.fontcraft.metrics`, `…stems`, `…numbers` |
-| Glyph category, subcategory, script, case, direction, tags, lock, sort names, last change | glyph lib `com.schriftgestaltung.Glyphs.category`, `…subCategory`, `…lastChange` (seen); the others `org.fontcraft.glyph.*`; plus `public.openTypeCategories` derived for compilers |
-| Colour label by index | `public.markColor` with the palette's colour, plus `org.fontcraft.colorIndex` to restore the index |
+| Glyph category, subcategory, script, case, direction, tags, lock, sort names, last change | glyph lib `com.schriftgestaltung.Glyphs.category`, `…subCategory`, `…lastChange` (seen); the others `org.fontcraft.glyph.*`; plus `public.openTypeCategories` derived for compilers once the glyph database exists (M4; until then only a UFO's own map is written back) |
+| Colour label by index | `public.markColor` with the label colour glyphsLib uses for the index; reading that exact text gives the index back (implemented, M1.7), so no extra key is needed |
 | Metrics keys (glyph and layer) | glyph lib `org.fontcraft.metricsKeys` |
 | Kerning groups for top and bottom, `kerningVertical`, `kerningContext`, separate `kerningRTL` | lib `org.fontcraft.kerning.vertical`, `…context`; RTL pairs are merged into `kerning.plist` with a lib marker listing which pairs came from the RTL table |
 | Backup layers and their names | sparse UFO layers; glyph lib `org.fontcraft.layer {id, associatedMaster, name}` on each layer GLIF |
@@ -314,7 +314,7 @@ would have to define because none was found (`roundtrip.ufoGlyphsLibKeys`, `roun
 | Point `name`, point/contour/component/anchor/guideline `identifier`, object libs | node `attr.userData` (nodes), `userData`/`attr` of the object; contour identifiers in the path's `attr` |
 | GLIF file names, layer directory names, `layerinfo.plist` colour and lib | font `userData` → `org.fontcraft.ufo` |
 | Non-kerning groups, group member order, members not in the font, empty kerning groups, per-master group differences | font or master `userData` → `org.fontcraft.ufo.groups` |
-| Primary code point order; code points, note, mark colour or lib that differ between masters' GLIFs | layer `userData` on the master layer that differs |
+| Primary code point order; code points, note, mark colour or lib that differ between masters' GLIFs | layer `userData` on the master layer that differs (planned; for now they stay in that layer's `Extra`, written back to the UFO and counted as lost when saving `.glyphs`) |
 | Anchor and guideline colour; unnamed anchors | `userData` / `attr` of the object |
 | `public.postscript.hints`, `public.truetype.instructions`, `public.truetype.overlap`, `public.verticalOrigin` (when not equal to `vertOrigin` semantics), `public.unicodeVariationSequences`, `public.openTypeMeta`, any foreign lib key | layer or font `userData` under the same key name, so that writing UFO again restores it verbatim |
 | `data/` directory content | not embeddable in a text plist at sensible size: kept beside the Glyphs file only in the native format; loss report when saving as `.glyphs` |

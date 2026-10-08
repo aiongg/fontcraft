@@ -1,6 +1,6 @@
 //! `.glyphs` → designspace → model: the font information, the alignment zones, the stems, the
-//! guides, the axes (ranges and maps) and the instances come back, except what the loss report
-//! lists. Every `.glyphs` source the reference app
+//! guides, the axes (ranges and maps), the instances and the glyphs' metadata come back, except
+//! what the loss report lists. Every `.glyphs` source the reference app
 //! saved in format version 3 (outside fontc's hand-made test data). Skipped when `corpus/` is
 //! absent.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -8,7 +8,8 @@
 use std::path::{Path, PathBuf};
 
 use fontcraft_io_ufo::designspace;
-use fontcraft_model::{Family, Font, Guide, Instance, Master, Param, Params, Properties, axes, metric};
+use fontcraft_io_ufo::ufo::GLYPH_LOSSES;
+use fontcraft_model::{ColorLabel, Family, Font, Glyph, GlyphInfo, Guide, Instance, Master, Param, Params, Properties, axes, metric};
 
 fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
@@ -203,12 +204,63 @@ fn instances_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
     }
 }
 
+/// A colour as 8-bit components (what versions 2 and 3 store), or its index.
+fn color_form(c: &Option<ColorLabel>) -> Option<(Option<u8>, [i64; 4])> {
+    c.map(|c| match c {
+        ColorLabel::Index(i) => (Some(i), [0; 4]),
+        ColorLabel::Rgba(p) => (None, p.map(|v| (v * 255.0).round() as i64)),
+    })
+}
+
+/// The glyphs' code points, export flags and metadata. Each difference names the kind of
+/// metadata as the loss reports do, so a listed loss excuses it.
+fn glyphs_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
+    type Field = fn(&GlyphInfo) -> String;
+    let fields: [(&str, Field); 15] = [
+        ("the glyphs' production names", |i| format!("{:?}", i.production)),
+        ("the glyphs' OpenType categories", |i| format!("{:?}", i.opentype_category)),
+        (GLYPH_LOSSES[0], |i| format!("{:?}", (&i.category, &i.sub_category, &i.script))),
+        (GLYPH_LOSSES[1], |i| format!("{:?}", (&i.case, &i.direction))),
+        (GLYPH_LOSSES[2], |i| format!("{:?}", i.metrics_keys)),
+        (GLYPH_LOSSES[3], |i| format!("{:?}", i.tags)),
+        (GLYPH_LOSSES[4], |i| format!("{:?}", i.locked)),
+        (GLYPH_LOSSES[5], |i| format!("{:?}", i.last_change)),
+        (GLYPH_LOSSES[6], |i| format!("{:?}", (&i.sort_name, &i.sort_name_keep))),
+        (GLYPH_LOSSES[7], |i| format!("{:?}", i.parts)),
+        (GLYPH_LOSSES[8], |i| format!("{:?}", fontcraft_model::plist::Value::Dict(i.user_data.0.clone()).without_spellings())),
+        (GLYPH_LOSSES[10], |i| i.note.clone()),
+        // An index: the label colours; components: 8-bit ones survive a UFO.
+        (GLYPH_LOSSES[9], |i| format!("{:?}", color_form(&i.color).map(|c| c.0))),
+        ("the glyphs' colours, rounded to 8 bits", |i| format!("{:?}", color_form(&i.color).map(|c| c.1))),
+        ("the glyphs' colours", |i| format!("{:?}", i.color.is_some())),
+    ];
+    if font.glyphs.len() != back.glyphs.len() {
+        diffs.push(format!("glyphs: {} → {}", font.glyphs.len(), back.glyphs.len()));
+    }
+    for g in font.glyphs.iter() {
+        let Some(b) = back.glyph(&g.name) else {
+            diffs.push(format!("glyph `{}`: missing", g.name));
+            continue;
+        };
+        let plain = |g: &Glyph| (g.unicodes.clone(), g.export);
+        if plain(g) != plain(b) {
+            diffs.push(format!("glyph `{}`: code points or export", g.name));
+        }
+        for (what, field) in &fields {
+            if field(&g.info) != field(&b.info) {
+                diffs.push(format!("{what}: `{}` {:?} → {:?}", g.name, field(&g.info), field(&b.info)));
+            }
+        }
+    }
+}
+
 fn info_trip(font: &Font) -> Vec<String> {
     let written = fontcraft_io_ufo::designspace::write(font).unwrap();
     let back = fontcraft_io_ufo::designspace::read(&written.document, &written.ufos).unwrap();
     let mut diffs = Vec::new();
     axes_trip(font, &back, &mut diffs);
     instances_trip(font, &back, &mut diffs);
+    glyphs_trip(font, &back, &mut diffs);
     if font.info.date != back.info.date {
         diffs.push(format!("font: date {:?} → {:?}", font.info.date, back.info.date));
     }
@@ -242,6 +294,7 @@ fn font_information_survives_a_designspace() {
     sources(&corpus, &mut all);
     let (mut checked, mut failures) = (0, Vec::new());
     let (mut zoned, mut stemmed, mut guided, mut instanced, mut mapped) = (0, 0, 0, 0, 0);
+    let (mut noted, mut coloured, mut produced) = (0, 0, 0);
     for path in &all {
         let text = std::fs::read_to_string(path).unwrap();
         if !text.lines().take(3).any(|l| l.starts_with(".appVersion = "))
@@ -259,6 +312,9 @@ fn font_information_survives_a_designspace() {
         guided += usize::from(font.masters.iter().any(|m| !m.guides.is_empty()));
         instanced += usize::from(!font.instances.is_empty());
         mapped += usize::from((0..font.axes.len()).any(|i| !bent(axes::mapping(&font, i).pairs).is_empty()));
+        noted += usize::from(font.glyphs.iter().any(|g| !g.info.note.is_empty()));
+        coloured += usize::from(font.glyphs.iter().any(|g| g.info.color.is_some()));
+        produced += usize::from(font.glyphs.iter().any(|g| g.info.production.is_some()));
         let losses = designspace::info_losses(&font);
         for d in info_trip(&font) {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
@@ -271,9 +327,11 @@ fn font_information_survives_a_designspace() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     assert!(checked >= 5, "only {checked} sources found");
     eprintln!(
-        "{checked} sources: {zoned} with zones, {stemmed} with stems, {guided} with master guides, {instanced} with instances, {mapped} with axis maps"
+        "{checked} sources: {zoned} with zones, {stemmed} with stems, {guided} with master guides, {instanced} with instances, {mapped} with axis maps, \
+         {noted} with glyph notes, {coloured} with glyph colours, {produced} with production names"
     );
     assert!(zoned > 0 && stemmed > 0 && instanced > 0 && mapped > 0, "the corpus exercises zones, stems, instances and axis maps");
+    assert!(noted > 0 && coloured > 0 && produced > 0, "the corpus exercises glyph notes, colours and production names");
 }
 
 fn designspaces(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -341,6 +399,7 @@ fn axes_and_instances_survive_a_glyphs_file() {
         let mut diffs = Vec::new();
         axes_trip(&font, &again, &mut diffs);
         instances_trip(&font, &again, &mut diffs);
+        glyphs_trip(&font, &again, &mut diffs);
         for d in diffs {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
             if listed {

@@ -24,6 +24,7 @@ use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
 mod design;
+mod glyph;
 mod info;
 mod package;
 mod v2;
@@ -70,10 +71,10 @@ pub fn write(font: &Font) -> Result<String> {
 }
 
 /// What [`write`] leaves out of the document because the format version it writes has no place
-/// for it, one line each: zones beyond the overshoots (versions 3 and 4), and the axis data
-/// only a designspace states.
+/// for it, one line each: zones beyond the overshoots (versions 3 and 4), the axis data only a
+/// designspace states, and glyph metadata the version has no key for.
 pub fn info_losses(font: &Font) -> Vec<String> {
-    let mut out = Vec::new();
+    let mut out = glyph::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3));
     // Versions 3 and 4 hold alignment zones only as the metrics' overshoots; version 2 writes
     // the other zones into `alignmentZones`.
     if font.source.glyphs_version.unwrap_or(3) != 2 {
@@ -280,7 +281,7 @@ fn read_font(mut root: Dict) -> Result<Font> {
         Some(v) => as_items(v, "glyphs")?
             .into_iter()
             .enumerate()
-            .map(|(i, g)| read_glyph(g, &format!("glyphs[{i}]")).map(Arc::new))
+            .map(|(i, g)| read_glyph(g, &format!("glyphs[{i}]"), version).map(Arc::new))
             .collect::<Result<Vec<_>>>()?,
         None => Vec::new(),
     };
@@ -638,7 +639,7 @@ fn plain_metric_values(v: &Value) -> Option<Vec<MetricValue>> {
         .collect()
 }
 
-fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
+fn read_glyph(v: Value, at: &str, version: i64) -> Result<Glyph> {
     let mut d = as_dict(v, at)?;
     let name = opt_string(&mut d, "glyphname", at)?.ok_or_else(|| bad(at, "a glyph has no glyphname"))?;
     let at = format!("glyph `{name}`");
@@ -655,11 +656,12 @@ fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
     };
     let export = take(&mut d, "export").map(|v| as_bool01(&v, &format!("{at}.export"))).transpose()?.unwrap_or(true);
     let kern_groups = take_kern_groups(&mut d, KERN_GROUP_KEYS, &at)?;
+    let info = glyph::take_glyph_info(&mut d, u32::try_from(version).unwrap_or(3));
     let layers = match take(&mut d, "layers") {
         Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
-    Ok(Glyph { name, unicodes, export, kern_groups, layers, file_name: None, extra: into_extra(d) })
+    Ok(Glyph { name, unicodes, export, kern_groups, info: fontcraft_model::Rare::new(info), layers, file_name: None, extra: into_extra(d) })
 }
 
 fn code_points(v: &Value) -> Option<Vec<u32>> {
@@ -865,7 +867,7 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
         e.push(("instances".into(), list(font.instances.iter().map(write_instance).collect::<Result<_>>()?)));
     }
     e.push(("fontMaster".into(), list(font.masters.iter().map(write_master).collect::<Result<_>>()?)));
-    e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g).map(Value::Dict)).collect::<Result<_>>()?)));
+    e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g, version).map(Value::Dict)).collect::<Result<_>>()?)));
     for (key, table) in [("kerningLTR", &font.kerning.ltr), ("kerningRTL", &font.kerning.rtl), ("kerningVertical", &font.kerning.vertical)] {
         if !table.is_empty() {
             e.push((key.into(), write_kern_table(table)?));
@@ -920,8 +922,8 @@ fn write_master(m: &Master) -> Result<Value> {
     Ok(Value::Dict(finish(e, &m.extra)))
 }
 
-/// One glyph's dictionary (a package writes each to its own file).
-pub fn write_glyph(g: &Glyph) -> Result<Dict> {
+/// One glyph's dictionary in format version 3 or 4.
+fn write_glyph(g: &Glyph, version: u32) -> Result<Dict> {
     let at = format!("glyph `{}`", g.name);
     let mut e = vec![("glyphname".into(), string(&g.name))];
     match g.unicodes.as_slice() {
@@ -937,6 +939,7 @@ pub fn write_glyph(g: &Glyph) -> Result<Dict> {
         e.push(("export".into(), int(0)));
     }
     push_kern_groups(&mut e, &g.kern_groups, KERN_GROUP_KEYS);
+    glyph::push_glyph_info(&mut e, &g.info, version);
     e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at)).collect::<Result<_>>()?)));
     Ok(finish(e, &g.extra))
 }

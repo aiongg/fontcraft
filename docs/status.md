@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M1.7 step 3 done (3c: designspace axes and instances)._
+_Updated: 2026-10-08, M1.7 step 4 done (glyph fields)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (254 tests; about 28,000 lines of Rust in 12 crates).
+- `cargo xtask ci` passes all nine steps (265 tests; about 28,600 lines of Rust in 12 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -31,7 +31,7 @@ M1 (`docs/plans/M1.md`) so far:
 | M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
 | M1.5 compiled fonts | done |
 | M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
-| M1.7 the typed model | **in progress**: steps 1 to 3 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts); step 4 (glyph fields) next (plan § M1.7 › Progress) |
+| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5 (layers) next (plan § M1.7 › Progress) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -141,3 +141,10 @@ Append one terse entry per session: what landed, numbers, what is still open.
   writes back unchanged (112, UFOs or not); designspace → `.glyphs` → designspace keeps axes and
   instances in all 59 readable ones, except localised axis names (13 axes, reported).
   Round trips and census unchanged. Next: step 4.
+  Step 4: glyph metadata (production name, classification, case, direction, metrics keys,
+  colour, tags, note, lock, last change, sort names, smart-glyph properties, user data) is
+  `Glyph::info`, behind one pointer; `.glyphs` versions 2 to 4 and the native file type it. UFO
+  notes, mark colours, `public.postscriptNames` and `public.openTypeCategories` read into and
+  write from it, by glyphsLib's rules; the rest is in the loss report until step 8. Census:
+  glyph keys from 10,808 entries to 25 (explained in the plan). Round trips unchanged. Our UFOs
+  of seven `.glyphs` sources hold glyphsLib's notes, colours and production names. Next: step 5.

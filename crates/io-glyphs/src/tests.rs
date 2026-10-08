@@ -107,7 +107,8 @@ fn a_version_3_file_round_trips_through_the_model() {
     let Shape::Path(p) = &a.layers[0].shapes[0] else { panic!() };
     // The file's last node is the start node.
     assert_eq!((p.nodes[0].x, p.nodes[0].y), (100.0, 0.0));
-    assert!(a.extra.get(Family::Glyphs, "lastChange").is_some());
+    assert!(a.extra.get(Family::Glyphs, "lastChange").is_none(), "typed, not carried");
+    assert!(a.info.last_change.is_some());
     let b = font.glyph("B").unwrap();
     assert_eq!((b.unicodes.clone(), b.export), (vec![66, 67], false));
     assert_eq!(write(&font).unwrap(), V3);

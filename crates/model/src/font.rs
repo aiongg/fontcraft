@@ -12,6 +12,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::features::Features;
 use crate::glyph::{Glyph, Layer, Path, Shape};
+use crate::glyph_info::check_glyph_info;
 use crate::info::{Params, Properties, UserData};
 use crate::kerning::Kerning;
 use crate::{
@@ -949,6 +950,7 @@ impl Font {
         if let Some(&value) = g.unicodes.iter().find(|u| char::from_u32(**u).is_none()) {
             return Err(ModelError::BadUnicode { glyph: g.name.clone(), value });
         }
+        check_glyph_info(g)?;
         let mut layer_ids = HashSet::new();
         for l in &g.layers {
             self.master(&l.master)?;

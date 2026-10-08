@@ -17,8 +17,10 @@ mod extra;
 mod features;
 mod font;
 mod glyph;
+mod glyph_info;
 mod info;
 mod kerning;
+mod rare;
 
 pub use extra::{Extra, ExtraEntry, Family};
 pub use features::{Features, Snippet};
@@ -28,8 +30,10 @@ pub use font::{
 };
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
+pub use glyph_info::{ColorLabel, GlyphInfo, GlyphInfoBox, MetricsKeys, PartProperty};
 pub use info::{DEFAULT_LANGUAGE, Localized, Param, Params, Properties, Property, PropertyValue, UserData};
 pub use kerning::{KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
+pub use rare::{Rare, RareDefault};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.
 pub const UPM_RANGE: std::ops::RangeInclusive<u16> = 16..=16384;
@@ -47,6 +51,10 @@ pub const MAX_OUTLINE_ELEMENTS: usize = 500_000;
 pub const MAX_NAME_LEN: usize = 255;
 /// Most code points one glyph may be mapped from.
 pub const MAX_UNICODES: usize = 1024;
+/// Most tags one glyph may have.
+pub const MAX_GLYPH_TAGS: usize = 256;
+/// Most properties one smart glyph may have.
+pub const MAX_PART_PROPERTIES: usize = 64;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ModelError {
@@ -82,6 +90,8 @@ pub enum ModelError {
     BadUnicode { glyph: String, value: u32 },
     #[error("glyph `{glyph}` is mapped from more than {MAX_UNICODES} code points")]
     TooManyUnicodes { glyph: String },
+    #[error("glyph `{glyph}`: {message}")]
+    BadGlyphInfo { glyph: String, message: String },
 }
 
 /// A name is usable when it is not empty, not longer than [`MAX_NAME_LEN`] bytes and has no

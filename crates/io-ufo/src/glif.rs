@@ -20,7 +20,8 @@
 //! | `<` | path, node, component, anchor | the file's start tag, where it differs from the writer's |
 //! | `<glyph`, `<advance`, `<outline`, `<lib` | layer | the same, for elements without an object of their own |
 //! | `<unicode` | layer | the file's `unicode` start tags, `""` where they equal the writer's |
-//! | `+note`, `+image`, `+guideline`, `+…` | layer | an element the model does not read, as XML text, in source order |
+//! | `noteXml` | layer | the `<note>` element as XML text, where it differs from the writer's for the note it holds |
+//! | `+image`, `+guideline`, `+…` | layer | an element the model does not read (and a second `<note>`), as XML text, in source order |
 //! | `order` | layer | the names of the glyph's child elements, when they were not in the writer's order |
 //! | `height` | layer | the advance height |
 //! | `lib` | layer | the glyph lib, a property-list dictionary |
@@ -32,11 +33,17 @@
 //!
 //! A lib that is not a well-formed property list is kept as an unknown element (`+lib`).
 //!
+//! The note ([`Glif::note`]) is read as fontTools reads it (each line stripped, blank lines left
+//! out) and written as it writes it (the note between line breaks). The mark colour stays in the
+//! lib; [`write`] sets it from a [`MarkColor`], and [`mark_color`] and [`mark_color_text`]
+//! convert between its text and a [`ColorLabel`] as glyphsLib 6.15.0 does (`builder/glyph.py`,
+//! the label colours of `builder/constants.py`; Apache-2.0, see `NOTICE`).
+//!
 //! Contours the model cannot hold as a [`Path`] (a `curve` after one or three off-curve points, an
 //! open contour ending in off-curve points) and unknown elements inside `<outline>` are kept as a
 //! [`Shape::Raw`] holding their XML text.
 
-use fontcraft_model::{Anchor, Component, Extra, Family, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
+use fontcraft_model::{Anchor, ColorLabel, Component, Extra, Family, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
 use fontcraft_plist::xml::{self, Element, Node as XNode};
 use fontcraft_plist::{Array, Dict, Layout, Number, Value, xmlplist};
 
@@ -84,6 +91,8 @@ pub struct Glif {
     /// The `name` attribute (the UFO's `contents.plist` decides the glyph's name).
     pub name: String,
     pub unicodes: Vec<u32>,
+    /// The note, as fontTools reads it.
+    pub note: Option<String>,
     /// The GLIF format version: 1 in UFO 2, 2 in UFO 3.
     pub format: u32,
     pub layer: Layer,
@@ -110,6 +119,113 @@ fn ufo(x: &mut Extra, key: &str, v: Value) {
 
 fn s(text: &str) -> Value {
     Value::String(text.into())
+}
+
+/// The mark colour's key in a glyph lib.
+pub const MARK_COLOR: &str = "public.markColor";
+
+/// The reference's label colours as glyphsLib writes them to `public.markColor`, by index.
+const LABEL_COLORS: [&str; 12] = [
+    "0.85,0.26,0.06,1",
+    "0.99,0.62,0.11,1",
+    "0.65,0.48,0.2,1",
+    "0.97,1,0,1",
+    "0.67,0.95,0.38,1",
+    "0.04,0.57,0.04,1",
+    "0,0.67,0.91,1",
+    "0.18,0.16,0.78,1",
+    "0.5,0.09,0.79,1",
+    "0.98,0.36,0.67,1",
+    "0.75,0.75,0.75,1",
+    "0.25,0.25,0.25,1",
+];
+
+/// A `public.markColor` value as a colour label: a label colour's text is its index; other text
+/// is four numbers from 0 to 1, separated by commas.
+pub fn mark_color(text: &str) -> Option<ColorLabel> {
+    if let Some(i) = LABEL_COLORS.iter().position(|c| *c == text) {
+        return u8::try_from(i).ok().map(ColorLabel::Index);
+    }
+    let parts: Vec<f64> = text.split(',').map(|p| p.trim().parse::<f64>().ok().filter(|v| (0.0..=1.0).contains(v))).collect::<Option<_>>()?;
+    let [r, g, b, a] = parts.as_slice() else { return None };
+    Some(ColorLabel::Rgba([*r, *g, *b, *a]))
+}
+
+/// A colour label as `public.markColor` text; `None` for an index the label colours do not have.
+/// A component that is a whole number of 255ths is written with three decimals (`0` and `1`
+/// bare), as glyphsLib writes 8-bit components; any other in its shortest form.
+pub fn mark_color_text(c: &ColorLabel) -> Option<String> {
+    match c {
+        ColorLabel::Index(i) => LABEL_COLORS.get(usize::from(*i)).map(|t| (*t).to_string()),
+        ColorLabel::Rgba(parts) => {
+            let one = |v: f64| {
+                // In range for a valid colour, so the conversion is exact.
+                #[allow(clippy::cast_possible_truncation)]
+                let byte = (v * 255.0).round() as i64;
+                #[allow(clippy::cast_precision_loss)]
+                let whole = (byte as f64) / 255.0 == v;
+                if v == 0.0 {
+                    "0".to_string()
+                } else if v == 1.0 {
+                    "1".to_string()
+                } else if whole {
+                    format!("{v:.3}")
+                } else {
+                    format!("{v}")
+                }
+            };
+            Some(parts.iter().map(|v| one(*v)).collect::<Vec<_>>().join(","))
+        }
+    }
+}
+
+/// What [`write`] does with the lib's mark colour.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MarkColor<'a> {
+    /// Leaves the lib as it is.
+    Keep,
+    /// Sets this text, unless the lib's value already means the same colour.
+    Set(&'a str),
+    /// Removes a mark colour the lib has (one that does not read as a colour stays).
+    Remove,
+}
+
+fn patch_mark_color(lib: &mut Dict, want: MarkColor<'_>) {
+    let at = lib.entries.iter().position(|(k, _)| k.as_str() == MARK_COLOR);
+    let kept = at.and_then(|i| lib.entries.get(i)).and_then(|(_, v)| v.as_str()).and_then(mark_color);
+    match (want, at) {
+        (MarkColor::Keep, _) => {}
+        (MarkColor::Set(text), _) if kept.is_some() && kept == mark_color(text) => {}
+        (MarkColor::Set(text), Some(i)) => {
+            if let Some((_, v)) = lib.entries.get_mut(i) {
+                *v = s(text);
+            }
+        }
+        (MarkColor::Set(text), None) => {
+            let i = lib.entries.iter().position(|(k, _)| k.as_str() > MARK_COLOR).unwrap_or(lib.entries.len());
+            lib.insert_at(i, MARK_COLOR, s(text));
+        }
+        (MarkColor::Remove, Some(i)) if kept.is_some() => {
+            lib.remove_at(i);
+        }
+        (MarkColor::Remove, _) => {}
+    }
+}
+
+/// A note as fontTools reads it: each line stripped of white space, blank lines left out.
+fn read_note(text: &str) -> Option<String> {
+    let lines: Vec<&str> = text.split('\n').map(str::trim).filter(|l| !l.is_empty()).collect();
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
+/// The `<note>` element fontTools writes for a note.
+fn note_el(note: &str) -> Element {
+    Element::new("note").with_text(format!("\n{}\n", note.trim()))
+}
+
+/// Whether writing `note` and reading it back gives the same note.
+pub fn note_survives(note: &str) -> bool {
+    note.is_empty() || read_note(&note_el(note).text()).as_deref() == Some(note)
 }
 
 fn hint<'a>(x: &'a Extra, key: &str) -> Option<&'a str> {
@@ -326,6 +442,8 @@ pub fn read(text: &str, at: &str, layer_id: &str, master: &str) -> Result<Glif> 
     keep_tag(&mut layer.extra, "<glyph", root, &ours);
 
     let mut unicodes = Vec::new();
+    let mut note = None;
+    let mut seen_note = false;
     let mut unicode_tags: Vec<Value> = Vec::new();
     let mut names: Vec<&str> = Vec::new();
     for el in root.elements() {
@@ -349,6 +467,18 @@ pub fn read(text: &str, at: &str, layer_id: &str, master: &str) -> Result<Glif> 
                 let u = u32::from_str_radix(hex.trim(), 16).map_err(|_| bad(&at, format!("`{hex}` is not hexadecimal")))?;
                 unicodes.push(u);
                 unicode_tags.push(s(&tag_if_different(el, &unicode_el(u)).unwrap_or_default()));
+            }
+            "note" if !seen_note => {
+                seen_note = true;
+                note = read_note(&el.text());
+                let (mut theirs, mut ours) = (String::new(), String::new());
+                el.write(&mut theirs);
+                if let Some(n) = &note {
+                    note_el(n).write(&mut ours);
+                }
+                if theirs != ours {
+                    ufo(&mut layer.extra, "noteXml", s(&theirs));
+                }
             }
             "anchor" => {
                 let a = read_anchor(el, &at, &style)?;
@@ -418,7 +548,7 @@ pub fn read(text: &str, at: &str, layer_id: &str, master: &str) -> Result<Glif> 
         let items = names.iter().map(|n| s(n)).collect();
         ufo(&mut layer.extra, "order", Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }));
     }
-    Ok(Glif { name, unicodes, format, layer, style })
+    Ok(Glif { name, unicodes, note, format, layer, style })
 }
 
 /// The whitespace inside `<lib>` before and after its dictionary.
@@ -559,8 +689,26 @@ fn read_anchor(el: &Element, at: &str, style: &Style) -> Result<Anchor> {
 
 // ── writing ────────────────────────────────────────────────────────────────────────────────────
 
-/// Writes a layer as a GLIF file of `format` (1 or 2) for the glyph `name` mapped from `unicodes`.
-pub fn write(name: &str, unicodes: &[u32], layer: &Layer, format: u32, style: &Style) -> Result<String> {
+/// What a GLIF file holds besides the layer.
+#[derive(Clone, Copy, Debug)]
+pub struct Head<'a> {
+    pub name: &'a str,
+    pub unicodes: &'a [u32],
+    /// The note to write (empty: none).
+    pub note: &'a str,
+    pub mark_color: MarkColor<'a>,
+}
+
+impl<'a> Head<'a> {
+    /// A file that holds what was read: the note as read, the lib as it is.
+    pub fn of(g: &'a Glif) -> Self {
+        Head { name: &g.name, unicodes: &g.unicodes, note: g.note.as_deref().unwrap_or(""), mark_color: MarkColor::Keep }
+    }
+}
+
+/// Writes a layer as a GLIF file of `format` (1 or 2).
+pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Result<String> {
+    let Head { name, unicodes, note, mark_color } = head;
     let x = &layer.extra;
     let mut root = glyph_el(name, format, x);
     apply_tag(&mut root, x, "<glyph");
@@ -593,6 +741,15 @@ pub fn write(name: &str, unicodes: &[u32], layer: &Layer, format: u32, style: &S
         let mut el = unicode_el(*u);
         apply_source(&mut el, unicode_tags.and_then(|t| t.items.get(i)).and_then(Value::as_str));
         children.push(el);
+    }
+    // The note: as read while it says the same, else as fontTools writes it.
+    let kept_note = hint(x, "noteXml")
+        .map(|t| xml::parse_element(t).map_err(|err| UfoError::Syntax { file: format!("glyph `{name}`, kept <note>"), error: err }))
+        .transpose()?;
+    match kept_note {
+        Some(el) if read_note(&el.text()).as_deref().unwrap_or("") == note => children.push(el),
+        _ if !note.is_empty() => children.push(note_el(note)),
+        _ => {}
     }
     // Elements the model does not read, kept as text.
     for e in x.of(Family::Ufo) {
@@ -637,9 +794,14 @@ pub fn write(name: &str, unicodes: &[u32], layer: &Layer, format: u32, style: &S
         apply_tag(&mut outline, x, "<outline");
         children.push(outline);
     }
-    if let Some(lib) = x.get(Family::Ufo, "lib").filter(|v| v.as_dict().is_some_and(|d| !d.is_empty())) {
+    let mut lib = x.get(Family::Ufo, "lib").and_then(Value::as_dict).cloned().unwrap_or_default();
+    if x.get(Family::Ufo, "+lib").is_none() {
+        patch_mark_color(&mut lib, mark_color);
+    }
+    if !lib.is_empty() {
+        let lib = Value::Dict(lib);
         let mut text = String::new();
-        xmlplist::write_value(&mut text, lib, &style.indent, 2);
+        xmlplist::write_value(&mut text, &lib, &style.indent, 2);
         let dict = xml::parse_element(&text).map_err(|e| UfoError::Syntax { file: format!("glyph `{name}`, lib"), error: e })?;
         let mut el = Element::new("lib").with_child(dict);
         if let Some(gaps) = x.get(Family::Ufo, "libGaps").and_then(Value::as_array)
@@ -745,7 +907,7 @@ mod tests {
 
     fn round_trip(text: &str) -> String {
         let g = read(text, "test.glif", "m", "m").unwrap();
-        write(&g.name, &g.unicodes, &g.layer, g.format, &g.style).unwrap()
+        write(Head::of(&g), &g.layer, g.format, &g.style).unwrap()
     }
 
     fn hints(g: &Glif) -> usize {
@@ -780,7 +942,7 @@ mod tests {
         assert_eq!(hints(&g), 2);
         let Shape::Path(p) = &mut g.layer.shapes[0] else { panic!() };
         p.nodes[0].x = 448.0;
-        let out = write(&g.name, &g.unicodes, &g.layer, 2, &g.style).unwrap();
+        let out = write(Head::of(&g), &g.layer, 2, &g.style).unwrap();
         assert!(out.contains("<point x=\"448\" y=\"434\" type=\"line\"/>"), "{out}");
         assert!(out.contains("<point y='520' x=\"250\"/>"), "an untouched point keeps its spelling");
     }

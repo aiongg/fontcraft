@@ -3,7 +3,7 @@
 use fontcraft_geom::{Affine, BezPath, Point};
 use serde::{Deserialize, Serialize};
 
-use crate::{Extra, Family, KernGroups, MAX_COORDINATE, in_range};
+use crate::{Extra, Family, GlyphInfoBox, KernGroups, MAX_COORDINATE, in_range};
 use fontcraft_plist::Value;
 
 fn yes() -> bool {
@@ -24,6 +24,10 @@ pub struct Glyph {
     pub export: bool,
     #[serde(default, skip_serializing_if = "KernGroups::is_empty")]
     pub kern_groups: KernGroups,
+    /// Production name, classification, metrics keys, colour, tags, note and the rest of the
+    /// glyph's metadata ([`crate::GlyphInfo`]); most glyphs have none.
+    #[serde(default, skip_serializing_if = "GlyphInfoBox::is_default")]
+    pub info: GlyphInfoBox,
     /// Master layers and all others, in file order.
     #[serde(default)]
     pub layers: Vec<Layer>,
@@ -70,6 +74,7 @@ impl Glyph {
             unicodes: Vec::new(),
             export: true,
             kern_groups: KernGroups::default(),
+            info: GlyphInfoBox::default(),
             layers: Vec::new(),
             file_name: None,
             extra: Extra::new(),

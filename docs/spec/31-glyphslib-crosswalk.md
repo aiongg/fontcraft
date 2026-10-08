@@ -11,8 +11,10 @@ far: font information (§1 to §3) in `crates/io-ufo/src/fontinfo.rs`; master al
 stems and guides (§4.1, §4 stem rows, §9.6) in `crates/io-ufo/src/design.rs`; axes, user
 locations and the origin master (§6.1 to §6.5) in `crates/model/src/axes.rs` and
 `crates/io-ufo/src/designspace/axes.rs`; instances and variable fonts (§5.1, §5.2, §5.4, §5.5)
-in `crates/io-ufo/src/designspace/instances.rs`. Not yet: STAT (§6.6), applying instance data
-(§5.3). Where FontCraft differs from glyphsLib on purpose: `docs/plans/M1.md` § M1.7.
+in `crates/io-ufo/src/designspace/instances.rs`; the glyph's note, colour and production name
+(§7) in `crates/io-ufo/src/glif.rs` and `ufo.rs`. Not yet: STAT (§6.6), applying instance data
+(§5.3), the glyph lib keys (§7, §12.3), `public.openTypeCategories` from categories (§11.4: only
+a UFO's own map is read and written back). Where FontCraft differs from glyphsLib on purpose: `docs/plans/M1.md` § M1.7.
 
 Direction labels used in the tables:
 

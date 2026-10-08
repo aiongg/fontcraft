@@ -557,6 +557,15 @@ fn merge_glyph(merged: &mut Glyph, g: Glyph) {
             l.extra.push(Family::Ufo, "unicodes", list(&g.unicodes));
             l.extra.push(Family::Ufo, "unicodesRead", list(&merged.unicodes));
         }
+        // The note and colour of this master's file, where they differ from the glyph's.
+        if g.info.note != merged.info.note {
+            l.extra.push(Family::Ufo, "note", Value::String(g.info.note.as_str().into()));
+            l.extra.push(Family::Ufo, "noteRead", Value::String(merged.info.note.as_str().into()));
+        }
+        if g.info.color != merged.info.color {
+            let text = merged.info.color.as_ref().and_then(crate::glif::mark_color_text).unwrap_or_default();
+            l.extra.push(Family::Ufo, "markColorRead", Value::String(text.into()));
+        }
         if g.file_name != merged.file_name && l.extra.get(Family::Ufo, "fileName").is_none() {
             let own = g.file_name.clone().or_else(|| crate::names::glyph_file_name(&g.name, &std::collections::HashSet::new()));
             if let Some(own) = own {
@@ -1146,6 +1155,51 @@ mod tests {
         let font = read(&doc, &ufos).unwrap();
         assert_eq!(font.glyph("a").unwrap().unicodes, [0x61]);
         assert_eq!(write(&font).unwrap().ufos, ufos);
+    }
+
+    #[test]
+    fn each_master_keeps_its_own_glyph_note_colour_and_production_name() {
+        use fontcraft_model::ColorLabel;
+        let (doc, mut ufos) = two_masters();
+        let edit = |ufos: &mut BTreeMap<String, Files>, ufo: &str, file: &str, from: &str, to: &str| {
+            let files = ufos.get_mut(ufo).unwrap();
+            let text = String::from_utf8(files[file].clone()).unwrap();
+            assert!(text.contains(from), "{text}");
+            files.insert(file.into(), text.replacen(from, to, 1).into_bytes());
+        };
+        let lib = |name: &str| {
+            format!("<dict>\n    <key>public.postscriptNames</key>\n    <dict>\n      <key>a</key>\n      <string>{name}</string>\n    </dict>\n")
+        };
+        let glif = |note: &str, color: &str| {
+            format!(
+                "  <note>\n{note}\n</note>\n  <lib>\n    <dict>\n      <key>public.markColor</key>\n      <string>{color}</string>\n    </dict>\n  </lib>\n</glyph>"
+            )
+        };
+        edit(&mut ufos, "Duo-Light.ufo", "lib.plist", "<dict>\n", &lib("uni0061"));
+        edit(&mut ufos, "Duo-Bold.ufo", "lib.plist", "<dict>\n", &lib("a.bold"));
+        edit(&mut ufos, "Duo-Light.ufo", "glyphs/a.glif", "</glyph>", &glif("light", "1,0,0,1"));
+        edit(&mut ufos, "Duo-Bold.ufo", "glyphs/a.glif", "</glyph>", &glif("bold", "0,0,1,1"));
+        let font = read(&doc, &ufos).unwrap();
+        let a = font.glyph("a").unwrap();
+        assert_eq!(a.info.note, "light", "the default source's");
+        assert_eq!(a.info.color, Some(ColorLabel::Rgba([1.0, 0.0, 0.0, 1.0])));
+        assert_eq!(a.info.production.as_deref(), Some("uni0061"));
+        assert_eq!(write(&font).unwrap().ufos, ufos, "each master keeps its own");
+
+        // An edit goes to every master.
+        let mut edited = font.clone();
+        {
+            let mut a = edited.glyph_mut("a").unwrap();
+            a.info.note = "both".into();
+            a.info.color = Some(ColorLabel::Index(0));
+            a.info.production = Some("uni0061.alt".into());
+        }
+        let out = write(&edited).unwrap();
+        for ufo in ["Duo-Light.ufo", "Duo-Bold.ufo"] {
+            let a = String::from_utf8(out.ufos[ufo]["glyphs/a.glif"].clone()).unwrap();
+            assert!(a.contains("<note>\nboth\n</note>") && a.contains("<string>0.85,0.26,0.06,1</string>"), "{ufo}: {a}");
+            assert!(String::from_utf8_lossy(&out.ufos[ufo]["lib.plist"]).contains("<string>uni0061.alt</string>"), "{ufo}");
+        }
     }
 
     #[test]

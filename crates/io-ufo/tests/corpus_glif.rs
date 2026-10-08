@@ -66,7 +66,7 @@ fn glif_files_round_trip_through_the_model() {
             ufolib_hints += n;
         }
         match read {
-            Ok(g) => match glif::write(&g.name, &g.unicodes, &g.layer, g.format, &g.style) {
+            Ok(g) => match glif::write(glif::Head::of(&g), &g.layer, g.format, &g.style) {
                 Ok(out) if out == text => same += 1,
                 Ok(out) => {
                     let line = text.lines().zip(out.lines()).position(|(a, b)| a != b).unwrap_or(0);

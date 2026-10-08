@@ -422,11 +422,12 @@ fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
     }
     let export = take(&mut d, "export").map(|v| crate::as_bool01(&v, &format!("{at}.export"))).transpose()?.unwrap_or(true);
     let kern_groups = take_kern_groups(&mut d, KERN_GROUP_KEYS, &at)?;
+    let info = crate::glyph::take_glyph_info(&mut d, 2);
     let layers = match take(&mut d, "layers") {
         Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
-    Ok(Glyph { name, unicodes, export, kern_groups, layers, file_name: None, extra: into_extra(d) })
+    Ok(Glyph { name, unicodes, export, kern_groups, info: fontcraft_model::Rare::new(info), layers, file_name: None, extra: into_extra(d) })
 }
 
 fn read_layer(v: Value, at: &str) -> Result<Layer> {
@@ -654,6 +655,7 @@ fn write_glyph(g: &Glyph) -> Result<Dict> {
         e.push(("export".into(), int(0)));
     }
     push_kern_groups(&mut e, &g.kern_groups, KERN_GROUP_KEYS);
+    crate::glyph::push_glyph_info(&mut e, &g.info, 2);
     e.push(("layers".into(), list(g.layers.iter().map(|l| write_layer(l, &at)).collect::<Result<_>>()?)));
     Ok(finish_ordered(e, &g.extra, GLYPH_ORDER))
 }

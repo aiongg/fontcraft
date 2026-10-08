@@ -128,7 +128,8 @@ fn a_package_and_a_single_file_of_the_same_font_read_the_same() {
         for f in [&mut single, &mut package] {
             for i in 0..f.glyphs.len() {
                 if let Some(mut g) = f.glyphs.get_mut_at(i) {
-                    g.extra.remove(fontcraft_model::Family::Glyphs, "lastChange");
+                    g.info.last_change = None;
+                    g.info.tidy();
                 }
             }
         }
