@@ -405,6 +405,28 @@ fn zones_stems_and_guides_reach_fontinfo_and_come_back() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn a_ufo_zone_at_no_metric_is_reported_when_saved_as_version_3() {
+    let dir = temp("zones");
+    std::fs::write(dir.join("Z.glyphs"), V3).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": dir.join("Z.glyphs") }));
+    let ufo = dir.join("Z.ufo");
+    run(&mut s, "file.saveAs", json!({ "path": ufo }));
+    // A zone from 400 to 408, where the document has no metric.
+    let info = std::fs::read_to_string(ufo.join("fontinfo.plist")).unwrap();
+    let blues = "<key>postscriptBlueValues</key>\n    <array>\n      <integer>400</integer>\n      <integer>408</integer>\n";
+    let edited = info.replacen("<key>postscriptBlueValues</key>\n    <array>\n", blues, 1);
+    assert_ne!(edited, info, "{info}");
+    std::fs::write(ufo.join("fontinfo.plist"), edited).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": ufo }));
+    let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("Back.glyphs") }));
+    let lost = saved["losses"].as_array().unwrap().iter().find(|l| l["what"] == "font information this .glyphs version has no place for").cloned();
+    assert_eq!(lost.map(|l| l["items"].clone()), Some(json!(["master `Regular`: alignment zones other than overshoots (1)"])), "{saved}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// The test document with a second master, Bold, whose glyphs are wider.
 fn two_masters() -> String {
     V3.replacen(

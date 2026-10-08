@@ -375,6 +375,14 @@ fn ufo_info_losses(font: &Font) -> Option<Value> {
         .then(|| json!({ "family": family, "entries": items.len(), "what": "font information a UFO has no place for yet", "items": items }))
 }
 
+/// Font information the `.glyphs` version being written has no place for.
+fn glyphs_info_losses(font: &Font) -> Option<Value> {
+    let items = fontcraft_io_glyphs::info_losses(font);
+    (!items.is_empty()).then(
+        || json!({ "family": "fontcraft", "entries": items.len(), "what": "font information this .glyphs version has no place for", "items": items }),
+    )
+}
+
 fn family_name(f: Family) -> &'static str {
     match f {
         Family::Glyphs => "glyphs",
@@ -402,6 +410,9 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
         losses.extend(ufo_layer_losses(font));
         losses.extend(side_file_losses(font));
         losses.extend(ufo_info_losses(font));
+    }
+    if matches!(format, SaveFormat::Glyphs | SaveFormat::GlyphsPackage) {
+        losses.extend(glyphs_info_losses(font));
     }
     // A single file has no place for a package's side files (UI state, version 4 feature files).
     if format == SaveFormat::Glyphs && !font.files.is_empty() {

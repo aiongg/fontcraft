@@ -6,7 +6,7 @@ _Updated: 2026-10-08, M1.7 step 3b (UFO zones, stems, guidelines) done._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (236 tests; about 25,000 lines of Rust in 12 crates).
+- `cargo xtask ci` passes all nine steps (238 tests; about 25,000 lines of Rust in 12 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.

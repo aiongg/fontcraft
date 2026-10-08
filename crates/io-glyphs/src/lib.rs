@@ -69,6 +69,21 @@ pub fn write(font: &Font) -> Result<String> {
     Ok(openstep::write(&openstep::Document::new(Value::Dict(root)), dialect))
 }
 
+/// What [`write`] leaves out of the document because the format version it writes has no place
+/// for it, one line each.
+pub fn info_losses(font: &Font) -> Vec<String> {
+    let mut out = Vec::new();
+    // Versions 3 and 4 hold alignment zones only as the metrics' overshoots; version 2 writes
+    // the other zones into `alignmentZones`.
+    if font.source.glyphs_version.unwrap_or(3) != 2 {
+        for m in font.masters.iter().filter(|m| !m.zones.is_empty()) {
+            let name = if m.name.is_empty() { &m.id } else { &m.name };
+            out.push(format!("master `{name}`: alignment zones other than overshoots ({})", m.zones.len()));
+        }
+    }
+    out
+}
+
 /// The root dictionary of a document, and the dialect its version is written in.
 fn write_root(font: &Font) -> Result<(Dict, Dialect)> {
     let version = font.source.glyphs_version.unwrap_or(3);

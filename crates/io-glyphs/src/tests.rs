@@ -461,3 +461,18 @@ fn a_version_2_axes_parameter_names_the_axes_and_stays_a_parameter() {
     // Without values on any axis key, a file has no axes.
     assert!(read(&V2.replace("weightValue = 180;\n", "")).unwrap().axes.is_empty());
 }
+
+#[test]
+fn zones_beyond_the_overshoots_are_lost_only_after_version_2() {
+    let mut font = read(&v2_design()).unwrap();
+    assert!(crate::info_losses(&font).is_empty(), "version 2 writes them into `alignmentZones`");
+    assert!(write(&font).unwrap().contains("\"{400, 8}\""));
+    for version in [3, 4] {
+        font.source.glyphs_version = Some(version);
+        assert_eq!(crate::info_losses(&font), ["master `Bold Italic`: alignment zones other than overshoots (1)"]);
+        let out = write(&font).unwrap();
+        assert!(!out.contains("alignmentZones") && !out.contains("{400, 8}"), "version {version} has no place for them");
+    }
+    std::sync::Arc::make_mut(&mut font.masters)[0].zones.clear();
+    assert!(crate::info_losses(&font).is_empty());
+}
