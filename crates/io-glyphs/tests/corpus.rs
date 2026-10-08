@@ -106,3 +106,67 @@ fn reference_written_packages_round_trip_through_the_model() {
     assert!(checked >= 10, "only {checked} packages found");
     eprintln!("{checked} reference-written packages round-trip through the model");
 }
+
+#[test]
+fn a_package_and_a_single_file_of_the_same_font_read_the_same() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/glyphspack/tests/fixtures");
+    if !fixtures.is_dir() {
+        eprintln!("corpus/ absent: skipped (cargo xtask corpus --fetch)");
+        return;
+    }
+    for version in ["3", "4"] {
+        let single = fontcraft_io_glyphs::read(&std::fs::read_to_string(fixtures.join(format!("Andika Mini {version}.glyphs"))).unwrap()).unwrap();
+        let dir = fixtures.join(format!("Andika Mini {version}.glyphspackage"));
+        let mut files = fontcraft_io_glyphs::Files::new();
+        files_of(&dir, &dir, &mut files);
+        let mut package = fontcraft_io_glyphs::read_package(&files).unwrap();
+        assert!(package.files.is_empty(), "version {version}: side files left over: {:?}", package.files.0.keys().collect::<Vec<_>>());
+        package.source = single.source.clone();
+        // The fixtures' single files carry each glyph's last-change date and their packages do
+        // not (they were saved differently); that date is not part of the mapping under test.
+        let mut single = single;
+        for f in [&mut single, &mut package] {
+            for i in 0..f.glyphs.len() {
+                if let Some(mut g) = f.glyphs.get_mut_at(i) {
+                    g.extra.remove(fontcraft_model::Family::Glyphs, "lastChange");
+                }
+            }
+        }
+        let differs = first_difference(&package, &single);
+        assert!(differs.is_none(), "version {version}: the package reads differently from the single file: {}", differs.unwrap_or_default());
+        // And the package read back writes the package's files.
+        assert!(fontcraft_io_glyphs::write_package(&package).unwrap() == files, "version {version}: the package does not write back");
+    }
+}
+
+/// The first part in which two fonts differ, for test messages.
+fn first_difference(a: &fontcraft_model::Font, b: &fontcraft_model::Font) -> Option<String> {
+    macro_rules! part {
+        ($($f:ident),*) => {
+            $(if a.$f != b.$f {
+                return Some(format!("{}: {:?} vs {:?}", stringify!($f), a.$f, b.$f).chars().take(600).collect());
+            })*
+        };
+    }
+    part!(
+        family_name,
+        units_per_em,
+        version_major,
+        version_minor,
+        axes,
+        metrics,
+        masters,
+        instances,
+        kerning,
+        features,
+        display_strings,
+        note,
+        extra
+    );
+    for (x, y) in a.glyphs.iter().zip(b.glyphs.iter()) {
+        if x != y {
+            return Some(format!("glyph {}: {:?} vs {:?}", x.name, x, y).chars().take(600).collect());
+        }
+    }
+    (a.glyphs.len() != b.glyphs.len()).then(|| "glyph count".to_string())
+}
