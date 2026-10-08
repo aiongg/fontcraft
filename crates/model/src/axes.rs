@@ -18,6 +18,8 @@ use crate::{Font, Instance, Master, Params, StyleClass};
 
 /// The font parameter that holds the user-to-design map of every axis.
 pub const AXIS_MAPPINGS: &str = "Axis Mappings";
+/// A location the font is interpolated at as if a master were there.
+pub const VIRTUAL_MASTER: &str = "Virtual Master";
 /// The master or instance parameter that gives its user coordinates by axis name.
 pub const AXIS_LOCATION: &str = "Axis Location";
 /// The font parameter naming the origin master by id.
@@ -305,8 +307,10 @@ fn active_instances(font: &Font) -> impl Iterator<Item = &Instance> {
 ///
 /// Unlike glyphsLib, an axis the `Axis Mappings` parameter leaves out gets the next rule's map
 /// (glyphsLib leaves the axis out of the designspace); instances that put one user value at
-/// different design values make no map (glyphsLib keeps the last one's); and `Virtual Master`
-/// parameters do not widen the range.
+/// different design values make no map (glyphsLib keeps the last one's).
+///
+/// When the map is the identity, the font's `Virtual Master` parameters widen the range: each
+/// one's location on the axis becomes a point of the map (glyphsLib's issue 859 rule).
 pub fn mapping(font: &Font, i: usize) -> Mapping {
     let Some(axis) = font.axes.get(i) else { return Mapping { pairs: vec![(0.0, 0.0)], default: 0.0 } };
     let regular = origin(font);
@@ -336,6 +340,12 @@ pub fn mapping(font: &Font, i: usize) -> Mapping {
         (pairs, default)
     };
     let pairs = if pairs.is_empty() { vec![(default, default)] } else { pairs };
+    let pairs = if pairs.iter().all(|(u, d)| u == d) {
+        let virtual_points = virtual_locations(font, &axis.name).map(|v| (v, v));
+        as_sorted_map(pairs.into_iter().chain(virtual_points))
+    } else {
+        pairs
+    };
     let mut mapping = Mapping { pairs, default };
     // The default, clamped to the range.
     mapping.default = default.max(mapping.minimum()).min(mapping.maximum());
@@ -343,6 +353,21 @@ pub fn mapping(font: &Font, i: usize) -> Mapping {
         mapping.default = mapping.minimum();
     }
     mapping
+}
+
+/// The locations on the axis named `axis` of the font's switched-on `Virtual Master` parameters
+/// (each a list of `{Axis, Location}`).
+fn virtual_locations<'a>(font: &'a Font, axis: &'a str) -> impl Iterator<Item = f64> + 'a {
+    font.info
+        .params
+        .0
+        .iter()
+        .filter(|p| p.name == VIRTUAL_MASTER && !p.disabled)
+        .filter_map(|p| p.value.as_array())
+        .flat_map(|a| a.items.iter())
+        .filter_map(|v| v.as_dict())
+        .filter(move |d| d.get("Axis").and_then(Value::as_str) == Some(axis))
+        .filter_map(|d| d.get("Location").and_then(Value::as_num).map(Num::as_f64))
 }
 
 /// The user range of axis `i`: the one the source states, else the one [`mapping`] derives.
@@ -409,6 +434,32 @@ mod tests {
         assert_eq!((m.minimum(), m.default, m.maximum()), (200.0, 400.0, 700.0), "Regular is the origin");
         assert_eq!(m.to_user(275.0), 300.0);
         assert_eq!(m.to_design(350.0), 337.5);
+    }
+
+    #[test]
+    fn virtual_masters_widen_an_identity_map() {
+        let mut f = font(&[("Weight", "wght"), ("Cap Height", "CHGT")], &[("Regular", &[400.0, 700.0])]);
+        let vm = |axis: &str, loc: i64| {
+            let mut d = Dict::new();
+            d.insert("Axis", Value::String(Str::new(axis)));
+            d.insert("Location", Value::Number(Number::int(loc)));
+            Value::Dict(d)
+        };
+        let params = &mut Arc::make_mut(&mut f.info).params.0;
+        params.push(Param::new(
+            VIRTUAL_MASTER,
+            Value::Array(fontcraft_plist::Array { items: vec![vm("Cap Height", 600), vm("Weight", 400)], ..Default::default() }),
+        ));
+        params.push(Param::new(VIRTUAL_MASTER, Value::Array(fontcraft_plist::Array { items: vec![vm("Cap Height", 800)], ..Default::default() })));
+        let m = mapping(&f, 1);
+        assert_eq!((m.minimum(), m.default, m.maximum()), (600.0, 700.0, 800.0));
+        assert!(m.is_identity());
+        assert_eq!(range(&f, 0), crate::AxisRange { minimum: 400.0, default: 400.0, maximum: 400.0 });
+        // A switched-off one does not count, and a map that is not the identity stays as it is.
+        Arc::make_mut(&mut f.info).params.0[1].disabled = true;
+        assert_eq!(mapping(&f, 1).maximum(), 700.0);
+        Arc::make_mut(&mut f.info).params.0.push(mappings("CHGT", &[("650", 700.0), ("700", 720.0)]));
+        assert_eq!(mapping(&f, 1).pairs, [(650.0, 700.0), (700.0, 720.0)]);
     }
 
     #[test]
