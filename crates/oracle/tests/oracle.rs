@@ -5,10 +5,10 @@
 
 use std::path::{Path, PathBuf};
 
-use fontcraft_compile::{Options, compile_ttf};
+use fontcraft_compile::{Options, compile};
 use fontcraft_engine::io::{SaveFormat, open, save};
 use fontcraft_model::{Font, Path as Contour, Shape};
-use fontcraft_oracle::{AllowList, Flavour, Hint, Oracle, Ours, OursError, Outcome, Settings, Status, check, compare};
+use fontcraft_oracle::{AllowList, Flavour, Hint, Oracle, Ours, OursError, Outcome, Settings, Status, check};
 
 fn sample() -> Font {
     let mut f = Font::new("Oracle Fixture");
@@ -49,11 +49,12 @@ fn settings(oracle: Oracle, flavour: Flavour, tool: PathBuf) -> Settings {
 fn ours(path: &Path, flavour: Flavour) -> Result<Ours, OursError> {
     let (font, warnings) = open(path, None).map_err(|e| OursError::Failed(e.to_string()))?;
     let hint = Hint { family: font.family_name.clone(), style: font.default_master().unwrap().name.clone() };
-    if flavour == Flavour::Cff {
-        return Err(OursError::Unsupported { message: "not yet".into(), hint });
-    }
-    let compiled = compile_ttf(&font, &Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, ..Default::default() })
-        .map_err(|e| OursError::Failed(e.to_string()))?;
+    let outlines = match flavour {
+        Flavour::TrueType => fontcraft_compile::Flavour::TrueType,
+        Flavour::Cff => fontcraft_compile::Flavour::Cff,
+    };
+    let options = Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, ..Default::default() };
+    let compiled = compile(&font, &font.default_target().unwrap(), outlines, &options).map_err(|e| OursError::Failed(e.to_string()))?;
     Ok(Ours { bytes: compiled.bytes, warnings, hint })
 }
 
@@ -102,20 +103,20 @@ fn fontmake_builds_a_glyphs_source_we_can_compare() {
 }
 
 #[test]
-fn fontmake_builds_cff_that_reads_back() {
+fn fontmake_and_fontcraft_build_the_same_cff_outlines() {
     let Some(tool) = tool(Oracle::Fontmake) else { return };
     let dir = temp("fontmake-cff");
     let path = dir.join("Fixture.glyphs");
     save(&sample(), &path, SaveFormat::Glyphs).unwrap();
-    let mut s = settings(Oracle::Fontmake, Flavour::Cff, tool);
-    s.keep = Some(dir.join("out"));
-    let report = check(&path, "Fixture.glyphs", &s, || ours(&path, Flavour::Cff));
-    assert_eq!(report.outcome, Outcome::NotCompared, "{:?}", report.messages);
-    let built = report.reference.expect("the reference was built");
-    let bytes = std::fs::read(&built.path).unwrap();
-    // The CFF outlines decode: the font compared with itself is identical, outlines included.
-    let c = compare::compare(&bytes, &bytes).unwrap();
-    let cff = c.tables.iter().find(|t| t.tag == "CFF ").expect("a CFF table");
-    assert_eq!(cff.status, Status::Identical);
+    let report = check(&path, "Fixture.glyphs", &settings(Oracle::Fontmake, Flavour::Cff, tool), || ours(&path, Flavour::Cff));
+    eprintln!("{}", fontcraft_oracle::render(&report));
+    assert_eq!(report.outcome, Outcome::Compared, "{:?}", report.messages);
+    let status = |tag: &str| report.tables.iter().find(|t| t.tag == tag).map(|t| t.status);
+    // Decoded outlines within half a unit; the table's bytes are the reference's too.
+    assert_eq!(status("CFF "), Some(Status::Identical));
+    for tag in ["maxp", "hmtx", "post", "cmap"] {
+        assert!(matches!(status(tag), Some(Status::Identical | Status::Equivalent)), "{tag}: {:?}", status(tag));
+    }
+    assert_eq!(status("glyf"), None, "no TrueType outlines");
     let _ = std::fs::remove_dir_all(&dir);
 }

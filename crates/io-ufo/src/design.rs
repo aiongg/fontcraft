@@ -15,7 +15,7 @@
 //! a key that would not be written back the same is kept as written. The two blue keys are
 //! typed or kept together, since one list of zones makes both.
 
-use fontcraft_model::{AlignmentZone, Guide};
+use fontcraft_model::{AlignmentZone, Guide, blue_values};
 use fontcraft_plist::{Array, Dict, Value};
 
 use crate::fontinfo::{number, string};
@@ -147,11 +147,6 @@ fn write_typed(d: &Design, skip: &[String], out: &mut Vec<(String, Value)>, lost
 
 // ── blue values ────────────────────────────────────────────────────────────────────────────────
 
-fn by_position(a: &AlignmentZone, b: &AlignmentZone) -> std::cmp::Ordering {
-    // Finite values, so the comparison is total; `-0` and `0` are equal, as in Python.
-    a.pos.partial_cmp(&b.pos).unwrap_or(std::cmp::Ordering::Equal).then(a.size.partial_cmp(&b.size).unwrap_or(std::cmp::Ordering::Equal))
-}
-
 /// Alignment zones from blue values, as glyphsLib's `to_glyphs_blue_values` makes them: a
 /// `BlueValues` pair `(y1, y2)` is the zone `(y1, y2 - y1)`, or `(0, y1)` when `y2` is 0; an
 /// `OtherBlues` pair is `(y2, y1 - y2)`. In descending order of position. `None` for a list of
@@ -172,21 +167,6 @@ pub(crate) fn zones_of(blues: &[f64], other: &[f64]) -> Option<Vec<AlignmentZone
     // A stable sort, as Python's.
     zones.sort_by(|a, b| b.pos.partial_cmp(&a.pos).unwrap_or(std::cmp::Ordering::Equal));
     Some(zones)
-}
-
-/// Blue values from alignment zones, as glyphsLib's `to_ufo_blue_values` writes them: zones in
-/// ascending order of position and size; a zone at 0 or of positive size goes to `BlueValues`,
-/// the rest to `OtherBlues`, each as its two edges in ascending order.
-pub(crate) fn blue_values(zones: &[AlignmentZone]) -> (Vec<f64>, Vec<f64>) {
-    let mut sorted = zones.to_vec();
-    sorted.sort_by(by_position);
-    let (mut blues, mut other) = (Vec::new(), Vec::new());
-    for z in sorted {
-        let list = if z.pos == 0.0 || z.size >= 0.0 { &mut blues } else { &mut other };
-        let (a, b) = (z.pos, z.pos + z.size);
-        list.extend(if a <= b { [a, b] } else { [b, a] });
-    }
-    (blues, other)
 }
 
 // ── guidelines ─────────────────────────────────────────────────────────────────────────────────

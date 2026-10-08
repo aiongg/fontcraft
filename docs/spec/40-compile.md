@@ -297,6 +297,29 @@ What we build:
 Verification plan: read our output back with read-fonts's charstring evaluator and compare
 outlines; compare against fontmake and makeotf builds through the oracle harness.
 
+State (M2.3): items 1 to 5 are done for name-keyed fonts without hints (`crates/cff`, byte for
+byte as fontTools writes them), and the compiler builds static CFF fonts with them
+(`Flavour::Cff`, `crates/compile/src/cff.rs`). What the compiler supplies follows ufo2ft's
+`OutlineOTFCompiler`:
+
+| Part | Value |
+|---|---|
+| Outlines | the decomposed contours in their drawn direction (no reversal); quadratic segments made cubic by fontTools' two-thirds rule; a closed contour's closing line left out unless the point before it sits on the start; the compiler's own `.notdef` keeps its closing lines, as ufo2ft draws it |
+| Glyph names | the charset holds the names `post` would hold; `post` is 3.0 |
+| Top DICT | font name = name ID 6; `version` = `major.minor`; `Notice` and `Copyright` from the trademark and copyright with `©` spelt out and reduced to printable ASCII; `FullName` and `FamilyName` from the PostScript full name or the typographic names of the `name` table; `Weight` only from `postscriptWeightName`; `ItalicAngle` always real; `FontMatrix` `1/upem` |
+| Private DICT | blue values from the master's alignment zones (rounded), and only with them `BlueFuzz` (0), `BlueShift` (7), `BlueScale` (`3/(4 × tallest zone)`) and `ForceBold`; `StemSnapH/V` sorted with `StdHW/VW` the first stem of each direction, only when both directions have stems; widths optimised unless the source sets `postscriptDefaultWidthX` or `postscriptNominalWidthX` |
+| Other tables | `maxp` 0.5; `hmtx` side bearings and `vmtx` top side bearings from the charstring bounds rounded half up; `hhea`/`vhea` extents from the bounds rounded outwards; `head` box = `FontBBox` |
+
+Where FontCraft's CFF differs from ufo2ft's on purpose:
+
+| What | ufo2ft | FontCraft | Why |
+|---|---|---|---|
+| A full or family name that Latin-1 cannot hold | the build fails (fontTools encodes CFF strings as Latin-1) | written with `?` for those characters, and a warning | a compile does not fail over a name |
+| A font whose `name` table has no PostScript name | n/a (glyphsLib names the family `Unnamed font`) | the typographic family and subfamily joined by a hyphen | follows the M2.2 name rules (fontc's) |
+
+ufo2ft writes no `LanguageGroup` or `ExpansionFactor`, whatever the source says, and neither does
+FontCraft.
+
 ### 3.2 CFF2 writing (blocks variable OTF, M9)
 
 write-fonts gives us `Cff2Header` (raw Top DICT bytes plus a raw tail) and `Index::from_items`.
@@ -419,6 +442,10 @@ Reading questions left open (listed on the allow-list): a `.glyphs` layer withou
 master has (fontc builds the UFO alone and uses ufo2ft's default, the model reads 0); a UFO
 glyph without a height (fontc writes advance height 0, the UFO reader cannot tell it from one
 with the default height); version 2 name keys in a version 3 file.
+
+Against fontmake (and so for CFF fonts, which fontc does not write), every field the two
+references derive differently keeps fontc's value; `crates/oracle/allow.toml` lists those
+differences for fontmake with their reasons (`docs/plans/M2.md` › M2.3b).
 
 ---
 

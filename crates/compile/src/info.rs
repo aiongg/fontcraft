@@ -115,8 +115,15 @@ pub struct Info {
     pub vertical: bool,
 }
 
+impl Info {
+    /// The English (United States) Windows text of name `id`, if written.
+    pub fn name(&self, id: u16) -> Option<String> {
+        self.names.iter().find(|r| r.id == id && r.platform == 3 && r.language == 0x409).map(|r| r.text.clone())
+    }
+}
+
 /// Plist values as fontc's readers take them: numbers, or strings that read as numbers.
-fn int(v: &Value) -> Option<i64> {
+pub(crate) fn int(v: &Value) -> Option<i64> {
     match v {
         Value::Number(n) => match n.value() {
             Num::Int(i) => Some(i),
@@ -128,7 +135,7 @@ fn int(v: &Value) -> Option<i64> {
     }
 }
 
-fn float(v: &Value) -> Option<f64> {
+pub(crate) fn float(v: &Value) -> Option<f64> {
     match v {
         Value::Number(n) => Some(n.value().as_f64()).filter(|f| f.is_finite()),
         Value::String(s) => s.as_str().trim().parse::<f64>().ok().filter(|f| f.is_finite()),
@@ -136,7 +143,7 @@ fn float(v: &Value) -> Option<f64> {
     }
 }
 
-fn boolean(v: &Value) -> Option<bool> {
+pub(crate) fn boolean(v: &Value) -> Option<bool> {
     match v {
         Value::Bool(b) => Some(*b),
         _ => int(v).map(|i| i == 1),
@@ -152,7 +159,7 @@ fn ints(v: &Value) -> Option<Vec<i64>> {
 const MAX_LIST: usize = 256;
 
 /// The first parameter of these names with a value `read` accepts.
-fn param<T>(params: &Params, names: &[&str], read: impl Fn(&Value) -> Option<T>) -> Option<T> {
+pub(crate) fn param<T>(params: &Params, names: &[&str], read: impl Fn(&Value) -> Option<T>) -> Option<T> {
     names.iter().find_map(|n| params.get(n).and_then(&read))
 }
 
@@ -235,7 +242,7 @@ fn default_text(value: &PropertyValue) -> Option<&str> {
 
 /// The text of a property, or of the first of `params` that holds a string: format version 2
 /// keeps most names in parameters, and a UFO's name keys without a property are parameters.
-fn text<'a>(font: &'a Resolved, property: &str, params: &[&str]) -> Option<&'a str> {
+pub(crate) fn text<'a>(font: &'a Resolved, property: &str, params: &[&str]) -> Option<&'a str> {
     font.properties
         .get(property)
         .and_then(|p| default_text(&p.value))

@@ -11,6 +11,12 @@
 //! `vertical_metrics.rs`; `head` from `head.rs`; `OS/2` from `os2.rs`; `post` from `post.rs`.
 //! Where FontCraft writes something else, `docs/spec/40-compile.md` › Where FontCraft differs
 //! from fontc says what and why.
+//!
+//! A font with CFF outlines (which fontc does not write) follows ufo2ft's `OutlineOTFCompiler`
+//! (MIT, see `NOTICE`) and what fontTools recomputes when it saves one: `CFF ` in place of
+//! `glyf`/`loca`, `maxp` 0.5, `post` 3.0, glyph boxes from the charstrings rounded half up for
+//! `hmtx` and `vmtx`, rounded outwards for the `hhea` and `vhea` extents, and the `head` box from
+//! the CFF `FontBBox`.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -29,10 +35,11 @@ use write_fonts::tables::os2::{Os2, SelectionFlags};
 use write_fonts::tables::post::Post;
 use write_fonts::tables::vhea::Vhea;
 use write_fonts::tables::vmtx::Vmtx;
-use write_fonts::types::{F2Dot14, FWord, Fixed, GlyphId, GlyphId16, LongDateTime, NameId, UfWord, Version16Dot16};
+use write_fonts::types::{F2Dot14, FWord, Fixed, GlyphId, GlyphId16, LongDateTime, NameId, Tag, UfWord, Version16Dot16};
 
+use crate::cff;
 use crate::info::{self, Info};
-use crate::outline::Prepared;
+use crate::outline::{Flavour, Prepared};
 use crate::{CompileError, MAX_POST_NAMES, MAX_TT_POINTS, Options, i16_of, ot_round, ranges, u16_of};
 
 /// Seconds between 1904-01-01 (the `head` epoch) and 1970-01-01 (the Unix epoch).
@@ -232,27 +239,46 @@ impl MetricsBuilder {
     }
 }
 
-/// Builds every table and the font file.
-pub fn assemble(
-    font: &Resolved,
-    order: &[ResolvedGlyph],
-    outlines: &[Prepared],
-    options: &Options,
-    warnings: &mut Vec<String>,
-) -> Result<Vec<u8>, CompileError> {
-    let info = info::derive(font, &options.style_name, warnings);
-    let m = info.metrics;
-    let built = build_glyphs(order, outlines)?;
+/// What the outline tables tell the metrics tables.
+struct Boxes {
+    /// Each glyph's integer box, as `hmtx`, `vmtx` and `head` read it; `None` when it draws
+    /// nothing.
+    glyphs: Vec<Option<Bbox>>,
+    /// Each glyph's width and height, for the `hhea` and `vhea` extents.
+    extents: Vec<Option<(i32, i32)>>,
+    /// The `head` box.
+    font: Bbox,
+    /// `head.indexToLocFormat`: 1 for long `loca` offsets, else 0.
+    loc_format: i16,
+}
 
-    // Horizontal metrics and the font box, from the glyphs as written.
-    let mut horizontal = MetricsBuilder::default();
-    let mut bounds: Option<Bbox> = None;
+/// The glyph names written to the font: the glyph's own when it is a conventional one, else
+/// `glyphNNNNN` by glyph id, with a warning.
+fn glyph_names(order: &[ResolvedGlyph], warnings: &mut Vec<String>) -> Vec<String> {
+    order
+        .iter()
+        .enumerate()
+        .map(|(gid, g)| {
+            if is_post_name(&g.name) {
+                g.name.clone()
+            } else {
+                warnings.push(format!(
+                    "glyph `{}` is written to the font as `glyph{gid:05}`: its name is not a valid glyph name there",
+                    g.name.escape_debug()
+                ));
+                format!("glyph{gid:05}")
+            }
+        })
+        .collect()
+}
+
+/// `glyf` and `loca`, with the boxes and `maxp` that follow from them.
+fn truetype(order: &[ResolvedGlyph], outlines: &[Prepared], builder: &mut FontBuilder) -> Result<(Boxes, Maxp), CompileError> {
+    let built = build_glyphs(order, outlines)?;
     let (mut max_points, mut max_contours, mut max_elements) = (0u16, 0u16, 0u16);
-    for (g, b) in order.iter().zip(&built) {
-        let advance = u16_of(g.width);
-        if ot_round(g.width) != f64::from(advance) {
-            warnings.push(format!("glyph `{}`: the advance width {} does not fit the font and was written as {advance}", g.name, g.width));
-        }
+    let mut boxes = Boxes { glyphs: Vec::with_capacity(built.len()), extents: Vec::with_capacity(built.len()), font: Bbox::default(), loc_format: 0 };
+    let mut font_box: Option<Bbox> = None;
+    for b in &built {
         max_points = max_points.max(b.points);
         max_contours = max_contours.max(b.contours);
         if let TtGlyph::Composite(c) = &b.glyph {
@@ -260,18 +286,119 @@ pub fn assemble(
         }
         let bbox = b.glyph.bbox();
         if let Some(bbox) = bbox {
-            bounds = Some(bounds.map_or(bbox, |f| f.union(bbox)));
+            font_box = Some(font_box.map_or(bbox, |f| f.union(bbox)));
         }
-        horizontal.update(advance, bbox.map_or(0, |b| b.x_min), bbox.map(|b| i32::from(b.x_max) - i32::from(b.x_min)));
+        boxes.glyphs.push(bbox);
+        boxes.extents.push(bbox.map(|b| (i32::from(b.x_max) - i32::from(b.x_min), i32::from(b.y_max) - i32::from(b.y_min))));
     }
+    boxes.font = font_box.unwrap_or_default();
     let (composite_points, composite_contours, depth) = composite_limits(&built);
     let mut glyf = GlyfLocaBuilder::new();
     for b in &built {
         glyf.add_glyph(&b.glyph).map_err(table("glyf"))?;
     }
     let (glyf, loca, loca_format) = glyf.build();
-    let bounds = bounds.unwrap_or_default();
-    let glyph_count = u16::try_from(order.len()).map_err(|_| CompileError::TooManyGlyphs(order.len()))?;
+    let maxp = Maxp {
+        num_glyphs: u16::try_from(order.len()).map_err(|_| CompileError::TooManyGlyphs(order.len()))?,
+        max_points: Some(max_points),
+        max_contours: Some(max_contours),
+        max_composite_points: Some(composite_points),
+        max_composite_contours: Some(composite_contours),
+        max_zones: Some(1),
+        max_twilight_points: Some(0),
+        max_storage: Some(0),
+        max_function_defs: Some(0),
+        max_instruction_defs: Some(0),
+        max_stack_elements: Some(0),
+        max_size_of_instructions: Some(0),
+        max_component_elements: Some(max_elements),
+        max_component_depth: Some(depth),
+    };
+    builder.add_table(&loca).map_err(table("loca"))?;
+    builder.add_table(&glyf).map_err(table("glyf"))?;
+    boxes.loc_format = match loca_format {
+        LocaFormat::Short => 0,
+        LocaFormat::Long => 1,
+    };
+    Ok((boxes, maxp))
+}
+
+/// The `CFF ` table, with the boxes and `maxp` (version 0.5) that follow from it. Glyph boxes
+/// are the drawn charstrings' bounds rounded half up, the extents rounded outwards and the font
+/// box is the table's `FontBBox`, as fontTools recomputes `hmtx`, `hhea` and `head` from a CFF
+/// table when it writes a font.
+fn postscript(input: &CffInput, builder: &mut FontBuilder, warnings: &mut Vec<String>) -> Result<(Boxes, Maxp), CompileError> {
+    let built = cff::build(input.font, input.info, input.order, input.outlines, input.names, input.synthesised_notdef, warnings)?;
+    let clamp = |v: i64| i16::try_from(v.clamp(i64::from(i16::MIN), i64::from(i16::MAX))).unwrap_or(0);
+    let bbox = |[x_min, y_min, x_max, y_max]: [i64; 4]| Bbox { x_min: clamp(x_min), y_min: clamp(y_min), x_max: clamp(x_max), y_max: clamp(y_max) };
+    let boxes = Boxes {
+        glyphs: built.glyph_bounds.iter().map(|b| b.map(|b| bbox(b.round_with_tolerance(cff::ROUND_TOLERANCE)))).collect(),
+        extents: built
+            .glyph_bounds
+            .iter()
+            .map(|b| {
+                b.map(|b| {
+                    let [x_min, y_min, x_max, y_max] = b.round_out();
+                    let span = |a: i64, b: i64| i32::try_from(b.saturating_sub(a)).unwrap_or(i32::MAX);
+                    (span(x_min, x_max), span(y_min, y_max))
+                })
+            })
+            .collect(),
+        font: bbox(built.font_bbox),
+        loc_format: 0,
+    };
+    let maxp =
+        Maxp { num_glyphs: u16::try_from(input.order.len()).map_err(|_| CompileError::TooManyGlyphs(input.order.len()))?, ..Default::default() };
+    builder.add_raw(Tag::new(b"CFF "), built.table);
+    Ok((boxes, maxp))
+}
+
+/// What [`postscript`] reads.
+struct CffInput<'a> {
+    font: &'a Resolved,
+    info: &'a Info,
+    order: &'a [ResolvedGlyph],
+    outlines: &'a [Prepared],
+    names: &'a [String],
+    synthesised_notdef: bool,
+}
+
+/// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
+/// `.notdef`.
+pub fn assemble(
+    font: &Resolved,
+    order: &[ResolvedGlyph],
+    outlines: &[Prepared],
+    flavour: Flavour,
+    synthesised_notdef: bool,
+    options: &Options,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<u8>, CompileError> {
+    let info = info::derive(font, &options.style_name, warnings);
+    let m = info.metrics;
+    let mut builder = FontBuilder::new();
+    // Glyph names: in `post` for TrueType, unless there are too many; in the charset for CFF.
+    let names = if flavour == Flavour::Cff || order.len() <= MAX_POST_NAMES { glyph_names(order, warnings) } else { Vec::new() };
+    let (boxes, maxp) = match flavour {
+        Flavour::TrueType => truetype(order, outlines, &mut builder)?,
+        Flavour::Cff => {
+            let input = CffInput { font, info: &info, order, outlines, names: &names, synthesised_notdef };
+            postscript(&input, &mut builder, warnings)?
+        }
+    };
+
+    // Horizontal metrics, from the glyphs as written.
+    let mut horizontal = MetricsBuilder::default();
+    for (i, g) in order.iter().enumerate() {
+        let advance = u16_of(g.width);
+        if ot_round(g.width) != f64::from(advance) {
+            warnings.push(format!("glyph `{}`: the advance width {} does not fit the font and was written as {advance}", g.name, g.width));
+        }
+        let bbox = boxes.glyphs.get(i).copied().flatten();
+        let extent = boxes.extents.get(i).copied().flatten();
+        horizontal.update(advance, bbox.map_or(0, |b| b.x_min), extent.map(|e| e.0));
+    }
+    let bounds = boxes.font;
 
     // cmap: every code point to its glyph id (conflicts were refused in preflight).
     let mut mappings: Vec<(char, GlyphId)> = Vec::new();
@@ -312,10 +439,7 @@ pub fn assemble(
         y_max: bounds.y_max,
         mac_style,
         lowest_rec_ppem: info.lowest_rec_ppem,
-        index_to_loc_format: match loca_format {
-            LocaFormat::Short => 0,
-            LocaFormat::Long => 1,
-        },
+        index_to_loc_format: boxes.loc_format,
         ..Default::default()
     };
     let (h_metrics, h_side_bearings) = horizontal.split();
@@ -332,45 +456,17 @@ pub fn assemble(
         caret_offset: i16_of(m.caret_offset),
         number_of_h_metrics: u16::try_from(h_metrics.len()).unwrap_or(u16::MAX),
     };
-    let maxp = Maxp {
-        num_glyphs: glyph_count,
-        max_points: Some(max_points),
-        max_contours: Some(max_contours),
-        max_composite_points: Some(composite_points),
-        max_composite_contours: Some(composite_contours),
-        max_zones: Some(1),
-        max_twilight_points: Some(0),
-        max_storage: Some(0),
-        max_function_defs: Some(0),
-        max_instruction_defs: Some(0),
-        max_stack_elements: Some(0),
-        max_size_of_instructions: Some(0),
-        max_component_elements: Some(max_elements),
-        max_component_depth: Some(depth),
-    };
     let os2 = os2(&info, &horizontal.metrics, &code_points);
 
-    // Glyph names: written when every name is a conventional one and there are few enough.
-    let post_names: Vec<String> = order
-        .iter()
-        .enumerate()
-        .map(|(gid, g)| {
-            if is_post_name(&g.name) {
-                g.name.clone()
-            } else {
-                warnings.push(format!(
-                    "glyph `{}` is written to the font as `glyph{gid:05}`: its name is not a valid glyph name there",
-                    g.name.escape_debug()
-                ));
-                format!("glyph{gid:05}")
-            }
-        })
-        .collect();
-    let mut post = if order.len() > MAX_POST_NAMES {
+    // Glyph names: in `post` 2.0 for TrueType when there are few enough; CFF keeps them in its
+    // charset and has `post` 3.0 (`compile.postFormat`).
+    let mut post = if flavour == Flavour::Cff {
+        Post { version: Version16Dot16::VERSION_3_0, ..Default::default() }
+    } else if order.len() > MAX_POST_NAMES {
         warnings.push(format!("the font has more than {MAX_POST_NAMES} glyphs, so glyph names were left out of it"));
         Post { version: Version16Dot16::VERSION_3_0, ..Default::default() }
     } else {
-        Post::new_v2(post_names.iter().map(String::as_str))
+        Post::new_v2(names.iter().map(String::as_str))
     };
     post.italic_angle = Fixed::from_f64(info.italic_angle);
     post.underline_position = FWord::new(i16_of(m.underline_position));
@@ -380,19 +476,16 @@ pub fn assemble(
     let name =
         Name::new(info.names.iter().map(|r| NameRecord::new(r.platform, r.encoding, r.language, NameId::new(r.id), r.text.clone().into())).collect());
 
-    let mut builder = FontBuilder::new();
     builder.add_table(&head).map_err(table("head"))?;
     builder.add_table(&hhea).map_err(table("hhea"))?;
     builder.add_table(&maxp).map_err(table("maxp"))?;
     builder.add_table(&os2).map_err(table("OS/2"))?;
     builder.add_table(&Hmtx::new(h_metrics, h_side_bearings)).map_err(table("hmtx"))?;
     builder.add_table(&cmap).map_err(table("cmap"))?;
-    builder.add_table(&loca).map_err(table("loca"))?;
-    builder.add_table(&glyf).map_err(table("glyf"))?;
     builder.add_table(&name).map_err(table("name"))?;
     builder.add_table(&post).map_err(table("post"))?;
     if info.vertical {
-        let (vhea, vmtx) = vertical(order, &built, &info);
+        let (vhea, vmtx) = vertical(order, &boxes, &info);
         builder.add_table(&vhea).map_err(table("vhea"))?;
         builder.add_table(&vmtx).map_err(table("vmtx"))?;
     }
@@ -460,15 +553,15 @@ fn os2(info: &Info, metrics: &[LongMetric], code_points: &BTreeSet<u32>) -> Os2 
 /// own or the typographic ascender. The model measures a vertical origin down from the
 /// typographic ascender, for every source format (glyphsLib's rule, which the UFO reader
 /// follows).
-fn vertical(order: &[ResolvedGlyph], built: &[Built], info: &Info) -> (Vhea, Vmtx) {
+fn vertical(order: &[ResolvedGlyph], boxes: &Boxes, info: &Info) -> (Vhea, Vmtx) {
     let m = &info.metrics;
     let mut v = MetricsBuilder::default();
-    for (g, b) in order.iter().zip(built) {
+    for (i, g) in order.iter().enumerate() {
         let advance = u16_of(g.vert_width.unwrap_or(m.typo_ascender - m.typo_descender));
         let origin = i16_of(g.vert_origin.map_or(m.typo_ascender, |o| m.typo_ascender - o));
-        let bbox = b.glyph.bbox();
+        let bbox = boxes.glyphs.get(i).copied().flatten();
         let top = clamp16(i32::from(origin) - i32::from(bbox.map_or(0, |b| b.y_max)));
-        v.update(advance, top, bbox.map(|b| i32::from(b.y_max) - i32::from(b.y_min)));
+        v.update(advance, top, boxes.extents.get(i).copied().flatten().map(|e| e.1));
     }
     let (long, short) = v.split();
     let vhea = Vhea {

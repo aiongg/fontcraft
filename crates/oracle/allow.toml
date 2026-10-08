@@ -2,7 +2,8 @@
 #
 # Each entry: `table` (tag, trailing spaces dropped), `key` (a difference key as the report prints
 # it; a `*` matches any run of characters) and more keys in `keys`, optional `oracle` ("fontc",
-# "fontmake"), `source` and `sources` (parts of the source path; any of them), and the `reason`.
+# "fontmake"), `source` and `sources` (parts of the source path; any of them), `ours` and `theirs`
+# (the two values as the report prints them, with `*` as in keys), and the `reason`.
 # A difference that FontCraft is meant to fix is not listed here: it stays "different" until the
 # compiler matches. Every entry names the package that removes it, where one does.
 
@@ -115,28 +116,24 @@ reason = "Source reading: the font box includes the glyphs the reference makes o
 [[allow]]
 table = "maxp"
 key = "maxp.numGlyphs"
-oracle = "fontc"
 sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
-reason = "Source reading: the reference is the first source's UFO built alone, which has no `bonus_bar`; the font FontCraft reads has every source's glyphs, and a glyph without a layer for the master is written empty (plan M2 § M2.1)."
+reason = "Source reading: the reference is the first source's UFO built alone (fontc builds that UFO, fontmake one font per source), which has no `bonus_bar`; the font FontCraft reads has every source's glyphs, and a glyph without a layer for the master is written empty (plan M2 § M2.1)."
 
 [[allow]]
 table = "post"
 key = "post.numGlyphs"
-oracle = "fontc"
 sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
 reason = "Source reading: `bonus_bar` (see maxp)."
 
 [[allow]]
 table = "cmap"
 key = "cmap U+007F"
-oracle = "fontc"
 sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
 reason = "Source reading: `bonus_bar` (see maxp) has a code point."
 
 [[allow]]
 table = "OS/2"
 key = "OS/2.usLastCharIndex"
-oracle = "fontc"
 sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
 reason = "Source reading: the code point of `bonus_bar` (see maxp)."
 
@@ -169,6 +166,12 @@ key = "glyf * outline"
 keys = ["glyf * bounds", "glyf * structure"]
 sources = ["/OpenCorners.ufo", "/NestedSmartComponent.glyphs", "/SmartComponent.glyphs", "/SmartComponents.glyphs", "/CornerComponents.glyphs"]
 reason = "Source reading: the reference interpolates smart components, applies corner components and erases open corners before compiling; FontCraft does from M6."
+
+[[allow]]
+table = "CFF"
+key = "CFF * outline"
+sources = ["/OpenCorners.ufo", "/NestedSmartComponent.glyphs", "/SmartComponent.glyphs", "/SmartComponents.glyphs", "/CornerComponents.glyphs"]
+reason = "Source reading: smart components, corner components and open corners, as for glyf; M6."
 
 [[allow]]
 table = "hmtx"
@@ -236,6 +239,12 @@ sources = ["/fontinfo_var.designspace"]
 reason = "Follows from the metrics the first source lacks (see OS/2): the drawn `.notdef` spans the descender to the ascender."
 
 [[allow]]
+table = "CFF"
+key = "CFF .notdef *"
+sources = ["/fontinfo_var.designspace"]
+reason = "Follows from the metrics the first source lacks (see OS/2): the drawn `.notdef` spans the descender to the ascender."
+
+[[allow]]
 table = "name"
 key = "name *"
 sources = ["/TheBestV2NamesInAV3File.glyphs"]
@@ -269,3 +278,267 @@ key = "name 3/1/0x0409/7"
 oracle = "fontc"
 sources = ["/master_custom_params_override.glyphs"]
 reason = "The master's `trademark` parameter in place of the font's, as for the other parameters of this source (see OS/2)."
+
+# --- fontmake and fontc disagree; FontCraft follows fontc (M2.2) ------------------------------
+# Where the two reference compilers write different values, M2.2 matched fontc. Each entry below
+# was checked against fontc's build of the same sources: FontCraft's value is fontc's. fontmake
+# writes CFF fonts and fontc does not, so these differences show in every comparison with
+# fontmake, TrueType and CFF alike.
+
+[[allow]]
+table = "head"
+key = "head.fontRevision"
+oracle = "fontmake"
+ours = "0"
+theirs = "1"
+reason = "A source without a version: glyphsLib reads it as 1.000, fontc as 0.000 (FontCraft follows fontc)."
+
+[[allow]]
+table = "name"
+key = "name 3/1/0x0409/5"
+oracle = "fontmake"
+ours = "Version 0.000"
+theirs = "Version 1.000"
+reason = "A source without a version (see head)."
+
+[[allow]]
+table = "name"
+key = "name 3/1/0x0409/3"
+oracle = "fontmake"
+ours = "0.000;*"
+theirs = "1.000;*"
+reason = "The unique id starts with the version, of a source without one (see head)."
+
+[[allow]]
+table = "name"
+key = "name 3/1/0x0409/1"
+keys = ["name 3/1/0x0409/3", "name 3/1/0x0409/4", "name 3/1/0x0409/6", "name 3/1/0x0409/16"]
+oracle = "fontmake"
+theirs = "*Unnamed*"
+reason = "A source without a family name: glyphsLib names the family `Unnamed font`; fontc writes no family name and builds the other names without one (FontCraft follows fontc)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.usLastCharIndex"
+oracle = "fontmake"
+ours = "0"
+theirs = "65535"
+reason = "A font without code points: ufo2ft writes 0xFFFF as the last character, fontc 0 (FontCraft follows fontc)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.achVendID"
+oracle = "fontmake"
+ours = "\"NONE\""
+theirs = "\"    \""
+reason = "A vendor id of four spaces: ufo2ft writes it, fontc 1.0.0 writes `NONE` (M2.2, plan § 3 question 6; FontCraft follows fontc)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.usWeightClass"
+oracle = "fontmake"
+sources = [".glyphs"]
+theirs = "400"
+reason = "glyphsLib gives a master's UFO no weight class, so ufo2ft writes its default 400; fontc takes the class from the master's location on the weight axis (FontCraft follows fontc)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.usWidthClass"
+oracle = "fontmake"
+sources = [".glyphs"]
+theirs = "5"
+reason = "As for the weight class: ufo2ft's default 5 for a master's UFO; fontc takes the class from the master's location on the width axis (FontCraft follows fontc)."
+
+[[allow]]
+table = "cmap"
+key = "cmap variation *"
+oracle = "fontmake"
+ours = "absent"
+reason = "Unicode variation sequences: ufo2ft writes a format 14 subtable, fontc 1.0.0 none (FontCraft follows fontc)."
+
+[[allow]]
+table = "cmap"
+key = "cmap subtables"
+oracle = "fontmake"
+theirs = "*0/5 format 14*"
+reason = "The format 14 subtable of Unicode variation sequences (see `cmap variation`)."
+
+[[allow]]
+table = "head"
+key = "head.flags"
+oracle = "fontmake"
+ours = "0x000b"
+theirs = "0x0009"
+reason = "The source's `openTypeHeadFlags` leaves out bit 1 (left side bearings at x = 0). fontc sets that bit in every font, since its left side bearings are the glyphs' xMin (FontCraft follows fontc)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.*"
+sources = ["/FeaTableOverrides.ufo"]
+oracle = "fontmake"
+reason = "The feature file's `table` blocks override fields of OS/2, hhea and head. fontmake compiles features; FontCraft compiles them from M8, and fontc is run without them."
+
+[[allow]]
+table = "hhea"
+key = "hhea.*"
+sources = ["/FeaTableOverrides.ufo"]
+oracle = "fontmake"
+reason = "Feature-file table overrides (see OS/2); M8."
+
+[[allow]]
+table = "head"
+key = "head.fontRevision"
+sources = ["/FeaTableOverrides.ufo"]
+oracle = "fontmake"
+reason = "Feature-file table overrides (see OS/2); M8."
+
+[[allow]]
+table = "name"
+key = "name *"
+sources = ["/CustomNameTableInFea.ufo"]
+oracle = "fontmake"
+reason = "The feature file's `name` table block (see OS/2); M8."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.s*"
+keys = ["OS/2.usWin*", "OS/2.yStrikeoutPosition"]
+sources = ["/ItalicItalic.glyphs", "/MasterNameNotExactlyItalic.glyphs", "/MasterNames-Italic.glyphs", "/An-Italic.glyphs"]
+oracle = "fontmake"
+reason = "A master without a value for a metric (a version 2 master lacking one another master has, or a master with no metric values): glyphsLib reads it as 0, fontc as the format's default (FontCraft follows fontc)."
+
+[[allow]]
+table = "hhea"
+key = "hhea.ascender"
+keys = ["hhea.descender"]
+sources = ["/ItalicItalic.glyphs", "/MasterNameNotExactlyItalic.glyphs", "/MasterNames-Italic.glyphs", "/An-Italic.glyphs"]
+oracle = "fontmake"
+reason = "Follows from the metrics the master lacks (see OS/2)."
+
+[[allow]]
+table = "head"
+key = "head.yMin"
+keys = ["head.yMax"]
+sources = ["/ItalicItalic.glyphs", "/MasterNameNotExactlyItalic.glyphs", "/MasterNames-Italic.glyphs"]
+oracle = "fontmake"
+reason = "Follows from the metrics a version 2 master lacks (see OS/2): the drawn `.notdef` spans the descender to the ascender."
+
+[[allow]]
+table = "glyf"
+key = "glyf .notdef *"
+sources = ["/ItalicItalic.glyphs", "/MasterNameNotExactlyItalic.glyphs", "/MasterNames-Italic.glyphs"]
+oracle = "fontmake"
+reason = "Follows from the metrics a version 2 master lacks (see OS/2 and head)."
+
+[[allow]]
+table = "CFF"
+key = "CFF .notdef *"
+sources = ["/ItalicItalic.glyphs", "/MasterNameNotExactlyItalic.glyphs", "/MasterNames-Italic.glyphs"]
+oracle = "fontmake"
+reason = "Follows from the metrics a version 2 master lacks (see OS/2 and head)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.s*"
+keys = ["OS/2.usWin*", "OS/2.yStrikeoutPosition"]
+sources = ["/LocalizedNames.glyphs"]
+oracle = "fontmake"
+reason = "A version 3 master with metric values but a font without metric definitions: glyphsLib assigns the values to the metrics in another order than fontc (FontCraft follows fontc)."
+
+[[allow]]
+table = "hhea"
+key = "hhea.ascender"
+keys = ["hhea.descender"]
+sources = ["/LocalizedNames.glyphs"]
+oracle = "fontmake"
+reason = "Follows from the order of the metric values (see OS/2)."
+
+[[allow]]
+table = "head"
+key = "head.yMin"
+keys = ["head.yMax"]
+sources = ["/LocalizedNames.glyphs"]
+oracle = "fontmake"
+reason = "Follows from the order of the metric values (see OS/2): the drawn `.notdef` spans the descender to the ascender."
+
+[[allow]]
+table = "glyf"
+key = "glyf .notdef *"
+sources = ["/LocalizedNames.glyphs"]
+oracle = "fontmake"
+reason = "Follows from the order of the metric values (see OS/2 and head)."
+
+[[allow]]
+table = "CFF"
+key = "CFF .notdef *"
+sources = ["/LocalizedNames.glyphs"]
+oracle = "fontmake"
+reason = "Follows from the order of the metric values (see OS/2 and head)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.sTypoLineGap"
+keys = ["OS/2.usWinAscent"]
+sources = ["/WghtVarGasp", "/WghtVarPanose", "/WghtVarInstancePanose"]
+oracle = "fontmake"
+reason = "The default typographic line gap is 1.2 em less the ascender and descender. At 1,234 units per em that is a fraction: ufo2ft truncates it, fontc rounds it (FontCraft follows fontc)."
+
+[[allow]]
+table = "hhea"
+key = "hhea.ascender"
+sources = ["/WghtVarGasp", "/WghtVarPanose", "/WghtVarInstancePanose"]
+oracle = "fontmake"
+reason = "Follows from the default line gap (see OS/2)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.ySub*"
+keys = ["OS/2.ySuper*"]
+sources = ["/Float-Regular.ufo", "/float.designspace"]
+oracle = "fontmake"
+reason = "A fractional units per em (255.5): ufo2ft and fontc round the subscript and superscript defaults derived from it differently (FontCraft follows fontc)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.fsSelection"
+sources = ["/StaticBoldItalic.glyphs", "/StaticBoldOblique.glyphs"]
+oracle = "fontmake"
+reason = "Style linking of a master named with `Bold`, `Italic` or `Oblique`: glyphsLib and fontc derive the style bits and legacy names differently (FontCraft follows fontc)."
+
+[[allow]]
+table = "head"
+key = "head.macStyle"
+sources = ["/StaticBoldItalic.glyphs", "/StaticBoldOblique.glyphs"]
+oracle = "fontmake"
+reason = "Style linking of the master (see OS/2)."
+
+[[allow]]
+table = "name"
+key = "name 3/1/0x0409/1"
+keys = ["name 3/1/0x0409/2", "name 3/1/0x0409/16", "name 3/1/0x0409/17"]
+sources = ["/StaticBoldItalic.glyphs", "/StaticBoldOblique.glyphs", "/StaticThinItalic.glyphs", "/WghtVar_AxisLocation_InstanceOverride.glyphs", "/bracket-rules-processed-in-glyph-order.glyphs"]
+oracle = "fontmake"
+reason = "Legacy family and style names of a master named with `Bold`, `Italic` or `Oblique` (see OS/2)."
+
+[[allow]]
+table = "name"
+key = "name 3/1/0x0409/4"
+keys = ["name 3/1/0x0409/6", "name 3/1/0x0409/16"]
+sources = ["/Dated.glyphs", "/KernFloats.glyphs", "/Unicode-UnquotedDec.glyphs", "/Unicode-UnquotedDecSequence.glyphs"]
+oracle = "fontmake"
+reason = "A master without a name: glyphsLib names its style `Regular` in the full and PostScript names; fontc leaves the style out (FontCraft follows fontc)."
+
+[[allow]]
+table = "name"
+key = "name 3/1/0x0409/18"
+sources = ["/TheBestNames.glyphs"]
+oracle = "fontmake"
+reason = "The compatible full name: glyphsLib writes it for `.glyphs` sources, fontc only for UFOs (FontCraft follows fontc)."
+
+[[allow]]
+table = "vhea"
+key = "vhea.lineGap"
+sources = ["/VheaParams.glyphs"]
+oracle = "fontmake"
+ours = "0"
+reason = "The source sets the vertical line gap to 0; fontmake writes 1000, fontc the source's 0 (FontCraft follows fontc)."

@@ -386,7 +386,8 @@ fn a_target_compiles_its_own_master_and_an_instance_at_a_master() {
         compile(&f, &Target::Instance(9), Flavour::TrueType, &Options::default()),
         Err(CompileError::Model(ModelError::NoSuchInstance(9)))
     ));
-    assert!(matches!(compile(&f, &Target::Master("m02".into()), Flavour::Cff, &Options::default()), Err(CompileError::Unsupported(_))));
+    let otf = compile(&f, &Target::Master("m02".into()), Flavour::Cff, &Options::default()).unwrap();
+    assert!(FontRef::new(&otf.bytes).unwrap().cff().is_ok(), "either flavour, at any master");
 }
 
 // --- Preflight -----------------------------------------------------------------------------
@@ -890,4 +891,259 @@ fn stated_non_spacing_marks_have_no_advance() {
     let out = compile_sample(&f);
     let font = FontRef::new(&out.bytes).unwrap();
     assert_eq!(font.hmtx().unwrap().advance(gid_of(&out, "acutecomb")), Some(0));
+}
+
+// --- CFF outlines (M2.3b) --------------------------------------------------------------------
+
+use skrifa::raw::ps::cff::dict::{Entry, entries};
+use skrifa::raw::types::Fixed;
+
+fn compile_otf(f: &Font) -> Compiled {
+    compile(f, &f.default_target().unwrap(), Flavour::Cff, &Options::default()).unwrap()
+}
+
+fn param(f: &mut Font, name: &str, v: fontcraft_model::plist::Value) {
+    Arc::make_mut(&mut f.info).params.0.push(fontcraft_model::Param::new(name, v));
+}
+
+fn real(v: f64) -> fontcraft_model::plist::Value {
+    fontcraft_model::plist::Value::Number(fontcraft_model::plist::Number::float(v).unwrap())
+}
+
+/// The Top DICT and Private DICT entries of a font's `CFF ` table, with the Top DICT's strings
+/// looked up.
+struct Dicts {
+    top: Vec<Entry>,
+    private: Vec<Entry>,
+    strings: Vec<(String, String)>,
+    name: String,
+}
+
+fn dicts(bytes: &[u8]) -> Dicts {
+    let font = FontRef::new(bytes).unwrap();
+    let cff = font.cff().unwrap();
+    let top: Vec<Entry> = entries(cff.top_dicts().get(0).unwrap(), None).collect::<Result<_, _>>().unwrap();
+    let range = top.iter().find_map(|e| if let Entry::PrivateDictRange(r) = e { Some(r.clone()) } else { None }).unwrap();
+    let private = entries(&cff.offset_data().as_bytes()[range], None).collect::<Result<_, _>>().unwrap();
+    let text = |sid| String::from_utf8_lossy(cff.string(sid).unwrap()).into_owned();
+    let strings = top
+        .iter()
+        .filter_map(|e| match e {
+            Entry::Version(s) => Some(("version", text(*s))),
+            Entry::Notice(s) => Some(("Notice", text(*s))),
+            Entry::Copyright(s) => Some(("Copyright", text(*s))),
+            Entry::FullName(s) => Some(("FullName", text(*s))),
+            Entry::FamilyName(s) => Some(("FamilyName", text(*s))),
+            Entry::Weight(s) => Some(("Weight", text(*s))),
+            _ => None,
+        })
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    let name = String::from_utf8_lossy(cff.name(0).unwrap()).into_owned();
+    Dicts { top, private, strings, name }
+}
+
+fn fixed(v: f64) -> Fixed {
+    Fixed::from_f64(v)
+}
+
+#[test]
+fn a_cff_font_reads_back_with_its_outlines_widths_and_names() {
+    let out = compile_otf(&sample());
+    assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(font.cff().is_ok() && font.glyf().is_err() && font.loca(None).is_err(), "CFF outlines, no glyf or loca");
+    let maxp = font.maxp().unwrap();
+    assert_eq!(maxp.version(), skrifa::raw::types::Version16Dot16::VERSION_0_5);
+    assert_eq!(usize::from(maxp.num_glyphs()), out.glyph_order.len());
+    assert_eq!(font.post().unwrap().version(), skrifa::raw::types::Version16Dot16::VERSION_3_0);
+    assert_eq!(font.head().unwrap().index_to_loc_format(), 0);
+    // Glyph names live in the charset.
+    let names: Vec<String> = font.glyph_names().iter().map(|(_, n)| n.to_string()).collect();
+    assert_eq!(names, out.glyph_order);
+
+    let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+    let a = gid_of(&out, "A");
+    assert_eq!(metrics.advance_width(a), Some(620.0));
+    assert_eq!(metrics.left_side_bearing(a), Some(60.0));
+    // The component is drawn in, moved by its offset.
+    let b = gid_of(&out, "B");
+    let shifted: Vec<Vec<(f32, f32)>> = drawn(&font, a).into_iter().map(|c| c.into_iter().map(|(x, y)| (x + 10.0, y)).collect()).collect();
+    assert_eq!(drawn(&font, b), shifted);
+    assert_eq!(metrics.left_side_bearing(b), Some(70.0));
+    // Cubic curves stay cubic and keep their drawn direction (counter-clockwise for an outer
+    // contour), with the closing line implied.
+    let o = gid_of(&out, "O");
+    let contours = drawn(&font, o);
+    assert_eq!(contours.len(), 1);
+    assert_eq!(contours[0].len(), 5, "a move and four curves: {contours:?}");
+    assert!(area(&contours[0]) > 0.0);
+    assert!(area(&drawn(&font, a)[0]) > 0.0);
+    let ob = metrics.bounds(o).unwrap();
+    assert_eq!((ob.x_min, ob.y_min, ob.x_max, ob.y_max), (50.0, -10.0, 650.0, 710.0));
+    // The font box is the CFF FontBBox, in `head` as well.
+    let head = font.head().unwrap();
+    let top = dicts(&out.bytes).top;
+    let bbox = top.iter().find_map(|e| if let Entry::FontBbox(b) = e { Some(*b) } else { None }).unwrap();
+    assert_eq!(bbox.map(|v| v.to_i32() as i16), [head.x_min(), head.y_min(), head.x_max(), head.y_max()]);
+    let hhea = font.hhea().unwrap();
+    assert_eq!((hhea.min_left_side_bearing().to_i16(), hhea.x_max_extent().to_i16()), (50, 650));
+}
+
+#[test]
+fn cff_dicts_hold_the_names_numbers_zones_and_stems() {
+    let mut f = sample();
+    Arc::make_mut(&mut f.info).properties.set("copyrights", "© 2026 José [Test]", true);
+    let d = dicts(&compile_otf(&f).bytes);
+    let s = |k: &str| d.strings.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
+    assert_eq!(d.name, "SliceSans-Regular", "name ID 6");
+    assert_eq!(s("version").as_deref(), Some("1.0"));
+    assert_eq!(s("Copyright").as_deref(), Some("Copyright 2026 Jose? Test"), "© spelt out, accents decomposed, brackets dropped");
+    assert_eq!(s("Notice").as_deref(), Some(""), "written empty when missing");
+    assert_eq!(s("FullName").as_deref(), Some("Slice Sans Regular"));
+    assert_eq!(s("FamilyName").as_deref(), Some("Slice Sans"));
+    assert_eq!(s("Weight"), None);
+    assert!(!d.top.iter().any(|e| matches!(e, Entry::FontMatrix(_))), "the default matrix at 1000 units per em");
+
+    // The master's overshoots become blue zones, with the scale from the tallest zone.
+    let p = &d.private;
+    let blues = |e: &Entry| -> Option<Vec<(i32, i32)>> {
+        match e {
+            Entry::BlueValues(b) => Some(b.values().iter().map(|(a, b)| (a.to_i32(), b.to_i32())).collect()),
+            _ => None,
+        }
+    };
+    assert_eq!(p.iter().find_map(blues), Some(vec![(-16, 0), (500, 516), (700, 716), (800, 816)]));
+    let other = p.iter().find_map(|e| if let Entry::OtherBlues(b) = e { Some(b.values().to_vec()) } else { None });
+    assert_eq!(other, Some(vec![(fixed(-216.0), fixed(-200.0))]));
+    assert!(p.contains(&Entry::BlueScale(fixed(3.0 / 64.0))), "{p:?}");
+    assert!(p.contains(&Entry::BlueFuzz(fixed(0.0))), "0 unless the source says otherwise");
+    assert!(!p.iter().any(|e| matches!(e, Entry::BlueShift(_) | Entry::ForceBold(_))), "defaults are left out");
+    assert!(!p.iter().any(|e| matches!(e, Entry::StdHw(_) | Entry::StemSnapH(_))), "no stems");
+
+    // Stems of both directions, a zone of the master's own, parameters for the rest, another em.
+    let mut f = sample();
+    f.units_per_em = 2048;
+    Arc::make_mut(&mut f.stems).extend([
+        fontcraft_model::StemDef { horizontal: true, ..Default::default() },
+        fontcraft_model::StemDef { horizontal: true, ..Default::default() },
+        fontcraft_model::StemDef::default(),
+    ]);
+    let master = &mut Arc::make_mut(&mut f.masters)[0];
+    master.stem_values = vec![42.4, 30.0, 80.6];
+    master.zones.push(fontcraft_model::AlignmentZone { pos: 600.0, size: 12.0 });
+    param(&mut f, "blueScale", real(0.05));
+    int_param(&mut f, "blueShift", 5);
+    int_param(&mut f, "postscriptBlueFuzz", 1);
+    param(&mut f, "postscriptForceBold", fontcraft_model::plist::Value::Bool(true));
+    param(&mut f, "postscriptWeightName", fontcraft_model::plist::Value::String(fontcraft_model::plist::Str::new("Regular")));
+    let d = dicts(&compile_otf(&f).bytes);
+    let p = &d.private;
+    assert_eq!(p.iter().find_map(blues).unwrap().get(2), Some(&(600, 612)));
+    assert!(p.contains(&Entry::BlueScale(fixed(0.05))) && p.contains(&Entry::BlueShift(fixed(5.0))) && p.contains(&Entry::ForceBold(true)));
+    assert!(!p.iter().any(|e| matches!(e, Entry::BlueFuzz(_))), "1 is the default");
+    assert!(p.contains(&Entry::StdHw(fixed(42.0))) && p.contains(&Entry::StdVw(fixed(81.0))), "the first of each list, rounded: {p:?}");
+    let snaps = p.iter().find_map(|e| if let Entry::StemSnapH(s) = e { Some(s.values().to_vec()) } else { None });
+    assert_eq!(snaps, Some(vec![fixed(30.0), fixed(42.0)]), "sorted");
+    assert_eq!(d.strings.iter().find(|(k, _)| k == "Weight").map(|(_, v)| v.as_str()), Some("Regular"));
+    let matrix = d.top.iter().find_map(|e| if let Entry::FontMatrix(m) = e { Some(*m) } else { None });
+    assert!(matrix.is_some(), "1/2048 is not the default matrix");
+
+    // One direction of stems only: none written; no zones: no blue entries at all.
+    let mut f = sample();
+    Arc::make_mut(&mut f.stems).push(fontcraft_model::StemDef::default());
+    let master = &mut Arc::make_mut(&mut f.masters)[0];
+    master.stem_values = vec![80.0];
+    master.metric_values.iter_mut().for_each(|v| v.over = 0.0);
+    let p = dicts(&compile_otf(&f).bytes).private;
+    assert!(!p.iter().any(|e| matches!(e, Entry::StdVw(_) | Entry::StemSnapV(_) | Entry::BlueValues(_) | Entry::BlueFuzz(_))), "{p:?}");
+}
+
+#[test]
+fn cff_widths_come_from_the_source_when_it_sets_them() {
+    let mut f = sample();
+    int_param(&mut f, "postscriptNominalWidthX", 600);
+    let d = dicts(&compile_otf(&f).bytes);
+    assert!(d.private.contains(&Entry::NominalWidthX(fixed(600.0))) && d.private.contains(&Entry::DefaultWidthX(fixed(200.0))), "{:?}", d.private);
+    let font_bytes = compile_otf(&f).bytes;
+    let font = FontRef::new(&font_bytes).unwrap();
+    let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+    assert_eq!(metrics.advance_width(GlyphId::new(font.charmap().map('A').unwrap().to_u32())), Some(620.0));
+}
+
+#[test]
+fn cff_paths_leave_out_the_implied_closing_line_and_convert_quadratics_exactly() {
+    use fontcraft_cff::PathOp;
+    let mut triangle = BezPath::new();
+    triangle.move_to((0.0, 0.0));
+    triangle.line_to((100.0, 0.0));
+    triangle.line_to((50.0, 80.0));
+    triangle.line_to((0.0, 0.0));
+    triangle.close_path();
+    let ops = cff::path_ops(&triangle, true);
+    assert_eq!(ops, [PathOp::MoveTo((0.0, 0.0)), PathOp::LineTo((100.0, 0.0)), PathOp::LineTo((50.0, 80.0))]);
+    assert_eq!(cff::path_ops(&triangle, false).len(), 4, "the compiler's own .notdef keeps it");
+    // A point that sits on the start keeps the closing line, as the duplicate point it is.
+    let mut doubled = BezPath::new();
+    doubled.move_to((0.0, 0.0));
+    doubled.line_to((100.0, 0.0));
+    doubled.line_to((0.0, 0.0));
+    doubled.line_to((0.0, 0.0));
+    doubled.close_path();
+    assert_eq!(cff::path_ops(&doubled, true).len(), 4);
+    // An open path keeps its last line.
+    let mut open = BezPath::new();
+    open.move_to((0.0, 0.0));
+    open.line_to((100.0, 0.0));
+    open.line_to((0.0, 0.0));
+    assert_eq!(cff::path_ops(&open, true).len(), 3);
+    // Quadratic: the control points two thirds of the way, computed from each end.
+    let mut quad = BezPath::new();
+    quad.move_to((0.0, 0.0));
+    quad.quad_to((30.0, 90.0), (100.0, 0.0));
+    quad.close_path();
+    let k = 0.666_666_666_666_666_7;
+    assert_eq!(cff::path_ops(&quad, true)[1], PathOp::CurveTo((k * 30.0, k * 90.0), (100.0 + k * (30.0 - 100.0), k * 90.0), (100.0, 0.0)));
+}
+
+#[test]
+fn postscript_strings_are_reduced_to_printable_ascii() {
+    assert_eq!(cff::postscript_string("Fine (c) <2026> 50%"), "Fine c 2026 50");
+    assert_eq!(cff::postscript_string("Ærø ﬁ ①"), "?r? fi 1", "no decomposition: one `?` each");
+    assert_eq!(cff::postscript_string("Åé"), "A?e?", "a decomposition with a mark: the mark is `?`");
+    assert_eq!(cff::postscript_string("line\nbreak"), "line\nbreak");
+}
+
+#[test]
+fn cff_glyph_boxes_are_rounded_for_the_metrics_tables() {
+    let mut f = sample();
+    let mut a = f.glyph_mut("A").unwrap();
+    a.layers[0].shapes = vec![Shape::Path(Path::rect(60.4, -0.6, 559.5, 700.2))];
+    drop(a);
+    let out = compile_otf(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    let a = gid_of(&out, "A");
+    assert_eq!(font.hmtx().unwrap().side_bearing(a), Some(60));
+    let b = font.glyph_metrics(Size::unscaled(), LocationRef::default()).bounds(a).unwrap();
+    assert_eq!((b.x_min, b.y_min, b.x_max, b.y_max), (60.0, -1.0, 560.0, 700.0), "points rounded half up in the charstring");
+}
+
+#[test]
+fn hostile_cff_input_is_an_error_not_a_panic() {
+    // Two points 60,000 units apart cannot be told apart in a charstring's 16-bit numbers.
+    let mut f = sample();
+    f.glyph_mut("A").unwrap().layers[0].shapes = vec![Shape::Path(Path::rect(-30_000.0, 0.0, 30_000.0, 10.0))];
+    let err = compile(&f, &f.default_target().unwrap(), Flavour::Cff, &Options::default()).unwrap_err();
+    assert!(err.to_string().contains("CFF"), "{err}");
+    // No family and no style: the name table has no PostScript name, the CFF table still needs one.
+    let mut f = sample();
+    f.family_name = String::new();
+    Arc::make_mut(&mut f.masters)[0].name = String::new();
+    let d = dicts(&compile_otf(&f).bytes);
+    assert!(!d.name.is_empty(), "{d:?}", d = d.strings);
+    // A family name Latin-1 cannot hold is written with a warning.
+    let mut f = sample();
+    f.family_name = "Slice 字体".into();
+    let out = compile_otf(&f);
+    assert!(out.warnings.iter().any(|w| w.contains("CFF")), "{:?}", out.warnings);
 }

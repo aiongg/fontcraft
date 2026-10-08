@@ -3,8 +3,9 @@
 //! `crates/oracle/allow.toml` is built in. An entry names a table and one or more difference
 //! keys (`key`, and more in `keys`; a `*` in a key matches any run of characters, so
 //! `hmtx * advance` matches every glyph's advance), and optionally the oracle and one or more
-//! parts of the source path it applies to (`source`, `sources`: any of them). A table whose every
-//! difference is allowed is reported as "allowed", with the reasons.
+//! parts of the source path it applies to (`source`, `sources`: any of them) and the two values
+//! it applies to (`ours`, `theirs`: patterns with `*` as in keys). A table whose every difference
+//! is allowed is reported as "allowed", with the reasons.
 
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +31,12 @@ pub struct Entry {
     /// More parts of source paths the entry applies to, beside `source`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<String>,
+    /// FontCraft's value, as the report prints it; any value when absent.
+    #[serde(default)]
+    pub ours: Option<String>,
+    /// The reference's value, as the report prints it; any value when absent.
+    #[serde(default)]
+    pub theirs: Option<String>,
     pub reason: String,
 }
 
@@ -73,6 +80,8 @@ impl AllowList {
                 && std::iter::once(&e.key).chain(&e.keys).any(|k| key_matches(k, &d.key))
                 && e.oracle.as_deref().is_none_or(|o| o == oracle)
                 && (any_source || e.source.iter().chain(&e.sources).any(|s| source.contains(s.as_str())))
+                && e.ours.as_deref().is_none_or(|p| key_matches(p, &d.ours))
+                && e.theirs.as_deref().is_none_or(|p| key_matches(p, &d.theirs))
         })
     }
 }
@@ -95,7 +104,19 @@ fn key_matches(pattern: &str, key: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::key_matches;
+    use super::{AllowList, key_matches};
+    use crate::Difference;
+
+    #[test]
+    fn values_narrow_an_entry() {
+        let list =
+            AllowList::parse("[[allow]]\ntable = \"head\"\nkey = \"head.fontRevision\"\nours = \"0\"\ntheirs = \"1*\"\nreason = \"r\"\n").unwrap();
+        let d = |ours: &str, theirs: &str| Difference { key: "head.fontRevision".into(), ours: ours.into(), theirs: theirs.into() };
+        assert!(list.find("fontmake", "s", "head", &d("0", "1")).is_some());
+        assert!(list.find("fontmake", "s", "head", &d("0", "1.5")).is_some());
+        assert!(list.find("fontmake", "s", "head", &d("2", "1")).is_none());
+        assert!(list.find("fontmake", "s", "head", &d("0", "2")).is_none());
+    }
 
     #[test]
     fn stars_match_any_run_of_characters() {

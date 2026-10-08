@@ -42,8 +42,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use fontcraft_model::{
-    AlignmentZone, Extra, Family, FileStore, Font, FontInfo, Glyph, GlyphTable, Group, KernFirst, KernTable, Kerning, Layer, Master, MasterKerning,
-    MetricDef, MetricValue, Param, Source, SourceFormat, StemDef, UserData, metric,
+    Extra, Family, FileStore, Font, FontInfo, Glyph, GlyphTable, Group, KernFirst, KernTable, Kerning, Layer, Master, MasterKerning, MetricDef,
+    MetricValue, Param, Source, SourceFormat, StemDef, UserData, metric,
 };
 use fontcraft_plist::xml::{self, Node as XNode};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value, xmlplist};
@@ -1507,16 +1507,7 @@ fn info_entries(font: &Font, master: &Master, read: &Dict) -> fontinfo::Written 
 /// the italic angle, then the master's other zones (glyphsLib's alignment zones of a format 3
 /// master); its stem values split by their definitions' direction; its guides.
 fn design_of(font: &Font, m: &Master) -> Design {
-    let overshoots = font.metrics.iter().zip(m.metric_values.iter()).filter(|(d, v)| d.kind != metric::ITALIC_ANGLE && v.over != 0.0);
-    let stems = |horizontal: bool| -> Vec<f64> {
-        font.stems.iter().zip(m.stem_values.iter()).filter(|(d, _)| d.horizontal == horizontal).map(|(_, v)| *v).collect()
-    };
-    Design {
-        zones: overshoots.map(|(_, v)| AlignmentZone { pos: v.pos, size: v.over }).chain(m.zones.iter().copied()).collect(),
-        stems_h: stems(true),
-        stems_v: stems(false),
-        guides: m.guides.clone(),
-    }
+    Design { zones: font.alignment_zones(m), stems_h: font.stem_widths(m, true), stems_v: font.stem_widths(m, false), guides: m.guides.clone() }
 }
 
 /// Whether a UFO holds the parameter `p` in its lib, under one of glyphsLib's keys, rather than

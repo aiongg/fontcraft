@@ -71,7 +71,9 @@ bundled, the file says so in its header and the project is listed here with its 
   designspace sources are ported from its bracket-layer, transformation and source builders
   (crates/io-ufo/src/designspace/rules.rs and sparse.rs). The decomposition of a component or
   image matrix into position, scale, rotation and slant is ported from its
-  decomposeGlyphs3Transform (crates/io-glyphs/src/lib.rs, decompose).
+  decomposeGlyphs3Transform (crates/io-glyphs/src/lib.rs, decompose). The blue values written
+  from a master's alignment zones (crates/model/src/resolve.rs, blue_values) port its
+  to_ufo_blue_values (builder/blue_values.py).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data
@@ -90,6 +92,14 @@ bundled, the file says so in its header and the project is listed here with its 
   (pens/t2CharStringPen.py, Copyright (c) 2009 Type Supply LLC); and the glyph bounds of
   pens/boundsPen.py with calcCubicBounds and solveQuadratic of misc/bezierTools.py. The
   cross-check script (crates/cff/crosscheck) records what ufo2ft (MIT) hands that pen.
+
+  ufo2ft (https://github.com/googlefonts/ufo2ft), MIT License, Copyright (c) 2015-2016 Tal
+  Leming, Ben Kiel, Cosimo Lupo and contributors. What the compiler puts into a CFF table and
+  the OpenType tables around it (crates/compile/src/cff.rs and build.rs) is ported from its
+  OutlineOTFCompiler (outlineCompiler.py: setupTable_CFF, getCharStringForGlyph,
+  getDefaultAndNominalWidths, makeGlyphsBoundingBoxes, setupTable_maxp) and from the PostScript
+  fallbacks of fontInfoData.py (normalizeStringForPostscript, postscriptFontNameFallback,
+  postscriptBlueScaleFallback and the static defaults).
 
   fontc (https://github.com/googlefonts/fontc), Apache License 2.0. The compiler's glyph rules
   are ported from its fontir and fontbe crates (1.0.0): pruning of missing components, inlining

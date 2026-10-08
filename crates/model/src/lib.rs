@@ -38,7 +38,7 @@ pub use info::{DEFAULT_LANGUAGE, LANGUAGES, Localized, Param, Params, Properties
 pub use kerning::{KernContext, KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
 pub use rare::{Rare, RareDefault};
-pub use resolve::{Metrics, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, is_ufo_family};
+pub use resolve::{Metrics, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, blue_values, is_ufo_family};
 pub use shape_info::{
     Alignment, AnchorInfo, AnchorInfoBox, ComponentInfo, ComponentInfoBox, Dimension, NodeInfo, NodeInfoBox, Orientation, PathInfo, PathInfoBox,
     ShapeAttrs, SmartValue,

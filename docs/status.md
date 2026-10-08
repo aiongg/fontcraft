@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M2.3a done (the `cff` crate; numbers in `docs/plans/M2.md` › M2.3)._
+_Updated: 2026-10-08, M2.3b done (static CFF in the compiler; numbers in `docs/plans/M2.md` › M2.3)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (467 tests; about 50,000 lines of Rust in 14 crates).
+- `cargo xtask ci` passes all nine steps (475 tests; about 51,000 lines of Rust in 14 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -16,17 +16,17 @@ _Updated: 2026-10-08, M2.3a done (the `cff` crate; numbers in `docs/plans/M2.md`
 ## Where to start
 
 **M2, the compile core** (`docs/plans/M2.md`, accepted): M2.0 (the oracle harness), M2.1 (the
-staged pipeline), M2.2 (the core tables at fontc parity) and M2.3a (the standalone `cff`
-crate) are done. Against fontc every core table is identical, equivalent or allow-listed with a
-reason (`crates/oracle/allow.toml`); the plan's M2.2 section has the numbers and the causes.
-`crates/cff` writes CFF tables byte-identical to fontTools' on 115 of 115 cross-checked fonts
-(`crates/cff/crosscheck/crosscheck.py`, run locally). Next is M2.3b: `Flavour::Cff` in
-`crates/compile`, OTF output, compared with fontmake `-o otf --optimize-cff 1`; the plan's
-M2.3 section lists what the compiler must hand the crate, value by value, as ufo2ft does. Open from M2.2, for the readers: a `.glyphs`
-layer without a `width` (fontc reads 600, we read 0); a designspace master without a metric
-another master has; a UFO glyph without a height (indistinguishable from the default height in
-the model); version 2 name keys in a version 3 file. Against fontmake the rest of the
-differences are where fontmake and fontc disagree (listed in the plan); FontCraft follows fontc.
+staged pipeline), M2.2 (the core tables at fontc parity) and M2.3 (CFF: the `cff` crate and
+`Flavour::Cff` in the compiler) are done. Against fontc every core table is identical,
+equivalent or allow-listed with a reason (`crates/oracle/allow.toml`). Against fontmake's CFF
+builds (`fontcraft-cli oracle --corpus --format otf`), 320 of 331 CFF tables decode to the same
+outlines and 195 are byte-identical; the rest follow from source reading or from fields where
+fontmake and fontc disagree, which are now allow-listed for fontmake with reasons. Next is M2.4
+(WOFF 1 and WOFF2 writing, WOFF2 reading in `crates/container`), then M2.5 (the export
+commands: `file.exportStatic` still refuses `outlines: "cff"`, and the CLI exports TrueType
+only). Open: four reader questions from M2.2 (plan › M2.2) and the differences left against
+fontmake (plan › M2.3b: 9 axis-mapping sources where fontmake's master file has other advances,
+a master's vendor id and licence parameters, a bracket layer source).
 
 M1 (`docs/plans/M1.md`) so far:
 
@@ -171,3 +171,10 @@ Append one terse entry per session: what landed, numbers, what is still open.
   passes. Cross-check against ufo2ft at `--optimize-cff 1`: 115 of 115 fonts byte-identical
   (17,896 glyphs; tolerances 0, 0.3, 0.5). 45 tests, read back with read-fonts. Not yet used by
   the compiler (M2.3b).
+- **2026-10-08, M2.3b.** `Flavour::Cff` builds static OTF: `crates/compile/src/cff.rs` fills
+  the `cff` crate as ufo2ft does (names, blue zones and stems from the new `Resolved::zones`,
+  `stems_h`, `stems_v`, widths); `maxp` 0.5, `post` 3.0, metrics from charstring bounds.
+  Against fontmake over 331 sources: CFF 195 identical / 125 equivalent / 10 allowed / 1
+  different; 347 OTF and 347 TTF read back by fontTools without error. Allow-list entries can
+  name values (`ours`, `theirs`); fontmake/fontc disagreements allow-listed. fontc and round
+  trips unchanged. 8 new tests. Export commands still TrueType only (M2.5).

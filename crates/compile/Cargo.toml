@@ -11,9 +11,11 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-cff.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
 thiserror.workspace = true
+unicode-normalization.workspace = true
 write-fonts.workspace = true
 
 [dev-dependencies]

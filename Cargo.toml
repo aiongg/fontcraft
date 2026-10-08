@@ -34,6 +34,8 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
 log = "0.4"
 base64 = "0.22"
+# Unicode compatibility decomposition (NFKD) for PostScript strings in CFF (MIT OR Apache-2.0).
+unicode-normalization = "0.1"
 
 # fonts: the fontations crates (MIT OR Apache-2.0). See docs/decisions/0002-compile-pipeline.md.
 write-fonts = "0.54"

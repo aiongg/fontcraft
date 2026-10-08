@@ -20,10 +20,13 @@
 //! master's location the master layer is the drawing, and alternate layers become separate
 //! glyphs with feature variations, which compiling does not do yet. The result's notes say when
 //! a font has any.
+//!
+//! The master's alignment zones and stems come along for PostScript hinting values; the
+//! zones as blue values follow glyphsLib's `to_ufo_blue_values` (Apache-2.0, see `NOTICE`).
 
 use fontcraft_geom::{Affine, BezPath, Point};
 
-use crate::{Font, Master, ModelError, Params, Properties, Shape, SourceFormat, metric};
+use crate::{AlignmentZone, Font, Master, ModelError, Params, Properties, Shape, SourceFormat, metric};
 
 /// What to resolve.
 #[derive(Clone, Debug, PartialEq)]
@@ -53,6 +56,13 @@ pub struct Resolved {
     /// The font's axes, with the location in user coordinates.
     pub axes: Vec<ResolvedAxis>,
     pub metrics: Metrics,
+    /// The master's alignment zones, overshoots first ([`Font::alignment_zones`]).
+    pub zones: Vec<AlignmentZone>,
+    /// The master's horizontal stem widths (measured vertically, such as crossbars), in the
+    /// order of the font's stem definitions.
+    pub stems_h: Vec<f64>,
+    /// The master's vertical stem widths.
+    pub stems_v: Vec<f64>,
     /// The font's properties, with the master's and then the instance's of the same key in their
     /// place.
     pub properties: Properties,
@@ -178,7 +188,44 @@ impl ResolvedGlyph {
 /// How close two design coordinates must be to count as the same location.
 const SAME_LOCATION: f64 = 1e-9;
 
+/// Blue values from alignment zones, as glyphsLib's `to_ufo_blue_values` writes them
+/// (`builder/blue_values.py`, glyphsLib 6.15.0, Apache-2.0, see `NOTICE`): zones in ascending
+/// order of position and size; a zone at 0 or of positive size goes to `BlueValues`, the rest to
+/// `OtherBlues`, each as its two edges in ascending order. Values that are not finite are kept;
+/// callers check them.
+pub fn blue_values(zones: &[AlignmentZone]) -> (Vec<f64>, Vec<f64>) {
+    let mut sorted = zones.to_vec();
+    // Python's sort of (position, size) pairs: stable, and `-0` equals `0` as there.
+    let cmp = |a: f64, b: f64| a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal);
+    sorted.sort_by(|a, b| cmp(a.pos, b.pos).then(cmp(a.size, b.size)));
+    let (mut blues, mut other) = (Vec::new(), Vec::new());
+    for z in sorted {
+        let list = if z.pos == 0.0 || z.size >= 0.0 { &mut blues } else { &mut other };
+        let (a, b) = (z.pos, z.pos + z.size);
+        list.extend(if a <= b { [a, b] } else { [b, a] });
+    }
+    (blues, other)
+}
+
 impl Font {
+    /// A master's alignment zones as the reference reads a format 3 master: the overshoot of
+    /// every metric but the italic angle that has one, in the font's metric order, then the
+    /// master's other zones (glyphsLib's `GSFontMaster.alignmentZones`).
+    pub fn alignment_zones(&self, master: &Master) -> Vec<AlignmentZone> {
+        self.metrics
+            .iter()
+            .zip(master.metric_values.iter())
+            .filter(|(d, v)| d.kind != metric::ITALIC_ANGLE && v.over != 0.0)
+            .map(|(_, v)| AlignmentZone { pos: v.pos, size: v.over })
+            .chain(master.zones.iter().copied())
+            .collect()
+    }
+
+    /// A master's stem widths of one direction, in the order of the font's stem definitions.
+    pub fn stem_widths(&self, master: &Master, horizontal: bool) -> Vec<f64> {
+        self.stems.iter().zip(master.stem_values.iter()).filter(|(d, _)| d.horizontal == horizontal).map(|(_, v)| *v).collect()
+    }
+
     /// The master that a static build of this font uses when nothing else is asked for: the
     /// first one.
     pub fn default_target(&self) -> Result<Target, ModelError> {
@@ -323,6 +370,9 @@ impl Font {
             location: instance.map_or_else(|| master.location.clone(), |i| i.location.clone()),
             axes,
             metrics,
+            zones: self.alignment_zones(master),
+            stems_h: self.stem_widths(master, true),
+            stems_v: self.stem_widths(master, false),
             properties,
             params,
             date: self.info.date.clone(),

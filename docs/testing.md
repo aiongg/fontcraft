@@ -79,7 +79,7 @@ results. The corpus-wide run is how the "compile" row of the parity table is sco
 fontcraft-cli oracle corpus/fontc/resources/testdata/glyphs3/WghtVar.glyphs   # one source, fontc
 fontcraft-cli oracle --corpus                       # the comparison set (fontc's test data, Oswald)
 fontcraft-cli oracle --corpus --against fontmake    # the other TrueType oracle
-fontcraft-cli oracle --corpus --format otf          # fontmake's CFF builds (compared from M2.3)
+fontcraft-cli oracle --corpus --format otf          # fontmake's CFF builds
 fontcraft-cli oracle --corpus --json --differences 10000 > report.json
 fontcraft-cli oracle SOURCE --output-dir out/       # keep both fonts and the tool's log
 ```
@@ -114,8 +114,15 @@ both fonts have. Exit status 1 means a table differs or a build failed.
 
 To accept a difference, add an entry to `crates/oracle/allow.toml` with the table, the difference
 key as the report prints it (`key`, more in `keys`; a `*` matches any run of characters, as in
-`hmtx * advance`), optionally the oracle and parts of the source path (`source`, `sources`), and
-the reason. A difference FontCraft is meant to fix does not go there.
+`hmtx * advance`), optionally the oracle, parts of the source path (`source`, `sources`) and the
+two values as the report prints them (`ours`, `theirs`, with `*` as in keys), and the reason. An
+entry with values accepts a cause wherever it shows (a source without a version: `ours = "0"`,
+`theirs = "1"`) without listing every source. A difference FontCraft is meant to fix does not go
+there.
+
+Reading our own output back: every corpus run with `--output-dir` keeps FontCraft's font
+(`fontcraft.ttf` or `fontcraft.otf`) in each source's folder, also when the reference fails, so
+the fonts can be checked with other readers (fontTools' `TTFont(...).ensureDecompiled()`, `ttx`).
 
 ### Other oracles
 

@@ -240,13 +240,14 @@ pub fn check(source: &Path, label: &str, settings: &Settings, ours: impl FnOnce(
         }
         Err(e) => report.messages.push(e),
     }
-    if let (Ok(o), Some(theirs)) = (&ours, &reference) {
-        if settings.keep.is_some() {
-            let path = work.path.join(format!("fontcraft.{}", settings.flavour.extension()));
-            if let Err(e) = std::fs::write(&path, &o.bytes) {
-                report.notes.push(format!("cannot keep FontCraft's font at {}: {e}", path.display()));
-            }
+    // FontCraft's font is kept whenever it was built, compared or not.
+    if let (Ok(o), Some(_)) = (&ours, &settings.keep) {
+        let path = work.path.join(format!("fontcraft.{}", settings.flavour.extension()));
+        if let Err(e) = std::fs::write(&path, &o.bytes) {
+            report.notes.push(format!("cannot keep FontCraft's font at {}: {e}", path.display()));
         }
+    }
+    if let (Ok(o), Some(theirs)) = (&ours, &reference) {
         match compare::compare(&o.bytes, theirs) {
             Ok(c) => {
                 report.notes.extend(c.notes);

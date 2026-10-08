@@ -303,7 +303,7 @@ write = true
 spec = "https://learn.microsoft.com/en-us/typography/opentype/spec/cff"
 area = "import-export"
 milestone = "M2"
-summary = "Static font with a CFF table, one per exported instance: cubic outlines as drawn, components decomposed, stem hints and alignment zones written into charstrings and the private dictionary. Quadratic paths in the source are converted to cubic."
+summary = "Static font with a CFF table, one per exported instance: cubic outlines as drawn, components decomposed, stem hints and alignment zones written into charstrings and the private dictionary. Quadratic paths in the source are converted to cubic. FontCraft's compiler builds this flavour of one master as fontmake does (M2.3b): alignment zones and stems in the Private DICT, no stem hints in the charstrings (autohinting is M10); the export command offers it from M2.5."
 ref = "Import & Export › OpenType Export › Outline Flavor; Adobe TN 5176, TN 5177"
 status = "handbook"
 

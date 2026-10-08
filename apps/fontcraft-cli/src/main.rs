@@ -414,13 +414,13 @@ fn oracle(args: &[String]) -> Outcome {
                 warnings.push(format!("compiled master `{}`, the variable font origin, instead of the first", master.name));
             }
             let hint = fontcraft_oracle::Hint { family: font.family_name.clone(), style: master.name.clone() };
-            if flavour == Flavour::Cff {
-                return Ok(Err(OursError::Unsupported { message: "CFF outlines are written from M2.3".into(), hint }));
-            }
             let options = fontcraft_engine::compile::Options { timestamp, ..Default::default() };
             let target = fontcraft_engine::model::Target::Master(master.id.clone());
-            let compiled = fontcraft_engine::compile::compile(&font, &target, fontcraft_engine::compile::Flavour::TrueType, &options)
-                .map_err(|e| e.to_string())?;
+            let outlines = match flavour {
+                Flavour::TrueType => fontcraft_engine::compile::Flavour::TrueType,
+                Flavour::Cff => fontcraft_engine::compile::Flavour::Cff,
+            };
+            let compiled = fontcraft_engine::compile::compile(&font, &target, outlines, &options).map_err(|e| e.to_string())?;
             warnings.extend(compiled.warnings);
             Ok(Ok(fontcraft_oracle::Ours { bytes: compiled.bytes, warnings, hint }))
         });

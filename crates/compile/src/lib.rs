@@ -9,11 +9,14 @@
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph order | [`order`] | the font's order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), cubic to quadratic, contour direction |
-//! | Table builders and assembly | `build` | `glyf`/`loca` with composites, `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post`, then the font file |
+//! | Table builders and assembly | `build`, [`cff`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post`, then the font file |
 //!
-//! The output is a **static TrueType-flavoured font** of one master. It is deterministic: the
-//! same font and options give the same bytes. Rounding is half up everywhere (OpenType rounding,
-//! `compile.rounding`): point coordinates when the glyph is written, component offsets, advances.
+//! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
+//! as fontc builds it) or CFF outlines ([`Flavour::Cff`], as fontmake builds it: `maxp` 0.5, `post`
+//! 3.0, glyph names in the CFF charset, metrics from the charstrings' bounds). It is
+//! deterministic: the same font and options give the same bytes. Rounding is half up everywhere
+//! (OpenType rounding, `compile.rounding`): point coordinates when the glyph is written,
+//! component offsets, advances.
 //!
 //! Everything handed to the table writer is validated first. `write-fonts` panics or overflows on
 //! points more than 32,767 units apart, on more than 65,277 glyph names outside the standard set and
@@ -27,6 +30,7 @@
 #![forbid(unsafe_code)]
 
 mod build;
+pub mod cff;
 pub mod info;
 pub mod order;
 pub mod outline;
@@ -145,9 +149,6 @@ pub fn compile_ttf(font: &Font, options: &Options) -> Result<Compiled, CompileEr
 
 /// The stages after resolving, on a resolved font.
 pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
-    if flavour == Flavour::Cff {
-        return Err(CompileError::Unsupported("CFF"));
-    }
     let mut warnings = std::mem::take(&mut resolved.notes);
     // Non-spacing marks have no advance in a compiled font (`compile.nonSpacingMarkWidth`), as
     // fontc and glyphsLib write them for `.glyphs` sources; a UFO states its advances as they
@@ -160,6 +161,7 @@ pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Opti
         }
     }
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
+    let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let upm = f64::from(resolved.units_per_em);
@@ -167,7 +169,7 @@ pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Opti
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
     let settings = outline::Settings { flavour, tolerance: upm * error, keep_direction: options.keep_direction, max_expanded: MAX_EXPANDED_ELEMENTS };
     let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
-    let bytes = build::assemble(&resolved, &glyphs, &outlines, options, &mut warnings)?;
+    let bytes = build::assemble(&resolved, &glyphs, &outlines, flavour, synthesised_notdef, options, &mut warnings)?;
     Ok(Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings })
 }
 
