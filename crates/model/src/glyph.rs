@@ -103,7 +103,8 @@ pub struct RawShape {
     pub value: Value,
 }
 
-/// In the native file a raw shape is `{"family", "value"}`, with the value as property-list text.
+/// In the native file a raw shape is `{"family", "value"}`, with the value as property-list text
+/// in its family's syntax (see [`Extra`]'s native form).
 #[derive(Serialize, Deserialize)]
 struct RawShapeRepr {
     family: Family,
@@ -112,9 +113,7 @@ struct RawShapeRepr {
 
 impl Serialize for RawShape {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut value = String::new();
-        fontcraft_plist::openstep::write_value(&mut value, &self.value, fontcraft_plist::openstep::Dialect::Glyphs3);
-        RawShapeRepr { family: self.family, value }.serialize(s)
+        RawShapeRepr { family: self.family, value: crate::extra::value_text(self.family, &self.value) }.serialize(s)
     }
 }
 
@@ -122,7 +121,7 @@ impl<'de> Deserialize<'de> for RawShape {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let r = RawShapeRepr::deserialize(d)?;
         let value =
-            fontcraft_plist::openstep::parse_value(&r.value).map_err(|e| <D::Error as serde::de::Error>::custom(format!("raw shape: {e}")))?;
+            crate::extra::parse_value_text(r.family, &r.value).map_err(|e| <D::Error as serde::de::Error>::custom(format!("raw shape: {e}")))?;
         Ok(RawShape { family: r.family, value })
     }
 }

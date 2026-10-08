@@ -82,6 +82,32 @@ impl Spacing {
     pub fn gaps(&self, children: usize) -> Option<&[Box<str>]> {
         self.0.as_deref().filter(|g| g.len() == children + 1)
     }
+
+    /// Drops the gaps before children `at` and `at + 1` of a container of `children`.
+    fn remove_pair(&mut self, at: usize, children: usize) {
+        if let Some(g) = self.0.as_mut().filter(|g| g.len() == children + 1) {
+            let mut v = g.to_vec();
+            if at + 1 < v.len() {
+                v.drain(at..at + 2);
+            }
+            *g = v.into_boxed_slice();
+        }
+    }
+
+    /// Adds gaps for two children inserted at `at`, copied from the neighbouring pair.
+    fn insert_pair(&mut self, at: usize, children: usize) {
+        if let Some(g) = self.0.as_mut().filter(|g| g.len() == children + 1) {
+            let mut v = g.to_vec();
+            let src = if at + 1 < children { at } else { at.saturating_sub(2) };
+            let pair: Vec<Box<str>> = v.get(src..src + 2).map(<[Box<str>]>::to_vec).unwrap_or_default();
+            if pair.len() == 2 && at <= v.len() {
+                for (k, gap) in pair.into_iter().enumerate() {
+                    v.insert(at + k, gap);
+                }
+                *g = v.into_boxed_slice();
+            }
+        }
+    }
 }
 
 impl Dict {
@@ -112,6 +138,23 @@ impl Dict {
 
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// Removes the entry at `i`, keeping kept whitespace ([`Spacing`]) aligned with the rest.
+    pub fn remove_at(&mut self, i: usize) -> Option<(Str, Value)> {
+        if i >= self.entries.len() {
+            return None;
+        }
+        self.spacing.remove_pair(i * 2, self.entries.len() * 2);
+        Some(self.entries.remove(i))
+    }
+
+    /// Inserts an entry at `i` (at most the length), giving it the whitespace of its neighbour
+    /// when the dictionary keeps whitespace.
+    pub fn insert_at(&mut self, i: usize, key: impl Into<Str>, value: Value) {
+        let i = i.min(self.entries.len());
+        self.spacing.insert_pair(i * 2, self.entries.len() * 2);
+        self.entries.insert(i, (key.into(), value));
     }
 }
 

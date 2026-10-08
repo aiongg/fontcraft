@@ -9,7 +9,7 @@
 //! An empty `Extra` is one pointer wide; almost every object has one.
 
 use fontcraft_plist::openstep::{self, Dialect};
-use fontcraft_plist::{Str, Value};
+use fontcraft_plist::{Str, Value, xmlplist};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -97,7 +97,9 @@ impl Extra {
 
 /// In the native file an entry is `{"family", "key", "value"}`, with the value as property-list
 /// text so its spelling and layout survive, and `keySpelling` when the key was not written
-/// canonically.
+/// canonically. The text is in the syntax the family's formats use: OpenStep for `.glyphs` and our
+/// own entries, XML for UFO and designspace (whose values have booleans, dates and XML spellings).
+/// Compiled-font entries are written as OpenStep text.
 #[derive(Serialize, Deserialize)]
 struct EntryRepr {
     family: Family,
@@ -112,8 +114,7 @@ impl Serialize for Extra {
         let reprs: Vec<EntryRepr> = self
             .iter()
             .map(|e| {
-                let mut value = String::new();
-                openstep::write_value(&mut value, &e.value, Dialect::Glyphs3);
+                let value = value_text(e.family, &e.value);
                 EntryRepr { family: e.family, key: e.key.as_str().to_string(), key_spelling: e.key.spelling().map(str::to_string), value }
             })
             .collect();
@@ -136,11 +137,30 @@ impl<'de> Deserialize<'de> for Extra {
                 }
                 None => Str::new(r.key),
             };
-            let value = openstep::parse_value(&r.value).map_err(|e| D::Error::custom(format!("extra value of `{}`: {e}", key.as_str())))?;
+            let value = parse_value_text(r.family, &r.value).map_err(|e| D::Error::custom(format!("extra value of `{}`: {e}", key.as_str())))?;
             out.push(r.family, key, value);
         }
         Ok(out)
     }
+}
+
+fn uses_xml(family: Family) -> bool {
+    matches!(family, Family::Ufo | Family::Designspace)
+}
+
+/// A value as text in its family's syntax, for the native file.
+pub(crate) fn value_text(family: Family, value: &Value) -> String {
+    if uses_xml(family) {
+        xmlplist::write_fragment(value)
+    } else {
+        let mut out = String::new();
+        openstep::write_value(&mut out, value, Dialect::Glyphs3);
+        out
+    }
+}
+
+pub(crate) fn parse_value_text(family: Family, text: &str) -> Result<Value, fontcraft_plist::Error> {
+    if uses_xml(family) { xmlplist::parse_fragment(text) } else { openstep::parse_value(text) }
 }
 
 #[cfg(test)]
@@ -179,6 +199,18 @@ mod tests {
         let mut text = String::new();
         openstep::write_value(&mut text, &e.value, Dialect::Glyphs3);
         assert_eq!(text, "(\n1.0,\n(1,2)\n)");
+    }
+
+    #[test]
+    fn ufo_entries_keep_xml_types_and_spellings() {
+        let v = xmlplist::parse_fragment("<dict><key>a</key><true/><key>b</key><real>1.0</real><key>c</key><string/></dict>").unwrap();
+        let mut x = Extra::new();
+        x.push(Family::Ufo, "lib", v.clone());
+        let json = serde_json::to_string(&x).unwrap();
+        let back: Extra = serde_json::from_str(&json).unwrap();
+        let got = back.get(Family::Ufo, "lib").unwrap();
+        assert_eq!(got, &v);
+        assert_eq!(xmlplist::write_fragment(got), xmlplist::write_fragment(&v), "spellings survive");
     }
 
     #[test]

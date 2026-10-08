@@ -188,7 +188,7 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
     let display_strings = take_strings(&mut root, "DisplayStrings");
     let note = take_note(&mut root);
     Ok(Font {
-        source: Source { format: SourceFormat::Glyphs, glyphs_version: Some(2), compressed: false },
+        source: Source { format: SourceFormat::Glyphs, glyphs_version: Some(2), ..Default::default() },
         family_name,
         units_per_em,
         version_major,

@@ -255,7 +255,7 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
     }
 
     let font = Font {
-        source: Source { format: SourceFormat::Binary, glyphs_version: None, compressed: false },
+        source: Source { format: SourceFormat::Binary, ..Default::default() },
         family_name,
         units_per_em,
         version_major,

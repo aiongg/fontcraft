@@ -100,9 +100,10 @@ impl KernTable {
 
 /// The group a kerning side names, if it is a group: the reference writes `@MMK_L_` before the
 /// group name of a left side and `@MMK_R_` before a right side's (top and bottom: `@MMK_T_`,
-/// `@MMK_B_`).
+/// `@MMK_B_`); a UFO writes `public.kern1.` before a first side's group and `public.kern2.` before
+/// a second side's.
 pub fn side_group(side: &str) -> Option<&str> {
-    ["@MMK_L_", "@MMK_R_", "@MMK_T_", "@MMK_B_"].iter().find_map(|p| side.strip_prefix(p))
+    ["@MMK_L_", "@MMK_R_", "@MMK_T_", "@MMK_B_", "public.kern1.", "public.kern2."].iter().find_map(|p| side.strip_prefix(p))
 }
 
 /// A glyph's kerning groups: the group it belongs to on each side.
@@ -150,6 +151,7 @@ mod tests {
     fn group_sides_are_recognised() {
         assert_eq!(side_group("@MMK_L_A"), Some("A"));
         assert_eq!(side_group("@MMK_R_round"), Some("round"));
+        assert_eq!(side_group("public.kern2.O"), Some("O"));
         assert_eq!(side_group("A"), None);
     }
 }

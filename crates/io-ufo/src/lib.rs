@@ -7,6 +7,7 @@
 //!
 //! - [`glif`]: one glyph's file in one layer.
 //! - [`names`]: the specification's user-name-to-file-name rule.
+//! - [`ufo`]: a UFO directory, as one master.
 //!
 //! The functions work on file contents by relative path; reading and writing directories is the
 //! caller's job, so they also run in the browser.
@@ -18,6 +19,7 @@ use fontcraft_model::ModelError;
 
 pub mod glif;
 pub mod names;
+pub mod ufo;
 
 /// A UFO's files: relative path (with `/`) → contents.
 pub type Files = BTreeMap<String, Vec<u8>>;

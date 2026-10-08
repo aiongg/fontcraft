@@ -44,8 +44,11 @@ pub struct Document {
     pub after: String,
     pub root: Value,
     pub epilog: Vec<Node>,
-    /// The indentation unit, taken from the line the value starts on.
+    /// The indentation unit, taken from the lines the value and its first child start on.
     pub indent: String,
+    /// The indentation level of the value: 1 as fontTools writes (`<plist>` then an indented
+    /// `<dict>`), 0 in files whose value starts at the beginning of its line.
+    pub level: usize,
     /// Containers whose whitespace was neither the canonical layout nor compact (comments inside
     /// count). Their gaps are kept ([`crate::Spacing`]) and written back while the container has
     /// the same number of children.
@@ -69,6 +72,7 @@ impl Document {
             root,
             epilog: vec![Node::Text(text)],
             indent: indent.to_string(),
+            level: 1,
             irregular: 0,
         }
     }
@@ -98,12 +102,30 @@ pub fn parse(text: &str) -> Result<Document, Error> {
         }
     }
     let Some(value) = value else { return Err(err("`<plist>` is empty")) };
-    let indent = before.rsplit('\n').next().unwrap_or("").to_string();
+    let (indent, level) = indentation(&before, value);
     let mut irregular = 0;
-    let root = read_value(value, &indent, 1, &mut irregular)?;
+    let root = read_value(value, &indent, level, &mut irregular)?;
     let mut shell = plist.clone();
     shell.children.clear();
-    Ok(Document { bom: doc.bom, prolog: doc.prolog, plist: shell, before, after, root, epilog: doc.epilog, indent, irregular })
+    Ok(Document { bom: doc.bom, prolog: doc.prolog, plist: shell, before, after, root, epilog: doc.epilog, indent, level, irregular })
+}
+
+/// The indentation unit and the value's level, from the indentation of the value's line and of
+/// its first child's.
+fn indentation(before: &str, value: &Element) -> (String, usize) {
+    let outer = before.rsplit('\n').next().unwrap_or("");
+    let inner = value.children.iter().find_map(|n| match n {
+        Node::Text(t) if t.as_str().contains('\n') => t.as_str().rsplit('\n').next(),
+        _ => None,
+    });
+    match inner.and_then(|i| i.strip_prefix(outer)).filter(|unit| !unit.is_empty()) {
+        // The value at the start of its line: its children one unit in.
+        Some(unit) if outer.is_empty() => (unit.to_string(), 0),
+        Some(unit) if outer.len().is_multiple_of(unit.len()) && outer == unit.repeat(outer.len() / unit.len()) => {
+            (unit.to_string(), outer.len() / unit.len())
+        }
+        _ => (if outer.is_empty() { "  ".to_string() } else { outer.to_string() }, usize::from(!outer.is_empty())),
+    }
 }
 
 fn write_text(out: &mut String, t: &xml::Text) {
@@ -127,7 +149,7 @@ pub fn write(doc: &Document) -> String {
     plist.set_self_closing(false);
     let _ = plist.write_start(&mut out);
     out.push_str(&doc.before);
-    write_value(&mut out, &doc.root, &doc.indent, 1);
+    write_value(&mut out, &doc.root, &doc.indent, doc.level);
     out.push_str(&doc.after);
     plist.write_end(&mut out);
     for n in &doc.epilog {
@@ -562,6 +584,14 @@ mod tests {
         let doc = parse(text).unwrap();
         assert_eq!(doc.indent, "\t");
         assert_eq!((doc.root.spelling_count(), doc.irregular), (0, 0));
+        assert_eq!(write(&doc), text);
+    }
+
+    #[test]
+    fn values_at_the_start_of_their_line() {
+        let text = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\">\n<dict>\n\t<key>a</key>\n\t<dict>\n\t\t<key>b</key>\n\t\t<integer>1</integer>\n\t</dict>\n</dict>\n</plist>\n";
+        let doc = parse(text).unwrap();
+        assert_eq!((doc.indent.as_str(), doc.level, doc.irregular), ("\t", 0, 0));
         assert_eq!(write(&doc), text);
     }
 
