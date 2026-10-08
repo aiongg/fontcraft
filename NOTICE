@@ -83,6 +83,13 @@ bundled, the file says so in its header and the project is listed here with its 
   designspace writer follows the element order of designspaceLib. crates/io-ufo/src/designspace/rules.rs
   ports varLib's overlayFeatureVariations, overlayBox and cleanupBox (featureVars.py), and
   crates/io-glyphs/src/lib.rs (quadratic_roots) the quadratic solver of misc/bezierTools.py.
+  The CFF writer (crates/cff) ports cffLib: the table layout and offset passes, INDEX, charset
+  and DICT compilers, the standard strings and predefined charsets (data from Adobe Technical
+  Note #5176), the specialiser (specializer.py) and the width optimiser (width.py); the number
+  encoders of misc/psCharStrings.py; the rounding of misc/roundTools.py; the charstring pen
+  (pens/t2CharStringPen.py, Copyright (c) 2009 Type Supply LLC); and the glyph bounds of
+  pens/boundsPen.py with calcCubicBounds and solveQuadratic of misc/bezierTools.py. The
+  cross-check script (crates/cff/crosscheck) records what ufo2ft (MIT) hands that pen.
 
   fontc (https://github.com/googlefonts/fontc), Apache License 2.0. The compiler's glyph rules
   are ported from its fontir and fontbe crates (1.0.0): pruning of missing components, inlining

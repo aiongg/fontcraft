@@ -126,6 +126,11 @@ the reason. A difference FontCraft is meant to fix does not go there.
   how many files come back identical; files saved by the format's reference tool are reported
   apart, since only they are held to byte identity. Accepted differences, each with its reason,
   are in `xtask/roundtrip-allow.toml`.
+- **CFF tables.** `crates/cff/crosscheck/crosscheck.py` (run with the fontmake tool's Python,
+  outside the gate) compiles each corpus UFO and a few synthetic fonts with ufo2ft at
+  `--optimize-cff 1`, records what its charstring pen receives, has the `cff_from_json` example
+  build the table from that recording, and compares the two tables byte for byte. On a
+  difference it names the first differing DICT entry or charstring.
 - **Path operations.** Overlap removal is compared with the result's area and winding, and with
   an independent implementation where one is available; property tests (a union's area is at most
   the sum, removing overlap twice changes nothing).

@@ -749,6 +749,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-cff"
+version = "0.0.1"
+dependencies = [
+ "read-fonts 0.45.0",
+ "serde_json",
+]
+
+[[package]]
 name = "fontcraft-cli"
 version = "0.0.1"
 dependencies = [

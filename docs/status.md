@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M2.2 done (the core tables at fontc parity; numbers in `docs/plans/M2.md`)._
+_Updated: 2026-10-08, M2.3a done (the `cff` crate; numbers in `docs/plans/M2.md` › M2.3)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (413 tests; about 47,000 lines of Rust in 13 crates).
+- `cargo xtask ci` passes all nine steps (467 tests; about 50,000 lines of Rust in 14 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -16,10 +16,13 @@ _Updated: 2026-10-08, M2.2 done (the core tables at fontc parity; numbers in `do
 ## Where to start
 
 **M2, the compile core** (`docs/plans/M2.md`, accepted): M2.0 (the oracle harness), M2.1 (the
-staged pipeline) and M2.2 (the core tables at fontc parity) are done. Against fontc every core
-table is identical, equivalent or allow-listed with a reason (`crates/oracle/allow.toml`); the
-plan's M2.2 section has the numbers and the causes. Next is M2.3, the `cff` crate (static CFF
-compared with fontmake `-o otf --optimize-cff 1`). Open from M2.2, for the readers: a `.glyphs`
+staged pipeline), M2.2 (the core tables at fontc parity) and M2.3a (the standalone `cff`
+crate) are done. Against fontc every core table is identical, equivalent or allow-listed with a
+reason (`crates/oracle/allow.toml`); the plan's M2.2 section has the numbers and the causes.
+`crates/cff` writes CFF tables byte-identical to fontTools' on 115 of 115 cross-checked fonts
+(`crates/cff/crosscheck/crosscheck.py`, run locally). Next is M2.3b: `Flavour::Cff` in
+`crates/compile`, OTF output, compared with fontmake `-o otf --optimize-cff 1`; the plan's
+M2.3 section lists what the compiler must hand the crate, value by value, as ufo2ft does. Open from M2.2, for the readers: a `.glyphs`
 layer without a `width` (fontc reads 600, we read 0); a designspace master without a metric
 another master has; a UFO glyph without a height (indistinguishable from the default height in
 the model); version 2 name keys in a version 3 file. Against fontmake the rest of the
@@ -162,3 +165,9 @@ Append one terse entry per session: what landed, numbers, what is still open.
   several keys, sources and `*`. Against fontc over 332 sources every core table identical,
   equivalent or allowed; round trips: glyphs 122 identical (was 108). Open: four reader
   questions (see Where to start).
+- **2026-10-08, M2.3a.** New standalone crate `crates/cff`: CFF tables from plain data, porting
+  fontTools' number encodings, INDEX, standard strings and charsets, DICT order and defaults,
+  charstring pen rounding, specialiser, width optimiser, BoundsPen FontBBox and the offset
+  passes. Cross-check against ufo2ft at `--optimize-cff 1`: 115 of 115 fonts byte-identical
+  (17,896 glyphs; tolerances 0, 0.3, 0.5). 45 tests, read back with read-fonts. Not yet used by
+  the compiler (M2.3b).
