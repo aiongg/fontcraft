@@ -43,13 +43,13 @@ dialogs yet. Font View and Edit View draw. `fontcraft-cli oracle` compiles a sou
 FontCraft and with fontc or fontmake and compares the two fonts table by table; over 354 corpus
 sources it measures the compiler: 332 compared with fontc, and every core table identical,
 equivalent or allow-listed with a reason in all of them; 331 compared with fontmake's CFF builds,
-whose outlines FontCraft's match in 320. 475 tests pass, including a sweep that runs every engine
+whose outlines FontCraft's match in 320. `crates/container` wraps and unwraps WOFF 1 and untransformed WOFF2 for all 342 corpus fonts. 487 tests pass, including a sweep that runs every engine
 command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
 **What is not.** There is no drawing with the pointer, no selection of nodes, no path operations,
 no kerning editing, no component editing (components are exported as composites), no feature compilation, no
-variable fonts, no CFF export command (the compiler builds CFF; the command comes in M2.5), no hinting, no WOFF2, no screenshots over the control channel,
+variable fonts, no CFF, WOFF or WOFF2 export command (the compiler and the container crate build them; the commands come in M2.5), no hinting, no WOFF2 table transforms (the 48 transformed corpus WOFF2 files do not open yet), no screenshots over the control channel,
 no web app, no packaging. Glyphs-only data travels in glyphsLib's UFO lib keys where glyphsLib
 has a key for it, and alternate and intermediate layers travel as designspace rules and sparse
 sources; the data no key holds (glyph tags, locks, sort names, layer colours, drawing
@@ -71,7 +71,7 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 |---|---|---|
 | **Breadth:** commands, tools and panels exist | ~3% | 32 of 920 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
-| **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out from the export command; static CFF from the compiler and the oracle. Missing: the OTF export command, variable, WOFF2, version conversion, a glyph database for production names |
+| **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out from the export command; static CFF from the compiler and the oracle. Missing: the OTF, WOFF and WOFF2 export commands, WOFF2 table transforms (reading most WOFF2 files), variable, version conversion, a glyph database for production names |
 | **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF). Against fontc over 332 corpus sources every core table is identical, equivalent or allow-listed: allowed differences come from fontc building variable fonts, its bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6) and four reader questions (`docs/plans/M2.md` › M2.2). Against fontmake's CFF builds over 331 sources, 320 CFF tables decode to the same outlines and 195 are byte-identical; where fontmake and fontc disagree FontCraft follows fontc and the allow-list says why; 9 to 11 sources per table are left different (`docs/plans/M2.md` › M2.3b). No variable font, no features |
 | **Agent automation** | ~40% | every existing command is reachable from CLI, control channel and MCP; no pointer injection, dialogs, screenshots, resources or prompts yet |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests); one dependency panic found and fenced; one adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, no corpus runs, and the known scaling limits in `docs/status.md` |
