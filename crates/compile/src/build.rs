@@ -1,16 +1,18 @@
 //! Per-table builders and assembly (`docs/spec/40-compile.md` §§ 1.5, 1.8).
 //!
-//! The builders read only the resolved font, the final glyph order and the prepared outlines.
-//! `glyf`/`loca` come first: composite bounds, side bearings, `hhea` extents, `maxp` limits and
-//! the `head` box all follow from the written glyphs. The other tables keep the M0 compiler's
-//! values until M2.2 brings each to the reference compiler's.
+//! The builders read only the resolved font, what [`crate::info`] derives from it, the final
+//! glyph order and the prepared outlines. `glyf`/`loca` come first: composite bounds, side
+//! bearings, `hhea` and `vhea` extents, `maxp` limits and the `head` box all follow from the
+//! written glyphs.
 //!
-//! Composite bounds and `maxp`'s composite limits follow fontc (`fontbe/src/glyphs.rs`,
-//! `fontbe/src/metrics_and_limits.rs`, Apache-2.0): a composite's box is the box of its simple
-//! glyphs' written points under the written component transforms, and its limits add up the
-//! points and contours it reaches.
+//! Every field is derived as fontc 1.0.0 derives it (`fontbe/src`, Apache-2.0, see `NOTICE`):
+//! composite bounds, `USE_MY_METRICS` and component flags from `glyphs.rs`; `hmtx`, `hhea`,
+//! `maxp` and the `head` box from `metrics_and_limits.rs`; `vhea` and `vmtx` from
+//! `vertical_metrics.rs`; `head` from `head.rs`; `OS/2` from `os2.rs`; `post` from `post.rs`.
+//! Where FontCraft writes something else, `docs/spec/40-compile.md` › Where FontCraft differs
+//! from fontc says what and why.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use fontcraft_geom::{Affine, Point, Rect};
 use fontcraft_model::{MAX_OUTLINE_ELEMENTS, ModelError, Resolved, ResolvedGlyph};
@@ -25,10 +27,13 @@ use write_fonts::tables::maxp::Maxp;
 use write_fonts::tables::name::{Name, NameRecord};
 use write_fonts::tables::os2::{Os2, SelectionFlags};
 use write_fonts::tables::post::Post;
-use write_fonts::types::{F2Dot14, FWord, Fixed, GlyphId, GlyphId16, LongDateTime, NameId, Tag, UfWord, Version16Dot16};
+use write_fonts::tables::vhea::Vhea;
+use write_fonts::tables::vmtx::Vmtx;
+use write_fonts::types::{F2Dot14, FWord, Fixed, GlyphId, GlyphId16, LongDateTime, NameId, UfWord, Version16Dot16};
 
+use crate::info::{self, Info};
 use crate::outline::Prepared;
-use crate::{CompileError, MAX_POST_NAMES, MAX_TT_POINTS, Options, i16_of, u16_of};
+use crate::{CompileError, MAX_POST_NAMES, MAX_TT_POINTS, Options, i16_of, ot_round, ranges, u16_of};
 
 /// Seconds between 1904-01-01 (the `head` epoch) and 1970-01-01 (the Unix epoch).
 const HEAD_EPOCH_OFFSET: i64 = 2_082_844_800;
@@ -43,19 +48,6 @@ fn is_post_name(name: &str) -> bool {
     (1..=63).contains(&name.len()) && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
-/// Which of the four style-linked styles `style` names, as `(bold, italic)`; `None` for any
-/// other style name ("Light", "Condensed Bold"…), which gets its own family in name IDs 1 and 2.
-fn linked_style(style: &str) -> Option<(bool, bool)> {
-    match style.to_ascii_lowercase().as_str() {
-        "regular" => Some((false, false)),
-        "bold" => Some((true, false)),
-        "italic" => Some((false, true)),
-        "bold italic" => Some((true, true)),
-        _ => None,
-    }
-}
-
-/// A glyph as written to `glyf`, with what the other tables need from it.
 struct Built {
     glyph: TtGlyph,
     /// Points and contours (simple glyphs), for `maxp`.
@@ -74,6 +66,7 @@ fn written_affine(c: &Component) -> Affine {
 /// `glyf` entries for every glyph of the order.
 fn build_glyphs(order: &[ResolvedGlyph], outlines: &[Prepared]) -> Result<Vec<Built>, CompileError> {
     let gids: HashMap<&str, u16> = order.iter().enumerate().filter_map(|(i, g)| Some((g.name.as_str(), u16::try_from(i).ok()?))).collect();
+    let widths: HashMap<&str, f64> = order.iter().map(|g| (g.name.as_str(), g.width)).collect();
     let mut built = Vec::with_capacity(order.len());
     for (g, prepared) in order.iter().zip(outlines) {
         let glyph_error = |message: String| CompileError::Glyph { glyph: g.name.clone(), message };
@@ -90,15 +83,21 @@ fn build_glyphs(order: &[ResolvedGlyph], outlines: &[Prepared]) -> Result<Vec<Bu
             }
             Prepared::Composite(components) => {
                 let mut parts = Vec::with_capacity(components.len());
+                let mut metrics_from_component = false;
                 for c in components {
                     let gid = gids.get(c.base.as_str()).ok_or_else(|| glyph_error(format!("the component `{}` is not in the font", c.base)))?;
                     let [a, b, cc, d, e, f] = c.transform.as_coeffs();
+                    // `USE_MY_METRICS` on the first component that has the glyph's advance and is
+                    // not moved horizontally, scaled or turned (`compile.useMyMetrics`).
+                    let use_my_metrics =
+                        !metrics_from_component && widths.get(c.base.as_str()).is_some_and(|w| reuses_metrics(g.width, *w, &c.transform));
+                    metrics_from_component |= use_my_metrics;
                     let component = Component::new(
                         GlyphId16::new(*gid),
                         Anchor::Offset { x: i16_of(e), y: i16_of(f) },
                         Transform { xx: F2Dot14::from_f64(a), yx: F2Dot14::from_f64(b), xy: F2Dot14::from_f64(cc), yy: F2Dot14::from_f64(d) },
-                        // Always on, as fontc and ufo2ft write it (`compile.componentFlags`).
-                        ComponentFlags { round_xy_to_grid: true, ..Default::default() },
+                        // ROUND_XY_TO_GRID always, as fontc and ufo2ft write it (`compile.componentFlags`).
+                        ComponentFlags { round_xy_to_grid: true, use_my_metrics, ..Default::default() },
                     );
                     parts.push((component, Bbox::default()));
                 }
@@ -110,6 +109,18 @@ fn build_glyphs(order: &[ResolvedGlyph], outlines: &[Prepared]) -> Result<Vec<Bu
     }
     composite_boxes(&mut built, order)?;
     Ok(built)
+}
+
+/// Whether a composite of advance `width` can take its metrics from a component of advance
+/// `component_width` placed by `transform`: the same advance once rounded, and a transform that
+/// is the identity but for a vertical offset and a horizontal one that rounds to zero (fontc's
+/// `can_reuse_metrics`, after ufo2ft's instruction compiler).
+fn reuses_metrics(width: f64, component_width: f64, transform: &Affine) -> bool {
+    if u16_of(width) != u16_of(component_width) {
+        return false;
+    }
+    let [a, b, c, d, e, _] = transform.as_coeffs();
+    [a, b, c, d, ot_round(e)] == [1.0, 0.0, 0.0, 1.0, 0.0]
 }
 
 /// Sets every composite's box (`compile.compositeBounds`): the written points of the simple
@@ -184,6 +195,43 @@ fn composite_limits(built: &[Built]) -> (u16, u16, u16) {
     max
 }
 
+/// Advances and side bearings with their summaries, for `hhea`/`hmtx` or `vhea`/`vmtx`
+/// (fontc's `MetricsBuilder`).
+#[derive(Default)]
+struct MetricsBuilder {
+    metrics: Vec<LongMetric>,
+    advance_max: u16,
+    min_first: Option<i16>,
+    min_second: Option<i16>,
+    max_extent: Option<i16>,
+}
+
+impl MetricsBuilder {
+    /// One glyph: its advance, its first side bearing and, when it has an outline, the extent
+    /// of the outline along the advance.
+    fn update(&mut self, advance: u16, side_bearing: i16, bounds: Option<i32>) {
+        self.metrics.push(LongMetric::new(advance, side_bearing));
+        self.advance_max = self.advance_max.max(advance);
+        if let Some(bounds) = bounds {
+            self.min_first = Some(self.min_first.map_or(side_bearing, |v| v.min(side_bearing)));
+            let second = clamp16(i32::from(advance) - i32::from(side_bearing) - bounds);
+            self.min_second = Some(self.min_second.map_or(second, |v| v.min(second)));
+            let extent = clamp16(i32::from(side_bearing) + bounds);
+            self.max_extent = Some(self.max_extent.map_or(extent, |v| v.max(extent)));
+        }
+    }
+
+    /// The long metrics and the side bearings of the run of equal advances at the end, which
+    /// need no advance of their own.
+    fn split(&self) -> (Vec<LongMetric>, Vec<i16>) {
+        let mut long = self.metrics.clone();
+        let last = long.last().map(|m| m.advance);
+        let run = long.iter().rev().take_while(|m| Some(m.advance) == last).count();
+        let short = long.split_off(long.len() - run.saturating_sub(1));
+        (long, short.into_iter().map(|m| m.side_bearing).collect())
+    }
+}
+
 /// Builds every table and the font file.
 pub fn assemble(
     font: &Resolved,
@@ -192,34 +240,29 @@ pub fn assemble(
     options: &Options,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
+    let info = info::derive(font, &options.style_name, warnings);
+    let m = info.metrics;
     let built = build_glyphs(order, outlines)?;
 
     // Horizontal metrics and the font box, from the glyphs as written.
-    let mut metrics = Vec::with_capacity(order.len());
+    let mut horizontal = MetricsBuilder::default();
     let mut bounds: Option<Bbox> = None;
     let (mut max_points, mut max_contours, mut max_elements) = (0u16, 0u16, 0u16);
-    let (mut min_lsb, mut min_rsb, mut max_extent, mut max_advance) = (None::<i16>, None::<i16>, None::<i16>, 0u16);
     for (g, b) in order.iter().zip(&built) {
         let advance = u16_of(g.width);
-        if crate::ot_round(g.width) != f64::from(advance) {
+        if ot_round(g.width) != f64::from(advance) {
             warnings.push(format!("glyph `{}`: the advance width {} does not fit the font and was written as {advance}", g.name, g.width));
         }
-        max_advance = max_advance.max(advance);
         max_points = max_points.max(b.points);
         max_contours = max_contours.max(b.contours);
         if let TtGlyph::Composite(c) = &b.glyph {
             max_elements = max_elements.max(u16::try_from(c.components().len()).unwrap_or(u16::MAX));
         }
-        let Some(bbox) = b.glyph.bbox() else {
-            metrics.push(LongMetric::new(advance, 0));
-            continue;
-        };
-        bounds = Some(bounds.map_or(bbox, |f| f.union(bbox)));
-        let rsb = i32::from(advance) - i32::from(bbox.x_max);
-        min_lsb = Some(min_lsb.map_or(bbox.x_min, |v| v.min(bbox.x_min)));
-        min_rsb = Some(min_rsb.map_or(clamp16(rsb), |v| v.min(clamp16(rsb))));
-        max_extent = Some(max_extent.map_or(bbox.x_max, |v| v.max(bbox.x_max)));
-        metrics.push(LongMetric::new(advance, bbox.x_min));
+        let bbox = b.glyph.bbox();
+        if let Some(bbox) = bbox {
+            bounds = Some(bounds.map_or(bbox, |f| f.union(bbox)));
+        }
+        horizontal.update(advance, bbox.map_or(0, |b| b.x_min), bbox.map(|b| i32::from(b.x_max) - i32::from(b.x_min)));
     }
     let (composite_points, composite_contours, depth) = composite_limits(&built);
     let mut glyf = GlyfLocaBuilder::new();
@@ -232,75 +275,62 @@ pub fn assemble(
 
     // cmap: every code point to its glyph id (conflicts were refused in preflight).
     let mut mappings: Vec<(char, GlyphId)> = Vec::new();
-    let mut owners: BTreeMap<u32, &str> = BTreeMap::new();
+    let mut code_points: BTreeSet<u32> = BTreeSet::new();
     for (gid, g) in order.iter().enumerate() {
         for &cp in &g.unicodes {
             let Some(ch) = char::from_u32(cp) else { continue };
-            if owners.insert(cp, &g.name).is_none() {
+            if code_points.insert(cp) {
                 mappings.push((ch, GlyphId::new(u32::try_from(gid).unwrap_or(0))));
             }
         }
     }
-    let (first_char, last_char) = (owners.keys().next().copied().unwrap_or(0), owners.keys().next_back().copied().unwrap_or(0));
-    let has = |range: std::ops::RangeInclusive<u32>| owners.range(range).next().is_some();
     let cmap = Cmap::from_mappings(mappings).map_err(|e| CompileError::Table { table: "cmap", message: e.to_string() })?;
 
-    let style = if options.style_name.is_empty() { font.style_name.as_str() } else { options.style_name.as_str() };
-    let (bold, italic) = linked_style(style).unwrap_or((false, false));
-    let mut selection = SelectionFlags::USE_TYPO_METRICS;
     let mut mac_style = MacStyle::empty();
-    if bold {
-        selection |= SelectionFlags::BOLD;
+    if info.selection.contains(SelectionFlags::BOLD) {
         mac_style |= MacStyle::BOLD;
     }
-    if italic {
-        selection |= SelectionFlags::ITALIC;
+    if info.selection.contains(SelectionFlags::ITALIC) {
         mac_style |= MacStyle::ITALIC;
     }
-    if !bold && !italic {
-        selection |= SelectionFlags::REGULAR;
-    }
-
-    // A font may lack a metric definition; fall back to the usual proportions of the em.
-    let upm = f64::from(font.units_per_em);
-    let m_ascender = font.metrics.ascender.unwrap_or(upm * 0.8);
-    let m_descender = font.metrics.descender.unwrap_or(-upm * 0.2);
-    let m_x_height = font.metrics.x_height.unwrap_or(upm * 0.5);
-    let m_cap_height = font.metrics.cap_height.unwrap_or(upm * 0.7);
-    let (ascender, descender) = (i16_of(m_ascender), i16_of(m_descender));
-    let line_gap = i16_of((upm * 1.2 - (m_ascender - m_descender)).max(0.0));
-    let time = LongDateTime::new(options.timestamp.saturating_add(HEAD_EPOCH_OFFSET));
+    let modified = options.timestamp;
+    let created = info.created.unwrap_or(modified);
+    let date = |t: i64| LongDateTime::new(t.saturating_add(HEAD_EPOCH_OFFSET));
+    // The revision is the major version, a point and the minor version written with at least
+    // three digits, read as a number (minor 7 is .007, minor 7000 is .7).
+    let revision = format!("{}.{:03}", info.version_major, info.version_minor).parse::<f64>().unwrap_or(0.0);
     let head = Head {
-        font_revision: Fixed::from_f64(f64::from(font.version_major) + f64::from(font.version_minor) / 1000.0),
-        // Baseline at y = 0 and left sidebearing at x = 0 (lsb equals the glyph's xMin above).
-        flags: Flags::BASELINE_AT_Y_0 | Flags::LSB_AT_X_0,
+        font_revision: Fixed::from_f64(revision),
+        // Left side bearings are always the glyphs' xMin here, so bit 1 is always true.
+        flags: info.head_flags | Flags::LSB_AT_X_0,
         units_per_em: font.units_per_em,
-        created: time,
-        modified: time,
+        created: date(created),
+        modified: date(modified),
         x_min: bounds.x_min,
         y_min: bounds.y_min,
         x_max: bounds.x_max,
         y_max: bounds.y_max,
         mac_style,
-        lowest_rec_ppem: 6,
+        lowest_rec_ppem: info.lowest_rec_ppem,
         index_to_loc_format: match loca_format {
             LocaFormat::Short => 0,
             LocaFormat::Long => 1,
         },
         ..Default::default()
     };
+    let (h_metrics, h_side_bearings) = horizontal.split();
     let hhea = Hhea {
-        ascender: FWord::new(ascender),
-        descender: FWord::new(descender),
-        line_gap: FWord::new(line_gap),
-        advance_width_max: UfWord::new(max_advance),
-        min_left_side_bearing: FWord::new(min_lsb.unwrap_or(0)),
-        min_right_side_bearing: FWord::new(min_rsb.unwrap_or(0)),
-        x_max_extent: FWord::new(max_extent.unwrap_or(0)),
-        caret_slope_rise: 1,
-        caret_slope_run: 0,
-        caret_offset: 0,
-        number_of_h_metrics: glyph_count,
+        ascender: FWord::new(i16_of(m.hhea_ascender)),
+        descender: FWord::new(i16_of(m.hhea_descender)),
+        line_gap: FWord::new(i16_of(m.hhea_line_gap)),
+        advance_width_max: UfWord::new(horizontal.advance_max),
+        min_left_side_bearing: FWord::new(horizontal.min_first.unwrap_or(0)),
+        min_right_side_bearing: FWord::new(horizontal.min_second.unwrap_or(0)),
+        x_max_extent: FWord::new(horizontal.max_extent.unwrap_or(0)),
+        caret_slope_rise: i16_of(m.caret_slope_rise),
+        caret_slope_run: i16_of(m.caret_slope_run),
+        caret_offset: i16_of(m.caret_offset),
+        number_of_h_metrics: u16::try_from(h_metrics.len()).unwrap_or(u16::MAX),
     };
     let maxp = Maxp {
         num_glyphs: glyph_count,
@@ -318,44 +348,7 @@ pub fn assemble(
         max_component_elements: Some(max_elements),
         max_component_depth: Some(depth),
     };
-
-    let nonzero: Vec<f64> = metrics.iter().map(|m| f64::from(m.advance)).filter(|a| *a > 0.0).collect();
-    let average = if nonzero.is_empty() { 0.0 } else { nonzero.iter().sum::<f64>() / nonzero.len() as f64 };
-    // Only the two ranges this compiler can vouch for so far; the full range and code-page tables
-    // are M2.2.
-    let basic_latin = u32::from(has(0x20..=0x7E));
-    let latin_1 = u32::from(has(0xA0..=0xFF)) << 1;
-    let os2 = Os2 {
-        x_avg_char_width: i16_of(average),
-        us_weight_class: if bold { 700 } else { 400 },
-        us_width_class: 5,
-        y_subscript_x_size: i16_of(upm * 0.65),
-        y_subscript_y_size: i16_of(upm * 0.6),
-        y_subscript_y_offset: i16_of(upm * 0.075),
-        y_superscript_x_size: i16_of(upm * 0.65),
-        y_superscript_y_size: i16_of(upm * 0.6),
-        y_superscript_y_offset: i16_of(upm * 0.35),
-        y_strikeout_size: i16_of(upm * 0.05),
-        y_strikeout_position: i16_of(m_x_height * 0.6),
-        ul_unicode_range_1: basic_latin | latin_1,
-        ach_vend_id: Tag::new(b"NONE"),
-        fs_selection: selection,
-        us_first_char_index: u16::try_from(first_char).unwrap_or(u16::MAX),
-        us_last_char_index: u16::try_from(last_char).unwrap_or(u16::MAX),
-        s_typo_ascender: ascender,
-        s_typo_descender: descender,
-        s_typo_line_gap: line_gap,
-        us_win_ascent: u16_of(m_ascender.max(f64::from(bounds.y_max))),
-        us_win_descent: u16_of((-m_descender).max(-f64::from(bounds.y_min))),
-        ul_code_page_range_1: Some(basic_latin), // bit 0: Latin 1
-        ul_code_page_range_2: Some(0),
-        sx_height: Some(i16_of(m_x_height)),
-        s_cap_height: Some(i16_of(m_cap_height)),
-        us_default_char: Some(0),
-        us_break_char: Some(if owners.contains_key(&0x20) { 0x20 } else { 0 }),
-        us_max_context: Some(0),
-        ..Default::default()
-    };
+    let os2 = os2(&info, &horizontal.metrics, &code_points);
 
     // Glyph names: written when every name is a conventional one and there are few enough.
     let post_names: Vec<String> = order
@@ -379,39 +372,120 @@ pub fn assemble(
     } else {
         Post::new_v2(post_names.iter().map(String::as_str))
     };
-    post.underline_position = FWord::new(i16_of(-upm * 0.1));
-    post.underline_thickness = FWord::new(i16_of(upm * 0.05));
+    post.italic_angle = Fixed::from_f64(info.italic_angle);
+    post.underline_position = FWord::new(i16_of(m.underline_position));
+    post.underline_thickness = FWord::new(i16_of(m.underline_thickness));
+    post.is_fixed_pitch = u32::from(info.fixed_pitch);
 
-    // Names. A style outside Regular, Bold, Italic and Bold Italic becomes its own family in the
-    // legacy IDs 1 and 2, with the real family and style in IDs 16 and 17.
-    let version = format!("Version {}.{:03}", font.version_major, font.version_minor);
-    let full = format!("{} {style}", font.family_name);
-    let postscript: String =
-        format!("{}-{style}", font.family_name).chars().filter(|c| c.is_ascii_graphic() && !"[](){}<>/%".contains(*c)).take(63).collect();
-    let unique = format!("{version};NONE;{postscript}");
-    let record = |id: u16, s: &str| NameRecord::new(3, 1, 0x409, NameId::new(id), s.to_string().into());
-    let linked = linked_style(style).is_some();
-    let (legacy_family, legacy_style) = if linked { (font.family_name.clone(), style.to_string()) } else { (full.clone(), "Regular".to_string()) };
-    let mut records =
-        vec![record(1, &legacy_family), record(2, &legacy_style), record(3, &unique), record(4, &full), record(5, &version), record(6, &postscript)];
-    if !linked {
-        records.push(record(16, &font.family_name));
-        records.push(record(17, style));
-    }
-    let name = Name::new(records);
+    let name =
+        Name::new(info.names.iter().map(|r| NameRecord::new(r.platform, r.encoding, r.language, NameId::new(r.id), r.text.clone().into())).collect());
 
     let mut builder = FontBuilder::new();
     builder.add_table(&head).map_err(table("head"))?;
     builder.add_table(&hhea).map_err(table("hhea"))?;
     builder.add_table(&maxp).map_err(table("maxp"))?;
     builder.add_table(&os2).map_err(table("OS/2"))?;
-    builder.add_table(&Hmtx::new(metrics, Vec::new())).map_err(table("hmtx"))?;
+    builder.add_table(&Hmtx::new(h_metrics, h_side_bearings)).map_err(table("hmtx"))?;
     builder.add_table(&cmap).map_err(table("cmap"))?;
     builder.add_table(&loca).map_err(table("loca"))?;
     builder.add_table(&glyf).map_err(table("glyf"))?;
     builder.add_table(&name).map_err(table("name"))?;
     builder.add_table(&post).map_err(table("post"))?;
+    if info.vertical {
+        let (vhea, vmtx) = vertical(order, &built, &info);
+        builder.add_table(&vhea).map_err(table("vhea"))?;
+        builder.add_table(&vmtx).map_err(table("vmtx"))?;
+    }
     Ok(builder.build())
+}
+
+/// `OS/2` version 4 (`compile.os2*`).
+fn os2(info: &Info, metrics: &[LongMetric], code_points: &BTreeSet<u32>) -> Os2 {
+    let m = &info.metrics;
+    // The mean of the advances that are not zero, in single precision as fontc computes it.
+    let (count, total) = metrics.iter().filter(|l| l.advance > 0).fold((0u64, 0u64), |(c, t), l| (c + 1, t + u64::from(l.advance)));
+    #[allow(clippy::cast_precision_loss)]
+    let average = if count == 0 { 0.0 } else { (total as f32 / count as f32 + 0.5).floor() };
+    let unicode = info.unicode_ranges.clone().unwrap_or_else(|| ranges::unicode_range_bits(code_points));
+    let pages = info.code_pages.clone().unwrap_or_else(|| ranges::code_page_bits(code_points));
+    let [u1, u2, u3, u4] = ranges::words::<4>(&unicode);
+    let [c1, c2] = ranges::words::<2>(&pages);
+    let first = code_points.first().copied().unwrap_or(0xFFFF).min(0xFFFF);
+    let last = code_points.last().copied().unwrap_or(0).min(0xFFFF);
+    Os2 {
+        x_avg_char_width: f64::from(average).clamp(f64::from(i16::MIN), f64::from(i16::MAX)) as i16,
+        us_weight_class: info.weight_class,
+        us_width_class: info.width_class,
+        fs_type: info.fs_type,
+        y_subscript_x_size: i16_of(m.subscript_x_size),
+        y_subscript_y_size: i16_of(m.subscript_y_size),
+        y_subscript_x_offset: i16_of(m.subscript_x_offset),
+        y_subscript_y_offset: i16_of(m.subscript_y_offset),
+        y_superscript_x_size: i16_of(m.superscript_x_size),
+        y_superscript_y_size: i16_of(m.superscript_y_size),
+        y_superscript_x_offset: i16_of(m.superscript_x_offset),
+        y_superscript_y_offset: i16_of(m.superscript_y_offset),
+        y_strikeout_size: i16_of(m.strikeout_size),
+        y_strikeout_position: i16_of(m.strikeout_position),
+        s_family_class: info.family_class,
+        panose_10: info.panose.unwrap_or_default(),
+        ul_unicode_range_1: u1,
+        ul_unicode_range_2: u2,
+        ul_unicode_range_3: u3,
+        ul_unicode_range_4: u4,
+        ach_vend_id: info.vendor,
+        fs_selection: info.selection,
+        us_first_char_index: u16::try_from(first).unwrap_or(u16::MAX),
+        us_last_char_index: u16::try_from(last).unwrap_or(u16::MAX),
+        s_typo_ascender: i16_of(m.typo_ascender),
+        s_typo_descender: i16_of(m.typo_descender),
+        s_typo_line_gap: i16_of(m.typo_line_gap),
+        us_win_ascent: u16_of(m.win_ascent),
+        us_win_descent: u16_of(m.win_descent),
+        ul_code_page_range_1: Some(c1),
+        ul_code_page_range_2: Some(c2),
+        sx_height: Some(i16_of(m.x_height)),
+        s_cap_height: Some(i16_of(m.cap_height)),
+        us_default_char: Some(0),
+        // The space, whether the font has one or not, as ufo2ft and fontc write it.
+        us_break_char: Some(32),
+        // Layout tables are compiled from M8; until then no lookup has a context.
+        us_max_context: Some(0),
+        ..Default::default()
+    }
+}
+
+/// `vhea` and `vmtx` (`compile.verticalMetrics`): each glyph's vertical advance, its own or the
+/// typographic ascender to descender, and its top side bearing from its vertical origin, its
+/// own or the typographic ascender. The model measures a vertical origin down from the
+/// typographic ascender, for every source format (glyphsLib's rule, which the UFO reader
+/// follows).
+fn vertical(order: &[ResolvedGlyph], built: &[Built], info: &Info) -> (Vhea, Vmtx) {
+    let m = &info.metrics;
+    let mut v = MetricsBuilder::default();
+    for (g, b) in order.iter().zip(built) {
+        let advance = u16_of(g.vert_width.unwrap_or(m.typo_ascender - m.typo_descender));
+        let origin = i16_of(g.vert_origin.map_or(m.typo_ascender, |o| m.typo_ascender - o));
+        let bbox = b.glyph.bbox();
+        let top = clamp16(i32::from(origin) - i32::from(bbox.map_or(0, |b| b.y_max)));
+        v.update(advance, top, bbox.map(|b| i32::from(b.y_max) - i32::from(b.y_min)));
+    }
+    let (long, short) = v.split();
+    let vhea = Vhea {
+        version: Version16Dot16::VERSION_1_1,
+        ascender: FWord::new(i16_of(m.vhea_ascender)),
+        descender: FWord::new(i16_of(m.vhea_descender)),
+        line_gap: FWord::new(i16_of(m.vhea_line_gap)),
+        advance_height_max: UfWord::new(v.advance_max),
+        min_top_side_bearing: FWord::new(v.min_first.unwrap_or(0)),
+        min_bottom_side_bearing: FWord::new(v.min_second.unwrap_or(0)),
+        y_max_extent: FWord::new(v.max_extent.unwrap_or(0)),
+        caret_slope_rise: i16_of(m.vhea_caret_slope_rise),
+        caret_slope_run: i16_of(m.vhea_caret_slope_run),
+        caret_offset: i16_of(m.vhea_caret_offset),
+        number_of_long_ver_metrics: u16::try_from(long.len()).unwrap_or(u16::MAX),
+    };
+    (vhea, Vmtx::new(long, short))
 }
 
 fn clamp16(v: i32) -> i16 {

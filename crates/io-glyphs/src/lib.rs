@@ -726,11 +726,17 @@ fn read_glyph(v: Value, at: &str, version: i64) -> Result<Glyph> {
     let mut d = as_dict(v, at)?;
     let name = opt_string(&mut d, "glyphname", at)?.ok_or_else(|| bad(at, "a glyph has no glyphname"))?;
     let at = format!("glyph `{name}`");
-    // Code points written in any other way than numbers are kept as written.
+    // Code points the writer would spell otherwise (`0062`, read as decimal like other numbers)
+    // keep their spelling beside the values; those that are not numbers are kept as written.
     let unicodes = match take(&mut d, "unicode") {
         None => Vec::new(),
         Some(v) => match code_points(&v) {
-            Some(u) => u,
+            Some(u) => {
+                if write_code_points(&u).as_ref() != Some(&v) {
+                    d.entries.push(("unicode".into(), v));
+                }
+                u
+            }
             None => {
                 d.entries.push(("unicode".into(), v));
                 Vec::new()
@@ -748,13 +754,28 @@ fn read_glyph(v: Value, at: &str, version: i64) -> Result<Glyph> {
 }
 
 fn code_points(v: &Value) -> Option<Vec<u32>> {
-    let one = |v: &Value| match v.as_num() {
-        Some(Num::Int(i)) => u32::try_from(i).ok(),
+    // A number, or a string of digits read as a decimal number (as fontc reads `0062`).
+    let one = |v: &Value| match v {
+        Value::Number(n) => match n.value() {
+            Num::Int(i) => u32::try_from(i).ok(),
+            Num::Float(_) => None,
+        },
+        Value::String(s) if !s.as_str().is_empty() && s.as_str().bytes().all(|b| b.is_ascii_digit()) => s.as_str().parse().ok(),
         _ => None,
     };
     match v {
         Value::Array(a) => a.items.iter().map(one).collect(),
         v => one(v).map(|u| vec![u]),
+    }
+}
+
+/// The canonical `unicode` value of code points: a number, or a one-line list of them.
+fn write_code_points(u: &[u32]) -> Option<Value> {
+    match u {
+        [] => None,
+        [u] => Some(int(*u)),
+        // Several code points go on one line, unlike other lists.
+        many => Some(Value::Array(Array { items: many.iter().map(|u| int(*u)).collect(), layout: Layout::Compact, ..Default::default() })),
     }
 }
 
@@ -964,14 +985,10 @@ fn write_master(m: &Master) -> Result<Value> {
 fn write_glyph(g: &Glyph, version: u32) -> Result<Dict> {
     let at = format!("glyph `{}`", g.name);
     let mut e = vec![("glyphname".into(), string(&g.name))];
-    match g.unicodes.as_slice() {
-        [] => {}
-        [u] => e.push(("unicode".into(), int(*u))),
-        // Several code points go on one line, unlike other lists.
-        many => e.push((
-            "unicode".into(),
-            Value::Array(Array { items: many.iter().map(|u| int(*u)).collect(), layout: Layout::Compact, ..Default::default() }),
-        )),
+    // A spelling kept from reading, while it still reads as the code points.
+    let kept = g.extra.get(Family::Glyphs, "unicode").filter(|v| code_points(v).as_deref() == Some(g.unicodes.as_slice())).cloned();
+    if let Some(v) = kept.or_else(|| write_code_points(&g.unicodes)) {
+        e.push(("unicode".into(), v));
     }
     if !g.export {
         e.push(("export".into(), int(0)));

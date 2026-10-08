@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M2.1 done (the staged pipeline and the resolved projection; numbers in `docs/plans/M2.md`)._
+_Updated: 2026-10-08, M2.2 done (the core tables at fontc parity; numbers in `docs/plans/M2.md`)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (406 tests; about 45,300 lines of Rust in 13 crates).
+- `cargo xtask ci` passes all nine steps (413 tests; about 47,000 lines of Rust in 13 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -15,15 +15,15 @@ _Updated: 2026-10-08, M2.1 done (the staged pipeline and the resolved projection
 
 ## Where to start
 
-**M2, the compile core** (`docs/plans/M2.md`, accepted): M2.0 (the oracle harness) and M2.1
-(the staged pipeline: `Font::resolve`, preflight, glyph order with a drawn `.notdef`,
-composites kept, cu2qu, reversed contours) are done. Next is M2.2, the core tables to fontc
-parity, one table at a time, measured with `fontcraft-cli oracle --corpus` (`docs/testing.md` ›
-The oracle harness). The plan's M2.1 section lists what is left in `glyf` by cause: `.glyphs`
-masters without metric values read as 0 where the format means 800 and −200 (42 sources, the
-`.notdef` box and every metric default), `USE_MY_METRICS` (27), and differences that come from
-fontc building a variable font (21). Before M2.2 changes the vendor id, the owner answers
-question 6 again: fontc 1.0.0 writes `NONE`, not four spaces.
+**M2, the compile core** (`docs/plans/M2.md`, accepted): M2.0 (the oracle harness), M2.1 (the
+staged pipeline) and M2.2 (the core tables at fontc parity) are done. Against fontc every core
+table is identical, equivalent or allow-listed with a reason (`crates/oracle/allow.toml`); the
+plan's M2.2 section has the numbers and the causes. Next is M2.3, the `cff` crate (static CFF
+compared with fontmake `-o otf --optimize-cff 1`). Open from M2.2, for the readers: a `.glyphs`
+layer without a `width` (fontc reads 600, we read 0); a designspace master without a metric
+another master has; a UFO glyph without a height (indistinguishable from the default height in
+the model); version 2 name keys in a version 3 file. Against fontmake the rest of the
+differences are where fontmake and fontc disagree (listed in the plan); FontCraft follows fontc.
 
 M1 (`docs/plans/M1.md`) so far:
 
@@ -60,10 +60,9 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   before implementing.
 - **Nothing has been observed in the reference app.** About 440 open questions are listed at the
   ends of the notes.
-- **Our compiler matches the reference compilers in some tables only.** Over 332 corpus sources
-  compared with fontc, glyf is identical or equivalent in 236, cmap in 318, hmtx in 303, maxp in
-  275, head in 277; hhea, OS/2 and name differ in all (metric and name defaults: M2.2;
-  `docs/plans/M2.md` › M2.1).
+- **The compiler writes static TrueType only.** The core tables match fontc over the corpus
+  (with allow-listed causes: variable references, bracket and colour glyphs, the glyph database,
+  smart components); no CFF, features, variations or hinting yet (`docs/plans/M2.md` › M2.2).
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
 
@@ -79,7 +78,6 @@ around them. None can lose data; most are about scale.
 |---|---|---|
 | The history list is copied for each command's result | `crates/engine` | M1 |
 | The menu tree is rebuilt every frame | `crates/ui-egui/src/menus.rs` | M3 |
-| `OS/2` Unicode ranges: only two bits are set | `crates/compile` | M2 |
 | The vendor-names scanner does not see through `concat!` or string escapes | `xtask/src/brands.rs` | when it matters |
 
 ## Waiting on the owner
@@ -154,3 +152,13 @@ Append one terse entry per session: what landed, numbers, what is still open.
   FontCraft builds 347 of 354 (was 313), 332 compared (was 300); glyf identical 218 and
   equivalent 18 (was 2 and 0), head 277 (22), maxp 275 (58), hmtx 171 + 132 (1 + 14). 406 tests.
   Next: M2.2.
+- **2026-10-08, M2.2.** Core tables derived as fontc 1.0.0 derives them (`crates/compile/src/info.rs`,
+  `ranges.rs`, `build.rs`): metric defaults per format at resolve time, names and fallbacks,
+  style flags, vendor `NONE` (plan § 3 question 6 answered so), fsType, weight and width class,
+  Unicode and code page ranges, `USE_MY_METRICS`, hmtx run compression, vhea and vmtx. Readers:
+  version 2 vertical metrics no master states stay undefined, unusual code point and property
+  spellings read, `*origin` anchors applied; the binary reader takes the typographic ascender
+  and descender as the master's. Harness: vhea and vmtx by field, allow-list with
+  several keys, sources and `*`. Against fontc over 332 sources every core table identical,
+  equivalent or allowed; round trips: glyphs 122 identical (was 108). Open: four reader
+  questions (see Where to start).

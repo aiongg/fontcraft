@@ -4,7 +4,8 @@
 //! `.notdef` moved to glyph 0 (`compile.notdefFirst`). A font without a `.notdef` gets one drawn
 //! as fontc and ufo2ft draw it (`compile.notdefSynthesis`, ported from fontc's
 //! `fontir/src/glyph.rs`, `make_notdef_outline`, Apache-2.0): a hollow box half an em wide, its
-//! stroke 5% of the em, from the descender to the ascender.
+//! stroke 5% of the em, from the descender to the ascender, with the ascender to the descender
+//! as its vertical advance.
 
 use fontcraft_geom::BezPath;
 use fontcraft_model::{Resolved, ResolvedGlyph};
@@ -36,10 +37,13 @@ pub fn final_order(mut glyphs: Vec<ResolvedGlyph>, font: &Resolved, warnings: &m
 /// The `.notdef` drawn for a font that has none.
 pub fn notdef(font: &Resolved) -> ResolvedGlyph {
     let upm = f64::from(font.units_per_em);
-    let ascender = font.metrics.ascender.unwrap_or(0.8 * upm);
-    let descender = font.metrics.descender.unwrap_or(-0.2 * upm);
+    // The metrics as the tables write them, rounded half up.
+    let ascender = ot_round(font.metrics.ascender);
+    let descender = ot_round(font.metrics.descender);
     let mut g = ResolvedGlyph::new(NOTDEF, ot_round(upm * 0.5));
     g.contours = notdef_outline(upm, ascender, descender);
+    // Its vertical advance, should the font be vertical: the ascender to the descender.
+    g.vert_width = Some(ascender - descender);
     g
 }
 

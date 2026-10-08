@@ -99,11 +99,11 @@ What normalisation removes or canonicalises:
 | Table | Normalisation |
 |---|---|
 | head | `checksumAdjustment`, `created` and `modified` removed; `indexToLocFormat` (an offset size) not compared |
-| hhea | `numberOfHMetrics` not compared (`hmtx` compares the values) |
-| hmtx | advance and left side bearing per glyph, by glyph name |
+| hhea, vhea | `numberOfHMetrics` and `numberOfLongVerMetrics` not compared (`hmtx` and `vmtx` compare the values); the rest field by field |
+| hmtx, vmtx | advance and side bearing per glyph, by glyph name |
 | name | a set of records; the reference compiler's stamp at the end of name ID 5 (`;fontc 1.0.0`) removed; IDs 256 and up left out (feature and variation names) |
 | cmap | code point → glyph name over every Unicode subtable, the list of subtables, the variation sequences |
-| glyf, CFF | outlines drawn by skrifa without hinting, components resolved, compared within half a unit with any start point; reversed contours are named as such. For `glyf` also each glyph's kind (empty, simple, composite with its components and flags), bounds and instruction length |
+| glyf, CFF | outlines drawn by skrifa without hinting, components resolved, compared within half a unit with any start point; reversed contours are named as such. For `glyf` also each glyph's kind (empty, simple, composite with its components and flags), bounds and instruction length; against a variable reference the `USE_MY_METRICS` flag is left out (fontc never sets it in a variable font, and FontCraft's static build does) |
 | loca | offsets: compared through `glyf` |
 | maxp, OS/2, post | field by field |
 
@@ -113,8 +113,9 @@ layers and colour layers into glyphs, for example). The per-glyph tables then co
 both fonts have. Exit status 1 means a table differs or a build failed.
 
 To accept a difference, add an entry to `crates/oracle/allow.toml` with the table, the difference
-key as the report prints it (a trailing `*` matches a prefix), optionally the oracle and a part of
-the source path, and the reason. A difference FontCraft is meant to fix does not go there.
+key as the report prints it (`key`, more in `keys`; a `*` matches any run of characters, as in
+`hmtx * advance`), optionally the oracle and parts of the source path (`source`, `sources`), and
+the reason. A difference FontCraft is meant to fix does not go there.
 
 ### Other oracles
 

@@ -27,9 +27,11 @@
 #![forbid(unsafe_code)]
 
 mod build;
+pub mod info;
 pub mod order;
 pub mod outline;
 pub mod preflight;
+mod ranges;
 
 use fontcraft_model::{Font, ModelError, Resolved, Target};
 
@@ -147,6 +149,16 @@ pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Opti
         return Err(CompileError::Unsupported("CFF"));
     }
     let mut warnings = std::mem::take(&mut resolved.notes);
+    // Non-spacing marks have no advance in a compiled font (`compile.nonSpacingMarkWidth`), as
+    // fontc and glyphsLib write them for `.glyphs` sources; a UFO states its advances as they
+    // are. Only the categories glyphs state are known until the glyph database (M4).
+    if !fontcraft_model::is_ufo_family(resolved.format) {
+        for g in &mut resolved.glyphs {
+            if g.category.as_deref() == Some("Mark") && g.sub_category.as_deref() == Some("Nonspacing") {
+                g.width = 0.0;
+            }
+        }
+    }
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;

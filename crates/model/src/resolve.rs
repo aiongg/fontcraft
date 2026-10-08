@@ -23,7 +23,7 @@
 
 use fontcraft_geom::{Affine, BezPath, Point};
 
-use crate::{Font, Master, MetricValue, ModelError, Params, Properties, Shape, metric};
+use crate::{Font, Master, ModelError, Params, Properties, Shape, SourceFormat, metric};
 
 /// What to resolve.
 #[derive(Clone, Debug, PartialEq)]
@@ -37,6 +37,9 @@ pub enum Target {
 /// One master or instance of a font, as a compiler reads it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Resolved {
+    /// The format the font was read from. The two families of formats derive some table fields
+    /// differently (the names, the style flags), as the reference compilers do.
+    pub format: SourceFormat,
     pub units_per_em: u16,
     pub family_name: String,
     /// The master's name, or the instance's.
@@ -47,6 +50,8 @@ pub struct Resolved {
     pub master: String,
     /// The design location, axis by axis in the font's axis order.
     pub location: Vec<f64>,
+    /// The font's axes, with the location in user coordinates.
+    pub axes: Vec<ResolvedAxis>,
     pub metrics: Metrics,
     /// The font's properties, with the master's and then the instance's of the same key in their
     /// place.
@@ -64,15 +69,48 @@ pub struct Resolved {
     pub notes: Vec<String>,
 }
 
-/// The metrics the font defines at the location. `None` where the font has no definition of
-/// that metric; the compiler's defaults then apply.
+/// The metrics at the location. Where the font has no value for one, the value its format means
+/// takes its place ([`Metrics::defaults`]); the model itself keeps the value absent.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Metrics {
-    pub ascender: Option<f64>,
-    pub descender: Option<f64>,
-    pub x_height: Option<f64>,
-    pub cap_height: Option<f64>,
-    pub italic_angle: Option<f64>,
+    pub ascender: f64,
+    pub descender: f64,
+    pub x_height: f64,
+    pub cap_height: f64,
+    /// Clockwise, in degrees, as the reference's format states it (OpenType's is the negative).
+    pub italic_angle: f64,
+}
+
+impl Metrics {
+    /// What a font of `format` means when a master has no value for a metric. The `.glyphs`
+    /// format (and the native one, shaped like it) means fixed values: ascender 800, descender
+    /// −200, x-height 500, cap height 700 (glyphsLib's master defaults, which fontc's reader
+    /// follows). A UFO means fractions of the em (ufo2ft's `fontInfoData`): 0.8, −0.2, 0.5 and
+    /// 0.7. The italic angle is 0 in both.
+    pub fn defaults(format: SourceFormat, units_per_em: u16) -> Self {
+        let upm = f64::from(units_per_em);
+        if is_ufo_family(format) {
+            Self { ascender: 0.8 * upm, descender: -0.2 * upm, x_height: 0.5 * upm, cap_height: 0.7 * upm, italic_angle: 0.0 }
+        } else {
+            Self { ascender: 800.0, descender: -200.0, x_height: 500.0, cap_height: 700.0, italic_angle: 0.0 }
+        }
+    }
+}
+
+/// Whether `format` is a UFO or a designspace (whose masters are UFOs).
+pub fn is_ufo_family(format: SourceFormat) -> bool {
+    matches!(format, SourceFormat::Ufo | SourceFormat::Ufoz | SourceFormat::Designspace)
+}
+
+/// An axis of the font at the location.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedAxis {
+    /// The OpenType tag (the first four characters of a longer one).
+    pub tag: String,
+    /// The location on this axis, in user coordinates.
+    pub user: f64,
+    /// Whether the axis has a range (a variable font varies along it), not a single value.
+    pub variable: bool,
 }
 
 /// An instance's style-linking settings.
@@ -92,7 +130,15 @@ pub struct ResolvedGlyph {
     pub export: bool,
     /// The production name the glyph states, if any.
     pub production_name: Option<String>,
+    /// The category and subcategory the glyph states (`Mark`, `Nonspacing`…), if any. Those the
+    /// glyph database would give are not looked up here.
+    pub category: Option<String>,
+    pub sub_category: Option<String>,
     pub width: f64,
+    /// The vertical advance, when the layer states one.
+    pub vert_width: Option<f64>,
+    /// The vertical origin, measured down from the ascender, when the layer states one.
+    pub vert_origin: Option<f64>,
     /// The contours in shape order, each a closed or open Bézier path in font units. A closed
     /// contour that starts with a line ends with an explicit line back to its start
     /// ([`crate::Path::to_contour`]).
@@ -117,7 +163,11 @@ impl ResolvedGlyph {
             unicodes: Vec::new(),
             export: true,
             production_name: None,
+            category: None,
+            sub_category: None,
             width,
+            vert_width: None,
+            vert_origin: None,
             contours: Vec::new(),
             components: Vec::new(),
             anchors: Vec::new(),
@@ -168,14 +218,28 @@ impl Font {
             Some(inst) if !inst.name.is_empty() => inst.name.clone(),
             _ => master.name.clone(),
         };
-        let pos = |kind: &str| self.metric(master, kind).map(|v: MetricValue| v.pos);
-        let metrics = Metrics {
-            ascender: pos(metric::ASCENDER),
-            descender: pos(metric::DESCENDER),
-            x_height: pos(metric::X_HEIGHT),
-            cap_height: pos(metric::CAP_HEIGHT),
-            italic_angle: pos(metric::ITALIC_ANGLE),
+        // A master's value list may be shorter than the definitions: a value it does not have is
+        // absent, and the format's default applies (the editor shows it as zero).
+        let defaults = Metrics::defaults(self.source.format, self.units_per_em);
+        let pos = |kind: &str, default: f64| {
+            self.metrics.iter().position(|d| d.is_plain(kind)).and_then(|i| master.metric_values.get(i)).map_or(default, |v| v.pos)
         };
+        let metrics = Metrics {
+            ascender: pos(metric::ASCENDER, defaults.ascender),
+            descender: pos(metric::DESCENDER, defaults.descender),
+            x_height: pos(metric::X_HEIGHT, defaults.x_height),
+            cap_height: pos(metric::CAP_HEIGHT, defaults.cap_height),
+            italic_angle: pos(metric::ITALIC_ANGLE, defaults.italic_angle),
+        };
+        let axes = (0..self.axes.len())
+            .filter_map(|i| {
+                let axis = self.axes.get(i)?;
+                let location = instance.map_or(&master.location, |inst| &inst.location);
+                let user = crate::axes::mapping(self, i).to_user(axis_value(location, i));
+                let range = crate::axes::range(self, i);
+                Some(ResolvedAxis { tag: axis.tag.chars().take(4).collect(), user, variable: range.minimum < range.maximum })
+            })
+            .collect();
 
         let mut glyphs = Vec::with_capacity(self.glyphs.len());
         let (mut alternates, mut undrawable, mut missing) = (0usize, 0usize, Vec::new());
@@ -185,6 +249,8 @@ impl Font {
             out.unicodes.clone_from(&g.unicodes);
             out.export = g.export;
             out.production_name.clone_from(&g.info.production);
+            out.category.clone_from(&g.info.category);
+            out.sub_category.clone_from(&g.info.sub_category);
             if g.layers.iter().any(|l| l.master == master.id && !l.is_master_layer() && !l.info.attrs.axis_rules.is_empty()) {
                 alternates += 1;
             }
@@ -196,6 +262,8 @@ impl Font {
                 continue;
             };
             out.width = layer.width;
+            out.vert_width = layer.info.vert_width;
+            out.vert_origin = layer.info.vert_origin;
             for shape in &layer.shapes {
                 match shape {
                     Shape::Path(p) => {
@@ -219,6 +287,9 @@ impl Font {
                 }
             }
             out.anchors = layer.anchors.iter().map(|a| (a.name.clone(), Point::new(a.x, a.y))).collect();
+            if !is_ufo_family(self.source.format) {
+                apply_origin_anchor(&mut out);
+            }
             glyphs.push(out);
         }
         if alternates > 0 {
@@ -242,6 +313,7 @@ impl Font {
         }
 
         Ok(Resolved {
+            format: self.source.format,
             units_per_em: self.units_per_em,
             family_name: self.family_name.clone(),
             style_name,
@@ -249,6 +321,7 @@ impl Font {
             version_minor: self.version_minor,
             master: master.id.clone(),
             location: instance.map_or_else(|| master.location.clone(), |i| i.location.clone()),
+            axes,
             metrics,
             properties,
             params,
@@ -257,6 +330,30 @@ impl Font {
             glyphs,
             notes,
         })
+    }
+}
+
+/// The anchor that moves a layer's drawing (the reference's format; glyphsLib and fontc apply
+/// it the same way).
+pub const ORIGIN_ANCHOR: &str = "*origin";
+
+/// Moves the drawing and the other anchors so that the `*origin` anchor's position becomes
+/// (0, 0), and drops that anchor. The advance stays.
+fn apply_origin_anchor(g: &mut ResolvedGlyph) {
+    let Some(origin) = g.anchors.iter().find(|(n, _)| n == ORIGIN_ANCHOR).map(|(_, p)| *p) else { return };
+    if !(origin.x.is_finite() && origin.y.is_finite()) {
+        return;
+    }
+    let shift = Affine::translate((-origin.x, -origin.y));
+    for c in &mut g.contours {
+        c.apply_affine(shift);
+    }
+    for c in &mut g.components {
+        c.transform = shift * c.transform;
+    }
+    g.anchors.retain(|(n, _)| n != ORIGIN_ANCHOR);
+    for (_, p) in &mut g.anchors {
+        *p = shift * *p;
     }
 }
 
@@ -304,8 +401,8 @@ mod tests {
         let f = font();
         let r = f.resolve(&f.default_target().unwrap()).unwrap();
         assert_eq!((r.style_name.as_str(), r.master.as_str(), r.units_per_em), ("Regular", "m01", 1000));
-        assert_eq!(r.metrics.ascender, Some(800.0));
-        assert_eq!(r.metrics.italic_angle, None, "no definition: the compiler's default applies");
+        assert_eq!(r.metrics.ascender, 800.0);
+        assert_eq!(r.metrics.italic_angle, 0.0, "no definition: the format's default");
         assert_eq!(r.glyphs.len(), f.glyphs.len());
         let a = r.glyphs.iter().find(|g| g.name == "A").unwrap();
         assert_eq!((a.width, a.unicodes.as_slice(), a.contours.len()), (600.0, [0x41].as_slice(), 1));
@@ -316,6 +413,54 @@ mod tests {
         assert_eq!(b.components, [ResolvedComponent { base: "A".into(), transform: Affine::translate((10.0, 20.0)) }]);
         assert!(r.notes.is_empty(), "{:?}", r.notes);
         assert!(matches!(f.resolve(&Target::Master("nope".into())), Err(ModelError::NoSuchMaster(_))));
+    }
+
+    #[test]
+    fn a_metric_the_master_has_no_value_for_is_the_formats_default() {
+        let mut f = font();
+        f.units_per_em = 2000;
+        // The definitions stay; the master's list stops after the ascender.
+        let i = f.metrics.iter().position(|d| d.kind == metric::ASCENDER).unwrap();
+        Arc::make_mut(&mut f.masters)[0].metric_values.truncate(i + 1);
+        Arc::make_mut(&mut f.masters)[0].metric_values[i].pos = 1500.0;
+        let r = f.resolve(&f.default_target().unwrap()).unwrap();
+        assert_eq!((r.metrics.ascender, r.metrics.descender, r.metrics.x_height, r.metrics.cap_height), (1500.0, -200.0, 500.0, 700.0));
+        // A UFO means fractions of the em instead.
+        f.source.format = SourceFormat::Ufo;
+        let r = f.resolve(&f.default_target().unwrap()).unwrap();
+        assert_eq!((r.metrics.ascender, r.metrics.descender, r.metrics.x_height, r.metrics.cap_height), (1500.0, -400.0, 1000.0, 1400.0));
+        // A value of zero that the master states stays zero.
+        Arc::make_mut(&mut f.masters)[0].metric_values[i].pos = 0.0;
+        assert_eq!(f.resolve(&f.default_target().unwrap()).unwrap().metrics.ascender, 0.0);
+    }
+
+    #[test]
+    fn an_origin_anchor_moves_the_drawing() {
+        let mut f = font();
+        let mut g = f.glyph_mut("B").unwrap();
+        g.layers[0].anchors.push(crate::Anchor::new("*origin", -20.0, 5.0));
+        g.layers[0].anchors.push(crate::Anchor::new("top", 100.0, 700.0));
+        g.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 10.0, 10.0)));
+        drop(g);
+        let r = f.resolve(&f.default_target().unwrap()).unwrap();
+        let b = r.glyphs.iter().find(|g| g.name == "B").unwrap();
+        assert_eq!(b.components[0].transform, Affine::translate((30.0, 15.0)));
+        let first = b.contours[0].elements().first().and_then(|e| e.end_point()).unwrap();
+        assert_eq!(first, Point::new(20.0, -5.0), "contours move by the anchor too");
+        assert_eq!(b.anchors, [("top".to_string(), Point::new(120.0, 695.0))], "the origin anchor itself is gone");
+        // A UFO has no such anchor: one of that name is just an anchor.
+        f.source.format = SourceFormat::Ufo;
+        let r = f.resolve(&f.default_target().unwrap()).unwrap();
+        assert_eq!(r.glyphs.iter().find(|g| g.name == "B").unwrap().anchors.len(), 2);
+    }
+
+    #[test]
+    fn axes_resolve_to_the_targets_user_location() {
+        let mut f = font();
+        Arc::make_mut(&mut f.axes).push(crate::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() });
+        Arc::make_mut(&mut f.masters)[0].location = vec![700.0];
+        let r = f.resolve(&f.default_target().unwrap()).unwrap();
+        assert_eq!(r.axes, [ResolvedAxis { tag: "wght".into(), user: 700.0, variable: false }]);
     }
 
     #[test]

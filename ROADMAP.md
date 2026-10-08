@@ -4,7 +4,7 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-08 (M2.1 done: the staged compiler pipeline and the resolved projection; M2.2 next)._
+_Last updated: 2026-10-08 (M2.2 done: the core tables at fontc parity or allow-listed with a reason; M2.3 next)._
 
 ## Where we are
 
@@ -41,8 +41,8 @@ channel into the running window. From the window's menus only the commands that 
 parameters work (New, Close, Undo, Redo, New Glyph, the View and Window toggles): there are no
 dialogs yet. Font View and Edit View draw. `fontcraft-cli oracle` compiles a source with
 FontCraft and with fontc or fontmake and compares the two fonts table by table; over 354 corpus
-sources it measures the compiler: 332 compared with fontc, `glyf` identical or equivalent in 236
-of them, `head` in 277, `maxp` in 275. 406 tests pass, including a sweep that runs every engine
+sources it measures the compiler: 332 compared with fontc, and every core table identical,
+equivalent or allow-listed with a reason in all of them. 413 tests pass, including a sweep that runs every engine
 command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
@@ -71,7 +71,7 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 | **Breadth:** commands, tools and panels exist | ~3% | 32 of 920 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
 | **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. Missing: OTF/CFF export, variable, WOFF2, version conversion, a glyph database for production names |
-| **Compiler correctness** | measured, low | 10 of 50 tables written, for one static flavour. Against fontc over 332 corpus sources: cmap identical or equivalent in 318, hmtx in 303, head in 277, maxp in 275, glyf in 236, post in 209; hhea, OS/2 and name differ in all (metric and name defaults, `USE_MY_METRICS`: `docs/plans/M2.md` › M2.1) |
+| **Compiler correctness** | measured, low | 12 of 50 tables written, for one static flavour (TrueType). Against fontc over 332 corpus sources every core table is identical, equivalent or allow-listed: allowed differences come from fontc building variable fonts, its bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6) and four reader questions (`docs/plans/M2.md` › M2.2). Against fontmake, OS/2 still differs in 114 of 330, name in 75, head in 58 where fontmake and fontc disagree. No CFF, no variable font, no features |
 | **Agent automation** | ~40% | every existing command is reachable from CLI, control channel and MCP; no pointer injection, dialogs, screenshots, resources or prompts yet |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests); one dependency panic found and fenced; one adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, no corpus runs, and the known scaling limits in `docs/status.md` |
 | **Performance** | unmeasured | targets written down (`docs/architecture.md`); no budget suite |
@@ -80,11 +80,10 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 ### What to build next (in priority order)
 
-1. **M2, the compile core** (plan accepted, `docs/plans/M2.md`): M2.0 (the oracle harness) and
-   M2.1 (the staged pipeline) are done. Next M2.2 (core tables to fontc parity, measured with
-   `fontcraft-cli oracle --corpus`: metric defaults of `.glyphs` masters, `USE_MY_METRICS`, then
-   hhea, OS/2, name; the vendor-id question goes back to the owner first), the `cff` crate, WOFF
-   and WOFF2, and the export commands.
+1. **M2, the compile core** (plan accepted, `docs/plans/M2.md`): M2.0 (the oracle harness),
+   M2.1 (the staged pipeline) and M2.2 (core tables at fontc parity) are done. Next the `cff`
+   crate (M2.3), WOFF and WOFF2 (M2.4), and the export commands (M2.5). Four reader questions
+   from M2.2 are open (plan › M2.2).
 2. **M3, Edit View drawing**, in parallel with 1 now that the model has settled: the `tools` crate,
    selection, the Draw tool, node editing, transforms, the renderer, `ui.pointer` and
    `ui.screenshot` on the control channel, path operations.
@@ -164,7 +163,10 @@ on, so the engine track, where oracles prove correctness, goes first.
   stages (`Font::resolve`, preflight, glyph order, outline preparation, table builders): missing
   components dropped, non-exported glyphs inlined, `.notdef` drawn as fontc draws it,
   composites kept unless mixed or beyond ±2, cu2qu at 0.001 em, contours reversed, half-up
-  rounding, composite boxes and `maxp` limits as fontc computes them.
+  rounding, composite boxes and `maxp` limits as fontc computes them. The core tables (head,
+  hhea, hmtx, maxp, OS/2, name, cmap, post, vhea, vmtx) derive every field as fontc does:
+  metric defaults per source format, names with fontc's fallbacks, style flags, `NONE` as the
+  vendor id, Unicode and code page ranges, `USE_MY_METRICS`.
 - **Oracle harness:** `crates/oracle` and `fontcraft-cli oracle`: FontCraft's build and fontc's
   or fontmake's (TrueType, or CFF from fontmake) of the same master, compared per table after
   normalisation (identical, equivalent, allowed with a reason, different, skipped), with
@@ -185,7 +187,7 @@ measured by what works (the parity table below and the measures in each mileston
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
-| M2 | Compile core: static TTF and OTF, oracle harness | 🟨 M2.0 and M2.1 done: the oracle harness and the staged pipeline (`docs/plans/M2.md`); M2.2 next | 6 (1) |
+| M2 | Compile core: static TTF and OTF, oracle harness | 🟨 M2.0 to M2.2 done: the oracle harness, the staged pipeline, the core tables at fontc parity (`docs/plans/M2.md`); M2.3 next | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |

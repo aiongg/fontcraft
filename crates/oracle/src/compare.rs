@@ -5,8 +5,8 @@
 //! | Table | Removed or canonicalised |
 //! |---|---|
 //! | head | `checksumAdjustment`, `created`, `modified`; `indexToLocFormat` (an offset size) |
-//! | hhea | `numberOfHMetrics` (how many advances are spelt out; `hmtx` compares the values) |
-//! | hmtx | compared as advance and left side bearing per glyph, by glyph name |
+//! | hhea, vhea | `numberOfHMetrics`, `numberOfLongVerMetrics` (how many advances are spelt out; `hmtx` and `vmtx` compare the values) |
+//! | hmtx, vmtx | compared as advance and side bearing per glyph, by glyph name |
 //! | name | compared as a set of records; the reference compiler's own stamp at the end of the version string (ID 5); IDs 256 and up (feature and variation names) left out |
 //! | cmap | compared as code point → glyph name mappings over all Unicode subtables, plus the list of subtables and the variation sequences |
 //! | glyf, CFF | outlines drawn and compared within half a unit, start points free; for `glyf` also each glyph's kind (empty, simple, composite), components, flags, bounds and instructions |
@@ -193,13 +193,15 @@ fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool)
     let (diffs, note) = match tag {
         "head" => (head(a, b), None),
         "hhea" => (hhea(a, b), None),
+        "vhea" => (vhea(a, b), None),
+        "vmtx" => (vmtx(a, b, common), None),
         "maxp" => (maxp(a, b), None),
         "OS/2" => (os2(a, b), None),
         "post" => (post(a, b), None),
         "name" => name(a, b),
         "cmap" => (cmap(a, b), None),
         "hmtx" => (hmtx(a, b, common), None),
-        "glyf" => (glyf(a, b, common), None),
+        "glyf" => (glyf(a, b, common), variable_reference(b).then(|| "the reference is variable: USE_MY_METRICS is not compared".to_string())),
         "CFF " => (cff(a, b, common), Some("decoded outlines compared; size and encoding are not".to_string())),
         "loca" => (Vec::new(), Some("offsets: compared through glyf".to_string())),
         _ => {
@@ -301,6 +303,43 @@ fn hhea(a: &Side, b: &Side) -> Vec<Difference> {
         ])
     };
     fields("hhea", f(a), f(b))
+}
+
+fn vhea(a: &Side, b: &Side) -> Vec<Difference> {
+    let f = |s: &Side| -> Option<Fields> {
+        let h = s.font.vhea().ok()?;
+        Some(vec![
+            ("version", format!("{:?}", h.version())),
+            ("ascender", h.ascender().to_i16().to_string()),
+            ("descender", h.descender().to_i16().to_string()),
+            ("lineGap", h.line_gap().to_i16().to_string()),
+            ("advanceHeightMax", h.advance_height_max().to_u16().to_string()),
+            ("minTopSideBearing", h.min_top_side_bearing().to_i16().to_string()),
+            ("minBottomSideBearing", h.min_bottom_side_bearing().to_i16().to_string()),
+            ("yMaxExtent", h.y_max_extent().to_i16().to_string()),
+            ("caretSlopeRise", h.caret_slope_rise().to_string()),
+            ("caretSlopeRun", h.caret_slope_run().to_string()),
+            ("caretOffset", h.caret_offset().to_string()),
+            ("metricDataFormat", h.metric_data_format().to_string()),
+        ])
+    };
+    fields("vhea", f(a), f(b))
+}
+
+fn vmtx(a: &Side, b: &Side, common: &Common) -> Vec<Difference> {
+    let (Ok(va), Ok(vb)) = (a.font.vmtx(), b.font.vmtx()) else { return vec![diff("vmtx", "readable", "unreadable")] };
+    let mut out = Vec::new();
+    for (name, ga, gb) in common {
+        let (adv_a, adv_b) = (va.advance(*ga), vb.advance(*gb));
+        if adv_a != adv_b {
+            out.push(diff(format!("vmtx {name} advance"), opt(adv_a), opt(adv_b)));
+        }
+        let (tsb_a, tsb_b) = (va.side_bearing(*ga), vb.side_bearing(*gb));
+        if tsb_a != tsb_b {
+            out.push(diff(format!("vmtx {name} tsb"), opt(tsb_a), opt(tsb_b)));
+        }
+    }
+    out
 }
 
 fn maxp(a: &Side, b: &Side) -> Vec<Difference> {
@@ -551,8 +590,15 @@ fn hmtx(a: &Side, b: &Side, common: &Common) -> Vec<Difference> {
     out
 }
 
+/// Whether `s` is a variable font. fontc never sets `USE_MY_METRICS` in one (the flag is safe
+/// only when every master's advances agree), and the static builds it is compared with do.
+fn variable_reference(s: &Side) -> bool {
+    s.font.fvar().is_ok()
+}
+
 /// A glyf entry's structure, as text that compares equal when the structures are equal.
-fn glyf_structure(s: &Side, gid: GlyphId) -> Result<(String, String, String), String> {
+/// `USE_MY_METRICS` is left out with `use_my_metrics` false.
+fn glyf_structure(s: &Side, gid: GlyphId, use_my_metrics: bool) -> Result<(String, String, String), String> {
     let glyf = s.font.glyf().map_err(|e| e.to_string())?;
     let loca = s.font.loca(None).map_err(|e| e.to_string())?;
     match loca.get(gid, &glyf) {
@@ -567,7 +613,8 @@ fn glyf_structure(s: &Side, gid: GlyphId) -> Result<(String, String, String), St
                     format!("{} instruction bytes", simple.instructions().len()),
                 )),
                 RawGlyph::Composite(c) => {
-                    let keep = CompositeGlyphFlags::USE_MY_METRICS
+                    let metrics = if use_my_metrics { CompositeGlyphFlags::USE_MY_METRICS } else { CompositeGlyphFlags::empty() };
+                    let keep = metrics
                         | CompositeGlyphFlags::ROUND_XY_TO_GRID
                         | CompositeGlyphFlags::OVERLAP_COMPOUND
                         | CompositeGlyphFlags::SCALED_COMPONENT_OFFSET
@@ -600,8 +647,9 @@ fn glyf_structure(s: &Side, gid: GlyphId) -> Result<(String, String, String), St
 
 fn glyf(a: &Side, b: &Side, common: &Common) -> Vec<Difference> {
     let mut out = Vec::new();
+    let use_my_metrics = !variable_reference(b);
     for (name, ga, gb) in common {
-        match (glyf_structure(a, *ga), glyf_structure(b, *gb)) {
+        match (glyf_structure(a, *ga, use_my_metrics), glyf_structure(b, *gb, use_my_metrics)) {
             (Ok(x), Ok(y)) => {
                 if x.0 != y.0 {
                     // Bounds and instructions of glyphs of different kinds say nothing more.

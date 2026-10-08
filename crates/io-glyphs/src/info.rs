@@ -28,6 +28,27 @@ fn plain_str(v: Value) -> Option<String> {
     }
 }
 
+/// A name's text, whatever its spelling. One the writer would spell otherwise (quotes it does
+/// not need) is kept beside it in `extra` under `key`, and written again while the text is the
+/// same ([`spelled`]).
+fn text_value(d: &mut Dict, key: &str) -> Option<String> {
+    let v = take(d, key)?;
+    let Value::String(s) = &v else { return None };
+    let text = s.as_str().to_string();
+    if s.spelling().is_some() {
+        d.entries.push((key.into(), v));
+    }
+    Some(text)
+}
+
+/// `text` as a value, in the spelling `extra` kept for `key` while it is still that text.
+fn spelled(text: &str, extra: &fontcraft_model::Extra, key: &str) -> Value {
+    match extra.get(fontcraft_model::Family::Glyphs, key) {
+        Some(v @ Value::String(s)) if s.as_str() == text => v.clone(),
+        _ => string(text),
+    }
+}
+
 fn read_param(v: &Value) -> Option<Param> {
     let mut d = dict(v)?;
     let name = plain_str(take(&mut d, "name")?)?;
@@ -91,7 +112,7 @@ pub(crate) fn push_params(e: &mut Vec<(Str, Value)>, p: &Params) {
 pub(crate) fn read_localized(v: &Value) -> Option<Localized> {
     let mut d = dict(v)?;
     let language = plain_str(take(&mut d, "language")?)?;
-    let value = plain_str(take(&mut d, "value")?)?;
+    let value = text_value(&mut d, "value")?;
     Some(Localized { language, value, extra: into_extra(d) })
 }
 
@@ -99,7 +120,10 @@ fn read_property(v: &Value) -> Option<Property> {
     let mut d = dict(v)?;
     let key = plain_str(take(&mut d, "key")?)?;
     let value = match (take(&mut d, "value"), take(&mut d, "values")) {
-        (Some(v), None) => PropertyValue::Single(plain_str(v)?),
+        (Some(v), None) => {
+            d.entries.push(("value".into(), v));
+            PropertyValue::Single(text_value(&mut d, "value")?)
+        }
         (None, Some(Value::Array(a))) => PropertyValue::Localized(a.items.iter().map(read_localized).collect::<Option<_>>()?),
         _ => return None,
     };
@@ -122,13 +146,13 @@ pub(crate) fn take_properties(d: &mut Dict) -> Properties {
 }
 
 pub(crate) fn write_localized(l: &Localized) -> Value {
-    Value::Dict(finish(vec![("language".into(), string(&l.language)), ("value".into(), string(&l.value))], &l.extra))
+    Value::Dict(finish(vec![("language".into(), string(&l.language)), ("value".into(), spelled(&l.value, &l.extra, "value"))], &l.extra))
 }
 
 fn write_property(p: &Property) -> Value {
     let mut e = vec![("key".into(), string(&p.key))];
     match &p.value {
-        PropertyValue::Single(s) => e.push(("value".into(), string(s))),
+        PropertyValue::Single(s) => e.push(("value".into(), spelled(s, &p.extra, "value"))),
         PropertyValue::Localized(values) => e.push(("values".into(), list(values.iter().map(write_localized).collect()))),
     }
     Value::Dict(finish(e, &p.extra))

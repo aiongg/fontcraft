@@ -1,9 +1,10 @@
 //! The allow-list: differences from a reference compiler that are accepted, each with its reason.
 //!
-//! `crates/oracle/allow.toml` is built in. An entry names a table and a difference key (a
-//! trailing `*` matches every key that starts with the rest), and optionally the oracle and a
-//! part of the source path it applies to. A table whose every difference is allowed is reported
-//! as "allowed", with the reasons.
+//! `crates/oracle/allow.toml` is built in. An entry names a table and one or more difference
+//! keys (`key`, and more in `keys`; a `*` in a key matches any run of characters, so
+//! `hmtx * advance` matches every glyph's advance), and optionally the oracle and one or more
+//! parts of the source path it applies to (`source`, `sources`: any of them). A table whose every
+//! difference is allowed is reported as "allowed", with the reasons.
 
 use serde::{Deserialize, Serialize};
 
@@ -19,10 +20,16 @@ const MAX_ENTRIES: usize = 10_000;
 pub struct Entry {
     pub table: String,
     pub key: String,
+    /// More keys the entry accepts, beside `key`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keys: Vec<String>,
     #[serde(default)]
     pub oracle: Option<String>,
     #[serde(default)]
     pub source: Option<String>,
+    /// More parts of source paths the entry applies to, beside `source`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<String>,
     pub reason: String,
 }
 
@@ -61,17 +68,46 @@ impl AllowList {
     /// The entry that accepts difference `d` of `table`, for `oracle` and `source`.
     pub fn find(&self, oracle: &str, source: &str, table: &str, d: &Difference) -> Option<&Entry> {
         self.entries.iter().find(|e| {
+            let any_source = e.source.is_none() && e.sources.is_empty();
             e.table == table
-                && key_matches(&e.key, &d.key)
+                && std::iter::once(&e.key).chain(&e.keys).any(|k| key_matches(k, &d.key))
                 && e.oracle.as_deref().is_none_or(|o| o == oracle)
-                && e.source.as_deref().is_none_or(|s| source.contains(s))
+                && (any_source || e.source.iter().chain(&e.sources).any(|s| source.contains(s.as_str())))
         })
     }
 }
 
+/// Whether `key` matches `pattern`, each `*` in which stands for any run of characters.
 fn key_matches(pattern: &str, key: &str) -> bool {
-    match pattern.strip_suffix('*') {
-        Some(prefix) => key.starts_with(prefix),
-        None => pattern == key,
+    let mut parts = pattern.split('*');
+    let Some(first) = parts.next() else { return pattern == key };
+    let Some(mut rest) = key.strip_prefix(first) else { return false };
+    let parts: Vec<&str> = parts.collect();
+    let Some((last, middle)) = parts.split_last() else { return rest.is_empty() };
+    for part in middle {
+        match rest.find(part) {
+            Some(i) => rest = rest.get(i + part.len()..).unwrap_or(""),
+            None => return false,
+        }
+    }
+    rest.len() >= last.len() && rest.ends_with(last)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::key_matches;
+
+    #[test]
+    fn stars_match_any_run_of_characters() {
+        assert!(key_matches("hmtx.advance", "hmtx.advance"));
+        assert!(!key_matches("hmtx.advance", "hmtx.advanced"));
+        assert!(key_matches("OS/2.ulUnicodeRange*", "OS/2.ulUnicodeRange2"));
+        assert!(key_matches("hmtx * advance", "hmtx acutecomb advance"));
+        assert!(!key_matches("hmtx * advance", "hmtx acutecomb lsb"));
+        assert!(key_matches("*", "anything"));
+        assert!(key_matches("a*b*c", "a-b-b-c"));
+        assert!(!key_matches("a*bc", "abc-"));
+        assert!(key_matches("ab*ab", "abab"), "the prefix and the suffix may not overlap, and do not here");
+        assert!(!key_matches("ab*ab", "aba"));
     }
 }

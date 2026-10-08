@@ -34,11 +34,11 @@ pub use font::{
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
 pub use glyph_info::{ColorLabel, GlyphInfo, GlyphInfoBox, MetricsKeys, PartProperty};
-pub use info::{DEFAULT_LANGUAGE, Localized, Param, Params, Properties, Property, PropertyValue, UserData};
+pub use info::{DEFAULT_LANGUAGE, LANGUAGES, Localized, Param, Params, Properties, Property, PropertyValue, UserData, language_id};
 pub use kerning::{KernContext, KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
 pub use rare::{Rare, RareDefault};
-pub use resolve::{Metrics, Resolved, ResolvedComponent, ResolvedGlyph, StyleLinking, Target};
+pub use resolve::{Metrics, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, is_ufo_family};
 pub use shape_info::{
     Alignment, AnchorInfo, AnchorInfoBox, ComponentInfo, ComponentInfoBox, Dimension, NodeInfo, NodeInfoBox, Orientation, PathInfo, PathInfoBox,
     ShapeAttrs, SmartValue,

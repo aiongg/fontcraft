@@ -79,7 +79,7 @@ impl MetricDef {
     }
 
     /// A plain definition of this kind: no name and no filter.
-    fn is_plain(&self, kind: &str) -> bool {
+    pub(crate) fn is_plain(&self, kind: &str) -> bool {
         self.kind == kind && self.name.is_none() && self.filter.is_none()
     }
 }

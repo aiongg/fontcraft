@@ -372,14 +372,14 @@ must be robust enough to be on by default for static export.
 | name platforms | Windows only | Windows only | Windows + Mac unless `-omitMacNames` | Windows only, Mac optional |
 | Version string | `Version M.mmm` | same plus `;fontc <ver>` | `Version x.xxx;addfeatures <ver>`, "Development" unless `-r` | fontc style, stamp optional |
 | Unique id | `ver;vendor;psname` | same | `x.xxx;vendor;FontName[;license]` | fontc style |
-| Vendor id default | not checked | four spaces | from notice string, else `UKWN` | four spaces |
+| Vendor id default | four spaces (fontTools) | `NONE`, also for four spaces | from notice string, else `UKWN` | `NONE`, as fontc |
 | fsType default | not checked | bit 2 for UFO, bit 3 for Glyphs | from source font | explicit in source |
 | OS/2 version | 4 (per a write-fonts comment) | 4 | 3, or 4 when bits 7 to 9 used | 4 |
 | Typo metrics default | ascender / descender / max(0, 1.2 em + desc − asc) | same | from d-height or cap height; desc = asc − em; gap = 1.2 em − asc + desc | fontc rule |
 | Win metrics default | asc + line gap / abs(desc) | same | font box top / −bottom | fontc rule, box-based optional |
 | hhea metrics default | asc + typo gap / desc / 0 | same | copies typo values | fontc rule |
 | x-height, cap height default | 0.5 em, 0.7 em | same | measured from o and O | measured when glyphs exist, else fontc values (open question) |
-| Underline position default | −0.075 em (per fontc comment) | −0.1 em | from source font | −0.1 em |
+| Underline position default | −0.075 em | −100 for `.glyphs`, −0.075 em for UFO | from source font | as fontc (the UFO reader stores ufo2ft's value) |
 | lowestRecPPEM | 6 | 6 | 3 | 6 |
 | xAvgCharWidth | mean of non-zero advances, rounded | same | same mean, truncated | rounded |
 | post version | 2.0 for TTF | 2.0 always | 3.0 for CFF; CFF2 3.0 unless `-k` | 2.0 TTF and CFF2, 3.0 CFF |
@@ -397,6 +397,28 @@ must be robust enough to be on by default for static export.
 
 Cells for fontmake marked "per fontc" restate what fontc's comments say ufo2ft does; they were not
 read in ufo2ft itself.
+
+---
+
+## 4a. Where FontCraft differs from fontc
+
+The core tables match fontc 1.0.0 over the corpus (`docs/plans/M2.md` › M2.2) except where this
+table says otherwise. Each row is also on `crates/oracle/allow.toml` with the sources it shows in.
+
+| What | fontc | FontCraft | Why |
+|---|---|---|---|
+| A `.glyphs` master's custom parameters (`Use Typo Metrics`, `unicodeRanges`, name parameters) | read from the font only; only the metric parameters come from the master | the master's in place of the font's | a static build of a master is that master's font, as glyphsLib and the reference app build it |
+| `USE_MY_METRICS` in a multi-master source | never set: the reference is a variable font | set, as in fontc's own static builds | FontCraft builds one master statically until M9; the harness does not compare the flag against a variable reference |
+| Composites whose components differ between masters; curves | decomposed; converted across all masters | kept; converted per master | static build of one master until M9 |
+| Names and panose of the variable font's export settings | merged into the font's | not used | they belong to the variable font (M9) and instances (M2.5) |
+| `openTypeNameRecords` of a UFO | written as English records whatever their language | each in its own language | the records state their language |
+| Non-spacing marks the glyph database knows | advance 0 | advance 0 only when the glyph states its category | the glyph database is M4 |
+
+Reading questions left open (listed on the allow-list): a `.glyphs` layer without a `width`
+(glyphsLib and fontc read 600, FontCraft 0); a designspace master without a metric another
+master has (fontc builds the UFO alone and uses ufo2ft's default, the model reads 0); a UFO
+glyph without a height (fontc writes advance height 0, the UFO reader cannot tell it from one
+with the default height); version 2 name keys in a version 3 file.
 
 ---
 
@@ -431,8 +453,8 @@ the binary only; compilation never changes the source.
    keep parity with fontmake for UFO sources).
 5. **fsType default per source format.** Bit 2 for UFO and bit 3 for Glyphs in fontc. Our native
    format should store an explicit value; decide the value written on first import.
-6. **Vendor id default.** Four spaces (fontc) or `UKWN` (makeotf), or `NONE` as some checkers
-   expect. Needs a decision with the QA area.
+6. **Vendor id default.** Answered for M2: `NONE`, as fontc 1.0.0 writes it, also for a source
+   that sets four spaces (`docs/plans/M2.md` § 3). makeotf writes `UKWN`, fontmake four spaces.
 7. **CFF2 table order.** write-fonts and fontTools both pick the CFF physical order only when a
    `CFF ` table is present, so CFF2 fonts get the TrueType list. Harmless, but confirm that this is
    what fontmake-built CFF2 fonts look like before our oracle diff treats order as significant.

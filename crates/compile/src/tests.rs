@@ -147,10 +147,16 @@ fn the_compiled_font_reads_back() {
 
 #[test]
 fn compiling_is_deterministic_and_the_timestamp_is_an_input() {
-    let font = sample();
+    // Names, composites, vertical metrics, localised names: every table the compiler writes.
+    let mut font = sample();
+    for (n, v) in [("vheaVertAscender", 500), ("vheaVertDescender", -500), ("vheaVertLineGap", 1000)] {
+        int_param(&mut font, n, v);
+    }
+    Arc::make_mut(&mut font.info).properties.set("designers", "Someone", true);
     let a = compile_sample(&font);
-    let b = compile_sample(&font);
+    let b = compile_sample(&font.clone());
     assert_eq!(a.bytes, b.bytes);
+    assert!(FontRef::new(&a.bytes).unwrap().vmtx().is_ok());
     let later = compile_ttf(&font, &Options { timestamp: 1_800_000_000, ..Default::default() }).unwrap();
     assert_ne!(a.bytes, later.bytes);
     let head = FontRef::new(&later.bytes).unwrap().head().unwrap().created().as_secs();
@@ -323,11 +329,12 @@ fn style_names_drive_style_linking() {
 }
 
 #[test]
-fn a_font_without_a_space_has_no_break_character() {
+fn the_break_character_is_the_space_with_or_without_one() {
+    // As ufo2ft and fontc write it.
     let mut f = sample();
     f.remove_glyph("space").unwrap();
     let out = compile_sample(&f);
-    assert_eq!(FontRef::new(&out.bytes).unwrap().os2().unwrap().us_break_char(), Some(0));
+    assert_eq!(FontRef::new(&out.bytes).unwrap().os2().unwrap().us_break_char(), Some(32));
 }
 
 // --- Resolve: the target picks the layers and the names -------------------------------------
@@ -743,4 +750,144 @@ fn decomposition_over_the_whole_font_is_bounded() {
     let mut hidden = glyphs.clone();
     assert!(preflight::flatten_non_export_components(&mut hidden, 600).is_err());
     preflight::flatten_non_export_components(&mut glyphs, MAX_EXPANDED_ELEMENTS).unwrap();
+}
+
+// --- Core tables as fontc derives them (M2.2) -----------------------------------------------
+
+fn int_param(f: &mut Font, name: &str, v: i64) {
+    Arc::make_mut(&mut f.info)
+        .params
+        .0
+        .push(fontcraft_model::Param::new(name, fontcraft_model::plist::Value::Number(fontcraft_model::plist::Number::int(v))));
+}
+
+#[test]
+fn metrics_take_the_reference_defaults() {
+    let out = compile_sample(&sample());
+    let font = FontRef::new(&out.bytes).unwrap();
+    let (hhea, os2, post) = (font.hhea().unwrap(), font.os2().unwrap(), font.post().unwrap());
+    // Ascender 800, descender -200: typo line gap 1.2 em - 1000 = 200, hhea ascender 1000.
+    assert_eq!((hhea.ascender().to_i16(), hhea.descender().to_i16(), hhea.line_gap().to_i16()), (1000, -200, 0));
+    assert_eq!((hhea.caret_slope_rise(), hhea.caret_slope_run()), (1000, 0));
+    assert_eq!((os2.s_typo_ascender(), os2.s_typo_descender(), os2.s_typo_line_gap()), (800, -200, 200));
+    assert_eq!((os2.us_win_ascent(), os2.us_win_descent()), (1000, 200));
+    assert_eq!((post.underline_position().to_i16(), post.underline_thickness().to_i16()), (-100, 50));
+    assert_eq!(os2.fs_type(), 8, "editable embedding when the source says nothing");
+    assert_eq!(os2.fs_selection().bits(), 0x40, "REGULAR only; USE_TYPO_METRICS only when asked for");
+    assert_eq!(os2.ach_vend_id(), skrifa::raw::types::Tag::new(b"NONE"));
+    assert_eq!(os2.ul_code_page_range_1(), Some(1), "Latin 1 when nothing else applies");
+    assert_eq!(font.head().unwrap().flags().bits(), 3);
+}
+
+#[test]
+fn parameters_override_the_defaults() {
+    let mut f = sample();
+    int_param(&mut f, "typoLineGap", 0);
+    int_param(&mut f, "winDescent", -250);
+    int_param(&mut f, "Use Typo Metrics", 1);
+    int_param(&mut f, "openTypeHeadLowestRecPPEM", 9);
+    Arc::make_mut(&mut f.info).properties.set("vendorID", "    ", false);
+    Arc::make_mut(&mut f.info).params.0.push(fontcraft_model::Param::new(
+        "fsType",
+        fontcraft_model::plist::Value::Array(fontcraft_model::plist::Array { items: vec![], ..Default::default() }),
+    ));
+    let m = Arc::make_mut(&mut f.masters);
+    let i = f.metrics.iter().position(|d| d.kind == fontcraft_model::metric::ITALIC_ANGLE).unwrap_or(usize::MAX);
+    if let Some(v) = m[0].metric_values.get_mut(i) {
+        v.pos = 10.0;
+    }
+    let out = compile_sample(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    let os2 = font.os2().unwrap();
+    assert_eq!((os2.s_typo_line_gap(), os2.us_win_ascent(), os2.us_win_descent()), (0, 800, 250), "win ascent follows the gap; descent absolute");
+    assert_eq!(os2.fs_type(), 0);
+    assert_eq!(os2.ach_vend_id(), skrifa::raw::types::Tag::new(b"NONE"), "four spaces are no vendor id (fontc)");
+    assert_eq!(font.head().unwrap().lowest_rec_ppem(), 9);
+    if i != usize::MAX {
+        assert_eq!(os2.fs_selection().bits() & 0x81, 0x81, "ITALIC from the angle, USE_TYPO_METRICS");
+        assert_eq!(font.post().unwrap().italic_angle().to_f64(), -10.0, "counter-clockwise");
+        assert_eq!(font.hhea().unwrap().caret_slope_run(), 176, "1000 × tan 10°");
+    }
+}
+
+#[test]
+fn names_follow_the_reference_fallbacks() {
+    let mut f = sample();
+    f.version_major = 2;
+    f.version_minor = 5;
+    Arc::make_mut(&mut f.info).properties.set("designers", "Someone", true);
+    Arc::make_mut(&mut f.info)
+        .params
+        .0
+        .push(fontcraft_model::Param::new("Name Table Entry", fontcraft_model::plist::Value::String("25; Prefix".into())));
+    let out = compile_sample(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert_eq!(names(&font, StringId::VERSION_STRING), ["Version 2.005"]);
+    assert_eq!(names(&font, StringId::UNIQUE_ID), ["2.005;NONE;SliceSans-Regular"]);
+    assert_eq!(names(&font, StringId::FULL_NAME), ["Slice Sans Regular"]);
+    assert_eq!(names(&font, StringId::POSTSCRIPT_NAME), ["SliceSans-Regular"]);
+    assert_eq!(names(&font, StringId::DESIGNER), ["Someone"]);
+    assert_eq!(names(&font, StringId::new(25)), ["Prefix"]);
+    assert_eq!(font.head().unwrap().font_revision().to_f64(), 2.005_004_882_812_5);
+}
+
+#[test]
+fn use_my_metrics_goes_on_the_first_component_with_the_advance() {
+    let mut f = sample();
+    let mut c = f.glyph_mut("C").unwrap();
+    c.layers[0].width = 620.0;
+    c.layers[0].shapes.push(Shape::Component(Component::new("A", 0.0, 30.0)));
+    c.layers[0].shapes.push(Shape::Component(Component::new("A", 0.0, 0.0)));
+    drop(c);
+    let out = compile_sample(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    let flags = |name: &str| -> Vec<bool> {
+        let Some(RawGlyph::Composite(c)) = raw(&font, gid_of(&out, name)) else { panic!("{name}") };
+        c.components().map(|c| c.flags.contains(skrifa::raw::tables::glyf::CompositeGlyphFlags::USE_MY_METRICS)).collect()
+    };
+    assert_eq!(flags("C"), [true, false], "a vertical offset is allowed, and only the first gets it");
+    assert_eq!(flags("B"), [false], "B is moved sideways");
+}
+
+#[test]
+fn hmtx_leaves_out_the_trailing_advances_that_repeat() {
+    let mut f = sample();
+    for name in ["x1", "x2", "x3"] {
+        f.add_glyph(name, Vec::new(), 500.0).unwrap();
+    }
+    let out = compile_sample(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    let n = usize::from(font.hhea().unwrap().number_of_h_metrics());
+    assert_eq!(n, out.glyph_order.len() - 2, "three equal advances at the end keep one");
+}
+
+#[test]
+fn vertical_tables_come_with_the_vhea_parameters() {
+    let mut f = sample();
+    for (n, v) in [("vheaVertAscender", 500), ("vheaVertDescender", -500), ("vheaVertLineGap", 1000)] {
+        int_param(&mut f, n, v);
+    }
+    f.glyph_mut("A").unwrap().layers[0].info.vert_width = Some(900.0);
+    let out = compile_sample(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    let vhea = font.vhea().unwrap();
+    assert_eq!((vhea.ascender().to_i16(), vhea.line_gap().to_i16()), (500, 1000));
+    let vmtx = font.vmtx().unwrap();
+    assert_eq!(vmtx.advance(gid_of(&out, "A")), Some(900));
+    assert_eq!(vmtx.advance(gid_of(&out, "O")), Some(1000), "typo ascender to descender");
+    assert_eq!(vmtx.side_bearing(gid_of(&out, "A")), Some(100), "from the typo ascender to the top");
+    assert!(FontRef::new(&compile_sample(&sample()).bytes).unwrap().vhea().is_err(), "none without vertical data");
+}
+
+#[test]
+fn stated_non_spacing_marks_have_no_advance() {
+    let mut f = sample();
+    f.add_glyph("acutecomb", vec![0x301], 300.0).unwrap();
+    let mut g = f.glyph_mut("acutecomb").unwrap();
+    g.info.category = Some("Mark".into());
+    g.info.sub_category = Some("Nonspacing".into());
+    drop(g);
+    let out = compile_sample(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert_eq!(font.hmtx().unwrap().advance(gid_of(&out, "acutecomb")), Some(0));
 }

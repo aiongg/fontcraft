@@ -92,7 +92,16 @@ bundled, the file says so in its header and the project is listed here with its 
   conversion and contour reversal steps (outline.rs, from fontbe/src/glyphs.rs), and composite
   bounds and maxp composite limits (crates/compile/src/build.rs, from fontbe/src/glyphs.rs and
   metrics_and_limits.rs). The closing-line form of contours (crates/model/src/glyph.rs,
-  Path::to_contour) follows its path builder (fontir/src/ir/path_builder.rs).
+  Path::to_contour) follows its path builder (fontir/src/ir/path_builder.rs). The core tables'
+  derivations are ported from its front ends and backend (M2.2): names, style flags, vendor id,
+  embedding, weight and width classes, metric defaults and head settings
+  (crates/compile/src/info.rs, from glyphs2fontir/src/source.rs, ufo2fontir/src/source.rs,
+  fontir/src/ir.rs and fontir/src/ir/static_metadata.rs); USE_MY_METRICS, hmtx, hhea, vhea,
+  vmtx, head, OS/2 and post (crates/compile/src/build.rs, from fontbe/src/glyphs.rs,
+  metrics_and_limits.rs, vertical_metrics.rs, head.rs, os2.rs, post.rs); the OS/2 Unicode range
+  table and code page rules (crates/compile/src/ranges.rs, from fontbe/src/os2.rs, which takes
+  them from fontTools and ufo2ft, both MIT); the format defaults of master metrics and the
+  `*origin` anchor (crates/model/src/resolve.rs, from glyphs2fontir/src/source.rs).
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

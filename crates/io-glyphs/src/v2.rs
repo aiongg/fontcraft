@@ -63,6 +63,9 @@ const KERN_GROUP_KEYS: [&str; 4] = ["leftKerningGroup", "rightKerningGroup", "to
 
 /// The metric definitions of a version 2 document, in this order.
 const KINDS: [&str; 6] = [metric::ASCENDER, metric::CAP_HEIGHT, metric::X_HEIGHT, metric::BASELINE, metric::DESCENDER, metric::ITALIC_ANGLE];
+/// Where the baseline and the italic angle are in [`KINDS`].
+const BASELINE: usize = 3;
+const ITALIC: usize = 5;
 /// The master keys that hold the positions of [`KINDS`] (the baseline has none).
 const KEYS: [Option<&str>; 6] = [Some("ascender"), Some("capHeight"), Some("xHeight"), None, Some("descender"), Some("italicAngle")];
 
@@ -354,11 +357,23 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
     let axes = axes_of(&font_info.params, &master_values, root.get("instances"));
     let n = axes.len();
     let stem_layout = stem_layout(&master_values);
-    let masters = master_values
+    let read: Vec<(Master, [bool; 6])> = master_values
         .into_iter()
         .enumerate()
         .map(|(i, m)| read_master(m, &format!("fontMaster[{i}]"), n, stem_layout.is_some()))
         .collect::<Result<_>>()?;
+    // A vertical metric no master states has no definition: the font means the format's
+    // default for it (glyphsLib's, which compilers apply), and writing leaves the key out again.
+    // The baseline and the italic angle are always defined.
+    let keep: Vec<bool> =
+        (0..KINDS.len()).map(|i| i == BASELINE || i == ITALIC || read.iter().any(|(_, present)| present.get(i) == Some(&true))).collect();
+    let masters: Vec<Master> = read
+        .into_iter()
+        .map(|(mut m, _)| {
+            m.metric_values = m.metric_values.into_iter().zip(&keep).filter(|(_, k)| **k).map(|(v, _)| v).collect();
+            m
+        })
+        .collect();
     let instances = design::take_checked(&mut root, "instances", |v| read_instance(v, n), |i| write_instance(i, n).ok());
     let stems = match stem_layout {
         Some((h, v)) => {
@@ -388,7 +403,7 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
         version_minor,
         axes: Arc::new(axes),
         instances: Arc::new(instances),
-        metrics: Arc::new(KINDS.iter().map(|k| MetricDef::new(k)).collect()),
+        metrics: Arc::new(KINDS.iter().zip(&keep).filter(|(_, k)| **k).map(|(kind, _)| MetricDef::new(kind)).collect()),
         stems: Arc::new(stems),
         numbers: Arc::default(),
         masters: Arc::new(masters),
@@ -404,13 +419,18 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
     })
 }
 
-fn read_master(v: Value, at: &str, axes: usize, stems: bool) -> Result<Master> {
+/// A master, with which of the [`KEYS`] it states.
+fn read_master(v: Value, at: &str, axes: usize, stems: bool) -> Result<(Master, [bool; 6])> {
     let mut d = crate::as_dict(v, at)?;
     let id = opt_string(&mut d, "id", at)?.ok_or_else(|| bad(at, "a master has no id"))?;
     let mut values: Vec<MetricValue> = Vec::with_capacity(KINDS.len());
-    for key in KEYS {
+    let mut present = [false; 6];
+    for (key, slot) in KEYS.iter().zip(present.iter_mut()) {
         let pos = match key.and_then(|k| take(&mut d, k)) {
-            Some(v) => as_f64(&v, &format!("{at}.{}", key.unwrap_or_default()))?,
+            Some(v) => {
+                *slot = true;
+                as_f64(&v, &format!("{at}.{}", key.unwrap_or_default()))?
+            }
             None => 0.0,
         };
         values.push(MetricValue { pos, over: 0.0 });
@@ -422,7 +442,9 @@ fn read_master(v: Value, at: &str, axes: usize, stems: bool) -> Result<Master> {
             let parsed = z.as_str().and_then(|s| braced_numbers(s, 2));
             let slot = parsed.as_ref().and_then(|p| {
                 let (pos, size) = (*p.first()?, *p.get(1)?);
-                let i = values.iter().enumerate().position(|(i, v)| i != 5 && v.pos == pos && v.over == 0.0)?;
+                // Only a metric the master states (or the baseline) takes a zone.
+                let stated = |i: usize| i == BASELINE || present.get(i) == Some(&true);
+                let i = values.iter().enumerate().position(|(i, v)| i != ITALIC && stated(i) && v.pos == pos && v.over == 0.0)?;
                 Some((i, size))
             });
             let canonical = z.as_str().is_some_and(|s| s == braced(parsed.as_deref().unwrap_or_default()));
@@ -467,7 +489,7 @@ fn read_master(v: Value, at: &str, axes: usize, stems: bool) -> Result<Master> {
         None if usable_name(&derived) => derived,
         None => String::new(),
     };
-    Ok(Master {
+    let master = Master {
         id,
         name,
         location,
@@ -482,7 +504,8 @@ fn read_master(v: Value, at: &str, axes: usize, stems: bool) -> Result<Master> {
         user_data,
         extra: into_extra(d),
         ..Default::default()
-    })
+    };
+    Ok((master, present))
 }
 
 fn hex_code_points(v: &Value) -> Option<Vec<u32>> {
@@ -502,9 +525,15 @@ fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
     let name = opt_string(&mut d, "glyphname", at)?.ok_or_else(|| bad(at, "a glyph has no glyphname"))?;
     let at = format!("glyph `{name}`");
     let mut unicodes = Vec::new();
+    // Code points the writer would spell otherwise (`97` for `0097`) keep their spelling beside
+    // the values; those that are not hexadecimal are kept as written.
     if let Some(v) = take(&mut d, "unicode") {
         match hex_code_points(&v) {
             Some(u) if write_unicode(&u).as_ref() == Some(&v) => unicodes = u,
+            Some(u) if !u.is_empty() => {
+                unicodes = u;
+                d.entries.push(("unicode".into(), v));
+            }
             _ => d.entries.push(("unicode".into(), v)),
         }
     }
@@ -809,7 +838,8 @@ fn write_master(font: &Font, m: &Master) -> Result<Value> {
         e.push(("guideLines".into(), list(guides)));
     }
     for (kind, key) in KINDS.iter().zip(KEYS) {
-        let Some(key) = key else { continue };
+        // A metric the font has no definition of is no key (the format's default).
+        let Some(key) = key.filter(|_| font.metric(m, kind).is_some()) else { continue };
         let pos = value(kind).pos;
         if *kind != metric::ITALIC_ANGLE || pos != 0.0 {
             e.push((key.into(), num(pos, &at)?));
@@ -845,7 +875,9 @@ fn write_master(font: &Font, m: &Master) -> Result<Value> {
 fn write_glyph(g: &Glyph) -> Result<Dict> {
     let at = format!("glyph `{}`", g.name);
     let mut e = vec![("glyphname".into(), string(&g.name))];
-    if let Some(u) = write_unicode(&g.unicodes) {
+    // A spelling kept from reading, while it still reads as the code points.
+    let kept = g.extra.get(Family::Glyphs, "unicode").filter(|v| hex_code_points(v).as_deref() == Some(g.unicodes.as_slice())).cloned();
+    if let Some(u) = kept.or_else(|| write_unicode(&g.unicodes)) {
         e.push(("unicode".into(), u));
     }
     if !g.export {

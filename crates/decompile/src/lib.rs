@@ -212,7 +212,11 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         MetricDef::new(metric::BASELINE),
         MetricDef::new(metric::DESCENDER),
     ];
-    let mut values = [metrics.ascent, metrics.cap_height.unwrap_or(0.0), metrics.x_height.unwrap_or(0.0), 0.0, metrics.descent]
+    // The typographic ascender and descender are the source's own in fonts that fontc and ufo2ft
+    // build (hhea adds the line gap to the ascender there); without OS/2, the line metrics.
+    let (ascent, descent) =
+        font.os2().ok().map_or((metrics.ascent, metrics.descent), |o| (f32::from(o.s_typo_ascender()), f32::from(o.s_typo_descender())));
+    let mut values = [ascent, metrics.cap_height.unwrap_or(0.0), metrics.x_height.unwrap_or(0.0), 0.0, descent]
         .map(|v| MetricValue { pos: f64::from(v), over: 0.0 })
         .to_vec();
     if metrics.italic_angle != 0.0 {

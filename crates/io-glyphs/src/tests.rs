@@ -137,6 +137,16 @@ fn version_4_keeps_the_family_name_in_its_properties() {
 }
 
 #[test]
+fn property_texts_with_quotes_they_do_not_need_are_read() {
+    let v4 = "{\n.appVersion = \"4004\";\n.formatVersion = 4;\nfontMaster = (\n{\nid = m01;\n},\n);\nglyphs = (\n);\nproperties = (\n{\nkey = familyNames;\nvalues = (\n{\nlanguage = dflt;\nvalue = Markow;\n},\n{\nlanguage = DEU;\nvalue = \"Markow\";\n},\n);\n},\n{\nkey = vendorID;\nvalue = \"ABCD\";\n},\n);\nunitsPerEm = 1000;\nversionMajor = 1;\nversionMinor = 0;\n}\n";
+    let font = read(v4).unwrap();
+    let PropertyValue::Localized(names) = &font.info.properties.get("familyNames").unwrap().value else { panic!() };
+    assert_eq!(names[1].value, "Markow");
+    assert_eq!(font.info.properties.value("vendorID"), Some("ABCD"));
+    assert_eq!(write(&font).unwrap(), v4, "the quotes stay");
+}
+
+#[test]
 fn shapes_the_model_cannot_hold_are_kept_as_written() {
     let text = V3.replace("(500,0,l),", "(500,0,u),");
     let font = read(&text).unwrap();
@@ -284,6 +294,37 @@ fn a_version_2_file_round_trips_through_the_model() {
     let Shape::Component(c) = &font.glyph("Aacute").unwrap().layers[0].shapes[1] else { panic!() };
     assert_eq!(c.transform, Transform::Matrix([1.0, 0.0, 0.0, 1.0, 285.0, 232.0]));
     assert_eq!(write(&font).unwrap(), V2);
+}
+
+#[test]
+fn version_2_metrics_no_master_states_stay_absent() {
+    use fontcraft_model::metric;
+    // No master states the cap height or the x-height; a zone at 0 is the baseline's even though
+    // the absent metrics would read as 0.
+    let text = V2.replace("capHeight = 810;\n", "").replace("xHeight = 578;\n", "").replace("\"{578, 11}\",\n", "");
+    let font = read(&text).unwrap();
+    let m = font.default_master().unwrap();
+    assert!(font.metric(m, metric::CAP_HEIGHT).is_none() && font.metric(m, metric::X_HEIGHT).is_none());
+    assert_eq!(font.metric(m, metric::BASELINE).map(|v| v.over), Some(-13.0));
+    let resolved = font.resolve(&font.default_target().unwrap()).unwrap();
+    assert_eq!((resolved.metrics.cap_height, resolved.metrics.x_height), (700.0, 500.0), "the format's defaults");
+    assert_eq!(write(&font).unwrap(), text, "the keys stay out");
+}
+
+#[test]
+fn code_points_spelled_unusually_are_read_and_keep_their_spelling() {
+    // Version 2: hexadecimal, here written as a bare number.
+    let text = V2.replace("unicode = 0041;", "unicode = 41;");
+    let mut font = read(&text).unwrap();
+    assert_eq!(font.glyph("A").unwrap().unicodes, [0x41]);
+    assert_eq!(write(&font).unwrap(), text);
+    font.glyph_mut("A").unwrap().unicodes = vec![0x42];
+    assert!(write(&font).unwrap().contains("unicode = 0042;"), "a changed value is written canonically");
+    // Version 3: decimal, here with a leading zero, which reads as decimal too.
+    let v3 = V3.replace("unicode = 65;", "unicode = 0065;");
+    let font = read(&v3).unwrap();
+    assert_eq!(font.glyph("A").unwrap().unicodes, [65]);
+    assert_eq!(write(&font).unwrap(), v3);
 }
 
 #[test]
@@ -662,8 +703,12 @@ fn feature_labels_are_fields() {
 
 #[test]
 fn labels_that_would_not_write_back_stay_as_written() {
+    // A text the writer would spell otherwise is read, and keeps its spelling.
+    let text = v3_labels().replace("value = \"Alternate A\";", "value = \"Alternate\\012A\";");
+    let font = read(&text).unwrap();
+    assert_eq!(font.features.features[0].labels[0].value, "Alternate\nA");
+    assert_eq!(write(&font).unwrap(), text);
     for text in [
-        v3_labels().replace("value = \"Alternate A\";", "value = \"Alternate\\012A\";"),
         v3_labels().replace("language = DEU;\n", "language = \"DEU\";\n"),
         v3_labels().replace(
             "labels = (\n{\nlanguage = dflt;\nvalue = \"Alternate A\";\n},\n{\nlanguage = DEU;\nvalue = \"Anderes A\";\n}\n);",

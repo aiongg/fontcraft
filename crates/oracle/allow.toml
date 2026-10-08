@@ -1,12 +1,271 @@
 # Accepted differences between FontCraft's compiled fonts and a reference compiler's.
 #
 # Each entry: `table` (tag, trailing spaces dropped), `key` (a difference key as the report prints
-# it; a trailing `*` matches every key that starts with the rest), optional `oracle` ("fontc",
-# "fontmake") and `source` (part of the source path), and the `reason`. A difference that FontCraft
-# is meant to fix is not listed here: it stays "different" until the compiler matches.
+# it; a `*` matches any run of characters) and more keys in `keys`, optional `oracle` ("fontc",
+# "fontmake"), `source` and `sources` (parts of the source path; any of them), and the `reason`.
+# A difference that FontCraft is meant to fix is not listed here: it stays "different" until the
+# compiler matches. Every entry names the package that removes it, where one does.
 
 [[allow]]
 table = "OS/2"
 key = "OS/2.usMaxContext"
 oracle = "fontmake"
 reason = "usMaxContext is the longest context of the GSUB and GPOS lookups. FontCraft compiles features from M8 (plan M2 § 1, Deferred); fontc builds are made without features, fontmake's cannot be."
+
+# --- The reference builds a variable font (M9) -------------------------------------------------
+# fontc has no option for a static build of one master: from a multi-master source it builds a
+# variable font, compared at its default location, where FontCraft builds the origin master.
+
+[[allow]]
+table = "glyf"
+key = "glyf manual-component structure"
+oracle = "fontc"
+sources = ["/WghtVar.glyphs", "/WghtVar.glyphspackage", "/WghtVar_Avar", "/WghtVar_Instances", "/WghtVar_OS2", "/WghtVarWithStylisticSet", "/TheBestNames.glyphs"]
+reason = "The reference is a variable font: fontc decomposes a composite whose component offsets differ between masters (`compile.inconsistentComponentsDecompose`). A static build of one master keeps it, as fontmake's master build does. Compared again with variable builds (M9)."
+
+[[allow]]
+table = "glyf"
+key = "glyf dong structure"
+oracle = "fontc"
+sources = ["oswald/sources/Oswald.glyphs"]
+reason = "The reference is a variable font: fontc decomposes a composite whose component transforms differ between masters (`compile.inconsistentComponentsDecompose`). A static build of one master keeps it. Compared again with variable builds (M9)."
+
+[[allow]]
+table = "maxp"
+key = "maxp.maxComposite*"
+keys = ["maxp.maxComponentElements", "maxp.maxComponentDepth"]
+oracle = "fontc"
+sources = ["/WghtVar.glyphs", "/WghtVar.glyphspackage", "/WghtVar_Avar", "/WghtVar_Instances", "/WghtVar_OS2", "/WghtVarWithStylisticSet", "/TheBestNames.glyphs"]
+reason = "Follows from the composite the variable reference decomposes (see glyf); M9."
+
+[[allow]]
+table = "glyf"
+key = "glyf * outline"
+keys = ["glyf * bounds"]
+oracle = "fontc"
+sources = ["/Oswald-AE-comb.glyphs", "oswald/sources/Oswald.glyphs", "/WorkSans-minimal-bracketlayer.glyphs", "/PropagateAnchorsTest"]
+reason = "The reference is a variable font: fontc converts each curve to quadratics in all masters together (`compile.cu2quAcrossMasters`), so a curve may get more segments than one master alone needs. Within the tolerance either way. Compared again with variable builds (M9)."
+
+[[allow]]
+table = "maxp"
+key = "maxp.maxPoints"
+keys = ["maxp.maxCompositePoints"]
+oracle = "fontc"
+sources = ["/Oswald-AE-comb.glyphs", "/Oswald-O.glyphs", "oswald/sources/Oswald.glyphs", "/WorkSans-minimal-bracketlayer.glyphs", "/IntermediateLayer.glyphs", "/PropagateAnchorsTest"]
+reason = "Curves converted across the variable reference's masters have more points (see glyf); M9."
+
+[[allow]]
+table = "hmtx"
+key = "hmtx * lsb"
+oracle = "fontc"
+sources = ["oswald/sources/Oswald.glyphs"]
+reason = "Side bearings follow the curves converted across the variable reference's masters, whose extremes shift by a unit or two; M9."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.panose"
+oracle = "fontc"
+sources = ["/WghtVarInstancePanose.glyphs"]
+reason = "fontc takes the panose of the variable font's export settings (an instance of kind variable) before the master's. A static build of a master has no such instance; instances are compiled from M2.5, variable fonts from M9."
+
+[[allow]]
+table = "name"
+key = "name *"
+oracle = "fontc"
+sources = ["/PreferableNames.glyphs"]
+reason = "fontc merges the names of the variable font's export settings (an instance of kind variable) into the font's. A static build of a master has no such instance; M2.5 (instances) and M9 (variable fonts)."
+
+# --- Glyphs the reference compiler makes (M8, M9, M11) -------------------------------------------
+
+[[allow]]
+table = "maxp"
+key = "maxp.numGlyphs"
+keys = ["maxp.maxPoints", "maxp.maxComposite*", "maxp.maxComponent*"]
+sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
+reason = "Source reading: the reference compiler makes a glyph of each alternate (bracket) layer (`*.BRACKET.*`) and of each colour layer (`*.color0`); FontCraft compiles the master layers and keeps the others for feature variations (M8, M9) and colour tables (M11). The glyph set differs, and with it the glyph count and the maxima over all glyphs."
+
+[[allow]]
+table = "post"
+key = "post.numGlyphs"
+sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/ReverseBracketLayers", "/bracket-glyph-order", "/bracket-rules-processed", "/color-and-bracket-glyph-order", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
+reason = "Source reading: the glyphs the reference makes of alternate and colour layers (see maxp); M8, M9, M11."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.xAvgCharWidth"
+sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/bracket-rules-processed", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
+reason = "Source reading: the average advance counts the glyphs the reference makes of alternate and colour layers (see maxp), and non-spacing marks the glyph database knows (see hmtx); M4, M8, M9, M11."
+
+[[allow]]
+table = "hhea"
+key = "hhea.advanceWidthMax"
+keys = ["hhea.xMaxExtent", "hhea.minRightSideBearing", "hhea.minLeftSideBearing"]
+sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/glyph-with-bracket-component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-"]
+reason = "Source reading: the extremes over all glyphs include the glyphs the reference makes of alternate and colour layers (see maxp), and the zero advances of non-spacing marks (see hmtx); M4, M8, M9, M11."
+
+[[allow]]
+table = "head"
+key = "head.xMax"
+keys = ["head.xMin"]
+sources = ["/AlumniSans-wononly", "/BlankAlternateLayers", "decreasing_axis/axis.glyphs"]
+reason = "Source reading: the font box includes the glyphs the reference makes of alternate layers (see maxp); M8, M9."
+
+# --- A designspace whose first source lacks a glyph the others have -----------------------------
+
+[[allow]]
+table = "maxp"
+key = "maxp.numGlyphs"
+oracle = "fontc"
+sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
+reason = "Source reading: the reference is the first source's UFO built alone, which has no `bonus_bar`; the font FontCraft reads has every source's glyphs, and a glyph without a layer for the master is written empty (plan M2 § M2.1)."
+
+[[allow]]
+table = "post"
+key = "post.numGlyphs"
+oracle = "fontc"
+sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
+reason = "Source reading: `bonus_bar` (see maxp)."
+
+[[allow]]
+table = "cmap"
+key = "cmap U+007F"
+oracle = "fontc"
+sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
+reason = "Source reading: `bonus_bar` (see maxp) has a code point."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.usLastCharIndex"
+oracle = "fontc"
+sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
+reason = "Source reading: the code point of `bonus_bar` (see maxp)."
+
+# --- Non-spacing marks (M4) -------------------------------------------------------------------
+
+[[allow]]
+table = "hmtx"
+key = "hmtx * advance"
+sources = ["/IntermediateLayer", "/WghtVar_Anchors", "/DontPropagateAnchors.glyphs", "/ComponentAnchor.glyphs", "/GposWithFeatureParamName.glyphs", "/Unicode-UnquotedDecSequence.glyphs", "/COLRv0-marks.glyphs", "/COLRv0-component-anchors.glyphs", "/PropagateAnchorsTest", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "oswald/sources/Oswald.glyphs"]
+reason = "Non-spacing marks have no advance in compiled fonts (`compile.nonSpacingMarkWidth`). FontCraft knows a mark only when the glyph states its category; the reference compilers also look the glyph up in the glyph database, which FontCraft gets in M4. A UFO that glyphsLib wrote keeps the mark's drawn width in a lib key, which the model reads as the width."
+
+[[allow]]
+table = "hhea"
+key = "hhea.minRightSideBearing"
+keys = ["hhea.advanceWidthMax"]
+sources = ["/IntermediateLayer", "/WghtVar_Anchors", "/DontPropagateAnchors.glyphs", "/ComponentAnchor.glyphs", "/GposWithFeatureParamName.glyphs", "oswald/sources/Oswald.glyphs"]
+reason = "Follows from the advances of non-spacing marks (see hmtx); M4."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.xAvgCharWidth"
+sources = ["/IntermediateLayer", "/WghtVar_Anchors", "/DontPropagateAnchors.glyphs", "/ComponentAnchor.glyphs", "/GposWithFeatureParamName.glyphs", "/Unicode-UnquotedDecSequence.glyphs"]
+reason = "Follows from the advances of non-spacing marks (see hmtx); M4."
+
+# --- Smart components, corner components, open corners (M6) -----------------------------------
+
+[[allow]]
+table = "glyf"
+key = "glyf * outline"
+keys = ["glyf * bounds", "glyf * structure"]
+sources = ["/OpenCorners.ufo", "/NestedSmartComponent.glyphs", "/SmartComponent.glyphs", "/SmartComponents.glyphs", "/CornerComponents.glyphs"]
+reason = "Source reading: the reference interpolates smart components, applies corner components and erases open corners before compiling; FontCraft does from M6."
+
+[[allow]]
+table = "hmtx"
+key = "hmtx * lsb"
+sources = ["/CornerComponents.glyphs"]
+reason = "Follows from the corner components the reference applies (see glyf); M6."
+
+[[allow]]
+table = "head"
+key = "head.xMax"
+sources = ["/SmartComponents.glyphs"]
+reason = "Follows from the smart components the reference interpolates (see glyf); M6."
+
+[[allow]]
+table = "hhea"
+key = "hhea.xMaxExtent"
+sources = ["/SmartComponents.glyphs"]
+reason = "Follows from the smart components the reference interpolates (see glyf); M6."
+
+# --- Reading questions ------------------------------------------------------------------------
+
+[[allow]]
+table = "hmtx"
+key = "hmtx * advance"
+sources = ["/MissingWidth.glyphs", "/VersionMajorMinor.glyphs", "/An-Italic.glyphs", "/SuperscriptCustomParamFallback.glyphs"]
+reason = "Source reading: a `.glyphs` layer without a `width` key reads as 0 in FontCraft; glyphsLib and fontc read it as 600. Files from the reference app always state the width; these are hand-written tests. Open question for the `.glyphs` reader."
+
+[[allow]]
+table = "hhea"
+key = "hhea.advanceWidthMax"
+sources = ["/MissingWidth.glyphs", "/VersionMajorMinor.glyphs", "/An-Italic.glyphs", "/SuperscriptCustomParamFallback.glyphs"]
+reason = "Follows from a layer without a width (see hmtx)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.xAvgCharWidth"
+sources = ["/MissingWidth.glyphs", "/VersionMajorMinor.glyphs", "/An-Italic.glyphs", "/SuperscriptCustomParamFallback.glyphs"]
+reason = "Follows from a layer without a width (see hmtx)."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.s*"
+keys = ["OS/2.usWin*", "OS/2.yStrikeoutPosition"]
+sources = ["/fontinfo_var.designspace"]
+reason = "Source reading: the designspace's first source has no ascender, descender, x-height or cap height while another source has them. The reference builds that UFO alone and uses ufo2ft's defaults; the model holds one list of metrics for all masters and reads a value a master lacks as 0. Open question for the designspace reader."
+
+[[allow]]
+table = "hhea"
+key = "hhea.ascender"
+keys = ["hhea.descender"]
+sources = ["/fontinfo_var.designspace"]
+reason = "Follows from the metrics the first source lacks (see OS/2)."
+
+[[allow]]
+table = "head"
+key = "head.yMin"
+keys = ["head.yMax"]
+sources = ["/fontinfo_var.designspace"]
+reason = "Follows from the metrics the first source lacks (see OS/2): the drawn `.notdef` spans the descender to the ascender."
+
+[[allow]]
+table = "glyf"
+key = "glyf .notdef *"
+sources = ["/fontinfo_var.designspace"]
+reason = "Follows from the metrics the first source lacks (see OS/2): the drawn `.notdef` spans the descender to the ascender."
+
+[[allow]]
+table = "name"
+key = "name *"
+sources = ["/TheBestV2NamesInAV3File.glyphs"]
+reason = "Source reading: a version 3 file with version 2's top-level name keys (`copyright`, `designer`…). FontCraft's version 3 reader keeps them as unknown keys; fontc reads them as names. Open question for the `.glyphs` reader."
+
+[[allow]]
+table = "vmtx"
+key = "vmtx * advance"
+sources = ["HVVAR/SingleModel_", "/Vertical.ufo"]
+reason = "Source reading: a UFO glyph without a height has advance height 0 in ufo2ft and fontc. The UFO reader, following glyphsLib's crosswalk, keeps no height both for such a glyph and for one whose height is the default, so FontCraft writes the default. Open question for the UFO reader."
+
+[[allow]]
+table = "vhea"
+key = "vhea.minBottomSideBearing"
+sources = ["HVVAR/SingleModel_"]
+reason = "Follows from the UFO glyphs without a height (see vmtx)."
+
+# --- Decided differences ----------------------------------------------------------------------
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.fsSelection"
+keys = ["OS/2.ulUnicodeRange*"]
+oracle = "fontc"
+sources = ["/master_custom_params_override.glyphs"]
+reason = "A static build of a master uses the master's custom parameters in place of the font's, as glyphsLib (fontmake's reader) and the reference app do; fontc reads these parameters from the font only (docs/spec/40-compile.md › Where FontCraft differs from fontc)."
+
+[[allow]]
+table = "name"
+key = "name 3/1/0x0409/7"
+oracle = "fontc"
+sources = ["/master_custom_params_override.glyphs"]
+reason = "The master's `trademark` parameter in place of the font's, as for the other parameters of this source (see OS/2)."
