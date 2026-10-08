@@ -55,11 +55,31 @@ pub(crate) fn take_params(d: &mut Dict) -> Params {
 }
 
 pub(crate) fn write_param(p: &Param) -> Value {
-    let mut e = vec![("name".into(), string(&p.name)), ("value".into(), p.value.clone())];
+    let value = if p.name == fontcraft_model::axes::AXIS_MAPPINGS { number_keys(&p.value) } else { p.value.clone() };
+    let mut e = vec![("name".into(), string(&p.name)), ("value".into(), value)];
     if p.disabled {
         e.push(("disabled".into(), int(1)));
     }
     Value::Dict(finish(e, &p.extra))
+}
+
+/// An `Axis Mappings` value with the user coordinates of each axis's map spelled as the
+/// reference app writes them: as numbers, without quotes. A key with a spelling of its own keeps it.
+fn number_keys(v: &Value) -> Value {
+    let Value::Dict(axes) = v else { return v.clone() };
+    let mut axes = axes.clone();
+    for (_, map) in &mut axes.entries {
+        if let Value::Dict(m) = map {
+            for (k, _) in &mut m.entries {
+                if k.spelling().is_none()
+                    && let Some(bare) = Str::number_key(k.as_str())
+                {
+                    *k = bare;
+                }
+            }
+        }
+    }
+    Value::Dict(axes)
 }
 
 pub(crate) fn push_params(e: &mut Vec<(Str, Value)>, p: &Params) {

@@ -1,9 +1,12 @@
-//! `.glyphs` → designspace → model: the font information, the alignment zones, the stems, the
-//! guides, the axes (ranges and maps), the instances, the glyphs' metadata, the layers (their
-//! drawings, guides, images, backgrounds, vertical metrics and user data), the kerning, the
-//! groups and the feature code come back, except what the loss report lists. Every `.glyphs` source the reference app
-//! saved in format version 3 (outside fontc's hand-made test data). Skipped when `corpus/` is
-//! absent.
+//! Trips between the format families. `.glyphs` → designspace → model: the font information,
+//! the alignment zones, the stems, the guides, the axes (ranges and maps), the instances, the
+//! glyphs' metadata, the layers (their drawings, guides, images, backgrounds, vertical metrics
+//! and user data), the kerning, the groups and the feature code come back, except what the loss
+//! report lists, for every `.glyphs` source the reference app saved in format version 3 (outside
+//! fontc's hand-made test data). The other tests: designspace → `.glyphs` → designspace, UFO →
+//! `.glyphs` → UFO, intermediate and alternate layers, and `.glyphs` → designspace → `.glyphs`
+//! for every reference-written source in every version (M1.7's measure). Skipped when `corpus/`
+//! is absent.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::{Path, PathBuf};
@@ -90,7 +93,7 @@ fn stems(font: &Font, m: &Master) -> (Vec<f64>, Vec<f64>) {
 /// one through x 0 is stored by one coordinate), the name with any colour and identifier in it,
 /// and the lock.
 fn guide_form(g: &Guide) -> (f64, f64, f64, String, bool) {
-    let a = g.angle.rem_euclid(360.0);
+    let a = (g.angle.rem_euclid(360.0) * 1e9).round() / 1e9;
     let (x, y, a) = if g.y == 0.0 && (a == 90.0 || a == 270.0) {
         (g.x, 0.0, 90.0)
     } else if g.x == 0.0 && (a == 0.0 || a == 180.0) {
@@ -249,12 +252,14 @@ fn glyphs_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
         ("the glyphs' colours, rounded to 8 bits", |i| format!("{:?}", color_form(&i.color).map(|c| c.1))),
         ("the glyphs' colours", |i| format!("{:?}", i.color.is_some())),
     ];
-    if font.glyphs.len() != back.glyphs.len() {
+    let layerless = font.glyphs.iter().filter(|g| g.layers.is_empty()).count();
+    if font.glyphs.len() != back.glyphs.len() && font.glyphs.len() - layerless != back.glyphs.len() {
         diffs.push(format!("glyphs: {} → {}", font.glyphs.len(), back.glyphs.len()));
     }
     for g in font.glyphs.iter() {
         let Some(b) = back.glyph(&g.name) else {
-            diffs.push(format!("glyph `{}`: missing", g.name));
+            let what = if g.layers.is_empty() { GLYPH_LOSSES[9] } else { "missing" };
+            diffs.push(format!("glyph `{}`: {what}", g.name));
             continue;
         };
         let plain = |g: &Glyph| (g.unicodes.clone(), g.export);
@@ -295,6 +300,15 @@ fn drawing(shapes: &[Shape], anchors: &[Anchor]) -> String {
         .collect();
     let anchors: Vec<_> = anchors.iter().map(|a| (a.name.as_str(), a.x, a.y, &a.info.color, &a.info.identifier)).collect();
     format!("{shapes:?} {anchors:?}")
+}
+
+/// The engine's loss report line for shapes the model keeps as written.
+const RAW_SHAPES: &str = "shapes read from that format that the model keeps as written, left out";
+
+/// What a difference in a layer's drawing is called: the engine's loss report names a drawing
+/// with shapes kept as written.
+fn drawing_label(l: &Layer) -> &'static str {
+    if l.shapes.iter().any(|s| matches!(s, Shape::Raw(_))) { RAW_SHAPES } else { "the layer's drawing" }
 }
 
 /// What glyphsLib's lib keys carry of the shapes: node user data and other attribute keys, the
@@ -481,7 +495,7 @@ fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
             }
             let checks: [(&str, String, String); 15] = [
                 ("the layer's width", format!("{}", l.width), format!("{}", x.width)),
-                ("the layer's drawing", drawing(&l.shapes, &l.anchors), drawing(&x.shapes, &x.anchors)),
+                (drawing_label(l), drawing(&l.shapes, &l.anchors), drawing(&x.shapes, &x.anchors)),
                 (LAYER_LOSSES[1], attrs(l), attrs(x)),
                 (LAYER_LOSSES[2], format!("{:?}", width(l)), format!("{:?}", width(x))),
                 (LAYER_LOSSES[3], format!("{:?}", l.info.vert_origin.filter(|o| *o != 0.0)), format!("{:?}", x.info.vert_origin)),
@@ -717,7 +731,7 @@ fn canonical(v: &Value) -> String {
     fn sort(v: &Value) -> Value {
         match v {
             Value::Dict(d) => {
-                let mut entries: Vec<_> = d.entries.iter().map(|(k, v)| (k.clone(), sort(v))).collect();
+                let mut entries: Vec<_> = d.entries.iter().map(|(k, v)| (fontcraft_model::plist::Str::new(k.as_str()), sort(v))).collect();
                 entries.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
                 Value::Dict(Dict { entries, ..Default::default() })
             }
@@ -803,27 +817,33 @@ fn lib_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
 fn info_trip(font: &Font) -> Vec<String> {
     let written = fontcraft_io_ufo::designspace::write(font).unwrap();
     let back = fontcraft_io_ufo::designspace::read(&written.document, &written.ufos).unwrap();
+    trip_diffs(font, &back)
+}
+
+/// Everything the trips compare: axes, instances, glyphs, layers, kerning, features, the libs'
+/// data, the date, and each master's font information, zones, stems and guides.
+fn trip_diffs(font: &Font, back: &Font) -> Vec<String> {
     let mut diffs = Vec::new();
-    axes_trip(font, &back, &mut diffs);
-    instances_trip(font, &back, &mut diffs);
-    glyphs_trip(font, &back, &mut diffs);
-    layers_trip(font, &back, &mut diffs);
-    kerning_trip(font, &back, &mut diffs);
-    features_trip(font, &back, &mut diffs);
-    lib_trip(font, &back, &mut diffs);
+    axes_trip(font, back, &mut diffs);
+    instances_trip(font, back, &mut diffs);
+    glyphs_trip(font, back, &mut diffs);
+    layers_trip(font, back, &mut diffs);
+    kerning_trip(font, back, &mut diffs);
+    features_trip(font, back, &mut diffs);
+    lib_trip(font, back, &mut diffs);
     if font.info.date != back.info.date {
         diffs.push(format!("font: date {:?} → {:?}", font.info.date, back.info.date));
     }
     for (m, b) in font.masters.iter().zip(back.masters.iter()) {
-        compare(&format!("master `{}`", m.name), &effective(font, m), &effective(&back, b), &mut diffs);
+        compare(&format!("master `{}`", m.name), &effective(font, m), &effective(back, b), &mut diffs);
         if m.user_data != b.user_data {
             diffs.push(format!("master `{}`: user data", m.name));
         }
-        if zones(font, m) != zones(&back, b) {
-            diffs.push(format!("master `{}`: alignment zones {:?} → {:?}", m.name, zones(font, m), zones(&back, b)));
+        if zones(font, m) != zones(back, b) {
+            diffs.push(format!("master `{}`: alignment zones {:?} → {:?}", m.name, zones(font, m), zones(back, b)));
         }
-        if stems(font, m) != stems(&back, b) {
-            diffs.push(format!("master `{}`: stems {:?} → {:?}", m.name, stems(font, m), stems(&back, b)));
+        if stems(font, m) != stems(back, b) {
+            diffs.push(format!("master `{}`: stems {:?} → {:?}", m.name, stems(font, m), stems(back, b)));
         }
         let (before, after): (Vec<_>, Vec<_>) = (m.guides.iter().map(guide_form).collect(), b.guides.iter().map(guide_form).collect());
         if before != after {
@@ -1113,4 +1133,182 @@ fn kerning_groups_and_features_survive_a_glyphs_file() {
         checked >= 100 && grouped > 0 && ufo2_kerned > 0 && split > 0,
         "the corpus exercises groups, UFO 2 kerning groups and split feature code"
     );
+}
+
+/// Every `.glyphs` source the reference app saved, single files and packages (as the round-trip
+/// harness counts them: `.appVersion` in the header, outside fontc's hand-made test data).
+fn reference_sources(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.file_name().is_some_and(|n| n == ".git" || n == "fontc") {
+            continue;
+        }
+        let ext = p.extension().and_then(|x| x.to_str());
+        let header = match ext {
+            Some("glyphs") if p.is_file() => std::fs::read_to_string(&p).ok(),
+            Some("glyphspackage") if p.is_dir() => std::fs::read_to_string(p.join("fontinfo.plist")).ok(),
+            _ => {
+                if p.is_dir() {
+                    reference_sources(&p, out);
+                }
+                continue;
+            }
+        };
+        let head: String = header.unwrap_or_default().chars().take(4096).collect();
+        if head.lines().any(|l| l.starts_with(".appVersion = ")) {
+            out.push(p);
+        }
+    }
+}
+
+/// Whether a loss report line names the difference `d`: the line's subject (before any
+/// parenthesis or colon) is in `d`, or `d` is a new parameter a line says another comes back as.
+fn listed(losses: &[String], d: &str) -> bool {
+    losses.iter().any(|l| {
+        d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l))
+            || d.split_once("new parameter ").is_some_and(|(_, name)| l.contains(&format!("comes back as {name})")))
+    })
+}
+
+/// Removes what is not a model field (`extra`, the source's record) from a model as JSON.
+fn fields_only(v: &mut serde_json::Value) {
+    match v {
+        serde_json::Value::Object(m) => {
+            m.remove("extra");
+            m.values_mut().for_each(fields_only);
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(fields_only),
+        _ => {}
+    }
+}
+
+/// Where two models as JSON differ: paths with array indices left out, with a count and up to
+/// three examples (both values, shortened) each.
+type JsonDiffs = std::collections::BTreeMap<String, (usize, Vec<String>)>;
+
+fn json_diffs(a: &serde_json::Value, b: &serde_json::Value, path: &str, out: &mut JsonDiffs) {
+    use serde_json::Value as J;
+    fn note(out: &mut JsonDiffs, key: String, a: Option<&serde_json::Value>, b: Option<&serde_json::Value>) {
+        let row = out.entry(key).or_default();
+        row.0 += 1;
+        if row.1.len() < 3 {
+            let short = |v: Option<&serde_json::Value>| v.map(|v| v.to_string().chars().take(160).collect::<String>()).unwrap_or_else(|| "-".into());
+            row.1.push(format!("{} → {}", short(a), short(b)));
+        }
+    }
+    match (a, b) {
+        (J::Object(x), J::Object(y)) => {
+            for (k, va) in x {
+                match y.get(k) {
+                    Some(vb) => json_diffs(va, vb, &format!("{path}.{k}"), out),
+                    None => note(out, format!("{path}.{k} (gone)"), Some(va), None),
+                }
+            }
+            for (k, vb) in y.iter().filter(|(k, _)| !x.contains_key(*k)) {
+                note(out, format!("{path}.{k} (new)"), None, Some(vb));
+            }
+        }
+        (J::Array(x), J::Array(y)) if x.len() == y.len() => {
+            for (va, vb) in x.iter().zip(y) {
+                json_diffs(va, vb, &format!("{path}[]"), out);
+            }
+        }
+        (J::Array(_), J::Array(_)) => note(out, format!("{path} (length)"), Some(a), Some(b)),
+        _ if a != b => note(out, path.to_string(), Some(a), Some(b)),
+        _ => {}
+    }
+}
+
+/// `.glyphs` → designspace → `.glyphs`, as saving as a designspace, opening it and saving it as
+/// the source's format and version again does it. Every source the reference app saved (files
+/// and packages, versions 2 to 4): the model that comes back is compared with the one read,
+/// field by field as in the other trips, and every difference must be one the loss reports of
+/// the two saves list. A second, coarser count compares the whole models (every field, `Extra`
+/// left out) and prints where they differ.
+#[test]
+fn reference_sources_survive_a_designspace_and_back() {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    if !corpus.is_dir() {
+        eprintln!("corpus/ absent: skipped (cargo xtask corpus --fetch)");
+        return;
+    }
+    let mut all = Vec::new();
+    reference_sources(&corpus, &mut all);
+    all.sort();
+    let (mut checked, mut excused, mut failures) = (0, 0, Vec::new());
+    // Whole-model differences: path → (count, sources, examples). `TRIP_WHERE=<path part>` prints
+    // the examples of the rows whose path contains it.
+    let mut whole: std::collections::BTreeMap<String, (usize, std::collections::BTreeSet<String>, Vec<String>)> = Default::default();
+    for path in &all {
+        let name = path.strip_prefix(&corpus).unwrap().display().to_string();
+        let package = path.is_dir();
+        let font = if package {
+            fontcraft_io_glyphs::read_package(&ufo_tree(path)).unwrap()
+        } else {
+            fontcraft_io_glyphs::read(&std::fs::read_to_string(path).unwrap()).unwrap()
+        };
+        checked += 1;
+        // Saved as a designspace (the engine's `file.saveAs`).
+        let mut out = font.clone();
+        out.source.format = fontcraft_model::SourceFormat::Designspace;
+        out.source.ufo_version = Some(3);
+        let written = designspace::write(&out).unwrap();
+        let mut losses = designspace::info_losses(&out);
+        // Opened and saved as the source's format and version.
+        let mut back = designspace::read(&written.document, &written.ufos).unwrap();
+        back.source.format = font.source.format;
+        back.source.glyphs_version = font.source.glyphs_version;
+        losses.extend(fontcraft_io_glyphs::info_losses(&back));
+        let again = if package {
+            fontcraft_io_glyphs::read_package(&fontcraft_io_glyphs::write_package(&back).unwrap()).unwrap()
+        } else {
+            fontcraft_io_glyphs::read(&fontcraft_io_glyphs::write(&back).unwrap()).unwrap()
+        };
+        let mut diffs = trip_diffs(&font, &again);
+        params_trip(&font, &again, &mut diffs);
+        if font.masters.len() != again.masters.len() {
+            diffs.push(format!("masters: {} → {}", font.masters.len(), again.masters.len()));
+        }
+        let raw = font
+            .glyphs
+            .iter()
+            .flat_map(|g| g.layers.iter())
+            .any(|l| l.shapes.iter().chain(l.info.background.iter().flat_map(|b| b.shapes.iter())).any(|s| matches!(s, Shape::Raw(_))));
+        if raw {
+            losses.push(RAW_SHAPES.to_string());
+        }
+        let mut unlisted = 0;
+        for d in diffs {
+            if listed(&losses, &d) {
+                excused += 1;
+            } else {
+                unlisted += 1;
+                failures.push(format!("{name}: {d}"));
+            }
+        }
+        let (mut a, mut b) = (serde_json::to_value(&font).unwrap(), serde_json::to_value(&again).unwrap());
+        fields_only(&mut a);
+        fields_only(&mut b);
+        let mut counts = JsonDiffs::new();
+        json_diffs(&a, &b, "", &mut counts);
+        for (k, (n, examples)) in counts {
+            let row = whole.entry(k).or_default();
+            row.0 += n;
+            row.1.insert(name.clone());
+            row.2.extend(examples.into_iter().take(3usize.saturating_sub(row.2.len())).map(|e| format!("{name}: {e}")));
+        }
+        eprintln!("{name}: {} losses listed, {unlisted} differences not listed", losses.len());
+    }
+    eprintln!("whole-model differences (field path: count, sources):");
+    let wanted = std::env::var("TRIP_WHERE").ok();
+    for (k, (n, s, examples)) in &whole {
+        eprintln!("  {k}: {n} in {}: {}", s.len(), s.iter().take(3).cloned().collect::<Vec<_>>().join(", "));
+        if wanted.as_deref().is_some_and(|w| k.contains(w)) {
+            examples.iter().for_each(|e| eprintln!("      {e}"));
+        }
+    }
+    eprintln!("{checked} sources through a designspace and back; {excused} differences the loss reports list, {} not", failures.len());
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert!(checked >= 30, "only {checked} sources found");
 }

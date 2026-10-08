@@ -1373,12 +1373,12 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
                 *file = glyph_file_name(name, &files_taken).ok_or_else(|| bad(name, "no free file name for the glyph"))?;
                 files_taken.insert(file.to_lowercase());
             }
-            let own = code_points(ufo_get(&layer.extra, "unicodes"));
+            let own = code_points_of(ufo_get(&layer.extra, "unicodes"));
             let unicodes: Vec<u32> = if is_default {
                 // A master's own code points, where they differed from the default master's
                 // when read and the glyph's are unchanged.
                 match ufo_get(&layer.extra, "unicodesRead") {
-                    Some(read) if code_points(Some(read)) == g.unicodes => own,
+                    Some(read) if code_points_of(Some(read)) == g.unicodes => own,
                     _ => g.unicodes.clone(),
                 }
             } else if own.is_empty() && !from_ufo && !*is_background {
@@ -1561,8 +1561,12 @@ pub(crate) fn font_losses(font: &Font, designspace: bool) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for m in font.masters.iter().filter(|m| m.extra.get(Family::Designspace, "layer").is_none()) {
         let (read, _) = kept_dict(m, FONTINFO);
-        for line in info_entries(font, m, &read).1 {
-            if !out.contains(&line) {
+        let font_info = Info { params: font.info.params.clone(), ..Default::default() };
+        let own = Info { params: m.params.clone(), ..Default::default() };
+        let name = if m.name.is_empty() { &m.id } else { &m.name };
+        for line in info_entries(font, m, &read).1.into_iter().chain(fontinfo::replaced(&font_info, &own, name)) {
+            let param = line.split(" (").next().unwrap_or(&line);
+            if !out.iter().any(|l| l == &line || (line.contains("replaces it with") && l.split(" (").next() == Some(param))) {
                 out.push(line);
             }
         }
@@ -1581,6 +1585,21 @@ pub(crate) fn font_losses(font: &Font, designspace: bool) -> Vec<String> {
     if !font.numbers.is_empty() {
         out.push(format!("the font's numbers ({})", font.numbers.len()));
     }
+    // A UFO has a key for the first metric of each standard kind; the overshoots of the others
+    // come back as alignment zones.
+    let mut seen: Vec<&str> = Vec::new();
+    let other = font
+        .metrics
+        .iter()
+        .filter(|d| {
+            let first = !seen.contains(&d.kind.as_str());
+            seen.push(&d.kind);
+            !KIND_ORDER.contains(&d.kind.as_str()) || d.name.is_some() || d.filter.is_some() || !first
+        })
+        .count();
+    if other > 0 {
+        out.push(format!("the font's metrics other than the first ascender, cap height, x-height, baseline, descender and italic angle without a name or filter ({other}); their overshoots come back as alignment zones"));
+    }
     let italic = font.metrics.iter().position(|d| d.kind == metric::ITALIC_ANGLE);
     for m in font.masters.iter() {
         let name = if m.name.is_empty() { &m.id } else { &m.name };
@@ -1598,12 +1617,94 @@ pub(crate) fn font_losses(font: &Font, designspace: bool) -> Vec<String> {
     out
 }
 
+/// What the UFO and designspace readers hold only in their records of the files as read (the
+/// [`Family::Ufo`] and [`Family::Designspace`] entries of [`Extra`]), so that saving the document
+/// in another format leaves it out, one line per kind with a count. The other records are file
+/// layout (spellings, indentation, file names, element order, which files a UFO had), which the
+/// other format does not need.
+/// With `ufo_kept` (saving as one UFO), only the designspace document's parts.
+pub fn kept_data_losses(font: &Font, ufo_kept: bool) -> Vec<String> {
+    let document = font.extra.get(Family::Designspace, "document").and_then(Value::as_str);
+    let document = document.map(|t| document_data(t, font.extra.get(Family::Designspace, "rules").is_some())).unwrap_or_default();
+    if ufo_kept {
+        return document;
+    }
+    let (mut code_points, mut notes, mut colours, mut elements) = (0, 0, 0, 0);
+    for (g, l) in font.glyphs.iter().flat_map(|g| g.layers.iter().map(move |l| (g, l))) {
+        let x = &l.extra;
+        code_points += usize::from(ufo_get(x, "unicodes").is_some_and(|v| code_points_of(Some(v)) != g.unicodes));
+        notes += usize::from(ufo_get(x, "note").and_then(Value::as_str).is_some_and(|n| n != g.info.note));
+        colours += usize::from(ufo_get(x, "markColorRead").is_some());
+        elements += x.iter().filter(|e| e.family == Family::Ufo && e.key.as_str().starts_with('+')).count();
+    }
+    let default_id = font.extra.get(Family::Designspace, "defaultSource").and_then(Value::as_str);
+    let default = font.masters.iter().find(|m| Some(m.id.as_str()) == default_id).or_else(|| font.masters.first());
+    let groups_of = |m: &Master| ufo_get(&m.extra, GROUPS).map(Value::without_spellings);
+    let default_groups = default.and_then(groups_of);
+    let others = font.masters.iter().filter(|m| default.is_none_or(|d| d.id != m.id));
+    let (mut features, mut groups, mut layer_colours) = (0, 0, 0);
+    for m in others {
+        features += usize::from(ufo_get(&m.extra, FEATURES_KEY).is_some());
+        groups += usize::from(groups_of(m).is_some_and(|g| Some(&g) != default_groups.as_ref()));
+    }
+    for m in font.masters.iter() {
+        if let Some(d) = ufo_get(&m.extra, "layerinfo").and_then(Value::as_dict) {
+            layer_colours += d.entries.iter().filter(|(_, v)| v.as_dict().is_some_and(|i| i.get("color").is_some())).count();
+        }
+    }
+    let mut out = Vec::new();
+    let lines = [
+        (code_points, "code points of a master or UFO layer that differ from the glyph's"),
+        (notes, "notes of a master or UFO layer that differ from the glyph's"),
+        (colours, "mark colours of a master that differ from the glyph's"),
+        (elements, "GLIF elements kept as written"),
+        (features, "feature code of a master that differs from the default source's"),
+        (groups, "groups of a master that differ from the default source's"),
+        (layer_colours, "UFO layer colours"),
+    ];
+    for (n, what) in lines {
+        if n > 0 {
+            out.push(format!("{what} ({n})"));
+        }
+    }
+    out.extend(document);
+    out
+}
+
+/// The parts of a kept designspace document no model field holds: rules that are not alternate
+/// layers, localised instance names, variable fonts' axis subsets, and other top-level elements.
+fn document_data(text: &str, rules_raised: bool) -> Vec<String> {
+    const TYPED: [&str; 6] = ["axes", "sources", "instances", "variable-fonts", "lib", "rules"];
+    let Ok(doc) = xml::parse(text) else { return Vec::new() };
+    let root = &doc.root;
+    let mut out = Vec::new();
+    if !rules_raised && root.child("rules").is_some_and(|r| r.elements().next().is_some()) {
+        out.push("the designspace's rules, which are not alternate layers".to_string());
+    }
+    let localised =
+        root.child("instances").map(|i| i.elements().filter(|e| e.elements().any(|c| c.attr("xml:lang").is_some())).count()).unwrap_or_default();
+    if localised > 0 {
+        out.push(format!("localised instance names ({localised})"));
+    }
+    let subsets = root
+        .child("variable-fonts")
+        .map(|v| v.elements().filter(|e| e.child("axis-subsets").is_some_and(|s| s.elements().next().is_some())).count())
+        .unwrap_or_default();
+    if subsets > 0 {
+        out.push(format!("variable fonts' axis subsets ({subsets})"));
+    }
+    for e in root.elements().filter(|e| !TYPED.contains(&e.name())) {
+        out.push(format!("the designspace's `{}` element", e.name()));
+    }
+    out
+}
+
 /// The glyph metadata a UFO has no place for, not even in glyphsLib's lib keys
 /// ([`crate::glyphkeys`]), one line per kind with the number of glyphs that have it.
 pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
     use fontcraft_model::GlyphInfo;
     type Has = fn(&Font, &Glyph, &GlyphInfo) -> bool;
-    let kinds: [(&str, Has); 9] = [
+    let kinds: [(&str, Has); 10] = [
         (GLYPH_LOSSES[0], |_, _, i| i.case.is_some() || i.direction.is_some()),
         (GLYPH_LOSSES[1], |_, _, i| i.metrics_keys.all().iter().skip(3).any(|(_, v)| v.is_some())),
         (GLYPH_LOSSES[2], |_, _, i| !i.tags.is_empty()),
@@ -1613,6 +1714,7 @@ pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
         (GLYPH_LOSSES[6], |_, g, _| glyphkeys::parts_lost(g)),
         (GLYPH_LOSSES[7], |_, _, i| i.color.as_ref().is_some_and(|c| glif::mark_color_text(c).is_none())),
         (GLYPH_LOSSES[8], |_, _, i| !glif::note_survives(&i.note)),
+        (GLYPH_LOSSES[9], |_, g, _| g.layers.is_empty()),
     ];
     kinds
         .iter()
@@ -1790,7 +1892,7 @@ pub const LAYER_LOSSES: [&str; 14] = [
 ];
 
 /// The kinds of glyph metadata [`glyph_losses`] reports, as its lines begin.
-pub const GLYPH_LOSSES: [&str; 9] = [
+pub const GLYPH_LOSSES: [&str; 10] = [
     "the glyphs' case and writing direction",
     "the glyphs' top, bottom and vertical metrics keys",
     "the glyphs' tags",
@@ -1800,6 +1902,7 @@ pub const GLYPH_LOSSES: [&str; 9] = [
     "the glyphs' smart-glyph properties with keys a UFO has no place for, or end names stated empty",
     "the glyphs' colour labels that have no UFO mark colour",
     "the glyphs' notes, with spaces at line ends and blank lines left out",
+    "glyphs without layers, which a UFO has no file for",
 ];
 
 /// What one glyph puts into a UFO layer: a layer, or a layer's background.
@@ -1947,7 +2050,7 @@ pub fn layers_left_out(font: &Font, designspace: bool) -> usize {
         .count()
 }
 
-fn code_points(v: Option<&Value>) -> Vec<u32> {
+fn code_points_of(v: Option<&Value>) -> Vec<u32> {
     v.and_then(Value::as_array)
         .map(|a| a.items.iter().filter_map(|v| v.as_num().and_then(int_of)).filter_map(|i| u32::try_from(i).ok()).collect())
         .unwrap_or_default()
@@ -2189,6 +2292,29 @@ mod tests {
         assert_eq!(write(&font).unwrap(), files);
         Arc::make_mut(&mut font.features).features[0].code = "sub a by c;".into();
         assert!(s(&write(&font).unwrap()[FEATURES]).contains("feature ccmp {\n# automatic\nsub a by c;\n} ccmp;\n"));
+    }
+
+    #[test]
+    fn parameters_that_come_back_otherwise_and_layerless_glyphs_are_reported() {
+        let mut font = Font::new("Lost");
+        let params = &mut Arc::make_mut(&mut font.info).params.0;
+        params.push(Param::new("postscriptIsFixedPitch", Value::Number(Number::int(0))));
+        params.push(Param::new("openTypeOS2Panose", Value::Array(Array { items: vec![Value::Number(Number::int(2)); 10], ..Default::default() })));
+        let panose = Param::new("panose", Value::Array(Array { items: vec![Value::Number(Number::int(3)); 10], ..Default::default() }));
+        Arc::make_mut(&mut font.masters)[0].params.0.push(panose);
+        font.glyphs.push(Glyph::new("empty"));
+        let mut d = MetricDef::new(metric::X_HEIGHT);
+        d.filter = Some("case == 3".into());
+        Arc::make_mut(&mut font.metrics).push(d);
+        let losses = info_losses(&font);
+        for line in [
+            "parameter `postscriptIsFixedPitch` (comes back as `isFixedPitch`)",
+            "parameter `openTypeOS2Panose` (master `Regular` replaces it with `panose`, the same UFO key)",
+            "glyphs without layers, which a UFO has no file for (1)",
+            "the font's metrics other than the first ascender, cap height, x-height, baseline, descender and italic angle without a name or filter (1); their overshoots come back as alignment zones",
+        ] {
+            assert!(losses.iter().any(|l| l == line), "{line}: {losses:?}");
+        }
     }
 
     #[test]

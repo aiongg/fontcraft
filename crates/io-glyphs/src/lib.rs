@@ -105,6 +105,8 @@ pub fn info_losses(font: &Font) -> Vec<String> {
         out.push(format!("contextual kerning ({} contexts)", font.kerning.context.len()));
     }
     if version == 2 {
+        out.extend(v2::property_losses(font));
+        out.extend(v2::instance_property_losses(font));
         let labelled = font.features.features.iter().filter(|f| !f.labels.is_empty()).count();
         if labelled > 0 {
             out.push(format!("feature labels ({labelled} features)"));
@@ -990,22 +992,101 @@ fn write_layer(l: &Layer, at: &str, version: u32) -> Result<Value> {
     Ok(Value::Dict(finish(e, &l.extra)))
 }
 
-/// A matrix as position, scale and rotation, when it has no shear.
+/// A matrix as position, scale, rotation in degrees and slant in degrees.
 pub(crate) type Decomposed = ((f64, f64), (f64, f64), f64, (f64, f64));
+
+/// The real roots of `a·x² + b·x + c` (fontTools' `solveQuadratic`: a linear equation when `a`
+/// is close to 0).
+fn quadratic_roots(a: f64, b: f64, c: f64) -> Vec<f64> {
+    const EPSILON: f64 = 1e-10;
+    if a.abs() < EPSILON {
+        return if b.abs() < EPSILON { Vec::new() } else { vec![-c / b] };
+    }
+    let dd = b * b - 4.0 * a * c;
+    if dd < 0.0 {
+        return Vec::new();
+    }
+    let r = dd.sqrt();
+    vec![(-b + r) / 2.0 / a, (-b - r) / 2.0 / a]
+}
+
+/// A matrix as the format's component fields, applied as translate · slant · rotate · scale
+/// ([`fontcraft_model::Transform::affine`]); `None` for a singular matrix. Ported from
+/// glyphsLib's `decomposeGlyphs3Transform` (Apache-2.0): of the slants that leave a rotation and
+/// a scale, the one without a vertical slant is preferred, then the gentlest; a mirror is a
+/// negative horizontal scale rather than a turn by 180°.
 pub(crate) fn decompose([a, b, c, d, dx, dy]: [f64; 6]) -> Option<Decomposed> {
+    const TINY: f64 = 1e-12;
+    if ![a, b, c, d, dx, dy].iter().all(|v| v.is_finite()) {
+        return None;
+    }
     if b == 0.0 && c == 0.0 {
         return Some(((dx, dy), (a, d), 0.0, (0.0, 0.0)));
     }
-    let sx = a.hypot(b);
-    if sx == 0.0 {
-        return None;
+    // The linear part as rows [[a, c], [b, d]]: M = K · R · S with K = [[1, kx], [ky, 1]],
+    // kx = tan(slant x), ky = tan(slant y). That holds exactly when the columns of K⁻¹ · M are
+    // orthogonal, which puts (kx, ky) on a conic; its points on the axes, and the one without
+    // rotation, are the candidates.
+    let linear = a * d + c * b;
+    let constant = a * c + b * d;
+    let mut candidates: Vec<(f64, f64)> = quadratic_roots(b * d, -linear, constant).into_iter().map(|kx| (kx, 0.0)).collect();
+    candidates.extend(quadratic_roots(a * c, -linear, constant).into_iter().map(|ky| (0.0, ky)));
+    if a.abs() > TINY && d.abs() > TINY {
+        candidates.push((c / d, b / a));
     }
-    let angle = b.atan2(a);
-    let sy = (a * d - b * c) / sx;
-    // Without shear the second column is the first turned a quarter and scaled by sy / sx.
-    let (cc, dd) = (-angle.sin() * sy, angle.cos() * sy);
-    let close = |x: f64, y: f64| (x - y).abs() <= 1e-9 * (1.0 + x.abs().max(y.abs()));
-    (close(c, cc) && close(d, dd)).then(|| ((dx, dy), (sx, sy), angle.to_degrees(), (0.0, 0.0)))
+    let close = |x: [f64; 4], y: [f64; 4]| {
+        let magnitude = y.iter().fold(1.0f64, |m, v| m.max(v.abs()));
+        x.iter().zip(&y).all(|(p, q)| (p - q).abs() <= 1e-9 * magnitude)
+    };
+    let mut best: Option<((u8, f64), Decomposed)> = None;
+    for (kx, ky) in candidates {
+        let det = 1.0 - kx * ky;
+        if det.abs() < 1e-9 {
+            continue;
+        }
+        let (n00, n01) = ((a - kx * b) / det, (c - kx * d) / det);
+        let (n10, n11) = ((b - ky * a) / det, (d - ky * c) / det);
+        let sx = n00.hypot(n10);
+        if sx < TINY {
+            continue;
+        }
+        let angle = n10.atan2(n00);
+        let sy = -angle.sin() * n01 + angle.cos() * n11;
+        let fields: Decomposed = ((dx, dy), (sx, sy), angle.to_degrees(), (kx.atan().to_degrees(), ky.atan().to_degrees()));
+        let t = fontcraft_model::Transform::Decomposed { pos: fields.0, scale: fields.1, angle: fields.2, slant: fields.3 };
+        let m = t.affine().as_coeffs();
+        if !close([m[0], m[1], m[2], m[3]], [a, b, c, d]) {
+            continue;
+        }
+        let rank = (u8::from(ky.abs() >= TINY), kx * kx + ky * ky);
+        if best.as_ref().is_none_or(|(r, _)| rank.0 < r.0 || (rank.0 == r.0 && rank.1 < r.1)) {
+            best = Some((rank, fields));
+        }
+    }
+    let (_, (pos, (mut sx, mut sy), mut angle, slant)) = best?;
+    if (angle.abs() - 180.0).abs() < 1e-9 && sy < 0.0 {
+        (angle, sx, sy) = (0.0, -sx, -sy);
+    }
+    let snap = |v: f64| if v.abs() < 1e-9 { 0.0 } else { v };
+    let fields = (pos, (sx, sy), snap(angle), (snap(slant.0), snap(slant.1)));
+    Some(tidy(fields, [a, b, c, d]))
+}
+
+/// The decomposed fields with the noise of the arithmetic taken off: each value rounded to the
+/// fewest decimals (4 to 10; the reference app writes up to 4) that still give the same matrix.
+fn tidy(fields: Decomposed, m: [f64; 4]) -> Decomposed {
+    let (pos, scale, angle, slant) = fields;
+    for decimals in 4..=10 {
+        let f = 10f64.powi(decimals);
+        let r = |v: f64| (v * f).round() / f;
+        let t = fontcraft_model::Transform::Decomposed { pos, scale: (r(scale.0), r(scale.1)), angle: r(angle), slant: (r(slant.0), r(slant.1)) };
+        let c = t.affine().as_coeffs();
+        let magnitude = m.iter().fold(1.0f64, |x, v| x.max(v.abs()));
+        if c.iter().zip(&m).all(|(p, q)| (p - q).abs() <= 1e-12 * magnitude) {
+            return (pos, (r(scale.0), r(scale.1)), r(angle), (r(slant.0), r(slant.1)));
+        }
+    }
+    fields
 }
 
 #[cfg(test)]

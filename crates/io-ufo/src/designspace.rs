@@ -1501,6 +1501,29 @@ mod tests {
     }
 
     #[test]
+    fn data_only_the_files_held_is_reported() {
+        let (doc, mut ufos) = two_masters();
+        assert_eq!(ufo::kept_data_losses(&read(&doc, &ufos).unwrap(), false), Vec::<String>::new(), "file layout is no loss");
+        let bold = ufos.get_mut("Duo-Bold.ufo").unwrap();
+        let glif = String::from_utf8(bold["glyphs/a.glif"].clone()).unwrap().replace("<unicode hex=\"0061\"/>", "<unicode hex=\"0062\"/>");
+        bold.insert("glyphs/a.glif".into(), glif.into_bytes());
+        bold.insert("features.fea".into(), b"# bold\n".to_vec());
+        let doc = doc.replacen("</axes>", "</axes>\n  <labels>\n  </labels>", 1);
+        let font = read(&doc, &ufos).unwrap();
+        let lost = ufo::kept_data_losses(&font, false);
+        assert_eq!(
+            lost,
+            [
+                "code points of a master or UFO layer that differ from the glyph's (1)",
+                "feature code of a master that differs from the default source's (1)",
+                "the designspace's `labels` element",
+            ],
+            "{lost:?}"
+        );
+        assert_eq!(ufo::kept_data_losses(&font, true), ["the designspace's `labels` element"]);
+    }
+
+    #[test]
     fn per_master_differences_survive() {
         let (doc, mut ufos) = two_masters();
         // The bold master's `a` has another code point, and its UFO no family name.

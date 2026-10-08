@@ -202,6 +202,12 @@ impl Str {
     pub(crate) fn with_spelling(text: String, spelling: Option<Box<str>>) -> Self {
         Self { text, spelling }
     }
+
+    /// A dictionary key that reads as a number, spelled without quotes, as the reference app
+    /// writes the number keys of an `Axis Mappings` map; `None` for any other text.
+    pub fn number_key(text: &str) -> Option<Self> {
+        crate::openstep::is_number_like(text).then(|| Self { text: text.to_string(), spelling: Some(text.into()) })
+    }
 }
 
 impl PartialEq for Str {

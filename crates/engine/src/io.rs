@@ -298,11 +298,14 @@ fn is_native(body: &str) -> bool {
     json_key && body.get(..body.len().min(4096)).unwrap_or(body).contains("\"fontcraft\"")
 }
 
-/// What saving could not keep: extra entries and kept shapes of other format families.
+/// What saving could not keep: extra entries and kept shapes of other format families. The UFO
+/// and designspace readers' entries are records of the files as read; only the data some of them
+/// hold is reported ([`fontcraft_io_ufo::ufo::kept_data_losses`]), not the file layout.
 fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
     let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let record = |f: Family| matches!(f, Family::Ufo | Family::Designspace);
     let mut count = |x: &fontcraft_model::Extra| {
-        for e in x.iter().filter(|e| !targets.contains(&e.family)) {
+        for e in x.iter().filter(|e| !targets.contains(&e.family) && !record(e.family)) {
             *counts.entry(family_name(e.family)).or_default() += 1;
         }
     };
@@ -366,6 +369,13 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
     }
     for (family, n) in shapes {
         out.push(json!({ "family": family, "entries": n, "what": "shapes read from that format that the model keeps as written, left out" }));
+    }
+    if !targets.contains(&Family::Designspace) {
+        let items = fontcraft_io_ufo::ufo::kept_data_losses(font, targets.contains(&Family::Ufo));
+        if !items.is_empty() {
+            let family = if font.source.format == SourceFormat::Designspace { "designspace" } else { "ufo" };
+            out.push(json!({ "family": family, "entries": items.len(), "what": "data only the UFO or designspace files held", "items": items }));
+        }
     }
     out
 }

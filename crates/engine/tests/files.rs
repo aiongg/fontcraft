@@ -344,7 +344,7 @@ fn font_information_reaches_fontinfo_and_comes_back() {
     let mut s = Session::new();
     run(&mut s, "file.open", json!({ "path": ufo }));
     let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("Back.glyphs") }));
-    assert!(saved["losses"].as_array().unwrap().iter().all(|l| l["family"] == "ufo"), "only the UFO's file records: {saved}");
+    assert_eq!(saved["losses"], json!([]), "the UFO's records of its files are not losses: {saved}");
     let back = std::fs::read_to_string(dir.join("Back.glyphs")).unwrap();
     assert!(back.contains("name = typoAscender;\nvalue = 820;"), "{back}");
     assert!(back.contains("language = DEU;\nvalue = \"A. Gestalterin\";"), "{back}");
@@ -395,7 +395,7 @@ fn zones_stems_and_guides_reach_fontinfo_and_come_back() {
     let mut s = Session::new();
     run(&mut s, "file.open", json!({ "path": ufo }));
     let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("Back.glyphs") }));
-    assert!(saved["losses"].as_array().unwrap().iter().all(|l| l["family"] == "ufo"), "only the UFO's file records: {saved}");
+    assert_eq!(saved["losses"], json!([]), "the UFO's records of its files are not losses: {saved}");
     let back = std::fs::read_to_string(dir.join("Back.glyphs")).unwrap();
     for expected in [
         "{\nlocked = 1;\nname = \"top [#g1]\";\npos = (0,600);\n}",

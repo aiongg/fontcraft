@@ -220,7 +220,8 @@ pub(crate) fn guide_of(v: &Value) -> Option<Guide> {
         }
     }
     if let Some(stem) = g.name.as_deref().and_then(|n| n.strip_suffix(LOCKED)) {
-        g.name = Some(stem.to_string());
+        // A locked guide without a name is written as the suffix alone.
+        g.name = (!stem.is_empty()).then(|| stem.to_string());
         g.locked = true;
     }
     g.x = x.unwrap_or(0.0);
@@ -270,7 +271,8 @@ pub(crate) fn guideline(g: &Guide) -> Option<Value> {
     if !(g.x.is_finite() && g.y.is_finite() && g.angle.is_finite()) {
         return None;
     }
-    let angle = g.angle.rem_euclid(360.0);
+    // Between 0 and 360, without the noise the subtraction adds (-62.0205 is 297.9795).
+    let angle = if (0.0..360.0).contains(&g.angle) { g.angle } else { (g.angle.rem_euclid(360.0) * 1e9).round() / 1e9 };
     let (x, y, a) = if is_vertical(Some(g.y), Some(angle)) {
         (Some(g.x), None, None)
     } else if is_horizontal(Some(g.x), Some(angle)) {

@@ -163,7 +163,29 @@ fn matrices_without_shear_decompose() {
     assert_eq!(decompose([2.0, 0.0, 0.0, 3.0, 5.0, 6.0]), Some(((5.0, 6.0), (2.0, 3.0), 0.0, (0.0, 0.0))));
     let ((_, _), (sx, sy), angle, _) = decompose([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]).unwrap();
     assert!((sx - 1.0).abs() < 1e-12 && (sy - 1.0).abs() < 1e-12 && (angle - 90.0).abs() < 1e-9);
-    assert_eq!(decompose([1.0, 0.0, 0.5, 1.0, 0.0, 0.0]).map(|_| ()), None, "a shear is not a rotation and a scale");
+}
+
+#[test]
+fn matrices_with_shear_decompose_into_a_slant() {
+    use fontcraft_model::Transform;
+    let back = |m: [f64; 6]| {
+        let (pos, scale, angle, slant) = decompose(m).unwrap();
+        let c = Transform::Decomposed { pos, scale, angle, slant }.affine().as_coeffs();
+        assert!(c.iter().zip(&m).all(|(x, y)| (x - y).abs() < 1e-9), "{m:?} → {c:?}");
+        (scale, angle, slant)
+    };
+    // A horizontal shear is a horizontal slant, without a turn.
+    let (scale, angle, slant) = back([1.0, 0.0, 0.5, 1.0, 10.0, 0.0]);
+    assert!(angle == 0.0 && slant.1 == 0.0 && (slant.0 - 0.5f64.atan().to_degrees()).abs() < 1e-9 && (scale.0 - 1.0).abs() < 1e-12);
+    // A slanted, turned and scaled component, and a mirror with a shear.
+    back([0.8, 0.3, 0.9, 1.4, 5.0, -7.0]);
+    let (scale, angle, _) = back([-1.0, 0.0, 0.2, 1.0, 0.0, 0.0]);
+    assert!(angle == 0.0 && scale.0 < 0.0, "a mirror is a negative scale: {scale:?} {angle}");
+    // A steep vertical shear has no form without a vertical slant.
+    let (_, _, slant) = back([1.0, 3.0, 0.0, 1.0, 0.0, 0.0]);
+    assert!(slant.1 != 0.0);
+    assert_eq!(decompose([1.0, 2.0, 2.0, 4.0, 0.0, 0.0]), None, "a singular matrix");
+    assert_eq!(decompose([f64::NAN, 0.0, 0.5, 1.0, 0.0, 0.0]), None);
 }
 
 const V2: &str = "{
@@ -462,6 +484,60 @@ fn a_version_2_axes_parameter_names_the_axes_and_stays_a_parameter() {
     assert_eq!(read(&out).unwrap().axes[0].tag, "OPSZ");
     // Without values on any axis key, a file has no axes.
     assert!(read(&V2.replace("weightValue = 180;\n", "")).unwrap().axes.is_empty());
+}
+
+#[test]
+fn an_axis_range_from_a_designspace_does_not_add_an_axes_parameter() {
+    let mut font = read(V2).unwrap();
+    std::sync::Arc::make_mut(&mut font.axes)[0].range = Some(fontcraft_model::AxisRange { minimum: 100.0, default: 180.0, maximum: 900.0 });
+    assert!(!write(&font).unwrap().contains("name = Axes;"));
+}
+
+#[test]
+fn version_2_holds_properties_and_palettes_in_its_own_forms() {
+    use fontcraft_model::{Localized, Param, Property, PropertyValue};
+    let mut font = read(V2).unwrap();
+    let info = std::sync::Arc::make_mut(&mut font.info);
+    info.properties.set("vendorID", "ABCD", false);
+    let lang = |l: &str, v: &str| Localized { language: l.into(), value: v.into(), extra: Default::default() };
+    info.properties.0.push(Property {
+        key: "licenses".into(),
+        value: PropertyValue::Localized(vec![lang("dflt", "Free"), lang("DEU", "Frei")]),
+        extra: Default::default(),
+    });
+    info.properties.set("styleNames", "Old", true);
+    let palette = "(\n(\n(\n255,\n0,\n0,\n255\n),\n(\n128,\n255\n)\n)\n)";
+    info.params.0.push(Param::new("Color Palettes", fontcraft_plist::openstep::parse(palette).unwrap().root));
+    let mut map = fontcraft_plist::Dict::new();
+    map.insert("100", Value::Number(fontcraft_plist::Number::int(100)));
+    let mut maps = fontcraft_plist::Dict::new();
+    maps.insert("wght", Value::Dict(map));
+    info.params.0.push(Param::new("Axis Mappings", Value::Dict(maps)));
+    let mut instance = fontcraft_model::Instance { name: "Bold".into(), ..Default::default() };
+    instance.properties.set("familyNames", "Old Family", true);
+    instance.properties.set("designers", "Someone", true);
+    std::sync::Arc::make_mut(&mut font.instances).push(instance);
+    let out = write(&font).unwrap();
+    for expected in [
+        "name = vendorID;\nvalue = ABCD;",
+        "name = license;\nvalue = Free;",
+        "\"255,0,0,255\",\n\"128,255\"",
+        "wght = {\n100 = 100;\n};",
+        "name = familyName;\nvalue = \"Old Family\";",
+    ] {
+        assert!(out.contains(expected), "{expected} in {out}");
+    }
+    let lost = info_losses(&font);
+    for expected in [
+        "property `licenses`: languages other than the default (1)",
+        "property `styleNames` (no key in format version 2)",
+        "instance `Bold`: property `designers` (no parameter in format version 2)",
+    ] {
+        assert!(lost.iter().any(|l| l == expected), "{expected} in {lost:?}");
+    }
+    let back = read(&out).unwrap();
+    assert_eq!(back.info.params.get("vendorID").and_then(Value::as_str), Some("ABCD"));
+    assert_eq!(back.instances[0].params.get("familyName").and_then(Value::as_str), Some("Old Family"));
 }
 
 #[test]

@@ -250,7 +250,7 @@ const RENAMED: &[(&str, &str)] = &[
 
 /// Further reference names for the same UFO keys, accepted when writing. The last ones are the
 /// parameters version 2 files hold names in (glyphsLib's `GLYPHS_UFO_CUSTOM_PARAMS_GLYPHS3_PROPERTIES`);
-/// their keys read back as properties ([`NAMES`]), from [`PROPERTY_ALIASES`] on.
+/// their keys read back as properties ([`NAMES`]).
 const ALIASES: &[(&str, &str)] = &[
     ("vheaVertTypoAscender", "openTypeVheaVertTypoAscender"),
     ("vheaVertTypoDescender", "openTypeVheaVertTypoDescender"),
@@ -265,8 +265,6 @@ const ALIASES: &[(&str, &str)] = &[
     ("description", "openTypeNameDescription"),
     ("sampleText", "openTypeNameSampleText"),
 ];
-/// Where in [`ALIASES`] the parameters that come back as properties start.
-const PROPERTY_ALIASES: usize = 4;
 
 const SELECTION: &str = "openTypeOS2Selection";
 const TYPO_METRICS: &str = "Use Typo Metrics";
@@ -895,6 +893,19 @@ pub(crate) fn effective(font: &Info, master: &Info) -> Info {
     Info { properties, params: Params(params), date, design: master.design.clone() }
 }
 
+/// The font's parameters that a parameter of the master with another name replaces, because both
+/// stand for the same UFO key ([`effective`]), one line each.
+pub(crate) fn replaced(font: &Info, master: &Info, master_name: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for p in font.params.0.iter().filter(|p| !p.disabled && !is_raw(p)) {
+        let key = ufo_key_of(&p.name);
+        if let Some(m) = master.params.0.iter().find(|m| m.name != p.name && !is_raw(m) && ufo_key_of(&m.name) == key) {
+            out.push(format!("parameter `{}` (master `{master_name}` replaces it with `{}`, the same UFO key)", p.name, m.name));
+        }
+    }
+    out
+}
+
 /// What a master's own font information has that the font's does not: the properties and the
 /// parameter names whose values differ. A different date becomes a raw parameter.
 pub(crate) fn split(font: &Info, mine: Info) -> Info {
@@ -1055,10 +1066,12 @@ pub(crate) fn write(info: &Info, upm: f64, mine: Option<&Dict>) -> Written {
                     Some(v) => set(&mut out, &mut lost, ufo, v, &what),
                     None => lost.push(format!("{what}: not a value `{ufo}` can hold")),
                 }
-                if let Some((_, property, ..)) = NAMES.iter().find(|(u, ..)| *u == ufo)
-                    && ALIASES.iter().skip(PROPERTY_ALIASES).any(|(g, _)| *g == name)
-                {
-                    lost.push(format!("{what}, as the `{property}` property"));
+                // The reader names a key as the reference does: a property, or the parameter's
+                // reference name.
+                if let Some((_, property, ..)) = NAMES.iter().find(|(u, ..)| *u == ufo) {
+                    lost.push(format!("{what} (comes back as the `{property}` property)"));
+                } else if let Some((g, _)) = RENAMED.iter().find(|(g, u)| *u == ufo && *g != name) {
+                    lost.push(format!("{what} (comes back as `{g}`)"));
                 }
             }
         }

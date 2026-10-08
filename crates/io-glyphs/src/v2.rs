@@ -245,9 +245,92 @@ fn take_font_info(root: &mut Dict) -> FontInfo {
     }
 }
 
-/// [`take_font_info`] in reverse. A property version 2 has no key for is not written.
+/// Properties version 2 keeps in parameters of these names (glyphsLib's
+/// `GLYPHS_UFO_CUSTOM_PARAMS_GLYPHS3_PROPERTIES`): (parameter, property).
+const NAME_PARAMS: [(&str, &str); 8] = [
+    ("description", "descriptions"),
+    ("license", "licenses"),
+    ("licenseURL", "licenseURL"),
+    ("sampleText", "sampleTexts"),
+    ("trademark", "trademarks"),
+    ("uniqueID", "uniqueID"),
+    ("vendorID", "vendorID"),
+    ("versionString", "versionString"),
+];
+
+/// The font's parameters as version 2 holds them: [`params_with_axes`], then the properties
+/// version 2 keeps in parameters ([`NAME_PARAMS`]) where the font has no parameter of that name,
+/// and `Color Palettes` colours as version 2's `"r,g,b,a"` strings.
+fn v2_params(font: &Font) -> Result<Params> {
+    let mut params = params_with_axes(font)?.into_owned();
+    for (name, property) in NAME_PARAMS {
+        if params.get(name).is_none()
+            && let Some(v) = font.info.properties.value(property)
+        {
+            params.0.push(Param::new(name, string(v)));
+        }
+    }
+    for p in params.0.iter_mut().filter(|p| p.name == "Color Palettes") {
+        if let Some(v) = palettes_v2(&p.value) {
+            p.value = v;
+        }
+    }
+    Ok(params)
+}
+
+/// Palettes whose colours are lists of numbers, with each colour as a string of its numbers;
+/// `None` when any colour is in another form.
+fn palettes_v2(v: &Value) -> Option<Value> {
+    let mut changed = false;
+    let mut palettes = Vec::new();
+    for palette in &v.as_array()?.items {
+        let mut colours = Vec::new();
+        for c in &palette.as_array()?.items {
+            match c {
+                Value::String(_) => colours.push(c.clone()),
+                Value::Array(a) => {
+                    let parts: Vec<String> = a.items.iter().map(|n| n.as_num().map(canonical_number)).collect::<Option<_>>()?;
+                    colours.push(string(&parts.join(",")));
+                    changed = true;
+                }
+                _ => return None,
+            }
+        }
+        palettes.push(list(colours));
+    }
+    changed.then(|| list(palettes))
+}
+
+/// The font's properties version 2 cannot hold, one line each: those without a key or
+/// parameter, other languages than the default, and those whose parameter the font already has.
+pub(crate) fn property_losses(font: &Font) -> Vec<String> {
+    let mut out = Vec::new();
+    for p in &font.info.properties.0 {
+        let top = NAMES.iter().any(|(_, k, _)| *k == p.key);
+        let param = NAME_PARAMS.iter().find(|(_, k)| *k == p.key).map(|(n, _)| *n);
+        if !top && param.is_none() {
+            out.push(format!("property `{}` (no key in format version 2)", p.key));
+            continue;
+        }
+        if let Some(n) = param
+            && font.info.params.get(n).is_some()
+        {
+            out.push(format!("property `{}` (the `{n}` parameter is already set)", p.key));
+            continue;
+        }
+        if let fontcraft_model::PropertyValue::Localized(values) = &p.value
+            && values.len() > 1
+        {
+            out.push(format!("property `{}`: languages other than the default ({})", p.key, values.len() - 1));
+        }
+    }
+    out
+}
+
+/// [`take_font_info`] in reverse. A property version 2 has no key for is not written
+/// ([`property_losses`]).
 fn push_font_info(e: &mut Vec<(Str, Value)>, font: &Font) -> Result<()> {
-    crate::push_font_info_common(e, font, &*params_with_axes(font)?);
+    crate::push_font_info_common(e, font, &v2_params(font)?);
     for (key, property, _) in NAMES {
         if let Some(v) = font.info.properties.value(property) {
             e.push((key.into(), string(v)));
@@ -900,7 +983,9 @@ fn params_with_axes(font: &Font) -> Result<std::borrow::Cow<'_, Params>> {
         return Err(GlyphsError::Unsupported(format!("{} axes in format version 2, which holds {SLOTS}", font.axes.len())));
     }
     let expected = font.info.params.get("Axes").and_then(axes_from_param).unwrap_or_else(|| default_axes(font.axes.len()));
-    if *font.axes == expected {
+    // What the parameter says of an axis; ranges, maps and labels come from elsewhere.
+    let said = |axes: &[Axis]| -> Vec<(String, String, bool)> { axes.iter().map(|a| (a.name.clone(), a.tag.clone(), a.hidden)).collect() };
+    if said(&font.axes) == said(&expected) {
         return Ok(std::borrow::Cow::Borrowed(&font.info.params));
     }
     let mut params = font.info.params.clone();
@@ -1042,8 +1127,60 @@ fn write_instance(i: &Instance, axes: usize) -> Result<Value> {
         e.push(("exports".into(), int(0)));
     }
     design::push_instance_fields(&mut e, i)?;
-    crate::info::push_properties(&mut e, &i.properties);
-    crate::info::push_params(&mut e, &i.params);
+    let (properties, params) = instance_names_v2(i);
+    crate::info::push_properties(&mut e, &properties);
+    crate::info::push_params(&mut e, &params);
     crate::info::push_user_data(&mut e, &i.user_data);
     Ok(Value::Dict(finish_ordered(e, &i.extra, INSTANCE_ORDER)))
+}
+
+/// Instance properties version 2 holds as parameters of these names (the names glyphsLib reads
+/// a version 2 instance's names from): (property, parameter).
+const INSTANCE_NAME_PARAMS: [(&str, &str); 10] = [
+    ("familyNames", "familyName"),
+    ("postscriptFontName", "postscriptFontName"),
+    ("postscriptFullNames", "postscriptFullName"),
+    ("styleMapFamilyNames", "styleMapFamilyName"),
+    ("styleMapStyleNames", "styleMapStyleName"),
+    ("preferredFamilyNames", "preferredFamilyName"),
+    ("preferredSubfamilyNames", "preferredSubfamilyName"),
+    ("compatibleFullNames", "compatibleFullName"),
+    ("WWSFamilyName", "WWSFamilyName"),
+    ("WWSSubfamilyName", "WWSSubfamilyName"),
+];
+
+/// An instance's properties and parameters as version 2 writes them: the names of
+/// [`INSTANCE_NAME_PARAMS`] (their default value) as parameters, where the instance has no
+/// parameter of that name; other properties stay a `properties` list, which only this app reads.
+fn instance_names_v2(i: &Instance) -> (Properties, Params) {
+    let mut params = i.params.clone();
+    let mut properties = Properties::default();
+    for p in &i.properties.0 {
+        let name = INSTANCE_NAME_PARAMS.iter().find(|(k, _)| *k == p.key).map(|(_, n)| *n).filter(|n| params.get(n).is_none());
+        match (name, p.default_value()) {
+            (Some(name), Some(v)) => params.0.push(Param::new(name, string(v))),
+            _ => properties.0.push(p.clone()),
+        }
+    }
+    (properties, params)
+}
+
+/// The instances' properties version 2 does not hold as parameters, and other languages of
+/// those it does, one line each.
+pub(crate) fn instance_property_losses(font: &Font) -> Vec<String> {
+    let mut out = Vec::new();
+    for i in font.instances.iter() {
+        let (properties, _) = instance_names_v2(i);
+        for p in &properties.0 {
+            out.push(format!("instance `{}`: property `{}` (no parameter in format version 2)", i.name, p.key));
+        }
+        for p in i.properties.0.iter().filter(|p| !properties.0.iter().any(|q| q.key == p.key)) {
+            if let fontcraft_model::PropertyValue::Localized(values) = &p.value
+                && values.len() > 1
+            {
+                out.push(format!("instance `{}`: property `{}`: languages other than the default ({})", i.name, p.key, values.len() - 1));
+            }
+        }
+    }
+    out
 }
