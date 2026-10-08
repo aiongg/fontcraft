@@ -126,12 +126,16 @@ fn a_package_rewrites_only_what_changed() {
     let saved = run(&mut s, "file.save", json!({}));
     assert_eq!(saved["filesRemoved"], 1);
     assert!(!pkg.join("glyphs/B_.glyph").exists());
-    // A side file the package holds is reported when saving to a single file.
+    // Display strings are model data in either form; a file the model has no place for is kept
+    // in the package and reported when saving to a single file.
     std::fs::write(pkg.join("UIState.plist"), "{\ndisplayStrings = (\nA\n);\n}\n").unwrap();
+    std::fs::write(pkg.join("README.txt"), "notes for the team\n").unwrap();
     let mut s = Session::new();
     run(&mut s, "file.open", json!({ "path": pkg }));
+    assert_eq!(s.font().unwrap().display_strings.as_slice(), ["A"]);
     let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("Flat.glyphs") }));
-    assert_eq!(saved["losses"][0]["files"], json!(["UIState.plist"]));
+    assert_eq!(saved["losses"][0]["files"], json!(["README.txt"]));
+    assert!(std::fs::read_to_string(dir.join("Flat.glyphs")).unwrap().contains("DisplayStrings = (\nA\n);"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
