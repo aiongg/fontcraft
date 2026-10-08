@@ -40,6 +40,7 @@ is possible, by an oracle where there is one, or by a recorded decision of ours.
 | [20 Command line](20-cli.md) | `20-cli.toml` | AFDKO, fonttools, fontmake, fontc | 151 | 20 |
 | [21 Quality checks](21-qa.md) | `21-qa-checks.toml` | fontbakery, AFDKO, fonttools | 343 | 13 |
 | [30 Source formats](30-source-formats.md) | `30-formats.toml` | format specifications, crate sources | 94 | 17 |
+| [31 glyphsLib crosswalk](31-glyphslib-crosswalk.md) | — | glyphsLib 6.15.0 source | — | — |
 | [40 Compiling](40-compile.md) | `40-tables.toml` | fontations, fontc, fontmake, makeotf | 181 | 18 |
 | [90 Secondary references](90-secondary-references.md) | `90-secondary.toml` | FontLab, RoboFont, FontForge and Fontra documentation | 235 | 12 |
 

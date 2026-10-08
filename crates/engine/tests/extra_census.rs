@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use fontcraft_model::{Extra, Family, Font, Shape};
+use fontcraft_model::{Extra, Family, Font, Params, Shape};
 
 type Census = BTreeMap<(String, String, String), (usize, BTreeSet<usize>)>;
 
@@ -20,8 +20,20 @@ fn add(c: &mut Census, source: usize, what: &str, x: &Extra) {
     }
 }
 
+/// Parameters kept as written because their typed form would not write back the same (the UFO
+/// reader's `raw` mark), by name.
+fn raw_params(c: &mut Census, source: usize, what: &str, params: &Params) {
+    for p in params.0.iter().filter(|p| p.extra.get(Family::Ufo, "raw").is_some()) {
+        let row = c.entry(("ufo".into(), format!("{what} raw parameter"), p.name.clone())).or_default();
+        row.0 += 1;
+        row.1.insert(source);
+    }
+}
+
 fn census(c: &mut Census, source: usize, f: &Font) {
     add(c, source, "font", &f.extra);
+    raw_params(c, source, "font", &f.info.params);
+    f.masters.iter().for_each(|m| raw_params(c, source, "master", &m.params));
     f.axes.iter().for_each(|a| add(c, source, "axis", &a.extra));
     f.metrics.iter().for_each(|m| add(c, source, "metric", &m.extra));
     f.masters.iter().for_each(|m| add(c, source, "master", &m.extra));

@@ -22,12 +22,13 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Axis, Extra, Family, Features, FileStore, Font, Glyph, GlyphTable, Instance, KernTable, Kerning, Master, MetricDef, MetricValue, Snippet, Source,
-    SourceFormat,
+    Axis, Extra, Family, Features, FileStore, Font, FontInfo, Glyph, GlyphTable, Instance, KernTable, Kerning, Master, MetricDef, MetricValue,
+    Snippet, Source, SourceFormat,
 };
 use fontcraft_plist::xml::{self, Element, Node as XNode, Text};
 use fontcraft_plist::{Array, Value, xmlplist};
 
+use crate::fontinfo;
 use crate::ufo::{self, FEATURES_KEY, ReadUfo, Target};
 use crate::{Files, Result, UfoError, bad};
 
@@ -287,6 +288,8 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         default.format_version,
     );
     let default_id = sources.get(default_index).map(|s| s.id.clone()).unwrap_or_default();
+    // The default source's font information is the font's; another master keeps what differs.
+    let font_info = default.info.clone();
 
     // Masters, and the glyphs of each.
     let mut masters: Vec<Master> = Vec::new();
@@ -298,6 +301,11 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         let Some(r) = slot.take() else { continue };
         let Some(s) = sources.get(i) else { continue };
         let mut master = r.master;
+        if i != default_index {
+            let own = fontinfo::split(&font_info, r.info);
+            master.properties = own.properties;
+            master.params = own.params;
+        }
         master.location = s.location.clone();
         master.metric_values = values_of_owned(&kinds, &r.metrics);
         main_values.insert(s.filename.clone(), master.metric_values.clone());
@@ -384,7 +392,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         masters: Arc::new(masters),
         instances: Arc::new(read_instances(root, &axes, &labels)?),
         glyphs: GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect()),
-        info: Default::default(),
+        info: Arc::new(FontInfo { properties: font_info.properties, params: font_info.params, date: font_info.date, ..Default::default() }),
         kerning: Arc::new(Kerning { ltr: KernTable(kerning), ..Default::default() }),
         features: Arc::new(features),
         display_strings: Arc::default(),

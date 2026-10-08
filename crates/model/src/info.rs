@@ -9,7 +9,8 @@
 //!
 //! Values are property-list values. They may carry OpenStep spellings only (see
 //! `fontcraft_plist`): a reader of an XML format hands the model its values without their
-//! spellings, and keeps those in its own `Extra` for writing back.
+//! spellings, and keeps those in its own `Extra` for writing back. In the native file a value is
+//! OpenStep text, or XML text when it holds what OpenStep cannot say (a boolean, a date).
 
 use fontcraft_plist::{Dict, Value};
 use serde::de::Error as _;
@@ -73,12 +74,30 @@ impl Params {
     }
 }
 
-/// In the native file a parameter is `{"name", "value", "disabled"?, "extra"?}`, with the value as
-/// OpenStep property-list text.
+/// Whether `v` holds something only the XML syntax can say.
+fn needs_xml(v: &Value) -> bool {
+    let mut found = false;
+    v.visit(&mut |x| found |= matches!(x, Value::Bool(_) | Value::Date(_)));
+    found
+}
+
+/// A value as native-file text, and whether the text is XML.
+fn native_text(v: &Value) -> (String, bool) {
+    if needs_xml(v) { (value_text(Family::Ufo, v), true) } else { (value_text(Family::Glyphs, v), false) }
+}
+
+fn parse_native(text: &str, xml: bool) -> Result<Value, fontcraft_plist::Error> {
+    parse_value_text(if xml { Family::Ufo } else { Family::Glyphs }, text)
+}
+
+/// In the native file a parameter is `{"name", "value", "xml"?, "disabled"?, "extra"?}`, with the
+/// value as property-list text (see the module notes).
 #[derive(Serialize, Deserialize)]
 struct ParamRepr {
     name: String,
     value: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    xml: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     disabled: bool,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
@@ -87,15 +106,15 @@ struct ParamRepr {
 
 impl Serialize for Param {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        ParamRepr { name: self.name.clone(), value: value_text(Family::Glyphs, &self.value), disabled: self.disabled, extra: self.extra.clone() }
-            .serialize(s)
+        let (value, xml) = native_text(&self.value);
+        ParamRepr { name: self.name.clone(), value, xml, disabled: self.disabled, extra: self.extra.clone() }.serialize(s)
     }
 }
 
 impl<'de> Deserialize<'de> for Param {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let r = ParamRepr::deserialize(d)?;
-        let value = parse_value_text(Family::Glyphs, &r.value).map_err(|e| D::Error::custom(format!("parameter `{}`: {e}", r.name)))?;
+        let value = parse_native(&r.value, r.xml).map_err(|e| D::Error::custom(format!("parameter `{}`: {e}", r.name)))?;
         Ok(Param { name: r.name, value, disabled: r.disabled, extra: r.extra })
     }
 }
@@ -203,17 +222,32 @@ impl UserData {
     }
 }
 
-/// In the native file user data is OpenStep property-list text.
+/// In the native file user data is OpenStep property-list text, or `{"xml": text}` (see the module
+/// notes).
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum UserDataRepr {
+    OpenStep(String),
+    Xml { xml: String },
+}
+
 impl Serialize for UserData {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        value_text(Family::Glyphs, &Value::Dict(self.0.clone())).serialize(s)
+        match native_text(&Value::Dict(self.0.clone())) {
+            (text, false) => UserDataRepr::OpenStep(text),
+            (xml, true) => UserDataRepr::Xml { xml },
+        }
+        .serialize(s)
     }
 }
 
 impl<'de> Deserialize<'de> for UserData {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(d)?;
-        match parse_value_text(Family::Glyphs, &text).map_err(|e| D::Error::custom(format!("user data: {e}")))? {
+        let (text, xml) = match UserDataRepr::deserialize(d)? {
+            UserDataRepr::OpenStep(t) => (t, false),
+            UserDataRepr::Xml { xml } => (xml, true),
+        };
+        match parse_native(&text, xml).map_err(|e| D::Error::custom(format!("user data: {e}")))? {
             Value::Dict(dict) => Ok(UserData(dict)),
             _ => Err(D::Error::custom("user data is not a dictionary")),
         }
@@ -262,5 +296,19 @@ mod tests {
         assert_eq!(back.0.entries.first().map(|(k, _)| k.as_str()), Some("zeta"));
         assert_eq!(value_text(Family::Glyphs, &Value::Dict(back.0)), "{\nzeta = 1.0;\nalpha = (a,b);\n}");
         let _ = Str::new("");
+    }
+
+    #[test]
+    fn booleans_and_dates_survive_the_native_file() {
+        let mut d = Dict::new();
+        d.insert("flag", Value::Bool(true));
+        d.insert("when", Value::Date("2026-10-08T12:00:00Z".into()));
+        let u = UserData(d.clone());
+        let back: UserData = serde_json::from_str(&serde_json::to_string(&u).unwrap()).unwrap();
+        assert_eq!(back, u);
+        let p = Param::new("postscriptIsFixedPitch", Value::Bool(false));
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("\"xml\":true"), "{json}");
+        assert_eq!(serde_json::from_str::<Param>(&json).unwrap().value, Value::Bool(false));
     }
 }

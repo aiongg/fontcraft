@@ -310,6 +310,45 @@ fn a_ufo_opens_and_saves_only_what_changed() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn font_information_reaches_fontinfo_and_comes_back() {
+    let dir = temp("fontinfo");
+    let source = dir.join("Info.glyphs");
+    let text = V3.replacen(
+        "familyName = \"Test Sans\";",
+        "customParameters = (\n{\nname = typoAscender;\nvalue = 820;\n},\n{\nname = \"Variable Font Origin\";\nvalue = m01;\n}\n);\n\
+         date = \"2026-10-08 12:00:00 +0000\";\nfamilyName = \"Test Sans\";\nproperties = (\n{\nkey = designers;\nvalues = (\n{\nlanguage = dflt;\n\
+         value = \"A. Designer\";\n},\n{\nlanguage = DEU;\nvalue = \"A. Gestalterin\";\n}\n);\n}\n);",
+        1,
+    );
+    std::fs::write(&source, text).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": source }));
+    let ufo = dir.join("Info.ufo");
+    let saved = run(&mut s, "file.saveAs", json!({ "path": ufo }));
+    let info = saved["losses"].as_array().unwrap().iter().find(|l| l["what"] == "font information a UFO has no place for yet").cloned();
+    assert_eq!(info.map(|l| l["items"].clone()), Some(json!(["parameter `Variable Font Origin`"])), "{saved}");
+    let fontinfo = std::fs::read_to_string(ufo.join("fontinfo.plist")).unwrap();
+    for expected in [
+        "<key>openTypeOS2TypoAscender</key>\n  <integer>820</integer>",
+        "<key>openTypeNameDesigner</key>\n  <string>A. Designer</string>",
+        "<key>openTypeHeadCreated</key>\n  <string>2026/10/08 12:00:00</string>",
+        "<key>openTypeOS2Type</key>\n  <array>\n    <integer>3</integer>",
+        "<integer>1031</integer>",
+    ] {
+        assert!(fontinfo.contains(&expected.replace("\n  ", "\n    ")), "{expected} in {fontinfo}");
+    }
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": ufo }));
+    let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("Back.glyphs") }));
+    assert!(saved["losses"].as_array().unwrap().iter().all(|l| l["family"] == "ufo"), "only the UFO's file records: {saved}");
+    let back = std::fs::read_to_string(dir.join("Back.glyphs")).unwrap();
+    assert!(back.contains("name = typoAscender;\nvalue = 820;"), "{back}");
+    assert!(back.contains("language = DEU;\nvalue = \"A. Gestalterin\";"), "{back}");
+    assert!(back.contains("date = \"2026-10-08 12:00:00 +0000\";"), "{back}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// The test document with a second master, Bold, whose glyphs are wider.
 fn two_masters() -> String {
     V3.replacen(

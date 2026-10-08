@@ -17,6 +17,8 @@
 //! | Model | UFO |
 //! |---|---|
 //! | family name, units per em, version, note | `fontinfo.plist` `familyName`, `unitsPerEm`, `versionMajor`, `versionMinor`, `note` |
+//! | the font's properties, parameters and date; a master's where its file differs from the default master's | the other `fontinfo.plist` keys, through [`crate::fontinfo`] |
+//! | the master's user data | `lib.plist`, except the keys below |
 //! | master name; metrics `ascender`, `cap height`, `x-height`, `descender`, `italic angle` | `styleName`; `ascender`, `capHeight`, `xHeight`, `descender`, `italicAngle` (counter-clockwise, so the sign is flipped) |
 //! | glyph order | `lib.plist` `public.glyphOrder` first, then the rest in `contents.plist` order |
 //! | glyph export | `lib.plist` `public.skipExportGlyphs` |
@@ -31,12 +33,13 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Extra, Family, Features, FileStore, Font, Glyph, GlyphTable, KernFirst, KernTable, Kerning, Layer, Master, MasterKerning, MetricDef, MetricValue,
-    Snippet, Source, SourceFormat, metric,
+    Extra, Family, Features, FileStore, Font, FontInfo, Glyph, GlyphTable, KernFirst, KernTable, Kerning, Layer, Master, MasterKerning, MetricDef,
+    MetricValue, Snippet, Source, SourceFormat, UserData, metric,
 };
 use fontcraft_plist::xml::{self, Node as XNode};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value, xmlplist};
 
+use crate::fontinfo::{self, Info};
 use crate::glif::{self, Style};
 use crate::names::{glyph_file_name, layer_dir_name};
 use crate::{Files, Result, UfoError, bad};
@@ -55,6 +58,8 @@ const CONTENTS: &str = "contents.plist";
 const DEFAULT_DIR: &str = "glyphs";
 const KERN1: &str = "public.kern1.";
 const KERN2: &str = "public.kern2.";
+/// `lib.plist` keys that are model fields of their own rather than user data.
+const TYPED_LIB: [&str; 2] = ["public.glyphOrder", "public.skipExportGlyphs"];
 /// The creator written into a UFO FontCraft makes.
 pub const CREATOR: &str = "org.fontcraft";
 
@@ -248,6 +253,8 @@ pub(crate) struct ReadUfo {
     pub version_major: Option<i64>,
     pub version_minor: Option<i64>,
     pub note: Option<String>,
+    /// The other font information (see [`crate::fontinfo`]).
+    pub info: Info,
     /// Which metric kinds the file has (the master's values follow [`METRICS`]).
     pub metrics: Vec<(&'static str, f64)>,
     pub features: Option<String>,
@@ -298,6 +305,8 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
             metrics.push((kind, if kind == metric::ITALIC_ANGLE { if v == 0.0 { 0.0 } else { -v } } else { v }));
         }
     }
+    let upm = self::units_per_em(units_per_em).map_or(1000.0, f64::from);
+    let font_info = fontinfo::read(info.as_ref().unwrap_or(&Dict::new()), upm);
     if let Some(info) = info {
         master.extra.push(Family::Ufo, FONTINFO, Value::Dict(info));
     }
@@ -308,6 +317,13 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     let lib = plists.dict(LIB).ok().flatten();
     let order = strings(lib.as_ref().and_then(|d| d.get("public.glyphOrder")));
     let skip: HashSet<String> = strings(lib.as_ref().and_then(|d| d.get("public.skipExportGlyphs"))).into_iter().collect();
+    if let Some(lib) = &lib {
+        let mut data = Dict::new();
+        for (k, v) in lib.entries.iter().filter(|(k, _)| !TYPED_LIB.contains(&k.as_str())) {
+            data.insert(k.as_str(), v.without_spellings());
+        }
+        master.user_data = UserData(data);
+    }
     if let Some(lib) = lib {
         master.extra.push(Family::Ufo, LIB, Value::Dict(lib));
     }
@@ -512,6 +528,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         version_major,
         version_minor,
         note,
+        info: font_info,
         metrics,
         features,
         glyphs: ordered,
@@ -567,7 +584,7 @@ pub fn read(files: &Files) -> Result<Font> {
         masters: Arc::new(vec![master]),
         instances: Arc::default(),
         glyphs: GlyphTable::from_glyphs(r.glyphs.into_iter().map(Arc::new).collect()),
-        info: Default::default(),
+        info: Arc::new(FontInfo { properties: r.info.properties, params: r.info.params, date: r.info.date, ..Default::default() }),
         kerning: Arc::new(Kerning {
             ltr: if r.kerning.firsts.is_empty() { KernTable::default() } else { KernTable(vec![r.kerning]) },
             ..Default::default()
@@ -744,6 +761,26 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         let value = value.filter(|v| info.get(key).is_some() || !from_ufo || *v != 0.0);
         patch(&mut info, key, value.map(num_value));
     }
+    // The rest of the font information. As above, a master whose file differed from the default
+    // master's keeps its own value while the default master's is unchanged and this master has
+    // none of its own.
+    let (read_info, _) = kept_dict(master, FONTINFO);
+    let mine_now = info_entries(font, master, &read_info).0;
+    let default_now = if is_default { mine_now.clone() } else { info_entries(font, default, &default_info).0 };
+    let mut keys: Vec<&str> = read_info.entries.iter().map(|(k, _)| k.as_str()).chain(mine_now.keys().map(String::as_str)).collect();
+    keys.retain(|k| !fontinfo::ELSEWHERE.contains(k));
+    keys.dedup();
+    for key in keys {
+        let mut value = mine_now.get(key).cloned();
+        if !is_default
+            && value.as_ref() == default_now.get(key)
+            && default_info.get(key) == default_now.get(key)
+            && read_info.get(key) != default_info.get(key)
+        {
+            value = read_info.get(key).cloned();
+        }
+        patch(&mut info, key, value);
+    }
     if had_info || !info.is_empty() {
         out.insert(FONTINFO.into(), plist(FONTINFO, &Value::Dict(info)));
     }
@@ -764,8 +801,23 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     if !kerning.is_empty() || ufo_get(&master.extra, KERNING).is_some() {
         out.insert(KERNING.into(), plist(KERNING, &Value::Dict(kerning)));
     }
-    // lib.plist
+    // lib.plist: the master's user data, and the typed keys below.
     let (mut lib, _) = kept_dict(master, LIB);
+    let stale: Vec<String> = lib
+        .entries
+        .iter()
+        .map(|(k, _)| k.as_str())
+        .filter(|k| !TYPED_LIB.contains(k) && master.user_data.get(k).is_none())
+        .map(str::to_string)
+        .collect();
+    for k in stale {
+        patch(&mut lib, &k, None);
+    }
+    for (k, v) in &master.user_data.0.entries {
+        if !TYPED_LIB.contains(&k.as_str()) {
+            patch(&mut lib, k.as_str(), Some(v.without_spellings()));
+        }
+    }
     let skip: Vec<&str> = font.glyphs.iter().filter(|g| !g.export).map(|g| g.name.as_str()).collect();
     // The kept list stays while it names the same glyphs, in whatever order, and in a master that
     // read a list of its own (often none) while the default master's is unchanged.
@@ -950,6 +1002,45 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         }
     }
     Ok(out)
+}
+
+/// The font information of `master` as UFO keys (those [`crate::fontinfo`] handles), and what has
+/// no place there. `read` is the master's `fontinfo.plist` as read.
+fn info_entries(font: &Font, master: &Master, read: &Dict) -> fontinfo::Written {
+    let font_info = Info { properties: font.info.properties.clone(), params: font.info.params.clone(), date: font.info.date.clone() };
+    let own = Info { properties: master.properties.clone(), params: master.params.clone(), date: None };
+    fontinfo::write(&fontinfo::effective(&font_info, &own), f64::from(font.units_per_em), Some(read))
+}
+
+/// What saving `font` as UFOs leaves out of its font information and user data, one line each.
+pub fn info_losses(font: &Font) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for m in font.masters.iter().filter(|m| m.extra.get(Family::Designspace, "layer").is_none()) {
+        let (read, _) = kept_dict(m, FONTINFO);
+        for line in info_entries(font, m, &read).1 {
+            if !out.contains(&line) {
+                out.push(line);
+            }
+        }
+    }
+    if !font.info.user_data.is_empty() {
+        out.push(format!("the font's user data ({} keys)", font.info.user_data.0.len()));
+    }
+    if !font.info.settings.is_empty() {
+        out.push("the font's settings".into());
+    }
+    for i in font.instances.iter() {
+        for p in &i.params.0 {
+            out.push(format!("instance `{}`: parameter `{}`", i.name, p.name));
+        }
+        for p in &i.properties.0 {
+            out.push(format!("instance `{}`: property `{}`", i.name, p.key));
+        }
+        if !i.user_data.is_empty() {
+            out.push(format!("instance `{}`: user data", i.name));
+        }
+    }
+    out
 }
 
 /// The UFO layer a non-master layer is written to in this UFO: its own `layer` for the target

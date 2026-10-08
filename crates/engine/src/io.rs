@@ -367,6 +367,14 @@ fn ufo_layer_losses(font: &Font) -> Option<Value> {
     (n > 0).then(|| json!({ "family": "glyphs", "entries": n, "what": "layers other than master layers (backup, intermediate, alternate, colour), not written to UFO yet" }))
 }
 
+/// Font information (properties, parameters, settings, user data) a UFO has no place for yet.
+fn ufo_info_losses(font: &Font) -> Option<Value> {
+    let items = fontcraft_io_ufo::ufo::info_losses(font);
+    let family = if font.source.format == SourceFormat::Glyphs { "glyphs" } else { "fontcraft" };
+    (!items.is_empty())
+        .then(|| json!({ "family": family, "entries": items.len(), "what": "font information a UFO has no place for yet", "items": items }))
+}
+
 fn family_name(f: Family) -> &'static str {
     match f {
         Family::Glyphs => "glyphs",
@@ -393,6 +401,7 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
     if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
         losses.extend(ufo_layer_losses(font));
         losses.extend(side_file_losses(font));
+        losses.extend(ufo_info_losses(font));
     }
     // A single file has no place for a package's side files (UI state, version 4 feature files).
     if format == SaveFormat::Glyphs && !font.files.is_empty() {
@@ -472,6 +481,7 @@ pub fn export_ufos(font: &Font, masters: &[String], destination: &Path) -> Resul
     let mut losses = losses(&font, &[Family::Ufo]);
     losses.extend(ufo_layer_losses(&font));
     losses.extend(side_file_losses(&font));
+    losses.extend(ufo_info_losses(&font));
     let mut taken = Vec::new();
     let mut files = Vec::new();
     for id in masters {
