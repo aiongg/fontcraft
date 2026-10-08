@@ -24,7 +24,9 @@ packages in order). Its material is `docs/spec/30-source-formats.md` and
 | M1.0 corpus, harness, spikes | done (plan § 8) |
 | M1.1 property lists | OpenStep done; XML waits for the owner's answer on question 11 |
 | M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured; `crates/io-glyphs` reads and writes versions 2 to 4, single files and packages (every reference-written source identical). Next: more typed fields, then the native format's layout |
-| M1.4 to M1.6 | not started |
+| M1.4 UFO and designspace | waits for the owner's answer on question 11 (round 002) |
+| M1.5 compiled fonts | done |
+| M1.6 commands and CLI | `.glyphs`, packages and compiled fonts done; UFO with M1.4 |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -97,3 +99,11 @@ Append one terse entry per session: what landed, numbers, what is still open.
   (plan § 8); own plist crate, own UFO I/O recommended (round 002, waiting). `crates/plist`
   OpenStep reader and writer: 215 of 274 `.glyphs` sources identical, every reference-written
   one outside fontc's test data. Next: the model (M1.2); the XML plist after question 11.
+- **2026-10-08, M1.2, M1.3, M1.5, M1.6 (part).** Model restructured (tagged `Extra`, `Arc` parts,
+  glyph index, metric definitions, layer ids, kept transforms, kerning, axes, instances, features,
+  file store); native format version 2. `crates/io-glyphs`: versions 2 to 4 and packages, every
+  reference-written corpus source byte-identical; package side files are model data, so a package
+  and a single file of the same font read the same. `crates/decompile`: all 342 corpus binaries
+  open. `file.open`/`file.save` on every source and compiled fonts. Oswald shown in the app
+  (round 003). Next: question 11, then UFO; meanwhile the native format's layout and the CLI's
+  inspection commands.

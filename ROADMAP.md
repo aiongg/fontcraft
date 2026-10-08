@@ -50,7 +50,7 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 |---|---|---|
 | **Breadth:** commands, tools and panels exist | ~3% | 27 of 919 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
-| **File interop** | ~15% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage` in and out (every reference-written corpus source saves back byte for byte); static TrueType out. No UFO, designspace, OTF/CFF, variable, WOFF; no import of compiled fonts; axes, instances, kerning and features are carried, not yet modelled |
+| **File interop** | ~20% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage` in and out (every reference-written corpus source saves back byte for byte); compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. No UFO, designspace, OTF/CFF export, variable, WOFF2 |
 | **Compiler correctness** | unmeasured | 10 of 50 tables written, for one static flavour; read back by two independent readers; one code review's findings fixed (bounds, names, style linking); **no oracle comparison yet** (the harness is M2) |
 | **Agent automation** | ~40% | every existing command is reachable from CLI, control channel and MCP; no pointer injection, dialogs, screenshots, resources or prompts yet |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests); one dependency panic found and fenced; one adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, no corpus runs, and the known scaling limits in `docs/status.md` |
@@ -95,6 +95,8 @@ on, so the engine track, where oracles prove correctness, goes first.
   packages, Oswald and Inter among them); unmodelled keys travel in `Extra` with their spelling.
   `file.open` recognises sources by content; `file.save` keeps the format and version, rewrites
   only changed package files, refuses to overwrite a file changed on disk, and reports losses.
+  Compiled fonts (TrueType, CFF, collections, WOFF 1) open view-only. Kerning, axes, instances,
+  master locations, features, display strings and the note are fields of the model.
 - **Compiler:** static TrueType from the first master, deterministic.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
@@ -154,7 +156,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | PostScript hinting | 3 | 27 | 0 | 0% | everything |
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
-| Source formats | 6 | 14 | 4 | 25% | UFO, designspace, compiled-font import; axes, instances, kerning, features carried untyped; version conversion |
+| Source formats | 6 | 14 | 4 | 35% | UFO, designspace, WOFF2 import; custom parameters and layer attributes carried untyped; version conversion |
 | Compiling | 9 | 11 | 1 | 2% | static TrueType core tables; no oracle comparison |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
 | Command-line tools | 8 | 42 | 2 | 1% | `commands` and a first `run`, `convert`, `info` |
