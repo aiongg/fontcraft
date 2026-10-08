@@ -180,6 +180,9 @@ pub fn write_value(out: &mut String, value: &Value, dialect: Dialect) {
             Some(sp) => out.push_str(sp),
             None => out.push_str(&canonical_data(d.bytes())),
         },
+        // The syntax has no booleans and no dates: the reference writes flags as 0 and 1.
+        Value::Bool(b) => out.push(if *b { '1' } else { '0' }),
+        Value::Date(s) => write_str(out, s, dialect),
     }
 }
 
@@ -370,7 +373,7 @@ impl<'a> Parser<'a> {
             return Err(self.err(format!("nested more than {MAX_DEPTH} levels deep")));
         }
         self.pos += 1;
-        let mut dict = Dict { entries: Vec::new(), layout: self.layout_after_open() };
+        let mut dict = Dict { entries: Vec::new(), layout: self.layout_after_open(), ..Default::default() };
         loop {
             self.skip_ws()?;
             match self.peek() {
@@ -394,7 +397,7 @@ impl<'a> Parser<'a> {
             return Err(self.err(format!("nested more than {MAX_DEPTH} levels deep")));
         }
         self.pos += 1;
-        let mut array = Array { items: Vec::new(), layout: self.layout_after_open() };
+        let mut array = Array { items: Vec::new(), layout: self.layout_after_open(), ..Default::default() };
         loop {
             self.skip_ws()?;
             match self.peek() {
@@ -680,7 +683,11 @@ mod tests {
         d.insert("width", Value::Number(Number::float(512.25).unwrap()));
         d.insert(
             "pos",
-            Value::Array(Array { items: vec![Value::Number(Number::int(10)), Value::Number(Number::int(-20))], layout: Layout::Compact }),
+            Value::Array(Array {
+                items: vec![Value::Number(Number::int(10)), Value::Number(Number::int(-20))],
+                layout: Layout::Compact,
+                ..Default::default()
+            }),
         );
         let out = write(&Document::new(Value::Dict(d)), Dialect::Glyphs3);
         assert_eq!(out, "{\nname = \"Bold Italic\";\nwidth = 512.25;\npos = (10,-20);\n}\n");

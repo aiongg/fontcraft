@@ -228,9 +228,17 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
     param.insert("name", Value::String("glyphOrder".into()));
     param.insert(
         "value",
-        Value::Array(Array { items: glyph_names.iter().map(|n| Value::String(Str::new(n.as_str()))).collect(), layout: Layout::Multiline }),
+        Value::Array(Array {
+            items: glyph_names.iter().map(|n| Value::String(Str::new(n.as_str()))).collect(),
+            layout: Layout::Multiline,
+            ..Default::default()
+        }),
     );
-    extra.push(Family::Glyphs, "customParameters", Value::Array(Array { items: vec![Value::Dict(param)], layout: Layout::Multiline }));
+    extra.push(
+        Family::Glyphs,
+        "customParameters",
+        Value::Array(Array { items: vec![Value::Dict(param)], layout: Layout::Multiline, ..Default::default() }),
+    );
 
     let read_tables = ["head", "hhea", "hmtx", "maxp", "cmap", "name", "post", "OS/2", "glyf", "loca", "CFF "];
     let mut left_out: Vec<String> = font

@@ -133,7 +133,9 @@ fn plist_of(v: serde_json::Value) -> Value {
             None => n.as_f64().and_then(Number::float).map_or_else(|| Value::String(n.to_string().into()), Value::Number),
         },
         serde_json::Value::String(s) => Value::String(s.into()),
-        serde_json::Value::Array(a) => Value::Array(Array { items: a.into_iter().map(plist_of).collect(), layout: Layout::Multiline }),
+        serde_json::Value::Array(a) => {
+            Value::Array(Array { items: a.into_iter().map(plist_of).collect(), layout: Layout::Multiline, ..Default::default() })
+        }
         serde_json::Value::Object(o) => {
             let mut d = Dict::new();
             for (k, v) in o {

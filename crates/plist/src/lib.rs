@@ -1,8 +1,9 @@
 //! Property lists that remember how they were written (L0, standalone).
 //!
 //! FontCraft reads and writes two property-list syntaxes: the OpenStep text form that the primary
-//! reference's source format uses ([`openstep`]), and XML (planned, for UFO). Both readers keep
-//! enough of the original text that writing an unchanged document gives back the same bytes:
+//! reference's source format uses ([`openstep`]), and XML, as UFO and designspace files use it
+//! ([`xmlplist`], on the lossless XML tree in [`xml`]). Both readers keep enough of the original
+//! text that writing an unchanged document gives back the same bytes:
 //!
 //! - **Order.** Dictionaries keep their entries in file order.
 //! - **Spelling.** Each format has a canonical way to write a string, a number or a data blob.
@@ -15,11 +16,17 @@
 //!
 //! Equality ignores spelling and layout: two values are equal when they mean the same.
 //!
+//! A spelling belongs to the syntax it was read from: a value read from XML carries XML spellings,
+//! which the OpenStep writer must not be given (and the other way round). Converting a value to
+//! the other syntax starts with [`Value::without_spellings`].
+//!
 //! All input is untrusted: parsing returns an error for anything malformed, never panics, and is
 //! bounded by [`MAX_INPUT`] and [`MAX_DEPTH`].
 #![forbid(unsafe_code)]
 
 pub mod openstep;
+pub mod xml;
+pub mod xmlplist;
 
 use std::fmt;
 
@@ -36,6 +43,10 @@ pub enum Value {
     String(Str),
     Number(Number),
     Data(Data),
+    /// XML only; the OpenStep writer writes `1` or `0`.
+    Bool(bool),
+    /// An XML `<date>`, kept as its text (`2026-10-08T12:00:00Z`).
+    Date(Str),
 }
 
 /// How a dictionary or array was written.
@@ -53,6 +64,24 @@ pub enum Layout {
 pub struct Dict {
     pub entries: Vec<(Str, Value)>,
     pub layout: Layout,
+    pub spacing: Spacing,
+}
+
+/// The whitespace of an XML container that was neither laid out canonically nor compact: the
+/// text before each child element and before the end tag. Empty for everything else. It only
+/// applies while the container has the number of children it was read with.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Spacing(Option<Box<[Box<str>]>>);
+
+impl Spacing {
+    pub fn new(gaps: Vec<String>) -> Self {
+        Self(Some(gaps.into_iter().map(String::into_boxed_str).collect()))
+    }
+
+    /// The gaps, when there is one for each of `children` child elements and one before the end.
+    pub fn gaps(&self, children: usize) -> Option<&[Box<str>]> {
+        self.0.as_deref().filter(|g| g.len() == children + 1)
+    }
 }
 
 impl Dict {
@@ -97,6 +126,7 @@ impl PartialEq for Dict {
 pub struct Array {
     pub items: Vec<Value>,
     pub layout: Layout,
+    pub spacing: Spacing,
 }
 
 impl PartialEq for Array {
@@ -255,6 +285,34 @@ impl Value {
         }
     }
 
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// The same value with every source spelling dropped and layouts kept: what to hand a writer
+    /// of the other syntax.
+    pub fn without_spellings(&self) -> Value {
+        // Depth is bounded by MAX_DEPTH for parsed values; built values are the caller's.
+        match self {
+            Value::Dict(d) => Value::Dict(Dict {
+                entries: d.entries.iter().map(|(k, v)| (Str::new(k.as_str()), v.without_spellings())).collect(),
+                layout: d.layout,
+                spacing: d.spacing.clone(),
+            }),
+            Value::Array(a) => {
+                Value::Array(Array { items: a.items.iter().map(Value::without_spellings).collect(), layout: a.layout, spacing: a.spacing.clone() })
+            }
+            Value::String(s) => Value::String(Str::new(s.as_str())),
+            Value::Number(n) => Value::Number(Number { value: n.value, spelling: None }),
+            Value::Data(d) => Value::Data(Data::new(d.bytes.clone())),
+            Value::Bool(b) => Value::Bool(*b),
+            Value::Date(s) => Value::Date(Str::new(s.as_str())),
+        }
+    }
+
     pub fn as_num(&self) -> Option<Num> {
         match self {
             Value::Number(n) => Some(n.value()),
@@ -279,11 +337,11 @@ impl Value {
         let mut out: Vec<&str> = Vec::new();
         self.visit(&mut |v| {
             let found: Vec<&str> = match v {
-                Value::String(s) => s.spelling().into_iter().collect(),
+                Value::String(s) | Value::Date(s) => s.spelling().into_iter().collect(),
                 Value::Number(x) => x.spelling().into_iter().collect(),
                 Value::Data(d) => d.spelling().into_iter().collect(),
                 Value::Dict(d) => d.entries.iter().filter_map(|(k, _)| k.spelling()).collect(),
-                Value::Array(_) => Vec::new(),
+                Value::Array(_) | Value::Bool(_) => Vec::new(),
             };
             for s in found {
                 if out.len() < limit {
@@ -298,11 +356,11 @@ impl Value {
     pub fn spelling_count(&self) -> usize {
         let mut n = 0;
         self.visit(&mut |v| match v {
-            Value::String(s) => n += usize::from(s.spelling.is_some()),
+            Value::String(s) | Value::Date(s) => n += usize::from(s.spelling.is_some()),
             Value::Number(x) => n += usize::from(x.spelling.is_some()),
             Value::Data(d) => n += usize::from(d.spelling.is_some()),
             Value::Dict(d) => n += d.entries.iter().filter(|(k, _)| k.spelling.is_some()).count(),
-            Value::Array(_) => {}
+            Value::Array(_) | Value::Bool(_) => {}
         });
         n
     }

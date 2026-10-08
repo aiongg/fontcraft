@@ -647,11 +647,11 @@ fn string(s: &str) -> Value {
 }
 
 fn list(items: Vec<Value>) -> Value {
-    Value::Array(Array { items, layout: Layout::Multiline })
+    Value::Array(Array { items, layout: Layout::Multiline, ..Default::default() })
 }
 
 fn pair(a: f64, b: f64, at: &str) -> Result<Value> {
-    Ok(Value::Array(Array { items: vec![num(a, at)?, num(b, at)?], layout: Layout::Compact }))
+    Ok(Value::Array(Array { items: vec![num(a, at)?, num(b, at)?], layout: Layout::Compact, ..Default::default() }))
 }
 
 /// The fields' entries plus the extra entries of this family, keys sorted byte-wise. A field
@@ -663,7 +663,7 @@ fn finish(mut entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
         }
     }
     entries.sort_by(|a, b| a.0.as_str().as_bytes().cmp(b.0.as_str().as_bytes()));
-    Dict { entries, layout: Layout::Multiline }
+    Dict { entries, layout: Layout::Multiline, ..Default::default() }
 }
 
 /// Writes the family name into a version 4 file's `familyNames` property (its first value),
@@ -675,7 +675,7 @@ fn sync_v4_family_name(extra: &Extra, family: &str) -> Extra {
     }
     let mut props = match extra.get(Family::Glyphs, "properties") {
         Some(Value::Array(a)) => a.clone(),
-        _ => Array { items: Vec::new(), layout: Layout::Multiline },
+        _ => Array { items: Vec::new(), layout: Layout::Multiline, ..Default::default() },
     };
     let new_value = || {
         let mut v = Dict::new();
@@ -782,7 +782,7 @@ fn write_master(m: &Master) -> Result<Value> {
                 if v.pos != 0.0 {
                     d.push(("pos".into(), num(v.pos, "metricValues")?));
                 }
-                Ok(Value::Dict(Dict { entries: d, layout: Layout::Multiline }))
+                Ok(Value::Dict(Dict { entries: d, layout: Layout::Multiline, ..Default::default() }))
             })
             .collect::<Result<_>>()?;
         e.push(("metricValues".into(), list(values)));
@@ -798,7 +798,10 @@ pub fn write_glyph(g: &Glyph) -> Result<Dict> {
         [] => {}
         [u] => e.push(("unicode".into(), int(*u))),
         // Several code points go on one line, unlike other lists.
-        many => e.push(("unicode".into(), Value::Array(Array { items: many.iter().map(|u| int(*u)).collect(), layout: Layout::Compact }))),
+        many => e.push((
+            "unicode".into(),
+            Value::Array(Array { items: many.iter().map(|u| int(*u)).collect(), layout: Layout::Compact, ..Default::default() }),
+        )),
     }
     if !g.export {
         e.push(("export".into(), int(0)));
@@ -898,7 +901,7 @@ fn write_node(n: &Node, at: &str) -> Result<Value> {
     if let Some(attr) = n.extra.get(Family::Glyphs, "attr") {
         items.push(attr.clone());
     }
-    Ok(Value::Array(Array { items, layout: Layout::Compact }))
+    Ok(Value::Array(Array { items, layout: Layout::Compact, ..Default::default() }))
 }
 
 fn write_anchor(a: &Anchor, at: &str) -> Result<Value> {

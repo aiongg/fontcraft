@@ -176,7 +176,10 @@ pub fn read_package(files: &Files) -> Result<Font> {
         }
     }
     let stems: Vec<String> = ordered.iter().map(|(s, _)| s.clone()).collect();
-    root.entries.push(("glyphs".into(), Value::Array(Array { items: ordered.into_iter().map(|(_, v)| v).collect(), layout: Layout::Multiline })));
+    root.entries.push((
+        "glyphs".into(),
+        Value::Array(Array { items: ordered.into_iter().map(|(_, v)| v).collect(), layout: Layout::Multiline, ..Default::default() }),
+    ));
     let mut font = read_root(root)?;
     font.source.format = SourceFormat::GlyphsPackage;
     for (i, stem) in stems.iter().enumerate() {
@@ -258,7 +261,7 @@ pub fn write_package(font: &Font) -> Result<Files> {
     }
     out.insert(FONTINFO.into(), write(Value::Dict(root), dialect));
     let names: Vec<Value> = font.glyphs.iter().map(|g| Value::String(Str::new(g.name.as_str()))).collect();
-    let mut order = openstep::Document::new(Value::Array(Array { items: names, layout: Layout::Multiline }));
+    let mut order = openstep::Document::new(Value::Array(Array { items: names, layout: Layout::Multiline, ..Default::default() }));
     order.trailing = String::new();
     out.insert(ORDER.into(), openstep::write(&order, dialect).into_bytes());
     for (g, value) in font.glyphs.iter().zip(glyphs) {

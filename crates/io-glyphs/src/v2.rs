@@ -239,7 +239,7 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
         }
     }
     if !leftover.is_empty() {
-        d.entries.push(("alignmentZones".into(), Value::Array(Array { items: leftover, layout: Layout::Multiline })));
+        d.entries.push(("alignmentZones".into(), Value::Array(Array { items: leftover, layout: Layout::Multiline, ..Default::default() })));
     }
     Ok(Master { id, name: String::new(), location: Vec::new(), metric_values: values, extra: into_extra(d) })
 }
