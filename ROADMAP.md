@@ -4,7 +4,7 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-08 (M2.3 done: the compiler builds static CFF fonts, compared with fontmake; M2.4, WOFF and WOFF2, next)._
+_Last updated: 2026-10-08 (M2.4a done: WOFF 1 and untransformed WOFF2 in the new `container` crate; M2.4b, the WOFF2 transforms, next)._
 
 ## Where we are
 
@@ -83,7 +83,9 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 1. **M2, the compile core** (plan accepted, `docs/plans/M2.md`): M2.0 (the oracle harness),
    M2.1 (the staged pipeline), M2.2 (core tables at fontc parity) and M2.3 (static CFF) are
-   done. Next WOFF and WOFF2 (M2.4) and the export commands (M2.5, which also offer CFF). Four
+   done, and M2.4a (WOFF 1 and untransformed WOFF2, `crates/container`). Next M2.4b (the WOFF2
+   `glyf`/`loca` and `hmtx` transforms, WOFF2 opening) and the export commands (M2.5, which also
+   offer CFF and the containers). Four
    reader questions from M2.2 and the differences left against fontmake (plan › M2.3b) are open.
 2. **M3, Edit View drawing**, in parallel with 1 now that the model has settled: the `tools` crate,
    selection, the Draw tool, node editing, transforms, the renderer, `ui.pointer` and
@@ -102,7 +104,7 @@ on, so the engine track, where oracles prove correctness, goes first.
 - **Specification:** 24 inventory files (919 commands, 33 tools, 170 panels, 45 settings, 241
   parameters, 1,741 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 22
   behaviour notes (about 127,000 words), all in our own words.
-- **Workspace:** 13 library crates in enforced layers, two apps, `xtask`; about 43,800 lines of Rust.
+- **Workspace:** 15 library crates in enforced layers, two apps, `xtask`; about 52,800 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry (18 engine commands), atomic
@@ -179,6 +181,12 @@ on, so the engine track, where oracles prove correctness, goes first.
   metrics from the charstring bounds. Against fontmake over 331 corpus sources: 320 CFF tables
   decode to the same outlines, 195 are byte-identical. Every font built from the corpus (347
   OTF, 347 TTF) reads back in fontTools.
+- **Containers:** `crates/container` (standalone): WOFF 1 and WOFF2 with untransformed tables,
+  written and read with fontTools' table order, checksums, header fields and compression
+  settings. All 342 corpus fonts wrap and unwrap to the same tables; fontTools reads all 340
+  TTF and OTF wrappings back to its own tables; 19 WOFF2 files are byte-identical to fontTools'
+  and the rest differ only in the compressed streams. Transformed WOFF2 is refused for now.
+  `file.open` reads WOFF 1 through it.
 - **Oracle harness:** `crates/oracle` and `fontcraft-cli oracle`: FontCraft's build and fontc's
   or fontmake's (TrueType, or CFF from fontmake) of the same master, compared per table after
   normalisation (identical, equivalent, allowed with a reason, different, skipped), with
@@ -199,7 +207,7 @@ measured by what works (the parity table below and the measures in each mileston
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
-| M2 | Compile core: static TTF and OTF, oracle harness | 🟨 M2.0 to M2.3 done: the oracle harness, the staged pipeline, the core tables at fontc parity, static CFF compared with fontmake (`docs/plans/M2.md`); M2.4 next | 6 (1) |
+| M2 | Compile core: static TTF and OTF, oracle harness | 🟨 M2.0 to M2.3 done: the oracle harness, the staged pipeline, the core tables at fontc parity, static CFF compared with fontmake, and M2.4a (WOFF 1 and untransformed WOFF2 wrap and unwrap every corpus font table for table) (`docs/plans/M2.md`); M2.4b next | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
@@ -242,7 +250,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
 | Source formats | 6 | 14 | 5 | 55% | WOFF2 import; Glyphs-only data glyphsLib has no UFO key for; alternate layers' order and ids through a designspace, and alternate layers in a single UFO; STAT labels derived from instances; production names and mark widths from a glyph database; UFO 1; shape groups, gradients and shadows kept as stored values; right-to-left, vertical and contextual kerning in UFO; version conversion |
-| Compiling | 9 | 11 | 1 | 4% | measured against fontc (TrueType) and fontmake (CFF): core tables identical, equivalent or allow-listed in most sources; static CFF from the compiler, not yet from the export command; no containers, no WOFF2, no variable fonts, no features |
+| Compiling | 9 | 11 | 1 | 4% | measured against fontc (TrueType) and fontmake (CFF): core tables identical, equivalent or allow-listed in most sources; static CFF from the compiler, not yet from the export command; WOFF 1 and untransformed WOFF2 written by the container crate (not yet from a command), no WOFF2 transforms, no variable fonts, no features |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
 | Command-line tools | 8 | 42 | 4 | 1% | `commands`, `run`, `convert`, `info`, `tables list`, `glyphs list`, `oracle`; no dump, subset, instance, merge |
 | Quality checks | 3 | 33 | 0 | 0% | everything |

@@ -16,7 +16,8 @@ here. `cargo xtask assets` fails on an asset without a row.
 Rust dependencies (kurbo, write-fonts, read-fonts, skrifa, egui, eframe, serde, …) are fetched
 through crates.io under their own permissive licences (MIT and/or Apache-2.0 for the ones named
 here; their own dependencies also include BSD, ISC, Zlib, Unicode-3.0 and, on Windows, BSL-1.0 for
-clipboard-win and error-code). egui's default fonts,
+clipboard-win and error-code). The container crate uses brotli and brotli-decompressor
+(BSD-3-Clause and MIT, both licence texts required) and miniz_oxide (MIT, Zlib or Apache-2.0). egui's default fonts,
 compiled into the desktop app through the epaint_default_fonts crate, are Ubuntu Light (Ubuntu
 Font Licence 1.0), Hack (MIT and the Bitstream Vera licence), Noto Emoji (SIL Open Font License 1.1) and emoji-icon-font (MIT);
 their licence texts ship with that crate.
@@ -91,7 +92,11 @@ bundled, the file says so in its header and the project is listed here with its 
   encoders of misc/psCharStrings.py; the rounding of misc/roundTools.py; the charstring pen
   (pens/t2CharStringPen.py, Copyright (c) 2009 Type Supply LLC); and the glyph bounds of
   pens/boundsPen.py with calcCubicBounds and solveQuadratic of misc/bezierTools.py. The
-  cross-check script (crates/cff/crosscheck) records what ufo2ft (MIT) hands that pen.
+  cross-check script (crates/cff/crosscheck) records what ufo2ft (MIT) hands that pen. The
+  container crate (crates/container) ports the WOFF writer and reader of ttLib/sfnt.py with the
+  table reordering of ttLib/ttFont.py (sortedTagList and its order lists, reorderFontTables), and
+  from ttLib/woff2.py the WOFF2 writer and reader, the known-tag table and the UIntBase128 and
+  255UInt16 encodings.
 
   ufo2ft (https://github.com/googlefonts/ufo2ft), MIT License, Copyright (c) 2015-2016 Tal
   Leming, Ben Kiel, Cosimo Lupo and contributors. What the compiler puts into a CFF table and

@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M2.3b done (static CFF in the compiler; numbers in `docs/plans/M2.md` › M2.3)._
+_Updated: 2026-10-08, M2.4a done (WOFF 1 and untransformed WOFF2 in `crates/container`; numbers in `docs/plans/M2.md` › M2.4)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (475 tests; about 51,000 lines of Rust in 14 crates).
+- `cargo xtask ci` passes all nine steps (487 tests; about 52,800 lines of Rust in 15 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -21,10 +21,14 @@ staged pipeline), M2.2 (the core tables at fontc parity) and M2.3 (CFF: the `cff
 equivalent or allow-listed with a reason (`crates/oracle/allow.toml`). Against fontmake's CFF
 builds (`fontcraft-cli oracle --corpus --format otf`), 320 of 331 CFF tables decode to the same
 outlines and 195 are byte-identical; the rest follow from source reading or from fields where
-fontmake and fontc disagree, which are now allow-listed for fontmake with reasons. Next is M2.4
-(WOFF 1 and WOFF2 writing, WOFF2 reading in `crates/container`), then M2.5 (the export
-commands: `file.exportStatic` still refuses `outlines: "cff"`, and the CLI exports TrueType
-only). Open: four reader questions from M2.2 (plan › M2.2) and the differences left against
+fontmake and fontc disagree, which are now allow-listed for fontmake with reasons. M2.4a is done:
+the standalone `crates/container` writes and reads WOFF 1 and WOFF2 with untransformed tables,
+and `crates/decompile` reads WOFF 1 through it. Next is M2.4b (the WOFF2 `glyf`/`loca` and
+`hmtx` transforms, encode and decode, and WOFF2 opening in `crates/decompile`; the to-do list is
+in the plan › M2.4b), then M2.5 (the export commands: `file.exportStatic` still refuses
+`outlines: "cff"`, the CLI exports TrueType only, and no command writes WOFF yet). The
+cross-check against fontTools needs Python Brotli, which the fontmake environment lacks:
+`crates/container/crosscheck/crosscheck.py` has the venv recipe. Open: four reader questions from M2.2 (plan › M2.2) and the differences left against
 fontmake (plan › M2.3b: 9 axis-mapping sources where fontmake's master file has other advances,
 a master's vendor id and licence parameters, a bracket layer source).
 
@@ -178,3 +182,10 @@ Append one terse entry per session: what landed, numbers, what is still open.
   different; 347 OTF and 347 TTF read back by fontTools without error. Allow-list entries can
   name values (`ours`, `theirs`); fontmake/fontc disagreements allow-listed. fontc and round
   trips unchanged. 8 new tests. Export commands still TrueType only (M2.5).
+- **2026-10-08, M2.4a.** New standalone crate `crates/container`: WOFF 1 and untransformed WOFF2,
+  both directions, porting fontTools' sfnt.py and woff2.py choices (table order, checksums,
+  zlib 6, Brotli 11/22 font mode, DSIG dropped, head bit 11). Corpus round trip 342 of 342 for
+  both; fontTools reads all 340 TTF/OTF wrappings back to its own tables; byte identity WOFF 0
+  (miniz_oxide is not zlib), WOFF2 19, the rest equal apart from the compressed streams.
+  Transformed WOFF2 and collections refused with `Unsupported`. decompile's `woff.rs` moved
+  into the crate. 12 new tests. Round trips unchanged.

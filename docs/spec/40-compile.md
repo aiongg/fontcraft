@@ -342,6 +342,16 @@ validate and to measure stack depth, but it is a consumer, not a producer.
 - WOFF 1 encoder and decoder (zlib, optional metadata block).
 - Collection writer with table sharing.
 
+State (M2.4a, `crates/container`): WOFF 1 both ways, and WOFF2 both ways with the null transform
+on every table; the transforms are M2.4b, collections M12. Differences from fontTools, all
+checked with `crates/container/crosscheck`:
+
+| Difference | Reason |
+|---|---|
+| WOFF 1 zlib streams differ (0 of 340 files byte-identical; in 57 a table one implementation shrinks is left raw by the other) | `miniz_oxide` is not zlib. A C zlib cannot build for wasm; `zlib-rs` matched zlib on 104 of 720 sampled tables, not enough to be worth a second deflate crate. Headers, directories and inflated tables are identical in all 340 |
+| WOFF2 Brotli streams differ in 154 of 340 fonts | the `brotli` crate and the C library (1.0.9 to 1.2.0 give the same result) choose other encodings at quality 11. Headers, directories and decompressed streams are identical in all 340 |
+| fontTools' WOFF2 output has other `head` timestamps when the source's are below 0x7C259DC0 (208 corpus fonts, mostly test fonts with zero dates) | its `head` reader reads such times as Unix time and shifts them, and its WOFF2 writer recompiles `head` to set bit 11. A container should not change dates, so FontCraft keeps them |
+
 ### 3.5 Bitmap and SVG colour tables (M11)
 
 SVG document index; CBDT/CBLC index subtables and glyph bitmap formats. sbix has types but no

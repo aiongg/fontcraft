@@ -1,0 +1,22 @@
+[package]
+name = "fontcraft-container"
+description = "FontCraft font containers: WOFF and WOFF2 wrapping and unwrapping of sfnt fonts (L0, standalone)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+# zlib for WOFF 1 (MIT OR Zlib OR Apache-2.0); pure Rust, builds for wasm32.
+miniz_oxide = "0.8"
+# Brotli for WOFF2 (BSD-3-Clause AND MIT); pure Rust, builds for wasm32. The default `std`
+# feature only adds the standard allocator and the Read/Write adaptors.
+brotli = { version = "8", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+read-fonts.workspace = true

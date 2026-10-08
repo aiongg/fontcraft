@@ -12,8 +12,8 @@ workspace = true
 
 [dependencies]
 fontcraft-model.workspace = true
+fontcraft-container.workspace = true
 skrifa.workspace = true
-miniz_oxide = "0.8"
 thiserror.workspace = true
 
 [dev-dependencies]

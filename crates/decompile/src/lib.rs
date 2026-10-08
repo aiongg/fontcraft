@@ -13,9 +13,7 @@
 //! its header states and at most [`MAX_SFNT`], and nothing here panics.
 #![forbid(unsafe_code)]
 
-mod woff;
-
-pub use woff::{WoffTable, directory as woff_directory, to_sfnt as woff_to_sfnt};
+pub use fontcraft_container::woff::WoffTable;
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
@@ -34,7 +32,7 @@ use skrifa::raw::{FileRef, FontRef, TableProvider};
 use skrifa::string::StringId;
 
 /// Largest uncompressed font accepted, in bytes (WOFF data is inflated up to this).
-pub const MAX_SFNT: usize = 256 << 20;
+pub use fontcraft_container::MAX_SFNT;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecompileError {
@@ -46,6 +44,20 @@ pub enum DecompileError {
     NoSuchFace { face: u32 },
     #[error(transparent)]
     Model(#[from] fontcraft_model::ModelError),
+}
+
+fn container(e: fontcraft_container::Error) -> DecompileError {
+    DecompileError::Unreadable(e.to_string())
+}
+
+/// The table directory of a WOFF 1 file, in directory order.
+pub fn woff_directory(woff: &[u8]) -> Result<Vec<WoffTable>, DecompileError> {
+    fontcraft_container::woff::directory(woff).map_err(container)
+}
+
+/// The sfnt a WOFF 1 file wraps (`fontcraft_container::woff::decode`).
+pub fn woff_to_sfnt(woff: &[u8]) -> Result<Vec<u8>, DecompileError> {
+    fontcraft_container::woff::decode(woff).map(|u| u.sfnt).map_err(container)
 }
 
 /// A document read from a compiled font, and what was left out.
@@ -71,7 +83,7 @@ pub fn decompile(bytes: &[u8], face: Option<u32>) -> Result<Decompiled, Decompil
     let unwrapped;
     let bytes = match bytes.get(..4) {
         Some(b"wOFF") => {
-            unwrapped = woff::to_sfnt(bytes)?;
+            unwrapped = woff_to_sfnt(bytes)?;
             unwrapped.as_slice()
         }
         Some(b"wOF2") => return Err(DecompileError::Unreadable("WOFF2 is not supported yet (ROADMAP.md, M2)".into())),

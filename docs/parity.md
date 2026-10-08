@@ -41,7 +41,7 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0: Skeleton and vertical slice | 5 | 5 (100.0%) | 0 | 0 | 11 | 0 | 0 | 3 | 0 | 0 |
 | M1: Source model and file I/O (native, UFO, designspace, .glyphs, binary import) | 10 | 10 (100.0%) | 0 | 2 | 84 | 3 | 0 | 3 | 15 | 0 |
-| M2: Compile core: static TTF and OTF, oracle harness | 6 | 1 (16.7%) | 0 | 3 | 104 | 48 | 0 | 2 | 4 | 13 |
+| M2: Compile core: static TTF and OTF, oracle harness | 6 | 1 (16.7%) | 0 | 3 | 106 | 48 | 0 | 2 | 4 | 13 |
 | M3: Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 210 | 7 (3.3%) | 21 | 20 | 194 | 12 | 34 | 0 | 4 | 0 |
 | M4: Font View and glyph management | 57 | 6 (10.5%) | 0 | 24 | 143 | 1 | 0 | 0 | 0 | 0 |
 | M5: Spacing, kerning and text mode | 109 | 1 (0.9%) | 1 | 23 | 101 | 6 | 0 | 0 | 2 | 0 |
@@ -51,7 +51,7 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 | M9: Interpolation and variable fonts | 68 | 0 (0.0%) | 2 | 15 | 145 | 33 | 0 | 0 | 4 | 8 |
 | M10: Hinting (PostScript and TrueType) | 57 | 0 (0.0%) | 1 | 9 | 165 | 25 | 0 | 0 | 0 | 5 |
 | M11: Colour fonts and images | 50 | 0 (0.0%) | 3 | 11 | 91 | 11 | 2 | 0 | 1 | 5 |
-| M12: Command-line tool suite and quality checks | 71 | 0 (0.0%) | 0 | 2 | 44 | 0 | 263 | 61 | 6 | 15 |
+| M12: Command-line tool suite and quality checks | 71 | 0 (0.0%) | 0 | 2 | 42 | 0 | 263 | 61 | 6 | 15 |
 | M13: Plug-ins, scripting and automation depth | 79 | 0 (0.0%) | 4 | 17 | 74 | 1 | 1 | 1 | 10 | 0 |
 | M14: 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | 31 | 0 (0.0%) | 0 | 7 | 40 | 5 | 0 | 0 | 1 | 0 |
 
@@ -62,10 +62,10 @@ How each row is known. `handbook` and `docs` come from public documentation, `in
 | Status | Rows |
 |---|---:|
 | handbook | 2113 |
-| docs | 1056 |
+| docs | 1054 |
 | inferred | 376 |
 | memory | 33 |
-| observed | 45 |
+| observed | 47 |
 
 ## Live commands
 

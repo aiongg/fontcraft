@@ -22,7 +22,7 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
    L3   format · compile · decompile · io-glyphs · io-ufo · oracle · render · tables   (6 of 8 today)
    L2   pathops · interp · spacing · components · features · hinting · audit · plugins   (planned)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
-   L0   geom (kurbo)  ·  standalone format crates: plist, cff, ttinstr, container, glyphdata  (geom, plist, cff today)
+   L0   geom (kurbo)  ·  standalone format crates: plist, cff, ttinstr, container, glyphdata  (geom, plist, cff, container today)
 ```
 
 Everything a person does goes through `app.run(id, params)`, which is the same call the control
@@ -40,7 +40,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L0 alone | `plist` | today (OpenStep); XML in M1 | OpenStep and XML property lists, reading and writing, keeping spelling, key order and layout (for `.glyphs` and UFO) |
 | L0 alone | `glyphdata` | M4 | glyph name database: Unicode, category, script, case, production name; built from GlyphData, AGL and the UCD |
 | L0 alone | `cff` | today (M2.3a: static CFF writer) | CFF tables from plain data: DICTs, INDEXes, charsets, Type 2 charstrings with the reference's specialiser, width optimisation and FontBBox; byte-identical to fontTools on the cross-check. Later: subroutiniser, hints (M10), CFF2 (M9), CID-keyed fonts (M12). Not in any crate we can use |
-| L0 alone | `container` | M2/M12 | WOFF, WOFF2, collections: pack and unpack |
+| L0 alone | `container` | today (M2.4a: WOFF 1, untransformed WOFF2) | WOFF and WOFF2 wrapping and unwrapping of sfnt fonts, as fontTools writes them; `crates/decompile` reads WOFF through it. Later: the WOFF2 glyf/loca and hmtx transforms (M2.4b), collections (M12) |
 | L0 alone | `ttinstr` | M10 | TrueType instruction assembler and disassembler |
 | L1 | `model` | today (M0 subset) | the font source model, pure data |
 | L2 | `pathops` | M3 | overlap removal, booleans, offset, corner operations, clean-up (on linesweeper) |

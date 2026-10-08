@@ -1332,18 +1332,18 @@ status = "docs"
 [[behavior]]
 id = "compile.woff2Encoding"
 area = "compile"
-milestone = "M12"
-summary = "WOFF2 as fontTools writes it: glyf and loca are stored with the WOFF2 transform by default (the hmtx transform is available but optional), DSIG is always dropped, glyf is first normalised to 4-byte glyph padding with loca and indexToLocFormat updated, bit 11 of head.flags is set to mark lossless modification, checksums are recalculated, and the whole table stream is compressed with Brotli in font mode. No Rust crate in the reference folder encodes WOFF2, so the transform is ours and Brotli comes from a pure-Rust crate."
-ref = "fonttools Lib/fontTools/ttLib/woff2.py"
-status = "docs"
+milestone = "M2"
+summary = "WOFF2 as fontTools writes it: glyf and loca are stored with the WOFF2 transform by default (the hmtx transform is available but optional; an empty transform set stores every table untransformed, glyf and loca with transform version 3), DSIG is always dropped, bit 11 of head.flags is always set, even with no transform, and when glyf is transformed it is first normalised to 4-byte glyph padding with loca and indexToLocFormat updated. Table directory and data are sorted by tag, tables are concatenated without padding, checkSumAdjustment is computed for the sfnt laid out in tag order, and the whole table stream is one Brotli stream at quality 11, window 22, font mode; metadata uses text mode, and the private block starts on a 4-byte boundary. fontTools' head round trip also moves created and modified times below 0x7C259DC0 by that amount (it reads them as Unix time); FontCraft does not copy that. No Rust crate in the reference folder encodes WOFF2, so the transform is ours and Brotli comes from a pure-Rust crate."
+ref = "fonttools Lib/fontTools/ttLib/woff2.py; W3C WOFF 2.0; cross-check against fontTools 4.66.1 (crates/container/crosscheck, M2.4a: untransformed only)"
+status = "observed"
 
 [[behavior]]
 id = "compile.woffEncoding"
 area = "compile"
-milestone = "M12"
-summary = "WOFF 1.0 compresses each table separately with zlib; fontTools uses compression level 6 by default and can use Zopfli instead. The head table is always stored uncompressed, and any other table is stored raw when its compressed form is not smaller."
-ref = "fonttools Lib/fontTools/ttLib/sfnt.py (ZLIB_COMPRESSION_LEVEL, USE_ZOPFLI)"
-status = "docs"
+milestone = "M2"
+summary = "WOFF 1.0 compresses each table separately with zlib; fontTools uses compression level 6 by default and can use Zopfli instead. The head table is always stored uncompressed, and any other table is stored raw when its compressed form is not smaller. Table data follow fontTools' recommended order (head, hhea, maxp, OS/2, then the TrueType or CFF order list, the other tags sorted, DSIG last), the directory is sorted by tag, each table is padded to four bytes, checkSumAdjustment is computed for the sfnt the file unwraps to, the header version is head.fontRevision unless given, the metadata is compressed at level 6 and the private block starts on a 4-byte boundary. FontCraft's zlib (miniz_oxide) chooses other encodings of the same data than zlib, so the compressed bytes differ."
+ref = "fonttools Lib/fontTools/ttLib/sfnt.py (ZLIB_COMPRESSION_LEVEL, USE_ZOPFLI, SFNTWriter), ttLib/ttFont.py (sortedTagList, reorderFontTables); cross-check against fontTools 4.66.1 (crates/container/crosscheck, M2.4a)"
+status = "observed"
 
 [[behavior]]
 id = "compile.collectionSharing"
