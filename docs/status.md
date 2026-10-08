@@ -66,8 +66,6 @@ around them. None can lose data; most are about scale.
 |---|---|---|
 | The history list is copied for each command's result | `crates/engine` | M1 |
 | The menu tree is rebuilt every frame | `crates/ui-egui/src/menus.rs` | M3 |
-| A key in an `extra` map that collides with a known field is not rejected | `crates/model` | M1 |
-| `write_atomic` replaces a symlink with a file and does not keep the old file's mode | `crates/format` | M1 |
 | No command switches the active document; the same file can be opened twice | `crates/engine` | M1 |
 | `OS/2` Unicode ranges: only two bits are set | `crates/compile` | M2 |
 | The vendor-names scanner does not see through `concat!` or string escapes | `xtask/src/brands.rs` | when it matters |

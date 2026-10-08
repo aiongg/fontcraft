@@ -29,12 +29,13 @@ USAGE:
       Print the command catalogue as JSON (only commands whose id or label contains PATTERN).
 
   fontcraft-cli run [--in FILE] [--cmd ID [--params JSON]]... [--save [FILE]] [--export FILE]
-      Headless batch: open FILE (.fontcraft) or start a new font, run the commands in order and
+      Headless batch: open FILE (a source) or start a new font, run the commands in order and
       print one JSON result per line. Stops at the first command that fails. --save writes the
       document (to FILE, or back to the file it was opened from); --export compiles it to a font.
 
   fontcraft-cli convert IN OUT
-      Open IN (.fontcraft) and write OUT in the format its extension names (.ttf, .fontcraft).
+      Open IN (a source) and write OUT in the format its extension names (.ttf, .fontcraft,
+      .glyphs, .glyphspackage).
 
   fontcraft-cli info FILE
       Print a JSON summary of FILE: names, units per em, masters, glyph count.
@@ -189,8 +190,8 @@ fn convert(args: &[String]) -> Outcome {
     let extension = std::path::Path::new(output).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let result = match extension.as_str() {
         "ttf" => execute(&mut session, "file.exportStatic", &json!({"destination": output}))?,
-        "fontcraft" => execute(&mut session, "file.saveAs", &json!({"path": output}))?,
-        other => return Err(usage(format!("cannot write `.{other}` yet (writable: .ttf, .fontcraft; see ROADMAP.md)"))),
+        "fontcraft" | "glyphs" | "glyphspackage" => execute(&mut session, "file.saveAs", &json!({"path": output}))?,
+        other => return Err(usage(format!("cannot write `.{other}` yet (writable: .ttf, .fontcraft, .glyphs, .glyphspackage; see ROADMAP.md)"))),
     };
     out(&result.to_string())
 }

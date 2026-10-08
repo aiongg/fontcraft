@@ -17,6 +17,8 @@
 
 pub mod cmd;
 pub mod guard;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod io;
 pub mod params;
 
 use std::path::PathBuf;
@@ -45,6 +47,8 @@ pub enum EngineError {
     Format(#[from] fontcraft_format::FormatError),
     #[error(transparent)]
     Compile(#[from] fontcraft_compile::CompileError),
+    #[error(transparent)]
+    Glyphs(#[from] fontcraft_io_glyphs::GlyphsError),
     #[error("{0}")]
     Io(String),
     #[error("not supported yet: {0}")]
@@ -89,6 +93,10 @@ pub struct DocState {
     /// The font as it is on disk (for a new document: as it was created). Undoing back to it
     /// makes the document unmodified again.
     pub saved: Arc<Font>,
+    /// What the file on disk looked like when it was last read or written, so a save notices a
+    /// change made by something else in between.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub stamp: Option<io::Stamp>,
 }
 
 impl DocState {
@@ -163,7 +171,18 @@ impl Session {
             }
         };
         let font = Arc::new(font);
-        self.docs.push(DocState { saved: font.clone(), font, history: History::default(), path, title, revision: 0 });
+        #[cfg(not(target_arch = "wasm32"))]
+        let stamp = path.as_deref().and_then(io::stamp);
+        self.docs.push(DocState {
+            saved: font.clone(),
+            font,
+            history: History::default(),
+            path,
+            title,
+            revision: 0,
+            #[cfg(not(target_arch = "wasm32"))]
+            stamp,
+        });
         self.active = Some(self.docs.len() - 1);
     }
 

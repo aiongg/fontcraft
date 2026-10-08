@@ -13,7 +13,7 @@ _Last updated: 2026-10-07 (planning complete; M0 skeleton built, reviewed and pa
 | Planning: charter, rules, references, decisions | **done** for this stage (`docs/`) |
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,618 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, guard, CLI, control channel, MCP, UI shell, tests | **~35%** of what the siblings' "infrastructure" row covers |
-| Feature surface against the references (weighted, by behaviour, self-graded) | **~2%** |
+| Feature surface against the references (weighted, by behaviour, self-graded) | **~3%** |
 | Commands that exist (not: that behave like the reference) | **27 of 919** (`docs/parity.md`) |
 | Observed against the running reference app | **nothing** |
 
@@ -50,7 +50,7 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 |---|---|---|
 | **Breadth:** commands, tools and panels exist | ~3% | 27 of 919 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
-| **File interop** | ~2% | own format in and out; static TrueType out. No `.glyphs`, UFO, designspace, OTF/CFF, variable, WOFF; no import of compiled fonts |
+| **File interop** | ~15% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage` in and out (every reference-written corpus source saves back byte for byte); static TrueType out. No UFO, designspace, OTF/CFF, variable, WOFF; no import of compiled fonts; axes, instances, kerning and features are carried, not yet modelled |
 | **Compiler correctness** | unmeasured | 10 of 50 tables written, for one static flavour; read back by two independent readers; one code review's findings fixed (bounds, names, style linking); **no oracle comparison yet** (the harness is M2) |
 | **Agent automation** | ~40% | every existing command is reachable from CLI, control channel and MCP; no pointer injection, dialogs, screenshots, resources or prompts yet |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests); one dependency panic found and fenced; one adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, no corpus runs, and the known scaling limits in `docs/status.md` |
@@ -89,11 +89,12 @@ on, so the engine track, where oracles prove correctness, goes first.
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry (18 engine commands), atomic
   failure, the panic guard, the journal.
-- **Formats:** `.fontcraft` (versioned JSON, stable output, atomic writes). The `plist` crate
-  reads and writes the OpenStep property lists of `.glyphs` sources, keeping spelling and layout:
-  every corpus file the reference app saved (35 sources, versions 2 to 4) comes back byte for
-  byte; 215 of 274 `.glyphs` sources overall, the rest hand-edited test files. Not yet used by
-  any reader of the model.
+- **Formats:** `.fontcraft` version 2 (versioned JSON, stable output, atomic writes, upgrade from
+  version 1). `.glyphs` versions 2, 3 and 4 and `.glyphspackage`, read into the model and written
+  back: every corpus source the reference app saved comes back byte for byte (17 files and 17
+  packages, Oswald and Inter among them); unmodelled keys travel in `Extra` with their spelling.
+  `file.open` recognises sources by content; `file.save` keeps the format and version, rewrites
+  only changed package files, refuses to overwrite a file changed on disk, and reports losses.
 - **Compiler:** static TrueType from the first master, deterministic.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
@@ -153,14 +154,14 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | PostScript hinting | 3 | 27 | 0 | 0% | everything |
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
-| Source formats | 6 | 14 | 4 | 3% | own format only |
+| Source formats | 6 | 14 | 4 | 25% | UFO, designspace, compiled-font import; axes, instances, kerning, features carried untyped; version conversion |
 | Compiling | 9 | 11 | 1 | 2% | static TrueType core tables; no oracle comparison |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
 | Command-line tools | 8 | 42 | 2 | 1% | `commands` and a first `run`, `convert`, `info` |
 | Quality checks | 3 | 33 | 0 | 0% | everything |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
 | Agent surfaces | 4 | 11 | 1 | 25% | execute, list, inspect over three surfaces; no pointer, dialogs, screenshots, resources |
-| **Feature parity** | **117** | **919** | **27** | **~2%** | |
+| **Feature parity** | **117** | **919** | **27** | **~3%** | |
 
 ## Out of scope (by design or by law)
 

@@ -1,10 +1,13 @@
 //! File menu: new, open, save, close, export.
 //!
-//! Reading and writing files happens here only in native builds; on the web the shell hands bytes
-//! to [`crate::Session::add_document`] and takes them from [`save_bytes`] / [`export_ttf`].
+//! Reading and writing files happens here only in native builds (through [`crate::io`]); on the
+//! web the shell hands bytes to [`crate::Session::add_document`] and takes the compiled font from
+//! [`export_ttf`].
 
 use base64::Engine as _;
 use fontcraft_compile::{Compiled, Options};
+use std::sync::Arc;
+
 use fontcraft_model::Font;
 use serde_json::{Value, json};
 
@@ -28,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string} open a .fontcraft file as a new document (other source formats: see ROADMAP.md, M1) → {title, path, glyphs}",
+            "{path: string} open a font source as a new document: a .fontcraft file, a .glyphs file (format versions 2 to 4) or a .glyphspackage folder, recognised by content → {title, path, format, version?, glyphs}",
             always,
             open
         ),
@@ -37,7 +40,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save",
             ["File"],
             Some("Cmd+S"),
-            "{path?: string} write the document to its file, or to `path` and remember it; written atomically → {path, bytes}",
+            "{path?: string, force?: bool} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). Refuses when the file changed on disk since it was read, unless force is true. Single files are written atomically; a package rewrites only changed files → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save
         ),
@@ -46,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save As…",
             ["File"],
             Some("Cmd+Shift+S"),
-            "{path: string} write the document to a new file and make that its file → {path, bytes}",
+            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\", version?: 2|3|4, force?: bool} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document). losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save_as
         ),
@@ -85,26 +88,16 @@ fn new(s: &mut Session, p: &Value) -> Result<Value> {
 #[cfg(not(target_arch = "wasm32"))]
 fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("file.open", p)?;
-    use std::io::Read as _;
     let path = std::path::PathBuf::from(p.str("path")?);
-    let io = |what: &str, e: std::io::Error| EngineError::Io(format!("cannot {what} {}: {e}", path.display()));
-    // Only regular files: a pipe or a device would block or never end.
-    let meta = std::fs::metadata(&path).map_err(|e| io("open", e))?;
-    if !meta.is_file() {
-        return Err(EngineError::Io(format!("cannot open {}: it is not a regular file", path.display())));
-    }
-    let limit = fontcraft_format::MAX_BYTES as u64;
-    let mut bytes = Vec::new();
-    // Read at most one byte past the limit, whatever the file's size claims to be.
-    std::fs::File::open(&path).map_err(|e| io("open", e))?.take(limit + 1).read_to_end(&mut bytes).map_err(|e| io("read", e))?;
-    if bytes.len() as u64 > limit {
-        return Err(fontcraft_format::FormatError::TooLarge(bytes.len()).into());
-    }
-    let font = fontcraft_format::load(&bytes)?;
-    // `load` has checked the font.
+    let font = crate::io::open(&path)?;
+    // Every reader checks the font it returns.
     s.push_document(font, Some(path));
     let doc = s.doc()?;
-    Ok(json!({ "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "glyphs": doc.font.glyphs.len() }))
+    let format = crate::io::SaveFormat::of_source(doc.font.source.format).map(|f| f.name());
+    Ok(json!({
+        "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "format": format,
+        "version": doc.font.source.glyphs_version, "glyphs": doc.font.glyphs.len(),
+    }))
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -112,38 +105,85 @@ fn open(_: &mut Session, _: &Value) -> Result<Value> {
     Err(EngineError::Unsupported("opening a file by path in the browser; the web app passes the file's bytes".into()))
 }
 
-/// The active document as `.fontcraft` bytes.
-// On the web only the shell calls this, so the engine alone sees it as unused there.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub fn save_bytes(s: &Session) -> Result<Vec<u8>> {
-    Ok(fontcraft_format::save(s.font()?)?)
-}
-
 #[cfg(not(target_arch = "wasm32"))]
-fn write_document(s: &mut Session, path: std::path::PathBuf) -> Result<Value> {
-    let bytes = save_bytes(s)?;
-    fontcraft_format::write_atomic(&path, &bytes)?;
+fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format: crate::io::SaveFormat, version: Option<u32>) -> Result<Value> {
+    use crate::io::{self, SaveFormat};
+    let doc = s.doc()?;
+    // Another program may have changed the file since it was read or last written here.
+    if doc.path.as_deref() == Some(path.as_path()) && !p.bool_or("force", false)? {
+        let now = io::stamp(&path);
+        if now.is_some() && now != doc.stamp {
+            return Err(p.bad(format!("{} changed on disk since it was opened; save elsewhere, or pass force: true to overwrite", path.display())));
+        }
+    }
+    let mut font = Font::clone(&doc.font);
+    let version = match format {
+        SaveFormat::Native => None,
+        SaveFormat::Glyphs | SaveFormat::GlyphsPackage => {
+            let have = font.source.glyphs_version;
+            let want = version.or(have).unwrap_or(3);
+            if have.is_some_and(|h| h != want) {
+                return Err(EngineError::Unsupported(format!("converting between format versions ({} to {want})", have.unwrap_or_default())));
+            }
+            Some(want)
+        }
+    };
+    font.source.format = match format {
+        SaveFormat::Native => font.source.format,
+        SaveFormat::Glyphs => fontcraft_model::SourceFormat::Glyphs,
+        SaveFormat::GlyphsPackage => fontcraft_model::SourceFormat::GlyphsPackage,
+    };
+    if format != SaveFormat::Native {
+        font.source.glyphs_version = version;
+    }
+    let saved = io::save(&font, &path, format)?;
+    let font = Arc::new(font);
     let doc = s.doc_mut()?;
     doc.title = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| doc.title.clone());
-    doc.saved = doc.font.clone();
+    doc.font = font.clone();
+    doc.saved = font;
     doc.path = Some(path.clone());
-    Ok(json!({ "path": path.to_string_lossy(), "bytes": bytes.len() }))
+    doc.stamp = io::stamp(&path);
+    Ok(json!({
+        "path": path.to_string_lossy(), "format": format.name(), "version": version, "bytes": saved.bytes,
+        "filesWritten": saved.files_written, "filesRemoved": saved.files_removed, "losses": saved.losses,
+    }))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn save(s: &mut Session, p: &Value) -> Result<Value> {
+    use crate::io::SaveFormat;
     let p = Params::new("file.save", p)?;
-    let path = match p.opt_str("path")? {
-        Some(path) => std::path::PathBuf::from(path),
-        None => s.doc()?.path.clone().ok_or_else(|| p.bad("the document has never been saved: give a `path`"))?,
+    let (path, format) = match p.opt_str("path")? {
+        Some(path) => {
+            let path = std::path::PathBuf::from(path);
+            let format = SaveFormat::of_path(&path).unwrap_or(SaveFormat::Native);
+            (path, format)
+        }
+        None => {
+            let doc = s.doc()?;
+            let path = doc.path.clone().ok_or_else(|| p.bad("the document has never been saved: give a `path`"))?;
+            let format = SaveFormat::of_source(doc.font.source.format)
+                .ok_or_else(|| EngineError::Unsupported("saving in the format this document was opened from; use Save As".into()))?;
+            (path, format)
+        }
     };
-    write_document(s, path)
+    write_document(s, &p, path, format, None)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn save_as(s: &mut Session, p: &Value) -> Result<Value> {
+    use crate::io::SaveFormat;
     let p = Params::new("file.saveAs", p)?;
-    write_document(s, std::path::PathBuf::from(p.str("path")?))
+    let path = std::path::PathBuf::from(p.str("path")?);
+    let format = match p.opt_str("format")? {
+        Some(f) => {
+            SaveFormat::parse(f).ok_or_else(|| p.bad(format!("`format` must be \"fontcraft\", \"glyphs\" or \"glyphspackage\", got \"{f}\"")))?
+        }
+        None => SaveFormat::of_path(&path).ok_or_else(|| p.bad("give a `format`, or a path ending in .fontcraft, .glyphs or .glyphspackage"))?,
+    };
+    let version = p.opt_int("version", 2, 4)?.map(|v| v as u32);
+    write_document(s, &p, path, format, version)
 }
 
 #[cfg(target_arch = "wasm32")]
