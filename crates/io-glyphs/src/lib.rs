@@ -16,8 +16,8 @@
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Anchor, Component, Extra, Family, Font, Glyph, GlyphTable, KernFirst, KernGroups, KernTable, Kerning, Layer, Master, MasterKerning, MetricDef,
-    MetricValue, ModelError, Node, NodeKind, Path, RawShape, Shape, Source, SourceFormat, Transform,
+    Anchor, Axis, Component, Extra, Family, Font, Glyph, GlyphTable, Instance, KernFirst, KernGroups, KernTable, Kerning, Layer, Master,
+    MasterKerning, MetricDef, MetricValue, ModelError, Node, NodeKind, Path, RawShape, Shape, Source, SourceFormat, Transform,
 };
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
@@ -177,6 +177,8 @@ fn read_font(mut root: Dict) -> Result<Font> {
     let units_per_em = as_u16(&take(&mut root, "unitsPerEm").ok_or_else(|| bad("the file", "no unitsPerEm"))?, "unitsPerEm")?;
     let version_major = take(&mut root, "versionMajor").map(|v| as_u16(&v, "versionMajor")).transpose()?.unwrap_or(0);
     let version_minor = take(&mut root, "versionMinor").map(|v| as_u16(&v, "versionMinor")).transpose()?.unwrap_or(0);
+    let axes = take_typed_list(&mut root, "axes", read_axis);
+    let instances = take_typed_list(&mut root, "instances", read_instance);
     let metrics = match take(&mut root, "metrics") {
         Some(v) => as_items(v, "metrics")?.into_iter().enumerate().map(|(i, m)| read_metric(m, &format!("metrics[{i}]"))).collect::<Result<_>>()?,
         None => Vec::new(),
@@ -206,6 +208,8 @@ fn read_font(mut root: Dict) -> Result<Font> {
         units_per_em,
         version_major,
         version_minor,
+        axes: Arc::new(axes),
+        instances: Arc::new(instances),
         metrics: Arc::new(metrics),
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
@@ -281,6 +285,78 @@ fn opt_string(d: &mut Dict, key: &str, at: &str) -> Result<Option<String>> {
     take(d, key).map(|v| as_string(v, &format!("{at}.{key}"))).transpose()
 }
 
+/// The items of the list under `key`, when every one of them reads as a `T`; otherwise the list
+/// stays in `d` as written and the result is empty.
+fn take_typed_list<T>(d: &mut Dict, key: &str, read: fn(&Value) -> Option<T>) -> Vec<T> {
+    let Some(Value::Array(a)) = d.get(key) else { return Vec::new() };
+    match a.items.iter().map(read).collect::<Option<Vec<T>>>() {
+        Some(items) => {
+            take(d, key);
+            items
+        }
+        None => Vec::new(),
+    }
+}
+
+/// A list of numbers, such as `axesValues`.
+fn numbers(v: &Value) -> Option<Vec<f64>> {
+    v.as_array()?.items.iter().map(|n| n.as_num().map(Num::as_f64)).collect()
+}
+
+fn read_axis(v: &Value) -> Option<Axis> {
+    let mut d = v.as_dict()?.clone();
+    let name = take(&mut d, "name")?.as_str()?.to_string();
+    let tag = take(&mut d, "tag")?.as_str()?.to_string();
+    let hidden = match take(&mut d, "hidden") {
+        Some(h) => as_bool01(&h, "hidden").ok()?,
+        None => false,
+    };
+    Some(Axis { name, tag, hidden, extra: into_extra(d) })
+}
+
+fn read_instance(v: &Value) -> Option<Instance> {
+    let mut d = v.as_dict()?.clone();
+    let name = match take(&mut d, "name") {
+        Some(n) => n.as_str()?.to_string(),
+        None => String::new(),
+    };
+    let location = match take(&mut d, "axesValues") {
+        Some(a) => numbers(&a)?,
+        None => Vec::new(),
+    };
+    let exports = match take(&mut d, "exports") {
+        Some(x) => as_bool01(&x, "exports").ok()?,
+        None => true,
+    };
+    Some(Instance { name, location, exports, extra: into_extra(d) })
+}
+
+fn write_axis(a: &Axis) -> Value {
+    let mut e = vec![("name".into(), string(&a.name)), ("tag".into(), string(&a.tag))];
+    if a.hidden {
+        e.push(("hidden".into(), int(1)));
+    }
+    Value::Dict(finish(e, &a.extra))
+}
+
+fn write_numbers(n: &[f64], at: &str) -> Result<Value> {
+    Ok(list(n.iter().map(|v| num(*v, at)).collect::<Result<_>>()?))
+}
+
+fn write_instance(i: &Instance) -> Result<Value> {
+    let mut e = Vec::new();
+    if !i.name.is_empty() {
+        e.push(("name".into(), string(&i.name)));
+    }
+    if !i.location.is_empty() {
+        e.push(("axesValues".into(), write_numbers(&i.location, "instance")?));
+    }
+    if !i.exports {
+        e.push(("exports".into(), int(0)));
+    }
+    Ok(Value::Dict(finish(e, &i.extra)))
+}
+
 fn read_metric(v: Value, at: &str) -> Result<MetricDef> {
     let mut d = as_dict(v, at)?;
     let kind = opt_string(&mut d, "type", at)?.unwrap_or_default();
@@ -293,6 +369,13 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
     let mut d = as_dict(v, at)?;
     let id = opt_string(&mut d, "id", at)?.ok_or_else(|| bad(at, "a master has no id"))?;
     let name = opt_string(&mut d, "name", at)?.unwrap_or_default();
+    let mut location = Vec::new();
+    if let Some(v) = take(&mut d, "axesValues") {
+        match numbers(&v) {
+            Some(n) => location = n,
+            None => d.entries.push(("axesValues".into(), v)),
+        }
+    }
     // Metric values become fields only when every entry is a plain `{over, pos}`; anything else
     // stays as written.
     let mut metric_values = Vec::new();
@@ -302,7 +385,7 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
             None => d.entries.push(("metricValues".into(), values)),
         }
     }
-    Ok(Master { id, name, metric_values, extra: into_extra(d) })
+    Ok(Master { id, name, location, metric_values, extra: into_extra(d) })
 }
 
 fn plain_metric_values(v: &Value) -> Option<Vec<MetricValue>> {
@@ -557,6 +640,12 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     if !font.metrics.is_empty() {
         e.push(("metrics".into(), list(font.metrics.iter().map(write_metric).collect())));
     }
+    if !font.axes.is_empty() {
+        e.push(("axes".into(), list(font.axes.iter().map(write_axis).collect())));
+    }
+    if !font.instances.is_empty() {
+        e.push(("instances".into(), list(font.instances.iter().map(write_instance).collect::<Result<_>>()?)));
+    }
     e.push(("fontMaster".into(), list(font.masters.iter().map(write_master).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g).map(Value::Dict)).collect::<Result<_>>()?)));
     for (key, table) in [("kerningLTR", &font.kerning.ltr), ("kerningRTL", &font.kerning.rtl), ("kerningVertical", &font.kerning.vertical)] {
@@ -585,6 +674,9 @@ fn write_master(m: &Master) -> Result<Value> {
     let mut e = vec![("id".into(), string(&m.id))];
     if !m.name.is_empty() {
         e.push(("name".into(), string(&m.name)));
+    }
+    if !m.location.is_empty() {
+        e.push(("axesValues".into(), write_numbers(&m.location, "axesValues")?));
     }
     if !m.metric_values.is_empty() {
         let values = m

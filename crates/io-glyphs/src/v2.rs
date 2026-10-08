@@ -190,6 +190,8 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
         units_per_em,
         version_major,
         version_minor,
+        axes: Arc::default(),
+        instances: Arc::default(),
         metrics: Arc::new(KINDS.iter().map(|k| MetricDef::new(k)).collect()),
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
@@ -233,7 +235,7 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
     if !leftover.is_empty() {
         d.entries.push(("alignmentZones".into(), Value::Array(Array { items: leftover, layout: Layout::Multiline })));
     }
-    Ok(Master { id, name: String::new(), metric_values: values, extra: into_extra(d) })
+    Ok(Master { id, name: String::new(), location: Vec::new(), metric_values: values, extra: into_extra(d) })
 }
 
 fn hex_code_points(v: &Value) -> Option<Vec<u32>> {

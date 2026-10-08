@@ -83,11 +83,50 @@ pub struct MetricValue {
     pub over: f64,
 }
 
+/// A design axis of the family (weight, width…).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Axis {
+    pub name: String,
+    /// The OpenType axis tag. A source may write a longer one, whose first four characters are
+    /// the exported tag.
+    pub tag: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
+    #[serde(default, skip_serializing_if = "Extra::is_empty")]
+    pub extra: Extra,
+}
+
+/// A named instance: a static font to export, or another export setting.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Instance {
+    /// The style name (may be empty: format version 4 keeps it among the instance's properties).
+    #[serde(default)]
+    pub name: String,
+    /// Design-space coordinates, parallel to [`Font::axes`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub location: Vec<f64>,
+    /// Whether the instance is exported.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub exports: bool,
+    #[serde(default, skip_serializing_if = "Extra::is_empty")]
+    pub extra: Extra,
+}
+
+fn yes() -> bool {
+    true
+}
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
 /// One design of the family (a weight, a width…).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Master {
     pub id: String,
     pub name: String,
+    /// Design-space coordinates, parallel to [`Font::axes`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub location: Vec<f64>,
     /// Parallel to [`Font::metrics`]; may be shorter, and a missing value is zero.
     #[serde(default, rename = "metricValues", skip_serializing_if = "Vec::is_empty")]
     pub metric_values: Vec<MetricValue>,
@@ -109,9 +148,13 @@ pub struct Font {
     pub version_major: u16,
     #[serde(default)]
     pub version_minor: u16,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub axes: Arc<Vec<Axis>>,
     #[serde(default)]
     pub metrics: Arc<Vec<MetricDef>>,
     pub masters: Arc<Vec<Master>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub instances: Arc<Vec<Instance>>,
     /// In glyph order.
     pub glyphs: GlyphTable,
     #[serde(default, skip_serializing_if = "Kerning::is_empty")]
@@ -308,6 +351,7 @@ impl Font {
         let master = Master {
             id: master_id.clone(),
             name: "Regular".into(),
+            location: Vec::new(),
             metric_values: values.iter().zip(overs).map(|(&pos, over)| MetricValue { pos, over }).collect(),
             extra: Extra::new(),
         };
@@ -337,8 +381,10 @@ impl Font {
             units_per_em: 1000,
             version_major: 1,
             version_minor: 0,
+            axes: Arc::default(),
             metrics: Arc::new(defs.iter().map(|k| MetricDef::new(k)).collect()),
             masters: Arc::new(vec![master]),
+            instances: Arc::default(),
             glyphs: GlyphTable::from_glyphs(glyphs),
             kerning: Arc::default(),
             files: Arc::default(),
@@ -604,6 +650,8 @@ impl Font {
             && arc_eq(&self.extra, &before.extra)
             && arc_eq(&self.files, &before.files)
             && arc_eq(&self.kerning, &before.kerning)
+            && arc_eq(&self.axes, &before.axes)
+            && arc_eq(&self.instances, &before.instances)
             && (Arc::ptr_eq(&self.glyphs.order, &before.glyphs.order)
                 || self.glyphs.len() == before.glyphs.len() && self.glyphs.iter().zip(before.glyphs.iter()).all(|(a, b)| arc_eq(a, b)))
     }

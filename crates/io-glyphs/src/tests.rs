@@ -98,6 +98,8 @@ fn a_version_3_file_round_trips_through_the_model() {
     assert_eq!(font.source.glyphs_version, Some(3));
     let m = font.default_master().unwrap();
     assert_eq!(font.metric_pos(m, fontcraft_model::metric::ASCENDER, 0.0), 800.0);
+    assert_eq!((font.axes.len(), font.axes[0].tag.as_str(), m.location.clone()), (1, "wght", vec![400.0]));
+    assert!(font.extra.get(Family::Glyphs, "axes").is_none(), "typed, not carried");
     let a = font.glyph("A").unwrap();
     assert_eq!(a.unicodes, [65]);
     assert_eq!(a.layers.len(), 2);
