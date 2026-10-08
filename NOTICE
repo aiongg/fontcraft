@@ -33,7 +33,9 @@ bundled, the file says so in its header and the project is listed here with its 
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data
-  formatting, empty-container forms and line wrapping of base64.
+  formatting, empty-container forms and line wrapping of base64. The GLIF writer follows the
+  output rules of its glifLib (crates/io-ufo/src/glif.rs: element and attribute order, number
+  formatting), and crates/io-ufo/src/names.rs ports its user-name-to-file-name rule.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

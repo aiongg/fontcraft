@@ -125,7 +125,7 @@ pub fn write(doc: &Document) -> String {
     }
     let mut plist = doc.plist.clone();
     plist.set_self_closing(false);
-    plist.write_start(&mut out);
+    let _ = plist.write_start(&mut out);
     out.push_str(&doc.before);
     write_value(&mut out, &doc.root, &doc.indent, 1);
     out.push_str(&doc.after);

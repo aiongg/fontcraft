@@ -795,6 +795,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-io-ufo"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-model",
+ "fontcraft-plist",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fontcraft-mcp"
 version = "0.0.1"
 dependencies = [

@@ -1,0 +1,16 @@
+[package]
+name = "fontcraft-io-ufo"
+description = "FontCraft reader and writer for UFO 2 and 3 and designspace sources, in the layout fontTools writes (L3)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-model.workspace = true
+fontcraft-plist.workspace = true
+thiserror.workspace = true

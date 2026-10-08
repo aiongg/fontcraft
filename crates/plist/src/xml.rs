@@ -171,6 +171,18 @@ impl Element {
         Some(self.attrs.remove(i).value)
     }
 
+    /// The source text of the start tag, when it was not the canonical rendering.
+    pub fn start_source(&self) -> Option<&str> {
+        self.start_raw.as_deref()
+    }
+
+    /// Makes the element write `source` as its start tag. The caller vouches that `source` is a
+    /// start tag of this element with the same meaning (see [`same_attributes`]); it applies only
+    /// while the attributes stay as they are.
+    pub fn set_start_source(&mut self, source: &str) {
+        self.start_raw = Some(source.into());
+    }
+
     /// Whether an element without children is written `<name/>` rather than `<name></name>`.
     pub fn self_closing(&self) -> bool {
         self.self_closing
@@ -236,8 +248,7 @@ impl Element {
 
     /// Writes the element as it was read (or canonically, where it was built or changed).
     pub fn write(&self, out: &mut String) {
-        self.write_start(out);
-        if self.children.is_empty() && self.self_closing {
+        if self.write_start(out) {
             return;
         }
         for n in &self.children {
@@ -252,8 +263,7 @@ impl Element {
     /// it is. Whitespace text already among the children is written as it is too, so call this on
     /// a built tree or after [`Element::strip_layout`].
     pub fn write_pretty(&self, out: &mut String, unit: &str, level: usize) {
-        self.write_start(out);
-        if self.children.is_empty() && self.self_closing {
+        if self.write_start(out) {
             return;
         }
         let format = !self.children.is_empty() && !self.children.iter().any(|n| matches!(n, Node::Text(_) | Node::CData(_)));
@@ -273,24 +283,46 @@ impl Element {
         self.write_end(out);
     }
 
-    pub(crate) fn write_start(&self, out: &mut String) {
+    /// Writes the start tag; `true` when it closed the element (`<name/>`).
+    pub(crate) fn write_start(&self, out: &mut String) -> bool {
         // A source tag that closed itself does not fit once children were added.
         if let Some(raw) = &self.start_raw
-            && !(self.self_closing && !self.children.is_empty())
+            && !(raw.ends_with("/>") && !self.children.is_empty())
         {
             out.push_str(raw);
-            return;
+            return raw.ends_with("/>");
         }
+        let empty = self.children.is_empty() && self.self_closing;
+        out.push_str(&self.canonical_start_tag(empty));
+        empty
+    }
+
+    /// The start tag as this module writes it canonically, closing the element when `empty`.
+    pub fn canonical_start_tag(&self, empty: bool) -> String {
+        let mut out = String::new();
         out.push('<');
         out.push_str(&self.name);
         for a in &self.attrs {
             out.push(' ');
             out.push_str(&a.name);
             out.push_str("=\"");
-            escape_attr(out, &a.value);
+            escape_attr(&mut out, &a.value);
             out.push('"');
         }
-        out.push_str(if self.children.is_empty() && self.self_closing { "/>" } else { ">" });
+        out.push_str(if empty { "/>" } else { ">" });
+        out
+    }
+
+    /// The start tag as it will be written: the kept source, or the canonical tag.
+    pub fn start_tag_text(&self) -> String {
+        let mut out = String::new();
+        self.write_start(&mut out);
+        out
+    }
+
+    /// Whether the element is written closed (`<name/>`).
+    pub fn writes_empty(&self) -> bool {
+        self.start_tag_text().ends_with("/>")
     }
 
     pub(crate) fn write_end(&self, out: &mut String) {
@@ -306,14 +338,7 @@ impl Element {
 
     /// The canonical start tag, for telling whether a source tag needs to be kept.
     fn canonical_start(&self) -> String {
-        let mut s = String::new();
-        let me = Element { name: self.name.clone(), attrs: self.attrs.clone(), self_closing: self.self_closing, ..Element::new("") };
-        me.write_start(&mut s);
-        if !self.children.is_empty() && s.ends_with("/>") {
-            s.truncate(s.len() - 2);
-            s.push('>');
-        }
-        s
+        self.canonical_start_tag(self.children.is_empty() && self.self_closing)
     }
 }
 
@@ -481,6 +506,39 @@ pub fn parse(text: &str) -> Result<Document, Error> {
         return Err(p.err("unexpected content after the root element"));
     }
     Ok(Document { bom, prolog, root, epilog })
+}
+
+/// Parses a start tag on its own (`<a b="1">` or `<a b="1"/>`), as kept by
+/// [`Element::start_source`]. The element has no children.
+pub fn parse_start_tag(text: &str) -> Result<Element, Error> {
+    let mut p = Parser { text, pos: 0 };
+    let name_end = {
+        p.expect("<")?;
+        p.name()?;
+        p.pos
+    };
+    let name = text.get(1..name_end).unwrap_or("");
+    let closed = if text.trim_end().ends_with("/>") { text.to_string() } else { format!("{text}</{name}>") };
+    let mut el = parse_element(&closed)?;
+    el.children.clear();
+    el.end_raw = None;
+    Ok(el)
+}
+
+/// Whether two elements have the same name and the same attributes in any order, where values
+/// that both read as numbers count as the same when the numbers are equal (`100` and `100.0`),
+/// and `hex` values when they are the same hexadecimal number (`00e9` and `00E9`).
+pub fn same_attributes(a: &Element, b: &Element) -> bool {
+    if a.name != b.name || a.attrs.len() != b.attrs.len() {
+        return false;
+    }
+    a.attrs.iter().all(|x| {
+        b.attr(&x.name).is_some_and(|v| {
+            v == x.value
+                || matches!((v.trim().parse::<f64>(), x.value.trim().parse::<f64>()), (Ok(p), Ok(q)) if p == q)
+                || x.name == "hex" && matches!((u32::from_str_radix(v, 16), u32::from_str_radix(&x.value, 16)), (Ok(p), Ok(q)) if p == q)
+        })
+    })
 }
 
 /// Parses a fragment that is one element, with nothing around it but whitespace. For elements
@@ -815,6 +873,17 @@ mod tests {
         let mut out = String::new();
         el.write_pretty(&mut out, "  ", 1);
         assert_eq!(out, "<a>\n    <b>\n      <c/>\n    </b>\n    <d>text</d>\n  </a>");
+    }
+
+    #[test]
+    fn start_tags_parse_and_compare_by_meaning() {
+        let a = parse_start_tag("<point y='5' x=\"100.0\" type=\"line\"/>").unwrap();
+        let b = Element::new("point").with_attr("x", "100").with_attr("y", "5").with_attr("type", "line");
+        assert!(same_attributes(&a, &b));
+        assert!(!same_attributes(&a, &b.clone().with_attr("x", "101")));
+        let u = parse_start_tag("<unicode hex=\"00e9\">").unwrap();
+        assert!(same_attributes(&u, &Element::new("unicode").with_attr("hex", "00E9")));
+        assert!(parse_start_tag("<a b=>").is_err());
     }
 
     #[test]
