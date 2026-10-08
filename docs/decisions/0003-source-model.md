@@ -23,8 +23,13 @@ directory of glyph sets; node types, coordinate precision, where instance names 
 - **Our own `.glyphs` reader and writer** on our own property-list crate. The existing Rust reader
   is read-only, refuses version 4 and normalises the document on load; no Rust writer is known to
   be faithful. This is M1 work and on the critical path (decision 0002).
-- **norad for UFO and designspace**, with our own code where it falls short: it rejects unknown
-  GLIF elements, does not write UFO 2, and replaces the folder on save.
+- **Our own UFO and designspace reader and writer** (amended 2026-10-08, owner's answer to
+  question 11 of the M1 plan), on the XML half of our `plist` crate and an XML tokenizer, written
+  in the layout fontTools ufoLib and designspaceLib produce. norad stays in the tests as a second
+  reader of what we write. A spike found that norad writes no corpus UFO or designspace file back
+  unchanged (0 of 140 UFOs, 0 of 112 designspace files; `docs/plans/M1.md` § 8.2): its layout is
+  fixed and differs from ufoLib's, it rejects unknown GLIF elements, drops comments, does not write
+  UFO 2, and replaces the folder on save.
 - **The compiler reads a resolved projection** of the model (instances applied, parameters
   merged, components and alignment computed), not the editable model itself.
 
@@ -33,6 +38,9 @@ components, anchors, `extra` as a flat map). The full struct outline is in
 `docs/spec/30-source-formats.md` § Recommended model; M1 grows the skeleton into it.
 
 ## Costs
+
+- Our own UFO layer is more code than norad: GLIF, designspace, UFO 2 up- and down-conversion and
+  UFOZ, each with limits and hostile-input tests.
 
 - A UFO-native user sees a merged document; saving back to UFO must reproduce their file layout,
   including per-master differences the merged model has to carry in `extra`.

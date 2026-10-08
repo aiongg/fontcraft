@@ -55,7 +55,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L3 | `compile` | today (M0 slice) | model → OpenType binary |
 | L3 | `decompile` | M1 | OpenType binary → model, for opening compiled fonts |
 | L3 | `io-glyphs` | M1 | `.glyphs` 2, 3, 4 and `.glyphspackage`, reading and writing, lossless |
-| L3 | `io-ufo` | M1 | UFO and designspace, reading and writing (on norad where it suffices) |
+| L3 | `io-ufo` | M1 | UFO and designspace, reading and writing, lossless |
 | L3 | `tables` | M1/M12 | dump, table edit, subset, merge, instance: the engine behind the CLI tools |
 | L3 | `render` | M3 | glyph and text rasterising for the canvas, previews, proofs, headless screenshots |
 | L4 | `tools` | M3 | pointer tools: events in, commands and overlays out |
@@ -200,8 +200,9 @@ source model
 - **`.glyphs` 2, 3 and 4 and `.glyphspackage`:** our own reader and writer, on our `plist` crate.
   No Rust crate writes the format, and the one that reads it is lossy by design
   (`docs/spec/30-source-formats.md` § 4). Round trips are byte-exact where the format allows.
-- **UFO 2 and 3, designspace 4 and 5:** on norad, with our own handling where it falls short
-  (unknown GLIF elements, UFO 2 writing, in-place saves).
+- **UFO 2 and 3, designspace 4 and 5:** our own reader and writer, in the layout fontTools
+  writes; norad reads our output in tests (decision 0003). Round trips are byte-exact for files
+  ufoLib and designspaceLib wrote.
 - **Compiled fonts** open for editing through `decompile` and are written by `compile`.
 - Everything else (`spec/inventory/30-formats.toml`, 49 rows) is import or export around these.
 

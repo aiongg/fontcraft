@@ -4,37 +4,41 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-07 (planning complete; M0 skeleton built, reviewed and passing its gate)._
+_Last updated: 2026-10-08 (M1 done except UFO and designspace; M2 plan accepted)._
 
 ## Where we are
 
 | Dimension | Status |
 |---|---|
 | Planning: charter, rules, references, decisions | **done** for this stage (`docs/`) |
-| Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,618 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
+| Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,621 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, guard, CLI, control channel, MCP, UI shell, tests | **~35%** of what the siblings' "infrastructure" row covers |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~3%** |
-| Commands that exist (not: that behave like the reference) | **27 of 919** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **31 of 920** (`docs/parity.md`) |
 | Observed against the running reference app | **nothing** |
 
-## Honest assessment (2026-10-07)
+## Honest assessment (2026-10-08)
 
-**In one line:** the project is specified and has a working skeleton; it is not yet a font editor.
+**In one line:** the project reads and writes the primary reference's sources without loss and opens compiled fonts; it is not yet a font editor.
 
-**What is real.** A new font can be created, glyphs added, removed and encoded, outlines added
-from node lists, widths and font info set, everything undone and redone, the document saved to
-and opened from its own format, and a static TrueType font exported that fonttools and skrifa
-read back correctly. All of that works headless (`fontcraft-cli run`), over MCP, over the control
+**What is real.** `.glyphs` files of versions 2, 3 and 4 and `.glyphspackage` folders open and
+save back byte for byte (every corpus source the reference app wrote, Inter and Oswald among
+them), and either form saves as the other. Compiled TrueType, CFF, collection and WOFF 1 fonts
+open view-only (all 342 corpus fonts). The native `.fontcraft` format holds everything a `.glyphs`
+source holds. A new font can be created, glyphs added, removed and encoded, outlines added from
+node lists, widths and font info set, everything undone and redone, several edits batched into
+one undo step, and a static TrueType font exported that fonttools and skrifa read back correctly. All of that works headless (`fontcraft-cli run`), over MCP, over the control
 channel into the running window. From the window's menus only the commands that need no
 parameters work (New, Close, Undo, Redo, New Glyph, the View and Window toggles): there are no
-dialogs yet. Font View and Edit View draw. 78 tests pass, including a sweep that runs every engine
+dialogs yet. Font View and Edit View draw. 151 tests pass, including a sweep that runs every engine
 command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
 **What is not.** There is no drawing with the pointer, no selection of nodes, no path operations,
-no kerning, no components beyond flattening at export, no features, no variable fonts, no CFF, no
-hinting, no `.glyphs` or UFO support, no opening of compiled fonts, no screenshots over the control
-channel, no web app, no packaging. Edit View shows a glyph; it does not edit one.
+no kerning editing, no components beyond flattening at export, no feature compilation, no
+variable fonts, no CFF export, no hinting, no UFO or designspace support (M1.4, next), no WOFF2,
+no screenshots over the control channel, no web app, no packaging. Kerning, features and
+instances are read and written, not yet edited or compiled. Edit View shows a glyph; it does not edit one.
 
 **How much to trust the inventory.** It was compiled from public documentation in one day, each
 source read once. 2,113 rows come from the primary reference's handbook, 1,097 from other public
@@ -48,7 +52,7 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~3% | 27 of 919 commands; 0 of 33 tools; 2 of 170 panels as stubs |
+| **Breadth:** commands, tools and panels exist | ~3% | 31 of 920 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
 | **File interop** | ~20% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage` in and out (every reference-written corpus source saves back byte for byte); compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. No UFO, designspace, OTF/CFF export, variable, WOFF2 |
 | **Compiler correctness** | unmeasured | 10 of 50 tables written, for one static flavour; read back by two independent readers; one code review's findings fixed (bounds, names, style linking); **no oracle comparison yet** (the harness is M2) |
@@ -60,12 +64,12 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 ### What to build next (in priority order)
 
-1. **M1, the source model and the formats**: grow the model to the full outline of
-   `docs/spec/30-source-formats.md`; the `plist` crate; `.glyphs` 2/3/4 and package reading and
-   writing with exact round trips; UFO and designspace through norad; opening compiled fonts. This
-   unlocks every oracle and every real test font. Start here.
-2. **M2, the compile core and the oracle harness**: the remaining static tables, the `cff` crate,
-   `fontcraft-cli oracle`, and a first corpus-wide comparison with fontc and fontmake. From this
+1. **M1.4, UFO and designspace**: the last M1 package. Our own reader and writer in the layout
+   fontTools writes, with norad as a second reader in tests (decision 0003); the XML half of the
+   `plist` crate; UFO 2 and UFOZ. Next.
+2. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
+   remaining static tables, the `cff` crate, WOFF and WOFF2, `fontcraft-cli oracle`, and a first
+   corpus-wide comparison with fontc and fontmake. From this
    point compiler correctness is a number, not an opinion.
 3. **M3, Edit View drawing**, in parallel with 1 and 2 once the model settles: the `tools` crate,
    selection, the Draw tool, node editing, transforms, the renderer, `ui.pointer` and
@@ -113,8 +117,8 @@ measured by what works (the parity table below and the measures in each mileston
 | # | Milestone | Status | Commands (live) |
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 in progress (M1.0 done, M1.1 OpenStep done) | 10 (5) |
-| M2 | Compile core: static TTF and OTF, oracle harness | ⬜ | 6 (1) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 in progress: done except M1.4 (UFO, designspace) | 10 (9) |
+| M2 | Compile core: static TTF and OTF, oracle harness | ⬜ plan accepted | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
@@ -124,12 +128,12 @@ measured by what works (the parity table below and the measures in each mileston
 | M9 | Interpolation and variable fonts | ⬜ | 68 (0) |
 | M10 | Hinting (PostScript and TrueType) | ⬜ | 57 (0) |
 | M11 | Colour fonts and images | ⬜ | 50 (0) |
-| M12 | Command-line tool suite (60 of the 70 subcommand rows) and quality checks (263 of 300) | ⬜ | 70 (0) |
+| M12 | Command-line tool suite (61 of the 70 subcommand rows) and quality checks (263 of 300) | ⬜ | 71 (0) |
 | M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 79 (0) |
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default) | ⬜ | |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 919 (27) |
+| | **Total** | | 920 (31) |
 
 ## Parity estimate
 
@@ -141,7 +145,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 
 | Area | Weight | Commands | Exist | Done (behaviour) | Missing (main items) |
 |---|---:|---:|---:|---:|---|
-| Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 43 | 7 | 5% | tabs, toolbar, settings window, shortcut editor, workspaces, title bar |
+| Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 44 | 8 | 5% | tabs, toolbar, settings window, shortcut editor, workspaces, title bar |
 | Font View | 6 | 62 | 6 | 3% | list view, sidebar and filters, glyph data, Add Glyphs syntax, batch commands, inspector |
 | Edit View text mode | 4 | 25 | 0 | 0% | everything |
 | Drawing and editing outlines | 10 | 89 | 2 | 1% | all tools, selection, node editing, transforms; only headless path creation exists |
@@ -159,11 +163,11 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Source formats | 6 | 14 | 4 | 35% | UFO, designspace, WOFF2 import; custom parameters and layer attributes carried untyped; version conversion |
 | Compiling | 9 | 11 | 1 | 2% | static TrueType core tables; no oracle comparison |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
-| Command-line tools | 8 | 42 | 2 | 1% | `commands` and a first `run`, `convert`, `info` |
+| Command-line tools | 8 | 42 | 4 | 1% | `commands`, `run`, `convert`, `info`, `tables list`, `glyphs list`; no dump, subset, instance, merge |
 | Quality checks | 3 | 33 | 0 | 0% | everything |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
-| Agent surfaces | 4 | 11 | 1 | 25% | execute, list, inspect over three surfaces; no pointer, dialogs, screenshots, resources |
-| **Feature parity** | **117** | **919** | **27** | **~3%** | |
+| Agent surfaces | 4 | 11 | 2 | 25% | execute, list, inspect over three surfaces; no pointer, dialogs, screenshots, resources |
+| **Feature parity** | **117** | **920** | **31** | **~3%** | |
 
 ## Out of scope (by design or by law)
 

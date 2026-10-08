@@ -22,9 +22,9 @@ packages in order). Its material is `docs/spec/30-source-formats.md` and
 | Package | State |
 |---|---|
 | M1.0 corpus, harness, spikes | done (plan § 8) |
-| M1.1 property lists | OpenStep done; XML waits for the owner's answer on question 11 |
+| M1.1 property lists | OpenStep done; XML is done with M1.4 |
 | M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured; `crates/io-glyphs` reads and writes versions 2 to 4, single files and packages (every reference-written source identical). Next: more typed fields, then the native format's layout |
-| M1.4 UFO and designspace | waits for the owner's answer on question 11 (round 002) |
+| M1.4 UFO and designspace | **next**: our own reader and writer (question 11 answered 2026-10-08), norad as a second reader in tests |
 | M1.5 compiled fonts | done |
 | M1.6 commands and CLI | done for every format but UFO: open, save, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list` (`dump` moved to M12) |
 
@@ -95,7 +95,7 @@ Append one terse entry per session: what landed, numbers, what is still open.
   `.glyphs` file in the corpus. The owner accepted the plan.
 - **2026-10-07, M1.0 and M1.1 (OpenStep).** Version 4 corpora pinned (16 files); sparse corpus
   fetch; `cargo xtask roundtrip` (527 sources). Spikes: no existing crate round-trips any file
-  (plan § 8); own plist crate, own UFO I/O recommended (round 002, waiting). `crates/plist`
+  (plan § 8); own plist crate, own UFO I/O recommended (owner asked). `crates/plist`
   OpenStep reader and writer: 215 of 274 `.glyphs` sources identical, every reference-written
   one outside fontc's test data. Next: the model (M1.2); the XML plist after question 11.
 - **2026-10-08, M1.2, M1.3, M1.5, M1.6 (part).** Model restructured (tagged `Extra`, `Arc` parts,
@@ -103,6 +103,6 @@ Append one terse entry per session: what landed, numbers, what is still open.
   file store); native format version 2. `crates/io-glyphs`: versions 2 to 4 and packages, every
   reference-written corpus source byte-identical; package side files are model data, so a package
   and a single file of the same font read the same. `crates/decompile`: all 342 corpus binaries
-  open. `file.open`/`file.save` on every source and compiled fonts. Oswald shown in the app
-  (round 003). Next: question 11, then UFO; meanwhile the native format's layout and the CLI's
+  open. `file.open`/`file.save` on every source and compiled fonts. Oswald shown in the app.
+  Next: question 11, then UFO; meanwhile the native format's layout and the CLI's
   inspection commands (both done since). M2 plan drafted (`docs/plans/M2.md`), waiting for review.
