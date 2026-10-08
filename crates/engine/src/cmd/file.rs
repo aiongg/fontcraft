@@ -31,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string} open a font source as a new document: a .fontcraft file, a .glyphs file (format versions 2 to 4) or a .glyphspackage folder, recognised by content → {title, path, format, version?, glyphs}",
+            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF). A compiled font opens view-only: save it with Save As to a source format. warnings lists what reading a compiled font left out → {title, path, format, version?, glyphs, viewOnly, warnings}",
             always,
             open
         ),
@@ -89,14 +89,19 @@ fn new(s: &mut Session, p: &Value) -> Result<Value> {
 fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("file.open", p)?;
     let path = std::path::PathBuf::from(p.str("path")?);
-    let font = crate::io::open(&path)?;
+    let face = p.opt_int("face", 0, i64::from(u16::MAX))?.map(|f| f as u32);
+    let (font, warnings) = crate::io::open(&path, face)?;
     // Every reader checks the font it returns.
     s.push_document(font, Some(path));
     let doc = s.doc()?;
-    let format = crate::io::SaveFormat::of_source(doc.font.source.format).map(|f| f.name());
+    let save_format = crate::io::SaveFormat::of_source(doc.font.source.format);
+    let format = match doc.font.source.format {
+        fontcraft_model::SourceFormat::Binary => Some("binary"),
+        _ => save_format.map(|f| f.name()),
+    };
     Ok(json!({
         "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "format": format,
-        "version": doc.font.source.glyphs_version, "glyphs": doc.font.glyphs.len(),
+        "version": doc.font.source.glyphs_version, "glyphs": doc.font.glyphs.len(), "viewOnly": save_format.is_none(), "warnings": warnings,
     }))
 }
 

@@ -49,6 +49,8 @@ pub enum EngineError {
     Compile(#[from] fontcraft_compile::CompileError),
     #[error(transparent)]
     Glyphs(#[from] fontcraft_io_glyphs::GlyphsError),
+    #[error(transparent)]
+    Decompile(#[from] fontcraft_decompile::DecompileError),
     #[error("{0}")]
     Io(String),
     #[error("not supported yet: {0}")]

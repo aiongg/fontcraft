@@ -169,7 +169,7 @@ fn bad_targets_are_refused() {
     assert!(s.execute("file.saveAs", &json!({ "path": dir.join("x"), "format": "nope" })).is_err());
     assert!(s.execute("file.open", &json!({ "path": dir })).is_err(), "a folder that is not a source");
     std::fs::write(dir.join("x.ttf"), b"\0\x01\0\0rest").unwrap();
-    assert!(s.execute("file.open", &json!({ "path": dir.join("x.ttf") })).unwrap_err().to_string().contains("not supported yet"));
+    assert!(s.execute("file.open", &json!({ "path": dir.join("x.ttf") })).is_err(), "a damaged compiled font");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -186,5 +186,23 @@ fn a_real_family_saves_back_unchanged() {
     let copy = dir.join("Oswald.glyphs");
     run(&mut s, "file.saveAs", json!({ "path": copy }));
     assert!(std::fs::read(&copy).unwrap() == std::fs::read(&oswald).unwrap(), "Oswald.glyphs came back different");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_compiled_font_opens_view_only_and_saves_as_a_source() {
+    let dir = temp("binary");
+    let mut s = Session::with_document();
+    let ttf = dir.join("Untitled.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    let opened = run(&mut s, "file.open", json!({ "path": ttf }));
+    assert_eq!((opened["format"].as_str(), opened["viewOnly"].as_bool()), (Some("binary"), Some(true)));
+    assert!(opened["warnings"].is_array());
+    let err = s.execute("file.save", &json!({})).unwrap_err().to_string();
+    assert!(err.contains("Save As"), "{err}");
+    let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("FromBinary.glyphs") }));
+    assert_eq!(saved["format"], "glyphs");
+    let text = std::fs::read_to_string(dir.join("FromBinary.glyphs")).unwrap();
+    assert!(text.contains("name = glyphOrder;"), "the glyph order is recorded");
     std::fs::remove_dir_all(&dir).unwrap();
 }

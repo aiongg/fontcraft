@@ -2,8 +2,9 @@
 //! web app passes bytes instead).
 //!
 //! A source is recognised by its content, never by its file name: a folder with `fontinfo.plist`
-//! is a `.glyphspackage`, a JSON file whose `format` is `fontcraft` is a native file, and other
-//! text that starts with `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
+//! is a `.glyphspackage`, a file that starts with an sfnt, collection or WOFF signature is a
+//! compiled font, a JSON file whose `format` is `fontcraft` is a native file, and other text that
+//! starts with `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
 //! [`fontcraft_format::MAX_BYTES`] in all) and follows no symlinked folders, so a hostile folder
 //! can neither exhaust memory nor loop.
 
@@ -157,13 +158,14 @@ pub fn read_folder(root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
     Ok(out)
 }
 
-/// Reads the source at `path`, recognising its format by content.
-pub fn open(path: &Path) -> Result<Font> {
+/// Reads the source at `path`, recognising its format by content, with what reading it left out
+/// (compiled fonts only). `face` chooses a member of a font collection.
+pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
     let meta = std::fs::metadata(path).map_err(|e| io_err("open", path, e))?;
     if meta.is_dir() {
         if path.join("fontinfo.plist").is_file() {
             let files = read_folder(path)?;
-            return Ok(fontcraft_io_glyphs::read_package(&files)?);
+            return Ok((fontcraft_io_glyphs::read_package(&files)?, Vec::new()));
         }
         if path.join("metainfo.plist").is_file() {
             return Err(EngineError::Unsupported("opening UFO sources (ROADMAP.md, M1)".into()));
@@ -171,9 +173,9 @@ pub fn open(path: &Path) -> Result<Font> {
         return Err(EngineError::Io(format!("{} is a folder but not a font source", path.display())));
     }
     let bytes = read_file(path)?;
-    let head = bytes.get(..4).unwrap_or(&bytes);
-    if matches!(head, [0, 1, 0, 0] | b"OTTO" | b"true" | b"ttcf" | b"wOFF" | b"wOF2") {
-        return Err(EngineError::Unsupported("opening compiled fonts (ROADMAP.md, M1)".into()));
+    if fontcraft_decompile::sniff(&bytes).is_some() {
+        let d = fontcraft_decompile::decompile(&bytes, face)?;
+        return Ok((d.font, d.warnings));
     }
     let text = std::str::from_utf8(&bytes).map_err(|_| EngineError::Io(format!("{} is not a font source: it is not UTF-8 text", path.display())))?;
     let body = text.trim_start_matches('\u{feff}').trim_start();
@@ -184,9 +186,9 @@ pub fn open(path: &Path) -> Result<Font> {
         return Err(EngineError::Io(format!("{} is not a font source this build can read", path.display())));
     }
     if is_native(body) {
-        return Ok(fontcraft_format::load(&bytes)?);
+        return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }
-    Ok(fontcraft_io_glyphs::read(text)?)
+    Ok((fontcraft_io_glyphs::read(text)?, Vec::new()))
 }
 
 /// Whether text that starts with `{` is a native file: JSON whose first key is a quoted string

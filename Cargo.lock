@@ -737,11 +737,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-decompile"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-compile",
+ "fontcraft-geom",
+ "fontcraft-model",
+ "miniz_oxide 0.8.9",
+ "skrifa 0.48.0",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fontcraft-engine"
 version = "0.0.1"
 dependencies = [
  "base64",
  "fontcraft-compile",
+ "fontcraft-decompile",
  "fontcraft-format",
  "fontcraft-geom",
  "fontcraft-io-glyphs",
