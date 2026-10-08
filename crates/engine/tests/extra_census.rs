@@ -1,13 +1,14 @@
 //! Diagnostic: what the model still carries untyped. Reads every corpus source (`.glyphs`,
 //! packages, UFOs, designspace files with their UFOs) and counts the `Extra` keys per kind of
 //! object and format family, with how many sources use each.
-//! `cargo test -p fontcraft-engine --test extra_census -- --ignored --nocapture`.
+//! `cargo test -p fontcraft-engine --test extra_census -- --ignored --nocapture`. With
+//! `CENSUS_WHERE=<key>` set, it also names the sources of each row with that key.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use fontcraft_model::{Extra, Family, Font, Params, Shape};
+use fontcraft_model::{Extra, Family, Font, Params, Shape, SourceFormat};
 
 type Census = BTreeMap<(String, String, String), (usize, BTreeSet<usize>)>;
 
@@ -30,8 +31,26 @@ fn raw_params(c: &mut Census, source: usize, what: &str, params: &Params) {
     }
 }
 
+/// A row that counts something other than `Extra` keys.
+fn tally(c: &mut Census, source: usize, family: &str, what: &str, key: &str, n: usize) {
+    if n > 0 {
+        let row = c.entry((family.into(), what.into(), key.into())).or_default();
+        row.0 += n;
+        row.1.insert(source);
+    }
+}
+
 fn census(c: &mut Census, source: usize, f: &Font) {
     add(c, source, "font", &f.extra);
+    // How a UFO's feature code and groups came into the model.
+    if matches!(f.source.format, SourceFormat::Ufo | SourceFormat::Designspace) && !f.features.is_empty() {
+        let how = if fontcraft_io_ufo::features::is_kept_text(&f.features) { "kept as text" } else { "split" };
+        tally(c, source, "ufo", "features.fea", how, 1);
+    }
+    tally(c, source, "model", "groups", "", f.groups.len());
+    tally(c, source, "model", "kern context", "", f.kerning.context.len());
+    let labelled = f.features.features.iter().filter(|s| !s.labels.is_empty()).count();
+    tally(c, source, "model", "labelled features", "", labelled);
     raw_params(c, source, "font", &f.info.params);
     f.masters.iter().for_each(|m| raw_params(c, source, "master", &m.params));
     f.axes.iter().for_each(|a| add(c, source, "axis", &a.extra));
@@ -130,8 +149,14 @@ fn extra_census() {
     eprintln!("{read} sources read");
     let mut rows: Vec<_> = c.into_iter().collect();
     rows.sort_by(|a, b| (&a.0.0, &a.0.1, std::cmp::Reverse(a.1.1.len())).cmp(&(&b.0.0, &b.0.1, std::cmp::Reverse(b.1.1.len()))));
+    let wanted = std::env::var("CENSUS_WHERE").ok();
     for ((family, what, key), (n, srcs)) in rows {
         eprintln!("{family:9} {what:12} {key:40} {n:>8} in {:>4}", srcs.len());
+        if wanted.as_deref() == Some(key.as_str()) {
+            for s in &srcs {
+                eprintln!("    {}", all[*s].strip_prefix(&corpus).unwrap_or(&all[*s]).display());
+            }
+        }
     }
     let _ = Family::Glyphs;
 }

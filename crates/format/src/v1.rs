@@ -185,6 +185,7 @@ impl Font {
             info: Default::default(),
             kerning: Arc::default(),
             features: Arc::default(),
+            groups: Arc::default(),
             display_strings: Arc::default(),
             note: String::new(),
             files: Arc::default(),

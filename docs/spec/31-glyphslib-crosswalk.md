@@ -853,6 +853,14 @@ empty.
 | Every UFO pair → `setKerningForPair(masterId, …)` in **LTR**; `public.kern1.X` → `@MMK_L_X`, `public.kern2.X` → `@MMK_R_X`; pairs with BRACKET glyphs skipped. RTL tables are not rebuilt (lossy). | U→G | `builder/kerning.py:81-95` |
 | Bracket glyphs inherit their parent's groups and glyph pairs. | G→U | `builder/bracket_layers.py:163-185` |
 
+### 10.3 Where FontCraft differs (M1.7)
+
+| glyphsLib | FontCraft |
+|---|---|
+| A UFO 2's renamed kerning groups also stay groups under their old names (ufoLib copies them), so they become classes too | The old names are only the file's spelling of the kerning groups; they do not become classes |
+| Classes named in `groupsNotInFeature` go to `groups.plist` and into `features.fea` as well (reading back gives each class twice) | Groups go to `groups.plist` only |
+| `kerningRTL` pairs are merged into `kerning.plist` with swapped group sides | Not written; the loss report lists them, with vertical and contextual kerning and top and bottom groups |
+
 ---
 
 ## 11. Features
@@ -898,6 +906,26 @@ empty.
 | Feature code = remaining statements' text minus one trailing newline. |
 | Everything else at the root (language systems, lookups, tables including GDEF, markClass, …) → prefix named `<anonymous>`, flushed before the next handled element. |
 | `public.openTypeCategories` of the first UFO → font userData `com.schriftgestaltung.Glyphs.originalOpenTypeCategory`. |
+
+### 11.5 Where FontCraft differs (M1.7)
+
+FontCraft writes the §11.1 form (`crates/io-ufo/src/features.rs`) and reads a text back into snippets
+only when writing them gives the same bytes; any other text stays one unnamed prefix, written back
+unchanged.
+
+| glyphsLib | FontCraft |
+|---|---|
+| Disabled prefixes and classes are written as live code | Commented out after `# disabled`, as a disabled feature; read back as disabled |
+| A disabled anonymous prefix has no header | It gets `# Prefix: <anonymous>`, so it reads back as one |
+| A prefix's code loses two trailing line breaks when named, one when anonymous, wherever it stands | Two before the next item, one at the end of the text: what the writer added |
+| Class code is rebuilt from the parsed glyph list; a comment inside the brackets becomes an anonymous prefix | The text between `[ ` and the line break before `];`, comments included |
+| Feature code starts at its first statement (leading indentation is lost) | The text between the header line and the closing line |
+| Disabled code and notes are dedented and end with a line break | Exactly the commented lines, one `#` (or `# `) taken off each |
+| `name "…";` reads back as language `ENG` (platform defaults) | As `dflt`, the language it is written for |
+| A manual `kern` feature's added `# Automatic Code` line stays in its code | Taken off again when the writer added it |
+| Unknown label languages raise an error | Left out; the loss report lists them |
+| Format 2: a `Name:` line or `featureNames` block in a feature's notes becomes the feature's names | Notes stay notes (no format 2 labels yet) |
+| Feature tokens (`$[…]`, `${…}`) and conditional variable syntax are expanded per master | Not expanded: the code is written as the model holds it |
 
 ### 11.3 Markers summary
 

@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M1.7 step 6 done (shape fields in every format)._
+_Updated: 2026-10-08, M1.7 step 7 done (kerning context, groups, feature labels and markers)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (300 tests; about 33,200 lines of Rust in 12 crates).
+- `cargo xtask ci` passes all nine steps (327 tests; about 34,300 lines of Rust in 12 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -31,7 +31,7 @@ M1 (`docs/plans/M1.md`) so far:
 | M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
 | M1.5 compiled fonts | done |
 | M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
-| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5 done (layer fields in `.glyphs` and the native file; backgrounds, other layers, guides, images, vertical metrics and user data in UFO by glyphsLib's rules); step 6 done (node flags, names and user data, path locks and drawing attributes, component alignment, anchors, smart values, masters, locks and orientations, anchor locks and orientations, version 4 image shapes; UFO point names, identifiers and anchor colours); step 7 (kerning context, groups, feature labels) next (plan § M1.7 › Progress) |
+| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5 done (layer fields in `.glyphs` and the native file; backgrounds, other layers, guides, images, vertical metrics and user data in UFO by glyphsLib's rules); step 6 done (node flags, names and user data, path locks and drawing attributes, component alignment, anchors, smart values, masters, locks and orientations, anchor locks and orientations, version 4 image shapes; UFO point names, identifiers and anchor colours); step 7 done (version 4 contextual kerning stored; feature labels; UFO groups as `Font::groups` and glyphsLib's classes; UFO 2 kerning groups; `features.fea` split by glyphsLib's markers); step 8 (glyphsLib lib keys) next (plan § M1.7 › Progress) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -171,3 +171,11 @@ Append one terse entry per session: what landed, numbers, what is still open.
   glyphsLib writes it. Census: shape keys from 14,256 entries to 107 (explained in the plan).
   Round trips unchanged; our GLIF points match glyphsLib's for four `.glyphs` sources. Next:
   step 7.
+  Step 7: version 4 `kerningContext` is `Kerning::context` (stored, not interpreted; packages
+  keep it in `kerning.plist`); feature `labels` are `Snippet::labels`; UFO groups that are not
+  kerning groups are `Font::groups`, written to `.glyphs` as glyphsLib's classes with its user
+  data key; UFO 2 kerning groups get ufoLib's UFO 3 names and keep their own in the file.
+  `features.fea` is written as glyphsLib writes it and split back into snippets when that gives
+  the same bytes (18 corpus files split, 62 kept as text). Our `features.fea` and `groups.plist`
+  equal glyphsLib's for four `.glyphs` sources, except disabled prefixes and classes, which we
+  comment out. Round trips unchanged; census `snippet labels` typed. Next: step 8.

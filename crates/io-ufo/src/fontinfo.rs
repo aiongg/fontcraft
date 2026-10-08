@@ -396,8 +396,13 @@ const LANGUAGES: &[(&str, u16)] = &[
 /// Languages whose value is the property's default rather than a name record.
 const DEFAULT_LANGUAGES: [&str; 3] = [DEFAULT_LANGUAGE, "default", "ENG"];
 
-fn language_id(tag: &str) -> Option<u16> {
+pub(crate) fn language_id(tag: &str) -> Option<u16> {
     LANGUAGES.iter().find(|(t, _)| *t == tag).map(|(_, id)| *id)
+}
+
+/// The language-system tag of a Windows language id, `ENG` included.
+pub(crate) fn language_tag_any(id: u16) -> Option<&'static str> {
+    LANGUAGES.iter().find(|(_, i)| *i == id).map(|(t, _)| *t)
 }
 
 fn language_tag(id: u16) -> Option<&'static str> {

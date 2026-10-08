@@ -234,6 +234,30 @@ mod tests {
     }
 
     #[test]
+    fn kerning_context_feature_labels_and_groups_round_trip() {
+        use fontcraft_model::{Group, KernContext, Localized, Snippet};
+        use std::sync::Arc;
+        let mut font = Font::new("Features");
+        Arc::make_mut(&mut font.kerning).context.push(KernContext { context: "A V | T".into(), values: vec![("m01".into(), -12.5)] });
+        Arc::make_mut(&mut font.features).features.push(Snippet {
+            name: "ss01".into(),
+            code: "sub a by a.alt;".into(),
+            automatic: true,
+            labels: vec![Localized { language: "DEU".into(), value: "Alternativ".into(), extra: Default::default() }],
+            ..Default::default()
+        });
+        Arc::make_mut(&mut font.groups).push(Group { name: "round".into(), members: vec!["O".into(), "Q".into()] });
+        let bytes = save(&font).unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(text.contains("\"context\"") && text.contains("\"labels\"") && text.contains("\"groups\""), "{text}");
+        assert_eq!(load(&bytes).unwrap(), font);
+        assert_eq!(save(&load(&bytes).unwrap()).unwrap(), bytes);
+        // Empty fields are left out.
+        let plain = String::from_utf8(save(&Font::new("Plain")).unwrap()).unwrap();
+        assert!(!plain.contains("\"groups\"") && !plain.contains("\"labels\"") && !plain.contains("\"context\""));
+    }
+
+    #[test]
     fn layer_data_round_trips() {
         use fontcraft_model::plist::{Dict, Value};
         use fontcraft_model::{

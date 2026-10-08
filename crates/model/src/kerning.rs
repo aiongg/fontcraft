@@ -1,4 +1,4 @@
-//! Kerning: pair values per master, in three directions.
+//! Kerning: pair values per master, in three directions, and version 4's contextual kerning.
 //!
 //! Sides are kept as the source spells them: a glyph name, or a group with the source's prefix
 //! (`@MMK_L_A`, `@MMK_R_V` in the reference's format, where the right-to-left table swaps the two
@@ -15,12 +15,26 @@ pub struct Kerning {
     pub rtl: KernTable,
     #[serde(default, skip_serializing_if = "KernTable::is_empty")]
     pub vertical: KernTable,
+    /// Contextual kerning (`.glyphs` version 4 `kerningContext`), in file order. No document
+    /// describes the syntax of a context, so the model keeps each one as stored and does not
+    /// interpret it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<KernContext>,
 }
 
 impl Kerning {
     pub fn is_empty(&self) -> bool {
-        self.ltr.is_empty() && self.rtl.is_empty() && self.vertical.is_empty()
+        self.ltr.is_empty() && self.rtl.is_empty() && self.vertical.is_empty() && self.context.is_empty()
     }
+}
+
+/// One kerning context and its value in each master that has one, in file order.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct KernContext {
+    /// The context as the file spells it.
+    pub context: String,
+    /// Master id → value.
+    pub values: Vec<(String, f64)>,
 }
 
 /// One direction's pairs, per master, in source order.

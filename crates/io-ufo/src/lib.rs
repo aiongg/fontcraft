@@ -10,6 +10,8 @@
 //! - [`ufo`]: a UFO directory, as one master; `fontinfo` maps its font information to the
 //!   reference's properties and parameters, and `design` its blue zones, stem snaps and
 //!   guidelines to the master's fields.
+//! - [`features`]: `features.fea`, split into the model's prefixes, classes and features as
+//!   glyphsLib writes them.
 //! - [`designspace`]: a designspace and its UFOs, as one document; its axes, instances and
 //!   variable fonts are the model's.
 //! - [`zip`]: reading a UFOZ, a UFO in a ZIP archive.
@@ -24,8 +26,10 @@ use fontcraft_model::ModelError;
 
 mod design;
 pub mod designspace;
+pub mod features;
 mod fontinfo;
 pub mod glif;
+pub mod kerning;
 pub mod names;
 pub mod ufo;
 pub mod zip;

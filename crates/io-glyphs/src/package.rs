@@ -8,8 +8,8 @@
 //!   stored under another name keeps it in [`Glyph::file_name`](fontcraft_model::Glyph).
 //! - `UIState.plist`: the edit tabs' display strings (`displayStrings`).
 //! - Format version 4 only: `features/*.fea` with each prefix's, class's and feature's code (the
-//!   entry in `fontinfo.plist` names its file in `file`), `kerning.plist` with the kerning tables,
-//!   and `note.md` with the font note. Version 3 keeps these in `fontinfo.plist`.
+//!   entry in `fontinfo.plist` names its file in `file`), `kerning.plist` with the kerning tables
+//!   and the contextual kerning, and `note.md` with the font note. Version 3 keeps these in `fontinfo.plist`.
 //! - Anything else is kept in [`Font::files`] and written back unchanged.
 //!
 //! The reader moves the side files' contents into the root dictionary before reading it, so a
@@ -39,7 +39,8 @@ const UI_STATE: &str = "UIState.plist";
 const KERNING: &str = "kerning.plist";
 const NOTE: &str = "note.md";
 const FEATURES_DIR: &str = "features/";
-const KERNING_KEYS: [&str; 3] = ["kerningLTR", "kerningRTL", "kerningVertical"];
+/// The keys `kerning.plist` holds, in the order the writer puts them (sorted).
+const KERNING_KEYS: [&str; 4] = ["kerningContext", "kerningLTR", "kerningRTL", "kerningVertical"];
 /// The feature lists, with the key that names each item and the file-name rule's prefix.
 const FEATURE_LISTS: [(&str, &str, &str); 3] = [("featurePrefixes", "name", "_"), ("classes", "name", "@"), ("features", "tag", "")];
 
@@ -242,7 +243,8 @@ pub fn write_package(font: &Font) -> Result<Files> {
         if !kerning.is_empty() {
             out.insert(KERNING.into(), write(Value::Dict(kerning), dialect));
         }
-        let lists = [&font.features.prefixes, &font.features.classes, &font.features.features];
+        let classes = crate::groups::classes(font);
+        let lists = [font.features.prefixes.as_slice(), &classes, font.features.features.as_slice()];
         for (snippets, (list_key, _, prefix)) in lists.into_iter().zip(FEATURE_LISTS) {
             let rule = feature_file_names(snippets.iter().map(|s| s.name.as_str()), prefix);
             let Some(Value::Array(items)) = root.get_mut(list_key) else { continue };

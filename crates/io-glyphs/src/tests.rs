@@ -497,3 +497,157 @@ fn designspace_axis_data_is_reported_lost() {
     let name = a.name.clone();
     assert_eq!(crate::info_losses(&font), [format!("axis `{name}`: its range, its name in other languages, its STAT labels")]);
 }
+
+/// A version 4 file with contextual kerning.
+const V4_CONTEXT: &str = "{\n.appVersion = \"4004\";\n.formatVersion = 4;\nfontMaster = (\n{\nid = m01;\n},\n{\nid = m02;\n},\n);\nglyphs = (\n);\nkerningContext = {\n\"A V | T\" = {\nm01 = -20;\nm02 = 12.5;\n};\nT = {\nm02 = -8;\n};\n};\nunitsPerEm = 1000;\nversionMajor = 1;\nversionMinor = 0;\n}\n";
+
+#[test]
+fn version_4_contextual_kerning_is_stored_as_written() {
+    let mut font = read(V4_CONTEXT).unwrap();
+    let ctx = &font.kerning.context;
+    assert_eq!(ctx.len(), 2);
+    assert_eq!(ctx[0].context, "A V | T");
+    assert_eq!(ctx[0].values, [("m01".to_string(), -20.0), ("m02".to_string(), 12.5)]);
+    assert!(font.extra.get(Family::Glyphs, "kerningContext").is_none(), "typed, not carried");
+    assert_eq!(write(&font).unwrap(), V4_CONTEXT);
+    std::sync::Arc::make_mut(&mut font.kerning).context[1].values[0].1 = -9.0;
+    let out = write(&font).unwrap();
+    assert!(out.contains("T = {\nm02 = -9;\n};"), "{out}");
+    assert_eq!(read(&out).unwrap().kerning.context[1].values[0].1, -9.0);
+}
+
+#[test]
+fn contextual_kerning_that_would_not_write_back_stays_as_written() {
+    for text in [
+        V4_CONTEXT.replace("m02 = -8;", "m02 = odd;"),
+        V4_CONTEXT.replace("m01 = -20;", "m01 = -20.0;"),
+        V4_CONTEXT.replace(".formatVersion = 4;", ".formatVersion = 3;").replace("},\n);\nglyphs", "}\n);\nglyphs"),
+    ] {
+        let font = read(&text).unwrap();
+        assert!(font.kerning.context.is_empty(), "{text}");
+        assert!(font.extra.get(Family::Glyphs, "kerningContext").is_some());
+        assert_eq!(write(&font).unwrap(), text);
+    }
+}
+
+#[test]
+fn a_version_4_package_keeps_contextual_kerning_in_its_kerning_file() {
+    let font = read(V4_CONTEXT).unwrap();
+    let files = write_package(&font).unwrap();
+    let kerning = std::str::from_utf8(&files["kerning.plist"]).unwrap();
+    assert!(kerning.contains("kerningContext = {"), "{kerning}");
+    assert!(!std::str::from_utf8(&files["fontinfo.plist"]).unwrap().contains("kerningContext"));
+    let back = read_package(&files).unwrap();
+    assert_eq!(back.kerning.context, font.kerning.context);
+    assert!(back.files.is_empty(), "the kerning file is read, not kept");
+}
+
+#[test]
+fn contextual_kerning_is_reported_lost_before_version_4() {
+    let mut font = read(V4_CONTEXT).unwrap();
+    assert!(info_losses(&font).is_empty());
+    for version in [3, 2] {
+        font.source.glyphs_version = Some(version);
+        assert!(info_losses(&font).iter().any(|l| l.starts_with("contextual kerning (2 contexts)")), "{:?}", info_losses(&font));
+        assert!(!write(&font).unwrap().contains("kerningContext"), "version {version} has no place for it");
+    }
+}
+
+/// [`V3`] with a stylistic set whose names are labels.
+fn v3_labels() -> String {
+    V3.replace(
+        "fontMaster = (",
+        "features = (\n{\nautomatic = 1;\ncode = \"sub A by B;\";\nlabels = (\n{\nlanguage = dflt;\nvalue = \"Alternate A\";\n},\n{\nlanguage = DEU;\nvalue = \"Anderes A\";\n}\n);\ntag = ss01;\n}\n);\nfontMaster = (",
+    )
+}
+
+#[test]
+fn feature_labels_are_fields() {
+    let text = v3_labels();
+    let mut font = read(&text).unwrap();
+    let ss01 = &font.features.features[0];
+    assert_eq!(
+        ss01.labels.iter().map(|l| (l.language.as_str(), l.value.as_str())).collect::<Vec<_>>(),
+        [("dflt", "Alternate A"), ("DEU", "Anderes A")]
+    );
+    assert!(ss01.extra.is_empty(), "typed, not carried");
+    assert_eq!(write(&font).unwrap(), text);
+    std::sync::Arc::make_mut(&mut font.features).features[0].labels[1].value = "Zweites A".into();
+    let out = write(&font).unwrap();
+    assert!(out.contains("value = \"Zweites A\";"), "{out}");
+    assert_eq!(read(&out).unwrap().features.features[0].labels[1].value, "Zweites A");
+}
+
+#[test]
+fn labels_that_would_not_write_back_stay_as_written() {
+    for text in [
+        v3_labels().replace("value = \"Alternate A\";", "value = \"Alternate\\012A\";"),
+        v3_labels().replace("language = DEU;\n", "language = \"DEU\";\n"),
+        v3_labels().replace(
+            "labels = (\n{\nlanguage = dflt;\nvalue = \"Alternate A\";\n},\n{\nlanguage = DEU;\nvalue = \"Anderes A\";\n}\n);",
+            "labels = (\n);",
+        ),
+    ] {
+        let font = read(&text).unwrap();
+        assert!(font.features.features[0].labels.is_empty(), "{text}");
+        assert!(font.features.features[0].extra.get(Family::Glyphs, "labels").is_some());
+        assert_eq!(write(&font).unwrap(), text);
+    }
+}
+
+/// [`V3`] with a feature class and two classes that are UFO groups, named in the user data as
+/// glyphsLib names them.
+fn v3_groups() -> String {
+    V3.replace(
+        "familyName = ",
+        "classes = (\n{\ncode = \"A B\";\nname = Upper;\n},\n{\ncode = A;\nname = round;\n},\n{\ncode = \"\";\nname = empty;\n}\n);\nfamilyName = ",
+    )
+    .replace(
+        "unitsPerEm = 1000;\n",
+        "unitsPerEm = 1000;\nuserData = {\ncom.schriftgestaltung.Glyphs.groupsNotInFeature = (\nround,\nempty\n);\nzzz = 1;\n};\n",
+    )
+}
+
+#[test]
+fn classes_named_as_groups_are_groups() {
+    let text = v3_groups();
+    let mut font = read(&text).unwrap();
+    assert_eq!(font.features.classes.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Upper"]);
+    let groups: Vec<(&str, Vec<&str>)> = font.groups.iter().map(|g| (g.name.as_str(), g.members.iter().map(String::as_str).collect())).collect();
+    assert_eq!(groups, [("round", vec!["A"]), ("empty", vec![])]);
+    assert!(font.info.user_data.get(groups::GROUPS_KEY).is_none(), "the key is the groups' list, not user data");
+    assert_eq!(write(&font).unwrap(), text);
+    std::sync::Arc::make_mut(&mut font.groups).push(fontcraft_model::Group { name: "new".into(), members: vec!["A".into(), "B".into()] });
+    let out = write(&font).unwrap();
+    assert!(out.contains("{\ncode = \"A B\";\nname = new;\n}\n);"), "{out}");
+    assert!(out.contains("round,\nempty,\nnew\n);"), "{out}");
+    assert_eq!(read(&out).unwrap().groups.len(), 3);
+}
+
+#[test]
+fn classes_stay_classes_unless_the_groups_come_last_and_plain() {
+    for text in [
+        // Not the last classes.
+        v3_groups().replace("round,\nempty\n", "Upper\n"),
+        // Out of order.
+        v3_groups().replace("round,\nempty\n", "empty,\nround\n"),
+        // A class with a switch.
+        v3_groups().replace("code = A;\nname = round;", "automatic = 1;\ncode = A;\nname = round;"),
+        // The key not at its sorted place.
+        v3_groups().replace(
+            "userData = {\ncom.schriftgestaltung.Glyphs.groupsNotInFeature = (\nround,\nempty\n);\nzzz = 1;\n};",
+            "userData = {\nzzz = 1;\ncom.schriftgestaltung.Glyphs.groupsNotInFeature = (\nround,\nempty\n);\n};",
+        ),
+    ] {
+        let font = read(&text).unwrap();
+        assert!(font.groups.is_empty(), "{text}");
+        assert_eq!(write(&font).unwrap(), text);
+    }
+}
+
+#[test]
+fn version_2_reports_feature_labels_lost() {
+    let mut font = read(&v3_labels()).unwrap();
+    font.source.glyphs_version = Some(2);
+    assert!(info_losses(&font).contains(&"feature labels (1 features)".to_string()), "{:?}", info_losses(&font));
+}

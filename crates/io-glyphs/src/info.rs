@@ -68,7 +68,7 @@ pub(crate) fn push_params(e: &mut Vec<(Str, Value)>, p: &Params) {
     }
 }
 
-fn read_localized(v: &Value) -> Option<Localized> {
+pub(crate) fn read_localized(v: &Value) -> Option<Localized> {
     let mut d = dict(v)?;
     let language = plain_str(take(&mut d, "language")?)?;
     let value = plain_str(take(&mut d, "value")?)?;
@@ -101,17 +101,15 @@ pub(crate) fn take_properties(d: &mut Dict) -> Properties {
     }
 }
 
+pub(crate) fn write_localized(l: &Localized) -> Value {
+    Value::Dict(finish(vec![("language".into(), string(&l.language)), ("value".into(), string(&l.value))], &l.extra))
+}
+
 fn write_property(p: &Property) -> Value {
     let mut e = vec![("key".into(), string(&p.key))];
     match &p.value {
         PropertyValue::Single(s) => e.push(("value".into(), string(s))),
-        PropertyValue::Localized(values) => {
-            let items = values
-                .iter()
-                .map(|l| Value::Dict(finish(vec![("language".into(), string(&l.language)), ("value".into(), string(&l.value))], &l.extra)))
-                .collect();
-            e.push(("values".into(), list(items)));
-        }
+        PropertyValue::Localized(values) => e.push(("values".into(), list(values.iter().map(write_localized).collect()))),
     }
     Value::Dict(finish(e, &p.extra))
 }

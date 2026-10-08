@@ -29,8 +29,8 @@ use std::sync::Arc;
 
 use fontcraft_model::axes::{AXIS_MAPPINGS, ORIGIN};
 use fontcraft_model::{
-    Extra, Family, Features, FileStore, Font, FontInfo, Glyph, GlyphTable, Instance, KernTable, Kerning, Master, MetricDef, MetricValue, Param,
-    Snippet, Source, SourceFormat,
+    Extra, Family, FileStore, Font, FontInfo, Glyph, GlyphTable, Instance, KernTable, Kerning, Master, MetricDef, MetricValue, Param, Source,
+    SourceFormat,
 };
 use fontcraft_plist::xml::{self, Element, Node as XNode, Text};
 use fontcraft_plist::{Array, Value, xmlplist};
@@ -276,6 +276,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
     let kinds = ufo::metric_kinds(read.iter().flatten());
     let stems = ufo::stem_counts(std::iter::once(default).chain(read.iter().flatten()));
     let default_features = default.features.clone();
+    let groups = default.groups.clone();
     let (family_name, units_per_em, version_major, version_minor, note, ufo_version) = (
         default.family_name.clone(),
         default.units_per_em,
@@ -370,10 +371,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
             }
         }
     }
-    let mut features = Features::default();
-    if let Some(code) = default_features {
-        features.prefixes.push(Snippet { name: String::new(), code, ..Default::default() });
-    }
+    let features = default_features.as_deref().map(crate::features::read).unwrap_or_default();
     let mut extra = Extra::new();
     ds(&mut extra, "document", Value::String(text.into()));
     ds(&mut extra, "defaultSource", Value::String(default_id.as_str().into()));
@@ -401,6 +399,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         info: Arc::new(FontInfo { properties: font_info.properties, params, date: font_info.date, ..Default::default() }),
         kerning: Arc::new(Kerning { ltr: KernTable(kerning), ..Default::default() }),
         features: Arc::new(features),
+        groups: Arc::new(groups),
         display_strings: Arc::default(),
         note: note.unwrap_or_default(),
         files: Arc::new(FileStore(files)),

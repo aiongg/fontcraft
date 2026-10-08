@@ -966,7 +966,7 @@ status = "handbook"
 id = "roundtrip.ufoKerningGroups"
 area = "import-export"
 milestone = "M1"
-summary = "A glyph's right-side kerning group R becomes membership of `public.kern1.R` and its left-side group L membership of `public.kern2.L`; reading inverts this. Kerning pair sides that name a group use the same prefixed names, and all groups without a kerning prefix are kept as ordinary named glyph groups in their stored order."
+summary = "A glyph's right-side kerning group R becomes membership of `public.kern1.R` and its left-side group L membership of `public.kern2.L`; reading inverts this. Kerning pair sides that name a group use the same prefixed names, and all groups without a kerning prefix are kept as ordinary named glyph groups in their stored order. A UFO 2's kerning groups are recognised as ufoLib recognises them (named `@MMK_L_`/`@MMK_R_` or used as a pair side) and written back under their own names."
 ref = "UFO 3 groups.plist › Kerning Groups; fontc glyphs2fontir src/source.rs (right group is side 1, left group is side 2)"
 status = "docs"
 

@@ -222,12 +222,12 @@ also be an alternate).
 | Pair tables | `kerningLTR`, `kerningRTL`, `kerningVertical`, each `{masterId: {first: {second: value}}}` `[2: kerning, vertKerning]` | `kerning.plist {first: {second: value}}` in each UFO | One table per direction for all masters versus one table per master file. UFO has no vertical kerning. |
 | Group reference in a pair | `@MMK_L_<group>` as first member, `@MMK_R_<group>` as second (seen in `glyphs2fontir` and in test files) | `public.kern1.<group>` as first member, `public.kern2.<group>` as second | The Glyphs prefixes are not in the format document. |
 | Group definition | per glyph: `kernRight` = the group it belongs to as the left glyph of a pair, `kernLeft` = as the right glyph; `kernTop`, `kernBottom` for vertical | `groups.plist`: `public.kern1.X = [glyphs…]`, `public.kern2.X = [glyphs…]` | A glyph attribute versus a member list. Mapping: `kernRight` R ↔ `public.kern1.R`, `kernLeft` L ↔ `public.kern2.L` (`roundtrip.ufoKerningGroups`). UFO lists have an order, may contain glyphs that are not in the font, may be empty, and may differ between masters; the Glyphs attribute can express none of that. |
-| Other groups | none (feature classes are separate, §2.13) | any other key in `groups.plist`; order hint in lib `public.groupOrder` | UFO only. |
+| Other groups | none (feature classes are separate, §2.13); glyphsLib writes them as classes after the feature classes and names them in font `userData` `com.schriftgestaltung.Glyphs.groupsNotInFeature` | any other key in `groups.plist`; order hint in lib `public.groupOrder` | UFO only. The model's `Font::groups` (M1.7): read from `groups.plist`, written to `.glyphs` as glyphsLib writes them and read back from there. |
 | Right-to-left | a separate `kerningRTL` table; in v2 one table, and the doc notes `leftKerningGroup` means the right group for RTL glyphs | none: "first" is the first glyph in reading order, so for RTL the first is the right-hand glyph | UFO is direction-neutral; Glyphs is visual-side based with a table per direction. `glyphs2fontir` merges RTL pairs into the single table by swapping the group side prefixes. |
 | Exceptions | glyph-versus-group pairs take precedence | same, with a defined lookup order: glyph–glyph, glyph–group, group–glyph, group–group | Equivalent. |
 | Values | `f64` | integer or float; zero values should be omitted unless needed as an exception | |
-| Contextual kerning `[4]` | `kerningContext {context: {masterId: value}}` | none (feature code) | The context key syntax is not described. |
-| UFO 2 | — | group names without the mandatory prefixes; norad renames groups used as first or second pair members (and any named `@MMK_L_…`/`@MMK_R_…`) to `public.kern1.…`/`public.kern2.…` on load | Original names must be remembered to write UFO 2 back. |
+| Contextual kerning `[4]` | `kerningContext {context: {masterId: value}}`; a package keeps it in `kerning.plist` | none (feature code) | The context key syntax is not described. The model keeps each context as stored (`Kerning::context`, M1.7). glyphsLib has no UFO form for it: saving as UFO reports it lost. |
+| UFO 2 | — | group names without the mandatory prefixes; ufoLib and norad rename groups used as first or second pair members (and any named `@MMK_L_…`/`@MMK_R_…`) to `public.kern1.…`/`public.kern2.…` on load | The model holds the new names (ufoLib's rule, M1.7). The writer works the old names out again from the files it read; a new group gets `@MMK_L_`/`@MMK_R_`. |
 
 ### 2.12 Metrics and metrics keys
 
@@ -246,9 +246,9 @@ also be an alternate).
 | Features | `features[] {tag, code, automatic, disabled, notes, labels[] {language, value}}` `[2: name instead of tag]` | one `features.fea` text file per UFO | A structured list of snippets versus one text. `code` is the body only; the `feature tag { … } tag;` wrapper is implied. The same tag may occur more than once. |
 | Classes | `classes[] {name, code, automatic, disabled, notes}` (name without `@`; code may contain comments) | `@Name = […];` statements in `features.fea` | |
 | Prefixes | `featurePrefixes[] {name, code, automatic, disabled, notes}` | everything in `features.fea` outside feature blocks | |
-| Automatic | `automatic` = the application regenerates the code | none; converted files seen in fontTools and fontc test data mark snippets with comment lines `# automatic` and `# Prefix: <name>` | An importer can rebuild the structure from those comments, otherwise by parsing. |
-| Disabled | `disabled` | none (comment the code out) | |
-| Stylistic-set names | `labels[]` | `featureNames { name … }` inside the feature | |
+| Automatic | `automatic` = the application regenerates the code | none; glyphsLib marks snippets with comment lines `# Prefix: <name>`, `# automatic`, `# notes:` and `# disabled` (seen in fontTools and fontc test data) | FontCraft writes and reads these markers as glyphsLib does (M1.7, `crates/io-ufo/src/features.rs`); a text is split into snippets only when writing them gives it back byte for byte, otherwise it stays one unnamed prefix. |
+| Disabled | `disabled` | none (comment the code out) | glyphsLib comments out a disabled feature's code after `# disabled` and writes disabled prefixes and classes as live code; FontCraft comments those out too. |
+| Stylistic-set names | `labels[]` | `featureNames { name … }` inside the feature | Written as glyphsLib writes them (Windows language ids; labels without text or with an unknown language left out); read back only from automatic features, as glyphsLib reads them. |
 | Includes | not in the format document | `include(path);` resolved relative to the UFO | |
 | Per master | one set for the font | one file per UFO; they normally match but need not (`fontir` models a feature source per set of locations) | |
 | Package storage `[4]` | `features/<tag>.fea`, `features/@<Class>.fea`, `features/_<Prefix>.fea`; clashes get `.2`, `.3` | — | |
@@ -289,7 +289,7 @@ would have to define because none was found (`roundtrip.ufoGlyphsLibKeys`, `roun
 | Glyph category, subcategory, script, case, direction, tags, lock, sort names, last change | glyph lib `com.schriftgestaltung.Glyphs.category`, `…subCategory`, `…lastChange` (seen); the others `org.fontcraft.glyph.*`; plus `public.openTypeCategories` derived for compilers once the glyph database exists (M4; until then only a UFO's own map is written back) |
 | Colour label by index | `public.markColor` with the label colour glyphsLib uses for the index; reading that exact text gives the index back (implemented, M1.7), so no extra key is needed |
 | Metrics keys (glyph and layer) | glyph lib `org.fontcraft.metricsKeys` |
-| Kerning groups for top and bottom, `kerningVertical`, `kerningContext`, separate `kerningRTL` | lib `org.fontcraft.kerning.vertical`, `…context`; RTL pairs are merged into `kerning.plist` with a lib marker listing which pairs came from the RTL table |
+| Kerning groups for top and bottom, `kerningVertical`, `kerningContext`, separate `kerningRTL` | planned: lib `org.fontcraft.kerning.vertical`, `…context`; RTL pairs are merged into `kerning.plist` with a lib marker listing which pairs came from the RTL table. Until then saving as UFO reports them lost (M1.7) |
 | Backup layers and their names | sparse UFO layers; glyph lib `org.fontcraft.layer {id, associatedMaster, name}` on each layer GLIF |
 | Intermediate layers | UFO layer named by the coordinates + DS `<source layer>` (seen in fontc test data) |
 | Alternate layers | generated `<glyph>.BRACKET.varAltNN` glyphs + DS `<rules>` (seen in `glyphs2fontir`); glyph lib marker to merge them back |
@@ -300,7 +300,7 @@ would have to define because none was found (`roundtrip.ufoGlyphsLibKeys`, `roun
 | Corner, cap, segment, brush components; node-attached hints; TT instructions as authored | glyph lib `org.fontcraft.hints` (index paths rewritten to point identifiers); optionally decomposed outlines for other tools |
 | Path and component drawing attributes, gradients, shape groups, node flags, node `hoi` data, v4 curve types | object libs `org.fontcraft.shape`, `org.fontcraft.node`; v4 curve types additionally need a cubic approximation as the visible outline |
 | Guide filter, measurement, lock, circle and rectangle guides | object lib `org.fontcraft.guide`; non-line guides are omitted from the visible guideline list |
-| Feature structure (`automatic`, `disabled`, `notes`, snippet boundaries) | comment markers in `features.fea` (`# automatic`, `# Prefix: <name>` seen); disabled snippets and notes need further markers or lib `org.fontcraft.features` |
+| Feature structure (`automatic`, `disabled`, `notes`, `labels`, snippet boundaries) | comment markers in `features.fea` as glyphsLib writes them (`# Prefix: <name>`, `# automatic`, `# notes:`, `# disabled`, `featureNames`; implemented, M1.7). Notes of prefixes and classes have no marker and are reported lost |
 | Image crop, alpha, lock, original path and type | object-less: glyph lib `org.fontcraft.image` |
 | Long axis tags, glyph-local axes, `Virtual Master`, `Variable Font Origin`, `fontType` | DS document `lib` |
 
@@ -313,7 +313,8 @@ would have to define because none was found (`roundtrip.ufoGlyphsLibKeys`, `roun
 | Float `unitsPerEm` | rounded value in `unitsPerEm`, exact value in `userData` (loss report) |
 | Point `name`, point/contour/component/anchor/guideline `identifier`, object libs | node `attr.userData` (nodes), `userData`/`attr` of the object; contour identifiers in the path's `attr` |
 | GLIF file names, layer directory names, `layerinfo.plist` colour and lib | font `userData` → `org.fontcraft.ufo` |
-| Non-kerning groups, group member order, members not in the font, empty kerning groups, per-master group differences | font or master `userData` → `org.fontcraft.ufo.groups` |
+| Non-kerning groups | classes after the feature classes, named in font `userData` `com.schriftgestaltung.Glyphs.groupsNotInFeature`, as glyphsLib writes them (implemented, M1.7) |
+| Kerning group member order, members not in the font, empty kerning groups, per-master group differences | font or master `userData` → `org.fontcraft.ufo.groups` (planned) |
 | Primary code point order; code points, note, mark colour or lib that differ between masters' GLIFs | layer `userData` on the master layer that differs (planned; for now they stay in that layer's `Extra`, written back to the UFO and counted as lost when saving `.glyphs`) |
 | Anchor and guideline colour; unnamed anchors | `userData` / `attr` of the object |
 | `public.postscript.hints`, `public.truetype.instructions`, `public.truetype.overlap`, `public.verticalOrigin` (when not equal to `vertOrigin` semantics), `public.unicodeVariationSequences`, `public.openTypeMeta`, any foreign lib key | layer or font `userData` under the same key name, so that writing UFO again restores it verbatim |

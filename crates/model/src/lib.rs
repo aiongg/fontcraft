@@ -25,7 +25,7 @@ mod rare;
 mod shape_info;
 
 pub use extra::{Extra, ExtraEntry, Family};
-pub use features::{Features, Snippet};
+pub use features::{Features, Group, Snippet};
 pub use font::{
     AlignmentZone, Axis, AxisLabel, AxisRange, FileStore, Font, FontInfo, GlyphMut, GlyphTable, Guide, Instance, LangName, Master, MetricDef,
     MetricValue, NameParts, NumberDef, Settings, Source, SourceFormat, StemDef, StyleClass, metric,
@@ -34,7 +34,7 @@ pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
 pub use glyph_info::{ColorLabel, GlyphInfo, GlyphInfoBox, MetricsKeys, PartProperty};
 pub use info::{DEFAULT_LANGUAGE, Localized, Param, Params, Properties, Property, PropertyValue, UserData};
-pub use kerning::{KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
+pub use kerning::{KernContext, KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
 pub use rare::{Rare, RareDefault};
 pub use shape_info::{

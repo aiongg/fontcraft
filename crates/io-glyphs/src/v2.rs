@@ -259,7 +259,7 @@ fn push_font_info(e: &mut Vec<(Str, Value)>, font: &Font) -> Result<()> {
 
 pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
     let app_version = crate::take_app_version(&mut root);
-    let font_info = take_font_info(&mut root);
+    let mut font_info = take_font_info(&mut root);
     let family_name = opt_string(&mut root, "familyName", "the file")?.unwrap_or_default();
     let units_per_em = as_u16(&take(&mut root, "unitsPerEm").ok_or_else(|| bad("the file", "no unitsPerEm"))?, "unitsPerEm")?;
     let version_major = take(&mut root, "versionMajor").map(|v| as_u16(&v, "versionMajor")).transpose()?.unwrap_or(0);
@@ -292,9 +292,9 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
             .collect::<Result<Vec<_>>>()?,
         None => Vec::new(),
     };
-    let kerning =
-        Kerning { ltr: take_kern_table(&mut root, "kerning"), rtl: Default::default(), vertical: take_kern_table(&mut root, "vertKerning") };
-    let features = take_features(&mut root, "name");
+    let kerning = Kerning { ltr: take_kern_table(&mut root, "kerning"), vertical: take_kern_table(&mut root, "vertKerning"), ..Default::default() };
+    let mut features = take_features(&mut root, "name");
+    let groups = crate::groups::take_groups(&mut features.classes, &mut font_info.user_data);
     let display_strings = take_strings(&mut root, "DisplayStrings");
     let note = take_note(&mut root);
     Ok(Font {
@@ -313,6 +313,7 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
         info: Arc::new(font_info),
         kerning: Arc::new(kerning),
         features: Arc::new(features),
+        groups: Arc::new(groups),
         display_strings: Arc::new(display_strings),
         note,
         files: Arc::default(),
@@ -676,7 +677,7 @@ pub(crate) fn write_font(font: &Font) -> Result<Dict> {
     push_font_info(&mut e, font)?;
     e.push(("fontMaster".into(), list(font.masters.iter().map(|m| write_master(font, m)).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g).map(Value::Dict)).collect::<Result<_>>()?)));
-    push_features(&mut e, &font.features, "name");
+    push_features(&mut e, font, "name");
     push_ui_and_note(&mut e, font);
     if !font.instances.is_empty() {
         let n = font.axes.len();

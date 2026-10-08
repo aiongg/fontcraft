@@ -17,14 +17,15 @@
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Anchor, Axis, Extra, Family, Features, Font, FontInfo, Glyph, GlyphTable, Instance, KernFirst, KernGroups, KernTable, Kerning, Layer, Master,
-    MasterKerning, MetricDef, MetricValue, ModelError, PropertyValue, RawShape, Shape, Snippet, Source, SourceFormat,
+    Anchor, Axis, Extra, Family, Features, Font, FontInfo, Glyph, GlyphTable, Instance, KernContext, KernFirst, KernGroups, KernTable, Kerning,
+    Layer, Master, MasterKerning, MetricDef, MetricValue, ModelError, PropertyValue, RawShape, Shape, Snippet, Source, SourceFormat,
 };
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
 mod design;
 mod glyph;
+mod groups;
 mod info;
 mod layer;
 mod package;
@@ -85,6 +86,17 @@ pub fn info_losses(font: &Font) -> Vec<String> {
         for m in font.masters.iter().filter(|m| !m.zones.is_empty()) {
             let name = if m.name.is_empty() { &m.id } else { &m.name };
             out.push(format!("master `{name}`: alignment zones other than overshoots ({})", m.zones.len()));
+        }
+    }
+    // Contextual kerning is version 4's; feature labels are not in version 2.
+    let version = font.source.glyphs_version.unwrap_or(3);
+    if version < 4 && !font.kerning.context.is_empty() {
+        out.push(format!("contextual kerning ({} contexts)", font.kerning.context.len()));
+    }
+    if version == 2 {
+        let labelled = font.features.features.iter().filter(|f| !f.labels.is_empty()).count();
+        if labelled > 0 {
+            out.push(format!("feature labels ({labelled} features)"));
         }
     }
     // A designspace's axis data the format has no key for. The range travels while the axis
@@ -243,7 +255,7 @@ pub(crate) fn push_font_info_common(e: &mut Vec<(Str, Value)>, font: &Font, para
         e.push(("date".into(), string(d)));
     }
     info::push_params(e, params);
-    info::push_user_data(e, &font.info.user_data);
+    info::push_user_data(e, &groups::user_data(font));
 }
 
 fn read_font(mut root: Dict) -> Result<Font> {
@@ -255,7 +267,7 @@ fn read_font(mut root: Dict) -> Result<Font> {
         return Err(GlyphsError::Unsupported(format!("format version {version}")));
     }
     let app_version = take_app_version(&mut root);
-    let font_info = take_font_info(&mut root)?;
+    let mut font_info = take_font_info(&mut root)?;
     let family_name = if version >= 4 {
         v4_family_name(&font_info.properties).unwrap_or_default()
     } else {
@@ -264,7 +276,8 @@ fn read_font(mut root: Dict) -> Result<Font> {
     let units_per_em = as_u16(&take(&mut root, "unitsPerEm").ok_or_else(|| bad("the file", "no unitsPerEm"))?, "unitsPerEm")?;
     let version_major = take(&mut root, "versionMajor").map(|v| as_u16(&v, "versionMajor")).transpose()?.unwrap_or(0);
     let version_minor = take(&mut root, "versionMinor").map(|v| as_u16(&v, "versionMinor")).transpose()?.unwrap_or(0);
-    let features = take_features(&mut root, "tag");
+    let mut features = take_features(&mut root, "tag");
+    let groups = groups::take_groups(&mut features.classes, &mut font_info.user_data);
     let display_strings = take_strings(&mut root, "DisplayStrings");
     let note = take_note(&mut root);
     let axes = take_typed_list(&mut root, "axes", read_axis);
@@ -293,6 +306,7 @@ fn read_font(mut root: Dict) -> Result<Font> {
         ltr: take_kern_table(&mut root, "kerningLTR"),
         rtl: take_kern_table(&mut root, "kerningRTL"),
         vertical: take_kern_table(&mut root, "kerningVertical"),
+        context: if version >= 4 { take_kern_context(&mut root) } else { Vec::new() },
     };
     Ok(Font {
         source: Source { format: SourceFormat::Glyphs, glyphs_version: u32::try_from(version).ok(), app_version, ..Default::default() },
@@ -302,6 +316,7 @@ fn read_font(mut root: Dict) -> Result<Font> {
         version_major,
         version_minor,
         features: Arc::new(features),
+        groups: Arc::new(groups),
         display_strings: Arc::new(display_strings),
         note,
         axes: Arc::new(axes),
@@ -364,6 +379,46 @@ fn write_kern_table(t: &KernTable) -> Result<Value> {
     Ok(Value::Dict(masters))
 }
 
+/// Version 4's `kerningContext`, `{context: {master: value}}`, taken out of `d` when every value
+/// is a number and writing it back gives the same text; otherwise it stays as written.
+fn take_kern_context(d: &mut Dict) -> Vec<KernContext> {
+    const KEY: &str = "kerningContext";
+    let Some(v) = d.get(KEY) else { return Vec::new() };
+    let Some(contexts) = v.as_dict() else { return Vec::new() };
+    if contexts.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::with_capacity(contexts.len());
+    for (context, values) in &contexts.entries {
+        let Some(values) = values.as_dict() else { return Vec::new() };
+        let Some(values) = values.entries.iter().map(|(m, v)| Some((m.as_str().to_string(), v.as_num()?.as_f64()))).collect::<Option<Vec<_>>>()
+        else {
+            return Vec::new();
+        };
+        out.push(KernContext { context: context.as_str().to_string(), values });
+    }
+    match write_kern_context(&out) {
+        Ok(w) if design::same_text(&w, v) => {
+            take(d, KEY);
+            out
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// `kerningContext` as version 4 writes it, in the model's order.
+fn write_kern_context(contexts: &[KernContext]) -> Result<Value> {
+    let mut out = Dict::new();
+    for c in contexts {
+        let mut values = Dict::new();
+        for (master, v) in &c.values {
+            values.entries.push((Str::new(master.as_str()), num(*v, "kerningContext")?));
+        }
+        out.entries.push((Str::new(c.context.as_str()), Value::Dict(values)));
+    }
+    Ok(Value::Dict(out))
+}
+
 /// A glyph's kerning groups under the given keys (left, right, top, bottom).
 fn take_kern_groups(d: &mut Dict, keys: [&str; 4], at: &str) -> Result<KernGroups> {
     let [l, r, t, b] = keys;
@@ -424,7 +479,8 @@ fn read_snippet(v: &Value, name_key: &str) -> Option<Snippet> {
         Some(n) => n.as_str()?.to_string(),
         None => String::new(),
     };
-    Some(Snippet { name, code, automatic, disabled, notes, file_name: None, extra: into_extra(d) })
+    let labels = design::take_checked(&mut d, "labels", info::read_localized, |l| Some(info::write_localized(l)));
+    Some(Snippet { name, code, automatic, disabled, notes, labels, file_name: None, extra: into_extra(d) })
 }
 
 fn write_snippet(s: &Snippet, name_key: &str) -> Value {
@@ -438,11 +494,19 @@ fn write_snippet(s: &Snippet, name_key: &str) -> Value {
     if !s.notes.is_empty() {
         e.push(("notes".into(), string(&s.notes)));
     }
+    if !s.labels.is_empty() {
+        e.push(("labels".into(), list(s.labels.iter().map(info::write_localized).collect())));
+    }
     Value::Dict(finish(e, &s.extra))
 }
 
-fn push_features(e: &mut Vec<(Str, Value)>, f: &Features, tag_key: &str) {
-    for (key, list_of, name_key) in [("featurePrefixes", &f.prefixes, "name"), ("classes", &f.classes, "name"), ("features", &f.features, tag_key)] {
+/// The prefixes, the classes (the font's groups after the feature classes) and the features.
+fn push_features(e: &mut Vec<(Str, Value)>, font: &Font, tag_key: &str) {
+    let f = &font.features;
+    let classes = groups::classes(font);
+    for (key, list_of, name_key) in
+        [("featurePrefixes", f.prefixes.as_slice(), "name"), ("classes", &classes, "name"), ("features", f.features.as_slice(), tag_key)]
+    {
         if !list_of.is_empty() {
             e.push((key.into(), list(list_of.iter().map(|s| write_snippet(s, name_key)).collect())));
         }
@@ -817,7 +881,7 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     if !font.axes.is_empty() {
         e.push(("axes".into(), list(font.axes.iter().map(write_axis).collect())));
     }
-    push_features(&mut e, &font.features, "tag");
+    push_features(&mut e, font, "tag");
     push_ui_and_note(&mut e, font);
     if !font.instances.is_empty() {
         e.push(("instances".into(), list(font.instances.iter().map(write_instance).collect::<Result<_>>()?)));
@@ -828,6 +892,9 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
         if !table.is_empty() {
             e.push((key.into(), write_kern_table(table)?));
         }
+    }
+    if version >= 4 && !font.kerning.context.is_empty() {
+        e.push(("kerningContext".into(), write_kern_context(&font.kerning.context)?));
     }
     Ok(finish(e, extra))
 }

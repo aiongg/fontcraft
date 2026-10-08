@@ -1,7 +1,7 @@
 //! `.glyphs` → designspace → model: the font information, the alignment zones, the stems, the
-//! guides, the axes (ranges and maps), the instances, the glyphs' metadata and the layers (their
-//! drawings, guides, images, backgrounds, vertical metrics and user data) come back, except what
-//! the loss report lists. Every `.glyphs` source the reference app
+//! guides, the axes (ranges and maps), the instances, the glyphs' metadata, the layers (their
+//! drawings, guides, images, backgrounds, vertical metrics and user data), the kerning, the
+//! groups and the feature code come back, except what the loss report lists. Every `.glyphs` source the reference app
 //! saved in format version 3 (outside fontc's hand-made test data). Skipped when `corpus/` is
 //! absent.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -9,6 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use fontcraft_io_ufo::designspace;
+use fontcraft_io_ufo::features::{FEATURE_LOSSES, label_record};
+use fontcraft_io_ufo::kerning::KERNING_LOSSES;
 use fontcraft_io_ufo::ufo::{GLYPH_LOSSES, LAYER_LOSSES, SHAPE_LOSSES};
 use fontcraft_model::{
     Anchor, Background, ColorLabel, Family, Font, Glyph, GlyphInfo, Guide, Image, Instance, Layer, Master, Param, Params, Properties, Shape, axes,
@@ -412,6 +414,84 @@ fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
     }
 }
 
+/// The left-to-right pairs, with sides spelled as the reference's format spells them.
+fn pairs(font: &Font) -> Vec<(String, String, String, f64)> {
+    let side = |s: &str| fontcraft_model::glyphs_side(s).into_owned();
+    let mut out: Vec<_> = font
+        .kerning
+        .ltr
+        .0
+        .iter()
+        .flat_map(|m| m.firsts.iter().flat_map(move |f| f.seconds.iter().map(move |(s, v)| (m.master.clone(), side(&f.first), side(s), *v))))
+        .collect();
+    out.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    out
+}
+
+/// Kerning, kerning groups and the other groups.
+fn kerning_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
+    if pairs(font) != pairs(back) {
+        diffs.push(format!("kerning: {} left-to-right pairs → {}", pairs(font).len(), pairs(back).len()));
+    }
+    let lost = [
+        (KERNING_LOSSES[0], font.kerning.rtl.pair_count() > 0),
+        (KERNING_LOSSES[1], font.kerning.vertical.pair_count() > 0),
+        (KERNING_LOSSES[2], !font.kerning.context.is_empty()),
+        (KERNING_LOSSES[3], font.glyphs.iter().any(|g| g.kern_groups.top.is_some() || g.kern_groups.bottom.is_some())),
+    ];
+    diffs.extend(lost.iter().filter(|(_, on)| *on).map(|(what, _)| what.to_string()));
+    for g in font.glyphs.iter() {
+        let Some(b) = back.glyph(&g.name) else { continue };
+        if (&g.kern_groups.left, &g.kern_groups.right) != (&b.kern_groups.left, &b.kern_groups.right) {
+            diffs.push(format!("kerning groups: glyph `{}` {:?} → {:?}", g.name, g.kern_groups, b.kern_groups));
+        }
+    }
+    if font.groups != back.groups {
+        diffs.push(format!("groups: {:?} → {:?}", font.groups, back.groups));
+    }
+}
+
+/// The prefixes, classes and features, with the losses the report names applied first.
+fn features_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
+    let mut f = (*font.features).clone();
+    let mut lost = [false; 5];
+    for s in &mut f.features {
+        let before = s.labels.len();
+        s.labels.retain(|l| label_record(l).is_some());
+        lost[0] |= s.labels.len() != before;
+        if s.notes.ends_with('\n') || s.disabled && s.code.ends_with('\n') {
+            s.notes = s.notes.trim_end_matches('\n').to_string();
+            if s.disabled {
+                s.code = s.code.trim_end_matches('\n').to_string();
+            }
+            lost[3] = true;
+        }
+    }
+    for s in f.prefixes.iter_mut().chain(f.classes.iter_mut()) {
+        lost[2] |= !s.notes.is_empty();
+        s.notes.clear();
+    }
+    for s in f.prefixes.iter_mut().chain(f.classes.iter_mut()).chain(f.features.iter_mut()) {
+        lost[4] |= !s.extra.is_empty();
+        s.extra = Default::default();
+        s.file_name = None;
+    }
+    let manual_labels: Vec<String> = f.features.iter().filter(|s| !s.automatic && !s.labels.is_empty()).map(|s| s.name.clone()).collect();
+    lost[1] = !manual_labels.is_empty();
+    diffs.extend(FEATURE_LOSSES.iter().zip(lost).filter(|(_, on)| *on).map(|(what, _)| what.to_string()));
+    let fields = |s: &fontcraft_model::Snippet| (s.name.clone(), s.code.clone(), s.automatic, s.disabled, s.notes.clone(), s.labels.clone());
+    let lists = [("prefixes", &f.prefixes, &back.features.prefixes), ("classes", &f.classes, &back.features.classes)];
+    for (what, before, after) in lists {
+        if before.iter().map(fields).ne(after.iter().map(fields)) {
+            diffs.push(format!("features: {what} {before:?} → {after:?}"));
+        }
+    }
+    let kept = |list: &[fontcraft_model::Snippet]| list.iter().filter(|s| !manual_labels.contains(&s.name)).map(fields).collect::<Vec<_>>();
+    if kept(&f.features) != kept(&back.features.features) || f.features.len() != back.features.features.len() {
+        diffs.push(format!("features: features {:?} → {:?}", f.features, back.features.features));
+    }
+}
+
 fn info_trip(font: &Font) -> Vec<String> {
     let written = fontcraft_io_ufo::designspace::write(font).unwrap();
     let back = fontcraft_io_ufo::designspace::read(&written.document, &written.ufos).unwrap();
@@ -420,6 +500,8 @@ fn info_trip(font: &Font) -> Vec<String> {
     instances_trip(font, &back, &mut diffs);
     glyphs_trip(font, &back, &mut diffs);
     layers_trip(font, &back, &mut diffs);
+    kerning_trip(font, &back, &mut diffs);
+    features_trip(font, &back, &mut diffs);
     if font.info.date != back.info.date {
         diffs.push(format!("font: date {:?} → {:?}", font.info.date, back.info.date));
     }
@@ -455,6 +537,7 @@ fn font_information_survives_a_designspace() {
     let (mut zoned, mut stemmed, mut guided, mut instanced, mut mapped) = (0, 0, 0, 0, 0);
     let (mut noted, mut coloured, mut produced) = (0, 0, 0);
     let (mut layered, mut backgrounds, mut layer_guides, mut images) = (0, 0, 0, 0);
+    let (mut kerned, mut grouped, mut featured, mut labelled) = (0, 0, 0, 0);
     for path in &all {
         let text = std::fs::read_to_string(path).unwrap();
         if !text.lines().take(3).any(|l| l.starts_with(".appVersion = "))
@@ -480,6 +563,10 @@ fn font_information_survives_a_designspace() {
         backgrounds += any_layer(&|l| l.info.background.as_ref().is_some_and(|b| !b.shapes.is_empty()));
         layer_guides += any_layer(&|l| !l.info.guides.is_empty());
         images += any_layer(&|l| l.info.image.is_some());
+        kerned += usize::from(!font.kerning.ltr.is_empty());
+        grouped += usize::from(font.glyphs.iter().any(|g| !g.kern_groups.is_empty()));
+        featured += usize::from(!font.features.features.is_empty() && !font.features.prefixes.is_empty());
+        labelled += usize::from(font.features.features.iter().any(|s| !s.labels.is_empty()));
         let losses = designspace::info_losses(&font);
         for d in info_trip(&font) {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
@@ -499,6 +586,8 @@ fn font_information_survives_a_designspace() {
     assert!(noted > 0 && coloured > 0 && produced > 0, "the corpus exercises glyph notes, colours and production names");
     eprintln!("{layered} with other layers in a UFO, {backgrounds} with backgrounds, {layer_guides} with layer guides, {images} with images");
     assert!(layered > 0 && backgrounds > 0 && layer_guides > 0 && images > 0, "the corpus exercises layers, backgrounds, layer guides and images");
+    eprintln!("{kerned} with kerning, {grouped} with kerning groups, {featured} with prefixes and features, {labelled} with feature labels");
+    assert!(kerned > 0 && grouped > 0 && featured > 0 && labelled > 0, "the corpus exercises kerning, kerning groups, features and labels");
 }
 
 fn designspaces(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -532,8 +621,9 @@ fn ufo_tree(root: &Path) -> fontcraft_io_ufo::Files {
     out
 }
 
-/// designspace → `.glyphs` → designspace: the axes (ranges and maps) and the instances come back,
-/// except what the two loss reports list. Every corpus designspace whose UFOs are present.
+/// designspace → `.glyphs` → designspace: the axes (ranges and maps), the instances, the glyphs'
+/// metadata, the kerning, the groups and the feature code come back, except what the two loss
+/// reports list. Every corpus designspace whose UFOs are present.
 #[test]
 fn axes_and_instances_survive_a_glyphs_file() {
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -567,6 +657,8 @@ fn axes_and_instances_survive_a_glyphs_file() {
         axes_trip(&font, &again, &mut diffs);
         instances_trip(&font, &again, &mut diffs);
         glyphs_trip(&font, &again, &mut diffs);
+        kerning_trip(&font, &again, &mut diffs);
+        features_trip(&font, &again, &mut diffs);
         for d in diffs {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
             if listed {
@@ -579,4 +671,64 @@ fn axes_and_instances_survive_a_glyphs_file() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     eprintln!("{checked} designspaces through a .glyphs file; {excused} differences the loss reports list");
     assert!(checked >= 40, "only {checked} designspaces found");
+}
+
+fn ufos(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.file_name().is_some_and(|n| n == ".git") || !p.is_dir() {
+            continue;
+        }
+        if p.extension().is_some_and(|x| x == "ufo") {
+            out.push(p);
+        } else {
+            ufos(&p, out);
+        }
+    }
+}
+
+/// UFO → `.glyphs` → UFO: the kerning, the kerning groups (UFO 2 ones included), the other groups
+/// and the feature code come back, except what the two loss reports list. Every corpus UFO the
+/// reader reads.
+#[test]
+fn kerning_groups_and_features_survive_a_glyphs_file() {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    if !corpus.is_dir() {
+        eprintln!("corpus/ absent: skipped (cargo xtask corpus --fetch)");
+        return;
+    }
+    let mut all = Vec::new();
+    ufos(&corpus, &mut all);
+    all.sort();
+    let (mut checked, mut grouped, mut ufo2_kerned, mut split, mut failures) = (0, 0, 0, 0, Vec::new());
+    for path in &all {
+        let Ok(font) = fontcraft_io_ufo::ufo::read(&ufo_tree(path)) else { continue };
+        checked += 1;
+        grouped += usize::from(!font.groups.is_empty());
+        ufo2_kerned += usize::from(font.source.ufo_version == Some(2) && font.glyphs.iter().any(|g| !g.kern_groups.is_empty()));
+        split += usize::from(!fontcraft_io_ufo::features::is_kept_text(&font.features) && !font.features.is_empty());
+        let glyphs = fontcraft_io_glyphs::write(&font).unwrap();
+        let mut back = fontcraft_io_glyphs::read(&glyphs).unwrap();
+        back.source = font.source.clone();
+        let again = fontcraft_io_ufo::ufo::read(&fontcraft_io_ufo::ufo::write(&back).unwrap()).unwrap();
+        let mut losses = fontcraft_io_glyphs::info_losses(&font);
+        losses.extend(fontcraft_io_ufo::ufo::info_losses(&back));
+        let mut diffs = Vec::new();
+        kerning_trip(&font, &again, &mut diffs);
+        features_trip(&font, &again, &mut diffs);
+        for d in diffs {
+            if !losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l))) {
+                failures.push(format!("{}: {d}", path.strip_prefix(&corpus).unwrap().display()));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    eprintln!(
+        "{checked} UFOs through a .glyphs file: {grouped} with other groups, {ufo2_kerned} UFO 2 with kerning groups, {split} with split feature code"
+    );
+    assert!(
+        checked >= 100 && grouped > 0 && ufo2_kerned > 0 && split > 0,
+        "the corpus exercises groups, UFO 2 kerning groups and split feature code"
+    );
 }

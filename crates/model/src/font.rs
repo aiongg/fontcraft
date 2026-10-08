@@ -10,7 +10,7 @@ use std::sync::Arc;
 use fontcraft_geom::{BezPath, Point};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::features::Features;
+use crate::features::{Features, Group};
 use crate::glyph::{Glyph, Layer, Path, Shape};
 use crate::glyph_info::check_glyph_info;
 use crate::info::{Params, Properties, UserData};
@@ -520,6 +520,10 @@ pub struct Font {
     pub kerning: Arc<Kerning>,
     #[serde(default, skip_serializing_if = "Features::is_empty")]
     pub features: Arc<Features>,
+    /// Named glyph lists outside the feature code (a UFO's groups that are not kerning groups),
+    /// in file order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Arc<Vec<Group>>,
     /// The texts of the edit tabs, saved with the document.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub display_strings: Arc<Vec<String>>,
@@ -756,6 +760,7 @@ impl Font {
             glyphs: GlyphTable::from_glyphs(glyphs),
             kerning: Arc::default(),
             features: Arc::default(),
+            groups: Arc::default(),
             display_strings: Arc::default(),
             note: String::new(),
             files: Arc::default(),
@@ -1016,6 +1021,7 @@ impl Font {
             && arc_eq(&self.files, &before.files)
             && arc_eq(&self.kerning, &before.kerning)
             && arc_eq(&self.features, &before.features)
+            && arc_eq(&self.groups, &before.groups)
             && arc_eq(&self.display_strings, &before.display_strings)
             && self.note == before.note
             && arc_eq(&self.axes, &before.axes)
