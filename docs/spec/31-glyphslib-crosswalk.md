@@ -8,7 +8,11 @@ may keep our own carriers instead, and say so in the code.
 The tables restate behaviour in our own words; key names, parameter names and constants are
 facts. `file:line` references are relative to the installed `glyphsLib/` package. Implemented so
 far: font information (§1 to §3) in `crates/io-ufo/src/fontinfo.rs`; master alignment zones,
-stems and guides (§4.1, §4 stem rows, §9.6) in `crates/io-ufo/src/design.rs`.
+stems and guides (§4.1, §4 stem rows, §9.6) in `crates/io-ufo/src/design.rs`; axes, user
+locations and the origin master (§6.1 to §6.5) in `crates/model/src/axes.rs` and
+`crates/io-ufo/src/designspace/axes.rs`; instances and variable fonts (§5.1, §5.2, §5.4, §5.5)
+in `crates/io-ufo/src/designspace/instances.rs`. Not yet: STAT (§6.6), applying instance data
+(§5.3). Where FontCraft differs from glyphsLib on purpose: `docs/plans/M1.md` § M1.7.
 
 Direction labels used in the tables:
 

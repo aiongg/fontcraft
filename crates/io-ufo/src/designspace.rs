@@ -8,11 +8,17 @@
 //! names, feature code, export lists, groups, font info) are kept per master and written back as
 //! long as the model has not changed the default master's.
 //!
+//! The axes ([`axes`]) and the instances and variable fonts ([`instances`]) are model fields; the
+//! axes' maps are the font's `Axis Mappings` parameter, and a default source that glyphsLib would
+//! not take as the origin is named by a `Variable Font Origin` parameter.
+//!
 //! The designspace document itself is kept as read (the XML tree, comments and deprecated
 //! elements included) in the font's [`Extra`] under [`Family::Designspace`] (`document`), and the
-//! writer changes it only where the model changed: axis names, tags and hidden flags, source and
-//! instance locations, sources and instances added or removed. A document that did not come from
-//! a designspace gets one in the layout fontTools' `designspaceLib` writes (format 5.0).
+//! writer changes it only where the model changed, reading the kept element the way the reader
+//! does and comparing: axes, maps, source names and locations, instances and variable fonts, and
+//! sources and instances added or removed. A document that did not come from a designspace gets
+//! one in the layout fontTools' `designspaceLib` writes (format 5.0), with what glyphsLib writes
+//! for a `.glyphs` source.
 //!
 //! Locations are design coordinates in the model, parallel to [`Font::axes`]. A dimension given in
 //! user coordinates is mapped through the axis's `map` elements when read and written back
@@ -21,8 +27,9 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
+use fontcraft_model::axes::{AXIS_MAPPINGS, ORIGIN};
 use fontcraft_model::{
-    Axis, Extra, Family, Features, FileStore, Font, FontInfo, Glyph, GlyphTable, Instance, KernTable, Kerning, Master, MetricDef, MetricValue,
+    Extra, Family, Features, FileStore, Font, FontInfo, Glyph, GlyphTable, Instance, KernTable, Kerning, Master, MetricDef, MetricValue, Param,
     Snippet, Source, SourceFormat,
 };
 use fontcraft_plist::xml::{self, Element, Node as XNode, Text};
@@ -31,6 +38,9 @@ use fontcraft_plist::{Array, Value, xmlplist};
 use crate::fontinfo;
 use crate::ufo::{self, FEATURES_KEY, ReadUfo, Target};
 use crate::{Files, Result, UfoError, bad};
+
+mod axes;
+mod instances;
 
 const DOC: &str = "the designspace";
 /// Most sources, instances or axes one designspace may have.
@@ -46,7 +56,6 @@ pub struct Written {
 struct AxisInfo {
     name: String,
     tag: String,
-    hidden: bool,
     /// User-space default, and the user → design map.
     user_default: f64,
     map: Vec<(f64, f64)>,
@@ -114,13 +123,7 @@ fn read_axes(root: &Element) -> Result<Vec<AxisInfo>> {
                 map.push((i, o));
             }
         }
-        out.push(AxisInfo {
-            tag: a.attr("tag").unwrap_or("").to_string(),
-            hidden: a.attr("hidden").is_some_and(|h| h == "1" || h == "true"),
-            name,
-            user_default,
-            map,
-        });
+        out.push(AxisInfo { tag: a.attr("tag").unwrap_or("").to_string(), name, user_default, map });
     }
     Ok(out)
 }
@@ -375,20 +378,28 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
     let mut extra = Extra::new();
     ds(&mut extra, "document", Value::String(text.into()));
     ds(&mut extra, "defaultSource", Value::String(default_id.as_str().into()));
-    let font = Font {
+    let family = family_name.unwrap_or_default();
+    let model_axes = model_axes(root)?;
+    // The axes' maps, as the `Axis Mappings` parameter.
+    let mut params = font_info.params;
+    let sources: Vec<&[f64]> = masters.iter().map(|m| m.location.as_slice()).collect();
+    if let Some(v) = doc_mappings(root, &model_axes, &sources)? {
+        params.0.push(Param::new(AXIS_MAPPINGS, v));
+    }
+    let mut font = Font {
         source: Source { format: SourceFormat::Designspace, ufo_version: Some(ufo_version), ..Default::default() },
-        family_name: family_name.unwrap_or_default(),
+        family_name: family.clone(),
         units_per_em: ufo::units_per_em(units_per_em)?,
         version_major: version_major.and_then(|v| u16::try_from(v).ok()).unwrap_or(0),
         version_minor: version_minor.and_then(|v| u16::try_from(v).ok()).unwrap_or(0),
-        axes: Arc::new(axes.iter().map(|a| Axis { name: a.name.clone(), tag: a.tag.clone(), hidden: a.hidden, extra: Extra::new() }).collect()),
+        axes: Arc::new(model_axes),
         metrics: Arc::new(kinds.iter().map(|k| MetricDef::new(k)).collect()),
         stems: Arc::new(ufo::stem_defs(stems)),
         numbers: Arc::default(),
         masters: Arc::new(masters),
-        instances: Arc::new(read_instances(root, &axes, &labels)?),
+        instances: Arc::new(read_instances(root, &instances::Ctx { family: &family, axes: &axes, labels: &labels, unit: &indent_unit(root) })?),
         glyphs: GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect()),
-        info: Arc::new(FontInfo { properties: font_info.properties, params: font_info.params, date: font_info.date, ..Default::default() }),
+        info: Arc::new(FontInfo { properties: font_info.properties, params, date: font_info.date, ..Default::default() }),
         kerning: Arc::new(Kerning { ltr: KernTable(kerning), ..Default::default() }),
         features: Arc::new(features),
         display_strings: Arc::default(),
@@ -396,8 +407,121 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         files: Arc::new(FileStore(files)),
         extra: Arc::new(extra),
     };
+    // A default source glyphsLib would not find by the masters' names is named.
+    if font.masters.len() > 1 && fontcraft_model::axes::origin_without_parameter(&font).is_some_and(|m| m.id != default_id) {
+        Arc::make_mut(&mut font.info).params.0.push(Param::new(ORIGIN, Value::String(default_id.as_str().into())));
+    }
     font.check()?;
     Ok(font)
+}
+
+/// The names a designspace instance element states for an instance, derived where the model
+/// leaves them to the reference's rules.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InstanceNames {
+    pub family: String,
+    pub postscript: Option<String>,
+    /// The instance UFO's file name.
+    pub filename: String,
+    pub style_map_family: String,
+    pub style_map_style: &'static str,
+}
+
+/// The names of a static instance as a designspace states them.
+pub fn instance_names(font: &Font, inst: &Instance) -> InstanceNames {
+    let family = instances::family_of(inst, &font.family_name);
+    let (style_map_family, style_map_style) = instances::stylemap(inst, &family);
+    InstanceNames {
+        postscript: instances::ps_name_of(inst),
+        filename: instances::filename_of(inst, &family),
+        style_map_family,
+        style_map_style,
+        family,
+    }
+}
+
+/// What saving `font` as a designspace and its UFOs leaves out of its font information, axes and
+/// instances, one line each.
+pub fn info_losses(font: &Font) -> Vec<String> {
+    let maps_back = mappings_come_back(font);
+    let origin_back = font.info.params.get(ORIGIN).and_then(Value::as_str).is_some_and(|id| {
+        let origin = fontcraft_model::axes::origin(font).map(|m| m.id.as_str());
+        origin == Some(id) && fontcraft_model::axes::origin_without_parameter(font).map(|m| m.id.as_str()) != Some(id)
+    });
+    let carried = |line: &str| line == format!("parameter `{AXIS_MAPPINGS}`") && maps_back || line == format!("parameter `{ORIGIN}`") && origin_back;
+    let mut out: Vec<String> = ufo::font_losses(font).into_iter().filter(|l| !carried(l)).collect();
+    for i in font.instances.iter() {
+        let fields = [("id", i.id.is_some()), ("type", i.kind.as_deref().is_some_and(|k| k != "variable")), ("visibility", !i.visible)];
+        let set: Vec<&str> = fields.iter().filter(|(_, on)| *on).map(|(what, _)| *what).collect();
+        if !set.is_empty() {
+            out.push(format!("instance `{}`: {}", i.name, set.join(", ")));
+        }
+        for p in i.params.0.iter().filter(|p| p.disabled) {
+            out.push(format!("instance `{}`: parameter `{}`, switched off", i.name, p.name));
+        }
+        // Parameters an attribute holds come back as what the reader makes of the attribute.
+        for (param, back) in [("familyName", "the `familyNames` property"), ("postscriptFontName", "the property of that name")] {
+            if i.params.get(param).is_some() && i.kind.as_deref() != Some("variable") {
+                out.push(format!("instance `{}`: parameter `{param}`, as {back}", i.name));
+            }
+        }
+        let other_languages = |p: &&fontcraft_model::Property| match &p.value {
+            fontcraft_model::PropertyValue::Single(_) => false,
+            fontcraft_model::PropertyValue::Localized(v) => v.iter().any(|l| l.language != fontcraft_model::DEFAULT_LANGUAGE),
+        };
+        for p in i.properties.0.iter().filter(other_languages) {
+            out.push(format!("instance `{}`: property `{}` in languages other than the default", i.name, p.key));
+        }
+    }
+    out
+}
+
+/// Whether the `Axis Mappings` parameter comes back from the designspace written for `font`: the
+/// maps and ranges the writer gives the axes make the same parameter when read.
+fn mappings_come_back(font: &Font) -> bool {
+    let Some(model) = axes::model_mappings(font) else { return true };
+    let written: Vec<(fontcraft_model::Axis, Vec<(f64, f64)>)> = (0..font.axes.len())
+        .filter_map(|i| {
+            let a = font.axes.get(i)?;
+            let (map, range) = axes::map_and_range(font, i);
+            Some((fontcraft_model::Axis { range: Some(range), ..a.clone() }, map))
+        })
+        .collect();
+    let locations: Vec<Vec<f64>> =
+        font.masters.iter().map(|m| (0..font.axes.len()).map(|i| fontcraft_model::axes::design_value(&m.location, i)).collect()).collect();
+    let extents = axes::extents(locations.iter().map(Vec::as_slice), font.axes.len());
+    let sources: Vec<axes::MapSource<'_>> =
+        written.iter().zip(extents).map(|((axis, map), extent)| axes::MapSource { axis, map: map.clone(), extent }).collect();
+    let Some(back) = axes::mappings_param(&sources) else { return false };
+    let pairs = |v: &Value, tag: &str| -> Option<Vec<(f64, f64)>> {
+        let mut f = Font::new("x");
+        Arc::make_mut(&mut f.info).params.0.push(Param::new(AXIS_MAPPINGS, v.clone()));
+        fontcraft_model::axes::mapping_parameter(&f, tag)
+    };
+    let tags = |v: &Value| v.as_dict().map(|d| d.entries.iter().map(|(k, _)| k.as_str().to_string()).collect::<Vec<_>>()).unwrap_or_default();
+    let (mut a, mut b) = (tags(model), tags(&back));
+    a.sort();
+    b.sort();
+    a == b && a.iter().all(|t| pairs(model, t) == pairs(&back, t))
+}
+
+/// The model's axes, from the `<axis>` elements.
+fn model_axes(root: &Element) -> Result<Vec<fontcraft_model::Axis>> {
+    axis_elements(root).into_iter().map(axes::read_axis).collect()
+}
+
+fn axis_elements(root: &Element) -> Vec<&Element> {
+    root.child("axes").map(|a| a.elements().filter(|e| e.name() == "axis").take(MAX_ITEMS).collect()).unwrap_or_default()
+}
+
+/// The `Axis Mappings` parameter the document's maps make, given the sources' design locations.
+fn doc_mappings(root: &Element, model_axes: &[fontcraft_model::Axis], sources: &[&[f64]]) -> Result<Option<Value>> {
+    let extents = axes::extents(sources.iter().copied(), model_axes.len());
+    let mut list = Vec::new();
+    for ((el, axis), extent) in axis_elements(root).into_iter().zip(model_axes).zip(extents) {
+        list.push(axes::MapSource { axis, map: axes::read_map(el)?, extent });
+    }
+    Ok(axes::mappings_param(&list))
 }
 
 fn opt_text(t: Option<&str>) -> Value {
@@ -443,17 +567,32 @@ fn merge_glyph(merged: &mut Glyph, g: Glyph) {
     merged.layers.extend(layers);
 }
 
-fn read_instances(root: &Element, axes: &[AxisInfo], labels: &HashMap<String, Vec<f64>>) -> Result<Vec<Instance>> {
-    let Some(instances) = root.child("instances") else { return Ok(Vec::new()) };
+fn static_elements(root: &Element) -> Vec<&Element> {
+    root.child("instances").map(|i| i.elements().filter(|e| e.name() == "instance").collect()).unwrap_or_default()
+}
+
+fn variable_elements(root: &Element) -> Vec<&Element> {
+    root.child("variable-fonts").map(|i| i.elements().filter(|e| e.name() == "variable-font").collect()).unwrap_or_default()
+}
+
+/// The instances, then the variable fonts as variable instances.
+fn read_instances(root: &Element, ctx: &instances::Ctx<'_>) -> Result<Vec<Instance>> {
+    let (statics, variables) = (static_elements(root), variable_elements(root));
+    if statics.len() + variables.len() > MAX_ITEMS {
+        return Err(bad(DOC, format!("more than {MAX_ITEMS} instances")));
+    }
     let mut out = Vec::new();
-    for el in instances.elements().filter(|e| e.name() == "instance") {
-        if out.len() >= MAX_ITEMS {
-            return Err(bad(DOC, format!("more than {MAX_ITEMS} instances")));
-        }
-        let name = el.attr("stylename").or_else(|| el.attr("name")).unwrap_or("").to_string();
-        out.push(Instance { name, location: read_location(el, axes, labels)?, exports: true, ..Default::default() });
+    for el in statics {
+        out.push(instances::read_static(el, ctx)?);
+    }
+    for el in variables {
+        out.push(instances::read_variable(el, ctx)?);
     }
     Ok(out)
+}
+
+fn is_variable(i: &Instance) -> bool {
+    i.kind.as_deref() == Some("variable")
 }
 
 // ── writing ────────────────────────────────────────────────────────────────────────────────────
@@ -477,7 +616,7 @@ pub fn write(font: &Font) -> Result<Written> {
     let default_id = font.extra.get(Family::Designspace, "defaultSource").and_then(Value::as_str);
     let default = default_id
         .and_then(|id| font.masters.iter().find(|m| m.id == id))
-        .or_else(|| font.masters.first())
+        .or_else(|| fontcraft_model::axes::origin(font))
         .ok_or(fontcraft_model::ModelError::NoMaster)?;
     // Each master's UFO, and which masters are layers of which UFO.
     let mut filenames: Vec<String> = Vec::new();
@@ -620,6 +759,56 @@ fn indent_unit(root: &Element) -> String {
     "  ".into()
 }
 
+/// Inserts `child` before the `at`-th child element of `parent` (appends it when there is no
+/// such element), indented like a pretty printer would at `level` (the parent's).
+fn insert_child(parent: &mut Element, at: usize, child: Element, unit: &str, level: usize) {
+    let pos = parent.children.iter().enumerate().filter(|(_, n)| matches!(n, XNode::Element(_))).nth(at).map(|(i, _)| i);
+    let Some(pos) = pos else { return append_child(parent, child, unit, level) };
+    let mut text = String::new();
+    child.write_pretty(&mut text, unit, level + 1);
+    let child = xml::parse_element(&text).unwrap_or(child);
+    parent.children.insert(pos, XNode::Text(Text::new(format!("\n{}", unit.repeat(level + 1)))));
+    parent.children.insert(pos, XNode::Element(child));
+}
+
+/// Replaces the child elements called `name` with `new`: at the place of the first of them, else
+/// after the last child element called one of `after`, else first.
+fn replace_children(parent: &mut Element, name: &str, new: Vec<Element>, after: &[&str], unit: &str, level: usize) {
+    let names: Vec<String> = parent.elements().map(|e| e.name().to_string()).collect();
+    let first = names.iter().position(|n| n == name);
+    for i in (0..names.len()).rev().filter(|i| names.get(*i).is_some_and(|n| n == name)) {
+        remove_child(parent, i);
+    }
+    let at = first.unwrap_or_else(|| names.iter().rposition(|n| after.contains(&n.as_str())).map_or(0, |i| i + 1));
+    for (k, c) in new.into_iter().enumerate() {
+        insert_child(parent, at + k, c, unit, level);
+    }
+    // An element left without child elements closes itself, as designspaceLib writes it.
+    if parent.elements().next().is_none() && !parent.has_text() {
+        parent.children.clear();
+        parent.set_self_closing(true);
+    }
+}
+
+/// A source's `stylename` and `familyname` follow the master's and the font's names while they
+/// agreed with the source's UFO when read.
+fn patch_source_names(el: &mut Element, font: &Font, m: &Master) {
+    let layer = ds_str(&m.extra, "layer").is_some();
+    if let Some(s) = el.attr("stylename")
+        && s != m.name
+        && (layer || ufo::kept_info_str(m, "styleName").as_deref() == Some(s))
+    {
+        el.set_attr("stylename", &m.name);
+    }
+    if let Some(f) = el.attr("familyname")
+        && f != font.family_name
+        && !layer
+        && ufo::kept_info_str(m, "familyName").as_deref() == Some(f)
+    {
+        el.set_attr("familyname", &font.family_name);
+    }
+}
+
 fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> Result<String> {
     let mut doc = xml::parse(kept).map_err(|e| UfoError::Syntax { file: DOC.into(), error: e })?;
     let unit = indent_unit(&doc.root);
@@ -628,9 +817,16 @@ fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> R
         return Err(UfoError::Unsupported("adding or removing axes of a designspace".into()));
     }
     let names: Vec<String> = font.axes.iter().map(|a| a.name.clone()).collect();
+    // What the kept document says, read as the reader reads it.
+    let kept_axes = model_axes(&doc.root)?;
+    let labels = read_labels(&doc.root, &axes)?;
+    let kept_locations: Vec<Vec<f64>> = source_elements(&doc.root).iter().map(|s| read_location(s, &axes, &labels)).collect::<Result<_>>()?;
+    let refs: Vec<&[f64]> = kept_locations.iter().map(Vec::as_slice).collect();
+    let maps_changed = doc_mappings(&doc.root, &kept_axes, &refs)?.as_ref() != axes::model_mappings(font);
     // Axes.
     if let Some(axes_el) = doc.root.elements_mut().find(|e| e.name() == "axes") {
-        for (el, axis) in axes_el.elements_mut().filter(|e| e.name() == "axis").zip(font.axes.iter()) {
+        let axis_els = axes_el.elements_mut().filter(|e| e.name() == "axis");
+        for (i, ((el, axis), was)) in axis_els.zip(font.axes.iter()).zip(&kept_axes).enumerate() {
             el.set_attr("name", &axis.name);
             el.set_attr("tag", &axis.tag);
             let hidden = el.attr("hidden").is_some_and(|h| h == "1" || h == "true");
@@ -639,6 +835,21 @@ fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> R
                     el.set_attr("hidden", "1");
                 } else {
                     el.remove_attr("hidden");
+                }
+            }
+            if was.range != axis.range || was.values != axis.values {
+                axes::set_range(el, axis, fontcraft_model::axes::range(font, i));
+            }
+            if was.label_names != axis.label_names {
+                replace_children(el, "labelname", axes::label_name_elements(axis), &[], &unit, 2);
+            }
+            if (&was.labels, was.ordering) != (&axis.labels, axis.ordering) {
+                replace_children(el, "labels", axes::labels_element(axis).into_iter().collect(), &["labelname", "map"], &unit, 2);
+            }
+            if maps_changed {
+                let desired = fontcraft_model::axes::mapping_parameter(font, &axis.tag).filter(|m| m.iter().any(|(u, d)| u != d)).unwrap_or_default();
+                if axes::read_map(el)? != desired {
+                    replace_children(el, "map", axes::map_elements(&desired), &["labelname"], &unit, 2);
                 }
             }
         }
@@ -655,6 +866,7 @@ fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> R
         for (el, id) in sources.elements_mut().filter(|e| e.name() == "source").zip(kept_ids.iter()) {
             if let Some(m) = font.masters.iter().find(|m| &m.id == *id) {
                 patch_location(el, &axes, &names, &m.location, &unit, 2);
+                patch_source_names(el, font, m);
             }
         }
         for m in font.masters.iter().filter(|m| !ids.contains(&m.id)) {
@@ -667,24 +879,51 @@ fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> R
         }
         append_child(&mut doc.root, sources, &unit, 0);
     }
-    // Instances: by position.
-    let count = doc.root.child("instances").map_or(0, |i| i.elements().filter(|e| e.name() == "instance").count());
-    if let Some(instances) = doc.root.elements_mut().find(|e| e.name() == "instances") {
-        for i in (font.instances.len()..count).rev() {
-            remove_child(instances, i);
+    // Instances and variable fonts: by position.
+    let labels = read_labels(&doc.root, &axes)?;
+    let ctx = instances::Ctx { family: &font.family_name, axes: &axes, labels: &labels, unit: &unit };
+    let statics: Vec<&Instance> = font.instances.iter().filter(|i| !is_variable(i)).collect();
+    let variables: Vec<&Instance> = font.instances.iter().filter(|i| is_variable(i)).collect();
+    let kept_statics: Vec<Instance> = static_elements(&doc.root).into_iter().map(|e| instances::read_static(e, &ctx)).collect::<Result<_>>()?;
+    let kept_variables: Vec<Instance> = variable_elements(&doc.root).into_iter().map(|e| instances::read_variable(e, &ctx)).collect::<Result<_>>()?;
+    if let Some(list) = doc.root.elements_mut().find(|e| e.name() == "instances") {
+        for i in (statics.len()..kept_statics.len()).rev() {
+            remove_child(list, i);
         }
-        for (el, inst) in instances.elements_mut().filter(|e| e.name() == "instance").zip(font.instances.iter()) {
-            patch_location(el, &axes, &names, &inst.location, &unit, 2);
+        for ((el, model), kept) in list.elements_mut().filter(|e| e.name() == "instance").zip(&statics).zip(&kept_statics) {
+            if kept != *model {
+                instances::patch_static(el, kept, model, font, &axes, &names, &unit)?;
+            }
         }
-        for inst in font.instances.iter().skip(count) {
-            append_child(instances, instance_element(font, inst, &names), &unit, 1);
+        for inst in statics.iter().skip(kept_statics.len()) {
+            append_child(list, instances::static_element(font, inst, &names, &axes), &unit, 1);
         }
-    } else if !font.instances.is_empty() {
-        let mut instances = Element::new("instances");
-        for inst in font.instances.iter() {
-            instances.children.push(XNode::Element(instance_element(font, inst, &names)));
+    } else if !statics.is_empty() {
+        let mut list = Element::new("instances");
+        for inst in &statics {
+            list.children.push(XNode::Element(instances::static_element(font, inst, &names, &axes)));
         }
-        append_child(&mut doc.root, instances, &unit, 0);
+        append_child(&mut doc.root, list, &unit, 0);
+    }
+    if let Some(list) = doc.root.elements_mut().find(|e| e.name() == "variable-fonts") {
+        for i in (variables.len()..kept_variables.len()).rev() {
+            remove_child(list, i);
+        }
+        for ((el, model), kept) in list.elements_mut().filter(|e| e.name() == "variable-font").zip(&variables).zip(&kept_variables) {
+            if kept != *model {
+                instances::patch_variable(el, kept, model, font, &unit)?;
+            }
+        }
+        for inst in variables.iter().skip(kept_variables.len()) {
+            append_child(list, instances::variable_element(font, inst, &names), &unit, 1);
+        }
+    } else if !variables.is_empty() {
+        let mut list = Element::new("variable-fonts");
+        for inst in &variables {
+            list.children.push(XNode::Element(instances::variable_element(font, inst, &names)));
+        }
+        let at = doc.root.elements().position(|e| e.name() == "instances").unwrap_or(usize::MAX);
+        insert_child(&mut doc.root, at, list, &unit, 0);
     }
     Ok(doc.write())
 }
@@ -713,62 +952,55 @@ fn source_element(font: &Font, m: &Master, file_of: &HashMap<&str, String>, name
         el.set_attr("layer", l);
     }
     if !names.is_empty() {
-        el.children.push(XNode::Element(location_element(names, &m.location)));
+        let loc: Vec<f64> = (0..names.len()).map(|i| fontcraft_model::axes::design_value(&m.location, i)).collect();
+        el.children.push(XNode::Element(location_element(names, &loc)));
     }
     el
 }
 
-fn instance_element(font: &Font, inst: &Instance, names: &[String]) -> Element {
-    let mut el = Element::new("instance");
-    if !font.family_name.is_empty() {
-        el.set_attr("familyname", &font.family_name);
-    }
-    if !inst.name.is_empty() {
-        el.set_attr("stylename", &inst.name);
-    }
-    if !names.is_empty() {
-        el.children.push(XNode::Element(location_element(names, &inst.location)));
-    }
-    el
+/// The axes as a new document states them, for reading its instances' classes back.
+fn new_axis_infos(font: &Font) -> Vec<AxisInfo> {
+    (0..font.axes.len())
+        .filter_map(|i| {
+            let a = font.axes.get(i)?;
+            let (map, range) = axes::map_and_range(font, i);
+            Some(AxisInfo { name: a.name.clone(), tag: a.tag.clone(), user_default: range.default, map })
+        })
+        .collect()
 }
 
 /// A new designspace in designspaceLib's layout.
 fn new_document(font: &Font, file_of: &HashMap<&str, String>) -> String {
     let names: Vec<String> = font.axes.iter().map(|a| a.name.clone()).collect();
-    let default = font.masters.first();
+    let infos = new_axis_infos(font);
     let mut root = Element::new("designspace").with_attr("format", "5.0");
     if !font.axes.is_empty() {
-        let mut axes = Element::new("axes");
-        for (i, a) in font.axes.iter().enumerate() {
-            let values: Vec<f64> = font.masters.iter().filter_map(|m| m.location.get(i).copied()).collect();
-            let min = values.iter().copied().fold(f64::INFINITY, f64::min);
-            let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            let def = default.and_then(|m| m.location.get(i).copied()).unwrap_or(0.0);
-            let (min, max) = if min.is_finite() && max.is_finite() { (min, max) } else { (def, def) };
-            let mut el = Element::new("axis")
-                .with_attr("tag", &a.tag)
-                .with_attr("name", &a.name)
-                .with_attr("minimum", int_or_float(min))
-                .with_attr("maximum", int_or_float(max))
-                .with_attr("default", int_or_float(def));
-            if a.hidden {
-                el.set_attr("hidden", "1");
-            }
-            axes.children.push(XNode::Element(el));
+        let mut axes_el = Element::new("axes");
+        for i in 0..font.axes.len() {
+            axes_el.children.push(XNode::Element(axes::axis_element(font, i)));
         }
-        root.children.push(XNode::Element(axes));
+        root.children.push(XNode::Element(axes_el));
     }
     let mut sources = Element::new("sources");
     for m in font.masters.iter() {
         sources.children.push(XNode::Element(source_element(font, m, file_of, &names)));
     }
     root.children.push(XNode::Element(sources));
-    if !font.instances.is_empty() {
-        let mut instances = Element::new("instances");
-        for inst in font.instances.iter() {
-            instances.children.push(XNode::Element(instance_element(font, inst, &names)));
+    let variables: Vec<&Instance> = font.instances.iter().filter(|i| is_variable(i)).collect();
+    if !variables.is_empty() {
+        let mut list = Element::new("variable-fonts");
+        for inst in variables {
+            list.children.push(XNode::Element(instances::variable_element(font, inst, &names)));
         }
-        root.children.push(XNode::Element(instances));
+        root.children.push(XNode::Element(list));
+    }
+    let statics: Vec<&Instance> = font.instances.iter().filter(|i| !is_variable(i)).collect();
+    if !statics.is_empty() {
+        let mut list = Element::new("instances");
+        for inst in statics {
+            list.children.push(XNode::Element(instances::static_element(font, inst, &names, &infos)));
+        }
+        root.children.push(XNode::Element(list));
     }
     xml::Document::new(xmlplist::DECLARATION, root).write_pretty("  ")
 }
@@ -867,7 +1099,8 @@ mod tests {
         assert_eq!((x(light), x(bold)), (16.0, 20.0));
         assert!(light.guides.is_empty());
         assert_eq!(bold.guides, [Guide { y: 520.0, ..Default::default() }]);
-        assert!(font.masters.iter().all(|m| m.params.is_empty()) && font.info.params.is_empty());
+        assert!(font.masters.iter().all(|m| m.params.is_empty()));
+        assert_eq!(font.info.params.0.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), [AXIS_MAPPINGS], "the axis map");
         let out = write(&font).unwrap();
         assert_eq!(out.ufos, ufos);
 
@@ -918,7 +1151,7 @@ mod tests {
     #[test]
     fn a_new_designspace_is_written_in_designspacelib_layout() {
         let mut font = fontcraft_model::Font::new("Fresh");
-        Arc::make_mut(&mut font.axes).push(Axis { name: "Weight".into(), tag: "wght".into(), hidden: false, extra: Extra::new() });
+        Arc::make_mut(&mut font.axes).push(fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() });
         let mut bold = font.masters[0].clone();
         bold.id = "m02".into();
         bold.name = "Bold".into();
@@ -970,6 +1203,307 @@ mod tests {
         assert!(read(&doc.replace("Duo-Bold.ufo", "Missing.ufo"), &ufos).is_err());
         assert!(read(&doc.replace("xvalue=\"0\"", "xvalue=\"zero\""), &ufos).is_err());
         assert!(read(&doc.replace(" filename=\"Duo-Bold.ufo\"", ""), &ufos).is_err());
+    }
+
+    /// The document's own fields as a font: a stand-in master for each source, no glyphs.
+    fn document_font(text: &str) -> (Font, HashMap<String, String>) {
+        let doc = xml::parse(text).unwrap();
+        let root = &doc.root;
+        let axes = read_axes(root).unwrap();
+        let labels = read_labels(root, &axes).unwrap();
+        let elements = source_elements(root);
+        let mut font = Font::new("Stand-in");
+        let mut file_of = HashMap::new();
+        let mut masters = Vec::new();
+        for (el, id) in elements.iter().zip(source_ids(&elements)) {
+            let location = read_location(el, &axes, &labels).unwrap();
+            file_of.insert(id.clone(), el.attr("filename").unwrap_or("").to_string());
+            masters.push(Master { id, name: el.attr("stylename").unwrap_or("").into(), location, ..Default::default() });
+        }
+        let model_axes = model_axes(root).unwrap();
+        let refs: Vec<&[f64]> = masters.iter().map(|m| m.location.as_slice()).collect();
+        if let Some(v) = doc_mappings(root, &model_axes, &refs).unwrap() {
+            Arc::make_mut(&mut font.info).params.0.push(Param::new(AXIS_MAPPINGS, v));
+        }
+        let ctx = instances::Ctx { family: &font.family_name, axes: &axes, labels: &labels, unit: &indent_unit(root) };
+        font.instances = Arc::new(read_instances(root, &ctx).unwrap());
+        font.axes = Arc::new(model_axes);
+        font.masters = Arc::new(masters);
+        (font, file_of)
+    }
+
+    fn patched(font: &Font, text: &str, file_of: &HashMap<String, String>) -> String {
+        let file_of: HashMap<&str, String> = file_of.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+        patch_document(font, text, &file_of).unwrap()
+    }
+
+    /// Every designspace document in the corpus, its UFOs or not: its axes, instances and variable
+    /// fonts read, and written back unchanged.
+    #[test]
+    fn every_corpus_document_reads_and_comes_back() {
+        let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+        let mut stack = vec![corpus.clone()];
+        let (mut checked, mut labelled, mut mapped, mut libs) = (0, 0, 0, 0);
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else { continue };
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() && !p.ends_with(".git") {
+                    stack.push(p);
+                } else if p.extension().is_some_and(|x| x == "designspace") {
+                    let text = std::fs::read_to_string(&p).unwrap();
+                    let (font, file_of) = document_font(&text);
+                    assert_eq!(patched(&font, &text, &file_of), text, "{}", p.display());
+                    checked += 1;
+                    labelled += usize::from(font.axes.iter().any(|a| !a.labels.is_empty() || !a.label_names.is_empty()));
+                    mapped += usize::from(font.info.params.get(AXIS_MAPPINGS).is_some());
+                    libs += usize::from(font.instances.iter().any(|i| !i.user_data.is_empty()));
+                }
+            }
+        }
+        if checked > 0 {
+            assert!(checked >= 100 && labelled > 0 && mapped > 0 && libs > 0, "{checked} {labelled} {mapped} {libs}");
+        }
+    }
+
+    /// [`two_masters`] with a richer document: localised axis names, STAT labels, a discrete
+    /// hidden axis, instances with attributes and libs, and a variable font.
+    fn rich() -> (String, BTreeMap<String, Files>) {
+        let (_, ufos) = two_masters();
+        let doc = "<?xml version='1.0' encoding='UTF-8'?>
+<designspace format=\"5.0\">
+  <axes>
+    <axis tag=\"wght\" name=\"Weight\" minimum=\"300\" maximum=\"700\" default=\"300\">
+      <labelname xml:lang=\"de\">Gewicht</labelname>
+      <labelname xml:lang=\"fr\">Graisse</labelname>
+      <map input=\"300\" output=\"0\"/>
+      <map input=\"700\" output=\"1000\"/>
+      <labels ordering=\"1\">
+        <label uservalue=\"300\" name=\"Light\" elidable=\"true\"/>
+        <label uservalue=\"700\" userminimum=\"600\" usermaximum=\"700\" name=\"Bold\" linkeduservalue=\"300\">
+          <labelname xml:lang=\"de\">Fett</labelname>
+        </label>
+      </labels>
+    </axis>
+    <axis tag=\"ital\" name=\"Italic\" values=\"0 1\" default=\"0\" hidden=\"1\"/>
+  </axes>
+  <sources>
+    <source filename=\"Duo-Light.ufo\" name=\"light\" familyname=\"Duo\" stylename=\"Light\">
+      <location>
+        <dimension name=\"Weight\" xvalue=\"0\"/>
+      </location>
+    </source>
+    <source filename=\"Duo-Bold.ufo\" name=\"bold\" familyname=\"Duo\" stylename=\"Bold\">
+      <location>
+        <dimension name=\"Weight\" uservalue=\"700\"/>
+      </location>
+    </source>
+  </sources>
+  <variable-fonts>
+    <variable-font name=\"Upright\" filename=\"DuoVF\">
+      <axis-subsets>
+        <axis-subset name=\"Weight\"/>
+      </axis-subsets>
+    </variable-font>
+  </variable-fonts>
+  <instances>
+    <instance name=\"Duo Medium\" familyname=\"Duo\" stylename=\"Medium\" filename=\"instances/Duo-Medium.ufo\" postscriptfontname=\"Duo-Medium\" stylemapfamilyname=\"Duo Medium\" stylemapstylename=\"regular\">
+      <location>
+        <dimension name=\"Weight\" xvalue=\"500\"/>
+      </location>
+      <lib>
+        <dict>
+          <key>com.example.note</key>
+          <string>kept</string>
+          <key>com.schriftgestaltung.customParameters</key>
+          <array>
+            <array>
+              <string>Remove Glyphs</string>
+              <array>
+                <string>b</string>
+              </array>
+            </array>
+          </array>
+          <key>com.schriftgestaltung.export</key>
+          <false/>
+        </dict>
+      </lib>
+    </instance>
+    <instance familyname=\"Other\" stylename=\"Bold\" stylemapfamilyname=\"Other\" stylemapstylename=\"bold\">
+      <location>
+        <dimension name=\"Weight\" uservalue=\"700\"/>
+      </location>
+    </instance>
+  </instances>
+</designspace>
+";
+        (doc.to_string(), ufos)
+    }
+
+    /// An instance with its properties, parameters and user data in key order: the lib holds
+    /// them sorted, and the attributes' values come after the lib's.
+    fn sorted(i: &Instance) -> Instance {
+        let mut i = i.clone();
+        i.properties.0.sort_by(|a, b| a.key.cmp(&b.key));
+        i.params.0.sort_by(|a, b| a.name.cmp(&b.name));
+        i.user_data.0.entries.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+        i.interpolation.sort_by(|a, b| a.0.cmp(&b.0));
+        i
+    }
+
+    /// What the document part of a font holds: axes, axis maps, origin and instances.
+    #[allow(clippy::type_complexity)]
+    fn fields(f: &Font) -> (Vec<fontcraft_model::Axis>, Vec<Option<Vec<(f64, f64)>>>, Option<Value>, Vec<Instance>) {
+        let maps = f.axes.iter().map(|a| fontcraft_model::axes::mapping_parameter(f, &a.tag)).collect();
+        (f.axes.to_vec(), maps, f.info.params.get(ORIGIN).cloned(), f.instances.iter().map(sorted).collect())
+    }
+
+    #[test]
+    fn axes_and_instances_are_model_fields() {
+        use fontcraft_model::{AxisLabel, AxisRange, LangName, PropertyValue, StyleClass};
+        let (doc, ufos) = rich();
+        let font = read(&doc, &ufos).unwrap();
+        let (w, i) = (&font.axes[0], &font.axes[1]);
+        assert_eq!(w.range, Some(AxisRange { minimum: 300.0, default: 300.0, maximum: 700.0 }));
+        assert_eq!(
+            w.label_names,
+            [LangName { language: "de".into(), name: "Gewicht".into() }, LangName { language: "fr".into(), name: "Graisse".into() }]
+        );
+        assert_eq!(w.ordering, Some(1));
+        assert_eq!(
+            w.labels[1],
+            AxisLabel {
+                name: "Bold".into(),
+                user_value: 700.0,
+                user_minimum: Some(600.0),
+                user_maximum: Some(700.0),
+                linked_user_value: Some(300.0),
+                names: vec![LangName { language: "de".into(), name: "Fett".into() }],
+                ..Default::default()
+            }
+        );
+        assert!(w.labels[0].elidable);
+        assert_eq!((i.values.as_slice(), i.hidden, i.range.map(|r| r.default)), ([0.0, 1.0].as_slice(), true, Some(0.0)));
+        // The map is the `Axis Mappings` parameter, with every axis.
+        assert_eq!(fontcraft_model::axes::mapping_parameter(&font, "wght").unwrap(), [(300.0, 0.0), (700.0, 1000.0)]);
+        assert_eq!(fontcraft_model::axes::mapping_parameter(&font, "ital").unwrap(), [(0.0, 0.0), (1.0, 1.0)]);
+        // Instances: attributes, lib keys, user data, derived classes.
+        let (medium, bold, vf) = (&font.instances[0], &font.instances[1], &font.instances[2]);
+        assert_eq!((medium.name.as_str(), medium.exports, medium.location.as_slice()), ("Medium", false, [500.0, 0.0].as_slice()));
+        assert_eq!(medium.params.0.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Remove Glyphs", "UFO Filename"]);
+        assert_eq!(medium.properties.get("postscriptFontName").map(|p| p.value.clone()), Some(PropertyValue::Single("Duo-Medium".into())));
+        assert!(medium.properties.get("familyNames").is_none(), "the font's family name is not repeated");
+        assert_eq!(medium.user_data.get("com.example.note").and_then(Value::as_str), Some("kept"));
+        assert_eq!((medium.weight_class.clone(), medium.link_style.clone()), (Some(StyleClass::Number(500.0)), None));
+        assert_eq!(bold.properties.get("familyNames").and_then(|p| p.default_value()), Some("Other"));
+        assert_eq!((bold.is_bold, bold.is_italic, bold.link_style.clone()), (true, false, None));
+        assert_eq!((bold.location.as_slice(), bold.weight_class.clone()), ([1000.0, 0.0].as_slice(), Some(StyleClass::Number(700.0))));
+        assert_eq!((vf.name.as_str(), vf.kind.as_deref()), ("Upright", Some("variable")));
+        assert_eq!(vf.params.get("fileName").and_then(Value::as_str), Some("DuoVF"), "not the default, Duo-UprightVF");
+        assert_eq!(write(&font).unwrap().document, doc);
+    }
+
+    #[test]
+    fn edits_to_axes_and_instances_are_written_and_read_back() {
+        use fontcraft_model::{AxisLabel, LangName, StyleClass};
+        let (doc, ufos) = rich();
+        let mut font = read(&doc, &ufos).unwrap();
+        {
+            let axes = Arc::make_mut(&mut font.axes);
+            axes[0].label_names.remove(1);
+            axes[0].labels.push(AxisLabel { name: "Medium".into(), user_value: 500.0, ..Default::default() });
+            axes[0].range.as_mut().unwrap().maximum = 800.0;
+            axes[1].range.as_mut().unwrap().default = 1.0;
+            axes[1].label_names.push(LangName { language: "de".into(), name: "Kursiv".into() });
+        }
+        {
+            let info = Arc::make_mut(&mut font.info);
+            let mut map = info.params.get(AXIS_MAPPINGS).unwrap().clone();
+            if let Value::Dict(d) = &mut map
+                && let Some(Value::Dict(w)) = d.get_mut("wght")
+            {
+                w.insert("500", fontcraft_model::axes::number_value(400.0).unwrap());
+            }
+            info.params.set(AXIS_MAPPINGS, map);
+        }
+        {
+            let list = Arc::make_mut(&mut font.instances);
+            let m = &mut list[0];
+            m.name = "Book".into();
+            m.exports = true;
+            m.manual_interpolation = true;
+            m.interpolation = vec![("light".into(), 0.5), ("bold".into(), 0.5)];
+            m.params.0.retain(|p| p.name != "UFO Filename");
+            m.user_data.0.insert("com.example.more", Value::Bool(true));
+            m.location = vec![600.0, 0.0];
+            let b = &mut list[1];
+            b.is_italic = true;
+            b.link_style = Some("Light".into());
+            b.weight_class = Some(StyleClass::Name("Bold".into()));
+            list[2].params.set("fileName", Value::String("Other-VF".into()));
+            let mut extra = list[0].clone();
+            extra.name = "Black".into();
+            extra.location = vec![1000.0, 1.0];
+            // Instances come before variable fonts in the document.
+            list.insert(2, extra);
+        }
+        let out = write(&font).unwrap();
+        for expected in [
+            "<labels ordering=\"1\">",
+            "<label uservalue=\"500\" name=\"Medium\"/>",
+            "<map input=\"500\" output=\"400\"/>",
+            "maximum=\"800\"",
+            "values=\"0 1\" default=\"1\"",
+            "<labelname xml:lang=\"de\">Kursiv</labelname>",
+            "name=\"Duo Book\"",
+            "filename=\"instance_ufos/Duo-Book.ufo\"",
+            "stylemapfamilyname=\"Other Light\" stylemapstylename=\"bold italic\"",
+            "filename=\"Other-VF\"",
+            "<key>com.schriftgestaltung.intanceInterpolations</key>",
+        ] {
+            assert!(out.document.contains(expected), "{expected} in {}", out.document);
+        }
+        assert!(!out.document.contains("Graisse") && !out.document.contains("com.schriftgestaltung.export"), "{}", out.document);
+        assert!(out.document.contains("<!--") || !doc.contains("<!--"));
+        let back = read(&out.document, &out.ufos).unwrap();
+        assert_eq!(fields(&back), fields(&font));
+        // Unchanged parts keep their text: the first axis's map elements and labels are rewritten
+        // only where they changed.
+        assert!(out.document.contains("<label uservalue=\"300\" name=\"Light\" elidable=\"true\"/>"));
+    }
+
+    #[test]
+    fn a_new_document_holds_the_instance_fields() {
+        use fontcraft_model::{Localized, Property, PropertyValue, StyleClass};
+        let (doc, ufos) = rich();
+        let mut font = read(&doc, &ufos).unwrap();
+        // Drop the kept document: written as new, from the model.
+        Arc::make_mut(&mut font.extra).remove(Family::Designspace, "document");
+        {
+            let list = Arc::make_mut(&mut font.instances);
+            let m = &mut list[0];
+            m.weight_class = Some(StyleClass::Name("SemiBold".into()));
+            m.width_class = Some(StyleClass::Number(3.0));
+            m.manual_interpolation = true;
+            m.interpolation = vec![("light".into(), 0.25)];
+            m.properties.0.push(Property {
+                key: "designers".into(),
+                value: PropertyValue::Localized(vec![Localized { language: "dflt".into(), value: "A. Designer".into(), extra: Extra::new() }]),
+                extra: Extra::new(),
+            });
+            m.params.0.push(Param::new("fileName", Value::String("Medium-File".into())));
+            m.params.remove("UFO Filename");
+            list[1].link_style = Some("Light".into());
+            list[2].params.0.push(Param::new("Export STAT Table", Value::Bool(false)));
+        }
+        let out = write(&font).unwrap();
+        assert!(out.document.contains("filename=\"Medium-File.ufo\""), "{}", out.document);
+        assert!(out.document.contains("<variable-fonts>\n    <variable-font name=\"Upright\" filename=\"DuoVF\">"), "{}", out.document);
+        let back = read(&out.document, &out.ufos).unwrap();
+        assert_eq!(back.instances.iter().map(sorted).collect::<Vec<_>>(), font.instances.iter().map(sorted).collect::<Vec<_>>());
+        let ranges = |f: &Font| (0..f.axes.len()).map(|i| fontcraft_model::axes::range(f, i)).collect::<Vec<_>>();
+        assert_eq!(ranges(&back), ranges(&font));
+        assert_eq!(fontcraft_model::axes::mapping_parameter(&back, "wght"), fontcraft_model::axes::mapping_parameter(&font, "wght"));
     }
 
     #[test]

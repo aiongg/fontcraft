@@ -37,13 +37,19 @@ bundled, the file says so in its header and the project is listed here with its 
   rules that turn alignment zones into PostScript blue values and back, master stems into stem
   snaps, and master guides into UFO guidelines (with the name suffixes for colour, identifier and
   lock) are ported from its builder too (crates/io-ufo/src/design.rs, and the guide names in
-  crates/io-glyphs/src/design.rs).
+  crates/io-glyphs/src/design.rs). The user locations of masters and instances, the axis maps,
+  ranges and origin master it derives for a designspace, and its weight and width tables are
+  ported from its axis builder (crates/model/src/axes.rs); the rules for designspace axis maps,
+  instance attributes and instance lib keys, style-map names and instance file names from its
+  axis, instance and name builders (crates/io-ufo/src/designspace/axes.rs and instances.rs).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data
   formatting, empty-container forms and line wrapping of base64. The GLIF writer follows the
   output rules of its glifLib (crates/io-ufo/src/glif.rs: element and attribute order, number
-  formatting), and crates/io-ufo/src/names.rs ports its user-name-to-file-name rule.
+  formatting), and crates/io-ufo/src/names.rs ports its user-name-to-file-name rule. The
+  piecewise-linear map of crates/model/src/axes.rs ports varLib's piecewiseLinearMap, and the
+  designspace writer follows the element order of designspaceLib.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

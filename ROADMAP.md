@@ -71,9 +71,9 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 1. **M1.7, the typed model**: every documented field of the three source formats as a model
    field, one vocabulary for both format families, and Glyphs-only data in glyphsLib's UFO lib
-   keys. Steps 1 and 2 done (font information in every format); step 3a done (`.glyphs`
-   masters, instances, stems, guides); 3b done (UFO zones, stems, guidelines); 3c (designspace
-   axes and instances) next.
+   keys. Steps 1 to 3 done (font information in every format; `.glyphs` masters, instances,
+   stems, guides; UFO zones, stems, guidelines; designspace axes and instances); step 4 (glyph
+   fields) next.
 2. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
    remaining static tables, the `cff` crate, WOFF and WOFF2, `fontcraft-cli oracle`, and a first
    corpus-wide comparison with fontc and fontmake. From this
@@ -95,7 +95,7 @@ on, so the engine track, where oracles prove correctness, goes first.
 - **Specification:** 24 inventory files (919 commands, 33 tools, 170 panels, 45 settings, 241
   parameters, 1,741 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 22
   behaviour notes (about 127,000 words), all in our own words.
-- **Workspace:** 12 library crates in enforced layers, two apps, `xtask`; about 25,000 lines of Rust.
+- **Workspace:** 12 library crates in enforced layers, two apps, `xtask`; about 28,000 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry (18 engine commands), atomic
@@ -116,7 +116,11 @@ on, so the engine track, where oracles prove correctness, goes first.
   From `.glyphs`, stems, numbers, master guides, alignment zones, version 2 axes and name parts,
   and the instances' classes, style linking and interpolation settings are fields too. UFO blue
   values, stem snaps and guidelines read into and write from the same fields, by glyphsLib's
-  rules; numbers, name parts and instance fields are not yet written to UFO or designspace.
+  rules. Designspace axes (user range, discrete values, localised names, STAT labels) are axis
+  fields, their maps the `Axis Mappings` parameter; designspace instances and variable fonts
+  are the model's instances, with glyphsLib's instance lib keys. A `.glyphs` source written as a
+  designspace gets glyphsLib's axis ranges, maps and instance attributes. Numbers and master
+  name parts are not yet written to UFO.
 - **Compiler:** static TrueType from the first master, deterministic.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
@@ -133,7 +137,7 @@ measured by what works (the parity table below and the measures in each mileston
 | # | Milestone | Status | Commands (live) |
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress: font information done; `.glyphs` masters and instances typed; UFO zones, stems and guidelines typed | 10 (10) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress: font information done; `.glyphs` masters and instances typed; UFO zones, stems and guidelines typed; designspace axes and instances typed; glyphs, layers, shapes and lib keys not yet | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ⬜ plan accepted, next | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
@@ -176,7 +180,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | PostScript hinting | 3 | 27 | 0 | 0% | everything |
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
-| Source formats | 6 | 14 | 5 | 55% | WOFF2 import; Glyphs data in UFO lib keys; special layers to UFO; UFO 1; custom parameters and layer attributes carried untyped; version conversion |
+| Source formats | 6 | 14 | 5 | 55% | WOFF2 import; Glyphs data in UFO lib keys; special layers to UFO and designspace rules; STAT labels derived from instances; UFO 1; layer, glyph and shape attributes carried untyped; version conversion |
 | Compiling | 9 | 11 | 1 | 2% | static TrueType core tables; no oracle comparison |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
 | Command-line tools | 8 | 42 | 4 | 1% | `commands`, `run`, `convert`, `info`, `tables list`, `glyphs list`; no dump, subset, instance, merge |

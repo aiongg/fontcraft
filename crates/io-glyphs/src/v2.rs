@@ -750,7 +750,7 @@ fn axes_of(params: &Params, masters: &[Value], instances: Option<&Value>) -> Vec
 }
 
 fn default_axes(n: usize) -> Vec<Axis> {
-    SLOT_AXES.iter().take(n).map(|(name, tag)| Axis { name: (*name).into(), tag: (*tag).into(), hidden: false, extra: Extra::new() }).collect()
+    SLOT_AXES.iter().take(n).map(|(name, tag)| Axis { name: (*name).into(), tag: (*tag).into(), ..Default::default() }).collect()
 }
 
 /// The axes an `Axes` parameter names (`{Name, Tag?, Hidden?}` each), if it can be read and has no
@@ -775,7 +775,7 @@ fn axes_from_param(v: &Value) -> Option<Vec<Axis>> {
                 Some(h) => matches!(h.as_num(), Some(Num::Int(1))) || h.as_bool() == Some(true),
                 None => false,
             };
-            Some(Axis { name, tag, hidden, extra: into_extra(d) })
+            Some(Axis { name, tag, hidden, extra: into_extra(d), ..Default::default() })
         })
         .collect()
 }

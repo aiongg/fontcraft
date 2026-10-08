@@ -319,10 +319,10 @@ would have to define because none was found (`roundtrip.ufoGlyphsLibKeys`, `roun
 | `public.postscript.hints`, `public.truetype.instructions`, `public.truetype.overlap`, `public.verticalOrigin` (when not equal to `vertOrigin` semantics), `public.unicodeVariationSequences`, `public.openTypeMeta`, any foreign lib key | layer or font `userData` under the same key name, so that writing UFO again restores it verbatim |
 | `data/` directory content | not embeddable in a text plist at sensible size: kept beside the Glyphs file only in the native format; loss report when saving as `.glyphs` |
 | Embedded PNG images | written next to the Glyphs file in a subfolder and referenced by `imagePath` |
-| Axis minimum and maximum, `<map>` nodes | `Axis Mappings` custom parameter; explicit extremes beyond the masters as `Virtual Master` |
-| Discrete axes, avar 2 `<mappings>`, variable-font axis subsets, STAT labels with ranges and linked values, location labels | font `userData` → `org.fontcraft.designspace`; the parts Glyphs can express (STAT names, variable settings) are also written natively |
+| Axis minimum and maximum, `<map>` nodes | `Axis Mappings` custom parameter, listing every axis (one without a map gets the identity over its range), as glyphsLib does (implemented, M1.7) |
+| Discrete axes, avar 2 `<mappings>`, variable-font axis subsets, STAT labels with ranges and linked values, location labels | discrete values, localised axis names and STAT labels are axis fields of the model, but are not written to `.glyphs` yet (the loss report lists them); planned: font `userData` → `org.fontcraft.designspace`, the parts Glyphs can express (STAT names, variable settings) also written natively |
 | Rules that swap unrelated glyphs (not expressible as alternate layers of one glyph) | font `userData`, plus feature code when a fixed feature is acceptable |
-| DS `filename` paths, source and instance `name`, deprecated MutatorMath elements, the three libs | font, master and instance `userData` → `org.fontcraft.designspace` |
+| DS `filename` paths, source and instance `name`, deprecated MutatorMath elements, the three libs | an instance's `filename` is its `UFO Filename` parameter and its lib its user data, a source's `name` the master id (implemented, M1.7); the rest: font, master and instance `userData` → `org.fontcraft.designspace` (planned) |
 | Quadratic contours made only of off-curve points | stored as `q`/`o` nodes if the reference accepts it; otherwise an explicit on-curve is inserted and flagged (Open questions) |
 
 ### 3.3 Consequences for the model

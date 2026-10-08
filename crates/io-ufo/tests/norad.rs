@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use fontcraft_io_ufo::{Files, designspace, ufo};
-use fontcraft_model::{Axis, Component, Extra, Font, Node, NodeKind, Path as Contour, Shape};
+use fontcraft_model::{Axis, Component, Font, Node, NodeKind, Path as Contour, Shape};
 
 fn temp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("fontcraft-norad-{name}-{}", std::process::id()));
@@ -76,7 +76,7 @@ fn norad_reads_a_ufo_we_wrote() {
 #[test]
 fn norad_reads_a_designspace_we_wrote() {
     let mut font = sample();
-    Arc::make_mut(&mut font.axes).push(Axis { name: "Weight".into(), tag: "wght".into(), hidden: false, extra: Extra::new() });
+    Arc::make_mut(&mut font.axes).push(Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() });
     let mut bold = font.masters[0].clone();
     bold.id = "bold".into();
     bold.name = "Bold".into();

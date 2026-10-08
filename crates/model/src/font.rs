@@ -232,7 +232,10 @@ pub enum StyleClass {
 }
 
 /// A design axis of the family (weight, width…).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+///
+/// The user-to-design map of the axes is the font's `Axis Mappings` parameter, as in the
+/// reference's format; [`crate::axes`] derives what a source does not state.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Axis {
     pub name: String,
     /// The OpenType axis tag. A source may write a longer one, whose first four characters are
@@ -240,8 +243,62 @@ pub struct Axis {
     pub tag: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    /// The range in user coordinates, as a designspace states it. `None`: derived from the
+    /// masters, the instances and the axis parameters ([`crate::axes::range`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<AxisRange>,
+    /// A discrete axis's user values (designspace 5); empty for a continuous axis.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<f64>,
+    /// The axis name in other languages.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub label_names: Vec<LangName>,
+    /// The axis's STAT labels.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<AxisLabel>,
+    /// The axis's place in the STAT design-axis order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ordering: Option<u32>,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
+}
+
+/// An axis's minimum, default and maximum in user coordinates.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AxisRange {
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+}
+
+/// A name in one language. The language is a BCP 47 tag (`de`, `fa-IR`), as a designspace writes
+/// it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LangName {
+    pub language: String,
+    pub name: String,
+}
+
+/// A STAT label of an axis: a name for one user value, or for a range of them.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AxisLabel {
+    pub name: String,
+    pub user_value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_minimum: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_maximum: Option<f64>,
+    /// The value this one is style-linked to (bold to regular, for example).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked_user_value: Option<f64>,
+    /// Left out of names built from labels (`Regular`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub elidable: bool,
+    /// The STAT flag for a label that older applications may use for the same location.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub older_sibling: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<LangName>,
 }
 
 /// A named instance: a static font to export, or another export setting.

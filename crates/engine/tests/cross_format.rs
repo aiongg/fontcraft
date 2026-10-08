@@ -1,12 +1,14 @@
-//! `.glyphs` → designspace → model: the font information, the alignment zones, the stems and the
-//! guides come back, except what the loss report lists. Every `.glyphs` source the reference app
+//! `.glyphs` → designspace → model: the font information, the alignment zones, the stems, the
+//! guides, the axes (ranges and maps) and the instances come back, except what the loss report
+//! lists. Every `.glyphs` source the reference app
 //! saved in format version 3 (outside fontc's hand-made test data). Skipped when `corpus/` is
 //! absent.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::{Path, PathBuf};
 
-use fontcraft_model::{Family, Font, Guide, Master, Param, Params, Properties, metric};
+use fontcraft_io_ufo::designspace;
+use fontcraft_model::{Family, Font, Guide, Instance, Master, Param, Params, Properties, axes, metric};
 
 fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
@@ -52,7 +54,9 @@ fn compare(what: &str, before: &(Properties, Params), after: &(Properties, Param
             out.push(format!("{what}: parameter `{}`", p.name));
         }
     }
-    for p in &after.1.0 {
+    // The axes' maps, which the reference's rules derive when a source has no parameter for
+    // them, come back as the parameter (compared in `axes_trip`).
+    for p in after.1.0.iter().filter(|p| p.name != axes::AXIS_MAPPINGS) {
         if !before.1.0.iter().any(|q| q.name == p.name) {
             out.push(format!("{what}: new parameter `{}`", p.name));
         }
@@ -95,10 +99,116 @@ fn guide_form(g: &Guide) -> (f64, f64, f64, String, bool) {
     (x, y, a, name, g.locked)
 }
 
+/// A map that is the identity is no map.
+fn bent(pairs: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+    if pairs.iter().all(|(u, d)| u == d) { Vec::new() } else { pairs }
+}
+
+/// The axes: names, tags, user ranges and maps, as the source states them or the reference's rules
+/// derive them.
+fn axes_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
+    if font.axes.len() != back.axes.len() {
+        diffs.push(format!("axes: {} → {}", font.axes.len(), back.axes.len()));
+        return;
+    }
+    for (i, (a, b)) in font.axes.iter().zip(back.axes.iter()).enumerate() {
+        if (&a.name, &a.tag, a.hidden) != (&b.name, &b.tag, b.hidden) {
+            diffs.push(format!("axis `{}`: name, tag or hidden", a.name));
+        }
+        let (before, after) = (axes::range(font, i), axes::range(back, i));
+        if before != after {
+            diffs.push(format!("axis `{}`: range {before:?} → {after:?}", a.name));
+        }
+        for (what, same) in [
+            ("its name in other languages", a.label_names == b.label_names),
+            ("its STAT labels", a.labels == b.labels && a.ordering == b.ordering),
+            ("its discrete values", a.values == b.values),
+        ] {
+            if !same {
+                diffs.push(format!("axis `{}`: {what}", a.name));
+            }
+        }
+        let before = bent(axes::mapping(font, i).pairs);
+        let after = bent(axes::mapping_parameter(back, &b.tag).unwrap_or_default());
+        if before != after {
+            diffs.push(format!("axis `{}`: map {before:?} → {after:?}", a.name));
+        }
+    }
+}
+
+/// An instance's parameters, properties and user data in key order, without what the element's
+/// attributes hold (compared through [`designspace::instance_names`]).
+type InstanceData = (Vec<(String, String)>, Vec<(String, Option<String>)>, Vec<(String, String)>);
+
+fn instance_data(i: &Instance) -> InstanceData {
+    let attrs = ["familyName", "postscriptFontName", "UFO Filename", "com.schriftgestaltung.Glyphs.fullFilename"];
+    let mut params: Vec<(String, String)> = i
+        .params
+        .0
+        .iter()
+        .filter(|p| !p.disabled && !attrs.contains(&p.name.as_str()))
+        .map(|p| (p.name.clone(), format!("{:?}", p.value.without_spellings())))
+        .collect();
+    params.sort();
+    let mut props: Vec<(String, Option<String>)> = i
+        .properties
+        .0
+        .iter()
+        .filter(|p| p.key != "postscriptFontName" && p.key != "familyNames")
+        .map(|p| (p.key.clone(), p.default_value().map(str::to_string)))
+        .collect();
+    props.sort();
+    let mut user: Vec<(String, String)> =
+        i.user_data.0.entries.iter().map(|(k, v)| (k.as_str().to_string(), format!("{:?}", v.without_spellings()))).collect();
+    user.sort();
+    (params, props, user)
+}
+
+/// The instances, static ones and variable ones each in order.
+fn instances_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
+    let variable = |i: &&Instance| i.kind.as_deref() == Some("variable");
+    for want in [false, true] {
+        let a: Vec<&Instance> = font.instances.iter().filter(|i| variable(i) == want).collect();
+        let b: Vec<&Instance> = back.instances.iter().filter(|i| variable(i) == want).collect();
+        if a.len() != b.len() {
+            diffs.push(format!("instances: {} → {}", a.len(), b.len()));
+            continue;
+        }
+        for (x, y) in a.into_iter().zip(b) {
+            let what = format!("instance `{}`", x.name);
+            let loc = |f: &Font, i: &Instance| (0..f.axes.len()).map(|k| axes::design_value(&i.location, k)).collect::<Vec<_>>();
+            let sorted = |i: &Instance| {
+                let mut w = i.interpolation.clone();
+                w.sort_by(|p, q| p.0.cmp(&q.0));
+                w
+            };
+            let checks = [
+                ("name", x.name == y.name),
+                // A designspace holds design coordinates to six decimals.
+                ("location", want || loc(font, x).iter().zip(loc(back, y)).all(|(p, q)| (p - q).abs() < 1e-6)),
+                ("export", x.exports == y.exports),
+                ("weight class", x.weight_class == y.weight_class),
+                ("width class", x.width_class == y.width_class),
+                ("manual interpolation", x.manual_interpolation == y.manual_interpolation && sorted(x) == sorted(y)),
+                ("type", x.kind == y.kind),
+                ("names", want || designspace::instance_names(font, x) == designspace::instance_names(back, y)),
+                ("parameters, properties or user data", instance_data(x) == instance_data(y)),
+            ];
+            for (field, same) in checks {
+                if !same {
+                    diffs.push(format!("{what}: {field}"));
+                }
+            }
+        }
+    }
+}
+
 fn info_trip(font: &Font) -> Vec<String> {
     let written = fontcraft_io_ufo::designspace::write(font).unwrap();
     let back = fontcraft_io_ufo::designspace::read(&written.document, &written.ufos).unwrap();
     let mut diffs = Vec::new();
+    axes_trip(font, &back, &mut diffs);
+    instances_trip(font, &back, &mut diffs);
     if font.info.date != back.info.date {
         diffs.push(format!("font: date {:?} → {:?}", font.info.date, back.info.date));
     }
@@ -131,7 +241,7 @@ fn font_information_survives_a_designspace() {
     let mut all = Vec::new();
     sources(&corpus, &mut all);
     let (mut checked, mut failures) = (0, Vec::new());
-    let (mut zoned, mut stemmed, mut guided) = (0, 0, 0);
+    let (mut zoned, mut stemmed, mut guided, mut instanced, mut mapped) = (0, 0, 0, 0, 0);
     for path in &all {
         let text = std::fs::read_to_string(path).unwrap();
         if !text.lines().take(3).any(|l| l.starts_with(".appVersion = "))
@@ -147,7 +257,9 @@ fn font_information_survives_a_designspace() {
         zoned += usize::from(font.masters.iter().any(|m| !zones(&font, m).is_empty()));
         stemmed += usize::from(font.masters.iter().any(|m| !m.stem_values.is_empty()));
         guided += usize::from(font.masters.iter().any(|m| !m.guides.is_empty()));
-        let losses = fontcraft_io_ufo::ufo::info_losses(&font);
+        instanced += usize::from(!font.instances.is_empty());
+        mapped += usize::from((0..font.axes.len()).any(|i| !bent(axes::mapping(&font, i).pairs).is_empty()));
+        let losses = designspace::info_losses(&font);
         for d in info_trip(&font) {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
             if !listed {
@@ -158,6 +270,87 @@ fn font_information_survives_a_designspace() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     assert!(checked >= 5, "only {checked} sources found");
-    eprintln!("{checked} sources: {zoned} with zones, {stemmed} with stems, {guided} with master guides");
-    assert!(zoned > 0 && stemmed > 0, "the corpus exercises zones and stems");
+    eprintln!(
+        "{checked} sources: {zoned} with zones, {stemmed} with stems, {guided} with master guides, {instanced} with instances, {mapped} with axis maps"
+    );
+    assert!(zoned > 0 && stemmed > 0 && instanced > 0 && mapped > 0, "the corpus exercises zones, stems, instances and axis maps");
+}
+
+fn designspaces(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.file_name().is_some_and(|n| n == ".git") {
+            continue;
+        }
+        if p.is_file() && p.extension().is_some_and(|x| x == "designspace") {
+            out.push(p);
+        } else if p.is_dir() {
+            designspaces(&p, out);
+        }
+    }
+}
+
+fn ufo_tree(root: &Path) -> fontcraft_io_ufo::Files {
+    let mut out = fontcraft_io_ufo::Files::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                out.insert(p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"), std::fs::read(&p).unwrap());
+            }
+        }
+    }
+    out
+}
+
+/// designspace → `.glyphs` → designspace: the axes (ranges and maps) and the instances come back,
+/// except what the two loss reports list. Every corpus designspace whose UFOs are present.
+#[test]
+fn axes_and_instances_survive_a_glyphs_file() {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    if !corpus.is_dir() {
+        eprintln!("corpus/ absent: skipped (cargo xtask corpus --fetch)");
+        return;
+    }
+    let mut all = Vec::new();
+    designspaces(&corpus, &mut all);
+    all.sort();
+    let (mut checked, mut excused, mut failures) = (0, 0, Vec::new());
+    for path in &all {
+        let text = std::fs::read_to_string(path).unwrap();
+        let Ok(paths) = designspace::ufo_paths(&text) else { continue };
+        let dir = path.parent().unwrap();
+        if paths.is_empty() || !paths.iter().all(|p| dir.join(p).join("metainfo.plist").is_file()) {
+            continue;
+        }
+        let ufos = paths.iter().map(|p| (p.clone(), ufo_tree(&dir.join(p)))).collect();
+        let Ok(font) = designspace::read(&text, &ufos) else { continue };
+        checked += 1;
+        let glyphs = fontcraft_io_glyphs::write(&font).unwrap();
+        let mut back = fontcraft_io_glyphs::read(&glyphs).unwrap();
+        // As saved as a new designspace from the `.glyphs` file.
+        back.source = font.source.clone();
+        let written = designspace::write(&back).unwrap();
+        let again = designspace::read(&written.document, &written.ufos).unwrap();
+        let mut losses = fontcraft_io_glyphs::info_losses(&font);
+        losses.extend(designspace::info_losses(&back));
+        let mut diffs = Vec::new();
+        axes_trip(&font, &again, &mut diffs);
+        instances_trip(&font, &again, &mut diffs);
+        for d in diffs {
+            let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
+            if listed {
+                excused += 1;
+            } else {
+                failures.push(format!("{}: {d}", path.strip_prefix(&corpus).unwrap().display()));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    eprintln!("{checked} designspaces through a .glyphs file; {excused} differences the loss reports list");
+    assert!(checked >= 40, "only {checked} designspaces found");
 }

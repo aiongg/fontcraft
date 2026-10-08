@@ -158,6 +158,39 @@ mod tests {
     }
 
     #[test]
+    fn designspace_axis_fields_round_trip() {
+        use fontcraft_model::{Axis, AxisLabel, AxisRange, LangName};
+        use std::sync::Arc;
+        let mut font = Font::new("Axes");
+        let de = |n: &str| LangName { language: "de".into(), name: n.into() };
+        font.axes = Arc::new(vec![
+            Axis {
+                name: "Weight".into(),
+                tag: "wght".into(),
+                range: Some(AxisRange { minimum: 100.0, default: 400.0, maximum: 900.5 }),
+                label_names: vec![de("Gewicht")],
+                labels: vec![AxisLabel {
+                    name: "Bold".into(),
+                    user_value: 700.0,
+                    user_minimum: Some(650.0),
+                    linked_user_value: Some(400.0),
+                    elidable: true,
+                    older_sibling: true,
+                    names: vec![de("Fett")],
+                    ..Default::default()
+                }],
+                ordering: Some(2),
+                ..Default::default()
+            },
+            Axis { name: "Italic".into(), tag: "ital".into(), hidden: true, values: vec![0.0, 1.0], ..Default::default() },
+        ]);
+        Arc::make_mut(&mut font.masters)[0].location = vec![400.0, 0.0];
+        let bytes = save(&font).unwrap();
+        assert_eq!(load(&bytes).unwrap(), font);
+        assert_eq!(save(&load(&bytes).unwrap()).unwrap(), bytes);
+    }
+
+    #[test]
     fn newer_and_foreign_files_are_rejected_with_a_reason() {
         assert!(matches!(load(br#"{"format":"fontcraft","version":99,"font":{}}"#), Err(FormatError::TooNew { found: 99, .. })));
         assert!(matches!(load(br#"{"format":"other","version":1}"#), Err(FormatError::NotFontcraft(_))));

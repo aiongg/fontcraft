@@ -427,6 +427,39 @@ fn a_ufo_zone_at_no_metric_is_reported_when_saved_as_version_3() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn instance_fields_travel_in_a_designspace_but_not_a_ufo() {
+    let dir = temp("instances");
+    let text = V3.replacen(
+        "familyName = \"Test Sans\";",
+        "familyName = \"Test Sans\";\ninstances = (\n{\nisBold = 1;\nname = Bold;\nvisible = 0;\nweightClass = 700;\n}\n);",
+        1,
+    );
+    std::fs::write(dir.join("I.glyphs"), text).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": dir.join("I.glyphs") }));
+    let items = |saved: &Value, what: &str| saved["losses"].as_array().unwrap().iter().find(|l| l["what"] == what).map(|l| l["items"].clone());
+    let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("I.designspace") }));
+    assert_eq!(
+        items(&saved, "font information a designspace and its UFOs have no place for yet"),
+        Some(json!(["instance `Bold`: visibility"])),
+        "{saved}"
+    );
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": dir.join("I.glyphs") }));
+    let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("I.ufo") }));
+    assert_eq!(
+        items(&saved, "font information a UFO has no place for yet"),
+        Some(json!(["instance `Bold`: visibility, weight class, style linking"])),
+        "{saved}"
+    );
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": dir.join("I.designspace") }));
+    let back = &s.doc().unwrap().font.instances[0];
+    assert_eq!((back.name.as_str(), back.is_bold, back.weight_class.clone()), ("Bold", true, Some(fontcraft_model::StyleClass::Number(700.0))));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// The test document with a second master, Bold, whose glyphs are wider.
 fn two_masters() -> String {
     V3.replacen(

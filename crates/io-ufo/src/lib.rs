@@ -10,7 +10,8 @@
 //! - [`ufo`]: a UFO directory, as one master; `fontinfo` maps its font information to the
 //!   reference's properties and parameters, and `design` its blue zones, stem snaps and
 //!   guidelines to the master's fields.
-//! - [`designspace`]: a designspace and its UFOs, as one document.
+//! - [`designspace`]: a designspace and its UFOs, as one document; its axes, instances and
+//!   variable fonts are the model's.
 //! - [`zip`]: reading a UFOZ, a UFO in a ZIP archive.
 //!
 //! The functions work on file contents by relative path; reading and writing directories is the

@@ -70,7 +70,8 @@ pub fn write(font: &Font) -> Result<String> {
 }
 
 /// What [`write`] leaves out of the document because the format version it writes has no place
-/// for it, one line each.
+/// for it, one line each: zones beyond the overshoots (versions 3 and 4), and the axis data
+/// only a designspace states.
 pub fn info_losses(font: &Font) -> Vec<String> {
     let mut out = Vec::new();
     // Versions 3 and 4 hold alignment zones only as the metrics' overshoots; version 2 writes
@@ -79,6 +80,29 @@ pub fn info_losses(font: &Font) -> Vec<String> {
         for m in font.masters.iter().filter(|m| !m.zones.is_empty()) {
             let name = if m.name.is_empty() { &m.id } else { &m.name };
             out.push(format!("master `{name}`: alignment zones other than overshoots ({})", m.zones.len()));
+        }
+    }
+    // A designspace's axis data the format has no key for. The range travels while the axis
+    // parameters give it back.
+    for (i, a) in font.axes.iter().enumerate() {
+        let mut parts = Vec::new();
+        if let Some(r) = a.range {
+            let m = fontcraft_model::axes::mapping(font, i);
+            if (m.minimum(), m.default, m.maximum()) != (r.minimum, r.default, r.maximum) {
+                parts.push("its range");
+            }
+        }
+        if !a.values.is_empty() {
+            parts.push("its discrete values");
+        }
+        if !a.label_names.is_empty() {
+            parts.push("its name in other languages");
+        }
+        if !a.labels.is_empty() || a.ordering.is_some() {
+            parts.push("its STAT labels");
+        }
+        if !parts.is_empty() {
+            out.push(format!("axis `{}`: {}", a.name, parts.join(", ")));
         }
     }
     out
@@ -464,7 +488,7 @@ fn read_axis(v: &Value) -> Option<Axis> {
         Some(h) => as_bool01(&h, "hidden").ok()?,
         None => false,
     };
-    Some(Axis { name, tag, hidden, extra: into_extra(d) })
+    Some(Axis { name, tag, hidden, extra: into_extra(d), ..Default::default() })
 }
 
 fn read_instance(v: &Value) -> Option<Instance> {

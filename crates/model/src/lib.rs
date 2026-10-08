@@ -12,6 +12,7 @@
 //! into; `docs/plans/M1.md` says in which order.
 #![forbid(unsafe_code)]
 
+pub mod axes;
 mod extra;
 mod features;
 mod font;
@@ -22,8 +23,8 @@ mod kerning;
 pub use extra::{Extra, ExtraEntry, Family};
 pub use features::{Features, Snippet};
 pub use font::{
-    AlignmentZone, Axis, FileStore, Font, FontInfo, GlyphMut, GlyphTable, Guide, Instance, Master, MetricDef, MetricValue, NameParts, NumberDef,
-    Settings, Source, SourceFormat, StemDef, StyleClass, metric,
+    AlignmentZone, Axis, AxisLabel, AxisRange, FileStore, Font, FontInfo, GlyphMut, GlyphTable, Guide, Instance, LangName, Master, MetricDef,
+    MetricValue, NameParts, NumberDef, Settings, Source, SourceFormat, StemDef, StyleClass, metric,
 };
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};

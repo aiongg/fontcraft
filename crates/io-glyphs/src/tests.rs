@@ -476,3 +476,22 @@ fn zones_beyond_the_overshoots_are_lost_only_after_version_2() {
     std::sync::Arc::make_mut(&mut font.masters)[0].zones.clear();
     assert!(crate::info_losses(&font).is_empty());
 }
+
+#[test]
+fn designspace_axis_data_is_reported_lost() {
+    use fontcraft_model::{AxisLabel, AxisRange, LangName};
+    let mut font = read(&v3_design()).unwrap();
+    assert!(crate::info_losses(&font).is_empty());
+    let range = {
+        let m = fontcraft_model::axes::mapping(&font, 0);
+        AxisRange { minimum: m.minimum(), default: m.default, maximum: m.maximum() }
+    };
+    std::sync::Arc::make_mut(&mut font.axes)[0].range = Some(range);
+    assert!(crate::info_losses(&font).is_empty(), "a range the axis parameters give back travels");
+    let a = &mut std::sync::Arc::make_mut(&mut font.axes)[0];
+    a.range = Some(AxisRange { maximum: range.maximum + 100.0, ..range });
+    a.label_names.push(LangName { language: "de".into(), name: "Gewicht".into() });
+    a.labels.push(AxisLabel { name: "Regular".into(), user_value: 400.0, elidable: true, ..Default::default() });
+    let name = a.name.clone();
+    assert_eq!(crate::info_losses(&font), [format!("axis `{name}`: its range, its name in other languages, its STAT labels")]);
+}

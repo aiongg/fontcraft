@@ -367,12 +367,14 @@ fn ufo_layer_losses(font: &Font) -> Option<Value> {
     (n > 0).then(|| json!({ "family": "glyphs", "entries": n, "what": "layers other than master layers (backup, intermediate, alternate, colour), not written to UFO yet" }))
 }
 
-/// Font information (properties, parameters, settings, user data) a UFO has no place for yet.
-fn ufo_info_losses(font: &Font) -> Option<Value> {
-    let items = fontcraft_io_ufo::ufo::info_losses(font);
+/// Font information (properties, parameters, settings, user data, instance fields) a UFO, or a
+/// designspace and its UFOs, has no place for yet.
+fn ufo_info_losses(font: &Font, designspace: bool) -> Option<Value> {
+    let items = if designspace { fontcraft_io_ufo::designspace::info_losses(font) } else { fontcraft_io_ufo::ufo::info_losses(font) };
     let family = if font.source.format == SourceFormat::Glyphs { "glyphs" } else { "fontcraft" };
-    (!items.is_empty())
-        .then(|| json!({ "family": family, "entries": items.len(), "what": "font information a UFO has no place for yet", "items": items }))
+    let what =
+        if designspace { "font information a designspace and its UFOs have no place for yet" } else { "font information a UFO has no place for yet" };
+    (!items.is_empty()).then(|| json!({ "family": family, "entries": items.len(), "what": what, "items": items }))
 }
 
 /// Font information the `.glyphs` version being written has no place for.
@@ -409,7 +411,7 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
     if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
         losses.extend(ufo_layer_losses(font));
         losses.extend(side_file_losses(font));
-        losses.extend(ufo_info_losses(font));
+        losses.extend(ufo_info_losses(font, format == SaveFormat::Designspace));
     }
     if matches!(format, SaveFormat::Glyphs | SaveFormat::GlyphsPackage) {
         losses.extend(glyphs_info_losses(font));
@@ -492,7 +494,7 @@ pub fn export_ufos(font: &Font, masters: &[String], destination: &Path) -> Resul
     let mut losses = losses(&font, &[Family::Ufo]);
     losses.extend(ufo_layer_losses(&font));
     losses.extend(side_file_losses(&font));
-    losses.extend(ufo_info_losses(&font));
+    losses.extend(ufo_info_losses(&font, false));
     let mut taken = Vec::new();
     let mut files = Vec::new();
     for id in masters {

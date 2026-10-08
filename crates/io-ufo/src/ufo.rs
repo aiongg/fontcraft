@@ -749,6 +749,11 @@ fn str_value(s: &str) -> Value {
 }
 
 /// The kept dictionary `key` of a master, or an empty one.
+/// A string of a master's `fontinfo.plist` as read.
+pub(crate) fn kept_info_str(m: &Master, key: &str) -> Option<String> {
+    kept_dict(m, FONTINFO).0.get(key).and_then(Value::as_str).map(str::to_string)
+}
+
 fn kept_dict(m: &Master, key: &str) -> (Dict, bool) {
     match ufo_get(&m.extra, key).and_then(Value::as_dict) {
         Some(d) => (d.clone(), true),
@@ -1125,6 +1130,36 @@ fn design_of(font: &Font, m: &Master) -> Design {
 
 /// What saving `font` as UFOs leaves out of its font information and user data, one line each.
 pub fn info_losses(font: &Font) -> Vec<String> {
+    let mut out = font_losses(font);
+    for i in font.instances.iter() {
+        let fields = [
+            ("id", i.id.is_some()),
+            ("type", i.kind.is_some()),
+            ("visibility", !i.visible),
+            ("weight class", i.weight_class.is_some()),
+            ("width class", i.width_class.is_some()),
+            ("style linking", i.is_bold || i.is_italic || i.link_style.is_some()),
+            ("manual interpolation", i.manual_interpolation || !i.interpolation.is_empty()),
+        ];
+        let set: Vec<&str> = fields.iter().filter(|(_, on)| *on).map(|(what, _)| *what).collect();
+        if !set.is_empty() {
+            out.push(format!("instance `{}`: {}", i.name, set.join(", ")));
+        }
+        for p in &i.params.0 {
+            out.push(format!("instance `{}`: parameter `{}`", i.name, p.name));
+        }
+        for p in &i.properties.0 {
+            out.push(format!("instance `{}`: property `{}`", i.name, p.key));
+        }
+        if !i.user_data.is_empty() {
+            out.push(format!("instance `{}`: user data", i.name));
+        }
+    }
+    out
+}
+
+/// What the UFOs of `font` leave out of the font's and the masters' information, one line each.
+pub(crate) fn font_losses(font: &Font) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for m in font.masters.iter().filter(|m| m.extra.get(Family::Designspace, "layer").is_none()) {
         let (read, _) = kept_dict(m, FONTINFO);
@@ -1163,30 +1198,6 @@ pub fn info_losses(font: &Font) -> Vec<String> {
         }
         if !m.name_parts.is_empty() {
             out.push(format!("master `{name}`: name parts"));
-        }
-    }
-    for i in font.instances.iter() {
-        let fields = [
-            ("id", i.id.is_some()),
-            ("type", i.kind.is_some()),
-            ("visibility", !i.visible),
-            ("weight class", i.weight_class.is_some()),
-            ("width class", i.width_class.is_some()),
-            ("style linking", i.is_bold || i.is_italic || i.link_style.is_some()),
-            ("manual interpolation", i.manual_interpolation || !i.interpolation.is_empty()),
-        ];
-        let set: Vec<&str> = fields.iter().filter(|(_, on)| *on).map(|(what, _)| *what).collect();
-        if !set.is_empty() {
-            out.push(format!("instance `{}`: {}", i.name, set.join(", ")));
-        }
-        for p in &i.params.0 {
-            out.push(format!("instance `{}`: parameter `{}`", i.name, p.name));
-        }
-        for p in &i.properties.0 {
-            out.push(format!("instance `{}`: property `{}`", i.name, p.key));
-        }
-        if !i.user_data.is_empty() {
-            out.push(format!("instance `{}`: user data", i.name));
         }
     }
     out
