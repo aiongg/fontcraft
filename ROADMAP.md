@@ -69,14 +69,17 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 ### What to build next (in priority order)
 
-1. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
+1. **M1.7, the typed model**: every documented field of the three source formats as a model
+   field, one vocabulary for both format families, and Glyphs-only data in glyphsLib's UFO lib
+   keys. Next.
+2. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
    remaining static tables, the `cff` crate, WOFF and WOFF2, `fontcraft-cli oracle`, and a first
-   corpus-wide comparison with fontc and fontmake. Next. From this
+   corpus-wide comparison with fontc and fontmake. From this
    point compiler correctness is a number, not an opinion.
-2. **M3, Edit View drawing**, in parallel with 1 once the model settles: the `tools` crate,
+3. **M3, Edit View drawing**, in parallel with 2 once the model settles: the `tools` crate,
    selection, the Draw tool, node editing, transforms, the renderer, `ui.pointer` and
    `ui.screenshot` on the control channel, path operations.
-3. Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
+4. Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
    orders them.
 
 **The primary reference cannot be observed directly** (open decision O1: no licence). Editor
@@ -123,7 +126,7 @@ measured by what works (the parity table below and the measures in each mileston
 | # | Milestone | Status | Commands (live) |
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; remaining model fields proposed for later milestones | 10 (10) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ⬜ plan accepted, next | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |

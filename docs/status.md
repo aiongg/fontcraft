@@ -15,20 +15,23 @@ _Updated: 2026-10-08, after M1.4 (UFO and designspace)._
 
 ## Where to start
 
-**M2, the compile core and the oracle harness.** The plan is `docs/plans/M2.md` (accepted
-2026-10-08; one agent). Start with M2.0 (the harness) and M2.1 (the pipeline); first check
-whether glyphsLib reads `.glyphs` version 4.
+**M1.7, the typed model** (`docs/plans/M1.md` § M1.7, added 2026-10-08 at the owner's request):
+every documented field becomes a model field, and Glyphs-only data travels in glyphsLib's UFO lib
+keys. Eight steps; `cargo test -p fontcraft-engine --test extra_census -- --ignored --nocapture`
+shows what is still untyped. After it, M2 (`docs/plans/M2.md`, accepted): M2.0 and M2.1 first;
+check whether glyphsLib reads `.glyphs` version 4.
 
-M1 (`docs/plans/M1.md`) is done as far as the formats go:
+M1 (`docs/plans/M1.md`) so far:
 
 | Package | State |
 |---|---|
 | M1.0 corpus, harness, spikes | done (plan § 8) |
 | M1.1 property lists | done: OpenStep and XML |
-| M1.2 the model, with M1.3 `.glyphs` | the fields M1 needs are typed; the rest of the outline in `docs/spec/30-source-formats.md` (ordered custom parameters, layer kinds, hints, guides…) travels in `Extra` and is typed by the milestone that uses it (proposed to the owner). `crates/io-glyphs`: versions 2 to 4, files and packages, every reference-written source identical |
+| M1.2 the model, with M1.3 `.glyphs` | the fields M1.0 to M1.6 needed are typed; the rest of the outline in `docs/spec/30-source-formats.md` is M1.7. `crates/io-glyphs`: versions 2 to 4, files and packages, every reference-written source identical |
 | M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
 | M1.5 compiled fonts | done |
 | M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
+| M1.7 the typed model | **next**, step 1 (vocabulary) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -77,8 +80,7 @@ around them. None can lose data; most are about scale.
 
 `docs/spec/00-open-decisions.md` › For the owner: the name (O2), access to the sibling apps' shared
 standards (O3), the application id (rest of O4), FontLab (O5), platforms (O6). O1 is answered (no
-licence; tutorial videos watched by the owner) and so is the repository's home. Also asked: whether
-M1 may close with the remaining model fields typed by the milestones that use them.
+licence; tutorial videos watched by the owner) and so is the repository's home.
 
 ## Dev log
 

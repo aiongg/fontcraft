@@ -1,0 +1,93 @@
+//! Diagnostic: what the model still carries untyped. Reads every corpus source (`.glyphs`,
+//! packages, UFOs, designspace files with their UFOs) and counts the `Extra` keys per kind of
+//! object and format family, with how many sources use each.
+//! `cargo test -p fontcraft-engine --test extra_census -- --ignored --nocapture`.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+
+use fontcraft_model::{Extra, Family, Font, Shape};
+
+type Census = BTreeMap<(String, String, String), (usize, BTreeSet<usize>)>;
+
+fn add(c: &mut Census, source: usize, what: &str, x: &Extra) {
+    for e in x.iter() {
+        let family = format!("{:?}", e.family).to_lowercase();
+        let row = c.entry((family, what.to_string(), e.key.as_str().to_string())).or_default();
+        row.0 += 1;
+        row.1.insert(source);
+    }
+}
+
+fn census(c: &mut Census, source: usize, f: &Font) {
+    add(c, source, "font", &f.extra);
+    f.axes.iter().for_each(|a| add(c, source, "axis", &a.extra));
+    f.metrics.iter().for_each(|m| add(c, source, "metric", &m.extra));
+    f.masters.iter().for_each(|m| add(c, source, "master", &m.extra));
+    f.instances.iter().for_each(|i| add(c, source, "instance", &i.extra));
+    for s in f.features.prefixes.iter().chain(&f.features.classes).chain(&f.features.features) {
+        add(c, source, "snippet", &s.extra);
+    }
+    for g in f.glyphs.iter() {
+        add(c, source, "glyph", &g.extra);
+        for l in &g.layers {
+            add(c, source, if l.is_master_layer() { "layer" } else { "other layer" }, &l.extra);
+            l.anchors.iter().for_each(|a| add(c, source, "anchor", &a.extra));
+            for s in &l.shapes {
+                match s {
+                    Shape::Path(p) => {
+                        add(c, source, "path", &p.extra);
+                        p.nodes.iter().for_each(|n| add(c, source, "node", &n.extra));
+                    }
+                    Shape::Component(k) => add(c, source, "component", &k.extra),
+                    Shape::Raw(r) => {
+                        let row = c.entry((format!("{:?}", r.family).to_lowercase(), "raw shape".into(), String::new())).or_default();
+                        row.0 += 1;
+                        row.1.insert(source);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let p = e.path();
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if name == ".git" {
+            continue;
+        }
+        let ext = p.extension().and_then(|x| x.to_str()).unwrap_or("");
+        if matches!(ext, "glyphs" | "designspace") && p.is_file() || matches!(ext, "glyphspackage" | "ufo") && p.is_dir() {
+            out.push(p);
+        } else if p.is_dir() {
+            sources(&p, out);
+        }
+    }
+}
+
+#[test]
+#[ignore = "diagnostic"]
+fn extra_census() {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let mut all = Vec::new();
+    sources(&corpus, &mut all);
+    let mut c = Census::new();
+    let mut read = 0;
+    for (i, p) in all.iter().enumerate() {
+        if let Ok((font, _)) = fontcraft_engine::io::open(p, None) {
+            read += 1;
+            census(&mut c, i, &font);
+        }
+    }
+    eprintln!("{read} sources read");
+    let mut rows: Vec<_> = c.into_iter().collect();
+    rows.sort_by(|a, b| (&a.0.0, &a.0.1, std::cmp::Reverse(a.1.1.len())).cmp(&(&b.0.0, &b.0.1, std::cmp::Reverse(b.1.1.len()))));
+    for ((family, what, key), (n, srcs)) in rows {
+        eprintln!("{family:9} {what:12} {key:40} {n:>8} in {:>4}", srcs.len());
+    }
+    let _ = Family::Glyphs;
+}
