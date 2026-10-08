@@ -27,8 +27,8 @@
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Anchor, Component, Extra, Family, Font, Glyph, GlyphTable, Layer, Master, MetricDef, MetricValue, Node, NodeKind, Path, RawShape, Shape, Source,
-    SourceFormat, Transform, metric,
+    Anchor, Component, Extra, Family, Font, FontInfo, Glyph, GlyphTable, Layer, Master, MetricDef, MetricValue, Node, NodeKind, Path, Properties,
+    RawShape, Settings, Shape, Source, SourceFormat, Transform, metric,
 };
 use fontcraft_plist::openstep::canonical_number;
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
@@ -163,7 +163,49 @@ fn spelled(kept: Option<&Value>, nums: &[f64]) -> String {
     }
 }
 
+/// Version 2 keeps these names at the top level; the model keeps them as properties.
+const NAMES: [(&str, &str, bool); 5] = [
+    ("copyright", "copyrights", true),
+    ("designer", "designers", true),
+    ("designerURL", "designerURL", false),
+    ("manufacturer", "manufacturers", true),
+    ("manufacturerURL", "manufacturerURL", false),
+];
+
+/// The font information of a version 2 root: names, parameters, settings, date and user data.
+fn take_font_info(root: &mut Dict) -> FontInfo {
+    let mut properties = Properties::default();
+    for (key, property, localized) in NAMES {
+        if let Some(v) = crate::take_plain_string(root, key) {
+            properties.set(property, &v, localized);
+        }
+    }
+    let mut settings = Settings::default();
+    crate::info::take_settings_keys(root, &mut settings);
+    FontInfo {
+        properties,
+        params: crate::info::take_params(root),
+        settings,
+        date: crate::take_plain_string(root, "date"),
+        user_data: crate::info::take_user_data(root),
+    }
+}
+
+/// [`take_font_info`] in reverse. A property version 2 has no key for is not written.
+fn push_font_info(e: &mut Vec<(Str, Value)>, font: &Font) -> Result<()> {
+    crate::push_font_info_common(e, font);
+    for (key, property, _) in NAMES {
+        if let Some(v) = font.info.properties.value(property) {
+            e.push((key.into(), string(v)));
+        }
+    }
+    e.extend(crate::info::settings_entries(&font.info.settings)?);
+    Ok(())
+}
+
 pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
+    let app_version = crate::take_app_version(&mut root);
+    let font_info = take_font_info(&mut root);
     let family_name = opt_string(&mut root, "familyName", "the file")?.unwrap_or_default();
     let units_per_em = as_u16(&take(&mut root, "unitsPerEm").ok_or_else(|| bad("the file", "no unitsPerEm"))?, "unitsPerEm")?;
     let version_major = take(&mut root, "versionMajor").map(|v| as_u16(&v, "versionMajor")).transpose()?.unwrap_or(0);
@@ -188,7 +230,7 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
     let display_strings = take_strings(&mut root, "DisplayStrings");
     let note = take_note(&mut root);
     Ok(Font {
-        source: Source { format: SourceFormat::Glyphs, glyphs_version: Some(2), ..Default::default() },
+        source: Source { format: SourceFormat::Glyphs, glyphs_version: Some(2), app_version, ..Default::default() },
         family_name,
         units_per_em,
         version_major,
@@ -198,6 +240,7 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
         metrics: Arc::new(KINDS.iter().map(|k| MetricDef::new(k)).collect()),
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
+        info: Arc::new(font_info),
         kerning: Arc::new(kerning),
         features: Arc::new(features),
         display_strings: Arc::new(display_strings),
@@ -241,7 +284,10 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
     if !leftover.is_empty() {
         d.entries.push(("alignmentZones".into(), Value::Array(Array { items: leftover, layout: Layout::Multiline, ..Default::default() })));
     }
-    Ok(Master { id, name: String::new(), location: Vec::new(), metric_values: values, extra: into_extra(d) })
+    let (icon, visible) = crate::take_master_display(&mut d)?;
+    let params = crate::info::take_params(&mut d);
+    let user_data = crate::info::take_user_data(&mut d);
+    Ok(Master { id, metric_values: values, icon, visible, params, user_data, extra: into_extra(d), ..Default::default() })
 }
 
 fn hex_code_points(v: &Value) -> Option<Vec<u32>> {
@@ -406,6 +452,7 @@ pub(crate) fn write_font(font: &Font) -> Result<Dict> {
     e.push(("unitsPerEm".into(), int(font.units_per_em)));
     e.push(("versionMajor".into(), int(font.version_major)));
     e.push(("versionMinor".into(), int(font.version_minor)));
+    push_font_info(&mut e, font)?;
     e.push(("fontMaster".into(), list(font.masters.iter().map(|m| write_master(font, m)).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g).map(Value::Dict)).collect::<Result<_>>()?)));
     push_features(&mut e, &font.features, "name");
@@ -455,6 +502,7 @@ fn write_master(font: &Font, m: &Master) -> Result<Value> {
         zones.sort_by(|a, b| b.0.total_cmp(&a.0));
         e.push(("alignmentZones".into(), list(zones.into_iter().map(|(_, z)| z).collect())));
     }
+    crate::push_master_info(&mut e, m);
     Ok(Value::Dict(finish_ordered(e, &m.extra, MASTER_ORDER)))
 }
 

@@ -325,7 +325,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
             name: s.style_name.clone().unwrap_or_else(|| layer.clone()),
             location: s.location.clone(),
             metric_values: main_values.get(&s.filename).cloned().unwrap_or_default(),
-            extra: Extra::new(),
+            ..Default::default()
         };
         ds(&mut master.extra, "filename", Value::String(s.filename.as_str().into()));
         ds(&mut master.extra, "layer", Value::String(layer.as_str().into()));
@@ -384,6 +384,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
         masters: Arc::new(masters),
         instances: Arc::new(read_instances(root, &axes, &labels)?),
         glyphs: GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect()),
+        info: Default::default(),
         kerning: Arc::new(Kerning { ltr: KernTable(kerning), ..Default::default() }),
         features: Arc::new(features),
         display_strings: Arc::default(),
@@ -450,7 +451,7 @@ fn read_instances(root: &Element, axes: &[AxisInfo], labels: &HashMap<String, Ve
             return Err(bad(DOC, format!("more than {MAX_ITEMS} instances")));
         }
         let name = el.attr("stylename").or_else(|| el.attr("name")).unwrap_or("").to_string();
-        out.push(Instance { name, location: read_location(el, axes, labels)?, exports: true, extra: Extra::new() });
+        out.push(Instance { name, location: read_location(el, axes, labels)?, exports: true, ..Default::default() });
     }
     Ok(out)
 }

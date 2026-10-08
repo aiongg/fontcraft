@@ -16,12 +16,14 @@
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Anchor, Axis, Component, Extra, Family, Features, Font, Glyph, GlyphTable, Instance, KernFirst, KernGroups, KernTable, Kerning, Layer, Master,
-    MasterKerning, MetricDef, MetricValue, ModelError, Node, NodeKind, Path, RawShape, Shape, Snippet, Source, SourceFormat, Transform,
+    Anchor, Axis, Component, Extra, Family, Features, Font, FontInfo, Glyph, GlyphTable, Instance, KernFirst, KernGroups, KernTable, Kerning, Layer,
+    Master, MasterKerning, MetricDef, MetricValue, ModelError, Node, NodeKind, Path, PropertyValue, RawShape, Shape, Snippet, Source, SourceFormat,
+    Transform,
 };
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
+mod info;
 mod package;
 mod v2;
 
@@ -149,17 +151,53 @@ fn as_pair(v: &Value, at: &str) -> Result<(f64, f64)> {
     }
 }
 
-/// The family name of a version 4 file, which keeps it among the `properties`.
-fn v4_family_name(root: &Dict) -> Option<String> {
-    let props = root.get("properties")?.as_array()?;
-    props.items.iter().find_map(|p| {
-        let d = p.as_dict()?;
-        if d.get("key")?.as_str()? != "familyNames" {
-            return None;
-        }
-        let first = d.get("values")?.as_array()?.items.first()?.as_dict()?;
-        first.get("value")?.as_str().map(str::to_string)
+/// The family name of a version 4 file, which keeps it among the `properties`: the first value
+/// of `familyNames`.
+fn v4_family_name(props: &fontcraft_model::Properties) -> Option<String> {
+    match &props.get("familyNames")?.value {
+        PropertyValue::Localized(v) => v.first().map(|l| l.value.clone()),
+        PropertyValue::Single(s) => Some(s.clone()),
+    }
+}
+
+/// `.appVersion`, when the writer would spell it the same way.
+pub(crate) fn take_app_version(d: &mut Dict) -> Option<String> {
+    match d.get(".appVersion") {
+        Some(Value::String(s)) if s.spelling().is_none() => take(d, ".appVersion").and_then(|v| v.as_str().map(str::to_string)),
+        _ => None,
+    }
+}
+
+/// The font information of a version 3 or 4 root: properties, parameters, settings, date and
+/// user data.
+fn take_font_info(d: &mut Dict) -> Result<FontInfo> {
+    Ok(FontInfo {
+        properties: info::take_properties(d),
+        params: info::take_params(d),
+        settings: info::take_settings(d),
+        date: take_plain_string(d, "date"),
+        user_data: info::take_user_data(d),
     })
+}
+
+/// A string the writer would spell the same way.
+pub(crate) fn take_plain_string(d: &mut Dict, key: &str) -> Option<String> {
+    match d.get(key) {
+        Some(Value::String(s)) if s.spelling().is_none() => take(d, key).and_then(|v| v.as_str().map(str::to_string)),
+        _ => None,
+    }
+}
+
+/// The parts of the font information every version writes the same way.
+pub(crate) fn push_font_info_common(e: &mut Vec<(Str, Value)>, font: &Font) {
+    if let Some(v) = &font.source.app_version {
+        e.push((".appVersion".into(), string(v)));
+    }
+    if let Some(d) = &font.info.date {
+        e.push(("date".into(), string(d)));
+    }
+    info::push_params(e, &font.info.params);
+    info::push_user_data(e, &font.info.user_data);
 }
 
 fn read_font(mut root: Dict) -> Result<Font> {
@@ -170,8 +208,10 @@ fn read_font(mut root: Dict) -> Result<Font> {
     if !(3..=4).contains(&version) {
         return Err(GlyphsError::Unsupported(format!("format version {version}")));
     }
+    let app_version = take_app_version(&mut root);
+    let font_info = take_font_info(&mut root)?;
     let family_name = if version >= 4 {
-        v4_family_name(&root).unwrap_or_default()
+        v4_family_name(&font_info.properties).unwrap_or_default()
     } else {
         take(&mut root, "familyName").map(|v| as_string(v, "familyName")).transpose()?.unwrap_or_default()
     };
@@ -207,7 +247,8 @@ fn read_font(mut root: Dict) -> Result<Font> {
         vertical: take_kern_table(&mut root, "kerningVertical"),
     };
     Ok(Font {
-        source: Source { format: SourceFormat::Glyphs, glyphs_version: u32::try_from(version).ok(), ..Default::default() },
+        source: Source { format: SourceFormat::Glyphs, glyphs_version: u32::try_from(version).ok(), app_version, ..Default::default() },
+        info: Arc::new(font_info),
         family_name,
         units_per_em,
         version_major,
@@ -419,7 +460,10 @@ fn read_instance(v: &Value) -> Option<Instance> {
         Some(x) => as_bool01(&x, "exports").ok()?,
         None => true,
     };
-    Some(Instance { name, location, exports, extra: into_extra(d) })
+    let properties = info::take_properties(&mut d);
+    let params = info::take_params(&mut d);
+    let user_data = info::take_user_data(&mut d);
+    Some(Instance { name, location, exports, properties, params, user_data, extra: into_extra(d) })
 }
 
 fn write_axis(a: &Axis) -> Value {
@@ -445,6 +489,9 @@ fn write_instance(i: &Instance) -> Result<Value> {
     if !i.exports {
         e.push(("exports".into(), int(0)));
     }
+    info::push_properties(&mut e, &i.properties);
+    info::push_params(&mut e, &i.params);
+    info::push_user_data(&mut e, &i.user_data);
     Ok(Value::Dict(finish(e, &i.extra)))
 }
 
@@ -476,7 +523,37 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
             None => d.entries.push(("metricValues".into(), values)),
         }
     }
-    Ok(Master { id, name, location, metric_values, extra: into_extra(d) })
+    let (icon, visible) = take_master_display(&mut d)?;
+    let properties = info::take_properties(&mut d);
+    let params = info::take_params(&mut d);
+    let user_data = info::take_user_data(&mut d);
+    Ok(Master { id, name, location, metric_values, icon, visible, properties, params, user_data, extra: into_extra(d) })
+}
+
+/// A master's `iconName` and `visible`.
+pub(crate) fn take_master_display(d: &mut Dict) -> Result<(Option<String>, bool)> {
+    let icon = take_plain_string(d, "iconName");
+    let visible = match d.get("visible") {
+        Some(v) if matches!(v.as_num(), Some(Num::Int(1))) => {
+            take(d, "visible");
+            true
+        }
+        _ => false,
+    };
+    Ok((icon, visible))
+}
+
+/// What [`take_master_display`] took, and the master's properties, parameters and user data.
+pub(crate) fn push_master_info(e: &mut Vec<(Str, Value)>, m: &Master) {
+    if let Some(i) = &m.icon {
+        e.push(("iconName".into(), string(i)));
+    }
+    if m.visible {
+        e.push(("visible".into(), int(1)));
+    }
+    info::push_properties(e, &m.properties);
+    info::push_params(e, &m.params);
+    info::push_user_data(e, &m.user_data);
 }
 
 fn plain_metric_values(v: &Value) -> Option<Vec<MetricValue>> {
@@ -669,62 +746,42 @@ fn finish(mut entries: Vec<(Str, Value)>, extra: &Extra) -> Dict {
 
 /// Writes the family name into a version 4 file's `familyNames` property (its first value),
 /// adding the property when the file has none.
-fn sync_v4_family_name(extra: &Extra, family: &str) -> Extra {
-    let mut extra = extra.clone();
-    if v4_family_name_of_extra(&extra).as_deref() == Some(family) {
-        return extra;
+/// The properties with the family name as the first value of `familyNames` (added first when
+/// there is none).
+fn sync_v4_family_name(props: &fontcraft_model::Properties, family: &str) -> fontcraft_model::Properties {
+    let mut props = props.clone();
+    if v4_family_name(&props).as_deref() == Some(family) {
+        return props;
     }
-    let mut props = match extra.get(Family::Glyphs, "properties") {
-        Some(Value::Array(a)) => a.clone(),
-        _ => Array { items: Vec::new(), layout: Layout::Multiline, ..Default::default() },
-    };
-    let new_value = || {
-        let mut v = Dict::new();
-        v.insert("language", string("dflt"));
-        v.insert("value", string(family));
-        Value::Dict(v)
-    };
-    let found = props.items.iter_mut().find_map(|p| match p {
-        Value::Dict(d) if d.get("key").and_then(Value::as_str) == Some("familyNames") => Some(d),
-        _ => None,
-    });
-    match found {
-        Some(d) => match d.get_mut("values") {
-            Some(Value::Array(values)) => match values.items.first_mut() {
-                Some(Value::Dict(first)) => first.insert("value", string(family)),
-                _ => values.items.insert(0, new_value()),
+    let value = || fontcraft_model::Localized { language: fontcraft_model::DEFAULT_LANGUAGE.into(), value: family.into(), extra: Extra::new() };
+    match props.0.iter_mut().find(|p| p.key == "familyNames") {
+        Some(p) => match &mut p.value {
+            PropertyValue::Localized(v) => match v.first_mut() {
+                Some(first) => first.value = family.into(),
+                None => v.push(value()),
             },
-            _ => d.insert("values", list(vec![new_value()])),
+            PropertyValue::Single(s) => *s = family.into(),
         },
-        None => {
-            let mut entry = Dict::new();
-            entry.insert("key", string("familyNames"));
-            entry.insert("values", list(vec![new_value()]));
-            props.items.insert(0, Value::Dict(entry));
-        }
+        None => props
+            .0
+            .insert(0, fontcraft_model::Property { key: "familyNames".into(), value: PropertyValue::Localized(vec![value()]), extra: Extra::new() }),
     }
-    extra.insert(Family::Glyphs, "properties", Value::Array(props));
-    extra
-}
-
-fn v4_family_name_of_extra(extra: &Extra) -> Option<String> {
-    let mut d = Dict::new();
-    d.insert("properties", extra.get(Family::Glyphs, "properties")?.clone());
-    v4_family_name(&d)
+    props
 }
 
 fn write_font(font: &Font, version: u32) -> Result<Dict> {
     let mut e: Vec<(Str, Value)> = vec![(".formatVersion".into(), int(version))];
-    let synced;
-    let extra: &Extra = if version >= 4 && !font.family_name.is_empty() {
-        synced = sync_v4_family_name(&font.extra, &font.family_name);
-        &synced
-    } else {
-        &font.extra
-    };
+    let extra: &Extra = &font.extra;
     if version < 4 && !font.family_name.is_empty() {
         e.push(("familyName".into(), string(&font.family_name)));
     }
+    push_font_info_common(&mut e, font);
+    if version >= 4 && !font.family_name.is_empty() {
+        info::push_properties(&mut e, &sync_v4_family_name(&font.info.properties, &font.family_name));
+    } else {
+        info::push_properties(&mut e, &font.info.properties);
+    }
+    info::push_settings(&mut e, &font.info.settings)?;
     e.push(("unitsPerEm".into(), int(font.units_per_em)));
     e.push(("versionMajor".into(), int(font.version_major)));
     e.push(("versionMinor".into(), int(font.version_minor)));
@@ -788,6 +845,7 @@ fn write_master(m: &Master) -> Result<Value> {
             .collect::<Result<_>>()?;
         e.push(("metricValues".into(), list(values)));
     }
+    push_master_info(&mut e, m);
     Ok(Value::Dict(finish(e, &m.extra)))
 }
 

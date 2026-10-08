@@ -276,7 +276,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     };
     let glif_format = if format_version == 2 { 1 } else { 2 };
 
-    let mut master = Master { id: master_id.to_string(), name: String::new(), location: Vec::new(), metric_values: Vec::new(), extra: Extra::new() };
+    let mut master = Master { id: master_id.to_string(), ..Default::default() };
     let mx = &mut master.extra;
     mx.push(Family::Ufo, "plistStyle", plist_style.to_value());
     mx.push(Family::Ufo, METAINFO, Value::Dict(meta));
@@ -567,6 +567,7 @@ pub fn read(files: &Files) -> Result<Font> {
         masters: Arc::new(vec![master]),
         instances: Arc::default(),
         glyphs: GlyphTable::from_glyphs(r.glyphs.into_iter().map(Arc::new).collect()),
+        info: Default::default(),
         kerning: Arc::new(Kerning {
             ltr: if r.kerning.firsts.is_empty() { KernTable::default() } else { KernTable(vec![r.kerning]) },
             ..Default::default()

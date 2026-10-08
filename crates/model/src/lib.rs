@@ -16,13 +16,17 @@ mod extra;
 mod features;
 mod font;
 mod glyph;
+mod info;
 mod kerning;
 
 pub use extra::{Extra, ExtraEntry, Family};
 pub use features::{Features, Snippet};
-pub use font::{Axis, FileStore, Font, GlyphMut, GlyphTable, Instance, Master, MetricDef, MetricValue, Source, SourceFormat, metric};
+pub use font::{
+    Axis, FileStore, Font, FontInfo, GlyphMut, GlyphTable, Instance, Master, MetricDef, MetricValue, Settings, Source, SourceFormat, metric,
+};
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
+pub use info::{DEFAULT_LANGUAGE, Localized, Param, Params, Properties, Property, PropertyValue, UserData};
 pub use kerning::{KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 
 /// Smallest and largest units-per-em the OpenType `head` table allows.

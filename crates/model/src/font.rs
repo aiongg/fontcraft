@@ -9,6 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::features::Features;
 use crate::glyph::{Glyph, Layer, Path, Shape};
+use crate::info::{Params, Properties, UserData};
 use crate::kerning::Kerning;
 use crate::{
     Extra, MAX_COMPONENT_DEPTH, MAX_COORDINATE, MAX_GLYPHS, MAX_OUTLINE_ELEMENTS, MAX_UNICODES, ModelError, UPM_RANGE, check_name, in_range,
@@ -25,6 +26,10 @@ pub struct Source {
     /// The UFO format version (2 or 3) the document was read in, and is written in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ufo_version: Option<u32>,
+    /// The version of the app that last saved the source, as the source states it (the
+    /// reference's `.appVersion`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_version: Option<String>,
     /// A native file that was gzip-compressed, and is written so again. Not stored in the file:
     /// the reader sets it from the file's first bytes.
     #[serde(skip)]
@@ -107,7 +112,7 @@ pub struct Axis {
 }
 
 /// A named instance: a static font to export, or another export setting.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Instance {
     /// The style name (may be empty: format version 4 keeps it among the instance's properties).
     #[serde(default)]
@@ -118,6 +123,12 @@ pub struct Instance {
     /// Whether the instance is exported.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub exports: bool,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
+    #[serde(default, skip_serializing_if = "Params::is_empty")]
+    pub params: Params,
+    #[serde(default, skip_serializing_if = "UserData::is_empty")]
+    pub user_data: UserData,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
@@ -130,7 +141,7 @@ fn is_true(b: &bool) -> bool {
 }
 
 /// One design of the family (a weight, a width…).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Master {
     pub id: String,
     pub name: String,
@@ -140,8 +151,83 @@ pub struct Master {
     /// Parallel to [`Font::metrics`]; may be shorter, and a missing value is zero.
     #[serde(default, rename = "metricValues", skip_serializing_if = "Vec::is_empty")]
     pub metric_values: Vec<MetricValue>,
+    /// The icon the master is shown with (the reference's icon names, such as `Light`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Shown in the editor's preview of all masters.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub visible: bool,
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
+    #[serde(default, skip_serializing_if = "Params::is_empty")]
+    pub params: Params,
+    #[serde(default, skip_serializing_if = "UserData::is_empty")]
+    pub user_data: UserData,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
+}
+
+/// Font-wide information beyond the family name, version and units per em.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct FontInfo {
+    /// Names and other strings, localised where the format allows.
+    #[serde(default, skip_serializing_if = "Properties::is_empty")]
+    pub properties: Properties,
+    /// Custom parameters: table values, export options, UFO font-info fields.
+    #[serde(default, skip_serializing_if = "Params::is_empty")]
+    pub params: Params,
+    #[serde(default, skip_serializing_if = "Settings::is_empty")]
+    pub settings: Settings,
+    /// The creation date as the source writes it (`2026-10-08 12:00:00 +0000`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    #[serde(default, skip_serializing_if = "UserData::is_empty")]
+    pub user_data: UserData,
+}
+
+impl FontInfo {
+    pub fn is_empty(&self) -> bool {
+        *self == FontInfo::default()
+    }
+}
+
+/// Editor settings saved with the document.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    /// Components are not aligned automatically.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disables_automatic_alignment: Option<bool>,
+    /// Glyph names are kept as typed, not turned into the nice names of the glyph data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disables_nice_names: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid_length: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid_sub_division: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyboard_increment: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyboard_increment_big: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyboard_increment_huge: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_alternates_together: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_remove_overlap: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snap_to_objects: Option<bool>,
+    /// `default`, `variable`, `layerFont` or `iconSet`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Extra::is_empty")]
+    pub extra: Extra,
+}
+
+impl Settings {
+    pub fn is_empty(&self) -> bool {
+        *self == Settings::default()
+    }
 }
 
 /// A font source: one family, all its masters and glyphs.
@@ -165,6 +251,8 @@ pub struct Font {
     pub masters: Arc<Vec<Master>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub instances: Arc<Vec<Instance>>,
+    #[serde(default, skip_serializing_if = "FontInfo::is_empty")]
+    pub info: Arc<FontInfo>,
     /// In glyph order.
     pub glyphs: GlyphTable,
     #[serde(default, skip_serializing_if = "Kerning::is_empty")]
@@ -368,9 +456,8 @@ impl Font {
         let master = Master {
             id: master_id.clone(),
             name: "Regular".into(),
-            location: Vec::new(),
             metric_values: values.iter().zip(overs).map(|(&pos, over)| MetricValue { pos, over }).collect(),
-            extra: Extra::new(),
+            ..Default::default()
         };
         let mut glyphs = Vec::new();
         let mut notdef = Glyph::new(".notdef");
@@ -402,6 +489,7 @@ impl Font {
             metrics: Arc::new(defs.iter().map(|k| MetricDef::new(k)).collect()),
             masters: Arc::new(vec![master]),
             instances: Arc::default(),
+            info: Arc::default(),
             glyphs: GlyphTable::from_glyphs(glyphs),
             kerning: Arc::default(),
             features: Arc::default(),
@@ -675,6 +763,7 @@ impl Font {
             && self.note == before.note
             && arc_eq(&self.axes, &before.axes)
             && arc_eq(&self.instances, &before.instances)
+            && arc_eq(&self.info, &before.info)
             && (Arc::ptr_eq(&self.glyphs.order, &before.glyphs.order)
                 || self.glyphs.len() == before.glyphs.len() && self.glyphs.iter().zip(before.glyphs.iter()).all(|(a, b)| arc_eq(a, b)))
     }

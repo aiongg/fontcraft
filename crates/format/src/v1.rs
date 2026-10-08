@@ -163,9 +163,9 @@ impl Font {
             .map(|m| fontcraft_model::Master {
                 id: m.id,
                 name: m.name,
-                location: Vec::new(),
                 metric_values: [m.ascender, m.cap_height, m.x_height, m.descender].into_iter().map(|pos| MetricValue { pos, over: 0.0 }).collect(),
                 extra: extra_of(m.extra),
+                ..Default::default()
             })
             .collect();
         let glyphs = self.glyphs.into_iter().map(|g| Arc::new(g.upgrade())).collect();
@@ -180,6 +180,7 @@ impl Font {
             metrics: Arc::new(kinds.iter().map(|k| MetricDef::new(k)).collect()),
             masters: Arc::new(masters),
             glyphs: GlyphTable::from_glyphs(glyphs),
+            info: Default::default(),
             kerning: Arc::default(),
             features: Arc::default(),
             display_strings: Arc::default(),
