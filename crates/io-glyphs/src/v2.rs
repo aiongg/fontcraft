@@ -34,8 +34,8 @@ use fontcraft_plist::openstep::canonical_number;
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
 use crate::{
-    GlyphsError, Result, as_f64, as_items, as_u16, bad, finish, int, into_extra, list, num, opt_string, push_kern_groups, string, take,
-    take_kern_groups, take_kern_table, write_kern_table,
+    GlyphsError, Result, as_f64, as_items, as_u16, bad, finish, int, into_extra, list, num, opt_string, push_features, push_kern_groups,
+    push_ui_and_note, string, take, take_features, take_kern_groups, take_kern_table, take_note, take_strings, write_kern_table,
 };
 use fontcraft_model::Kerning;
 
@@ -184,6 +184,9 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
     };
     let kerning =
         Kerning { ltr: take_kern_table(&mut root, "kerning"), rtl: Default::default(), vertical: take_kern_table(&mut root, "vertKerning") };
+    let features = take_features(&mut root, "name");
+    let display_strings = take_strings(&mut root, "DisplayStrings");
+    let note = take_note(&mut root);
     Ok(Font {
         source: Source { format: SourceFormat::Glyphs, glyphs_version: Some(2) },
         family_name,
@@ -196,6 +199,9 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
         kerning: Arc::new(kerning),
+        features: Arc::new(features),
+        display_strings: Arc::new(display_strings),
+        note,
         files: Arc::default(),
         extra: Arc::new(into_extra(root)),
     })
@@ -402,6 +408,8 @@ pub(crate) fn write_font(font: &Font) -> Result<Dict> {
     e.push(("versionMinor".into(), int(font.version_minor)));
     e.push(("fontMaster".into(), list(font.masters.iter().map(|m| write_master(font, m)).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g).map(Value::Dict)).collect::<Result<_>>()?)));
+    push_features(&mut e, &font.features, "name");
+    push_ui_and_note(&mut e, font);
     if !font.kerning.ltr.is_empty() {
         e.push(("kerning".into(), write_kern_table(&font.kerning.ltr)?));
     }

@@ -8,8 +8,10 @@
 //! Canonical spelling, measured on files the reference app saved (`docs/plans/M1.md` § 8):
 //!
 //! - A string is written bare when it consists only of ASCII letters, digits, `.` and `_`, has
-//!   at least one letter or digit, and does not read as a number ([`is_number_like`]). Otherwise it is quoted, with `\` and `"` escaped and
-//!   every other character (line breaks and tabs included) written literally.
+//!   at least one letter or digit, and does not read as a number ([`is_number_like`]). Otherwise
+//!   it is quoted, with `\` and `"` escaped. Format versions 3 and 4 write every other character
+//!   literally, line breaks and tabs included; version 2 writes line breaks as the octal escapes
+//!   `\012` and `\015` and tabs literally.
 //! - A number is written as the shortest decimal text that reads back to the same value, without
 //!   an exponent; integers without a decimal point.
 //! - Data is written as lowercase hexadecimal digits without spaces.
@@ -26,7 +28,9 @@ use crate::{Array, Data, Dict, Error, Layout, MAX_DEPTH, MAX_INPUT, Num, Number,
 /// The writer conventions of one format version.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dialect {
-    /// Format versions 2 and 3.
+    /// Format version 2: line breaks in strings as octal escapes.
+    Glyphs2,
+    /// Format version 3.
     Glyphs3,
     /// Format version 4: a comma after the last element of a multi-line array.
     Glyphs4,
@@ -99,7 +103,7 @@ pub fn parse_str_token(token: &str) -> Result<Str, Error> {
 /// The text a string is written as: its spelling, or the canonical form.
 pub fn str_token(s: &Str) -> String {
     let mut out = String::new();
-    write_str(&mut out, s);
+    write_str(&mut out, s, Dialect::Glyphs3);
     out
 }
 
@@ -128,7 +132,7 @@ pub fn write_value(out: &mut String, value: &Value, dialect: Dialect) {
                 if !multiline && i > 0 {
                     out.push(' ');
                 }
-                write_str(out, k);
+                write_str(out, k, dialect);
                 out.push_str(" = ");
                 write_value(out, v, dialect);
                 out.push(';');
@@ -167,7 +171,7 @@ pub fn write_value(out: &mut String, value: &Value, dialect: Dialect) {
             }
             out.push(')');
         }
-        Value::String(s) => write_str(out, s),
+        Value::String(s) => write_str(out, s, dialect),
         Value::Number(n) => match n.spelling() {
             Some(sp) => out.push_str(sp),
             None => out.push_str(&canonical_number(n.value())),
@@ -179,9 +183,10 @@ pub fn write_value(out: &mut String, value: &Value, dialect: Dialect) {
     }
 }
 
-fn write_str(out: &mut String, s: &Str) {
+fn write_str(out: &mut String, s: &Str, dialect: Dialect) {
     match s.spelling() {
         Some(sp) => out.push_str(sp),
+        None if dialect == Dialect::Glyphs2 => out.push_str(&canonical_string_v2(s.as_str())),
         None => out.push_str(&canonical_string(s.as_str())),
     }
 }
@@ -223,6 +228,27 @@ pub fn canonical_string(s: &str) -> String {
         match c {
             '\\' => out.push_str("\\\\"),
             '"' => out.push_str("\\\""),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// The canonical spelling of a string in format version 2: as [`canonical_string`], with line
+/// breaks written as three-digit octal escapes.
+pub fn canonical_string_v2(s: &str) -> String {
+    if !s.contains(['\n', '\r']) {
+        return canonical_string(s);
+    }
+    let mut out = String::with_capacity(s.len() + 8);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\012"),
+            '\r' => out.push_str("\\015"),
             c => out.push(c),
         }
     }
@@ -635,6 +661,16 @@ mod tests {
         assert_eq!(canonical_string("say \"hi\"\n"), "\"say \\\"hi\\\"\n\"");
         assert_eq!(canonical_string("国"), "\"国\"");
         assert_eq!(canonical_string("0041"), "0041", "hexadecimal code points stay bare");
+    }
+
+    #[test]
+    fn version_2_escapes_control_characters() {
+        assert_eq!(canonical_string_v2("a\nb\tc"), "\"a\\012b\tc\"", "tabs stay literal");
+        assert_eq!(canonical_string_v2("plain"), "plain");
+        let mut d = Dict::new();
+        d.insert("code", Value::String("sub a by b;\n".into()));
+        assert_eq!(write(&Document::new(Value::Dict(d)), Dialect::Glyphs2), "{\ncode = \"sub a by b;\\012\";\n}\n");
+        assert_eq!(parse_value("\"sub a by b;\\012\"").unwrap().as_str(), Some("sub a by b;\n"));
     }
 
     #[test]

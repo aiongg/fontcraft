@@ -16,8 +16,8 @@
 use std::sync::Arc;
 
 use fontcraft_model::{
-    Anchor, Axis, Component, Extra, Family, Font, Glyph, GlyphTable, Instance, KernFirst, KernGroups, KernTable, Kerning, Layer, Master,
-    MasterKerning, MetricDef, MetricValue, ModelError, Node, NodeKind, Path, RawShape, Shape, Source, SourceFormat, Transform,
+    Anchor, Axis, Component, Extra, Family, Features, Font, Glyph, GlyphTable, Instance, KernFirst, KernGroups, KernTable, Kerning, Layer, Master,
+    MasterKerning, MetricDef, MetricValue, ModelError, Node, NodeKind, Path, RawShape, Shape, Snippet, Source, SourceFormat, Transform,
 };
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
@@ -70,7 +70,8 @@ pub fn write(font: &Font) -> Result<String> {
 fn write_root(font: &Font) -> Result<(Dict, Dialect)> {
     let version = font.source.glyphs_version.unwrap_or(3);
     let dialect = match version {
-        2 | 3 => Dialect::Glyphs3,
+        2 => Dialect::Glyphs2,
+        3 => Dialect::Glyphs3,
         4 => Dialect::Glyphs4,
         v => return Err(GlyphsError::Unsupported(format!("writing format version {v}"))),
     };
@@ -177,6 +178,9 @@ fn read_font(mut root: Dict) -> Result<Font> {
     let units_per_em = as_u16(&take(&mut root, "unitsPerEm").ok_or_else(|| bad("the file", "no unitsPerEm"))?, "unitsPerEm")?;
     let version_major = take(&mut root, "versionMajor").map(|v| as_u16(&v, "versionMajor")).transpose()?.unwrap_or(0);
     let version_minor = take(&mut root, "versionMinor").map(|v| as_u16(&v, "versionMinor")).transpose()?.unwrap_or(0);
+    let features = take_features(&mut root, "tag");
+    let display_strings = take_strings(&mut root, "DisplayStrings");
+    let note = take_note(&mut root);
     let axes = take_typed_list(&mut root, "axes", read_axis);
     let instances = take_typed_list(&mut root, "instances", read_instance);
     let metrics = match take(&mut root, "metrics") {
@@ -208,6 +212,9 @@ fn read_font(mut root: Dict) -> Result<Font> {
         units_per_em,
         version_major,
         version_minor,
+        features: Arc::new(features),
+        display_strings: Arc::new(display_strings),
+        note,
         axes: Arc::new(axes),
         instances: Arc::new(instances),
         metrics: Arc::new(metrics),
@@ -295,6 +302,89 @@ fn take_typed_list<T>(d: &mut Dict, key: &str, read: fn(&Value) -> Option<T>) ->
             items
         }
         None => Vec::new(),
+    }
+}
+
+/// The prefixes, classes and features; `tag_key` is the key a feature names its tag with
+/// (`tag`, or `name` in format version 2).
+fn take_features(d: &mut Dict, tag_key: &'static str) -> Features {
+    let prefixes = take_typed_list(d, "featurePrefixes", |v| read_snippet(v, "name"));
+    let classes = take_typed_list(d, "classes", |v| read_snippet(v, "name"));
+    let features = if tag_key == "tag" {
+        take_typed_list(d, "features", |v| read_snippet(v, "tag"))
+    } else {
+        take_typed_list(d, "features", |v| read_snippet(v, "name"))
+    };
+    Features { prefixes, classes, features }
+}
+
+fn read_snippet(v: &Value, name_key: &str) -> Option<Snippet> {
+    let mut d = v.as_dict()?.clone();
+    let name = take(&mut d, name_key)?.as_str()?.to_string();
+    let code = take(&mut d, "code")?.as_str()?.to_string();
+    let flag = |d: &mut Dict, k: &str| match take(d, k) {
+        Some(x) => as_bool01(&x, k).ok(),
+        None => Some(false),
+    };
+    let automatic = flag(&mut d, "automatic")?;
+    let disabled = flag(&mut d, "disabled")?;
+    let notes = match take(&mut d, "notes") {
+        Some(n) => n.as_str()?.to_string(),
+        None => String::new(),
+    };
+    Some(Snippet { name, code, automatic, disabled, notes, file_name: None, extra: into_extra(d) })
+}
+
+fn write_snippet(s: &Snippet, name_key: &str) -> Value {
+    let mut e = vec![(name_key.into(), string(&s.name)), ("code".into(), string(&s.code))];
+    if s.automatic {
+        e.push(("automatic".into(), int(1)));
+    }
+    if s.disabled {
+        e.push(("disabled".into(), int(1)));
+    }
+    if !s.notes.is_empty() {
+        e.push(("notes".into(), string(&s.notes)));
+    }
+    Value::Dict(finish(e, &s.extra))
+}
+
+fn push_features(e: &mut Vec<(Str, Value)>, f: &Features, tag_key: &str) {
+    for (key, list_of, name_key) in [("featurePrefixes", &f.prefixes, "name"), ("classes", &f.classes, "name"), ("features", &f.features, tag_key)] {
+        if !list_of.is_empty() {
+            e.push((key.into(), list(list_of.iter().map(|s| write_snippet(s, name_key)).collect())));
+        }
+    }
+}
+
+/// A list of strings, such as `DisplayStrings`; it stays as written if it holds anything else.
+fn take_strings(d: &mut Dict, key: &str) -> Vec<String> {
+    let Some(Value::Array(a)) = d.get(key) else { return Vec::new() };
+    match a.items.iter().map(|s| s.as_str().map(str::to_string)).collect::<Option<Vec<_>>>() {
+        Some(s) => {
+            take(d, key);
+            s
+        }
+        None => Vec::new(),
+    }
+}
+
+fn take_note(d: &mut Dict) -> String {
+    match d.get("note").and_then(Value::as_str).map(str::to_string) {
+        Some(n) => {
+            take(d, "note");
+            n
+        }
+        None => String::new(),
+    }
+}
+
+fn push_ui_and_note(e: &mut Vec<(Str, Value)>, font: &Font) {
+    if !font.display_strings.is_empty() {
+        e.push(("DisplayStrings".into(), list(font.display_strings.iter().map(|s| string(s)).collect())));
+    }
+    if !font.note.is_empty() {
+        e.push(("note".into(), string(&font.note)));
     }
 }
 
@@ -643,6 +733,8 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     if !font.axes.is_empty() {
         e.push(("axes".into(), list(font.axes.iter().map(write_axis).collect())));
     }
+    push_features(&mut e, &font.features, "tag");
+    push_ui_and_note(&mut e, font);
     if !font.instances.is_empty() {
         e.push(("instances".into(), list(font.instances.iter().map(write_instance).collect::<Result<_>>()?)));
     }

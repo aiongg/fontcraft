@@ -179,6 +179,9 @@ impl Font {
             masters: Arc::new(masters),
             glyphs: GlyphTable::from_glyphs(glyphs),
             kerning: Arc::default(),
+            features: Arc::default(),
+            display_strings: Arc::default(),
+            note: String::new(),
             files: Arc::default(),
             extra: Arc::new(extra_of(self.extra)),
         }

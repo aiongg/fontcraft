@@ -13,11 +13,13 @@
 #![forbid(unsafe_code)]
 
 mod extra;
+mod features;
 mod font;
 mod glyph;
 mod kerning;
 
 pub use extra::{Extra, ExtraEntry, Family};
+pub use features::{Features, Snippet};
 pub use font::{Axis, FileStore, Font, GlyphMut, GlyphTable, Instance, Master, MetricDef, MetricValue, Source, SourceFormat, metric};
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};

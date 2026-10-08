@@ -7,6 +7,7 @@ use std::sync::Arc;
 use fontcraft_geom::{BezPath, Point};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::features::Features;
 use crate::glyph::{Glyph, Layer, Path, Shape};
 use crate::kerning::Kerning;
 use crate::{
@@ -159,6 +160,13 @@ pub struct Font {
     pub glyphs: GlyphTable,
     #[serde(default, skip_serializing_if = "Kerning::is_empty")]
     pub kerning: Arc<Kerning>,
+    #[serde(default, skip_serializing_if = "Features::is_empty")]
+    pub features: Arc<Features>,
+    /// The texts of the edit tabs, saved with the document.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub display_strings: Arc<Vec<String>>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
     /// Files a multi-file source holds beside what the model reads (a package's feature files and
     /// UI state, a UFO's `data/` and `images/`), by relative path, written back unchanged.
     #[serde(default, skip_serializing_if = "FileStore::is_empty")]
@@ -387,6 +395,9 @@ impl Font {
             instances: Arc::default(),
             glyphs: GlyphTable::from_glyphs(glyphs),
             kerning: Arc::default(),
+            features: Arc::default(),
+            display_strings: Arc::default(),
+            note: String::new(),
             files: Arc::default(),
             extra: Arc::default(),
         }
@@ -650,6 +661,9 @@ impl Font {
             && arc_eq(&self.extra, &before.extra)
             && arc_eq(&self.files, &before.files)
             && arc_eq(&self.kerning, &before.kerning)
+            && arc_eq(&self.features, &before.features)
+            && arc_eq(&self.display_strings, &before.display_strings)
+            && self.note == before.note
             && arc_eq(&self.axes, &before.axes)
             && arc_eq(&self.instances, &before.instances)
             && (Arc::ptr_eq(&self.glyphs.order, &before.glyphs.order)
