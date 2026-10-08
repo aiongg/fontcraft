@@ -48,6 +48,8 @@ const GROUPS: &str = "groups.plist";
 const KERNING: &str = "kerning.plist";
 const LAYERCONTENTS: &str = "layercontents.plist";
 const FEATURES: &str = "features.fea";
+/// The key of a master's own feature code (see [`write_master`]).
+pub(crate) const FEATURES_KEY: &str = FEATURES;
 const LAYERINFO: &str = "layerinfo.plist";
 const CONTENTS: &str = "contents.plist";
 const DEFAULT_DIR: &str = "glyphs";
@@ -57,7 +59,7 @@ const KERN2: &str = "public.kern2.";
 pub const CREATOR: &str = "org.fontcraft";
 
 /// The `fontinfo.plist` keys that are metrics, with the model's kind for each.
-const METRICS: [(&str, &str); 5] = [
+pub(crate) const METRICS: [(&str, &str); 5] = [
     ("ascender", metric::ASCENDER),
     ("capHeight", metric::CAP_HEIGHT),
     ("xHeight", metric::X_HEIGHT),
@@ -406,7 +408,8 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
                 if glyph_file_name(name, &HashSet::new()).as_deref() != Some(file) {
                     glyph.file_name = Some(file.to_string());
                 }
-            } else if glyph.file_name.as_deref().unwrap_or(&glyph_file_name(name, &HashSet::new()).unwrap_or_default()) != file {
+            } else if glyph.file_name.clone().or_else(|| glyph_file_name(name, &HashSet::new())).as_deref() != Some(file) {
+                // Another file name than the glyph has in the default layer of this UFO.
                 layer.extra.push(Family::Ufo, "fileName", Value::String(file.into()));
             }
             glyph.layers.push(layer);
@@ -548,15 +551,7 @@ pub fn read(files: &Files) -> Result<Font> {
     }
     let mut master = r.master;
     master.metric_values = values;
-    let upm = r.units_per_em.unwrap_or(1000.0).round();
-    let units_per_em = if (1.0..=f64::from(u16::MAX)).contains(&upm) {
-        // In range, so the conversion is exact.
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let u = upm as u16;
-        u
-    } else {
-        return Err(bad(FONTINFO, format!("unitsPerEm {upm} is out of range")));
-    };
+    let units_per_em = units_per_em(r.units_per_em)?;
     let mut features = Features::default();
     if let Some(code) = r.features {
         features.prefixes.push(Snippet { name: String::new(), code, ..Default::default() });
@@ -584,6 +579,18 @@ pub fn read(files: &Files) -> Result<Font> {
     };
     font.check()?;
     Ok(font)
+}
+
+/// The model's units per em for a UFO's `unitsPerEm` (1000 when it has none; rounded).
+pub(crate) fn units_per_em(v: Option<f64>) -> Result<u16> {
+    let upm = v.unwrap_or(1000.0).round();
+    if (1.0..=f64::from(u16::MAX)).contains(&upm) {
+        // In range, so the conversion is exact.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        Ok(upm as u16)
+    } else {
+        Err(bad(FONTINFO, format!("unitsPerEm {upm} is out of range")))
+    }
 }
 
 // ── writing ────────────────────────────────────────────────────────────────────────────────────
@@ -639,8 +646,35 @@ fn kept_dict(m: &Master, key: &str) -> (Dict, bool) {
     }
 }
 
+/// What one UFO of a document holds when written.
+pub(crate) struct Target<'a> {
+    /// The master whose UFO this is.
+    pub master: &'a Master,
+    /// The document's default master: font-wide values a master's file shared with it when
+    /// read are written from the model.
+    pub default: &'a Master,
+    /// Masters stored as a layer of this UFO (a designspace source with a `layer`), with the
+    /// layer's name.
+    pub layer_masters: Vec<(&'a Master, String)>,
+    /// The prefix of this UFO's files in [`Font::files`] (`""` for a single UFO).
+    pub prefix: String,
+}
+
+/// The value of a font-wide setting for a master: the model's, except that a master whose own
+/// value differed from the default master's when read keeps its own while the default master's
+/// is still what the model holds.
+fn per_master<T: PartialEq>(is_default: bool, model: T, default_read: T, mine_read: T) -> T {
+    if !is_default && default_read == model && mine_read != default_read { mine_read } else { model }
+}
+
+fn sorted(mut v: Vec<String>) -> Vec<String> {
+    v.sort_unstable();
+    v
+}
+
 /// The files of one master's UFO.
-pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Result<Files> {
+pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
+    let (master, default) = (target.master, target.default);
     let mut out = Files::new();
     let version = font.source.ufo_version.unwrap_or(3);
     if !(2..=3).contains(&version) {
@@ -679,20 +713,24 @@ pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Re
         }
         model
     };
-    let family = font_wide("familyName", (!font.family_name.is_empty() || info.get("familyName").is_some()).then(|| str_value(&font.family_name)));
+    // Whether the model has a value is judged by the default master's file; `font_wide` then
+    // keeps this master's own where it differed.
+    let family =
+        font_wide("familyName", (!font.family_name.is_empty() || default_info.get("familyName").is_some()).then(|| str_value(&font.family_name)));
     let style_name = (!master.name.is_empty() || info.get("styleName").is_some()).then(|| str_value(&master.name));
     // A UFO without unitsPerEm reads as 1000; it is not added on saving.
-    let upm = (!from_ufo || font.units_per_em != 1000 || info.get("unitsPerEm").is_some() || default_info.get("unitsPerEm").is_some())
-        .then(|| num_value(f64::from(font.units_per_em)));
+    let upm = (!from_ufo || font.units_per_em != 1000 || default_info.get("unitsPerEm").is_some()).then(|| num_value(f64::from(font.units_per_em)));
     let upm = font_wide("unitsPerEm", upm);
     // A fractional unitsPerEm (read rounded) stays while the model keeps its rounded value.
     let upm = match (upm, info.get("unitsPerEm")) {
         (Some(new), Some(old)) if as_f64(old).map(f64::round) == as_f64(&new) => Some(old.clone()),
         (new, _) => new,
     };
-    let major = font_wide("versionMajor", (font.version_major != 0 || info.get("versionMajor").is_some()).then(|| int_value(font.version_major)));
-    let minor = font_wide("versionMinor", (font.version_minor != 0 || info.get("versionMinor").is_some()).then(|| int_value(font.version_minor)));
-    let note = font_wide("note", (!font.note.is_empty() || info.get("note").is_some()).then(|| str_value(&font.note)));
+    let major =
+        font_wide("versionMajor", (font.version_major != 0 || default_info.get("versionMajor").is_some()).then(|| int_value(font.version_major)));
+    let minor =
+        font_wide("versionMinor", (font.version_minor != 0 || default_info.get("versionMinor").is_some()).then(|| int_value(font.version_minor)));
+    let note = font_wide("note", (!font.note.is_empty() || default_info.get("note").is_some()).then(|| str_value(&font.note)));
     patch(&mut info, "familyName", family);
     patch(&mut info, "styleName", style_name);
     patch(&mut info, "unitsPerEm", upm);
@@ -710,7 +748,12 @@ pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Re
     }
 
     // groups.plist
-    let groups = write_groups(font, master);
+    let groups = {
+        let (mine, _) = kept_dict(master, GROUPS);
+        let (default_read, _) = kept_dict(default, GROUPS);
+        let default_now = write_groups(font, default);
+        if !is_default && default_now == default_read && mine != default_read { mine } else { write_groups(font, master) }
+    };
     // An empty file is written back where there was one.
     if !groups.is_empty() || ufo_get(&master.extra, GROUPS).is_some() {
         out.insert(GROUPS.into(), plist(GROUPS, &Value::Dict(groups)));
@@ -723,12 +766,13 @@ pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Re
     // lib.plist
     let (mut lib, _) = kept_dict(master, LIB);
     let skip: Vec<&str> = font.glyphs.iter().filter(|g| !g.export).map(|g| g.name.as_str()).collect();
-    // The kept list stays while it names the same glyphs, in whatever order.
-    let mut kept_skip = strings(lib.get("public.skipExportGlyphs"));
-    kept_skip.sort_unstable();
-    let mut sorted_skip: Vec<&str> = skip.clone();
-    sorted_skip.sort_unstable();
-    if !kept_skip.iter().map(String::as_str).eq(sorted_skip.iter().copied()) {
+    // The kept list stays while it names the same glyphs, in whatever order, and in a master that
+    // read a list of its own (often none) while the default master's is unchanged.
+    let kept_skip = sorted(strings(lib.get("public.skipExportGlyphs")));
+    let model_skip = sorted(skip.iter().map(|s| s.to_string()).collect());
+    let default_skip = sorted(strings(kept_dict(default, LIB).0.get("public.skipExportGlyphs")));
+    let wanted = per_master(is_default, model_skip.clone(), default_skip, kept_skip.clone());
+    if kept_skip != wanted {
         let skip_value = (!skip.is_empty()).then(|| Value::Array(Array { items: skip.iter().map(|s| str_value(s)).collect(), ..Default::default() }));
         patch(&mut lib, "public.skipExportGlyphs", skip_value);
     }
@@ -741,12 +785,14 @@ pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Re
     }
     // features.fea
     let fea = features_text(&font.features);
-    let fea = match ufo_get(&master.extra, FEATURES).and_then(Value::as_str) {
-        // This master's file differed from the default master's when read.
-        Some(own) if !std::ptr::eq(master, default) => own.to_string(),
-        _ => fea,
+    // A master whose file differed from the default master's when read: `[default's, own]`.
+    // `false` stands for no file.
+    let model_fea = (!fea.is_empty() || !font.features.is_empty()).then_some(fea);
+    let fea = match ufo_get(&master.extra, FEATURES).and_then(Value::as_array).map(|a| a.items.as_slice()) {
+        Some([theirs, own]) if !is_default && theirs.as_str() == model_fea.as_deref() => own.as_str().map(str::to_string),
+        _ => model_fea,
     };
-    if !fea.is_empty() || !font.features.is_empty() {
+    if let Some(fea) = fea {
         out.insert(FEATURES.into(), fea.into_bytes());
     }
 
@@ -772,8 +818,8 @@ pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Re
     // Which UFO layers the glyphs use, in the kept order, then in order of appearance.
     let mut used: Vec<String> = vec![default_name.clone()];
     for g in font.glyphs.iter() {
-        for l in g.layers.iter().filter(|l| l.master == master.id && l.id != master.id) {
-            if let Some(n) = ufo_get(&l.extra, "layer").and_then(Value::as_str)
+        for l in &g.layers {
+            if let Some(n) = ufo_layer_of(l, target)
                 && !used.iter().any(|u| u == n)
             {
                 used.push(n.to_string());
@@ -814,19 +860,11 @@ pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Re
         let mut files_taken: HashSet<String> = HashSet::new();
         let mut entries: Vec<(String, String, &Glyph, &Layer)> = Vec::new();
         for g in font.glyphs.iter() {
-            let layer = if is_default {
-                g.layer(&master.id)
-            } else {
-                g.layers
-                    .iter()
-                    .find(|l| l.master == master.id && l.id != master.id && ufo_get(&l.extra, "layer").and_then(Value::as_str) == Some(layer_name))
-            };
+            let layer = if is_default { g.layer(&master.id) } else { g.layers.iter().find(|l| ufo_layer_of(l, target) == Some(layer_name)) };
             let Some(layer) = layer else { continue };
-            let kept = if is_default {
-                g.file_name.clone()
-            } else {
-                ufo_get(&layer.extra, "fileName").and_then(Value::as_str).map(str::to_string).or_else(|| g.file_name.clone())
-            };
+            // The layer's own file name, else the one the glyph has in this UFO's default layer.
+            let file_of = |l: Option<&Layer>| l.and_then(|l| ufo_get(&l.extra, "fileName")).and_then(Value::as_str).map(str::to_string);
+            let kept = file_of(Some(layer)).or_else(|| file_of(g.layer(&master.id))).or_else(|| g.file_name.clone());
             entries.push((g.name.clone(), kept.unwrap_or_default(), g, layer));
         }
         for (_, file, _, _) in &entries {
@@ -839,13 +877,16 @@ pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Re
                 *file = glyph_file_name(name, &files_taken).ok_or_else(|| bad(name, "no free file name for the glyph"))?;
                 files_taken.insert(file.to_lowercase());
             }
+            let own = code_points(ufo_get(&layer.extra, "unicodes"));
             let unicodes: Vec<u32> = if is_default {
-                g.unicodes.clone()
+                // A master's own code points, where they differed from the default master's
+                // when read and the glyph's are unchanged.
+                match ufo_get(&layer.extra, "unicodesRead") {
+                    Some(read) if code_points(Some(read)) == g.unicodes => own,
+                    _ => g.unicodes.clone(),
+                }
             } else {
-                ufo_get(&layer.extra, "unicodes")
-                    .and_then(Value::as_array)
-                    .map(|a| a.items.iter().filter_map(|v| v.as_num().and_then(int_of)).filter_map(|i| u32::try_from(i).ok()).collect())
-                    .unwrap_or_default()
+                own
             };
             let style = ufo_get(&layer.extra, "glifStyle").and_then(Style::from_value).unwrap_or_else(|| glif_style.clone());
             let format =
@@ -878,9 +919,26 @@ pub(crate) fn write_master(font: &Font, master: &Master, default: &Master) -> Re
     }
     // Other files, as read.
     for (path, bytes) in &font.files.0 {
-        out.entry(path.clone()).or_insert_with(|| bytes.to_vec());
+        if let Some(rel) = path.strip_prefix(target.prefix.as_str()) {
+            out.entry(rel.to_string()).or_insert_with(|| bytes.to_vec());
+        }
     }
     Ok(out)
+}
+
+/// The UFO layer a non-master layer is written to in this UFO: its own `layer` for the target
+/// master's layers, the layer master's layer for a layer master's master layers.
+fn ufo_layer_of<'a>(l: &'a Layer, target: &'a Target<'_>) -> Option<&'a str> {
+    if l.master == target.master.id && l.id != target.master.id {
+        return ufo_get(&l.extra, "layer").and_then(Value::as_str);
+    }
+    target.layer_masters.iter().find(|(m, _)| l.id == m.id && l.master == m.id).map(|(_, name)| name.as_str())
+}
+
+fn code_points(v: Option<&Value>) -> Vec<u32> {
+    v.and_then(Value::as_array)
+        .map(|a| a.items.iter().filter_map(|v| v.as_num().and_then(int_of)).filter_map(|i| u32::try_from(i).ok()).collect())
+        .unwrap_or_default()
 }
 
 /// The feature code of a document as one `features.fea` text.
@@ -960,7 +1018,7 @@ pub fn write(font: &Font) -> Result<Files> {
     let [master] = font.masters.as_slice() else {
         return Err(UfoError::Unsupported(format!("a document with {} masters as a single UFO: save it as a designspace", font.masters.len())));
     };
-    write_master(font, master, master)
+    write_master(font, &Target { master, default: master, layer_masters: Vec::new(), prefix: String::new() })
 }
 
 #[cfg(test)]

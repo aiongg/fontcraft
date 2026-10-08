@@ -8,6 +8,7 @@
 //! - [`glif`]: one glyph's file in one layer.
 //! - [`names`]: the specification's user-name-to-file-name rule.
 //! - [`ufo`]: a UFO directory, as one master.
+//! - [`designspace`]: a designspace and its UFOs, as one document.
 //!
 //! The functions work on file contents by relative path; reading and writing directories is the
 //! caller's job, so they also run in the browser.
@@ -17,6 +18,7 @@ use std::collections::BTreeMap;
 
 use fontcraft_model::ModelError;
 
+pub mod designspace;
 pub mod glif;
 pub mod names;
 pub mod ufo;
