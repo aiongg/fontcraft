@@ -185,6 +185,7 @@ pub(crate) fn read_font(mut root: Dict) -> Result<Font> {
         metrics: Arc::new(KINDS.iter().map(|k| MetricDef::new(k)).collect()),
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
+        files: Arc::default(),
         extra: Arc::new(into_extra(root)),
     })
 }
@@ -254,7 +255,7 @@ fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
         Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
-    Ok(Glyph { name, unicodes, export, layers, extra: into_extra(d) })
+    Ok(Glyph { name, unicodes, export, layers, file_name: None, extra: into_extra(d) })
 }
 
 fn read_layer(v: Value, at: &str) -> Result<Layer> {

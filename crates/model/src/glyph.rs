@@ -25,6 +25,10 @@ pub struct Glyph {
     /// Master layers and all others, in file order.
     #[serde(default)]
     pub layers: Vec<Layer>,
+    /// The file a multi-file source stored this glyph in, when it is not the one that format's
+    /// naming rule gives (a package's `glyphs/*.glyph`, a UFO's `.glif`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
@@ -59,7 +63,7 @@ impl Layer {
 
 impl Glyph {
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), unicodes: Vec::new(), export: true, layers: Vec::new(), extra: Extra::new() }
+        Self { name: name.into(), unicodes: Vec::new(), export: true, layers: Vec::new(), file_name: None, extra: Extra::new() }
     }
 
     /// The master layer of `master`.

@@ -287,9 +287,9 @@ Measured by the review of 2026-10-07. Fixed in M1.2: glyph lookup by name (now a
 copy of the font's top level on every edit (the parts are now behind `Arc`s), the double parse on
 load, and undo steps for edits that change nothing. Still open:
 
-- **An edit to a glyph copies the glyph pointer list** (one pointer per glyph). Measure on a large
-  family before choosing a chunked or persistent vector (`docs/plans/M1.md`, question 13). History
-  is bounded by count, not yet by bytes.
+- **An edit to a glyph copies the glyph pointer list** (one pointer per glyph): 80 µs at 3,017
+  glyphs, under 2 ms extrapolated to 65,535, so the flat vector stays (`docs/plans/M1.md`,
+  question 13). History is bounded by count, not yet by bytes.
 - **A command that is not a query copies each document's history list** for its rollback snapshot
   (pointers and labels: about 0.5 ms at 10,000 undo steps). A persistent list removes it.
 - **The menu tree is rebuilt every frame**, asking each command whether it is enabled. Fine at 27

@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+base64.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-plist.workspace = true
 serde.workspace = true

@@ -48,3 +48,61 @@ fn reference_written_sources_round_trip_through_the_model() {
     assert!(checked >= 15, "only {checked} sources found");
     eprintln!("{checked} reference-written sources round-trip through the model");
 }
+
+fn packages(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.file_name().is_some_and(|n| n == ".git" || n == "fontc") {
+            continue;
+        }
+        if p.is_dir() && p.extension().is_some_and(|x| x == "glyphspackage") {
+            out.push(p);
+        } else if p.is_dir() {
+            packages(&p, out);
+        }
+    }
+}
+
+fn files_of(dir: &Path, root: &Path, out: &mut fontcraft_io_glyphs::Files) {
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            files_of(&p, root, out);
+        } else {
+            out.insert(p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"), std::fs::read(&p).unwrap());
+        }
+    }
+}
+
+#[test]
+fn reference_written_packages_round_trip_through_the_model() {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    if !corpus.is_dir() {
+        eprintln!("corpus/ absent: skipped (cargo xtask corpus --fetch)");
+        return;
+    }
+    let mut all = Vec::new();
+    packages(&corpus, &mut all);
+    let (mut checked, mut failures) = (0, Vec::new());
+    for dir in &all {
+        let mut files = fontcraft_io_glyphs::Files::new();
+        files_of(dir, dir, &mut files);
+        let head = files.get("fontinfo.plist").map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
+        if !head.lines().take(3).any(|l| l.starts_with(".appVersion = ")) {
+            continue;
+        }
+        checked += 1;
+        match fontcraft_io_glyphs::read_package(&files).and_then(|f| fontcraft_io_glyphs::write_package(&f)) {
+            Ok(out) if out == files => {}
+            Ok(out) => {
+                let first = files.iter().find(|(k, v)| out.get(*k) != Some(*v)).map_or("an extra file", |(k, _)| k.as_str());
+                failures.push(format!("{}: {first} differs", dir.display()));
+            }
+            Err(e) => failures.push(format!("{}: {e}", dir.display())),
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert!(checked >= 10, "only {checked} packages found");
+    eprintln!("{checked} reference-written packages round-trip through the model");
+}

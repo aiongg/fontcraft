@@ -22,7 +22,10 @@ use fontcraft_model::{
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
+mod package;
 mod v2;
+
+pub use package::{Files, glyph_file_stem, read_package, write_package};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GlyphsError {
@@ -46,14 +49,25 @@ fn bad(at: &str, message: impl Into<String>) -> GlyphsError {
 pub fn read(text: &str) -> Result<Font> {
     let doc = openstep::parse(text)?;
     let Value::Dict(root) = doc.root else { return Err(bad("the file", "the top level is not a dictionary")) };
-    let font = read_font(root)?;
+    let font = read_root(root)?;
     font.check()?;
     Ok(font)
+}
+
+/// The document a root dictionary holds, in whichever format version it states.
+fn read_root(root: Dict) -> Result<Font> {
+    read_font(root)
 }
 
 /// Writes a document as a single `.glyphs` file in the format version it was read in (version 3
 /// for a document that did not come from a `.glyphs` file).
 pub fn write(font: &Font) -> Result<String> {
+    let (root, dialect) = write_root(font)?;
+    Ok(openstep::write(&openstep::Document::new(Value::Dict(root)), dialect))
+}
+
+/// The root dictionary of a document, and the dialect its version is written in.
+fn write_root(font: &Font) -> Result<(Dict, Dialect)> {
     let version = font.source.glyphs_version.unwrap_or(3);
     let dialect = match version {
         2 | 3 => Dialect::Glyphs3,
@@ -61,7 +75,7 @@ pub fn write(font: &Font) -> Result<String> {
         v => return Err(GlyphsError::Unsupported(format!("writing format version {v}"))),
     };
     let root = if version == 2 { v2::write_font(font)? } else { write_font(font, version)? };
-    Ok(openstep::write(&openstep::Document::new(Value::Dict(root)), dialect))
+    Ok((root, dialect))
 }
 
 // ── reading ────────────────────────────────────────────────────────────────────────────────────
@@ -190,6 +204,7 @@ fn read_font(mut root: Dict) -> Result<Font> {
         metrics: Arc::new(metrics),
         masters: Arc::new(masters),
         glyphs: GlyphTable::from_glyphs(glyphs),
+        files: Arc::default(),
         extra: Arc::new(into_extra(root)),
     })
 }
@@ -257,7 +272,7 @@ fn read_glyph(v: Value, at: &str) -> Result<Glyph> {
         Some(v) => as_items(v, &at)?.into_iter().map(|l| read_layer(l, &at)).collect::<Result<_>>()?,
         None => Vec::new(),
     };
-    Ok(Glyph { name, unicodes, export, layers, extra: into_extra(d) })
+    Ok(Glyph { name, unicodes, export, layers, file_name: None, extra: into_extra(d) })
 }
 
 fn code_points(v: &Value) -> Option<Vec<u32>> {

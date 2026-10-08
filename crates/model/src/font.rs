@@ -113,8 +113,46 @@ pub struct Font {
     pub masters: Arc<Vec<Master>>,
     /// In glyph order.
     pub glyphs: GlyphTable,
+    /// Files a multi-file source holds beside what the model reads (a package's feature files and
+    /// UI state, a UFO's `data/` and `images/`), by relative path, written back unchanged.
+    #[serde(default, skip_serializing_if = "FileStore::is_empty")]
+    pub files: Arc<FileStore>,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Arc<Extra>,
+}
+
+/// Relative path (with `/`) → contents. In the native file each file is base64 text.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FileStore(pub std::collections::BTreeMap<String, Arc<[u8]>>);
+
+impl FileStore {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Serialize for FileStore {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use base64::Engine as _;
+        let m: std::collections::BTreeMap<&str, String> =
+            self.0.iter().map(|(k, v)| (k.as_str(), base64::engine::general_purpose::STANDARD.encode(v))).collect();
+        m.serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for FileStore {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use base64::Engine as _;
+        let m = std::collections::BTreeMap::<String, String>::deserialize(d)?;
+        let mut out = std::collections::BTreeMap::new();
+        for (k, v) in m {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(v.as_bytes())
+                .map_err(|e| <D::Error as serde::de::Error>::custom(format!("file `{k}`: {e}")))?;
+            out.insert(k, Arc::from(bytes));
+        }
+        Ok(FileStore(out))
+    }
 }
 
 fn one() -> u16 {
@@ -299,6 +337,7 @@ impl Font {
             metrics: Arc::new(defs.iter().map(|k| MetricDef::new(k)).collect()),
             masters: Arc::new(vec![master]),
             glyphs: GlyphTable::from_glyphs(glyphs),
+            files: Arc::default(),
             extra: Arc::default(),
         }
     }
@@ -562,6 +601,7 @@ impl Font {
             && arc_eq(&self.metrics, &before.metrics)
             && arc_eq(&self.masters, &before.masters)
             && arc_eq(&self.extra, &before.extra)
+            && arc_eq(&self.files, &before.files)
             && (Arc::ptr_eq(&self.glyphs.order, &before.glyphs.order)
                 || self.glyphs.len() == before.glyphs.len() && self.glyphs.iter().zip(before.glyphs.iter()).all(|(a, b)| arc_eq(a, b)))
     }

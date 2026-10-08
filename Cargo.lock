@@ -792,6 +792,7 @@ dependencies = [
 name = "fontcraft-model"
 version = "0.0.1"
 dependencies = [
+ "base64",
  "fontcraft-geom",
  "fontcraft-plist",
  "serde",

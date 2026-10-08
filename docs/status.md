@@ -23,7 +23,7 @@ packages in order). Its material is `docs/spec/30-source-formats.md` and
 |---|---|
 | M1.0 corpus, harness, spikes | done (plan § 8) |
 | M1.1 property lists | OpenStep done; XML waits for the owner's answer on question 11 |
-| M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured; `crates/io-glyphs` reads and writes versions 2, 3 and 4 (every reference-written file identical). Next: packages, then more typed fields |
+| M1.2 the model, with M1.3 `.glyphs` | **in progress**: core restructured; `crates/io-glyphs` reads and writes versions 2 to 4, single files and packages (every reference-written source identical). Next: more typed fields, then the native format's layout |
 | M1.4 to M1.6 | not started |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
@@ -64,7 +64,6 @@ around them. None can lose data; most are about scale.
 
 | Limit | Where | Fix it in |
 |---|---|---|
-| An edit to a glyph copies the glyph pointer list (one pointer per glyph; about half a megabyte at 65,000 glyphs) | `GlyphTable` | M1.2, after measuring on Inter (plan question 13) |
 | The history list is copied for each command's result | `crates/engine` | M1 |
 | The menu tree is rebuilt every frame | `crates/ui-egui/src/menus.rs` | M3 |
 | A key in an `extra` map that collides with a known field is not rejected | `crates/model` | M1 |

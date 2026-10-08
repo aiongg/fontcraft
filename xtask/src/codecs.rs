@@ -22,6 +22,7 @@ pub fn codec(mode: &str, kind: Kind) -> Option<Codec> {
         ("plist", Kind::Glyphs) => Some(glyphs_file),
         ("plist", Kind::GlyphsPackage) => Some(glyphs_package),
         ("model", Kind::Glyphs) => Some(glyphs_file_model),
+        ("model", Kind::GlyphsPackage) => Some(glyphs_package_model),
         _ => None,
     }
 }
@@ -73,4 +74,11 @@ fn glyphs_file_model(path: &Path) -> Result<Coded, String> {
     let font = fontcraft_io_glyphs::read(&read_text(path)?).map_err(|e| e.to_string())?;
     let out = fontcraft_io_glyphs::write(&font).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::File(out.into_bytes()), spellings: 0 })
+}
+
+fn glyphs_package_model(path: &Path) -> Result<Coded, String> {
+    let files = read_tree(path)?;
+    let font = fontcraft_io_glyphs::read_package(&files).map_err(|e| e.to_string())?;
+    let out = fontcraft_io_glyphs::write_package(&font).map_err(|e| format!("writing: {e}"))?;
+    Ok(Coded { written: Written::Tree(out), spellings: 0 })
 }

@@ -175,6 +175,7 @@ impl Font {
             metrics: Arc::new(kinds.iter().map(|k| MetricDef::new(k)).collect()),
             masters: Arc::new(masters),
             glyphs: GlyphTable::from_glyphs(glyphs),
+            files: Arc::default(),
             extra: Arc::new(extra_of(self.extra)),
         }
     }
@@ -187,6 +188,7 @@ impl Glyph {
             unicodes: self.unicodes,
             export: self.export,
             layers: self.layers.into_iter().map(Layer::upgrade).collect(),
+            file_name: None,
             extra: extra_of(self.extra),
         }
     }
