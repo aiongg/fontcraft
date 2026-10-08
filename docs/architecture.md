@@ -139,8 +139,8 @@ Rules for writing one ([decision 0004](decisions/0004-commands.md)):
   parameters and previews by running it inside an interaction that is rolled back on Cancel.
 - **Shell commands** (`UI_COMMANDS` in `ui-egui`) change only view and window state: zoom, panels,
   selection, which tab shows. They are reachable from the control channel and MCP like any other.
-- Nested commands share the outer command's transaction today. Running them as **one undo
-  step** (`command.batch`, actions) is planned for M1; until then each inner edit is its own step.
+- Nested commands share the outer command's transaction. `command.batch` runs a list of commands
+  as one transaction and one undo step per document it changed; actions and scripts build on it.
 
 ## Tools (L4, planned for M3)
 
