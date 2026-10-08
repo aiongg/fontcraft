@@ -380,11 +380,17 @@ fn side_file_losses(font: &Font) -> Option<Value> {
     })
 }
 
-/// Layers a UFO has no place for yet: alternate layers, layers without a name, and the other
-/// layers of masters stored as a layer of another UFO.
-fn ufo_layer_losses(font: &Font) -> Option<Value> {
-    let n = fontcraft_io_ufo::ufo::layers_left_out(font);
-    (n > 0).then(|| json!({ "family": "glyphs", "entries": n, "what": "alternate layers and layers without a name, which a UFO cannot hold yet" }))
+/// Layers a UFO has no place for yet: alternate layers (a designspace holds them, in a font with
+/// axes), layers without a name, and the other layers of masters stored as a layer of another
+/// UFO.
+fn ufo_layer_losses(font: &Font, designspace: bool) -> Option<Value> {
+    let n = fontcraft_io_ufo::ufo::layers_left_out(font, designspace);
+    let what = if designspace {
+        "layers without a name, alternate layers in a font without axes, and other layers of masters stored as a layer of another UFO, which a designspace cannot hold yet"
+    } else {
+        "alternate layers and layers without a name, which a UFO cannot hold yet"
+    };
+    (n > 0).then(|| json!({ "family": "glyphs", "entries": n, "what": what }))
 }
 
 /// Font information (properties, parameters, settings, user data, instance fields) a UFO, or a
@@ -429,7 +435,7 @@ pub struct Saved {
 pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
     let mut losses = if format == SaveFormat::Native { Vec::new() } else { losses(font, format.families()) };
     if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
-        losses.extend(ufo_layer_losses(font));
+        losses.extend(ufo_layer_losses(font, format == SaveFormat::Designspace));
         losses.extend(side_file_losses(font));
         losses.extend(ufo_info_losses(font, format == SaveFormat::Designspace));
     }
@@ -512,7 +518,7 @@ pub fn export_ufos(font: &Font, masters: &[String], destination: &Path) -> Resul
     let mut font = font.clone();
     font.source.ufo_version = Some(3);
     let mut losses = losses(&font, &[Family::Ufo]);
-    losses.extend(ufo_layer_losses(&font));
+    losses.extend(ufo_layer_losses(&font, false));
     losses.extend(side_file_losses(&font));
     losses.extend(ufo_info_losses(&font, false));
     let mut taken = Vec::new();

@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use fontcraft_io_ufo::designspace;
 use fontcraft_io_ufo::features::{FEATURE_LOSSES, label_record};
 use fontcraft_io_ufo::kerning::KERNING_LOSSES;
-use fontcraft_io_ufo::ufo::{GLYPH_LOSSES, LAYER_LOSSES, SHAPE_LOSSES};
+use fontcraft_io_ufo::ufo::{GLYPH_LOSSES, LAYER_LOSSES, SHAPE_LOSSES, ufo_layer_name};
 use fontcraft_model::plist::{Array, Dict, Value};
 use fontcraft_model::{
     Anchor, Background, ColorLabel, Family, Font, Glyph, GlyphInfo, Guide, Image, Instance, Layer, Master, Param, Params, Properties, Settings,
@@ -365,19 +365,63 @@ fn hints_form(h: &[fontcraft_model::Hint]) -> Vec<String> {
     h.iter().map(|h| fontcraft_io_ufo::glyphkeys::hint_to_ufo(h).map_or_else(|| format!("{h:?}"), |(v, _)| canonical(&v))).collect()
 }
 
+/// Whether a layer is an alternate layer.
+fn is_alternate(l: &Layer) -> bool {
+    !l.is_master_layer() && !l.info.attrs.axis_rules.is_empty()
+}
+
+/// Whether a designspace holds a layer's coordinates, as a sparse source.
+fn is_intermediate(l: &Layer) -> bool {
+    let a = &l.info.attrs;
+    !l.is_master_layer() && !a.coordinates.is_empty() && a.axis_rules.is_empty() && a.color_palette.is_none()
+}
+
+/// The alternate layer of `b` that `l` comes back as: of its master and name (a layer without a
+/// name gets one), not taken yet.
+fn alternate_in<'a>(l: &Layer, b: &'a Glyph, used: &[&str]) -> Option<&'a Layer> {
+    b.layers.iter().find(|x| {
+        is_alternate(x)
+            && x.master == l.master
+            && !used.contains(&x.id.as_str())
+            && (l.info.name.as_deref().is_none_or(str::is_empty) || x.info.name == l.info.name)
+    })
+}
+
 /// The layers a UFO holds: each master layer and each other layer that has a UFO layer, matched
 /// by the UFO layer's name (a second layer of one name in a glyph comes back as `<name> #<n>`),
-/// and their order in the glyph. Each difference names the kind of data as the loss report does,
-/// so a listed loss excuses it.
+/// and their order in the glyph; in a designspace also the alternate layers, by master and name.
+/// Each difference names the kind of data as the loss report does, so a listed loss excuses it.
 fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
     for g in font.glyphs.iter() {
         let Some(b) = back.glyph(&g.name) else { continue };
         let mut used: Vec<&str> = Vec::new();
         let mut positions: Vec<usize> = Vec::new();
+        let mut alternate_positions: Vec<usize> = Vec::new();
         for l in &g.layers {
             let at = format!("glyph `{}` layer `{}`", g.name, l.id);
             let found = if l.is_master_layer() {
                 b.layer(&l.id)
+            } else if is_alternate(l) {
+                let hit = alternate_in(l, b, &used);
+                if let Some(x) = hit {
+                    used.push(&x.id);
+                    if x.info.name != l.info.name {
+                        diffs.push(format!("{}: {at} {:?} → {:?}", LAYER_LOSSES[0], l.info.name, x.info.name));
+                    }
+                    if x.id != l.id {
+                        diffs.push(format!("{}: {at} → `{}`", LAYER_LOSSES[13], x.id));
+                    }
+                    let (before, after) = (
+                        designspace::alternate_region(font, &l.info.attrs.axis_rules),
+                        designspace::alternate_region(back, &x.info.attrs.axis_rules),
+                    );
+                    if before != after {
+                        diffs.push(format!(
+                            "the rules of alternate layers that a later alternate layer of their glyph overlaps: {at} {before:?} → {after:?}"
+                        ));
+                    }
+                }
+                hit
             } else {
                 let Some(name) = fontcraft_io_ufo::ufo::ufo_layer_name(font, l) else { continue };
                 let hit = b.layers.iter().find(|x| {
@@ -401,7 +445,12 @@ fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
                 diffs.push(format!("{at}: missing"));
                 continue;
             };
-            positions.extend(b.layers.iter().position(|y| std::ptr::eq(y, x)));
+            let at_back = b.layers.iter().position(|y| std::ptr::eq(y, x));
+            if is_alternate(l) {
+                alternate_positions.extend(at_back)
+            } else {
+                positions.extend(at_back)
+            }
             if l.is_master_layer() && l.info.name.is_some() {
                 diffs.push(format!("{}: {at} {:?}", LAYER_LOSSES[0], l.info.name));
             }
@@ -412,10 +461,28 @@ fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
             let bg_notes = |l: &Layer| l.info.background.as_ref().map(|b| format!("{:?}", b.annotations));
             let notes =
                 |l: &Layer| format!("{:?}", l.info.annotations.iter().map(|a| (&a.kind, a.x, a.y, a.angle, &a.text, a.width)).collect::<Vec<_>>());
+            // The alternate layers' rules and the intermediate layers' coordinates are compared
+            // on their own.
+            let attrs = |l: &Layer| {
+                let mut a = l.info.attrs.clone();
+                if is_alternate(l) {
+                    a.axis_rules.clear();
+                }
+                if is_intermediate(l) {
+                    a.coordinates.clear();
+                }
+                format!("{a:?}")
+            };
+            if is_intermediate(l) && l.info.attrs.coordinates != x.info.attrs.coordinates {
+                diffs.push(format!(
+                    "intermediate layers' coordinates that take the master's value: {at} {:?} → {:?}",
+                    l.info.attrs.coordinates, x.info.attrs.coordinates
+                ));
+            }
             let checks: [(&str, String, String); 15] = [
                 ("the layer's width", format!("{}", l.width), format!("{}", x.width)),
                 ("the layer's drawing", drawing(&l.shapes, &l.anchors), drawing(&x.shapes, &x.anchors)),
-                (LAYER_LOSSES[1], format!("{:?}", l.info.attrs), format!("{:?}", x.info.attrs)),
+                (LAYER_LOSSES[1], attrs(l), attrs(x)),
                 (LAYER_LOSSES[2], format!("{:?}", width(l)), format!("{:?}", width(x))),
                 (LAYER_LOSSES[3], format!("{:?}", l.info.vert_origin.filter(|o| *o != 0.0)), format!("{:?}", x.info.vert_origin)),
                 (
@@ -464,7 +531,106 @@ fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
         if positions.windows(2).any(|w| matches!(w, [a, b] if a > b)) {
             diffs.push(format!("travelling: the layers' order: glyph `{}` {positions:?}", g.name));
         }
+        // Alternate layers come back after the others.
+        let last = positions.iter().max().copied().unwrap_or(0);
+        let first_alt = g.layers.iter().position(is_alternate);
+        let moved = first_alt
+            .is_some_and(|f| g.layers.iter().skip(f).any(|l| !is_alternate(l) && (l.is_master_layer() || ufo_layer_name(font, l).is_some())));
+        if moved || alternate_positions.windows(2).any(|w| matches!(w, [a, b] if a > b)) || alternate_positions.iter().any(|p| *p < last) {
+            diffs.push(format!("glyphs whose alternate layers come back after their other layers: glyph `{}` {alternate_positions:?}", g.name));
+        }
     }
+}
+
+/// `.glyphs` → designspace → model for every corpus source with intermediate or alternate layers
+/// (fontc's hand-made test files included): those layers come back as layers, with their
+/// coordinates or rules, drawing, width and name, except what the loss report lists. A source
+/// whose alternate layers come back as glyphs of their own (the report says so) is counted.
+#[test]
+fn intermediate_and_alternate_layers_survive_a_designspace() {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    if !corpus.is_dir() {
+        eprintln!("corpus/ absent: skipped (cargo xtask corpus --fetch)");
+        return;
+    }
+    fn all(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.file_name().is_some_and(|n| n == ".git") {
+                continue;
+            }
+            if p.is_file() && p.extension().is_some_and(|x| x == "glyphs") {
+                out.push(p);
+            } else if p.is_dir() {
+                all(&p, out);
+            }
+        }
+    }
+    let mut paths = Vec::new();
+    all(&corpus, &mut paths);
+    paths.sort();
+    let (mut intermediate, mut alternate, mut as_written, mut failures) = (0, 0, 0, Vec::new());
+    for path in &paths {
+        let Ok(text) = std::fs::read_to_string(path) else { continue };
+        let Ok(font) = fontcraft_io_glyphs::read(&text) else { continue };
+        let layers = || font.glyphs.iter().flat_map(|g| g.layers.iter());
+        let (braces, brackets) = (layers().any(is_intermediate), layers().any(|l| is_alternate(l) && !font.axes.is_empty()));
+        if !braces && !brackets {
+            continue;
+        }
+        let name = path.strip_prefix(&corpus).unwrap().display().to_string();
+        let losses = designspace::info_losses(&font);
+        if losses.iter().any(|l| l.starts_with("alternate layers that later alternate layers")) {
+            as_written += 1;
+            continue;
+        }
+        let written = match designspace::write(&font) {
+            Ok(w) => w,
+            Err(e) => {
+                failures.push(format!("{name}: {e}"));
+                continue;
+            }
+        };
+        let back = designspace::read(&written.document, &written.ufos).unwrap();
+        intermediate += usize::from(braces);
+        alternate += usize::from(brackets);
+        let mut diffs = Vec::new();
+        if back.masters.len() != font.masters.len() {
+            diffs.push(format!("masters: {} → {}", font.masters.len(), back.masters.len()));
+        }
+        if back.glyphs.len() != font.glyphs.len() {
+            diffs.push(format!("glyphs: {} → {}", font.glyphs.len(), back.glyphs.len()));
+        }
+        // Only the intermediate and alternate layers: the rest of these hand-made files is
+        // compared elsewhere.
+        let mut trimmed = font.clone();
+        for i in 0..trimmed.glyphs.len() {
+            let mut g = trimmed.glyphs.get_mut_at(i).unwrap();
+            g.layers.retain(|l| l.is_master_layer() || is_alternate(l) || is_intermediate(l));
+        }
+        let mut layer_diffs = Vec::new();
+        layers_trip(&trimmed, &back, &mut layer_diffs);
+        let special = |d: &String| {
+            !d.contains(" layer `") || {
+                font.glyphs.iter().any(|g| {
+                    g.layers.iter().any(|l| (is_alternate(l) || is_intermediate(l)) && d.contains(&format!("glyph `{}` layer `{}`", g.name, l.id)))
+                })
+            }
+        };
+        diffs.extend(layer_diffs.into_iter().filter(special));
+        for d in diffs {
+            let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
+            if !listed {
+                failures.push(format!("{name}: {d}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    eprintln!(
+        "{intermediate} sources with intermediate layers, {alternate} with alternate layers; {as_written} whose alternate layers come back as glyphs"
+    );
+    assert!(intermediate > 0 && alternate > 0, "the corpus exercises intermediate and alternate layers");
 }
 
 /// The left-to-right pairs, with sides spelled as the reference's format spells them.

@@ -26,6 +26,10 @@
 //! Locations are design coordinates in the model, parallel to [`Font::axes`]. A dimension given in
 //! user coordinates is mapped through the axis's `map` elements when read and written back
 //! unchanged while the design value stays the same (`roundtrip.designspaceCoordinates`).
+//!
+//! Intermediate layers get sparse sources ([`sparse`]) and alternate layers become glyphs of their
+//! own with `<rules>` ([`rules`]), as glyphsLib writes them; the reader turns that form back into
+//! layers when the result writes back the same ([`read`]).
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -44,6 +48,12 @@ use crate::{Files, Result, UfoError, bad};
 
 mod axes;
 mod instances;
+mod rules;
+mod sparse;
+
+pub use rules::MAX_REGIONS;
+/// The extra key that marks a glyph the writer made of alternate layers.
+pub(crate) const BRACKET_GLYPH: &str = rules::MADE;
 
 const DOC: &str = "the designspace";
 /// Most sources, instances or axes one designspace may have.
@@ -222,7 +232,47 @@ fn ds_str<'a>(x: &'a Extra, key: &str) -> Option<&'a str> {
 }
 
 /// Reads a designspace and the UFOs it refers to, given by their `filename` as written.
+///
+/// Sparse sources and rules in glyphsLib's form become the intermediate and alternate layers they
+/// were made from ([`sparse`], [`rules`]) when writing that reading gives back the files as read,
+/// or the files the plain reading writes; otherwise a sparse source is a master made of a UFO
+/// layer's glyphs and a rule's glyphs are glyphs of their own.
 pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
+    let (plain, _) = read_as(text, ufos, false)?;
+    let doc = xml::parse(text).map_err(|e| UfoError::Syntax { file: DOC.into(), error: e })?;
+    let candidates = source_elements(&doc.root).iter().any(|s| s.attr("layer").is_some()) || doc.root.child("rules").is_some();
+    if !candidates {
+        return Ok(plain);
+    }
+    let Ok((converted, true)) = read_as(text, ufos, true) else { return Ok(plain) };
+    let Ok(ours) = write(&converted) else { return Ok(plain) };
+    // The files as read, or as the plain reading writes them.
+    let as_read = ours.document == text && ours.ufos.len() == ufos.len() && ours.ufos.iter().all(|(k, v)| ufos.get(k) == Some(v));
+    if as_read || write(&plain).is_ok_and(|b| b.document == ours.document && b.ufos == ours.ufos) { Ok(converted) } else { Ok(plain) }
+}
+
+/// The coordinates of source `i` when it is a sparse source as glyphsLib writes one for
+/// intermediate layers: a `layer` of a UFO another source holds, named `<that source's name>
+/// <layer>`, whose name states the source's location (axes it leaves out at the other source's;
+/// coordinates beyond the axes ignored).
+fn brace_source(i: usize, elements: &[&Element], sources: &[SourceInfo], main_of: &HashMap<String, usize>) -> Option<Vec<f64>> {
+    let (s, el) = (sources.get(i)?, elements.get(i)?);
+    let layer = s.layer.as_ref()?;
+    let m = *main_of.get(&s.filename)?;
+    let (main_el, main) = (elements.get(m)?, sources.get(m)?);
+    if el.attr("name") != Some(sparse::source_name(main_el.attr("name").unwrap_or(""), layer).as_str()) {
+        return None;
+    }
+    // The name may state more coordinates than there are axes; the rest are not written.
+    let c = ufo::braced_coordinates(layer)?;
+    let n = c.len().min(s.location.len());
+    let (stated, rest) = (s.location.get(..n)?, s.location.get(n..)?);
+    (c.get(..n) == Some(stated) && main.location.get(n..) == Some(rest)).then_some(c)
+}
+
+/// Reads a designspace; with `convert`, sparse sources and rules in glyphsLib's form as the
+/// layers they were made from. Whether anything was so read.
+fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<(Font, bool)> {
     let doc = xml::parse(text).map_err(|e| UfoError::Syntax { file: DOC.into(), error: e })?;
     let root = &doc.root;
     if root.name() != "designspace" {
@@ -270,6 +320,9 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
             return Err(UfoError::Unsupported(format!("`{}` is used only through layers", s.filename)));
         }
     }
+    let braced: Vec<Option<Vec<f64>>> =
+        (0..sources.len()).map(|i| if convert { brace_source(i, &elements, &sources, &main_of) } else { None }).collect();
+    let intermediate: Vec<bool> = braced.iter().map(Option::is_some).collect();
     let default_index =
         if read.get(default_index).is_some_and(Option::is_some) { default_index } else { main_of.values().copied().min().unwrap_or(0) };
     let Some(Some(default)) = read.get(default_index) else { return Err(bad(DOC, "no source can be read")) };
@@ -329,6 +382,20 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
     for (i, s) in sources.iter().enumerate() {
         let Some(layer) = &s.layer else { continue };
         let main_id = main_of.get(&s.filename).and_then(|&m| sources.get(m)).map(|m| m.id.clone()).unwrap_or_default();
+        if let Some(Some(c)) = braced.get(i) {
+            // The layers of that name are intermediate layers at the source's location.
+            let coordinates: Vec<Option<f64>> = c.iter().map(|v| Some(*v)).collect();
+            for (_, glyphs) in &mut per_master_glyphs {
+                for g in glyphs.iter_mut() {
+                    for l in
+                        g.layers.iter_mut().filter(|l| l.master == main_id && !l.is_master_layer() && l.info.name.as_deref() == Some(layer.as_str()))
+                    {
+                        l.info.attrs.coordinates = coordinates.clone();
+                    }
+                }
+            }
+            continue;
+        }
         let mut master = Master {
             id: s.id.clone(),
             name: s.style_name.clone().unwrap_or_else(|| layer.clone()),
@@ -382,7 +449,9 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
     let model_axes = model_axes(root)?;
     // The axes' maps, as the `Axis Mappings` parameter.
     let mut params = font_info.params;
-    let sources: Vec<&[f64]> = masters.iter().map(|m| m.location.as_slice()).collect();
+    // The sources' locations, intermediate layers' included.
+    let braced = sources.iter().zip(&intermediate).filter(|(_, b)| **b).map(|(s, _)| s.location.as_slice());
+    let sources: Vec<&[f64]> = masters.iter().map(|m| m.location.as_slice()).chain(braced).collect();
     if let Some(v) = doc_mappings(root, &model_axes, &sources)? {
         params.0.push(Param::new(AXIS_MAPPINGS, v));
     }
@@ -420,8 +489,56 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
     }
     crate::glyphkeys::read(&mut font, &default_id);
     crate::libkeys::read(&mut font, true, &default_id);
+    let mut converted = intermediate.iter().any(|b| *b);
+    if convert
+        && let Some(r) = rules::read_rules(root)?
+        && let Some(mut raised) = rules::raise(&font, &r)
+    {
+        Arc::make_mut(&mut raised.extra).push(Family::Designspace, "rules", Value::Bool(true));
+        // The feature tag the rules' feature parameter puts in the lib.
+        let tag = raised.info.params.get(rules::FEATURE_PARAM).and_then(Value::as_str).map(str::to_string);
+        let lib = &raised.info.user_data;
+        if let Some(tag) = tag
+            && tag != "rvrn"
+            && tag != "rclt"
+            && lib.get(rules::FEATURE_TAG_KEY).and_then(Value::as_str) == Some(tag.as_str())
+            && let Some(i) = lib.0.entries.iter().position(|(k, _)| k.as_str() == rules::FEATURE_TAG_KEY)
+        {
+            Arc::make_mut(&mut raised.info).user_data.0.remove_at(i);
+        }
+        font = raised;
+        converted = true;
+    }
     font.check()?;
-    Ok(font)
+    Ok((font, converted))
+}
+
+/// Whether a designspace holds an alternate layer, as a glyph of its own that a rule substitutes
+/// (one of a glyph that is not exported comes back as that glyph): an alternate layer of a master
+/// with a UFO of its own, in a font with axes.
+pub(crate) fn alternate_comes_back(font: &Font, l: &fontcraft_model::Layer) -> bool {
+    !font.axes.is_empty()
+        && !l.is_master_layer()
+        && !l.info.attrs.axis_rules.is_empty()
+        && !l.info.name.as_deref().is_some_and(|n| n.contains(".background"))
+        && font.masters.iter().any(|m| m.id == l.master && m.extra.get(Family::Designspace, "layer").is_none())
+}
+
+/// Whether a designspace holds an intermediate layer's coordinates, as a sparse source.
+pub(crate) fn intermediate_comes_back(font: &Font, l: &fontcraft_model::Layer) -> bool {
+    sparse::comes_back(font, l)
+}
+
+/// The region an alternate layer with these rules covers in a designspace of `font`, axis by
+/// axis, in design coordinates: an open end at the axis's end, `None` for an axis the rules do
+/// not narrow. Rules that cover the same region read back as the same.
+pub fn alternate_region(font: &Font, rules: &[fontcraft_model::AxisRule]) -> Vec<Option<(f64, f64)>> {
+    rules::region(font, rules)
+}
+
+/// The ids the alternate layers come back with: glyph, layer id, id read back.
+pub(crate) fn alternate_ids(font: &Font) -> Vec<(String, String, String)> {
+    rules::read_back_ids(font)
 }
 
 /// The names a designspace instance element states for an instance, derived where the model
@@ -458,6 +575,23 @@ pub fn info_losses(font: &Font) -> Vec<String> {
         origin == Some(id) && fontcraft_model::axes::origin_without_parameter(font).map(|m| m.id.as_str()) != Some(id)
     });
     let mut out: Vec<String> = ufo::font_losses(font, true);
+    let alternates = rules::alternate_losses(font);
+    let lines = [
+        (
+            alternates.ranges,
+            "the rules of alternate layers that a later alternate layer of their glyph overlaps, which come back running on to the axis's end",
+        ),
+        (
+            alternates.covered,
+            "alternate layers that later alternate layers of their glyph cover entirely, for which the font's alternate and intermediate layers come back as glyphs and masters of their own",
+        ),
+        (alternates.order, "glyphs whose alternate layers come back after their other layers"),
+        (alternates.not_exported, "the alternate layers of glyphs that are not exported, which come back as glyphs of their own"),
+        (sparse::master_values(font), "intermediate layers' coordinates that take the master's value, which come back as the value"),
+    ];
+    for (n, what) in lines.into_iter().filter(|(n, _)| *n > 0) {
+        out.push(format!("{what} ({n})"));
+    }
     // The document holds these two; its UFOs do not repeat them.
     if font.info.params.get(AXIS_MAPPINGS).is_some() && !maps_back {
         out.push(format!("parameter `{AXIS_MAPPINGS}`"));
@@ -691,8 +825,18 @@ pub fn int_or_float(v: f64) -> String {
     }
 }
 
-/// Writes a document as a designspace and its UFOs.
+/// Writes a document as a designspace and its UFOs. Intermediate layers get sparse sources
+/// ([`sparse`]); alternate layers become glyphs of their own with rules ([`rules`]).
 pub fn write(font: &Font) -> Result<Written> {
+    let braces = sparse::braces(font);
+    let rules::Lowered { font: mut lowered, rules, any, feature_tag, .. } = rules::lower(font)?;
+    if any
+        && let Some(tag) = feature_tag
+        && lowered.info.user_data.get(rules::FEATURE_TAG_KEY).is_none()
+    {
+        Arc::make_mut(&mut lowered.to_mut().info).user_data.0.insert(rules::FEATURE_TAG_KEY, Value::String(tag.as_str().into()));
+    }
+    let font: &Font = &lowered;
     let default_id = font.extra.get(Family::Designspace, "defaultSource").and_then(Value::as_str);
     let default = default_id
         .and_then(|id| font.masters.iter().find(|m| m.id == id))
@@ -730,9 +874,10 @@ pub fn write(font: &Font) -> Result<Written> {
         }
         ufos.insert(f.clone(), files);
     }
+    let layers = DocLayers { rules: &rules, braces: &braces };
     let document = match font.extra.get(Family::Designspace, "document").and_then(Value::as_str) {
-        Some(kept) => patch_document(font, kept, &file_of)?,
-        None => new_document(font, &file_of),
+        Some(kept) => patch_document(font, kept, &file_of, &layers)?,
+        None => new_document(font, &file_of, &layers),
     };
     Ok(Written { document, ufos })
 }
@@ -889,7 +1034,7 @@ fn patch_source_names(el: &mut Element, font: &Font, m: &Master) {
     }
 }
 
-fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> Result<String> {
+fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>, layers: &DocLayers<'_>) -> Result<String> {
     let mut doc = xml::parse(kept).map_err(|e| UfoError::Syntax { file: DOC.into(), error: e })?;
     let unit = indent_unit(&doc.root);
     let axes = read_axes(&doc.root)?;
@@ -935,30 +1080,8 @@ fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> R
         }
     }
     let axes = read_axes(&doc.root)?;
-    // Sources: by master id.
-    let ids = source_ids(&source_elements(&doc.root));
-    if let Some(sources) = doc.root.elements_mut().find(|e| e.name() == "sources") {
-        let gone: Vec<usize> = ids.iter().enumerate().filter(|(_, id)| !font.masters.iter().any(|m| &m.id == *id)).map(|(i, _)| i).collect();
-        for &i in gone.iter().rev() {
-            remove_child(sources, i);
-        }
-        let kept_ids: Vec<&String> = ids.iter().enumerate().filter(|(i, _)| !gone.contains(i)).map(|(_, id)| id).collect();
-        for (el, id) in sources.elements_mut().filter(|e| e.name() == "source").zip(kept_ids.iter()) {
-            if let Some(m) = font.masters.iter().find(|m| &m.id == *id) {
-                patch_location(el, &axes, &names, &m.location, &unit, 2);
-                patch_source_names(el, font, m);
-            }
-        }
-        for m in font.masters.iter().filter(|m| !ids.contains(&m.id)) {
-            append_child(sources, source_element(font, m, file_of, &names), &unit, 1);
-        }
-    } else if !font.masters.is_empty() {
-        let mut sources = Element::new("sources");
-        for m in font.masters.iter() {
-            sources.children.push(XNode::Element(source_element(font, m, file_of, &names)));
-        }
-        append_child(&mut doc.root, sources, &unit, 0);
-    }
+    patch_rules(&mut doc.root, font, layers.rules, &unit)?;
+    patch_sources(&mut doc.root, font, file_of, layers.braces, &axes, &names, &unit);
     // Instances and variable fonts: by position.
     let labels = read_labels(&doc.root, &axes)?;
     let ctx = instances::Ctx { family: &font.family_name, axes: &axes, labels: &labels, unit: &unit };
@@ -1009,7 +1132,153 @@ fn patch_document(font: &Font, kept: &str, file_of: &HashMap<&str, String>) -> R
     Ok(doc.write())
 }
 
-fn location_element(names: &[String], loc: &[f64]) -> Element {
+/// What a kept `<source>` stands for in the model.
+#[derive(Clone, PartialEq)]
+enum Kept {
+    /// The master of this id.
+    Master(String),
+    /// The sparse source of intermediate layers of a master: the master's id, the layer.
+    Brace(String, String),
+    /// Nothing any more.
+    Gone,
+}
+
+/// Brings the sources to the model: master sources by master id, sparse sources of intermediate
+/// layers by master and layer (a kept `layer` source that is no master); new ones after their
+/// master's.
+fn patch_sources(
+    root: &mut Element,
+    font: &Font,
+    file_of: &HashMap<&str, String>,
+    braces: &[sparse::Brace],
+    axes: &[AxisInfo],
+    names: &[String],
+    unit: &str,
+) {
+    let elements = source_elements(root);
+    let ids = source_ids(&elements);
+    let is_master = |id: &str| font.masters.iter().any(|m| m.id == id);
+    let mut matched: Vec<bool> = vec![false; braces.len()];
+    let mut kinds: Vec<Kept> = Vec::new();
+    for (el, id) in elements.iter().zip(&ids) {
+        let kind = if is_master(id) {
+            Kept::Master(id.clone())
+        } else if let Some(layer) = el.attr("layer") {
+            // The master whose UFO holds the layer: the first source of the file without one.
+            let main =
+                elements.iter().zip(&ids).find(|(e, i)| e.attr("filename") == el.attr("filename") && e.attr("layer").is_none() && is_master(i));
+            match main {
+                Some((_, m)) => {
+                    match braces.iter().enumerate().position(|(k, b)| !matched.get(k).copied().unwrap_or(true) && b.master == *m && b.layer == layer)
+                    {
+                        Some(k) => {
+                            if let Some(slot) = matched.get_mut(k) {
+                                *slot = true;
+                            }
+                            Kept::Brace(m.clone(), layer.to_string())
+                        }
+                        None => Kept::Gone,
+                    }
+                }
+                None => Kept::Gone,
+            }
+        } else {
+            Kept::Gone
+        };
+        kinds.push(kind);
+    }
+    let Some(sources) = root.elements_mut().find(|e| e.name() == "sources") else {
+        if !font.masters.is_empty() {
+            let mut sources = Element::new("sources");
+            for m in font.masters.iter() {
+                sources.children.push(XNode::Element(source_element(font, m, file_of, names)));
+                for b in braces.iter().filter(|b| b.master == m.id) {
+                    sources.children.push(XNode::Element(sparse::element(b, file_of.get(m.id.as_str()).map_or("", String::as_str), names)));
+                }
+            }
+            append_child(root, sources, unit, 0);
+        }
+        return;
+    };
+    for i in (0..kinds.len()).rev() {
+        if kinds.get(i) == Some(&Kept::Gone) {
+            remove_child(sources, i);
+            kinds.remove(i);
+        }
+    }
+    for (el, kind) in sources.elements_mut().filter(|e| e.name() == "source").zip(&kinds) {
+        match kind {
+            Kept::Master(id) => {
+                if let Some(m) = font.masters.iter().find(|m| &m.id == id) {
+                    patch_location(el, axes, names, &m.location, unit, 2);
+                    patch_source_names(el, font, m);
+                }
+            }
+            Kept::Brace(m, layer) => {
+                if let Some(b) = braces.iter().find(|b| &b.master == m && &b.layer == layer) {
+                    patch_location(el, axes, names, &b.location, unit, 2);
+                }
+            }
+            Kept::Gone => {}
+        }
+    }
+    // New sparse sources of kept masters, after the master's last source.
+    for (b, _) in braces.iter().zip(&matched).filter(|(_, m)| !**m) {
+        let Some(last) = kinds.iter().rposition(|k| matches!(k, Kept::Master(id) | Kept::Brace(id, _) if *id == b.master)) else { continue };
+        let filename = file_of.get(b.master.as_str()).map_or("", String::as_str);
+        insert_child(sources, last + 1, sparse::element(b, filename, names), unit, 1);
+        kinds.insert(last + 1, Kept::Brace(b.master.clone(), b.layer.clone()));
+    }
+    // New masters, each with its sparse sources.
+    for m in font.masters.iter().filter(|m| !ids.contains(&m.id)) {
+        append_child(sources, source_element(font, m, file_of, names), unit, 1);
+        for b in braces.iter().filter(|b| b.master == m.id) {
+            append_child(sources, sparse::element(b, file_of.get(m.id.as_str()).map_or("", String::as_str), names), unit, 1);
+        }
+    }
+}
+
+/// Brings `<rules>` to the model. Rules the reader took as the font's alternate layers (the
+/// font's `rules` mark) are replaced by those the layers make; other kept rules stay, the model's
+/// after them. An unchanged element stays as written.
+fn patch_rules(root: &mut Element, font: &Font, model: &rules::Rules, unit: &str) -> Result<()> {
+    let kept = rules::read_rules(root)?;
+    let ours = font.extra.get(Family::Designspace, "rules").and_then(Value::as_bool) == Some(true);
+    let want: Option<rules::Rules> = match (&kept, ours) {
+        (_, true) | (None, false) => (!model.rules.is_empty()).then(|| model.clone()),
+        (Some(k), false) => {
+            let mut all = k.clone();
+            all.rules.extend(model.rules.iter().cloned());
+            all.last |= model.last && !model.rules.is_empty();
+            Some(all)
+        }
+    };
+    if want == kept {
+        return Ok(());
+    }
+    let at = root.elements().position(|e| e.name() == "rules");
+    // Rules added after kept ones go in as elements of their own.
+    if let (Some(k), Some(w), Some(_)) = (&kept, &want, at)
+        && w.last == k.last
+        && w.rules.starts_with(&k.rules)
+        && let Some(el) = root.elements_mut().find(|e| e.name() == "rules")
+    {
+        for r in w.rules.iter().skip(k.rules.len()) {
+            append_child(el, rules::rule_element(r), unit, 1);
+        }
+        return Ok(());
+    }
+    if let Some(i) = at {
+        remove_child(root, i);
+    }
+    if let Some(w) = want {
+        let place = at.or_else(|| root.elements().position(|e| e.name() == "sources")).unwrap_or(usize::MAX);
+        insert_child(root, place, rules::rules_element(&w), unit, 0);
+    }
+    Ok(())
+}
+
+pub(crate) fn location_element(names: &[String], loc: &[f64]) -> Element {
     let mut el = Element::new("location");
     for (n, v) in names.iter().zip(loc) {
         el.children.push(XNode::Element(Element::new("dimension").with_attr("name", n).with_attr("xvalue", int_or_float(*v))));
@@ -1050,8 +1319,14 @@ fn new_axis_infos(font: &Font) -> Vec<AxisInfo> {
         .collect()
 }
 
+/// What the document says of the font's alternate and intermediate layers.
+struct DocLayers<'a> {
+    rules: &'a rules::Rules,
+    braces: &'a [sparse::Brace],
+}
+
 /// A new designspace in designspaceLib's layout.
-fn new_document(font: &Font, file_of: &HashMap<&str, String>) -> String {
+fn new_document(font: &Font, file_of: &HashMap<&str, String>, layers: &DocLayers<'_>) -> String {
     let names: Vec<String> = font.axes.iter().map(|a| a.name.clone()).collect();
     let infos = new_axis_infos(font);
     let mut root = Element::new("designspace").with_attr("format", "5.0");
@@ -1062,9 +1337,15 @@ fn new_document(font: &Font, file_of: &HashMap<&str, String>) -> String {
         }
         root.children.push(XNode::Element(axes_el));
     }
+    if !layers.rules.rules.is_empty() {
+        root.children.push(XNode::Element(rules::rules_element(layers.rules)));
+    }
     let mut sources = Element::new("sources");
     for m in font.masters.iter() {
         sources.children.push(XNode::Element(source_element(font, m, file_of, &names)));
+        for b in layers.braces.iter().filter(|b| b.master == m.id) {
+            sources.children.push(XNode::Element(sparse::element(b, file_of.get(m.id.as_str()).map_or("", String::as_str), &names)));
+        }
     }
     root.children.push(XNode::Element(sources));
     let variables: Vec<&Instance> = font.instances.iter().filter(|i| is_variable(i)).collect();
@@ -1365,7 +1646,7 @@ mod tests {
 
     fn patched(font: &Font, text: &str, file_of: &HashMap<String, String>) -> String {
         let file_of: HashMap<&str, String> = file_of.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
-        patch_document(font, text, &file_of).unwrap()
+        patch_document(font, text, &file_of, &DocLayers { rules: &rules::Rules::default(), braces: &[] }).unwrap()
     }
 
     /// Every designspace document in the corpus, its UFOs or not: its axes, instances and variable
@@ -1652,5 +1933,273 @@ mod tests {
         assert_eq!(piecewise(&m, 600.0), 750.0);
         assert_eq!(piecewise(&m, 100.0), 0.0);
         assert_eq!(piecewise(&[], 5.0), 5.0);
+    }
+
+    // ── intermediate and alternate layers ─────────────────────────────────────────────────
+
+    use fontcraft_model::{AxisRule, Component, KernFirst, Layer, MasterKerning, Shape};
+
+    /// [`Font::new`] with a weight axis from 400 to 1000 and a second master `m02` at 1000.
+    fn duo() -> Font {
+        let mut font = fontcraft_model::Font::new("Duo");
+        Arc::make_mut(&mut font.axes).push(fontcraft_model::Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() });
+        let mut bold = font.masters[0].clone();
+        bold.id = "m02".into();
+        bold.name = "Bold".into();
+        bold.location = vec![1000.0];
+        Arc::make_mut(&mut font.masters)[0].location = vec![400.0];
+        Arc::make_mut(&mut font.masters).push(bold);
+        let names: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).collect();
+        for n in names {
+            let mut g = font.glyph_mut(&n).unwrap();
+            let mut l = g.layers[0].clone();
+            l.id = "m02".into();
+            l.master = "m02".into();
+            l.width += 50.0;
+            g.layers.push(l);
+        }
+        font
+    }
+
+    fn other_layer(master: &str, id: &str, name: Option<&str>, width: f64) -> Layer {
+        let mut l = Layer::new(master, width);
+        l.id = id.into();
+        l.info.name = name.map(str::to_string);
+        l
+    }
+
+    fn text(files: &Files, path: &str) -> String {
+        String::from_utf8(files.get(path).unwrap_or_else(|| panic!("{path}: {:?}", files.keys().collect::<Vec<_>>())).clone()).unwrap()
+    }
+
+    #[test]
+    fn intermediate_layers_are_sparse_sources_and_come_back() {
+        let mut font = duo();
+        {
+            let mut a = font.glyph_mut("a").unwrap();
+            let mut l = other_layer("m01", "brace-a", Some("Apr 1 24"), 610.0);
+            l.info.attrs.coordinates = vec![Some(550.0)];
+            a.layers.push(l);
+        }
+        {
+            let mut b = font.glyph_mut("b").unwrap();
+            let mut l = other_layer("m01", "brace-b", None, 620.0);
+            l.info.attrs.coordinates = vec![Some(550.0)];
+            b.layers.push(l);
+            let mut l = other_layer("m02", "brace-b2", None, 640.0);
+            l.info.attrs.coordinates = vec![Some(800.0)];
+            b.layers.push(l);
+        }
+        let out = write(&font).unwrap();
+        let doc = &out.document;
+        let sparse = "<source filename=\"Duo-Regular.ufo\" name=\"m01 {550}\" layer=\"{550}\">\n      <location>\n        <dimension name=\"Weight\" xvalue=\"550\"/>";
+        assert!(doc.contains(sparse), "{doc}");
+        assert!(doc.contains("name=\"m02 {800}\" layer=\"{800}\""), "{doc}");
+        // After its master's source.
+        let (m01, s550, m02, s800) =
+            (doc.find("name=\"m01\"").unwrap(), doc.find("m01 {550}").unwrap(), doc.find("name=\"m02\"").unwrap(), doc.find("m02 {800}").unwrap());
+        assert!(m01 < s550 && s550 < m02 && m02 < s800, "{doc}");
+        assert!(text(&out.ufos["Duo-Regular.ufo"], "layercontents.plist").contains("<string>{550}</string>"));
+
+        let back = read(&out.document, &out.ufos).unwrap();
+        assert_eq!(back.masters.len(), 2, "no master for a sparse source");
+        let layer = |f: &Font, g: &str, master: &str| {
+            f.glyph(g).unwrap().layers.iter().find(|l| !l.is_master_layer() && l.master == master).cloned().unwrap()
+        };
+        assert_eq!(layer(&back, "a", "m01").info.attrs.coordinates, [Some(550.0)]);
+        assert_eq!(layer(&back, "a", "m01").width, 610.0);
+        assert_eq!(layer(&back, "b", "m02").info.attrs.coordinates, [Some(800.0)]);
+        let again = write(&back).unwrap();
+        assert_eq!(again.document, out.document);
+        assert_eq!(again.ufos, out.ufos);
+
+        // An edited location moves the layer and its source.
+        let mut edited = back.clone();
+        {
+            let mut b = edited.glyph_mut("b").unwrap();
+            let l = b.layers.iter_mut().find(|l| !l.is_master_layer() && l.master == "m02").unwrap();
+            l.info.attrs.coordinates = vec![Some(850.0)];
+        }
+        let out = write(&edited).unwrap();
+        assert!(
+            out.document.contains("name=\"m02 {850}\" layer=\"{850}\">\n      <location>\n        <dimension name=\"Weight\" xvalue=\"850\"/>"),
+            "{}",
+            out.document
+        );
+        assert!(!out.document.contains("{800}"), "{}", out.document);
+        let back = read(&out.document, &out.ufos).unwrap();
+        assert_eq!(layer(&back, "b", "m02").info.attrs.coordinates, [Some(850.0)]);
+    }
+
+    /// `a` has an alternate layer in the first master; `b` is a composite of `a`; `a` kerns with
+    /// `v`.
+    fn alternates() -> Font {
+        let mut font = duo();
+        {
+            let mut a = font.glyph_mut("a").unwrap();
+            let mut l = other_layer("m01", "alt-a", Some("a [600]"), 700.0);
+            l.info.attrs.axis_rules = vec![AxisRule { min: Some(600.0), max: None }];
+            l.shapes.push(Shape::Path(fontcraft_model::Path::rect(0.0, 0.0, 10.0, 10.0)));
+            a.layers.push(l);
+        }
+        {
+            let mut b = font.glyph_mut("b").unwrap();
+            for l in &mut b.layers {
+                l.shapes.push(Shape::Component(Component::new("a", 0.0, 0.0)));
+            }
+        }
+        let pairs = vec![KernFirst { first: "a".into(), seconds: vec![("v".into(), -20.0)] }];
+        Arc::make_mut(&mut font.kerning).ltr.0.push(MasterKerning { master: "m01".into(), firsts: pairs });
+        font
+    }
+
+    #[test]
+    fn alternate_layers_are_glyphs_and_rules_and_come_back() {
+        let font = alternates();
+        let out = write(&font).unwrap();
+        let doc = &out.document;
+        let rules = "  <rules>\n    <rule name=\"BRACKET.Weight_600_1000\">\n      <conditionset>\n        \
+                     <condition name=\"Weight\" minimum=\"600\" maximum=\"1000\"/>\n      </conditionset>\n      \
+                     <sub name=\"b\" with=\"b.BRACKET.varAlt01\"/>\n      <sub name=\"a\" with=\"a.BRACKET.varAlt01\"/>\n    </rule>\n  </rules>\n  <sources>";
+        assert!(doc.contains(rules), "{doc}");
+        let (light, bold) = (&out.ufos["Duo-Regular.ufo"], &out.ufos["Duo-Bold.ufo"]);
+        // The alternate layer in the first master, the master layer standing in in the second.
+        let a1 = text(light, "glyphs/a.B_R_A_C_K_E_T_.varA_lt01.glif");
+        assert!(a1.contains("<advance width=\"700\"/>") && a1.contains("<string>a [600]</string>"), "{a1}");
+        assert!(!a1.contains("<unicode"), "{a1}");
+        let a2 = text(bold, "glyphs/a.B_R_A_C_K_E_T_.varA_lt01.glif");
+        assert!(a2.contains("<advance width=\"650\"/>") && a2.contains("<string></string>"), "{a2}");
+        // The composite switches too, to a copy pointing at the bracket glyph.
+        let b1 = text(light, "glyphs/b.B_R_A_C_K_E_T_.varA_lt01.glif");
+        assert!(b1.contains("<component base=\"a.BRACKET.varAlt01\"/>") && b1.contains("<string></string>"), "{b1}");
+        // Kerning goes to the bracket glyph; the glyph order leaves it out.
+        let kerning = text(light, "kerning.plist");
+        assert!(kerning.contains("<key>a.BRACKET.varAlt01</key>\n    <dict>\n      <key>v</key>"), "{kerning}");
+        let lib = text(light, "lib.plist");
+        assert!(lib.contains("<key>public.glyphOrder</key>") && !lib.contains("<string>a.BRACKET.varAlt01</string>"), "{lib}");
+
+        let back = read(&out.document, &out.ufos).unwrap();
+        assert_eq!(back.glyphs.len(), font.glyphs.len(), "no bracket glyphs");
+        let a = back.glyph("a").unwrap();
+        let alt: Vec<&Layer> = a.layers.iter().filter(|l| !l.info.attrs.axis_rules.is_empty()).collect();
+        assert_eq!(alt.len(), 1);
+        assert_eq!((alt[0].master.as_str(), alt[0].info.name.as_deref(), alt[0].width), ("m01", Some("a [600]"), 700.0));
+        assert_eq!(alt[0].info.attrs.axis_rules, [AxisRule { min: Some(600.0), max: None }]);
+        assert!(alt[0].info.user_data.is_empty(), "the original name is no user data");
+        assert!(back.glyph("b").unwrap().layers.iter().all(|l| l.info.attrs.axis_rules.is_empty()), "the composite's copies go");
+        assert_eq!(back.kerning.ltr.pair_count(), 1, "the bracket glyph's kerning goes");
+        let again = write(&back).unwrap();
+        assert_eq!(again.document, out.document);
+        assert_eq!(again.ufos, out.ufos);
+
+        // An edited rule is written.
+        let mut edited = back.clone();
+        {
+            let mut a = edited.glyph_mut("a").unwrap();
+            let l = a.layers.iter_mut().find(|l| !l.info.attrs.axis_rules.is_empty()).unwrap();
+            l.info.attrs.axis_rules = vec![AxisRule { min: Some(700.0), max: Some(900.0) }];
+        }
+        let out = write(&edited).unwrap();
+        assert!(out.document.contains("<rule name=\"BRACKET.Weight_700_900\">"), "{}", out.document);
+        assert!(!out.document.contains("Weight_600_1000"), "{}", out.document);
+        let back = read(&out.document, &out.ufos).unwrap();
+        let rules: Vec<Vec<AxisRule>> =
+            back.glyph("a").unwrap().layers.iter().map(|l| l.info.attrs.axis_rules.clone()).filter(|r| !r.is_empty()).collect();
+        assert_eq!(rules, [vec![AxisRule { min: Some(700.0), max: Some(900.0) }]]);
+    }
+
+    #[test]
+    fn overlapping_alternate_layers_come_back_with_their_rules() {
+        // `[300]` and `[600]`: the second takes over above 600, so the first one's rule names its
+        // bracket glyph only up to 600.
+        let mut font = alternates();
+        {
+            let mut a = font.glyph_mut("a").unwrap();
+            let mut l = other_layer("m01", "alt-a2", Some("a [500]"), 710.0);
+            l.info.attrs.axis_rules = vec![AxisRule { min: Some(500.0), max: None }];
+            let at = a.layers.iter().position(|l| l.id == "alt-a").unwrap();
+            a.layers.insert(at, l);
+        }
+        let out = write(&font).unwrap();
+        assert!(out.document.contains("BRACKET.Weight_500_600") && out.document.contains("BRACKET.Weight_600_1000"), "{}", out.document);
+        let back = read(&out.document, &out.ufos).unwrap();
+        let rules: Vec<(Option<String>, Vec<AxisRule>)> = back
+            .glyph("a")
+            .unwrap()
+            .layers
+            .iter()
+            .filter(|l| !l.info.attrs.axis_rules.is_empty())
+            .map(|l| (l.info.name.clone(), l.info.attrs.axis_rules.clone()))
+            .collect();
+        assert_eq!(
+            rules,
+            [
+                (Some("a [500]".into()), vec![AxisRule { min: Some(500.0), max: None }]),
+                (Some("a [600]".into()), vec![AxisRule { min: Some(600.0), max: None }])
+            ]
+        );
+        assert!(info_losses(&font).iter().all(|l| !l.starts_with("the rules of alternate layers")), "{:?}", info_losses(&font));
+    }
+
+    #[test]
+    fn the_feature_parameter_sets_the_rules_feature() {
+        for (feature, expect) in [("rclt", "<rules processing=\"last\">"), ("calt", "<string>calt</string>")] {
+            let mut font = alternates();
+            Arc::make_mut(&mut font.info).params.0.push(Param::new(rules::FEATURE_PARAM, Value::String(feature.into())));
+            let out = write(&font).unwrap();
+            assert!(out.document.contains(expect), "{}", out.document);
+            let back = read(&out.document, &out.ufos).unwrap();
+            assert!(back.info.user_data.get(rules::FEATURE_TAG_KEY).is_none(), "the parameter says it");
+            assert_eq!(write(&back).unwrap().document, out.document);
+        }
+    }
+
+    #[test]
+    fn alternate_layers_of_glyphs_not_exported_come_back_as_glyphs() {
+        let mut font = alternates();
+        font.glyph_mut("a").unwrap().export = false;
+        let out = write(&font).unwrap();
+        assert!(!out.document.contains("<sub name=\"a\""), "no rule: {}", out.document);
+        assert!(text(&out.ufos["Duo-Regular.ufo"], "lib.plist").contains("<string>a.BRACKET.varAlt01</string>"), "skipped");
+        let back = read(&out.document, &out.ufos).unwrap();
+        assert!(back.glyph("a.BRACKET.varAlt01").is_some());
+        assert!(info_losses(&font).iter().any(|l| l.starts_with("the alternate layers of glyphs that are not exported")));
+    }
+
+    #[test]
+    fn structures_not_in_glyphslib_form_stay_as_read() {
+        let font = alternates();
+        let out = write(&font).unwrap();
+        let reread = |doc: &str, ufos: &BTreeMap<String, Files>| read(doc, ufos).unwrap();
+        // A rule not named as glyphsLib names them: the bracket glyphs stay glyphs.
+        let doc = out.document.replace("BRACKET.Weight_600_1000", "heavy");
+        let back = reread(&doc, &out.ufos);
+        assert!(back.glyph("a.BRACKET.varAlt01").is_some());
+        assert_eq!(write(&back).unwrap().document, doc, "kept as written");
+        // A bracket glyph without its layer name: likewise.
+        let mut ufos = out.ufos.clone();
+        let glif = text(&ufos["Duo-Regular.ufo"], "glyphs/a.B_R_A_C_K_E_T_.varA_lt01.glif")
+            .replace("com.schriftgestaltung.Glyphs._originalLayerName", "com.example.name");
+        ufos.get_mut("Duo-Regular.ufo").unwrap().insert("glyphs/a.B_R_A_C_K_E_T_.varA_lt01.glif".into(), glif.into_bytes());
+        let back = reread(&out.document, &ufos);
+        assert!(back.glyph("a.BRACKET.varAlt01").is_some());
+        assert_eq!(write(&back).unwrap().ufos, ufos);
+
+        // A sparse source not named `<master source> <layer>`: a master made of the layer.
+        let mut font = duo();
+        {
+            let mut a = font.glyph_mut("a").unwrap();
+            let mut l = other_layer("m01", "brace-a", None, 610.0);
+            l.info.attrs.coordinates = vec![Some(550.0)];
+            a.layers.push(l);
+        }
+        let out = write(&font).unwrap();
+        let doc = out.document.replace("name=\"m01 {550}\"", "name=\"middle\"");
+        let back = reread(&doc, &out.ufos);
+        assert_eq!(back.masters.len(), 3);
+        assert_eq!(write(&back).unwrap().document, doc);
+        // One whose location is not its layer's name: likewise.
+        let doc = out.document.replace("xvalue=\"550\"", "xvalue=\"560\"");
+        assert_eq!(reread(&doc, &out.ufos).masters.len(), 3);
     }
 }

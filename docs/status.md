@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M1.7 step 8b done (glyphsLib's lib keys for glyphs, layers and shapes)._
+_Updated: 2026-10-08, M1.7 step 8c done (intermediate and alternate layers in a designspace)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (349 tests; about 38,300 lines of Rust in 12 crates).
+- `cargo xtask ci` passes all nine steps (360 tests; about 40,500 lines of Rust in 12 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -17,8 +17,8 @@ _Updated: 2026-10-08, M1.7 step 8b done (glyphsLib's lib keys for glyphs, layers
 
 **M1.7, the typed model** (`docs/plans/M1.md` § M1.7, added 2026-10-08 at the owner's request):
 every documented field becomes a model field, and Glyphs-only data travels in glyphsLib's UFO lib
-keys. Eight steps, all done. Left in M1.7: alternate and intermediate layers as designspace
-rules and sources (a task of its own), then the M1.7 measures (plan § M1.7 › Measures);
+keys. Eight steps and step 8c (alternate and intermediate layers as designspace rules and
+sources), all done. Left in M1.7: the M1.7 measures (plan § M1.7 › Measures);
 `cargo test -p fontcraft-engine --test extra_census -- --ignored --nocapture` shows what is
 still untyped. After it, M2 (`docs/plans/M2.md`, accepted): M2.0 and M2.1 first;
 check whether glyphsLib reads `.glyphs` version 4.
@@ -33,7 +33,7 @@ M1 (`docs/plans/M1.md`) so far:
 | M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
 | M1.5 compiled fonts | done |
 | M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
-| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5 done (layer fields in `.glyphs` and the native file; backgrounds, other layers, guides, images, vertical metrics and user data in UFO by glyphsLib's rules); step 6 done (node flags, names and user data, path locks and drawing attributes, component alignment, anchors, smart values, masters, locks and orientations, anchor locks and orientations, version 4 image shapes; UFO point names, identifiers and anchor colours); step 7 done (version 4 contextual kerning stored; feature labels; UFO groups as `Font::groups` and glyphsLib's classes; UFO 2 kerning groups; `features.fea` split by glyphsLib's markers); step 8a done (glyphsLib's lib keys for the font's settings, app version, edit-tab texts, user data and parameters, and the masters' icons, name parts and parameters); step 8b done (glyphsLib's lib keys for glyphs, layers and shapes: categories, last changes, metrics keys, smart-glyph properties, glyph user data, hints, annotations, image crops, colour layer mapping, layer ids, order and libs, shape order, component placement, locks and smart values, node and anchor user data); next: alternate and intermediate layers in a designspace, then the measures (plan § M1.7 › Progress) |
+| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5 done (layer fields in `.glyphs` and the native file; backgrounds, other layers, guides, images, vertical metrics and user data in UFO by glyphsLib's rules); step 6 done (node flags, names and user data, path locks and drawing attributes, component alignment, anchors, smart values, masters, locks and orientations, anchor locks and orientations, version 4 image shapes; UFO point names, identifiers and anchor colours); step 7 done (version 4 contextual kerning stored; feature labels; UFO groups as `Font::groups` and glyphsLib's classes; UFO 2 kerning groups; `features.fea` split by glyphsLib's markers); step 8a done (glyphsLib's lib keys for the font's settings, app version, edit-tab texts, user data and parameters, and the masters' icons, name parts and parameters); step 8b done (glyphsLib's lib keys for glyphs, layers and shapes: categories, last changes, metrics keys, smart-glyph properties, glyph user data, hints, annotations, image crops, colour layer mapping, layer ids, order and libs, shape order, component placement, locks and smart values, node and anchor user data); step 8c done (intermediate layers as sparse designspace sources, alternate layers as bracket glyphs and rules, both read back when in glyphsLib's form); next: the measures (plan § M1.7 › Progress) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -207,3 +207,12 @@ Append one terse entry per session: what landed, numbers, what is still open.
   them back. `cross_format.rs` compares glyphs, layers and shapes in all three trips. Saving as
   `.glyphs` now reports booleans in user data (written as 1 and 0). Next: alternate and
   intermediate layers in a designspace.
+  Step 8c: intermediate layers become sparse sources and alternate layers bracket glyphs with
+  `<rules>`, as glyphsLib writes them (`crates/io-ufo/src/designspace/sparse.rs`, `rules.rs`;
+  composites get their components' alternates, fontTools' overlay splits regions). The reader
+  turns that form back into layers, recovering each range from the rules, and keeps the result
+  only when it writes back the same files. Rules and sparse sources equal glyphsLib's for the 21
+  corpus sources with such layers; our designspaces of 17 and glyphsLib's of 14 read back as
+  layers; fontmake builds them. Round trips unchanged; 3 fontc designspaces now read as
+  intermediate layers. Loss reports name what changes (ranges, order, layer ids). Next: the M1.7
+  measures.

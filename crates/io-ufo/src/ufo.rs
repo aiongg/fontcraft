@@ -643,7 +643,10 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
 /// The UFO layer that holds the master layers' backgrounds.
 pub(crate) const BACKGROUND: &str = "public.background";
 /// What a background's UFO layer name adds to its layer's.
-const BACKGROUND_SUFFIX: &str = ".background";
+pub(crate) const BACKGROUND_SUFFIX: &str = ".background";
+/// The layer extra key (designspace family) of a master layer whose background goes to a UFO
+/// layer other than `public.background`.
+pub(crate) const BACKGROUND_LAYER: &str = "backgroundLayer";
 
 /// The ascender and descender a layer's vertical metrics are measured from: the `typoAscender`
 /// and `typoDescender` parameters, else the ascender and descender metrics (glyphsLib's
@@ -750,7 +753,7 @@ fn attach_backgrounds(g: &mut Glyph, master_id: &str) {
 
 /// A background layer's GLIF as a background: shapes, anchors, guides and image as fields; the
 /// advance (`width`, `height`) and everything the GLIF reader kept in its `Extra`.
-fn background_of(l: Layer) -> fontcraft_model::Background {
+pub(crate) fn background_of(l: Layer) -> fontcraft_model::Background {
     let mut extra = l.extra;
     if l.width != 0.0 {
         extra.push(Family::Ufo, "width", num_value(l.width));
@@ -1289,7 +1292,11 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     // agrees with the model while those glyphs still lead the model's order. A disagreeing list is
     // rewritten from the model; a UFO that had none gets none; a master whose file had its own
     // list keeps it while the default master's still agrees.
+    // The glyphs a designspace makes of alternate layers stay out of a new list, as glyphsLib
+    // leaves them out.
+    let made = |g: &Glyph| g.extra.get(Family::Designspace, crate::designspace::BRACKET_GLYPH).is_some();
     let order: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).collect();
+    let listed: Vec<String> = font.glyphs.iter().filter(|g| !made(g)).map(|g| g.name.clone()).collect();
     let agrees = |kept: &[String]| {
         let named: Vec<&String> = order.iter().filter(|n| kept.contains(n)).collect();
         let listed: Vec<&String> = kept.iter().filter(|n| order.contains(n)).collect();
@@ -1308,7 +1315,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         default_order.as_deref().is_none_or(agrees) && from_ufo
     };
     if !keep {
-        let value = Value::Array(Array { items: order.iter().map(|n| str_value(n)).collect(), ..Default::default() });
+        let value = Value::Array(Array { items: listed.iter().map(|n| str_value(n)).collect(), ..Default::default() });
         patch(&mut lib, "public.glyphOrder", Some(value));
     }
     patch_glyph_map(&mut lib, POSTSCRIPT_NAMES, font, is_default, &default_lib, |g| g.info.production.as_deref());
@@ -1561,8 +1568,8 @@ pub(crate) fn font_losses(font: &Font, designspace: bool) -> Vec<String> {
         }
     }
     out.extend(glyph_losses(font));
-    out.extend(layer_losses(font));
-    out.extend(shape_losses(font));
+    out.extend(layer_losses(font, designspace));
+    out.extend(shape_losses(font, designspace));
     out.extend(crate::features::losses(&font.features));
     out.extend(kerning::losses(font));
     out.extend(libkeys::losses(font, designspace));
@@ -1618,8 +1625,9 @@ pub(crate) fn glyph_losses(font: &Font) -> Vec<String> {
 
 /// The layer data a UFO has no place for, not even in glyphsLib's lib keys, one line per kind
 /// with the number of layers that have it. Layers a UFO cannot hold at all ([`layers_left_out`])
-/// are not counted here.
-pub(crate) fn layer_losses(font: &Font) -> Vec<String> {
+/// are not counted here. A designspace (`designspace`) also holds alternate layers, as glyphs of
+/// their own, and intermediate layers' coordinates, as sparse sources.
+pub(crate) fn layer_losses(font: &Font, designspace: bool) -> Vec<String> {
     use fontcraft_model::{Background, Image, LayerInfo};
     let unfiled = |i: &Option<Image>| i.as_ref().is_some_and(|i| i.path.is_none());
     let guide_extras = |guides: &[fontcraft_model::Guide]| {
@@ -1640,23 +1648,49 @@ pub(crate) fn layer_losses(font: &Font) -> Vec<String> {
             }
         }
     }
+    let read_back = if designspace { crate::designspace::alternate_ids(font) } else { Vec::new() };
     for (g, l) in font.glyphs.iter().flat_map(|g| g.layers.iter().map(move |l| (g, l))) {
-        let written = if l.is_master_layer() { None } else { ufo_layer_name(font, l) };
+        let alternate = designspace && crate::designspace::alternate_comes_back(font, l);
+        let written = if l.is_master_layer() {
+            None
+        } else if alternate {
+            // An alternate layer's name comes back from its bracket glyph's lib; one without a
+            // name gets one.
+            Some(l.info.name.clone().unwrap_or_default())
+        } else {
+            ufo_layer_name(font, l)
+        };
         if !l.is_master_layer() && (written.is_none() || layer_master(&l.master)) {
             continue;
         }
         // A second layer of one name in a glyph goes to `<name> #<n>`.
-        let renamed = written.as_ref().is_some_and(|n| !seen.insert((g.name.as_str(), l.master.as_str(), n.clone())));
+        let renamed = !alternate && written.as_ref().is_some_and(|n| !seen.insert((g.name.as_str(), l.master.as_str(), n.clone())));
         let i = &*l.info;
-        let other_attrs = fontcraft_model::LayerAttrs { color_palette: None, ..i.attrs.clone() };
-        let id_lost = written.as_deref().is_some_and(|n| {
-            l.id != glyphkeys::synthetic_id(&l.master, n)
-                && (renamed || ids.get(&(l.master.as_str(), n.to_string())).copied().flatten() != Some(l.id.as_str()))
-        });
+        let mut other_attrs = fontcraft_model::LayerAttrs { color_palette: None, ..i.attrs.clone() };
+        if designspace && crate::designspace::intermediate_comes_back(font, l) {
+            other_attrs.coordinates.clear();
+        }
+        if alternate {
+            other_attrs.axis_rules.clear();
+        }
+        let id_lost = if alternate {
+            !read_back.iter().any(|(gn, id, back)| *gn == g.name && *id == l.id && *back == l.id)
+        } else {
+            written.as_deref().is_some_and(|n| {
+                l.id != glyphkeys::synthetic_id(&l.master, n)
+                    && (renamed || ids.get(&(l.master.as_str(), n.to_string())).copied().flatten() != Some(l.id.as_str()))
+            })
+        };
         let has = [
             // A master layer's name, an intermediate or colour layer's, which its UFO layer's
-            // name replaces, and a second one of a name in a glyph.
-            i.name.is_some() && (l.is_master_layer() || written != i.name || renamed),
+            // name replaces (or gives one without a name), and a second one of a name in a glyph.
+            if alternate {
+                i.name.as_deref().is_none_or(str::is_empty)
+            } else if l.is_master_layer() {
+                i.name.is_some()
+            } else {
+                written != i.name || renamed
+            },
             !other_attrs.is_empty(),
             i.vert_width == Some(0.0),
             i.vert_origin.is_some() && font.masters.iter().find(|m| m.id == l.master).is_none_or(|m| model_frame(font, m).0.is_none()),
@@ -1680,17 +1714,17 @@ pub(crate) fn layer_losses(font: &Font) -> Vec<String> {
 
 /// The shape data a GLIF file has no place for, not even in glyphsLib's lib keys
 /// ([`crate::shapekeys`]), one line per kind with the number of objects that have it, in the
-/// layers a UFO holds.
-pub(crate) fn shape_losses(font: &Font) -> Vec<String> {
+/// layers a UFO holds (a designspace's: alternate layers too).
+pub(crate) fn shape_losses(font: &Font, designspace: bool) -> Vec<String> {
     use fontcraft_model::Shape;
     let mut counts = [0usize; SHAPE_LOSSES.len()];
     let ufo2 = font.source.ufo_version == Some(2);
     let layer_master = |id: &str| font.masters.iter().any(|m| m.id == id && m.extra.get(Family::Designspace, "layer").is_some());
-    let layers = font
-        .glyphs
-        .iter()
-        .flat_map(|g| g.layers.iter())
-        .filter(|l| l.is_master_layer() || (ufo_layer_name(font, l).is_some() && !layer_master(&l.master)));
+    let layers = font.glyphs.iter().flat_map(|g| g.layers.iter()).filter(|l| {
+        l.is_master_layer()
+            || (ufo_layer_name(font, l).is_some() && !layer_master(&l.master))
+            || designspace && crate::designspace::alternate_comes_back(font, l)
+    });
     for l in layers {
         let background = l.info.background.as_ref();
         let shapes = l.shapes.iter().map(|s| (s, false)).chain(background.into_iter().flat_map(|b| b.shapes.iter().map(|s| (s, true))));
@@ -1795,8 +1829,12 @@ fn layer_plan<'a>(font: &'a Font, target: &Target<'a>) -> Plan<'a> {
     let mut plan: Plan<'a> = Vec::new();
     let master = target.master;
     for g in font.glyphs.iter() {
-        if let Some(b) = g.layer(&master.id).and_then(|l| l.info.background.as_ref()) {
-            plan_add(&mut plan, BACKGROUND.to_string(), g, Part::Background(b), false);
+        if let Some(l) = g.layer(&master.id)
+            && let Some(b) = l.info.background.as_ref()
+        {
+            // A glyph made of an alternate layer has that layer's background UFO layer.
+            let name = l.extra.get(Family::Designspace, BACKGROUND_LAYER).and_then(Value::as_str).unwrap_or(BACKGROUND);
+            plan_add(&mut plan, name.to_string(), g, Part::Background(b), false);
         }
         for (m, name) in &target.layer_masters {
             if let Some(l) = g.layers.iter().find(|l| l.id == m.id && l.master == m.id) {
@@ -1862,6 +1900,14 @@ pub fn ufo_layer_name(font: &Font, l: &Layer) -> Option<String> {
         return Some(format!("color.{index}"));
     }
     if !a.coordinates.is_empty() && font.source.glyphs_version != Some(2) {
+        // A document read from a UFO or designspace keeps a name that states the coordinates
+        // (a version 2 source's, such as `Bold {600}`).
+        if font.source.glyphs_version.is_none()
+            && let Some(n) = l.info.name.as_deref()
+            && braced_coordinates(n).is_some_and(|c| c.iter().map(|v| Some(*v)).eq(a.coordinates.iter().copied()))
+        {
+            return Some(n.to_string());
+        }
         let master = font.masters.iter().find(|m| m.id == l.master);
         let parts = a
             .coordinates
@@ -1874,14 +1920,30 @@ pub fn ufo_layer_name(font: &Font, l: &Layer) -> Option<String> {
     l.info.name.clone().filter(|n| !n.is_empty())
 }
 
-/// How many layers other than master layers a UFO cannot hold: alternate layers, layers
-/// without a name, and the other layers of masters stored as a layer of another source's UFO.
-pub fn layers_left_out(font: &Font) -> usize {
+/// The coordinates a layer name states between its first `{` and the `}` after it, as glyphsLib
+/// reads a version 2 name (`Bold {600, 100}`).
+pub(crate) fn braced_coordinates(name: &str) -> Option<Vec<f64>> {
+    let open = name.find('{')?;
+    let rest = name.get(open + 1..)?;
+    let inner = rest.get(..rest.find('}')?)?;
+    let v: Vec<f64> = inner.split(',').map(|p| p.trim().parse::<f64>().ok().filter(|f| f.is_finite())).collect::<Option<_>>()?;
+    (v.len() <= fontcraft_model::MAX_AXIS_VALUES).then_some(v)
+}
+
+/// How many layers other than master layers the files cannot hold: layers without a name, the
+/// other layers of masters stored as a layer of another source's UFO, and alternate layers. A
+/// designspace (`designspace`) holds alternate layers, as glyphs of their own and rules, in a
+/// font with axes.
+pub fn layers_left_out(font: &Font, designspace: bool) -> usize {
     let layer_master = |id: &str| font.masters.iter().any(|m| m.id == id && m.extra.get(Family::Designspace, "layer").is_some());
     font.glyphs
         .iter()
         .flat_map(|g| g.layers.iter())
-        .filter(|l| !l.is_master_layer() && (ufo_layer_name(font, l).is_none() || layer_master(&l.master)))
+        .filter(|l| {
+            !l.is_master_layer()
+                && (ufo_layer_name(font, l).is_none() || layer_master(&l.master))
+                && !(designspace && crate::designspace::alternate_comes_back(font, l))
+        })
         .count()
 }
 
@@ -1995,8 +2057,14 @@ fn write_kerning(font: &Font, master: &Master, version: u32) -> Dict {
         }
         out.entries.push((Str::new(first.as_str()), Value::Dict(seconds)));
     }
-    // Unchanged pairs: the kept file, with its whitespace.
-    if out == kept && kept.entries.iter().zip(&out.entries).all(|((a, _), (b, _))| a == b) { kept } else { out }
+    // Unchanged pairs, in whatever order: the kept file, with its whitespace.
+    let same = |a: &Dict, b: &Dict| a.len() == b.len() && a.entries.iter().all(|(k, v)| b.get(k.as_str()) == Some(v));
+    let unchanged = out.len() == kept.len()
+        && out.entries.iter().all(|(k, v)| match (v.as_dict(), kept.get(k.as_str()).and_then(Value::as_dict)) {
+            (Some(x), Some(y)) => same(x, y),
+            _ => false,
+        });
+    if unchanged { kept } else { out }
 }
 
 /// Writes one master of a document as a UFO of its own, with the document's font-wide values.
@@ -2424,11 +2492,11 @@ mod tests {
         assert!(s(&files["glyphs/A_.glif"]).contains("<key>org.example</key>"));
         assert!(s(&files["glyphs.public.background/A_.glif"]).contains("<contour>"));
         assert!(s(&files["glyphs.B_ackup/A_.glif"]).contains("<unicode hex=\"0041\"/>"), "glyphsLib gives every layer the code points");
-        assert_eq!(layers_left_out(&font), 2, "the alternate and the unnamed layer");
+        assert_eq!(layers_left_out(&font, false), 2, "the alternate and the unnamed layer");
         let losses = info_losses(&font);
-        // The colour layer's palette entry travels in the colour layer mapping.
+        // The colour layer's palette entry travels in the colour layer mapping; it gets a name.
         for line in [
-            "the layers' names (2)",
+            "the layers' names (3)",
             "the layers' attributes other than colour palette entries (1)",
             "the ids of layers other than master layers (2)",
         ] {

@@ -19,9 +19,10 @@ data, the generic and converted custom-parameter keys, icon, name parts, master 
 values; §1, §3.5, §4, §12.3; differences in §3.7) in `crates/io-ufo/src/libkeys.rs`; the glyph,
 layer and shape lib keys, the colour layer mapping of the non-minimal mode and the layer libs
 (§7, §8.4, §8.6, §9, §12.3; differences in §9.7) in `crates/io-ufo/src/glyphkeys.rs` and
-`shapekeys.rs`. Not yet: STAT (§6.6), applying instance data (§5.3), bracket glyphs and rules
-(§8.2), sparse sources for brace layers (§8.3), smart components drawn as outlines (§9.3; kept
-as components on purpose), `public.openTypeCategories` from categories (§11.4: only a UFO's own
+`shapekeys.rs`; bracket glyphs and rules (§8.2, with the `align_alternate_layers` preflight of
+§8.10) and sparse sources for brace layers (§8.3) in `crates/io-ufo/src/designspace/rules.rs` and
+`sparse.rs`, read back as alternate and intermediate layers. Not yet: STAT (§6.6), applying
+instance data (§5.3), smart components drawn as outlines (§9.3; kept as components on purpose), `public.openTypeCategories` from categories (§11.4: only a UFO's own
 map is read and written back). Where FontCraft differs from glyphsLib on purpose:
 `docs/plans/M1.md` § M1.7.
 
@@ -672,9 +673,17 @@ Colour table (`builder/constants.py:141-154`), index → `public.markColor`:
 | Components | a component whose base glyph has a bracket glyph for the same box is pointed at it |
 | Kerning | the bracket glyph joins every kern1/kern2 group of its parent and copies the parent's glyph-level pairs |
 | Non-exported parents | glyphs are still made (and added to `public.skipExportGlyphs`), no rule |
+| Backgrounds | an alternate layer's background goes to the UFO layer `<layer name>.background` under the bracket glyph's name; a master layer standing in brings its background to `public.background` (`builder/glyph.py:402-420`, `builder/layers.py:69-79`) |
 | After | GDEF categories regenerated |
 | Preflight | `align_alternate_layers` copies the component's bracket boxes onto composites that lack them (v2: name suffix ` [min]`/` ]max]`; v3: `axisRules`) |
 | U→G | each BRACKET glyph is moved into a UFO layer named by `_originalLayerName` (if non-empty) under the base name, component suffixes stripped, all BRACKET glyphs deleted; missing `_originalLayerName` raises NotImplementedError. Designspace rules are ignored; v3 `axisRules` attributes are **not** rebuilt (lossy). Bracket names are removed from `public.glyphOrder`, groups and kerning. (`builder/builders.py:533-579`, `builder/groups.py:141`, `builder/kerning.py:85-88`) |
+| Overlap | where two boxes of one glyph overlap, the later rule's substitution wins, so the rules name an earlier bracket glyph only outside the later box. The box of a bracket glyph that later boxes cover entirely appears in no rule. |
+
+FontCraft reads the rules back into `axisRules`: the box around the regions that name a bracket
+glyph, each end run on to the axis's end where that stays clear of regions where the glyph gets
+nothing or an earlier bracket glyph. A copy that `align_alternate_layers` adds is written with
+`_originalLayerName` `""` in every format version, and an alternate layer without a name gets one
+from its rules. Details and the other differences: `docs/plans/M1.md` § M1.7, step 8c.
 
 ### 8.3 Brace layers → sparse sources
 
@@ -687,6 +696,10 @@ Colour table (`builder/constants.py:141-154`), index → `public.markColor`:
 | Location: coordinates zipped with designspace axes in order. Fewer coordinates than axes → the rest from the master's location. More → warning, extras ignored. |
 | Inserted right after the master's source, sorted by location values. Duplicate locations log a warning. |
 | U→G: sources with `layerName` are not masters; their glyphs come back as ordinary named layers (`to_glyphs_layer`). v3 `coordinates` attributes are **not** rebuilt (lossy). |
+
+FontCraft names a sparse source `<master id> <layer name>` (its master's source carries the id)
+and reads a sparse source in this form back as intermediate layers with the coordinates the
+layer name states.
 
 ### 8.4 Layer metadata
 
