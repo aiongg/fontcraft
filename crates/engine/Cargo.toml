@@ -17,6 +17,7 @@ fontcraft-format.workspace = true
 fontcraft-compile.workspace = true
 fontcraft-io-glyphs.workspace = true
 fontcraft-decompile.workspace = true
+skrifa.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

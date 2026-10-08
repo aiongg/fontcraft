@@ -12,6 +12,7 @@ mod edit;
 mod file;
 mod font;
 mod glyph;
+mod inspect;
 mod meta;
 mod path;
 mod session;
@@ -112,6 +113,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(font::specs());
         v.extend(meta::specs());
         v.extend(session::specs());
+        v.extend(inspect::specs());
         v
     })
 }

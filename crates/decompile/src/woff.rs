@@ -25,6 +25,34 @@ struct Entry {
     data: Vec<u8>,
 }
 
+/// One entry of a WOFF table directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WoffTable {
+    pub tag: u32,
+    pub checksum: u32,
+    /// Where the (possibly compressed) table starts in the WOFF file.
+    pub offset: u32,
+    /// The table's size once inflated.
+    pub length: u32,
+    /// Its size in the WOFF file.
+    pub compressed: u32,
+}
+
+/// The table directory of a WOFF 1 file, in directory order.
+pub fn directory(woff: &[u8]) -> Result<Vec<WoffTable>, DecompileError> {
+    let num_tables = usize::from(u16_at(woff, 12).ok_or_else(|| bad("the header is cut short"))?);
+    if num_tables > MAX_TABLES {
+        return Err(bad("the table count is out of range"));
+    }
+    (0..num_tables)
+        .map(|i| {
+            let at = 44 + 20 * i;
+            let field = |k: usize| u32_at(woff, at + 4 * k).ok_or_else(|| bad("the table directory is cut short"));
+            Ok(WoffTable { tag: field(0)?, offset: field(1)?, compressed: field(2)?, length: field(3)?, checksum: field(4)? })
+        })
+        .collect()
+}
+
 /// The sfnt a WOFF 1 file wraps.
 pub fn to_sfnt(woff: &[u8]) -> Result<Vec<u8>, DecompileError> {
     let flavor = u32_at(woff, 4).ok_or_else(|| bad("the header is cut short"))?;

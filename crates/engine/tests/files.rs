@@ -206,3 +206,35 @@ fn a_compiled_font_opens_view_only_and_saves_as_a_source() {
     assert!(text.contains("name = glyphOrder;"), "the glyph order is recorded");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn files_are_inspected_without_being_opened() {
+    let dir = temp("inspect");
+    let mut s = Session::with_document();
+    let ttf = dir.join("Untitled.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    let docs = s.documents().len();
+    let info = run(&mut s, "font.inspect", json!({ "input": ttf, "sections": ["format", "names", "metrics", "masters"] }));
+    assert_eq!(info["format"]["kind"], "TrueType");
+    assert_eq!(info["names"]["family"], "Untitled");
+    assert_eq!(info["metrics"]["unitsPerEm"], 1000);
+    assert!(info["masters"]["error"].is_string(), "a section that does not apply reports an error, not a failure");
+    assert!(info.get("cmap").is_none(), "only the sections asked for");
+    let tables = run(&mut s, "tables.list", json!({ "font": ttf, "sort": "tag" }));
+    let tags: Vec<&str> = tables["faces"][0]["tables"].as_array().unwrap().iter().map(|t| t["tag"].as_str().unwrap()).collect();
+    let mut sorted = tags.clone();
+    sorted.sort();
+    assert_eq!(tags, sorted);
+    assert!(tags.contains(&"glyf") && tags.contains(&"OS/2"));
+    let glyphs = run(&mut s, "font.listGlyphs", json!({ "font": ttf }));
+    assert_eq!(glyphs["glyphs"][0]["name"], ".notdef");
+    // A source is summarised too.
+    let src = dir.join("Untitled.glyphs");
+    run(&mut s, "file.saveAs", json!({ "path": src }));
+    let info = run(&mut s, "font.inspect", json!({ "input": src, "sections": ["format", "masters"] }));
+    assert_eq!((info["format"]["kind"].as_str(), info["masters"][0]["ascender"].as_f64()), (Some("glyphs"), Some(800.0)));
+    assert_eq!(s.documents().len(), docs, "nothing was opened");
+    assert!(s.execute("font.inspect", &json!({ "input": ttf, "sections": ["nope"] })).is_err());
+    assert!(s.execute("tables.list", &json!({ "font": src })).is_err(), "a source has no table directory");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

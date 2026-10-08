@@ -15,6 +15,8 @@
 
 mod woff;
 
+pub use woff::{WoffTable, directory as woff_directory, to_sfnt as woff_to_sfnt};
+
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 

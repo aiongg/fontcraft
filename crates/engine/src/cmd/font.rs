@@ -32,8 +32,8 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Glyphs",
             [],
             None,
-            "{layer?: master id (default: the first master)} the glyphs in glyph order → {glyphs: [{gid, name, unicodes: [hex], export, advance, shapes, bounds: [x0, y0, x1, y1] | null}]}",
-            has_doc,
+            "{font?: path, face?: number, layer?: master id (default: the first master)} the glyphs of the active document, or of the font file at `font` without opening it, in glyph order → {glyphs: [{gid, name, unicodes: [hex], export, advance, shapes, bounds: [x0, y0, x1, y1] | null}]}",
+            always,
             list_glyphs
         ),
     ]
@@ -93,7 +93,14 @@ fn info_set(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn list_glyphs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.listGlyphs", p)?;
-    let font = s.font()?;
+    let from_file;
+    let font = match p.opt_str("font")? {
+        Some(path) => {
+            from_file = open_file(path, p.opt_int("face", 0, i64::from(u16::MAX))?.map(|f| f as u32))?;
+            &from_file
+        }
+        None => s.font()?,
+    };
     let layer = match p.opt_str("layer")? {
         Some(id) => font.master(id)?.id.clone(),
         None => font.default_master()?.id.clone(),
@@ -121,4 +128,14 @@ fn list_glyphs(s: &mut Session, p: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({ "glyphs": glyphs }))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn open_file(path: &str, face: Option<u32>) -> Result<fontcraft_model::Font> {
+    crate::io::open(std::path::Path::new(path), face).map(|(font, _)| font)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn open_file(_: &str, _: Option<u32>) -> Result<fontcraft_model::Font> {
+    Err(crate::EngineError::Unsupported("reading a file by path in the browser".into()))
 }

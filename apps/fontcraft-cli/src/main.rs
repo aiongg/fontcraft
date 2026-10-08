@@ -4,7 +4,9 @@
 //! fontcraft-cli commands [PATTERN]
 //! fontcraft-cli run [--in FILE] [--cmd ID [--params JSON]]... [--save [FILE]] [--export FILE]
 //! fontcraft-cli convert IN OUT
-//! fontcraft-cli info FILE
+//! fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]
+//! fontcraft-cli tables list FONT [--sort file|tag|size] [--face N|all]
+//! fontcraft-cli glyphs list FONT [--face N]
 //! fontcraft-cli mcp [--connect ADDR | --headless]
 //! ```
 //! Every subcommand is a thin shell over engine commands (`spec/inventory/20-cli.toml` lists the
@@ -37,8 +39,13 @@ USAGE:
       Open IN (a source) and write OUT in the format its extension names (.ttf, .fontcraft,
       .glyphs, .glyphspackage).
 
-  fontcraft-cli info FILE
-      Print a JSON summary of FILE: names, units per em, masters, glyph count.
+  fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]
+      Print a JSON summary of FILE (a compiled font or a source) without opening it: format, names,
+      metrics, style, tables, cmap, layout, axes, instances, masters, color, hinting, faces.
+  fontcraft-cli tables list FONT [--sort file|tag|size] [--face N|all]
+      Print the table directory of a compiled font, collection or WOFF file as JSON.
+  fontcraft-cli glyphs list FONT [--face N]
+      Print the glyphs of FONT (a compiled font or a source) in glyph order as JSON.
 
   fontcraft-cli mcp [--connect ADDR | --headless]
       Run the MCP server on stdio. Default: attach to a running app at 127.0.0.1:7985
@@ -105,6 +112,8 @@ fn main() -> ExitCode {
         Some("run") => run(rest),
         Some("convert") => convert(rest),
         Some("info") => info(rest),
+        Some("tables") => tables(rest),
+        Some("glyphs") => glyphs(rest),
         Some("mcp") => mcp(rest),
         Some("-h" | "--help" | "help") | None => out(USAGE.trim_end()),
         Some("-V" | "--version") => out(&format!("fontcraft-cli {}", env!("CARGO_PKG_VERSION"))),
@@ -196,12 +205,65 @@ fn convert(args: &[String]) -> Outcome {
     out(&result.to_string())
 }
 
+/// `--name VALUE` options after the positional arguments, as JSON parameters; `flags` are the
+/// options that take no value.
+fn options(args: &[String], names: &[(&str, &str)], flags: &[(&str, &str)]) -> Result<(Vec<String>, serde_json::Map<String, Value>), Failure> {
+    let mut positional = Vec::new();
+    let mut params = serde_json::Map::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if let Some((_, key)) = flags.iter().find(|(f, _)| f == a) {
+            params.insert((*key).to_string(), json!(true));
+        } else if let Some((_, key)) = names.iter().find(|(f, _)| f == a) {
+            let v = it.next().ok_or_else(|| usage(format!("{a} needs a value")))?;
+            let value = match *key {
+                "face" => v.parse::<u64>().map(Value::from).unwrap_or_else(|_| json!(v)),
+                "sections" => json!(v.split(',').collect::<Vec<_>>()),
+                _ => json!(v),
+            };
+            params.insert((*key).to_string(), value);
+        } else if a.starts_with("--") {
+            return Err(usage(format!("unknown option {a}")));
+        } else {
+            positional.push(a.clone());
+        }
+    }
+    Ok((positional, params))
+}
+
 fn info(args: &[String]) -> Outcome {
-    let [input] = args else { return Err(usage("info needs one FILE")) };
+    let (files, mut params) = options(args, &[("--section", "sections"), ("--face", "face")], &[("--all-names", "allNames")])?;
+    let [input] = files.as_slice() else { return Err(usage("info needs one FILE")) };
+    params.insert("input".into(), json!(input));
     let mut session = Session::new();
-    open(&mut session, input)?;
-    let summary = execute(&mut session, "font.info.get", &json!({}))?;
+    let summary = session.execute("font.inspect", &Value::Object(params)).map_err(|e| Failure::Input(e.to_string()))?;
     out(&serde_json::to_string_pretty(&summary).map_err(|e| Failure::Failed(e.to_string()))?)
+}
+
+fn tables(args: &[String]) -> Outcome {
+    let Some((verb, rest)) = args.split_first() else { return Err(usage("tables needs a subcommand: list")) };
+    if verb != "list" {
+        return Err(usage(format!("unknown tables subcommand `{verb}` (known: list)")));
+    }
+    let (files, mut params) = options(rest, &[("--sort", "sort"), ("--face", "face")], &[])?;
+    let [font] = files.as_slice() else { return Err(usage("tables list needs one FONT")) };
+    params.insert("font".into(), json!(font));
+    let mut session = Session::new();
+    let result = session.execute("tables.list", &Value::Object(params)).map_err(|e| Failure::Input(e.to_string()))?;
+    out(&serde_json::to_string_pretty(&result).map_err(|e| Failure::Failed(e.to_string()))?)
+}
+
+fn glyphs(args: &[String]) -> Outcome {
+    let Some((verb, rest)) = args.split_first() else { return Err(usage("glyphs needs a subcommand: list")) };
+    if verb != "list" {
+        return Err(usage(format!("unknown glyphs subcommand `{verb}` (known: list)")));
+    }
+    let (files, mut params) = options(rest, &[("--face", "face")], &[])?;
+    let [font] = files.as_slice() else { return Err(usage("glyphs list needs one FONT")) };
+    params.insert("font".into(), json!(font));
+    let mut session = Session::new();
+    let result = session.execute("font.listGlyphs", &Value::Object(params)).map_err(|e| Failure::Input(e.to_string()))?;
+    out(&serde_json::to_string_pretty(&result).map_err(|e| Failure::Failed(e.to_string()))?)
 }
 
 fn mcp(args: &[String]) -> Outcome {

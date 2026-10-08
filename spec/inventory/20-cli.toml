@@ -462,7 +462,7 @@ equivalents = [
   "pyftsubset: --xml",
 ]
 area = "cli-tools"
-milestone = "M1"
+milestone = "M12"
 summary = "Writes the contents of a font as text: every table or chosen tables, as TTX-compatible XML, JSON, a readable report or hex. Tables can be shown in named views (raw fields, a friendlier listing, feature-file syntax, kerning pairs and so on), and the font program can be listed per glyph. A Type 1 font is dumped as its decrypted, readable text."
 ref = "fontTools ttx; AFDKO spot (main.c usage and per-table usage), tx -dump / -dcf help, ttxn.py, detype1; fontc otl-normalizer; fontTools varLib.avar.unbuild"
 status = "docs"
@@ -2099,7 +2099,7 @@ shortcut = ""
 kind = "engine"
 params = "{font: path, face?: int|name|\"all\", tables?: [{tag: string, view?: string}], excludeTables?: [tag], format?: \"ttx\"|\"json\"|\"text\"|\"hex\", split?: \"tables\"|\"glyphs\", output?: path, disassemble?: bool, bitmapFormat?: \"raw\"|\"row\"|\"bitwise\"|\"extfile\", strict?: bool, allowVirtualGids?: bool, unicodeData?: path, newline?: \"lf\"|\"cr\"|\"crlf\", glyphs?: selector, excludeGlyphs?: selector, fd?: [int], excludeFd?: [int], glyphDetail?: \"short\"|\"medium\"|\"long\", flattenSeac?: bool, hints?: bool, normalize?: bool, version?: bool, showExtensions?: bool, cffParts?: string, cffLevel?: \"offsets\"|\"bytes\"|\"values\", wrap?: bool, cmapSubtable?: int, units?: \"font\"|1000, names?: \"source\"|\"final\", goadb?: path}"
 area = "cli-tools"
-milestone = "M1"
+milestone = "M12"
 summary = "Read-only query that renders tables of a binary font as XML, JSON, readable text or hex and returns the text or the paths written. With format json and no output path the parsed tables are returned in the command result. Tables that fail to parse fall back to hex unless strict is set."
 ref = "docs/spec/20-cli.md › dump"
 status = "docs"
