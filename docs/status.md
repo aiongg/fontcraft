@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M1.7 step 8a done (glyphsLib's lib keys for the font and the masters)._
+_Updated: 2026-10-08, M1.7 step 8b done (glyphsLib's lib keys for glyphs, layers and shapes)._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (334 tests; about 35,400 lines of Rust in 12 crates).
+- `cargo xtask ci` passes all nine steps (349 tests; about 38,300 lines of Rust in 12 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -17,7 +17,8 @@ _Updated: 2026-10-08, M1.7 step 8a done (glyphsLib's lib keys for the font and t
 
 **M1.7, the typed model** (`docs/plans/M1.md` § M1.7, added 2026-10-08 at the owner's request):
 every documented field becomes a model field, and Glyphs-only data travels in glyphsLib's UFO lib
-keys. Eight steps, the last split in two; step 8b (glyph, layer and shape lib keys) is next;
+keys. Eight steps, all done. Left in M1.7: alternate and intermediate layers as designspace
+rules and sources (a task of its own), then the M1.7 measures (plan § M1.7 › Measures);
 `cargo test -p fontcraft-engine --test extra_census -- --ignored --nocapture` shows what is
 still untyped. After it, M2 (`docs/plans/M2.md`, accepted): M2.0 and M2.1 first;
 check whether glyphsLib reads `.glyphs` version 4.
@@ -32,7 +33,7 @@ M1 (`docs/plans/M1.md`) so far:
 | M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
 | M1.5 compiled fonts | done |
 | M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
-| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5 done (layer fields in `.glyphs` and the native file; backgrounds, other layers, guides, images, vertical metrics and user data in UFO by glyphsLib's rules); step 6 done (node flags, names and user data, path locks and drawing attributes, component alignment, anchors, smart values, masters, locks and orientations, anchor locks and orientations, version 4 image shapes; UFO point names, identifiers and anchor colours); step 7 done (version 4 contextual kerning stored; feature labels; UFO groups as `Font::groups` and glyphsLib's classes; UFO 2 kerning groups; `features.fea` split by glyphsLib's markers); step 8a done (glyphsLib's lib keys for the font's settings, app version, edit-tab texts, user data and parameters, and the masters' icons, name parts and parameters); step 8b (glyph, layer and shape lib keys) next (plan § M1.7 › Progress) |
+| M1.7 the typed model | **in progress**: steps 1 to 4 done (font information everywhere; `.glyphs` stems, numbers, guides, zones, version 2 axes and name parts, instance fields; UFO blue values, stem snaps and guidelines; designspace axes, maps, instances and variable fonts; glyph metadata, with UFO notes, mark colours, production names and `GDEF` classes); step 5 done (layer fields in `.glyphs` and the native file; backgrounds, other layers, guides, images, vertical metrics and user data in UFO by glyphsLib's rules); step 6 done (node flags, names and user data, path locks and drawing attributes, component alignment, anchors, smart values, masters, locks and orientations, anchor locks and orientations, version 4 image shapes; UFO point names, identifiers and anchor colours); step 7 done (version 4 contextual kerning stored; feature labels; UFO groups as `Font::groups` and glyphsLib's classes; UFO 2 kerning groups; `features.fea` split by glyphsLib's markers); step 8a done (glyphsLib's lib keys for the font's settings, app version, edit-tab texts, user data and parameters, and the masters' icons, name parts and parameters); step 8b done (glyphsLib's lib keys for glyphs, layers and shapes: categories, last changes, metrics keys, smart-glyph properties, glyph user data, hints, annotations, image crops, colour layer mapping, layer ids, order and libs, shape order, component placement, locks and smart values, node and anchor user data); next: alternate and intermediate layers in a designspace, then the measures (plan § M1.7 › Progress) |
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -193,3 +194,16 @@ Append one terse entry per session: what landed, numbers, what is still open.
   reads our designspaces back. Round trips and census unchanged. Loss reports now name the
   settings no key holds and master visibility. Open: the UFO file-layout records in loss
   counts. Next: step 8b.
+  Step 8b: glyphsLib's lib keys for glyphs, layers and shapes (`crates/io-ufo/src/glyphkeys.rs`,
+  `shapekeys.rs`): GLIF lib keys for categories, scripts, last changes, metrics keys, smart-glyph
+  axes, export flags, hints (glyphsLib's dictionaries; `.glyphs` converts them back), annotations,
+  image crop, lock and opacity, non-spacing mark widths, colour layer mapping, shape order,
+  component info, locks and smart values, node user data and anchor user data
+  (`public.objectLibs`, under a derived identifier when the anchor has none); glyph user data in
+  the masters' libs; layer ids, order and libs in `layerinfo.plist`. Smart components stay
+  components with their values. Reading is checked by writing, glyph by glyph. Round trips and
+  census unchanged; every glyphsLib key in the corpus UFOs is now a field. Our designspaces of
+  five `.glyphs` sources carry glyphsLib's values (differences in plan § M1.7); glyphsLib reads
+  them back. `cross_format.rs` compares glyphs, layers and shapes in all three trips. Saving as
+  `.glyphs` now reports booleans in user data (written as 1 and 0). Next: alternate and
+  intermediate layers in a designspace.

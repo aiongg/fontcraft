@@ -331,7 +331,14 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
                     Shape::Path(p) => {
                         count(&p.extra);
                         count(&p.info.attrs.extra);
-                        p.nodes.iter().for_each(|n| count(&n.info.extra));
+                        // A node's other attribute keys travel in a UFO's node user data.
+                        for n in &p.nodes {
+                            let mut x = n.info.extra.clone();
+                            if targets.contains(&Family::Ufo) {
+                                x.remove(Family::Glyphs, "attr");
+                            }
+                            count(&x);
+                        }
                     }
                     Shape::Component(c) => {
                         count(&c.extra);

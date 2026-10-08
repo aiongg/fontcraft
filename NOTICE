@@ -58,7 +58,14 @@ bundled, the file says so in its header and the project is listed here with its 
   lib keys for the font's settings, app version, edit-tab texts, user data and custom parameters
   and for a master's icon, name parts, parameters, position and axis values, with the colour
   palette and meta table conversions, are ported from its custom-parameter, font, master, name
-  and user-data builders (crates/io-ufo/src/libkeys.rs).
+  and user-data builders (crates/io-ufo/src/libkeys.rs). The UFO lib keys for glyph, layer and
+  shape data (categories, last changes, metrics keys, smart-glyph axes, hints, annotations,
+  image crop, lock and opacity, non-spacing mark widths, colour layer mapping, layer ids, order
+  and libs, shape order, component info, locks and smart values, node and anchor user data) are
+  ported from its glyph, layer, user-data, hint, annotation, background-image, component, path
+  and anchor builders (crates/io-ufo/src/glyphkeys.rs and shapekeys.rs), and the conversion of
+  its hint dictionaries back into the .glyphs format from its hint builder
+  (crates/io-glyphs/src/layer.rs).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data

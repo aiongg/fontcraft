@@ -9,7 +9,7 @@
 //! | metrics keys | `metricLeft` … `metricVertOrigin` | `leftMetricsKey`, `rightMetricsKey`, `widthMetricsKey` |
 //! | colour, visibility | `color` (as a glyph's), `visible = 1` | the same |
 //! | guides | `guides` (as a master's) | `guideLines` |
-//! | hints | `hints`, kept as stored values | the same |
+//! | hints | `hints`, kept as stored values; hints read from a UFO (glyphsLib's dictionaries) are converted, as glyphsLib 6.15.0's hint builder reads them (`builder/hints.py`, Apache-2.0; see `NOTICE`) | the same, index paths and points as brace strings |
 //! | annotations | `annotations` `{type, pos?, angle?, text?, width?}` | the same with `position` `"{x, y}"` |
 //! | image | `backgroundImage` `{imagePath, pos, scale, angle, slant, crop [x, y, w, h], alpha, locked}` | `transform` `"{a, b, c, d, tx, ty}"`, `crop` `"{{x, y}, {w, h}}"`, `locked = "1"` |
 //! | background | `background` `{shapes, anchors, guides, hints, annotations, backgroundImage}` | `paths` and `components` for `shapes`, `guideLines` for `guides` |
@@ -537,14 +537,87 @@ fn take_content(d: &mut Dict, version: u32) -> Content {
 
 fn push_content(e: &mut Vec<(Str, Value)>, c: Content, version: u32, at: &str) -> Result<()> {
     push_list(e, guide_key(version), &c.guides, |g| write_guide(g, version), at)?;
-    // Hints of another format have no place here; [`losses`] lists them.
-    let hints: Vec<&Hint> = c.hints.iter().filter(|h| h.family == fontcraft_model::Family::Glyphs).collect();
-    push_list(e, "hints", &hints, |h| Some(h.value.clone()), at)?;
+    // Hints read from a UFO are converted; those of other formats have no place here, and
+    // [`losses`] lists them.
+    let hints: Vec<Value> = c.hints.iter().filter_map(|h| hint_value(h, version)).collect();
+    push_list(e, "hints", &hints, |h| Some(h.clone()), at)?;
     push_list(e, "annotations", &c.annotations, |a| write_annotation(a, version), at)?;
     if let Some(i) = &c.image {
         e.push(("backgroundImage".into(), write_image(i, version).ok_or_else(|| bad(at, "an image value is not a finite number"))?));
     }
     Ok(())
+}
+
+/// A hint as this version writes it: as stored, or converted from the dictionary a UFO's
+/// glyphsLib key holds ([`hint_from_ufo`]). `None` for a hint of another format.
+fn hint_value(h: &Hint, version: u32) -> Option<Value> {
+    match h.family {
+        fontcraft_model::Family::Glyphs => Some(h.value.clone()),
+        fontcraft_model::Family::Ufo => hint_from_ufo(&h.value, version),
+        _ => None,
+    }
+}
+
+/// A hint read from a UFO, glyphsLib's dictionary (`builder/hints.py`, Apache-2.0; see `NOTICE`),
+/// in this version's form: keys sorted, defaults left out (`horizontal` false, `options` 0,
+/// `stem` -2, an empty `name` or `type`), node index paths and points as lists, in version 2 as
+/// brace strings. `None` when a key or value has no such form.
+pub(crate) fn hint_from_ufo(v: &Value, version: u32) -> Option<Value> {
+    let d = v.as_dict()?;
+    let number = |n: Num| -> Option<Value> {
+        match n {
+            Num::Int(i) => Some(int(i)),
+            Num::Float(f) => num(f, "hint").ok(),
+        }
+    };
+    let numbers = |a: &Array| a.items.iter().map(|x| x.as_num().map(Num::as_f64).filter(|f| f.is_finite())).collect::<Option<Vec<f64>>>();
+    let compact = |items: Vec<Value>| Value::Array(Array { items, layout: Layout::Compact, ..Default::default() });
+    let mut e: Vec<(Str, Value)> = Vec::new();
+    for (k, x) in &d.entries {
+        let key = k.as_str();
+        let item = match key {
+            "horizontal" => x.as_bool()?.then(|| int(1)),
+            "name" | "type" => Some(x.as_str()?).filter(|t| !t.is_empty()).map(string),
+            "options" => match x.as_num()? {
+                n if n.as_f64() == 0.0 => None,
+                n => Some(number(n)?),
+            },
+            "stem" => match x.as_num()? {
+                n if n.as_f64() == -2.0 => None,
+                n => Some(number(n)?),
+            },
+            "origin" | "other1" | "other2" | "target" => Some(match x {
+                Value::String(t) if key == "target" && matches!(t.as_str(), "up" | "down") => string(t.as_str()),
+                // A side bearing, `origin = lsb;`.
+                Value::Array(a) if matches!(a.items.as_slice(), [Value::String(_)]) => string(a.items.first()?.as_str()?),
+                Value::Array(a) if version == 2 => string(&crate::v2::braced(&numbers(a)?)),
+                Value::Array(a) => compact(
+                    a.items
+                        .iter()
+                        .map(|i| match i {
+                            Value::String(t) => Some(string(t.as_str())),
+                            other => other.as_num().and_then(number),
+                        })
+                        .collect::<Option<Vec<_>>>()?,
+                ),
+                _ => return None,
+            }),
+            "place" | "scale" => {
+                let n = numbers(x.as_array()?)?;
+                Some(if version == 2 {
+                    string(&crate::v2::braced(&n))
+                } else {
+                    compact(n.into_iter().map(|f| num(f, "hint").ok()).collect::<Option<Vec<_>>>()?)
+                })
+            }
+            _ => return None,
+        };
+        if let Some(item) = item {
+            e.push((key.into(), item));
+        }
+    }
+    e.sort_by(|a, b| a.0.as_str().as_bytes().cmp(b.0.as_str().as_bytes()));
+    Some(Value::Dict(Dict { entries: e, layout: Layout::Multiline, ..Default::default() }))
 }
 
 // ── background ─────────────────────────────────────────────────────────────────────────────────
@@ -696,7 +769,7 @@ pub(crate) fn losses(glyphs: &[std::sync::Arc<fontcraft_model::Glyph>], version:
     let foreign = layers()
         .filter(|l| {
             let bg = l.info.background.as_ref();
-            l.info.hints.iter().chain(bg.into_iter().flat_map(|b| b.hints.iter())).any(|h| h.family != fontcraft_model::Family::Glyphs)
+            l.info.hints.iter().chain(bg.into_iter().flat_map(|b| b.hints.iter())).any(|h| hint_value(h, version).is_none())
         })
         .count();
     if foreign > 0 {

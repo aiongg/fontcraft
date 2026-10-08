@@ -20,6 +20,7 @@
 //! | master parameters with no `fontinfo.plist` key | `…customParameter.GSFontMaster.<name>` |
 //! | the master's position and its first six design coordinates | `com.schriftgestaltung.fontMasterOrder`; `…customParameter.GSFontMaster.weightValue` … `customValue3` and `com.schriftgestaltung.weightValue`…; written, and read only to check that they still say what the model says |
 //! | the master id, in a single UFO | `com.schriftgestaltung.fontMasterID` (a designspace's source `name` holds it) |
+//! | a glyph's user data | `com.schriftgestaltung.Glyphs.glyphUserData.<glyph>` (`builder/user_data.py`), in every master's UFO |
 //!
 //! **Defaults.** glyphsLib writes several keys whatever their value (`useNiceNames = 1`,
 //! `iconName = ""`, `weight = Regular`…). A new UFO of a document with a `.glyphs` format version
@@ -55,6 +56,8 @@ const WIDTH: &str = "com.schriftgestaltung.width";
 const CUSTOM: &str = "com.schriftgestaltung.customName";
 /// The font's user data in a single UFO.
 pub(crate) const FONT_USER_DATA: &str = "com.schriftgestaltung.Glyphs.fontUserData";
+/// A glyph's user data, the glyph's name after it.
+const GLYPH_USER_DATA: &str = "com.schriftgestaltung.Glyphs.glyphUserData.";
 /// The master id the UFO reader gives a single UFO without [`MASTER_ID`].
 pub(crate) const SINGLE_MASTER_ID: &str = "m01";
 /// The name part glyphsLib writes when a master has none.
@@ -408,6 +411,11 @@ pub(crate) fn entries(c: &Ctx<'_>) -> Entries {
         c.key(&mut out, &format!("{PLAIN}{name}"), None, (i == 0 || v != 0.0).then(|| fontinfo::number(v)), true, "a design coordinate");
     }
     c.params(&mut out, &m.params, false);
+    // Each glyph's user data, in every master's UFO that has a layer of the glyph.
+    for g in font.glyphs.iter().filter(|g| !g.info.user_data.is_empty() && g.layer(&m.id).is_some()) {
+        let data = sorted_keys(Value::Dict(g.info.user_data.0.clone()).without_spellings());
+        c.font_key(&mut out, &format!("{GLYPH_USER_DATA}{}", g.name), Some(data), None, false, "a glyph's user data");
+    }
     out
 }
 
@@ -499,6 +507,16 @@ fn apply(f: &mut Font, designspace: bool, default_id: &str, excluded: &HashSet<A
                     .and_then(|a| a.items.iter().map(|t| t.as_str().map(str::to_string)).collect::<Option<Vec<_>>>())
                     .map(|t| tabs = Some(t)),
                 FONT_USER_DATA if !designspace => v.as_dict().map(|d| info.user_data = UserData(d.clone())),
+                _ if k.starts_with(GLYPH_USER_DATA) => {
+                    let name = k.get(GLYPH_USER_DATA.len()..).unwrap_or_default();
+                    match (v.as_dict(), f.glyphs.get_mut(name)) {
+                        (Some(d), Some(mut g)) if !d.is_empty() => {
+                            g.info.user_data = UserData(d.clone());
+                            Some(())
+                        }
+                        _ => None,
+                    }
+                }
                 _ => {
                     if let Some((name, _, conv)) = OWN_KEYS.iter().find(|(_, key, _)| *key == k) {
                         to_model(*conv, v).map(|v| info.params.0.push(Param::new(*name, v)))

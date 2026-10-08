@@ -36,7 +36,9 @@
 //! guides, read and written by glyphsLib's guideline rules ([`crate::design`]); `<image>` is its
 //! image (`fileName` the path, the six transformation attributes a matrix, `color` kept as
 //! `@color`); the lib's keys other than [`TYPED_LIB`] are its user data. The writer patches the
-//! kept lib: a key whose value still means the same keeps its spelling. GLIF format 1 has no
+//! kept lib: a key whose value still means the same keeps its spelling. The UFO reader and writer
+//! type glyphsLib's keys in that user data ([`crate::glyphkeys`]); [`Head::lib_keys`] hands their
+//! values to the writer. GLIF format 1 has no
 //! guidelines or images; they are not written there.
 //!
 //! The note ([`Glif::note`]) is read as fontTools reads it (each line stripped, blank lines left
@@ -55,6 +57,8 @@
 //! only). As glyphsLib 6.15.0's path builder writes it (`builder/paths.py`, Apache-2.0; see
 //! `NOTICE`), an open contour's `move` point gets no `smooth`; a file's own `smooth` there stays an
 //! attribute of the file (`@smooth`).
+
+use std::collections::BTreeMap;
 
 use fontcraft_model::{
     Anchor, AnchorInfo, ColorLabel, Component, Extra, Family, Guide, Image, Layer, MAX_COORDINATE, MAX_LAYER_GUIDES, Node, NodeInfo, NodeKind, Path,
@@ -458,14 +462,25 @@ fn read_image(el: &Element, style: &Style) -> Option<Image> {
 /// Sets the lib's keys from the layer's user data: a key the user data no longer has goes, a new
 /// one goes in sorted position, and a kept value that means the same stays as written. The keys
 /// of [`TYPED_LIB`] are left to their fields.
-fn patch_user_data(lib: &mut Dict, user: &UserData) {
-    let stale: Vec<String> =
-        lib.entries.iter().map(|(k, _)| k.as_str()).filter(|k| !TYPED_LIB.contains(k) && user.get(k).is_none()).map(str::to_string).collect();
+fn patch_user_data(lib: &mut Dict, user: &UserData, keys: &BTreeMap<String, Value>) {
+    let stale: Vec<String> = lib
+        .entries
+        .iter()
+        .map(|(k, _)| k.as_str())
+        .filter(|k| !TYPED_LIB.contains(k) && user.get(k).is_none() && !keys.contains_key(*k))
+        .map(str::to_string)
+        .collect();
     for k in stale {
         crate::ufo::patch(lib, &k, None);
     }
     for (k, v) in user.0.entries.iter().filter(|(k, _)| !TYPED_LIB.contains(&k.as_str())) {
         crate::ufo::patch(lib, k.as_str(), Some(v.without_spellings()));
+    }
+    // glyphsLib's keys, where the user data does not say otherwise.
+    for (k, v) in keys {
+        if user.get(k).is_none() || crate::shapekeys::MERGED.contains(&k.as_str()) {
+            crate::ufo::patch(lib, k, Some(v.clone()));
+        }
     }
 }
 
@@ -890,7 +905,13 @@ pub struct Head<'a> {
     pub vertical_origin: Option<Option<f64>>,
     /// The advance height.
     pub height: Option<f64>,
+    /// glyphsLib's lib keys for the glyph's, the layer's and the shapes' data
+    /// ([`crate::glyphkeys`]); a key the layer's user data has is written as the user data says.
+    pub lib_keys: &'a BTreeMap<String, Value>,
 }
+
+/// No lib keys.
+pub static NO_KEYS: BTreeMap<String, Value> = BTreeMap::new();
 
 impl<'a> Head<'a> {
     /// A file that holds what was read: the note as read, the lib as it is.
@@ -903,13 +924,14 @@ impl<'a> Head<'a> {
             mark_color: MarkColor::Keep,
             vertical_origin: None,
             height: g.layer.info.vert_width.or(kept),
+            lib_keys: &NO_KEYS,
         }
     }
 }
 
 /// Writes a layer as a GLIF file of `format` (1 or 2).
 pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Result<String> {
-    let Head { name, unicodes, note, mark_color, vertical_origin, height } = head;
+    let Head { name, unicodes, note, mark_color, vertical_origin, height, lib_keys } = head;
     let x = &layer.extra;
     let mut root = glyph_el(name, format, x);
     apply_tag(&mut root, x, "<glyph");
@@ -1016,7 +1038,7 @@ pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Resul
             Some(None) => crate::ufo::patch(&mut lib, VERTICAL_ORIGIN, None),
             Some(Some(y)) => crate::ufo::patch(&mut lib, VERTICAL_ORIGIN, Some(Value::Number(plist_number(y)))),
         }
-        patch_user_data(&mut lib, &layer.info.user_data);
+        patch_user_data(&mut lib, &layer.info.user_data, lib_keys);
     }
     if !lib.is_empty() {
         let lib = Value::Dict(lib);
@@ -1319,7 +1341,7 @@ hello
     fn a_shape_another_format_kept_is_left_out() {
         let mut l = Layer::new("m", 500.0);
         l.shapes.push(Shape::Raw(RawShape { family: Family::Glyphs, value: s("{closed = 1;}") }));
-        let head = Head { name: "a", unicodes: &[], note: "", mark_color: MarkColor::Keep, vertical_origin: None, height: None };
+        let head = Head { name: "a", unicodes: &[], note: "", mark_color: MarkColor::Keep, vertical_origin: None, height: None, lib_keys: &NO_KEYS };
         let out = write(head, &l, 2, &Style::fonttools()).unwrap();
         assert!(!out.contains("<outline"), "{out}");
     }

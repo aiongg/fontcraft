@@ -219,25 +219,33 @@ fn color_form(c: &Option<ColorLabel>) -> Option<(Option<u8>, [i64; 4])> {
     })
 }
 
+/// What a glyph's metrics keys hold: the left, right and width keys glyphsLib's lib keys carry,
+/// and the rest.
+fn metrics_keys(k: &fontcraft_model::MetricsKeys) -> (String, String) {
+    (format!("{:?}", (&k.left, &k.right, &k.width)), format!("{:?}", (&k.top, &k.bottom, &k.vert_width, &k.vert_origin)))
+}
+
 /// The glyphs' code points, export flags and metadata. Each difference names the kind of
-/// metadata as the loss reports do, so a listed loss excuses it.
+/// metadata as the loss reports do, so a listed loss excuses it; data that travels in
+/// glyphsLib's lib keys has names no loss report uses.
 fn glyphs_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
     type Field = fn(&GlyphInfo) -> String;
-    let fields: [(&str, Field); 15] = [
+    let fields: [(&str, Field); 16] = [
         ("the glyphs' production names", |i| format!("{:?}", i.production)),
         ("the glyphs' OpenType categories", |i| format!("{:?}", i.opentype_category)),
-        (GLYPH_LOSSES[0], |i| format!("{:?}", (&i.category, &i.sub_category, &i.script))),
-        (GLYPH_LOSSES[1], |i| format!("{:?}", (&i.case, &i.direction))),
-        (GLYPH_LOSSES[2], |i| format!("{:?}", i.metrics_keys)),
-        (GLYPH_LOSSES[3], |i| format!("{:?}", i.tags)),
-        (GLYPH_LOSSES[4], |i| format!("{:?}", i.locked)),
-        (GLYPH_LOSSES[5], |i| format!("{:?}", i.last_change)),
-        (GLYPH_LOSSES[6], |i| format!("{:?}", (&i.sort_name, &i.sort_name_keep))),
-        (GLYPH_LOSSES[7], |i| format!("{:?}", i.parts)),
-        (GLYPH_LOSSES[8], |i| format!("{:?}", fontcraft_model::plist::Value::Dict(i.user_data.0.clone()).without_spellings())),
-        (GLYPH_LOSSES[10], |i| i.note.clone()),
+        ("travelling: the glyphs' categories, subcategories and scripts", |i| format!("{:?}", (&i.category, &i.sub_category, &i.script))),
+        (GLYPH_LOSSES[0], |i| format!("{:?}", (&i.case, &i.direction))),
+        ("travelling: the glyphs' left, right and width metrics keys", |i| metrics_keys(&i.metrics_keys).0),
+        (GLYPH_LOSSES[1], |i| metrics_keys(&i.metrics_keys).1),
+        (GLYPH_LOSSES[2], |i| format!("{:?}", i.tags)),
+        (GLYPH_LOSSES[3], |i| format!("{:?}", i.locked)),
+        (GLYPH_LOSSES[4], |i| format!("{:?}", i.last_change)),
+        (GLYPH_LOSSES[5], |i| format!("{:?}", (&i.sort_name, &i.sort_name_keep))),
+        (GLYPH_LOSSES[6], |i| format!("{:?}", i.parts)),
+        ("travelling: the glyphs' user data", |i| user_data_form(&i.user_data)),
+        (GLYPH_LOSSES[8], |i| i.note.clone()),
         // An index: the label colours; components: 8-bit ones survive a UFO.
-        (GLYPH_LOSSES[9], |i| format!("{:?}", color_form(&i.color).map(|c| c.0))),
+        (GLYPH_LOSSES[7], |i| format!("{:?}", color_form(&i.color).map(|c| c.0))),
         ("the glyphs' colours, rounded to 8 bits", |i| format!("{:?}", color_form(&i.color).map(|c| c.1))),
         ("the glyphs' colours", |i| format!("{:?}", i.color.is_some())),
     ];
@@ -275,7 +283,8 @@ fn drawing(shapes: &[Shape], anchors: &[Anchor]) -> String {
                     .nodes
                     .iter()
                     .enumerate()
-                    .map(|(i, n)| (n.x, n.y, n.kind, n.smooth && (p.closed || i > 0), &n.info.name, &n.info.identifier))
+                    // `-0` in a file reads as -0.0; other formats write 0.
+                    .map(|(i, n)| (n.x + 0.0, n.y + 0.0, n.kind, n.smooth && (p.closed || i > 0), &n.info.name, &n.info.identifier))
                     .collect();
                 format!("{:?}", (p.closed, nodes, &p.info.identifier))
             }
@@ -288,35 +297,59 @@ fn drawing(shapes: &[Shape], anchors: &[Anchor]) -> String {
     format!("{shapes:?} {anchors:?}")
 }
 
+/// What glyphsLib's lib keys carry of the shapes: node user data and other attribute keys, the
+/// components' alignment, anchors, locks and smart values (in property order), anchor user data.
+const SHAPE_TRAVELS: [&str; 3] = ["travelling: the nodes' user data", "travelling: the components' placement", "travelling: the anchors' user data"];
+
 /// The shape data a UFO has no place for, one projection per kind of [`SHAPE_LOSSES`]
-/// (identifiers, which a UFO 3 holds, are in [`drawing`]).
-fn shape_fields(shapes: &[Shape], anchors: &[Anchor]) -> [String; 9] {
-    let mut out: [Vec<String>; 9] = Default::default();
+/// (identifiers, which a UFO 3 holds, are in [`drawing`]), then those of [`SHAPE_TRAVELS`]. In a
+/// background, component placement is [`SHAPE_LOSSES`]`[4]`.
+fn shape_fields(shapes: &[Shape], anchors: &[Anchor], background: bool) -> Vec<(&'static str, String)> {
+    let mut out: [Vec<String>; 13] = Default::default();
     for s in shapes {
         match s {
             Shape::Path(p) => {
                 out[0].push(format!("{:?}", (p.info.locked, &p.info.attrs)));
-                out[1].push(format!("{:?}", p.nodes.iter().map(|n| (n.locked, n.orientation, &n.info.user_data)).collect::<Vec<_>>()));
+                out[1].push(format!("{:?}", p.nodes.iter().map(|n| (n.locked, n.orientation)).collect::<Vec<_>>()));
                 out[2].push(format!("{:?}", p.nodes.iter().map(|n| n.tangent).collect::<Vec<_>>()));
                 out[3].push(format!("{:?}", !p.closed && p.nodes.first().is_some_and(|n| n.smooth)));
+                let attr = |n: &fontcraft_model::Node| n.info.extra.get(Family::Glyphs, "attr").map(canonical);
+                out[10].push(format!("{:?}", p.nodes.iter().map(|n| (user_data_form(&n.info.user_data), attr(n))).collect::<Vec<_>>()));
             }
             Shape::Component(c) => {
                 let i = &*c.info;
-                out[4].push(format!("{:?}", (i.alignment, &i.anchor)));
-                out[5].push(format!("{:?}", i.smart_values));
-                out[6].push(format!("{:?}", (i.locked, &i.master_id, i.orientation, &i.attrs, &i.user_data)));
+                let mut smart: Vec<_> = i.smart_values.iter().map(|v| (v.property.clone(), v.value)).collect();
+                smart.sort_by(|a, b| a.0.cmp(&b.0));
+                if let Some(v) = out.get_mut(if background { 4 } else { 11 }) {
+                    v.push(format!("{:?}", (i.alignment, &i.anchor, i.locked, smart)));
+                }
+                out[5].push(format!("{:?}", (&i.master_id, i.orientation, &i.attrs, &i.user_data)));
             }
             Shape::Image(i) => out[8].push(format!("{i:?}")),
             Shape::Raw(_) => {}
         }
     }
-    out[7] = anchors.iter().map(|a| format!("{:?}", (a.info.locked, a.info.orientation, &a.info.user_data))).collect();
-    out.map(|v| v.join(" "))
+    out[6] = anchors.iter().map(|a| format!("{:?}", (a.info.locked, a.info.orientation))).collect();
+    out[12] = anchors.iter().map(|a| user_data_form(&a.info.user_data)).collect();
+    out.into_iter()
+        .enumerate()
+        .filter(|(k, _)| *k != 7 && *k != 9)
+        .map(|(k, v)| {
+            let what = match k {
+                10 => SHAPE_TRAVELS[0],
+                11 => SHAPE_TRAVELS[1],
+                12 => SHAPE_LOSSES[7],
+                _ => SHAPE_LOSSES.get(k).copied().unwrap_or(""),
+            };
+            (what, v.join(" "))
+        })
+        .collect()
 }
 
-/// What of an image a UFO holds: the file and the matrix.
+/// What of an image a UFO holds: the file and the matrix, and in glyphsLib's keys the crop, the
+/// opacity and the lock.
 fn image_form(i: &Option<Image>) -> String {
-    format!("{:?}", i.as_ref().map(|i| (&i.path, i.transform.affine().as_coeffs())))
+    format!("{:?}", i.as_ref().map(|i| (&i.path, i.transform.affine().as_coeffs(), i.crop, i.alpha, i.locked)))
 }
 
 fn guides_form(g: &[Guide]) -> Vec<(f64, f64, f64, String, bool)> {
@@ -327,13 +360,20 @@ fn background_form(b: &Option<Background>) -> String {
     format!("{:?}", b.as_ref().map(|b| (drawing(&b.shapes, &b.anchors), guides_form(&b.guides), image_form(&b.image))))
 }
 
+/// Hints in glyphsLib's form, whatever format they were read from.
+fn hints_form(h: &[fontcraft_model::Hint]) -> Vec<String> {
+    h.iter().map(|h| fontcraft_io_ufo::glyphkeys::hint_to_ufo(h).map_or_else(|| format!("{h:?}"), |(v, _)| canonical(&v))).collect()
+}
+
 /// The layers a UFO holds: each master layer and each other layer that has a UFO layer, matched
-/// by the UFO layer's name (a second layer of one name in a glyph comes back as `<name> #<n>`).
-/// Each difference names the kind of data as the loss report does, so a listed loss excuses it.
+/// by the UFO layer's name (a second layer of one name in a glyph comes back as `<name> #<n>`),
+/// and their order in the glyph. Each difference names the kind of data as the loss report does,
+/// so a listed loss excuses it.
 fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
     for g in font.glyphs.iter() {
         let Some(b) = back.glyph(&g.name) else { continue };
         let mut used: Vec<&str> = Vec::new();
+        let mut positions: Vec<usize> = Vec::new();
         for l in &g.layers {
             let at = format!("glyph `{}` layer `{}`", g.name, l.id);
             let found = if l.is_master_layer() {
@@ -361,56 +401,68 @@ fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
                 diffs.push(format!("{at}: missing"));
                 continue;
             };
+            positions.extend(b.layers.iter().position(|y| std::ptr::eq(y, x)));
             if l.is_master_layer() && l.info.name.is_some() {
                 diffs.push(format!("{}: {at} {:?}", LAYER_LOSSES[0], l.info.name));
             }
             let master = font.masters.iter().find(|m| m.id == l.master);
             let default = master.and_then(|m| fontcraft_io_ufo::ufo::default_vertical_width(font, m));
             let width = |l: &Layer| l.info.vert_width.filter(|v| *v != 0.0 && Some(*v) != default);
-            let checks: [(&str, String, String); 9] = [
+            let bg_hints = |l: &Layer| l.info.background.as_ref().map(|b| hints_form(&b.hints));
+            let bg_notes = |l: &Layer| l.info.background.as_ref().map(|b| format!("{:?}", b.annotations));
+            let notes =
+                |l: &Layer| format!("{:?}", l.info.annotations.iter().map(|a| (&a.kind, a.x, a.y, a.angle, &a.text, a.width)).collect::<Vec<_>>());
+            let checks: [(&str, String, String); 15] = [
                 ("the layer's width", format!("{}", l.width), format!("{}", x.width)),
                 ("the layer's drawing", drawing(&l.shapes, &l.anchors), drawing(&x.shapes, &x.anchors)),
                 (LAYER_LOSSES[1], format!("{:?}", l.info.attrs), format!("{:?}", x.info.attrs)),
                 (LAYER_LOSSES[2], format!("{:?}", width(l)), format!("{:?}", width(x))),
                 (LAYER_LOSSES[3], format!("{:?}", l.info.vert_origin.filter(|o| *o != 0.0)), format!("{:?}", x.info.vert_origin)),
-                (LAYER_LOSSES[11], format!("{:?}", guides_form(&l.info.guides)), format!("{:?}", guides_form(&x.info.guides))),
-                ("the layer's image", image_form(&l.info.image), image_form(&x.info.image)),
-                ("the layer's background", background_form(&l.info.background), background_form(&x.info.background)),
                 (
-                    "the layer's user data",
-                    format!("{:?}", fontcraft_model::plist::Value::Dict(l.info.user_data.0.clone()).without_spellings()),
-                    format!("{:?}", fontcraft_model::plist::Value::Dict(x.info.user_data.0.clone()).without_spellings()),
+                    "travelling: the layer's left, right and width metrics keys",
+                    metrics_keys(&l.info.metrics_keys).0,
+                    metrics_keys(&x.info.metrics_keys).0,
                 ),
+                (LAYER_LOSSES[4], metrics_keys(&l.info.metrics_keys).1, metrics_keys(&x.info.metrics_keys).1),
+                (
+                    LAYER_LOSSES[7],
+                    format!("{:?}", (hints_form(&l.info.hints), bg_hints(l))),
+                    format!("{:?}", (hints_form(&x.info.hints), bg_hints(x))),
+                ),
+                (LAYER_LOSSES[8], format!("{:?}", (notes(l), bg_notes(l))), format!("{:?}", (notes(x), bg_notes(x)))),
+                (LAYER_LOSSES[11], format!("{:?}", guides_form(&l.info.guides)), format!("{:?}", guides_form(&x.info.guides))),
+                (LAYER_LOSSES[9], image_form(&l.info.image), image_form(&x.info.image)),
+                ("the layer's background", background_form(&l.info.background), background_form(&x.info.background)),
+                ("the layer's user data", user_data_form(&numbered(&l.info.user_data)), user_data_form(&numbered(&x.info.user_data))),
+                ("booleans in user data", user_data_form(&l.info.user_data), user_data_form(&x.info.user_data)),
+                ("the layer's kind", format!("{:?}", l.is_master_layer()), format!("{:?}", x.is_master_layer())),
             ];
             for (what, before, after) in checks {
                 if before != after {
                     diffs.push(format!("{what}: {at} {before} → {after}"));
                 }
             }
-            let fields = |l: &Layer| {
-                let bg = l.info.background.as_ref();
-                let shapes: Vec<Shape> = l.shapes.iter().chain(bg.into_iter().flat_map(|b| b.shapes.iter())).cloned().collect();
-                let anchors: Vec<Anchor> = l.anchors.iter().chain(bg.into_iter().flat_map(|b| b.anchors.iter())).cloned().collect();
-                shape_fields(&shapes, &anchors)
-            };
-            for ((what, before), after) in SHAPE_LOSSES.iter().zip(fields(l)).zip(fields(x)) {
-                if before != after {
-                    diffs.push(format!("{what}: {at} {before} → {after}"));
+            for background in [false, true] {
+                let fields = |l: &Layer| match (background, l.info.background.as_ref()) {
+                    (false, _) => shape_fields(&l.shapes, &l.anchors, false),
+                    (true, Some(b)) => shape_fields(&b.shapes, &b.anchors, true),
+                    (true, None) => shape_fields(&[], &[], true),
+                };
+                for ((what, before), (_, after)) in fields(l).into_iter().zip(fields(x)) {
+                    if before != after {
+                        diffs.push(format!("{what}: {at} {before} → {after}"));
+                    }
                 }
             }
-            let lost: [(&str, bool); 6] = [
-                (LAYER_LOSSES[4], !l.info.metrics_keys.is_empty()),
-                (LAYER_LOSSES[5], l.info.color.is_some()),
-                (LAYER_LOSSES[6], l.info.visible),
-                (LAYER_LOSSES[7], !l.info.hints.is_empty() || l.info.background.as_ref().is_some_and(|b| !b.hints.is_empty())),
-                (LAYER_LOSSES[8], !l.info.annotations.is_empty() || l.info.background.as_ref().is_some_and(|b| !b.annotations.is_empty())),
-                (LAYER_LOSSES[9], l.info.image.as_ref().is_some_and(|i| i.crop.is_some() || i.alpha.is_some() || i.locked)),
-            ];
+            let lost: [(&str, bool); 2] = [(LAYER_LOSSES[5], l.info.color.is_some()), (LAYER_LOSSES[6], l.info.visible)];
             for (what, on) in lost {
                 if on {
                     diffs.push(format!("{what}: {at}"));
                 }
             }
+        }
+        if positions.windows(2).any(|w| matches!(w, [a, b] if a > b)) {
+            diffs.push(format!("travelling: the layers' order: glyph `{}` {positions:?}", g.name));
         }
     }
 }
@@ -514,6 +566,22 @@ fn canonical(v: &Value) -> String {
     format!("{:?}", sort(v))
 }
 
+/// User data with every boolean as the number a `.glyphs` file holds for it.
+fn numbered(u: &UserData) -> UserData {
+    fn walk(v: &Value) -> Value {
+        match v {
+            Value::Bool(b) => Value::Number(fontcraft_model::plist::Number::int(i64::from(*b))),
+            Value::Dict(d) => Value::Dict(Dict { entries: d.entries.iter().map(|(k, v)| (k.clone(), walk(v))).collect(), ..Default::default() }),
+            Value::Array(a) => Value::Array(Array { items: a.items.iter().map(walk).collect(), ..Default::default() }),
+            other => other.clone(),
+        }
+    }
+    match walk(&Value::Dict(u.0.clone())) {
+        Value::Dict(d) => UserData(d),
+        _ => UserData::default(),
+    }
+}
+
 fn user_data_form(u: &UserData) -> String {
     canonical(&Value::Dict(u.0.clone()))
 }
@@ -614,6 +682,8 @@ fn font_information_survives_a_designspace() {
     let (mut layered, mut backgrounds, mut layer_guides, mut images) = (0, 0, 0, 0);
     let (mut kerned, mut grouped, mut featured, mut labelled) = (0, 0, 0, 0);
     let (mut user_data, mut settings, mut tabs, mut lib_params, mut icons) = (0, 0, 0, 0, 0);
+    // What glyphsLib's glyph, layer and shape keys carry.
+    let mut exercised: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
     for path in &all {
         let text = std::fs::read_to_string(path).unwrap();
         if !text.lines().take(3).any(|l| l.starts_with(".appVersion = "))
@@ -649,6 +719,32 @@ fn font_information_survives_a_designspace() {
         let carried = |p: &Params| p.0.iter().any(fontcraft_io_ufo::ufo::lib_carries);
         lib_params += usize::from(carried(&font.info.params) || font.masters.iter().any(|m| carried(&m.params)));
         icons += usize::from(font.masters.iter().any(|m| m.icon.is_some()));
+        let glyph_has = |f: &dyn Fn(&GlyphInfo) -> bool| font.glyphs.iter().any(|g| f(&g.info));
+        let layers = || font.glyphs.iter().flat_map(|g| g.layers.iter());
+        let shapes = || layers().flat_map(|l| l.shapes.iter());
+        let components = || shapes().filter_map(|s| if let Shape::Component(c) = s { Some(c) } else { None });
+        let kinds: [(&str, bool); 15] = [
+            ("categories", glyph_has(&|i| i.category.is_some() || i.script.is_some())),
+            ("glyph metrics keys", glyph_has(&|i| i.metrics_keys.left.is_some() || i.metrics_keys.right.is_some())),
+            ("glyph user data", glyph_has(&|i| !i.user_data.is_empty())),
+            ("last changes", glyph_has(&|i| i.last_change.is_some())),
+            ("smart-glyph properties", glyph_has(&|i| !i.parts.is_empty())),
+            ("layer metrics keys", layers().any(|l| !l.info.metrics_keys.is_empty())),
+            ("hints", layers().any(|l| !l.info.hints.is_empty())),
+            ("annotations", layers().any(|l| !l.info.annotations.is_empty())),
+            ("image crops and locks", layers().any(|l| l.info.image.as_ref().is_some_and(|i| i.crop.is_some() || i.locked))),
+            ("colour palette layers", layers().any(|l| l.info.attrs.color_palette.is_some())),
+            ("paths and components in one layer", layers().any(|l| {
+                l.shapes.iter().any(|s| matches!(s, Shape::Path(_))) && l.shapes.iter().any(|s| matches!(s, Shape::Component(_)))
+            })),
+            ("component alignment and anchors", components().any(|c| c.info.anchor.is_some() || c.info.alignment != fontcraft_model::Alignment::Default)),
+            ("smart-component values", components().any(|c| !c.info.smart_values.is_empty())),
+            ("node user data", shapes().any(|s| matches!(s, Shape::Path(p) if p.nodes.iter().any(|n| !n.info.user_data.is_empty() || n.info.extra.get(Family::Glyphs, "attr").is_some())))),
+            ("anchor user data", layers().any(|l| l.anchors.iter().any(|a| !a.info.user_data.is_empty()))),
+        ];
+        for (what, on) in kinds {
+            *exercised.entry(what).or_default() += usize::from(on);
+        }
         let losses = designspace::info_losses(&font);
         for d in info_trip(&font) {
             let listed = losses.iter().any(|l| d.contains(l.split(" (").next().unwrap_or(l).split(':').next().unwrap_or(l)));
@@ -674,6 +770,9 @@ fn font_information_survives_a_designspace() {
         "{user_data} with font user data, {settings} with settings a lib holds, {tabs} with edit-tab texts, {lib_params} with parameters a lib holds, {icons} with master icons"
     );
     assert!(user_data > 0 && settings > 0 && tabs > 0 && lib_params > 0 && icons > 0, "the corpus exercises glyphsLib's font and master lib keys");
+    eprintln!("sources with what glyphsLib's glyph, layer and shape keys carry: {exercised:?}");
+    let missing: Vec<&&str> = exercised.iter().filter(|(_, n)| **n == 0).map(|(k, _)| k).collect();
+    assert!(missing.is_empty(), "the corpus exercises glyphsLib's glyph, layer and shape keys; not: {missing:?}");
 }
 
 /// The font's and each master's own parameters that a UFO's lib holds, compared by name and
@@ -767,6 +866,7 @@ fn axes_and_instances_survive_a_glyphs_file() {
         axes_trip(&font, &again, &mut diffs);
         instances_trip(&font, &again, &mut diffs);
         glyphs_trip(&font, &again, &mut diffs);
+        layers_trip(&font, &again, &mut diffs);
         kerning_trip(&font, &again, &mut diffs);
         features_trip(&font, &again, &mut diffs);
         lib_trip(&font, &again, &mut diffs);
@@ -827,6 +927,8 @@ fn kerning_groups_and_features_survive_a_glyphs_file() {
         let mut losses = fontcraft_io_glyphs::info_losses(&font);
         losses.extend(fontcraft_io_ufo::ufo::info_losses(&back));
         let mut diffs = Vec::new();
+        glyphs_trip(&font, &again, &mut diffs);
+        layers_trip(&font, &again, &mut diffs);
         kerning_trip(&font, &again, &mut diffs);
         features_trip(&font, &again, &mut diffs);
         lib_trip(&font, &again, &mut diffs);

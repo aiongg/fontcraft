@@ -30,9 +30,11 @@ pub mod designspace;
 pub mod features;
 mod fontinfo;
 pub mod glif;
+pub mod glyphkeys;
 pub mod kerning;
 pub(crate) mod libkeys;
 pub mod names;
+mod shapekeys;
 pub mod ufo;
 pub mod zip;
 

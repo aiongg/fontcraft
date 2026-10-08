@@ -41,9 +41,10 @@ command with hostile parameters. The whole gate
 **What is not.** There is no drawing with the pointer, no selection of nodes, no path operations,
 no kerning editing, no components beyond flattening at export, no feature compilation, no
 variable fonts, no CFF export, no hinting, no WOFF2, no screenshots over the control channel,
-no web app, no packaging. Glyphs-only data of glyphs, layers and shapes (special layers, smart
-and corner components, metrics keys, component alignment) does not yet travel into UFO lib keys;
-that of the font and the masters does. Kerning, features and
+no web app, no packaging. Glyphs-only data travels in glyphsLib's UFO lib keys where glyphsLib
+has a key for it; alternate and intermediate layers (designspace rules and sources) and the data
+no key holds (glyph tags, locks, sort names, layer colours, drawing attributes…) do not yet, and
+the loss report lists them. Kerning, features and
 instances are read and written, not yet edited or compiled. Edit View shows a glyph; it does not edit one.
 
 **How much to trust the inventory.** It was compiled from public documentation in one day, each
@@ -60,7 +61,7 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 |---|---|---|
 | **Breadth:** commands, tools and panels exist | ~3% | 32 of 920 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
-| **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. Missing: glyph, layer and shape data in UFO lib keys, alternate layers as designspace rules, OTF/CFF export, variable, WOFF2, version conversion |
+| **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out. Missing: alternate layers as designspace rules, OTF/CFF export, variable, WOFF2, version conversion |
 | **Compiler correctness** | unmeasured | 10 of 50 tables written, for one static flavour; read back by two independent readers; one code review's findings fixed (bounds, names, style linking); **no oracle comparison yet** (the harness is M2) |
 | **Agent automation** | ~40% | every existing command is reachable from CLI, control channel and MCP; no pointer injection, dialogs, screenshots, resources or prompts yet |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests); one dependency panic found and fenced; one adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, no corpus runs, and the known scaling limits in `docs/status.md` |
@@ -75,8 +76,9 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
    keys. Steps 1 to 4 done (font information in every format; `.glyphs` masters, instances,
    stems, guides; UFO zones, stems, guidelines; designspace axes and instances; glyph
    metadata; layers in every format; shapes in every format; kerning context, groups, feature
-   labels and the feature-file markers; glyphsLib's lib keys for the font and the masters);
-   step 8b (glyphsLib's glyph, layer and shape lib keys) next.
+   labels and the feature-file markers; glyphsLib's lib keys for the font, the masters, the
+   glyphs, the layers and the shapes). Left: alternate and intermediate layers as designspace
+   rules and sources, then the M1.7 measures (`docs/plans/M1.md` § M1.7).
 2. **M2, the compile core and the oracle harness** (plan accepted, `docs/plans/M2.md`): the
    remaining static tables, the `cff` crate, WOFF and WOFF2, `fontcraft-cli oracle`, and a first
    corpus-wide comparison with fontc and fontmake. From this
@@ -141,8 +143,13 @@ on, so the engine track, where oracles prove correctness, goes first.
   same text. The font's settings, app version, edit-tab texts, user data and custom parameters
   with no font-info key, and the masters' icons, name parts and such parameters travel in
   glyphsLib's UFO lib keys and are read back from them where they say what the model would
-  write. Numbers, stem names, master visibility, and right-to-left, vertical and contextual
-  kerning are not yet written to UFO (glyphsLib has no key for them).
+  write. So do the glyphs' categories, scripts, last changes, metrics keys, smart-glyph
+  properties and user data, the layers' metrics keys, hints, annotations, image crops, colour
+  palette entries, ids and order, the UFO layer libs, and the shapes' order, the components'
+  alignment, anchors, locks and smart values, node user data and anchor user data. Numbers,
+  stem names, master visibility, glyph tags, locks and sort names, layer colours, drawing
+  attributes, and right-to-left, vertical and contextual kerning are not yet written to UFO
+  (glyphsLib has no key for them).
 - **Compiler:** static TrueType from the first master, deterministic.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
@@ -159,7 +166,7 @@ measured by what works (the parity table below and the measures in each mileston
 | # | Milestone | Status | Commands (live) |
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
-| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress: font information done; `.glyphs` masters and instances typed; UFO zones, stems and guidelines typed; designspace axes and instances typed; glyph metadata typed; layers typed, and in UFO by glyphsLib's layer names (alternate layers and intermediate sources not yet); shapes typed (in UFO: joins, names, identifiers); kerning context, UFO groups and feature-file markers typed (UFO has no place for right-to-left, vertical or contextual kerning yet); glyphsLib's lib keys for the font and masters done, for glyphs, layers and shapes not yet | 10 (10) |
+| M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | 🔶 formats done; M1.7 (typed model, glyphsLib lib keys) in progress: font information done; `.glyphs` masters and instances typed; UFO zones, stems and guidelines typed; designspace axes and instances typed; glyph metadata typed; layers typed, and in UFO by glyphsLib's layer names (alternate layers and intermediate sources not yet); shapes typed (in UFO: joins, names, identifiers); kerning context, UFO groups and feature-file markers typed (UFO has no place for right-to-left, vertical or contextual kerning yet); glyphsLib's lib keys for the font, masters, glyphs, layers and shapes done (what glyphsLib has no key for is reported) | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ⬜ plan accepted, next | 6 (1) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
@@ -202,7 +209,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | PostScript hinting | 3 | 27 | 0 | 0% | everything |
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
-| Source formats | 6 | 14 | 5 | 55% | WOFF2 import; glyph, layer and shape data in UFO lib keys; special layers to UFO and designspace rules; STAT labels derived from instances; UFO 1; shape groups, gradients and shadows kept as stored values; right-to-left, vertical and contextual kerning in UFO; version conversion |
+| Source formats | 6 | 14 | 5 | 55% | WOFF2 import; Glyphs-only data glyphsLib has no UFO key for; special layers to UFO and designspace rules; STAT labels derived from instances; UFO 1; shape groups, gradients and shadows kept as stored values; right-to-left, vertical and contextual kerning in UFO; version conversion |
 | Compiling | 9 | 11 | 1 | 2% | static TrueType core tables; no oracle comparison |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
 | Command-line tools | 8 | 42 | 4 | 1% | `commands`, `run`, `convert`, `info`, `tables list`, `glyphs list`; no dump, subset, instance, merge |

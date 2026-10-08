@@ -61,6 +61,34 @@ fn census(c: &mut Census, source: usize, f: &Font) {
     for s in f.features.prefixes.iter().chain(&f.features.classes).chain(&f.features.features) {
         add(c, source, "snippet", &s.extra);
     }
+    // glyphsLib's lib keys a UFO's reader left as user data (glyph, layer and shape keys in
+    // the GLIF libs; glyph user data in the masters' libs). Layer libs are master user data by
+    // glyphsLib's rule.
+    if matches!(f.source.format, SourceFormat::Ufo | SourceFormat::Designspace) {
+        let glyphslib =
+            |k: &str| k.starts_with("com.schriftgestaltung.") || k == "public.objectLibs" || k.starts_with("com.github.googlei18n.ufo2ft.colorLayer");
+        // A key with a name or numbers after a prefix counts as the prefix.
+        let short = |k: &str| {
+            for p in ["nodeUserData.", "glyphUserData.", "layerOrderInGlyph."] {
+                if let Some((head, _)) = k.split_once(p) {
+                    return format!("{head}{p}*");
+                }
+            }
+            k.to_string()
+        };
+        for g in f.glyphs.iter() {
+            for l in &g.layers {
+                for (k, _) in l.info.user_data.0.entries.iter().filter(|(k, _)| glyphslib(k.as_str())) {
+                    tally(c, source, "ufo", "untyped lib key", &short(k.as_str()), 1);
+                }
+            }
+        }
+        for m in f.masters.iter() {
+            for (k, _) in m.user_data.0.entries.iter().filter(|(k, _)| k.as_str().contains("glyphUserData.")) {
+                tally(c, source, "ufo", "untyped lib key", &short(k.as_str()), 1);
+            }
+        }
+    }
     for g in f.glyphs.iter() {
         add(c, source, "glyph", &g.extra);
         for l in &g.layers {

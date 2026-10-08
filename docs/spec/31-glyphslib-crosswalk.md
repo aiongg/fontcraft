@@ -16,10 +16,14 @@ in `crates/io-ufo/src/designspace/instances.rs`; the glyph's note, colour and pr
 layer user data, layer guides and images (§8.1, §8.4, §8.5, §8.7, §9.6) in `crates/io-ufo/src/ufo.rs`
 and `glif.rs`; the font's and the masters' lib keys (settings, app version, `DisplayStrings`, user
 data, the generic and converted custom-parameter keys, icon, name parts, master order and axis
-values; §1, §3.5, §4, §12.3; differences in §3.7) in `crates/io-ufo/src/libkeys.rs`. Not yet: STAT (§6.6), applying instance data (§5.3), bracket glyphs and rules
-(§8.2), sparse sources for brace layers (§8.3), colour layer mapping (§8.6), the glyph, layer
-and shape lib keys (§7, §8.4, §9, §12.3), `public.openTypeCategories` from categories (§11.4: only a UFO's own map is
-read and written back). Where FontCraft differs from glyphsLib on purpose: `docs/plans/M1.md` § M1.7.
+values; §1, §3.5, §4, §12.3; differences in §3.7) in `crates/io-ufo/src/libkeys.rs`; the glyph,
+layer and shape lib keys, the colour layer mapping of the non-minimal mode and the layer libs
+(§7, §8.4, §8.6, §9, §12.3; differences in §9.7) in `crates/io-ufo/src/glyphkeys.rs` and
+`shapekeys.rs`. Not yet: STAT (§6.6), applying instance data (§5.3), bracket glyphs and rules
+(§8.2), sparse sources for brace layers (§8.3), smart components drawn as outlines (§9.3; kept
+as components on purpose), `public.openTypeCategories` from categories (§11.4: only a UFO's own
+map is read and written back). Where FontCraft differs from glyphsLib on purpose:
+`docs/plans/M1.md` § M1.7.
 
 Direction labels used in the tables:
 
@@ -847,6 +851,27 @@ as the UFO specification says, so the defect above does not apply. A guideline's
 `identifier` are fields of the model's guide; they join the name as above only when a `.glyphs`
 file is written, and the UFO writer takes them from the end of a name only when the fields are
 empty.
+
+### 9.7 Where FontCraft differs (M1.7 step 8b)
+
+The keys of §7, §8.4, §8.6 (non-minimal), §9 and §12.3 are written as glyphsLib writes them and
+read back only where writing the model gives the same value; other keys stay user data. Glyph
+keys go to every layer's GLIF; a GLIF read from disk keeps only the ones it had, except the
+default master's master layer, which gives the glyph's values.
+
+| glyphsLib | FontCraft |
+|---|---|
+| `lastChange` only with `minimize_glyphs_diffs` | always, unless `Disable Last Change`; only UTC dates (`+0000`) have a UFO form |
+| `layerId` and `layerOrderInGlyph.<glyph>` only with `minimize_glyphs_diffs` | `layerId` when every layer of a UFO layer has the same id; order keys, for every layer of a glyph, when its UFO layers hold other layers or its master layers are out of order. Without keys the reader puts master layers first, in the masters' order |
+| `Glyphs.Export = false` per glyph | `public.skipExportGlyphs`; a GLIF's own key is read and kept there |
+| non-spacing marks found through the glyph database | only glyphs whose own category and subcategory are `Mark`, `Nonspacing` (M4 adds the database) |
+| a smart component drawn as interpolated outlines | a component, its values in `componentsSmartComponentValues` |
+| an open path's first node gets no `nodeUserData` | it does |
+| an anchor with user data gets a random identifier; `public.objectLibs` not read | an identifier derived from the glyph and anchor names and the anchor's position, taken off again on reading; `public.objectLibs` read |
+| a node's `nodeUserData` is its whole attribute dictionary minus `name` | the same: the node's `userData` under `userData`, its other attribute keys beside it |
+| hints keep only glyphsLib's keys | the same; `settings` and unknown keys are reported. A UFO's hints stay in glyphsLib's form and are converted when a `.glyphs` file is written |
+| layer libs of UFO layers the UFO does not have are dropped; reserved-prefix keys left out | written to `lib.plist`, so they come back |
+| the background's components decomposed (§8.5) | kept; their alignment, anchors, locks and smart values are reported lost |
 
 ---
 

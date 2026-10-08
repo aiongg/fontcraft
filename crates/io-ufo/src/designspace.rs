@@ -418,6 +418,7 @@ pub fn read(text: &str, ufos: &BTreeMap<String, Files>) -> Result<Font> {
     if font.masters.len() > 1 && fontcraft_model::axes::origin_without_parameter(&font).is_some_and(|m| m.id != default_id) {
         Arc::make_mut(&mut font.info).params.0.push(Param::new(ORIGIN, Value::String(default_id.as_str().into())));
     }
+    crate::glyphkeys::read(&mut font, &default_id);
     crate::libkeys::read(&mut font, true, &default_id);
     font.check()?;
     Ok(font)

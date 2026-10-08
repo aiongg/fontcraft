@@ -372,3 +372,29 @@ fn values_beyond_the_models_limits_stay_as_written() {
         assert_eq!(l.extra.len(), 1, "{key}");
     }
 }
+
+#[test]
+fn hints_read_from_a_ufo_are_written_in_the_versions_form() {
+    let mut d = Dict::new();
+    for (k, v) in [
+        ("horizontal", Value::Bool(true)),
+        ("name", string("")),
+        ("options", int(0)),
+        ("origin", list(vec![int(0), int(0)])),
+        ("stem", int(-2)),
+        ("target", list(vec![int(0), int(3)])),
+        ("type", string("Stem")),
+    ] {
+        d.insert(k, v);
+    }
+    let ufo = Value::Dict(d);
+    let mut l = Layer::new("m01", 600.0);
+    l.info.hints = vec![Hint { family: fontcraft_model::Family::Ufo, value: ufo.clone() }];
+    let v3 = write(&l, 3);
+    assert!(v3.contains("hints = (\n{\nhorizontal = 1;\norigin = (0,0);\ntarget = (0,3);\ntype = Stem;\n}\n);"), "{v3}");
+    let v2 = write(&l, 2);
+    assert!(v2.contains("origin = \"{0, 0}\";") && v2.contains("target = \"{0, 3}\";"), "{v2}");
+    let mut odd = ufo.as_dict().unwrap().clone();
+    odd.insert("settings", Value::Dict(Dict::new()));
+    assert!(hint_from_ufo(&Value::Dict(odd), 3).is_none(), "a key the format's hint has no form for");
+}

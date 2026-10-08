@@ -78,6 +78,12 @@ pub fn write(font: &Font) -> Result<String> {
 /// designspace states, and glyph metadata the version has no key for.
 pub fn info_losses(font: &Font) -> Vec<String> {
     let mut out = glyph::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3));
+    // The format has no booleans: user data read from a UFO or a designspace comes back with 1
+    // and 0 for them.
+    let n = bool_user_data(font);
+    if n > 0 {
+        out.push(format!("booleans in user data ({n} objects), which the format holds as 1 and 0"));
+    }
     out.extend(layer::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3)));
     out.extend(shape::losses(&font.glyphs, font.source.glyphs_version.unwrap_or(3)));
     // Versions 3 and 4 hold alignment zones only as the metrics' overshoots; version 2 writes
@@ -1004,3 +1010,30 @@ pub(crate) fn decompose([a, b, c, d, dx, dy]: [f64; 6]) -> Option<Decomposed> {
 
 #[cfg(test)]
 mod tests;
+
+/// How many objects of the font have a boolean somewhere in their user data.
+fn bool_user_data(font: &Font) -> usize {
+    use fontcraft_model::UserData;
+    let has = |u: &UserData| {
+        let mut found = false;
+        Value::Dict(u.0.clone()).visit(&mut |v| found |= matches!(v, Value::Bool(_)));
+        found
+    };
+    let mut n = usize::from(has(&font.info.user_data));
+    n += font.masters.iter().filter(|m| has(&m.user_data)).count();
+    for g in font.glyphs.iter() {
+        n += usize::from(has(&g.info.user_data));
+        for l in &g.layers {
+            n += usize::from(has(&l.info.user_data));
+            for s in &l.shapes {
+                match s {
+                    fontcraft_model::Shape::Path(p) => n += p.nodes.iter().filter(|x| has(&x.info.user_data)).count(),
+                    fontcraft_model::Shape::Component(c) => n += usize::from(has(&c.info.user_data)),
+                    _ => {}
+                }
+            }
+            n += l.anchors.iter().filter(|a| has(&a.info.user_data)).count();
+        }
+    }
+    n
+}
