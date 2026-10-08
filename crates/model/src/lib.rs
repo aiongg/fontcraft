@@ -64,6 +64,8 @@ pub enum ModelError {
     BadName { what: &'static str, problem: String },
     #[error("two masters share the id `{0}`")]
     DuplicateMaster(String),
+    #[error("master `{0}` has a metric that is not a number or is beyond ±{MAX_COORDINATE}")]
+    BadMetric(String),
     #[error("glyph `{glyph}` has two layers with the id `{master}`")]
     DuplicateLayer { glyph: String, master: String },
     #[error("glyph `{glyph}`: {value:#X} is not a Unicode code point")]

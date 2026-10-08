@@ -497,10 +497,7 @@ impl Font {
                 return Err(ModelError::DuplicateMaster(m.id.clone()));
             }
             if !m.metric_values.iter().all(|v| in_range(v.pos) && in_range(v.over)) {
-                return Err(ModelError::BadName {
-                    what: "master",
-                    problem: format!("`{}` has a metric that is not a number or is out of range", m.name),
-                });
+                return Err(ModelError::BadMetric(if m.name.is_empty() { m.id.clone() } else { m.name.clone() }));
             }
         }
         if self.glyphs.len() > MAX_GLYPHS {
