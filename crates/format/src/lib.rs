@@ -15,10 +15,11 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 mod atomic;
+mod layout;
 mod v1;
 
 use fontcraft_model::Font;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use atomic::write_atomic;
@@ -46,14 +47,6 @@ pub enum FormatError {
     Io(String),
 }
 
-#[derive(Serialize)]
-struct FileOut<'a> {
-    format: &'a str,
-    version: u32,
-    generator: String,
-    font: &'a Font,
-}
-
 /// The file as read: the header, and the font's JSON left unparsed until the version says which
 /// shape it has. The file is tokenised once and the font built once.
 #[derive(Deserialize)]
@@ -68,10 +61,13 @@ struct FileIn<'a> {
 
 /// The bytes of a `.fontcraft` file holding `font`.
 pub fn save(font: &Font) -> Result<Vec<u8>, FormatError> {
-    let file = FileOut { format: FORMAT, version: VERSION, generator: format!("FontCraft {}", env!("CARGO_PKG_VERSION")), font };
-    let mut bytes = serde_json::to_vec_pretty(&file).map_err(|e| FormatError::Encode(e.to_string()))?;
-    bytes.push(b'\n');
-    Ok(bytes)
+    let value = serde_json::to_value(font).map_err(|e| FormatError::Encode(e.to_string()))?;
+    let generator = serde_json::Value::String(format!("FontCraft {}", env!("CARGO_PKG_VERSION")));
+    // The header first, by hand, so a reader sees the format and version at the top.
+    let mut out = format!("{{\n  \"format\": \"{FORMAT}\",\n  \"version\": {VERSION},\n  \"generator\": {generator},\n  \"font\": ");
+    layout::write(&mut out, &value, 1);
+    out.push_str("\n}\n");
+    Ok(out.into_bytes())
 }
 
 /// Reads a `.fontcraft` file and checks the font it holds.
