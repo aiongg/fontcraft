@@ -20,6 +20,7 @@ fontcraft-model = { path = "crates/model" }
 fontcraft-format = { path = "crates/format" }
 fontcraft-io-glyphs = { path = "crates/io-glyphs" }
 fontcraft-io-ufo = { path = "crates/io-ufo" }
+fontcraft-io-svg = { path = "crates/io-svg" }
 fontcraft-decompile = { path = "crates/decompile" }
 fontcraft-compile = { path = "crates/compile" }
 fontcraft-oracle = { path = "crates/oracle" }
@@ -45,6 +46,9 @@ unicode-normalization = "0.1"
 write-fonts = "0.54"
 read-fonts = "0.45"
 skrifa = "0.48"
+
+# SVG reading (MIT OR Apache-2.0). Without its default features: no text layout, no system fonts.
+usvg = { version = "0.47", default-features = false }
 
 # ui
 egui = "0.36"
