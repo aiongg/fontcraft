@@ -2,7 +2,7 @@
 
 What FontCraft is meant to do, in two forms that point at each other:
 
-- **`spec/inventory/*.toml`: the inventory.** 3,618 rows a tool can read: every command, tool,
+- **`spec/inventory/*.toml`: the inventory.** 3,633 rows a tool can read: every command, tool,
   panel, setting, custom parameter, behaviour rule, quality check, CLI subcommand, file format and
   OpenType table. `cargo xtask spec` checks it; `cargo xtask parity` compares it with the code and
   writes [`../parity.md`](../parity.md). The row schema is [`../../spec/README.md`](../../spec/README.md).
@@ -20,7 +20,7 @@ is possible, by an oracle where there is one, or by a recorded decision of ours.
 | Notes | Inventory | Source | Rows | Open questions |
 |---|---|---|---:|---:|
 | [00 Open decisions](00-open-decisions.md) | `00-app-basics.toml` | ours | 17 | – |
-| [03a Edit View: drawing](03a-edit-view-drawing.md) | `03a-edit-view-drawing.toml` | handbook ch. 1–3 | 190 | 30 |
+| [03a Edit View: drawing](03a-edit-view-drawing.md) | `03a-edit-view-drawing.toml` | handbook ch. 1–3 | 194 | 30 |
 | [03b Edit View: display, text, measuring](03b-edit-view-display.md) | `03b-edit-view-display.toml` | handbook ch. 3 | 187 | 17 |
 | [04 Palette](04-palette.md) | `04-palette.toml` | handbook ch. 4 | 75 | 9 |
 | [05 Font View](05-font-view.md) | `05-font-view.toml` | handbook ch. 5, GlyphData | 284 | 20 |
@@ -48,11 +48,16 @@ is possible, by an oracle where there is one, or by a recorded decision of ours.
 
 | `status` | Rows | Means |
 |---|---:|---|
-| `handbook` | 2,113 | stated in the primary reference's public handbook |
-| `docs` | 1,097 | stated in another public document or in permissively licensed source |
-| `inferred` | 375 | our own design: headless forms of pointer actions, queries, FontCraft-only features |
-| `memory` | 33 | recalled, not found in a source read for this work. **Verify before implementing** |
-| `observed` | 0 | checked against the running reference app. None yet |
+| `handbook` | 2,114 | stated in the primary reference's public handbook |
+| `docs` | 1,055 | stated in another public document or in permissively licensed source |
+| `inferred` | 387 | our own design: headless forms of pointer actions, queries, FontCraft-only features |
+| `memory` | 30 | recalled, not found in a source read for this work. **Verify before implementing** |
+| `observed` | 47 | checked against the running reference: the app on our own synthetic fonts, the app in a public tutorial video (decision D13), or a reference compiler's output. So far only compiled tables checked against the oracles |
+
+A row confirmed by a tutorial video names the video in its `notes`: title, channel, URL and the
+time in the video where the behaviour shows. A row becomes `observed` when the video shows
+everything the row states; when it shows only part, the row keeps its status and `notes` says
+which part the video confirms.
 
 The inventory was compiled on 2026-10-07 by reading each source once, in parallel, one chapter per
 reader. It has been checked mechanically (schema, unique ids, valid references, no long verbatim

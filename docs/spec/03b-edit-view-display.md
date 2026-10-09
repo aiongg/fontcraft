@@ -320,8 +320,12 @@ the active Edit View tab and is blank otherwise.
    the foreground label is from memory. Shortcuts of most View toggles are not given.
 2. Which Path menu item turns into Clear Background with Alt held, and whether it acts on the
    active layer only or on all layers of the selected glyphs.
+   **Answered for M3 (our decision, 2026-10-09):** Clear Background is its own Path menu item
+   (`path.clearBackground`); it acts on the active layer of the targeted glyphs.
 3. Assign Background: how glyphs and masters are matched between the two fonts, and what happens
    to glyphs missing in the source.
+   **Answered for M3 (our decision, 2026-10-09):** glyphs are matched by name, masters by name and
+   then by order; glyphs missing in the source are skipped and listed in the result.
 4. Which tool becomes active when Escape leaves text mode, and where the cursor lands when
    Escape returns to it.
 5. Select Sample Text: replace the whole tab text or insert at the cursor? Does the string wrap
@@ -330,12 +334,22 @@ the active Edit View tab and is blank otherwise.
    several glyphs?
 7. How placeholders serialise in the tab string of the file format and on the clipboard.
 8. Zoom step factor of Zoom In/Out and the minimum and maximum zoom values.
+   **Answered for M3 (our decision, 2026-10-09):** a factor of √2 per step, within the existing
+   `ZOOM_RANGE`.
 9. Measurement line: visible with the Measurement tool as well as the Text tool? Default height?
    Is the height stored per tab, per document or per app?
+   **Answered for M3 (our decision, 2026-10-09):** the line shows with the Measurement tool and
+   stays until the next click or tool change. The text-mode measurement line (height, storage) is
+   M5.
 10. Ruler: are components and other visible glyphs measured exactly like paths; is the ruler
     kept after the mouse is released?
+    **Answered for M3 (our decision, 2026-10-09):** components are measured like paths; the ruler
+    stays until the next click or tool change.
 11. Keyboard shortcut of the Annotation tool; default width, angle and diameter of new
     annotations; the units and anchor point of each annotation's position.
+    **Answered for M3 (our decision, 2026-10-09):** our default values, in `theme::Tokens`: text
+    width 200 units, circle diameter 100, arrow at 45°. The Annotation tool's key is `A`, as its row
+    says.
 12. Image crop: coordinate space of the stored rectangle; meaning of "layer bounds"; whether a
     layer can hold more than one image; which formats FontCraft decodes natively (PDF, PSD).
 13. Preview blur range and unit; which custom parameters the instance preview honours.

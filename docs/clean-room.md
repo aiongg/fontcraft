@@ -20,6 +20,7 @@ on record.
 | Source code under GPL, AGPL, LGPL or any copyleft licence (FontForge, Fontra, Inkscape, lib2geom…) | **no** | no. Do not open the repository. Their public *user documentation* is fine |
 | Anything inside a proprietary app: binaries, resources, bundled scripts and plug-ins, glyph databases shipped only in the app, example fonts, templates | **no** | no. File and folder names in a listing are the most you may see |
 | The running reference app, on fonts we made ourselves | yes, where the owner has a licence | observations only (see below) |
+| The running reference app in a public tutorial video | yes, the owner watches | observations only (see Tutorial videos below) |
 | Third-party plug-ins and scripts for a reference app | their documentation yes; their code only under a licence in the third row | as that row says |
 
 A source's licence is checked, not assumed, and recorded in [`references.md`](references.md)
@@ -43,7 +44,8 @@ before the source is used.
 ## Observation
 
 Watching a reference app is how the gaps in its documentation get filled: modifier keys, snapping
-distances, defaults, edge cases. It needs a licensed copy, and it is done like this:
+distances, defaults, edge cases. Running it ourselves needs a licensed copy, and it is done like
+this:
 
 - Only on **synthetic fonts made for the purpose** (in FontCraft, or by hand). Never open a
   commercial font, a client's font, or the app's own example files to study them.
@@ -57,17 +59,20 @@ distances, defaults, edge cases. It needs a licensed copy, and it is done like t
 
 ### Tutorial videos
 
-The owner has no licence for the primary reference (open decision O1), so public tutorial videos
-are the nearest thing to observation. They count as public user documentation (first row of the
-table above):
+The owner has no licence for the primary reference (open decision O1). A public tutorial video
+shows the running app, so watching one is observation of the running app, in the same way as
+watching it run on our own synthetic fonts. The video itself is public material (first row of the
+table above), and the same limits apply to it as to any documentation:
 
-- Take **facts only**: which key or modifier does what, defaults shown on screen, the order of
+- Take **behaviour only**: which key or modifier does what, defaults shown on screen, the order of
   steps, what a dialog contains. Never the narration's wording, the presenter's examples or fonts,
-  or images from the video.
+  or images from the video. Every sentence we write about it is our own.
 - Agents do not watch video. The owner watches and reports; the agent records the facts in our own
-  words in the behaviour note, with the video's title, channel and URL in the row's `notes`.
-- A video shows someone else's font and setup, so it confirms less than observation does. How such
-  rows are marked is open decision D13; until it is settled, keep their `status` and add the note.
+  words in the behaviour note.
+- A row the video confirms gets `status = "observed"` (decision D13). Its `notes` name the video:
+  title, channel, URL and the time in the video where the behaviour shows. When the video shows
+  only part of what the row states, the row keeps its status and `notes` says which part the video
+  confirms.
 
 ## Assets and data
 

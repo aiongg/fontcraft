@@ -96,7 +96,8 @@ cargo xtask parity                                       # regenerate docs/parit
 
 Rows are TOML blocks separated by blank lines; edit them by hand. One file per source chapter, so
 parallel agents do not collide. When you change behaviour, change the row's `summary` and
-`status`; when you confirm a row against the running reference app, set `status = "observed"`.
+`status`; when you confirm a row against the running reference app, on our own fonts or in a
+public tutorial video, set `status = "observed"` and name the video in `notes`.
 
 ## Driving the app
 

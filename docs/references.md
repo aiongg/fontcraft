@@ -20,9 +20,9 @@ with; **dependency** is code we build on; **spec** defines a format; **secondary
 | FontForge user documentation | https://fontforge.org/docs/ | the program is GPL-3.0-or-later (recalled); **documentation only, never the source repository** | **secondary**: legacy and bitmap formats, the long tail of menu commands | docs read 2026-10-07; pages listed there |
 | Fontra documentation | https://docs.fontra.xyz/ ; repository https://github.com/fontra/fontra (formerly googlefonts/fontra) | GPL-3.0 (verified 2026-10-07 on the archived repository page); **documentation only** | **secondary**: collaborative editing, variable components | docs read 2026-10-07; pages listed there |
 
-The primary reference is known **only through its documentation** so far. Nothing in `spec/` has
-`status = "observed"`. The owner has no licensed copy; public tutorial videos, watched by the
-owner, are the substitute ([`spec/00-open-decisions.md`](spec/00-open-decisions.md), O1;
+The primary reference is known **only through its documentation** so far: no row about it has
+`status = "observed"` yet. The owner has no licensed copy; public tutorial videos, watched by the
+owner, are the substitute, and a row a video confirms becomes `observed` (D13) ([`spec/00-open-decisions.md`](spec/00-open-decisions.md), O1;
 [`clean-room.md`](clean-room.md) › Tutorial videos).
 
 ## Command-line and compiler references

@@ -14,7 +14,7 @@ _Last updated: 2026-10-09 (M2 done: static TrueType and CFF export in plain, WOF
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,621 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, guard, CLI, control channel, MCP, UI shell, tests | **~35%** of what the siblings' "infrastructure" row covers |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~5%** |
-| Commands that exist (not: that behave like the reference) | **35 of 920** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **35 of 924** (`docs/parity.md`) |
 | Observed against the running reference app | **nothing** |
 
 ## Honest assessment (2026-10-09)
@@ -228,7 +228,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 6 (4) |
-| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
+| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ plan accepted (`docs/plans/M3.md`); M3.0 done: spec pass, targets in every command's params, `when` and `context` fields, D13 answered | 176 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
@@ -238,11 +238,11 @@ measured by what works (the parity table below and the measures in each mileston
 | M10 | Hinting (PostScript and TrueType) | ⬜ | 57 (0) |
 | M11 | Colour fonts and images | ⬜ | 50 (0) |
 | M12 | Command-line tool suite (61 of the 70 subcommand rows) and quality checks (263 of 300) | ⬜ | 71 (0) |
-| M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 79 (0) |
+| M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 114 (0) |
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
-| – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default) | ⬜ | |
+| – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 920 (35) |
+| | **Total** | | 924 (35) |
 
 ## Parity estimate
 
@@ -257,8 +257,8 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 44 | 8 | 5% | tabs, toolbar, settings window, shortcut editor, workspaces, title bar |
 | Font View | 6 | 62 | 6 | 3% | list view, sidebar and filters, glyph data, Add Glyphs syntax, batch commands, inspector |
 | Edit View text mode | 4 | 25 | 0 | 0% | everything |
-| Drawing and editing outlines | 10 | 89 | 2 | 1% | all tools, selection, node editing, transforms; only headless path creation exists |
-| Path operations and filters | 6 | 64 | 0 | 0% | everything |
+| Drawing and editing outlines | 10 | 92 | 2 | 1% | all tools, selection, node editing, transforms; only headless path creation exists |
+| Path operations and filters | 6 | 65 | 0 | 0% | everything |
 | Reusing shapes | 7 | 77 | 0 | 0% | everything; components are only exported (as composites, decomposed where the format needs it) |
 | Layers | 3 | 21 | 0 | 0% | everything |
 | Guides, metric lines, zones, grid | 3 | 34 | 1 | 1% | metric lines are drawn; nothing is editable |
@@ -276,7 +276,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Quality checks | 3 | 33 | 0 | 0% | everything |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
 | Agent surfaces | 4 | 11 | 2 | 25% | execute, list, inspect over three surfaces; no pointer, dialogs, screenshots, resources |
-| **Feature parity** | **117** | **920** | **35** | **~5%** | |
+| **Feature parity** | **117** | **924** | **35** | **~5%** | |
 
 ## Out of scope (by design or by law)
 

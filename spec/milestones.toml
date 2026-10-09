@@ -44,3 +44,6 @@ title = "Plug-ins, scripting and automation depth"
 [[milestone]]
 id = "M14"
 title = "1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web"
+[[milestone]]
+id = "fidelity"
+title = "Interaction-fidelity pass: side by side with the reference, every modifier, cursor and default"

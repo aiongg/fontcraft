@@ -67,10 +67,10 @@ label = "Export UFO"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{destination: path, masters?: [ids], productionNames?: bool, decomposeSmartStuff?: bool}'
+params = "{destination: path, masters?: [ids], productionNames?: bool, decomposeSmartStuff?: bool (default true)}"
 area = "import-export"
 milestone = "M1"
-summary = "Writes each chosen master as its own UFO 3 package into the destination folder. Options rename glyphs to production names and decide whether editor-only constructs are turned into plain paths or dropped. Headless form of the dialog's UFO tab."
+summary = "Writes each chosen master as its own UFO 3 package into the destination folder. Options rename glyphs to production names and decide whether editor-only constructs are turned into plain paths or dropped. Headless form of the dialog's UFO tab. Smart components are drawn as outlines unless decomposeSmartStuff is false, as in the reference's export dialog; file.saveAs and CLI convert keep them as components unless asked."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
 
@@ -99,7 +99,7 @@ controls = [
   "Next… button: start the export, or go on to a folder / file chooser when the tab needs one",
 ]
 area = "compile"
-milestone = "M2"
+milestone = "M3"
 summary = "The export dialog attached to the current document. Each tab is an output kind with its own options; Next… either exports straight away or first asks where to write."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
@@ -118,7 +118,7 @@ controls = [
   "Next… button",
 ]
 area = "compile"
-milestone = "M2"
+milestone = "M3"
 summary = "Options for static OpenType export: outline flavour, the container formats to write, overlap removal, autohinting and the two destinations (a folder, or direct installation into the system)."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
@@ -175,7 +175,7 @@ label = "Choose Export Folder"
 location = "dialog"
 controls = ["folder browser", "confirm / cancel"]
 area = "compile"
-milestone = "M2"
+milestone = "M3"
 summary = "Folder chooser shown when the destination path in the export dialog is clicked, when a font export starts with neither destination ticked, and after Next… on the UFO tab."
 ref = "Import & Export › Exporting Font Files › Export Destination"
 status = "handbook"
@@ -289,7 +289,7 @@ status = "handbook"
 [[behavior]]
 id = "export.removeOverlapOption"
 area = "compile"
-milestone = "M2"
+milestone = "M3"
 summary = "With Remove Overlap on, every exported glyph layer has its paths and components merged into non-overlapping outlines, using the same operation as Path › Remove Overlap. It is meant to be on for release builds and off only to speed up test exports or when the font already applies the Remove Overlap filter through custom parameters."
 ref = "Import & Export › Exporting Font Files › OpenType Export › Options"
 status = "handbook"
@@ -378,7 +378,7 @@ status = "handbook"
 id = "export.ufoDecomposeSmartStuff"
 area = "import-export"
 milestone = "M1"
-summary = "UFO cannot hold editor-only constructs such as smart components and corner components. With Decompose Smart Stuff on they are converted to ordinary paths; with it off they are left out of the exported UFO altogether. FontCraft draws smart components as outlines when it is on (export.ufoSmartComponentsAsOutlines) and keeps them as components with their values in the glyph lib when it is off."
+summary = "UFO cannot hold editor-only constructs such as smart components and corner components. With Decompose Smart Stuff on (the default) they are converted to ordinary paths; with it off they are left out of the exported UFO altogether. FontCraft draws smart components as outlines when it is on (export.ufoSmartComponentsAsOutlines) and keeps them as components with their values in the glyph lib when it is off."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
 
@@ -386,7 +386,7 @@ status = "handbook"
 id = "export.ufoSmartComponentsAsOutlines"
 area = "import-export"
 milestone = "M2"
-summary = "Writing a UFO or designspace keeps smart components as components, their values in the glyph lib key com.schriftgestaltung.componentsSmartComponentValues, unless smart components are to be drawn as outlines (file.saveAs and convert with smartComponents outlines, file.exportUfo with decomposeSmartStuff). Then, as glyphsLib does, each component of a glyph with smart properties and more than one pole layer for the layer's master becomes the pole layers' outlines interpolated at the component's values: the master layer (else the first pole layer) is the default location, the others sit at -1 or 1 on each property whose end differs from it, values are normalized with the property's bottom, default and top, and a variation model with extrapolation weighs the layers. Smart components inside pole layers are drawn first; the component's transform is applied and contours are reversed when it flips them. One pole layer: a plain component. A smart component that cannot be interpolated (pole layers with different node counts, no pole layer for the master) stays a component and is listed in the losses. The document keeps its components."
+summary = "Writing a UFO or designspace keeps smart components as components, their values in the glyph lib key com.schriftgestaltung.componentsSmartComponentValues, unless smart components are to be drawn as outlines (file.saveAs and convert with smartComponents outlines, file.exportUfo with decomposeSmartStuff, which is on by default). Then, as glyphsLib does, each component of a glyph with smart properties and more than one pole layer for the layer's master becomes the pole layers' outlines interpolated at the component's values: the master layer (else the first pole layer) is the default location, the others sit at -1 or 1 on each property whose end differs from it, values are normalized with the property's bottom, default and top, and a variation model with extrapolation weighs the layers. Smart components inside pole layers are drawn first; the component's transform is applied and contours are reversed when it flips them. One pole layer: a plain component. A smart component that cannot be interpolated (pole layers with different node counts, no pole layer for the master) stays a component and is listed in the losses. The document keeps its components."
 ref = "glyphsLib builder/smart_components.py, builder/components.py; docs/spec/31-glyphslib-crosswalk.md § 9.3"
 status = "docs"
 
@@ -658,12 +658,13 @@ label = "Outlines…"
 menu = ["File", "Import"]
 shortcut = ""
 kind = "engine"
-params = '{files: [paths], glyph?: name, layer?: id, onMissingGlyph?: "ask"|"add"|"skip"}'
+params = "{files: [paths], glyphs?: [names], layer?: id, onMissingGlyph?: add|skip} → {imported: [{file, glyph}], unmatched: [files]}"
 area = "import-export"
 milestone = "M3"
 summary = "Imports the vector paths of PDF, EPS or SVG files as glyph outlines. From Font View several files are matched to glyphs by file name; from Edit View one file goes into the current glyph. With an explicit glyph parameter the file-name matching is bypassed."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
+notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route."
 
 [[panel]]
 id = "dialog.importOutlinesMissingGlyph"
@@ -707,6 +708,7 @@ milestone = "M3"
 summary = "Only path geometry is taken from an imported file; fill colours and other styling are thrown away. The one exception stated: the stroke width of paths in a PDF is carried over as a stroke style on the path."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
+notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route."
 
 [[command]]
 id = "file.importMetrics"

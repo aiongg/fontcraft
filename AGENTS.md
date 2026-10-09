@@ -89,4 +89,5 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
   how the next agent picks up. Update it before you stop.
 - A row whose `status` is `memory` or `inferred`, and everything under "Open questions" in
   `docs/spec/`, has not been confirmed. Don't treat it as fact; mark it `observed` once checked
-  against the running reference app.
+  against the running reference app, on our own fonts or in a public tutorial video named in the
+  row's `notes`.

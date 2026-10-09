@@ -48,7 +48,8 @@ The names and shapes follow the sibling apps so their agents' habits carry over.
 |---|---|---|
 | `ui.screenshot` | `{path?}` capture the window as PNG | M3 |
 | `ui.render` | `{path?, glyphs?, text?, size?, scale?}` render glyphs or a text line headlessly | M3 |
-| `ui.tool.select` / `ui.tool.list` | `{tool}` | M3 |
+| `ui.tool.select` | `{tool}` make a pointer tool active; runs the command `tool.select` and returns `{tool, previous}` | M3 |
+| `ui.tool.list` | `{}` the pointer tools and the active one; runs the command `tool.list` and returns `{active, tools: [{id, label, shortcut, group}]}` | M3 |
 | `ui.pointer` | `{events: [{kind: down \| drag \| up \| move \| doubleclick, x, y, space?: "font" \| "screen", mods?}]}` drive the active tool like the mouse | M3 |
 | `ui.click` | `{id}` press the control with that stable id (`ui-design.md`) | M3 |
 | `ui.key` / `ui.text` | `{key, shift?, alt?, cmd?, ctrl?}` / `{text}` | M3 |

@@ -206,3 +206,13 @@ Append one terse entry per session: what landed, numbers, what is still open.
   (`crates/geom/src/variation.rs`, `crates/model/src/smart.rs`): the 10 glyph layers with smart
   components in 7 corpus sources match glyphsLib's points exactly. Follow-up: the compiler can
   draw smart components with the same function and drop their allow-list entries.
+- **2026-10-09, M3.0.** The owner accepted the M3 plan. Spec pass: the 42 secondary-reference
+  rows moved to M13; super-smooth nodes, pen points, Erase and Select All Layers (12 rows) to the
+  new milestone `fidelity` (the interaction-fidelity pass), each with its reason in `notes`; the
+  image formats to M11; the export dialogs and `export.removeOverlapOption` from M2 to M3; the
+  four `memory` M3 rows settled. New rows `layer.inspect`, `path.addInflections`, `tool.select`,
+  `tool.list`. Every M3 command's `params` name their targets (decision 0004 › How commands name
+  their targets). The schema gained `when`, `context` and `notes`; `cargo xtask spec` requires a
+  `when` on every shortcut without `Cmd` or `Ctrl`. D13: a row a tutorial video confirms is
+  `observed`. The § 3 answers are in the notes' open questions. M3 now holds 447 rows (176
+  commands, 7 live). Next: the M3.6 spike, then M3.1.

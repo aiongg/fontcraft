@@ -23,7 +23,7 @@ Common fields on every row:
 | `milestone` | An id from `milestones.toml` |
 | `summary` | One or two sentences of behaviour, in our own words |
 | `ref` | Where the reference documents it: `"<Chapter> › <Section>"` or a tool/doc name |
-| `status` | `handbook` (taken from the reference's public docs), `docs` (another public doc), `memory` (recalled, unverified), `inferred` (our design), `observed` (checked against the running reference app) |
+| `status` | `handbook` (taken from the reference's public docs), `docs` (another public doc), `memory` (recalled, unverified), `inferred` (our design), `observed` (checked against the running reference: the app on our own synthetic fonts, the app in a public tutorial video, or a reference tool's output; `notes` names a video by title, channel, URL and time) |
 
 ### `[[command]]`: something a menu item, button, shortcut or agent runs
 
@@ -191,8 +191,9 @@ status = "docs"
 | `origin` | any row | `"fontlab"`, `"robofont"`, `"fontforge"` or `"fontra"`: the feature comes from a secondary reference, not the primary one |
 | `effect` | `[[parameter]]` | what kind of thing the parameter does: `table-value`, `export-filter`, `naming`, `interpolation`, `hinting`, `features`, `ui`, `other` |
 | `ref` | `[[format]]` | where the format is described for our purposes, besides its `spec` URL |
-| `when` | `[[command]]`, planned | the tool or panel a shortcut is scoped to (decision 0004); a row without it has a global shortcut |
-| `context` | `[[command]]`, planned | the context menu that shows a command whose `menu` is empty |
+| `notes` | any row | facts about the row that are not behaviour: why it is deferred, which tutorial video confirmed it (title, channel, URL, time in the video), which parts wait for a later milestone |
+| `when` | `[[command]]`, `[[tool]]` | where the shortcut works (decision 0004): `editView`, `textMode`, `fontView`, `dialog`, `tool:<tool id>` or `panel:<panel id>`. Without it the shortcut is global. A tool's letter always works in Edit View |
+| `context` | `[[command]]` | the context menus that show the command: `canvas` (empty canvas), `canvas.node`, `canvas.segment`, `canvas.path`, `canvas.guide`, `canvas.anchor`, `canvas.component`, `layers.row` (a row of the Palette's layer list), `toolbar` (a tool button) |
 
 A `[[cli]]` id may hold a space for an action of a subcommand: `"tables list"` is `fontcraft-cli
 tables list`.
@@ -203,3 +204,7 @@ tables list`.
 - `id`s are unique per kind across all files (`name` for parameters, `tag` for tables).
 - `area` and `milestone` exist; `status` is one of the five values; `summary` is not empty.
 - A command id uses `noun.camelCase` with ASCII letters, digits and dots only.
+- A command's shortcut without `Cmd` or `Ctrl` (a plain key, or one with only `Shift` or `Alt`) has
+  a `when`, so it never fires while a text field has focus. A `when` names a known scope, tool or
+  panel.
+- `context` lists only the context menus above; `notes` is a string.

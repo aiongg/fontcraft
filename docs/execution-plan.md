@@ -47,7 +47,7 @@ made exact when they are about to be built.
 
 1. List the milestone's rows (`docs/parity.md` › By milestone gives the counts).
 2. Go through the open questions of its notes. For each: answer it by observation if the owner
-   has the reference app (set `status = "observed"`), by an oracle if it is about output, or by a
+   has the reference app or a tutorial video shows it (set `status = "observed"`), by an oracle if it is about output, or by a
    decision of ours recorded in the note. A question that cannot be answered and blocks nothing
    stays open.
 3. Verify every `memory` row or drop it.

@@ -192,6 +192,8 @@ dispatches it through the registry (`filter.customParameter.sameRegistryAsComman
 
 - Menu label of the Cmd+R command, and whether repeating reuses the last values silently.
 - Default values of every dialog field (none are given), and whether dialogs remember last values.
+  **Answered for M3 (our decision, 2026-10-09):** dialogs remember their last values for the
+  session. The first defaults are ours, written in each filter's row when it is built.
 - Extrude and Interpolate with Background: is there an export string? None is documented.
 - Roughen export string has a fourth `angle` value with no dialog field in the chapter.
 - Offset Curve export string has no slots for Keep Compatible or Cap Style; are they settable at export?
@@ -202,8 +204,18 @@ dispatches it through the registry (`filter.customParameter.sameRegistryAsComman
 - The appendix places the Origin picker under "Filter › Transformations › Transform", the chapter
   under Path › Transformations: which menu holds the dialog in the current version?
 - Whether Interpolate with Background leaves an incompatible glyph untouched silently or reports it.
+  **Answered for M3 (our decision, 2026-10-09):** an incompatible glyph is left unchanged and listed
+  in the result (`skipped`).
 - Rounded Font dialog contents and behaviour when the master has no vertical stems.
 - Round Corners: does "selected corners" need the node itself selected, or do selected segments count?
+  **Answered for M3 (our decision, 2026-10-09):** selected nodes, or the end nodes of selected
+  segments.
 - Whether any filter applies to more than the visible layer (the source says "usually").
+  **Answered for M3 (our decision, 2026-10-09):** a filter changes the visible layer of each
+  targeted glyph unless `layers` is given.
 - How filters treat components, and whether a filter run on many glyphs is one undo step.
+  **Answered for M3 (our decision, 2026-10-09):** filters change paths only, not components; a run
+  over many glyphs is one undo step.
 - Whether the random displacement in Roughen is uniform and whether it is re-seeded on each run.
+  **Answered for M3 (our decision, 2026-10-09):** the displacement is uniform; Roughen takes a
+  `seed` (fixed by default), so a run can be repeated exactly.

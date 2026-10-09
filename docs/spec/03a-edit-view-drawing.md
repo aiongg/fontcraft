@@ -101,6 +101,22 @@ Display conventions:
 
 `view.showNodesInForeground` (`Cmd+Shift+N`, View › Show Nodes › In Foreground) toggles node display.
 
+### Addressing (our design)
+
+Every editing command names what it acts on; none reads the shell's selection. The full rules
+are in decision 0004 › How commands name their targets. In short:
+
+- `glyph` and `layer?` name one layer (default: the first master's layer); `side?` picks the
+  foreground (default) or the background. Batch commands take `glyphs`.
+- `points: [[shape, node]]` are indices in the layer's shape list and the path's node list, off-curve
+  points included. A segment is named by the on-curve node that ends it. `shapes`, `anchors` (by
+  name), `guides` (`{scope, index}`) and `annotations` complete the target object.
+- An address that does not resolve is an error and changes nothing. Commands that change a
+  layer's structure return the new `selection`. Created or moved points are rounded to the grid.
+- `layer.inspect` returns a layer with every address, so an agent can read before it edits.
+- A glyph lock (`glyph.toggleLocked`) refuses every command that changes the glyph, with a
+  message naming it.
+
 ## 5. Drawing tools
 
 ### Draw (`draw`, `P`)
@@ -473,71 +489,151 @@ selected global guide defines Smart-Filter-style rules for the glyphs that show 
 ## 21. Undo (`undo.perGlyphHistory`)
 
 Each glyph has its own undo stack, in both Edit View and Font View. Edits to data outside a
-glyph are not captured; the reference calls out global guides (owned by the master). For our
-command model this means every engine command must declare which glyph(s) it touches so the
-change lands in the right history, and commands touching master- or font-level data need a
-defined policy.
+glyph are not captured; the reference calls out global guides (owned by the master).
+
+FontCraft keeps one history per document (decision 0004 item 4, D4). Every edit is undoable,
+global guides included: a deliberate difference from the reference, noted on
+`undo.perGlyphHistory`. There is no per-glyph filter in M3. A drag, a dialog run and a filter run
+over many glyphs are one undo step each.
 
 ---
 
 ## Open questions
 
-Settle by observing the reference app.
+Settle by observing the reference app, on our own fonts or in a tutorial video. An answer marked
+"for M3" is our decision: the row it changes is marked `inferred` when it is built, until an
+observation confirms it. Questions 25, 26 (M6) and 30 (M4) stay open; they block nothing in M3.
 
 1. **Option-drag conflict**: `Alt` while moving nodes is documented both as "move only the
    selected points" and as "drag a duplicate". Which wins when (key pressed before vs after
    mouse-down, whole path vs partial selection, mouse vs arrow keys)?
+   **Answered for M3 (our decision, 2026-10-09):** `Alt` held at mouse-down on a selection drags a
+   copy; `Alt` pressed after the drag started switches to nudge; `Alt` with an arrow key moves only
+   the selected points. A tutorial video showing it would confirm or correct this.
 2. **Nudge with arrow keys**: is `Ctrl+Alt`+arrow a nudge, and with which increments?
+   **Answered for M3 (our decision, 2026-10-09):** `Ctrl+Alt` with an arrow key nudges, with the
+   arrow increments (1, 10, 100). A tutorial video showing it would confirm or correct this.
 3. **Draw tool on a segment** without Shift: does a plain click insert a node? What does a click
    on an open path's end do (continue the path)? How is an unfinished path ended?
+   **Answered for M3 (our decision, 2026-10-09):** a plain click on a segment inserts a node at the
+   click; a click on an open end node continues that path; `Escape` or another tool ends the path. A
+   tutorial video showing it would confirm or correct this.
 4. **Draw tool `Shift`**: is there angle constraint while placing nodes or dragging handles?
+   **Answered for M3 (our decision, 2026-10-09):** `Shift` constrains the new node or handle to 45°
+   steps from the previous node.
 5. **Primitives dialog**: field names, defaults, remembered values, anchor point of the shape,
    and node structure of the ellipse (four nodes at extremes assumed).
+   **Answered for M3 (our decision, 2026-10-09):** width and height, created with the click as the
+   lower-left corner; the ellipse has four nodes at its extremes; the values are remembered for the
+   session. A tutorial video showing it would confirm or correct this.
 6. **Erase tool**: purpose and gestures. Also confirm the toolbar grouping of Rotate and Scale.
+   **Answered for M3 (our decision, 2026-10-09):** Erase is deferred to the interaction-fidelity
+   pass until a source shows what it does. Rotate and Scale are separate tools with `R` and `S`, as
+   their rows say.
 7. **Marquee and segments**: does a marquee select handles whose nodes are outside it; what
    exactly does clicking a segment select (both nodes, the handles)?
+   **Answered for M3 (our decision, 2026-10-09):** a marquee selects the handles inside it whatever
+   their node; clicking a segment selects its two end nodes.
 8. **Tab navigation**: does `Tab` wrap at path end, cross to the next path, and how does it order
    anchors and guides?
+   **Answered for M3 (our decision, 2026-10-09):** nodes in path order, then the next path, then
+   anchors, then guides, then back to the start.
 9. **Corner → smooth conversion**: the exact rule for placing the new handles and which points
    move; and the heuristics Tidy up Paths uses to classify nodes (angle tolerance).
+   **Answered for M3 (our decision, 2026-10-09):** missing handles are added at one third of the
+   segment; two handles that are not collinear are turned to the bisector of their directions,
+   keeping their lengths. Tidy up Paths classifies a node as smooth within 1° (the
+   `kinkedSmoothNode` threshold). A tutorial video showing it would confirm or correct this.
 10. **Delete with reconstruction**: fitting method and tolerance; behaviour when the selection
     includes handles only, or all nodes of a path.
+    **Answered for M3 (our decision, 2026-10-09):** the new segment is fitted to the removed
+    segments with curve fitting (kurbo), within 0.5 unit. With only handles selected, the segment
+    becomes a line. With every node of a path selected, the path is removed.
 11. **"All masters" variants**: how nodes are matched across masters (by index?) and what happens
     with incompatible masters; whether alternate and intermediate layers are included for
     commands other than Correct Path Direction.
+    **Answered for M3 (our decision, 2026-10-09):** nodes are matched by address. A layer whose
+    structure differs is skipped and listed in the result (`skipped: [{layer, reason}]`). Alternate
+    and intermediate layers are included only by Correct Path Direction, as the handbook says.
 12. **Super-smooth**: the construction used for star and raindrop nodes, the minimum straight
     length, and what points export emits.
+    **Deferred** to the interaction-fidelity pass: without the construction, a guess would change
+    exported outlines. The super-smooth rows carry the reason in `notes`.
 13. **Align Selection**: the tie-break when width equals height; how the transformation origin
     maps to the target coordinate; which point moves when handles of smooth nodes are involved.
+    **Answered for M3 (our decision, 2026-10-09):** when width equals height, the selection aligns
+    on one X. The transformation origin's column or row picks min, centre or max. Handles of smooth
+    nodes move with their nodes.
 14. **Open Corner**: the exact overlap geometry, the invisibility threshold, behaviour when stem
     values are missing.
+    **Answered for M3 (our decision, 2026-10-09):** the overlap is half the master's first vertical
+    stem by half its first horizontal stem, or 20 units when the master has no stems. The
+    invisibility threshold stays open; overlap removal at export takes the small triangle away.
 15. **Reconnect Nodes** on four or more nodes: pairing rule when distances tie.
+    **Answered for M3 (our decision, 2026-10-09):** ties go to the lower address first.
 16. **Correct Path Direction**: the resulting shape order (sort key) and tie-breaks for the
     bottom-left start node.
+    **Answered for M3 (our decision, 2026-10-09):** outer contours counter-clockwise and counters
+    clockwise, decided by nesting; shapes sorted by bounding box (left, then bottom); the start node
+    is the lowest, then leftmost, on-curve node (the `startPointPosition` rule).
 17. **Add Extremes**: the "very short segment" threshold and the "slightly off" tolerance; whether
     a selection limits the command; whether inflections can be added in bulk.
+    **Answered for M3 (our decision, 2026-10-09):** an extreme is skipped when it would leave a
+    segment shorter than 3 units (the `shortSegments` threshold). A node within 2 units and 2° of an
+    extreme is moved onto it (the `almostOrthogonalHandle` thresholds). The command acts on the
+    targets given, else the whole layer. Inflections in bulk: `path.addInflections`, our command,
+    also the audit's fix.
 18. **Reverse Contours**: shortcut (none stated in this chapter) and the label of the Option
     alternate; same for Reset Anchors and Expand Outline alternates.
+    **Answered for M3 (our decision, 2026-10-09):** the alternates are labelled "… for All Masters",
+    with the shortcuts their rows give.
 19. **Path focus**: is it persistent view state per tab or per layer; does it survive switching
     glyphs?
+    **Answered for M3 (our decision, 2026-10-09):** path focus belongs to the tab and is cleared
+    when the tab's edited glyph changes.
 20. **Locks**: are path locks and glyph locks stored in the file; does glyph lock also block
     metrics, anchors and kerning edits?
+    **Answered for M3 (our decision, 2026-10-09):** locks are stored in the file (the model and both
+    source formats hold them). A glyph lock refuses every command that changes the glyph's own data:
+    layers, outlines, anchors, guides, width and metrics keys. Kerning is font data and is not
+    blocked.
 21. **Stroke**: names and geometry of the four joins and five caps; whether the Fill checkbox
     and Mask checkbox sit in the Stroke section; whether left/right follows path direction; how
     strokes export (auto-expanded?) and interpolate.
+    **Answered for M3 (our decision, 2026-10-09):** joins: miter, round, bevel, round full. Caps:
+    butt, round, square, round inset, axis-aligned. A positive position is to the right of the path
+    direction. Butt, round, square, miter and bevel come from kurbo's stroker; round inset, round
+    full and axis-aligned are our construction. Export expands strokes; their interpolation is M9. A
+    tutorial video showing it would confirm or correct this.
 22. **Pen points**: units and zero direction of the angle; interpolation law behind the
     progression values; default progression.
+    **Deferred** to the interaction-fidelity pass: the pen-point rows carry the reason in `notes`.
 23. **Mask**: interaction with components and with stroked paths; export behaviour.
+    **Answered for M3 (our decision, 2026-10-09):** a mask subtracts from every shape below it,
+    components included (decomposed for the operation); stroked shapes are expanded first; export
+    applies masks while it prepares outlines.
 24. **Shape Order dialog**: what each row shows, and whether it applies to all masters.
+    **Answered for M3 (our decision, 2026-10-09):** one row per shape (kind, component name or path
+    index, a thumbnail); the dialog acts on the current layer.
 25. **Anchors**: placement rules of Set Anchors (database positions relative to metrics and
     outline), whether Set Anchors keeps existing anchors untouched, and renaming to a name that
     already exists.
 26. **Anchor context**: storage key in the file format and validation of the code.
 27. **Guides**: how a guide is deleted; rotation pivot when dragging; whether angle-locked guides
     still move; exact semantics of the "both sidebearings" reference; snapping of nodes to guides.
+    **Answered for M3 (our decision, 2026-10-09):** `Delete` removes the selected guide
+    (`guide.remove`). Dragging off the knob rotates the guide about the knob. Angle-locked guides
+    move but do not rotate. Sidebearing reference: left keeps x, right moves with the width, both
+    keeps the guide's fraction of the width. Guides are snap targets. A tutorial video showing it
+    would confirm or correct this.
 28. **Magnetic guides / snapping**: snap distance in screen pixels, priority among targets, and
     whether metrics and guides are snap targets.
+    **Answered for M3 (our decision, 2026-10-09):** snap distance 4 screen points (a `theme::Tokens`
+    value). Priority: nodes, handles, guides, metric lines. `Ctrl` suspends snapping and magnetic
+    guides. A tutorial video showing it would confirm or correct this.
 29. **Undo**: what else besides global guides escapes per-glyph undo (font info, kerning,
     classes), and whether there is any document-level undo.
+    **Answered for M3 (our decision, 2026-10-09):** one history per document, global guides included
+    (decision 0004 item 4, D4). No per-glyph filter in M3.
 30. **Start Window**: the list of scripts and glyph sets comes from the app's glyph data; we need
     our own data source for it.

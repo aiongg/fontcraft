@@ -9,6 +9,11 @@ pub const KINDS: &[&str] = &["command", "tool", "panel", "setting", "parameter",
 const STATUSES: &[&str] = &["handbook", "docs", "memory", "inferred", "observed"];
 const ORIGINS: &[&str] = &["fontlab", "robofont", "fontforge", "fontra"]; // brand-ok: the inventory's `origin` values, not user-visible text
 const MODIFIERS: &[&str] = &["Cmd", "Ctrl", "Alt", "Shift"];
+/// Focus scopes a `when` may name besides `tool:<id>` and `panel:<id>` (decision 0004).
+const SCOPES: &[&str] = &["editView", "textMode", "fontView", "dialog"];
+/// Context menus a command's `context` may list.
+const CONTEXTS: &[&str] =
+    &["canvas", "canvas.node", "canvas.segment", "canvas.path", "canvas.guide", "canvas.anchor", "canvas.component", "layers.row", "toolbar"];
 
 pub struct Area {
     pub id: String,
@@ -74,6 +79,12 @@ fn is_shortcut(sc: &str) -> bool {
     let Some((key, mods)) = parts.split_last() else { return false };
     let positions: Vec<usize> = mods.iter().filter_map(|m| MODIFIERS.iter().position(|o| o == m)).collect();
     !key.is_empty() && !MODIFIERS.contains(key) && positions.len() == mods.len() && positions.windows(2).all(|w| w[0] < w[1])
+}
+
+/// Does the shortcut fire while a text field has focus? Only Cmd and Ctrl keep a key out of text
+/// entry; a plain key, Shift or Alt types or edits text.
+fn types_into_text(sc: &str) -> bool {
+    !sc.is_empty() && !sc.split('+').rev().skip(1).any(|m| m == "Cmd" || m == "Ctrl")
 }
 
 /// Loads `spec/` and returns the inventory, or every problem found.
@@ -175,6 +186,12 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                     .is_some_and(|a| a.iter().all(|v| matches!(v.as_str(), Some("font" | "master" | "instance"))));
                 let flag = |k: &str| fields.get(k).is_some_and(Value::is_bool);
                 let is_str = |k: &str| fields.get(k).is_some_and(Value::is_str);
+                let absent_or_str = |k: &str| !fields.contains_key(k) || is_str(k);
+                let when_ok = !fields.contains_key("when") || (is_str("when") && !s("when").is_empty());
+                let when_needed = !types_into_text(&s("shortcut")) || fields.contains_key("when");
+                let context_ok = fields.get("context").is_none_or(|v| {
+                    v.as_array().is_some_and(|a| !a.is_empty() && a.iter().all(|c| c.as_str().is_some_and(|c| CONTEXTS.contains(&c))))
+                });
                 // One message per broken rule; a row may break several.
                 let rules: &[(&str, bool, &str)] = &[
                     ("command", is_command_id(&key), "a command id is noun.camelCase: ASCII letters, digits and dots"),
@@ -185,6 +202,10 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                     ),
                     ("command", one_of("kind", &["engine", "ui"]), "kind must be engine or ui"),
                     ("command", shortcut_ok, "the shortcut is not written Cmd+Ctrl+Alt+Shift+Key"),
+                    ("command", when_ok, "`when` must be a non-empty string"),
+                    ("tool", when_ok, "`when` must be a non-empty string"),
+                    ("command", when_needed, "a shortcut without Cmd or Ctrl needs `when`, so it never fires while a text field has focus"),
+                    ("command", context_ok, "`context` must be a non-empty list of known context menus (spec/README.md)"),
                     ("tool", !s("label").is_empty() && has_list("gestures"), "a tool needs label and gestures"),
                     ("panel", !s("label").is_empty() && has_list("controls"), "a panel needs label and controls"),
                     (
@@ -222,6 +243,15 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                 for (_, _, message) in rules.iter().filter(|(k, ok, _)| *k == kind && !ok) {
                     err((*message).to_string());
                 }
+                if !absent_or_str("notes") {
+                    err("`notes` must be a string".into());
+                }
+                if fields.contains_key("context") && kind != "command" {
+                    err("only a command has `context`".into());
+                }
+                if fields.contains_key("when") && !matches!(kind, "command" | "tool") {
+                    err("only a command or a tool has `when`".into());
+                }
                 rows.push(Row {
                     kind,
                     key,
@@ -236,6 +266,21 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
     }
     // A cli row's command must be a command in the inventory.
     let commands: HashSet<&str> = rows.iter().filter(|r| r.kind == "command").map(|r| r.key.as_str()).collect();
+    // A `when` names a scope, or a tool or panel that has a row.
+    let ids = |kind: &str| -> HashSet<&str> { rows.iter().filter(|r| r.kind == kind).map(|r| r.key.as_str()).collect() };
+    let (tools, panels) = (ids("tool"), ids("panel"));
+    for r in rows.iter().filter(|r| r.fields.contains_key("when")) {
+        let when = r.str("when");
+        let known = SCOPES.contains(&when)
+            || when.strip_prefix("tool:").is_some_and(|t| tools.contains(t))
+            || when.strip_prefix("panel:").is_some_and(|p| panels.contains(p));
+        if !known {
+            errors.push(format!(
+                "{}: {} `{}`: `when` must be one of {SCOPES:?}, tool:<tool id> or panel:<panel id>, got `{when}`",
+                r.file, r.kind, r.key
+            ));
+        }
+    }
     for r in rows.iter().filter(|r| r.kind == "cli") {
         let target = r.str("command");
         if !target.is_empty() && !commands.contains(target) {
@@ -282,6 +327,12 @@ mod tests {
         }
         for bad in ["Shift+Cmd+N", "Cmd+", "Cmd+Cmd+N", "Option+N", "Cmd+Shift", ""] {
             assert!(!is_shortcut(bad), "{bad}");
+        }
+        for text in ["Tab", "Shift+Tab", "Alt+Delete", "Alt+Shift+Return", "A"] {
+            assert!(types_into_text(text), "{text}");
+        }
+        for global in ["Cmd+A", "Ctrl+Tab", "Cmd+Alt+Shift+R", ""] {
+            assert!(!types_into_text(global), "{global}");
         }
     }
 

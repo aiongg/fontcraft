@@ -152,24 +152,43 @@ operation the Remove Overlap export option runs on every glyph.
 
 1. Dimensions: the field keys and diagram for each script, and whether any feature (autohinting,
    filters) reads them.
+   **Answered for M3 (our decision, 2026-10-09):** read and write the key the corpus `.glyphs` files
+   use in master user data, if any carries one; otherwise our own key there. Nothing else reads the
+   values (`dimensions.noEffectOnFont`).
 2. Fit Curve: default values of the two fields; the increment of plus and minus; the exact rule
    of the balance button; the precise definition of the percentage (relative to the handle
    intersection point, and what happens when the handles are parallel); what the buttons do
    when the field values exceed the range from the custom parameter.
+   **Answered for M3 (our decision, 2026-10-09):** the eight steps spread evenly between the lower
+   and upper percentage. A handle's percentage is its length over the distance from its node to the
+   intersection of the two handles; parallel handles use the chord. The range comes from the `Fit
+   Curve Panel Settings` parameter, else 48 and 74 (the handbook's example).
+   Plus and minus move to the next or previous step; balance sets both handles of a segment to
+   their mean percentage; values beyond the range are clamped to it.
 3. Layers: does the plus button copy the active layer or create an empty one; which master a
    new backup attaches to when several layers are selected; is layer visibility saved in the
    file; the full contents of the actions and filter menus; what clicking a row does to the
    glyphs selected in a text tab versus the edited glyph.
+   **Answered for M3 (our decision, 2026-10-09):** plus copies the active layer as a backup named by
+   date and time; visibility is saved; clicking a row edits that layer.
 4. Use as Master on a special layer: allowed, and with what result?
+   **Answered for M3 (our decision, 2026-10-09):** allowed for backup layers only.
 5. Transformations: the direction and fixed side of slant up/down; whether slant uses the
    angle's tangent as the shear factor; the horizontal position of the metrics-point origin for
    rotate, scale and slant (only mirroring is described); how exactness of opposite buttons is
    implemented (kept sub-grid coordinates or a remembered pre-state).
+   **Answered for M3 (our decision, 2026-10-09):** slant is a shear by the tangent of the angle
+   about the origin. Opposite buttons are exact for mirroring and 90° rotation; other pairs are
+   exact up to grid rounding. The rest of this question stays open.
 6. Which icon is "centre horizontally" and which "centre vertically": the handbook lists six
    align buttons but the wording of the two centre buttons can be read either way.
 7. Align with a single selected object or a single point: no-op, or aligned to something else
    (metrics, layer)? Behaviour in Font View with whole glyphs selected.
+   **Answered for M3 (our decision, 2026-10-09):** no change, with a message.
 8. Booleans on open paths and on components; the definition of "frontmost" (last path in the
    layer's path order?); which path's start point and direction the result inherits.
+   **Answered for M3 (our decision, 2026-10-09):** open paths are left as they are; components are
+   not changed; "frontmost" is the last shape in the layer; the result's start node follows the
+   Correct Path Direction rule (03a question 16).
 9. Edit > Info for Selection is given with Cmd+Shift+I here and Cmd+Alt+I in the Edit View
    chapter; Cmd+Shift+I is also View > Show Info.

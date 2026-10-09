@@ -562,6 +562,7 @@ milestone = "M3"
 summary = "Copy places three flavours on the clipboard: our own JSON fragment of the model (shapes, anchors, whole layers or glyphs, or kerning pairs, with every attribute), an SVG path for drawing applications, and plain text. Paste prefers our JSON, then SVG, then PDF, as vector applications offer them; pasted artwork far outside the glyph box triggers the bounds-correction prompt and coordinates are rounded to the grid unless the grid is zero."
 ref = "Import & Export › Vector Drawing Applications"
 status = "inferred"
+notes = "The PDF flavour waits for M11 with PDF import; M3 builds the JSON and SVG flavours."
 
 # ───────────────────────────── Kerning and metrics interchange ─────────────────────────────
 
@@ -616,7 +617,7 @@ read = true
 write = true
 spec = "https://www.w3.org/TR/png/"
 area = "import-export"
-milestone = "M3"
+milestone = "M11"
 summary = "Placed as a tracing template or as the bitmap of a colour glyph. A Glyphs source stores only a path relative to the document, with position, scale, slant, rotation, crop and alpha; a UFO requires the file itself inside `images/` and allows PNG only, so other image types are converted to PNG when saving to UFO. Images are left out of exports except for bitmap colour fonts."
 ref = "Edit View › Images; UFO 3 images directory, GLIF image element; Color Fonts › Standard Bitmap Graphics"
 status = "docs"
@@ -629,7 +630,7 @@ read = true
 write = false
 spec = "https://www.w3.org/Graphics/JPEG/itu-t81.pdf"
 area = "import-export"
-milestone = "M3"
+milestone = "M11"
 summary = "Placed by reference like PNG and used as a tracing template or as bitmap colour-glyph data. Not valid inside a UFO, so it is re-encoded as PNG there and the original relative path is remembered in the glyph lib."
 ref = "Edit View › Images; Color Fonts › Standard Bitmap Graphics"
 status = "handbook"

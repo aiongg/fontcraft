@@ -99,7 +99,7 @@ pub fn render(inv: &Inventory, live: &BTreeSet<&'static str>) -> String {
     let _ = writeln!(out, "\n## By source\n");
     let _ = writeln!(
         out,
-        "How each row is known. `handbook` and `docs` come from public documentation, `inferred` is our own design, `memory` is recalled and unverified, `observed` was checked against the running reference app.\n"
+        "How each row is known. `handbook` and `docs` come from public documentation, `inferred` is our own design, `memory` is recalled and unverified, `observed` was checked against the running reference (the app on our own fonts or in a public tutorial video, or a reference tool's output).\n"
     );
     let _ = writeln!(out, "| Status | Rows |\n|---|---:|");
     for status in ["handbook", "docs", "inferred", "memory", "observed"] {
