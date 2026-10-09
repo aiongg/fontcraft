@@ -52,6 +52,14 @@ pub fn postscript_name(resolved: &Resolved, options: &Options) -> Option<String>
     info::derive(resolved, &options.style_name, &mut Vec::new()).name(6)
 }
 
+/// The PostScript name an exported file of `resolved` is named by. A font with no family name
+/// takes `source` (the source file's name without its extension) as the family here, so its
+/// files are not called `-Bold.ttf`; the `name` table keeps the empty family.
+pub fn file_stem(resolved: &Resolved, options: &Options, source: &str) -> Option<String> {
+    let family = if resolved.family_name.trim().is_empty() { source.trim() } else { resolved.family_name.as_str() };
+    info::derive_with_family(resolved, family, &options.style_name, &mut Vec::new()).name(6)
+}
+
 /// The tables `build::assemble` writes for `flavour`, sorted by tag as the table directory is.
 fn tables(flavour: Flavour, vertical: bool) -> Vec<String> {
     let mut tags: Vec<&str> = vec!["OS/2", "cmap", "head", "hhea", "hmtx", "maxp", "name", "post"];

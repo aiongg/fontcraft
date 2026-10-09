@@ -210,7 +210,7 @@ status = "handbook"
 id = "export.fileNaming"
 area = "compile"
 milestone = "M2"
-summary = "Each exported file is named by the font's PostScript name (family and style without spaces, joined by a hyphen) plus the extension of its flavour and container: .ttf or .otf, .woff, .woff2. An instance's fileName custom parameter replaces that stem. FontCraft drops characters that cannot be in a file name."
+summary = "Each exported file is named by the font's PostScript name (family and style without spaces, joined by a hyphen) plus the extension of its flavour and container: .ttf or .otf, .woff, .woff2. An instance's fileName custom parameter replaces that stem. FontCraft drops characters that cannot be in a file name, and names the files of a font with no family name by the source file's name without its extension (Draft-Bold.ttf, not -Bold.ttf); the name table keeps the empty family."
 ref = "Import & Export › Exporting Font Files; Appendix › Custom Parameters › fileName"
 status = "memory"
 

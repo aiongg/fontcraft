@@ -78,7 +78,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Static Fonts",
             [],
             None,
-            "{instances?: [string], outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, removeOverlap?: bool, autohint?: bool, timestamp?: number|\"now\"} compile the active document's exportable instances (or the named ones; a font without instances exports its first master) to static fonts with TrueType (.ttf) or CFF (.otf) outlines, in each container asked for (default plain; WOFF and WOFF2 are .woff and .woff2). Instances between masters are skipped and listed. destination: a folder, created when missing, where each file is named by the instance's fileName parameter, else its PostScript name; or one file path ending in .ttf, .otf, .woff or .woff2, which sets the outlines and container when they are not given and receives the first instance that can be built; without it the fonts are returned as dataBase64. Existing files are replaced; a failing export writes nothing. removeOverlap and autohint: not supported yet (overlaps are kept, with a warning). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, outlines, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], skipped: [{instance, source, reason}], warnings}; with one file also {path? | dataBase64?, bytes, glyphs, glyphOrder}",
+            "{instances?: [string], outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, removeOverlap?: bool, autohint?: bool, timestamp?: number|\"now\"} compile the active document's exportable instances (or the named ones; a font without instances exports its first master) to static fonts with TrueType (.ttf) or CFF (.otf) outlines, in each container asked for (default plain; WOFF and WOFF2 are .woff and .woff2). Instances between masters are skipped and listed. destination: a folder, created when missing, where each file is named by the instance's fileName parameter, else its PostScript name (with the document's file name standing in for a missing family name); or one file path ending in .ttf, .otf, .woff or .woff2, which sets the outlines and container when they are not given and receives the first instance that can be built; without it the fonts are returned as dataBase64. Existing files are replaced; a failing export writes nothing. removeOverlap and autohint: not supported yet (overlaps are kept, with a warning). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, outlines, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], skipped: [{instance, source, reason}], warnings}; with one file also {path? | dataBase64?, bytes, glyphs, glyphOrder}",
             has_doc,
             export_static
         ),
@@ -382,7 +382,7 @@ fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
     let mut report = Report::default();
     report.warnings.extend(overlaps.map(str::to_string));
     let mut sink = Sink::new(&req.dest, true)?;
-    compile::build(font, &jobs, &req, &mut sink, &mut report)?;
+    compile::build(font, &s.doc()?.title, &jobs, &req, &mut sink, &mut report)?;
     if report.fonts.is_empty() {
         return Err(compile::nothing_built(&report));
     }
@@ -459,7 +459,7 @@ fn export_all(s: &mut Session, p: &Value) -> Result<Value> {
     for (&i, jobs) in chosen.iter().zip(&jobs) {
         let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
         let mut report = Report::default();
-        compile::build(&doc.font, jobs, &req, &mut sink, &mut report)?;
+        compile::build(&doc.font, &doc.title, jobs, &req, &mut sink, &mut report)?;
         warnings.append(&mut report.warnings);
         reports.push((doc.title.clone(), report));
     }

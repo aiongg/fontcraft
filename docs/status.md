@@ -198,3 +198,6 @@ Append one terse entry per session: what landed, numbers, what is still open.
   the same tables, and the 1,102 WOFF2 files `compile` wrote decode to the plain fonts' tables.
   New `crates/engine/tests/determinism.rs`: two sessions, 12 files (TTF and OTF, plain, WOFF,
   WOFF2), byte-identical. Next: M3's planning pass.
+- **2026-10-09, M2.7.** Owner decision: a font with no family name (42 corpus sources) is
+  exported as `<source file name>-<style>.ttf` instead of fontc's `-<style>.ttf`; only the file
+  name, the `name` table keeps the empty family.

@@ -199,8 +199,8 @@ on, so the engine track, where oracles prove correctness, goes first.
 - **Export:** `file.exportStatic`, `file.exportAll`, `font.compile` and `font.compilePlan`, and
   `fontcraft-cli compile` (`--plan` for the plan): static TTF and OTF of every exportable
   instance at a master, of the first master when there are none, or of each master; plain, WOFF
-  and WOFF2; named by the `fileName` parameter or the PostScript name, with `ttf` and `otf`
-  subfolders when both are written. Instances between masters are skipped with a reason;
+  and WOFF2; named by the `fileName` parameter or the PostScript name (the source file's name
+  stands in for a missing family name), with `ttf` and `otf` subfolders when both are written. Instances between masters are skipped with a reason;
   overlaps are kept with a warning. A failing export writes nothing: the files are staged and
   renamed only when every font is built. `convert` also writes `.otf`, `.woff` and `.woff2`.
   The same source and timestamp give the same bytes (`crates/engine/tests/determinism.rs`).

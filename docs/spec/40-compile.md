@@ -209,7 +209,7 @@ writing fonts; `font.compilePlan` describes the same choices without building.
 |---|---|---|
 | Which fonts | The exportable static instances; the first master when the font has no static instance. Named instances are built whether they export or not. `font.compile` can add each master | `export.staticUsesInstancesOrDefault` |
 | Instances between masters | Skipped with a reason in the result until interpolation (M9). An export that builds nothing fails | `export.instancesBetweenMasters` |
-| File name | The instance's `fileName` parameter, else the PostScript name (name ID 6, as the compiler derives it), plus `.ttf`, `.otf`, `.woff` or `.woff2`; characters a file name cannot hold are dropped | `export.fileNaming`, `compile.outputNaming` |
+| File name | The instance's `fileName` parameter, else the PostScript name (name ID 6, as the compiler derives it), plus `.ttf`, `.otf`, `.woff` or `.woff2`; characters a file name cannot hold are dropped. A font with no family name takes the source file's name without its extension as the family for the file name only (`Draft.glyphs` gives `Draft-Bold.ttf`, where fontc writes `-Bold.ttf`); the `name` table keeps the empty family | `export.fileNaming`, `compile.outputNaming` |
 | Both flavours at once | Each into a `ttf` or `otf` subfolder; a repeated file name keeps the later font, with a warning | `export.flavourSubfolders` |
 | One file as destination | Its extension sets the flavour and container; it receives the first font that can be built | `export.singleFileDestination` |
 | Failure | Files are staged under temporary names and renamed only when every font is built; a failure leaves the destination as it was | `export.failingExportWritesNothing` |

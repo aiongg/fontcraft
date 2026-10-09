@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile Fonts",
             [],
             None,
-            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
+            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
             has_doc,
             compile
         ),
@@ -300,16 +300,20 @@ impl Request {
 }
 
 /// The file name stem of a font: its `fileName` parameter, else its PostScript name, else family
-/// and style; characters that cannot be in a file name are dropped.
-fn stem(resolved: &Resolved, options: &Options) -> String {
+/// and style; characters that cannot be in a file name are dropped. `source` (the document's file
+/// name without extension) stands in for a missing family name.
+fn stem(resolved: &Resolved, options: &Options, source: &str) -> String {
     let wanted = resolved
         .params
         .get("fileName")
         .and_then(|v| v.as_str())
         .map(str::to_string)
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| fontcraft_compile::plan::postscript_name(resolved, options))
-        .unwrap_or_else(|| format!("{}-{}", resolved.family_name, resolved.style_name));
+        .or_else(|| fontcraft_compile::plan::file_stem(resolved, options, source))
+        .unwrap_or_else(|| {
+            let family = if resolved.family_name.trim().is_empty() { source } else { resolved.family_name.as_str() };
+            format!("{family}-{}", resolved.style_name)
+        });
     let clean: String =
         wanted.chars().filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')).take(MAX_STEM).collect();
     let clean = clean.trim().trim_start_matches('.');
@@ -440,8 +444,9 @@ impl Sink {
     }
 }
 
-/// Builds `jobs` of `font` into `sink`, adding to `report`.
-pub(super) fn build(font: &Font, jobs: &[Job], req: &Request, sink: &mut Sink, report: &mut Report) -> Result<()> {
+/// Builds `jobs` of `font` into `sink`, adding to `report`. `source` is the document's title (its
+/// file name without extension), which names the files of a font without a family name.
+pub(super) fn build(font: &Font, source: &str, jobs: &[Job], req: &Request, sink: &mut Sink, report: &mut Report) -> Result<()> {
     font.check()?;
     for job in jobs {
         if req.first_only && !report.fonts.is_empty() {
@@ -455,7 +460,7 @@ pub(super) fn build(font: &Font, jobs: &[Job], req: &Request, sink: &mut Sink, r
             }
             other => other?,
         };
-        let stem = stem(&resolved, &req.options);
+        let stem = stem(&resolved, &req.options, source);
         for &flavour in &req.flavours {
             let compiled = fontcraft_compile::compile_resolved(resolved.clone(), flavour, &req.options)?;
             let mut files = Vec::with_capacity(req.containers.len());
@@ -790,11 +795,11 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compile", p)?;
     let (jobs, mut req, overlaps) = compile_request(s, &p)?;
     req.options.timestamp = timestamp(&p)?;
-    let font = s.font()?;
+    let doc = s.doc()?;
     let mut report = Report::default();
     report.warnings.extend(overlaps.map(str::to_string));
     let mut sink = Sink::new(&req.dest, false)?;
-    build(font, &jobs, &req, &mut sink, &mut report)?;
+    build(&doc.font, &doc.title, &jobs, &req, &mut sink, &mut report)?;
     if matches!(req.dest, Dest::File(_)) && report.file_count() > 1 {
         return Err(p.bad(format!("`destination` is one file, but {} fonts were built: give a folder", report.fonts.len())));
     }
@@ -833,7 +838,8 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
         }
     };
     let want = |name: &str| sections.contains(&name);
-    let font = s.font()?;
+    let doc = s.doc()?;
+    let (font, source) = (&doc.font, doc.title.as_str());
     font.check()?;
     let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
     let mut warnings: Vec<String> = overlaps.map(str::to_string).into_iter().collect();
@@ -846,7 +852,7 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
             }
             other => other?,
         };
-        let stem = stem(&resolved, &req.options);
+        let stem = stem(&resolved, &req.options, source);
         instances.push(json!({ "instance": job.label, "source": job.source, "master": resolved.master, "location": resolved.location }));
         for &flavour in &req.flavours {
             let plan = fontcraft_compile::plan::plan_resolved(resolved.clone(), flavour, &req.options)?;

@@ -480,6 +480,11 @@ fn slanted(offset: f64, angle: f64) -> f64 {
 /// Derives what the tables say about `font`. `style` is the style name used for the names when
 /// not empty (the compile option), else the resolved master's or instance's.
 pub fn derive(font: &Resolved, style: &str, warnings: &mut Vec<String>) -> Info {
+    derive_with_family(font, &font.family_name, style, warnings)
+}
+
+/// [`derive`] with `family` in place of the font's family name.
+pub(crate) fn derive_with_family(font: &Resolved, family: &str, style: &str, warnings: &mut Vec<String>) -> Info {
     let ufo = is_ufo_family(font.format);
     let style = if style.is_empty() { font.style_name.as_str() } else { style };
     let params = &font.params;
@@ -546,7 +551,7 @@ pub fn derive(font: &Resolved, style: &str, warnings: &mut Vec<String>) -> Info 
         })
         .unwrap_or_else(|| Tag::new(b"NONE"));
 
-    let names = names(font, style, selection, vendor_text.unwrap_or(DEFAULT_VENDOR_ID), ufo, warnings);
+    let names = names(font, family, style, selection, vendor_text.unwrap_or(DEFAULT_VENDOR_ID), ufo, warnings);
 
     // Weight and width: a UFO's own value; a `.glyphs` font's from its axes, as fontc derives
     // them for the variable font it builds.
@@ -636,7 +641,15 @@ fn nearest_width_class(percent: f64) -> u16 {
 
 /// The name records: the font's names with fontc's fallbacks, then the localised values, then
 /// the `Name Table Entry` parameters.
-fn names(font: &Resolved, style: &str, selection: SelectionFlags, vendor: &str, ufo: bool, warnings: &mut Vec<String>) -> Vec<NameRecord> {
+fn names(
+    font: &Resolved,
+    family: &str,
+    style: &str,
+    selection: SelectionFlags,
+    vendor: &str,
+    ufo: bool,
+    warnings: &mut Vec<String>,
+) -> Vec<NameRecord> {
     let mut b = NameBuilder { version: (i64::from(font.version_major), u64::from(font.version_minor)), ..Default::default() };
     for (property, id, params, from) in NAME_PROPERTIES {
         let value = if *id == 1 || !writes(*from, ufo) { None } else { text(font, property, params) };
@@ -654,8 +667,8 @@ fn names(font: &Resolved, style: &str, selection: SelectionFlags, vendor: &str, 
         if let Some(flags) = font.params.get("styleMapStyleName").and_then(Value::as_str).and_then(ribbi_flags) {
             b.add(2, ribbi_name(flags));
         }
-        if b.get(16).is_none() && !font.family_name.is_empty() {
-            b.add(16, &font.family_name.clone());
+        if b.get(16).is_none() && !family.is_empty() {
+            b.add(16, family);
         }
         if b.get(17).is_none() && !style.is_empty() {
             b.add(17, style);
@@ -664,10 +677,9 @@ fn names(font: &Resolved, style: &str, selection: SelectionFlags, vendor: &str, 
         // fontc's `.glyphs` rules: the legacy style from the style flags, the legacy family
         // with the master's style words that are not Regular, Bold or Italic.
         b.add(2, ribbi_name(selection & (SelectionFlags::BOLD | SelectionFlags::ITALIC)));
-        let family = font.family_name.clone();
-        b.add(1, &NameBuilder::family_name(&family, style, true));
+        b.add(1, &NameBuilder::family_name(family, style, true));
         if b.get(16).is_none() {
-            b.add(16, &family);
+            b.add(16, family);
         }
         if b.get(17).is_none() {
             b.add(17, style);

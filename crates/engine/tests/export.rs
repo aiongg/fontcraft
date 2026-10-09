@@ -396,3 +396,25 @@ fn file_names_that_differ_only_in_case_collide() {
     assert!(out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("two fonts are written")), "{out}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_font_without_a_family_name_is_named_by_its_source_file() {
+    let dir = temp("nofamily");
+    let text = TWO_MASTERS.replacen("familyName = \"Test Sans\";\n", "", 1);
+    assert_ne!(text, TWO_MASTERS);
+    let path = dir.join("Draft Sans.glyphs");
+    std::fs::write(&path, text).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": path }));
+    let out_dir = dir.join("out");
+    run(&mut s, "file.exportStatic", json!({"destination": out_dir, "timestamp": 0}));
+    assert_eq!(names(&out_dir), ["DraftSans-Regular.ttf", "TestSans-Heavy.ttf"]);
+    let plan = run(&mut s, "font.compilePlan", json!({"destination": out_dir, "sections": ["outputs"]}));
+    assert!(plan.to_string().contains("DraftSans-Regular.ttf"), "{plan}");
+    // Only the file name: the name table keeps the source's empty family name.
+    let bytes = std::fs::read(out_dir.join("DraftSans-Regular.ttf")).unwrap();
+    let font = skrifa::FontRef::new(&bytes).unwrap();
+    let ps = font.localized_strings(skrifa::string::StringId::POSTSCRIPT_NAME).english_or_first().unwrap().to_string();
+    assert_eq!(ps, "-Regular");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
