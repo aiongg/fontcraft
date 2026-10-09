@@ -7,6 +7,7 @@ mod brands;
 mod codecs;
 mod corpus;
 mod layers;
+mod overlap;
 mod parity;
 mod roundtrip;
 mod spec;
@@ -33,6 +34,10 @@ commands:
   roundtrip [--mode plist|model|native] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
                   read every corpus source and write it back; count byte-identical results
                   (known differences with a reason: xtask/roundtrip-allow.toml)
+  overlap [--out DIR] [--reference FILE] [--match TEXT] [--quadratic]
+                  remove overlaps on every glyph layer of the corpus comparison set and measure it
+                  (--quadratic: convert the input to quadratic curves first)
+                  (inputs for crates/pathops/crosscheck/reference.py go to DIR/layers.jsonl)
 ";
 
 fn main() -> ExitCode {
@@ -48,6 +53,7 @@ fn main() -> ExitCode {
         Some("wasm") => cmd_wasm(),
         Some("corpus") => corpus::run(&root(), rest.contains(&"--fetch")),
         Some("roundtrip") => roundtrip::run(&root(), &rest),
+        Some("overlap") => overlap::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");
             Ok(())

@@ -27,6 +27,7 @@ fontcraft-engine = { path = "crates/engine" }
 fontcraft-mcp = { path = "crates/mcp" }
 fontcraft-ui-egui = { path = "crates/ui-egui" }
 fontcraft-testkit = { path = "crates/testkit" }
+fontcraft-pathops = { path = "crates/pathops" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }
@@ -35,6 +36,8 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
 log = "0.4"
 base64 = "0.22"
+# Curve booleans for overlap removal (MIT OR Apache-2.0). See docs/plans/M3.md › M3.6.
+linesweeper = "0.5"
 # Unicode compatibility decomposition (NFKD) for PostScript strings in CFF (MIT OR Apache-2.0).
 unicode-normalization = "0.1"
 
