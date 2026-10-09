@@ -15,18 +15,20 @@ lists the decision as the owner's.
    `docs/plans/M<n>.md`): the commands, the model changes, the tests, the oracle comparisons, what
    is out of scope. Settle the open questions that block you (§ 3).
 3. **Implement with tests.** Model first, then the pure function that does the work, then the
-   command that calls it, then the UI that calls the command. Tests at each step.
-4. **Verify.** `cargo xtask ci`. For UI work, look at the result (a headless frame test now; a
-   screenshot over the control channel from M3). For compiler work, run the oracle comparison.
+   command that calls it, then the UI that calls the command. § 2 lists the tests a command
+   needs. While working, run `cargo check` or the tests of the crate you changed.
+4. **Verify.** `cargo xtask ci`, once, when the task or batch is done. For UI work, look at the
+   result (a headless frame test now; a screenshot over the control channel from M3). For
+   compiler work, run the oracle comparison.
 5. **Record.** Fix inventory rows that turned out wrong. Run `cargo xtask parity`. Update
    `ROADMAP.md` (milestone row, parity-table row, "Shipped so far") and `docs/status.md`.
 6. **Commit.** One task per commit, named by its id: `M3.4: knife tool`. The tree is green at
-   every commit.
+   the end of every task or batch.
 
 ## 2. Adding a command: the checklist
 
 - [ ] Its row exists in `spec/inventory/*.toml` (add it if it is our own design, `status = "inferred"`).
-- [ ] The work is a function in the right lower-layer crate, with unit tests.
+- [ ] The work is a function in the right lower-layer crate.
 - [ ] `cmd!(…)` in `crates/engine/src/cmd/<area>.rs`: the id from the inventory, label, menu
       path, shortcut, a params doc that starts with `{…}` and says what is returned after `→`.
 - [ ] Parameters read through `Params`; every count and size capped; targets explicit.

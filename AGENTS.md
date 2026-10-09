@@ -44,9 +44,9 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
     under `fontcraft_engine::guard`, which cannot catch an out-of-memory abort.
   - Every panic fix comes with a test that panicked before it.
 - **Everything is a command.** User-visible behaviour is a command in `crates/engine/src/cmd/`
-  (id, label, menu path, shortcut, params doc, `enabled`, `run`) with tests. Commands take explicit
-  targets in their parameters; none depends on UI state. A command that fails changes nothing.
-  View and window state only: `UI_COMMANDS` in `crates/ui-egui/src/menus.rs`.
+  (id, label, menu path, shortcut, params doc, `enabled`, `run`) with behaviour tests. Commands
+  take explicit targets in their parameters; none depends on UI state. A command that fails
+  changes nothing. View and window state only: `UI_COMMANDS` in `crates/ui-egui/src/menus.rs`.
 - **Spec first.** A command must have a row in `spec/inventory/*.toml` before or with its code
   (`cargo xtask parity` fails otherwise). When behaviour turns out different from a row, fix the
   row in the same change.
@@ -60,8 +60,10 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
   the references.
 - **Oracles decide compiler questions.** Where FontCraft and a reference compiler disagree on a
   table, the difference is either fixed or written down in `docs/spec/40-compile.md` with the reason.
-- **The gate** before every commit: `cargo xtask ci` (fmt, clippy with the no-panic lints, tests,
-  spec, parity, assets, brands, layers, wasm). One task per commit, named by its id (`M1.3: …`).
+- **The gate**: `cargo xtask ci` (fmt, clippy with the no-panic lints, tests, spec, parity,
+  assets, brands, layers, wasm), run once when a task or batch is done, or when the brief says.
+  While working, `cargo check` and the tests of the crate you changed are enough. One task per
+  commit, named by its id (`M1.3: …`).
 
 ## Running and looking at the app
 - `cargo run -p fontcraft -- --control 7985 [file.fontcraft]`: the desktop app with the control
