@@ -221,7 +221,7 @@ fn spelled(kept: Option<&Value>, nums: &[f64]) -> String {
 }
 
 /// Version 2 keeps these names at the top level; the model keeps them as properties.
-const NAMES: [(&str, &str, bool); 5] = [
+pub(crate) const NAMES: [(&str, &str, bool); 5] = [
     ("copyright", "copyrights", true),
     ("designer", "designers", true),
     ("designerURL", "designerURL", false),
@@ -611,7 +611,7 @@ pub(crate) fn read_layer(v: Value, at: &str) -> Result<Layer> {
     let id = opt_string(&mut d, "layerId", at)?.ok_or_else(|| bad(at, "a layer has no layerId"))?;
     let at = format!("{at} layer `{id}`");
     let master = opt_string(&mut d, "associatedMasterId", &at)?.unwrap_or_else(|| id.clone());
-    let width = take(&mut d, "width").map(|v| as_f64(&v, &format!("{at}.width"))).transpose()?.unwrap_or(0.0);
+    let width = take(&mut d, "width").map(|v| as_f64(&v, &format!("{at}.width"))).transpose()?.unwrap_or(crate::DEFAULT_LAYER_WIDTH);
     let mut shapes = Vec::new();
     if let Some(v) = take(&mut d, "paths") {
         shapes.extend(as_items(v, &at)?.into_iter().map(|p| read_path(p.clone()).unwrap_or_else(|| raw(p))));

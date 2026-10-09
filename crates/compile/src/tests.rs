@@ -833,6 +833,26 @@ fn names_follow_the_reference_fallbacks() {
 }
 
 #[test]
+fn a_masters_parameters_replace_the_fonts_as_glyphslib_applies_them() {
+    let mut f = sample();
+    Arc::make_mut(&mut f.info).properties.set("vendorID", "FONT", false);
+    Arc::make_mut(&mut f.info).properties.set("licenses", "Font licence", true);
+    let text = |t: &str| fontcraft_model::plist::Value::String(t.into());
+    let m = &mut Arc::make_mut(&mut f.masters)[0];
+    m.params.0.push(fontcraft_model::Param::new("vendorID", text("MAST")));
+    m.params.0.push(fontcraft_model::Param::new("license", text("Master licence")));
+    // A selection bit the font sets stays set when the master's parameter is off (glyphsLib).
+    m.params.0.push(fontcraft_model::Param::new("Use Typo Metrics", fontcraft_model::plist::Value::Number(fontcraft_model::plist::Number::int(0))));
+    int_param(&mut f, "Use Typo Metrics", 1);
+    let out = compile_sample(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert_eq!(font.os2().unwrap().ach_vend_id(), skrifa::raw::types::Tag::new(b"MAST"));
+    assert_eq!(names(&font, StringId::LICENSE_DESCRIPTION), ["Master licence"]);
+    assert!(names(&font, StringId::UNIQUE_ID)[0].contains(";MAST;"));
+    assert_eq!(font.os2().unwrap().fs_selection().bits() & 0x80, 0x80);
+}
+
+#[test]
 fn use_my_metrics_goes_on_the_first_component_with_the_advance() {
     let mut f = sample();
     let mut c = f.glyph_mut("C").unwrap();

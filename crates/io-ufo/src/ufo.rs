@@ -506,10 +506,21 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     // `<name>.background` that of the layer `<name>`. Then the vertical origins, measured from
     // the ascender as the reference measures them. A glyph's master layer comes first.
     let frame = vertical_frame(&font_info.params, &metrics);
+    let vhea = VHEA_PARAMS.iter().all(|n| font_info.params.get(n).is_some());
     for g in &mut glyphs {
         attach_backgrounds(g, master_id);
         for l in &mut g.layers {
             type_vertical(l, frame);
+            // A GLIF without a height has height 0, which ufo2ft and fontc write when the font
+            // has vertical metrics. The model's "no height" is the default height.
+            if vhea
+                && l.id == master_id
+                && l.info.vert_width.is_none()
+                && ufo_get(&l.extra, "defaultHeight").is_none()
+                && ufo_get(&l.extra, "height").is_none()
+            {
+                l.info.vert_width = Some(0.0);
+            }
         }
         g.layers.sort_by_key(|l| l.id != master_id);
     }
@@ -695,6 +706,9 @@ fn vertical_origin_of(lib: Option<&Dict>, ascender: Option<f64>) -> Option<f64> 
     (y.is_finite() && y != a && o.abs() <= fontcraft_model::MAX_COORDINATE && a - o == y).then_some(o)
 }
 
+/// The parameters that make a UFO vertical for ufo2ft: its `openTypeVheaVertTypo…` keys.
+const VHEA_PARAMS: [&str; 3] = ["vheaVertAscender", "vheaVertDescender", "vheaVertLineGap"];
+
 /// Reads the vertical metrics as glyphsLib's `to_glyphs_glyph_height_and_vertical_origin` does:
 /// a height that is the default and a vertical origin at the ascender are no values (the file's
 /// own stay, `defaultHeight` marking the height).
@@ -873,6 +887,11 @@ pub(crate) fn place_design(
             None => zones.push(z),
         }
     }
+    // Trailing metrics the file does not have stay absent, so a compile gives them the format's
+    // default (ufo2ft's, which fontc follows for that UFO alone) rather than 0. One the file
+    // lacks before one it has is 0: a value list has no gaps.
+    let stated = kinds.iter().zip(values.iter()).rposition(|(k, v)| if *k == metric::BASELINE { v.over != 0.0 } else { has(k) });
+    values.truncate(stated.map_or(0, |i| i + 1));
     master.metric_values = values;
     master.zones = zones;
     master.guides = design.guides;
@@ -2660,5 +2679,21 @@ mod tests {
         }
         flat.glyph_mut("A").unwrap().layer_mut("m01").unwrap().info.vert_origin = Some(5.0);
         assert!(info_losses(&flat).iter().any(|l| l.starts_with("the layers' vertical origins, without an ascender")), "{:?}", info_losses(&flat));
+    }
+
+    #[test]
+    fn a_glyph_without_a_height_in_a_vertical_ufo_has_height_0() {
+        let mut font = Font::new("Vert");
+        for (name, v) in [("vheaVertAscender", 500), ("vheaVertDescender", -500), ("vheaVertLineGap", 0)] {
+            Arc::make_mut(&mut font.info).params.0.push(Param::new(name, Value::Number(Number::int(v))));
+        }
+        let mut files = write(&font).unwrap();
+        let b = s(&files["glyphs/B_.glif"]).to_string();
+        assert!(b.contains(" height=\"1000\""), "{b}");
+        files.insert("glyphs/B_.glif".into(), b.replace(" height=\"1000\"", "").into_bytes());
+        let back = read(&files).unwrap();
+        let height = |n: &str| back.glyph(n).unwrap().layer("m01").unwrap().info.vert_width;
+        assert_eq!((height("A"), height("B")), (None, Some(0.0)), "the default height, and none at all (ufo2ft's 0)");
+        assert_eq!(write(&back).unwrap(), files);
     }
 }

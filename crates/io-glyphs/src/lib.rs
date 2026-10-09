@@ -252,6 +252,40 @@ fn take_font_info(d: &mut Dict) -> Result<FontInfo> {
     })
 }
 
+/// Version 2's top-level names that a version 3 or 4 file holds (hand-written files do): each
+/// fills its property when the file has none, as fontc reads them. The key stays in the font's
+/// extra data, and [`without_kept_v2_names`] keeps the writer from writing the name twice.
+fn v2_names_as_properties(root: &Dict, properties: &mut fontcraft_model::Properties) {
+    for (key, property, localized) in v2::NAMES {
+        if properties.get(property).is_none()
+            && let Some(text) = root.get(key).and_then(Value::as_str)
+        {
+            properties.set(property, text, localized);
+        }
+    }
+}
+
+/// The properties to write: those [`v2_names_as_properties`] made from a top-level key that
+/// still holds the same text are left out (the key is written instead).
+fn without_kept_v2_names<'a>(properties: &'a fontcraft_model::Properties, extra: &Extra) -> std::borrow::Cow<'a, fontcraft_model::Properties> {
+    let kept = |p: &fontcraft_model::Property| {
+        v2::NAMES.iter().any(|(key, property, _)| {
+            p.key == *property
+                && extra.get(Family::Glyphs, key).and_then(Value::as_str).is_some_and(|text| match &p.value {
+                    PropertyValue::Single(s) => s == text,
+                    PropertyValue::Localized(v) => {
+                        matches!(v.as_slice(), [only] if only.language == fontcraft_model::DEFAULT_LANGUAGE && only.value == text)
+                    }
+                })
+        })
+    };
+    if properties.0.iter().any(kept) {
+        std::borrow::Cow::Owned(fontcraft_model::Properties(properties.0.iter().filter(|p| !kept(p)).cloned().collect()))
+    } else {
+        std::borrow::Cow::Borrowed(properties)
+    }
+}
+
 /// A string the writer would spell the same way.
 pub(crate) fn take_plain_string(d: &mut Dict, key: &str) -> Option<String> {
     match d.get(key) {
@@ -283,6 +317,7 @@ fn read_font(mut root: Dict) -> Result<Font> {
     }
     let app_version = take_app_version(&mut root);
     let mut font_info = take_font_info(&mut root)?;
+    v2_names_as_properties(&root, &mut font_info.properties);
     let family_name = if version >= 4 {
         v4_family_name(&font_info.properties).unwrap_or_default()
     } else {
@@ -812,13 +847,16 @@ fn push_shapes(e: &mut Vec<(Str, Value)>, shapes: &[Shape], anchors: &[Anchor], 
     Ok(())
 }
 
+/// The width of a layer that states none. The reference app always writes one; hand-written
+/// files may not, and glyphsLib and fontc read 600 then.
+pub(crate) const DEFAULT_LAYER_WIDTH: f64 = 600.0;
+
 fn read_layer(v: Value, at: &str, version: u32) -> Result<Layer> {
     let mut d = as_dict(v, at)?;
     let id = opt_string(&mut d, "layerId", at)?.ok_or_else(|| bad(at, "a layer has no layerId"))?;
     let at = format!("{at} layer `{id}`");
     let master = opt_string(&mut d, "associatedMasterId", &at)?.unwrap_or_else(|| id.clone());
-    // The reference always writes a width; a hand-edited file may not, and reads as zero.
-    let width = take(&mut d, "width").map(|v| as_f64(&v, &format!("{at}.width"))).transpose()?.unwrap_or(0.0);
+    let width = take(&mut d, "width").map(|v| as_f64(&v, &format!("{at}.width"))).transpose()?.unwrap_or(DEFAULT_LAYER_WIDTH);
     let shapes = match take(&mut d, "shapes") {
         Some(v) => as_items(v, &at)?.into_iter().map(|s| shape::read_shape(s, version)).collect(),
         None => Vec::new(),
@@ -902,10 +940,11 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     }
     push_font_info_common(&mut e, font, &font.info.params);
     design::push_defs(&mut e, &font.stems, &font.numbers);
+    let properties = without_kept_v2_names(&font.info.properties, extra);
     if version >= 4 && !font.family_name.is_empty() {
-        info::push_properties(&mut e, &sync_v4_family_name(&font.info.properties, &font.family_name));
+        info::push_properties(&mut e, &sync_v4_family_name(&properties, &font.family_name));
     } else {
-        info::push_properties(&mut e, &font.info.properties);
+        info::push_properties(&mut e, &properties);
     }
     info::push_settings(&mut e, &font.info.settings)?;
     e.push(("unitsPerEm".into(), int(font.units_per_em)));

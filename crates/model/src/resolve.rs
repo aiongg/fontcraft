@@ -412,7 +412,39 @@ fn axis_value(location: &[f64], i: usize) -> f64 {
     crate::axes::design_value(location, i)
 }
 
-/// Puts `own` properties and enabled parameters in place of those of the same key or name.
+/// Parameters that hold a name property's value in format version 2, and in the parameters of a
+/// master or instance of any version (glyphsLib's `GLYPHS_UFO_CUSTOM_PARAMS_GLYPHS3_PROPERTIES`):
+/// (parameter, property).
+const NAME_PARAMS: [(&str, &str); 8] = [
+    ("description", "descriptions"),
+    ("license", "licenses"),
+    ("licenseURL", "licenseURL"),
+    ("sampleText", "sampleTexts"),
+    ("trademark", "trademarks"),
+    ("uniqueID", "uniqueID"),
+    ("vendorID", "vendorID"),
+    ("versionString", "versionString"),
+];
+
+/// Parameters that set an `fsSelection` bit. glyphsLib adds the bit for the font's parameter and
+/// for the master's, and never clears it: a master's that is off leaves the font's on (fontc
+/// reads the font's only, which gives the same bit).
+const SELECTION_PARAMS: [&str; 2] = ["Use Typo Metrics", "Has WWS Names"];
+
+/// Whether a parameter's value is on: a true boolean or a number other than 0.
+fn is_on(v: &fontcraft_plist::Value) -> bool {
+    match v {
+        fontcraft_plist::Value::Bool(b) => *b,
+        fontcraft_plist::Value::Number(n) => n.value().as_f64() != 0.0,
+        fontcraft_plist::Value::String(s) => s.as_str().trim().parse::<f64>().is_ok_and(|f| f != 0.0),
+        _ => false,
+    }
+}
+
+/// Puts `own` properties and enabled parameters in place of those of the same key or name. An
+/// own parameter of [`NAME_PARAMS`] also takes the place of the property it holds, as glyphsLib
+/// writes a master's parameters over the font's names; one of [`SELECTION_PARAMS`] that is off
+/// does not replace one that is on.
 fn overlay(properties: &mut Properties, params: &mut Params, own_properties: &Properties, own_params: &Params) {
     for p in &own_properties.0 {
         match properties.0.iter_mut().find(|q| q.key == p.key) {
@@ -420,7 +452,15 @@ fn overlay(properties: &mut Properties, params: &mut Params, own_properties: &Pr
             None => properties.0.push(p.clone()),
         }
     }
-    let own: Vec<&crate::Param> = own_params.0.iter().filter(|p| !p.disabled).collect();
+    for (param, property) in NAME_PARAMS {
+        if own_params.0.iter().any(|p| !p.disabled && p.name == param) && own_properties.get(property).is_none() {
+            properties.remove(property);
+        }
+    }
+    let kept_on = |p: &crate::Param| {
+        SELECTION_PARAMS.contains(&p.name.as_str()) && !is_on(&p.value) && params.0.iter().any(|q| q.name == p.name && is_on(&q.value))
+    };
+    let own: Vec<&crate::Param> = own_params.0.iter().filter(|p| !p.disabled && !kept_on(p)).collect();
     params.0.retain(|p| !own.iter().any(|o| o.name == p.name));
     params.0.extend(own.into_iter().cloned());
 }

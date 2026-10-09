@@ -173,6 +173,10 @@ pub struct Built {
     /// How the build relates to FontCraft's (a variable font compared at its default location,
     /// one master's file out of several).
     pub notes: Vec<String>,
+    /// Other files of masters with the same name as the one in `path`. The name cannot tell them
+    /// apart, so [`crate::check`] compares with the closest of them all.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<PathBuf>,
 }
 
 /// Builds `req.source` with the reference compiler.
@@ -213,7 +217,12 @@ fn build_fontc(req: &Request, kind: SourceKind, source: &Path) -> Result<Built, 
     if !out.is_file() {
         return Err(format!("fontc finished but wrote no {}", out.display()));
     }
-    Ok(Built { path: out, command: format!("fontc --no-production-names --skip-features -o OUT {}", input.display()), notes })
+    Ok(Built {
+        path: out,
+        command: format!("fontc --no-production-names --skip-features -o OUT {}", input.display()),
+        notes,
+        alternatives: Vec::new(),
+    })
 }
 
 fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Built, String> {
@@ -224,19 +233,33 @@ fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Buil
         SourceKind::Designspace => "-m",
         SourceKind::Ufo => "-u",
     };
-    let mut args: Vec<String> = vec![input_flag.into(), source.to_string_lossy().into_owned(), "-o".into(), req.flavour.extension().into()];
+    let glyphs = matches!(kind, SourceKind::Glyphs | SourceKind::GlyphsPackage);
+    let ext = req.flavour.extension();
+    let mut args: Vec<String> = vec![input_flag.into(), source.to_string_lossy().into_owned(), "-o".into()];
+    if glyphs {
+        // Master UFOs written to disk, so that masters with the same name get files of their
+        // own: glyphsLib numbers the UFOs (`Family-Regular#1.ufo`) and fontmake names each font
+        // after its UFO. Built in memory, they would all be written to one file.
+        args.push("ufo".into());
+    }
+    args.push(ext.into());
     if req.flavour == Flavour::Cff {
         // Specialised charstrings without subroutines: what FontCraft's CFF writer is planned to do.
         args.extend(["--optimize-cff".into(), "1".into()]);
     }
     // Overlaps stay, as in fontc and in FontCraft before M3; glyph names stay the source's.
     args.extend(["--keep-overlaps".into(), "--no-production-names".into()]);
-    if matches!(kind, SourceKind::Glyphs | SourceKind::GlyphsPackage) {
-        args.extend(["--master-dir".into(), "{tmp}".into(), "--instance-dir".into(), "{tmp}".into()]);
+    if req.flavour == Flavour::TrueType {
+        // fontc and FontCraft leave out an on-curve point exactly between two off-curve points.
+        args.push("--drop-implied-oncurves".into());
+    }
+    if glyphs {
+        for (flag, dir) in [("--master-dir", "fontmake-masters"), ("--instance-dir", "fontmake-instances")] {
+            args.extend([flag.into(), req.work_dir.join(dir).to_string_lossy().into_owned()]);
+        }
     }
     cmd.args(&args).arg("--output-dir").arg(&out_dir);
     run(req, cmd)?;
-    let ext = req.flavour.extension();
     let mut outputs: Vec<PathBuf> = std::fs::read_dir(&out_dir)
         .map_err(|e| format!("fontmake finished but its output folder cannot be read: {e}"))?
         .take(MAX_OUTPUT_FILES)
@@ -245,52 +268,69 @@ fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Buil
         .collect();
     outputs.sort();
     let command = format!("fontmake {} --output-dir OUT", args.join(" "));
-    let mut notes = Vec::new();
-    let chosen = match outputs.as_slice() {
+    let first = if kind == SourceKind::Designspace { first_source(source) } else { None };
+    let (path, alternatives, notes) = choose_master_file(&outputs, ext, first.as_deref(), req.hint)?;
+    Ok(Built { path, command, notes, alternatives })
+}
+
+/// The file of the master FontCraft compiles out of fontmake's output files (sorted), with the
+/// files of other masters of the same name and a note when there are several files.
+/// `first_source` is a designspace's first source, which names its master's file.
+pub(crate) fn choose_master_file(
+    outputs: &[PathBuf],
+    ext: &str,
+    first_source: Option<&Path>,
+    hint: &Hint,
+) -> Result<(PathBuf, Vec<PathBuf>, Vec<String>), String> {
+    let many = match outputs {
         [] => return Err(format!("fontmake finished but wrote no .{ext} file")),
-        [only] => only.clone(),
-        many => {
-            // One file per master: take the one FontCraft compiles.
-            let mut stems = Vec::new();
-            if kind == SourceKind::Designspace
-                && let Some(stem) = first_source(source).and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
-            {
-                stems.push(stem);
-            }
-            let squash = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
-            let style = squash(&req.hint.style);
-            stems.push(format!("{}-{style}", squash(&req.hint.family)));
-            let stem_of = |p: &PathBuf| p.file_stem().and_then(|s| s.to_str()).map(str::to_string).unwrap_or_default();
-            let mut found = stems.iter().find_map(|stem| many.iter().find(|p| stem_of(p) == *stem));
-            // The family name may be spelt differently (a default family name): the style decides
-            // when only one file has it.
-            if found.is_none() && !style.is_empty() {
-                let suffix = format!("-{style}");
-                let by_style: Vec<&PathBuf> = many.iter().filter(|p| stem_of(p).ends_with(&suffix)).collect();
-                if let [one] = by_style.as_slice() {
-                    found = Some(*one);
-                }
-            }
-            let names: Vec<String> = many.iter().filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).collect();
-            let found = match (found, many.first()) {
-                (Some(f), _) => f,
-                // Without FontCraft's reading there is nothing to compare with: any file shows
-                // that the build worked.
-                (None, Some(first)) if req.hint.style.is_empty() => first,
-                _ => {
-                    return Err(format!(
-                        "fontmake wrote {} masters ({}) and none is named after the first master `{}`",
-                        many.len(),
-                        names.join(", "),
-                        req.hint.style
-                    ));
-                }
-            };
-            notes.push(format!("one of {} master files: {}", many.len(), found.file_name().map(|n| n.to_string_lossy()).unwrap_or_default()));
-            found.clone()
+        [only] => return Ok((only.clone(), Vec::new(), Vec::new())),
+        many => many,
+    };
+    // One file per master: take the one FontCraft compiles.
+    let mut stems = Vec::new();
+    if let Some(stem) = first_source.and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned())) {
+        stems.push(stem);
+    }
+    let squash = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    let style = squash(&hint.style);
+    stems.push(format!("{}-{style}", squash(&hint.family)));
+    let stem_of = |p: &PathBuf| p.file_stem().and_then(|s| s.to_str()).map(str::to_string).unwrap_or_default();
+    let mut found = stems.iter().find_map(|stem| many.iter().find(|p| stem_of(p) == *stem));
+    // The family name may be spelt differently (a default family name): the style decides
+    // when only one file has it.
+    if found.is_none() && !style.is_empty() {
+        let suffix = format!("-{style}");
+        let by_style: Vec<&PathBuf> = many.iter().filter(|p| stem_of(p).ends_with(&suffix)).collect();
+        if let [one] = by_style.as_slice() {
+            found = Some(*one);
+        }
+    }
+    let names: Vec<String> = many.iter().filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).collect();
+    let found = match (found, many.first()) {
+        (Some(f), _) => f,
+        // Without FontCraft's reading there is nothing to compare with: any file shows
+        // that the build worked.
+        (None, Some(first)) if hint.style.is_empty() => first,
+        _ => {
+            return Err(format!(
+                "fontmake wrote {} masters ({}) and none is named after the first master `{}`",
+                many.len(),
+                names.join(", "),
+                hint.style
+            ));
         }
     };
-    Ok(Built { path: chosen, command, notes })
+    // glyphsLib's names for the UFOs of masters that share a name: `#1`, `#1#2`… added.
+    let base = stem_of(found);
+    let same_name = |p: &&PathBuf| {
+        let stem = stem_of(p);
+        stem != base
+            && stem.strip_prefix(base.as_str()).is_some_and(|rest| rest.starts_with('#') && rest.chars().all(|c| c == '#' || c.is_ascii_digit()))
+    };
+    let alternatives: Vec<PathBuf> = many.iter().filter(same_name).cloned().collect();
+    let notes = vec![format!("one of {} master files: {}", many.len(), found.file_name().map(|n| n.to_string_lossy()).unwrap_or_default())];
+    Ok((found.clone(), alternatives, notes))
 }
 
 /// Runs `cmd` in the work folder with its output in `tool.log`, within the time limit.

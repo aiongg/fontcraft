@@ -402,6 +402,7 @@ must be robust enough to be on by default for static export.
 | cu2qu tolerance | 0.001 em, `-e` to change | upm/1000, fixed | n/a | 0.001 em, option |
 | Curve modes | cu2qu, mixed, keep-quad, keep-cubic | cu2qu only | n/a | cu2qu, keep-quad |
 | Contour direction | reversed for TTF | reversed for TTF | source direction | reversed for TTF |
+| Implied on-curve points (an on-curve point exactly between two off-curve points) | kept unless `--drop-implied-oncurves` | left out | n/a | left out, as fontc; the oracle harness passes the flag to fontmake |
 | Mixed contour+component glyph | decomposed | decomposed, or contours split off when preference is off | all decomposed (CFF) | decomposed |
 | Flatten nested components | off, `-f` | source setting, flag overrides | n/a | off |
 | USE_MY_METRICS | static only, switchable | static only, no switch | n/a | static only |
@@ -449,18 +450,19 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 
 | What | fontc | FontCraft | Why |
 |---|---|---|---|
-| A `.glyphs` master's custom parameters (`Use Typo Metrics`, `unicodeRanges`, name parameters) | read from the font only; only the metric parameters come from the master | the master's in place of the font's | a static build of a master is that master's font, as glyphsLib and the reference app build it |
+| A `.glyphs` master's custom parameters (`unicodeRanges`, `vendorID`, `license`, `trademark` and the other name parameters) | read from the font only; only the metric parameters come from the master | the master's in place of the font's, also in place of a font property of the same name | a static build of a master is that master's font, as glyphsLib and the reference app build it; fontmake writes the same values. `Use Typo Metrics` and `Has WWS Names` are the exception: glyphsLib adds their bit for the font's and the master's and never clears it, so a master's that is off leaves the font's on, which is also fontc's result |
 | `USE_MY_METRICS` in a multi-master source | never set: the reference is a variable font | set, as in fontc's own static builds | FontCraft builds one master statically until M9; the harness does not compare the flag against a variable reference |
 | Composites whose components differ between masters; curves | decomposed; converted across all masters | kept; converted per master | static build of one master until M9 |
 | Names and panose of the variable font's export settings | merged into the font's | not used | they belong to the variable font (M9) and instances (M2.5) |
 | `openTypeNameRecords` of a UFO | written as English records whatever their language | each in its own language | the records state their language |
 | Non-spacing marks the glyph database knows | advance 0 | advance 0 only when the glyph states its category | the glyph database is M4 |
 
-Reading questions left open (listed on the allow-list): a `.glyphs` layer without a `width`
-(glyphsLib and fontc read 600, FontCraft 0); a designspace master without a metric another
-master has (fontc builds the UFO alone and uses ufo2ft's default, the model reads 0); a UFO
-glyph without a height (fontc writes advance height 0, the UFO reader cannot tell it from one
-with the default height); version 2 name keys in a version 3 file.
+The readers follow fontc where a source leaves a value out (`docs/spec/30-source-formats.md` ›
+Values a source leaves out): a `.glyphs` layer without a `width` is 600 wide; a designspace
+master without a trailing metric gets ufo2ft's default; a UFO glyph without a height in a
+vertical UFO has height 0; version 2's top-level names in a version 3 file are names. One case
+stays different: a designspace master that lacks a metric but has a later one reads the missing
+one as 0, where fontc uses ufo2ft's default (no corpus source has it).
 
 Against fontmake (and so for CFF fonts, which fontc does not write), every field the two
 references derive differently keeps fontc's value; `crates/oracle/allow.toml` lists those

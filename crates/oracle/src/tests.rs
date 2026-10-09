@@ -372,6 +372,35 @@ fn a_run_compares_our_build_with_the_tools_output() {
 
 #[cfg(unix)]
 #[test]
+fn masters_that_share_a_name_are_compared_with_the_closest() {
+    let dir = temp("same-name");
+    let mut other = sample();
+    other.glyph_mut("A").unwrap().layers[0].width = 650.0;
+    let (ours_ttf, other_ttf) = (dir.join("ours.ttf"), dir.join("other.ttf"));
+    std::fs::write(&ours_ttf, build(&sample(), 0)).unwrap();
+    std::fs::write(&other_ttf, build(&other, 0)).unwrap();
+    let source = dir.join("Test.glyphs");
+    std::fs::write(&source, "{}").unwrap();
+    // fontmake's files for three masters, two of them named Regular: the first master of the
+    // name is not the one FontCraft compiled.
+    let body = format!(
+        "while [ $# -gt 0 ]; do if [ \"$1\" = --output-dir ]; then mkdir -p \"$2\"; cp '{o}' \"$2/Fam-Regular.ttf\"; cp '{u}' \"$2/Fam-Regular#1.ttf\"; cp '{o}' \"$2/Fam-Bold.ttf\"; exit 0; fi; shift; done; exit 3",
+        o = other_ttf.display(),
+        u = ours_ttf.display()
+    );
+    let mut s = settings(fake_tool(&dir, &body), DEFAULT_TIMEOUT);
+    s.oracle = Oracle::Fontmake;
+    let hint = Hint { family: "Fam".into(), style: "Regular".into() };
+    let report = check(&source, "Test.glyphs", &s, || Ok(Ours { bytes: build(&sample(), 0), warnings: Vec::new(), hint: hint.clone() }));
+    assert_eq!(report.outcome, Outcome::Compared, "{report:?}");
+    assert!(!report.has_differences(), "{:?}", report.tables);
+    assert!(report.reference.as_ref().unwrap().path.ends_with("Fam-Regular#1.ttf"));
+    assert!(report.notes.iter().any(|n| n.contains("2 masters share the name")), "{:?}", report.notes);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
 fn a_failing_or_hanging_tool_is_reported_with_its_log() {
     let dir = temp("fail");
     let source = dir.join("Test.glyphs");

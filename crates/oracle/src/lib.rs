@@ -221,6 +221,12 @@ pub fn check(source: &Path, label: &str, settings: &Settings, ours: impl FnOnce(
         timeout: settings.timeout,
         hint: &hint,
     });
+    let mut built = built;
+    if let (Ok(o), Ok(b)) = (&ours, &mut built)
+        && !b.alternatives.is_empty()
+    {
+        closest_master(&o.bytes, b);
+    }
     let reference = built.as_ref().ok().and_then(|b| std::fs::read(&b.path).ok());
     report.outcome = match (&ours, &built) {
         (Err(OursError::Unsupported { .. }), _) => Outcome::NotCompared,
@@ -268,6 +274,25 @@ pub fn check(source: &Path, label: &str, settings: &Settings, ours: impl FnOnce(
         report.messages.push("the reference font cannot be read back".into());
     }
     report
+}
+
+/// Of masters that share a name, the file whose font differs least from ours (fewest differing
+/// tables, then fewest differences) becomes `built.path`. The note names the choice.
+fn closest_master(ours: &[u8], built: &mut tools::Built) {
+    let candidates: Vec<PathBuf> = std::iter::once(built.path.clone()).chain(built.alternatives.iter().cloned()).collect();
+    let distance = |path: &PathBuf| {
+        let theirs = std::fs::read(path).ok()?;
+        let c = compare::compare(ours, &theirs).ok()?;
+        let different: Vec<&TableResult> = c.tables.iter().filter(|t| t.status == Status::Different).collect();
+        Some((different.len(), different.iter().map(|t| t.count).sum::<usize>()))
+    };
+    // Ties keep the earlier file, the first master of the name.
+    let best = candidates.iter().filter_map(|p| distance(p).map(|d| (d, p))).min_by_key(|(d, _)| *d).map(|(_, p)| p.clone());
+    let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if let Some(best) = best {
+        built.notes.push(format!("{} masters share the name of {}; compared with the closest, {}", candidates.len(), name(&built.path), name(&best)));
+        built.path = best;
+    }
 }
 
 /// Marks a different table "allowed" when the allow-list accepts every difference, and drops

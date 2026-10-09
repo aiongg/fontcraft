@@ -1486,6 +1486,39 @@ mod tests {
     }
 
     #[test]
+    fn a_master_without_metrics_another_has_compiles_with_the_ufo_defaults() {
+        let (doc, mut ufos) = two_masters();
+        let light = ufos.get_mut("Duo-Light.ufo").unwrap();
+        let info = String::from_utf8(light["fontinfo.plist"].clone()).unwrap();
+        // No metrics and no zones, as in fontc's `fontinfo_var.designspace`.
+        let mut lines: Vec<&str> = Vec::new();
+        let (mut skip, mut in_array) = (false, false);
+        for line in info.lines() {
+            if in_array {
+                in_array = !line.contains("</array>");
+            } else if skip {
+                skip = false;
+                in_array = line.contains("<array>");
+            } else if ["ascender", "descender", "xHeight", "capHeight", "postscriptBlueValues", "postscriptOtherBlues"]
+                .iter()
+                .any(|k| line.trim() == format!("<key>{k}</key>"))
+            {
+                skip = true;
+            } else {
+                lines.push(line);
+            }
+        }
+        assert!(lines.len() < info.lines().count(), "{info}");
+        light.insert("fontinfo.plist".into(), format!("{}\n", lines.join("\n")).into_bytes());
+        let font = read(&doc, &ufos).unwrap();
+        let light = font.resolve(&fontcraft_model::Target::Master(font.masters[0].id.clone())).unwrap();
+        assert_eq!((light.metrics.ascender, light.metrics.descender, light.metrics.x_height), (800.0, -200.0, 500.0), "ufo2ft's defaults");
+        let bold = font.resolve(&fontcraft_model::Target::Master(font.masters[1].id.clone())).unwrap();
+        assert_eq!(bold.metrics.ascender, font.metric(&font.masters[1], fontcraft_model::metric::ASCENDER).unwrap().pos);
+        assert_eq!(write(&font).unwrap().ufos, ufos);
+    }
+
+    #[test]
     fn edits_change_only_what_they_touch() {
         let (doc, ufos) = two_masters();
         let mut font = read(&doc, &ufos).unwrap();

@@ -778,3 +778,23 @@ fn version_2_reports_feature_labels_lost() {
     font.source.glyphs_version = Some(2);
     assert!(info_losses(&font).contains(&"feature labels (1 features)".to_string()), "{:?}", info_losses(&font));
 }
+
+#[test]
+fn hand_written_files_read_as_the_reference_compilers_read_them() {
+    // A layer without a width, and version 2's top-level names in a version 3 file.
+    let v3 = "{\n.formatVersion = 3;\ncopyright = \"Copy!\";\ndesigner = Someone;\nfontMaster = (\n{\nid = m01;\n}\n);\nglyphs = (\n{\nglyphname = a;\nlayers = (\n{\nlayerId = m01;\n}\n);\n}\n);\nunitsPerEm = 1000;\n}\n";
+    let font = read(v3).unwrap();
+    assert_eq!(font.glyph("a").unwrap().layers[0].width, 600.0);
+    assert_eq!(font.info.properties.value("copyrights"), Some("Copy!"));
+    assert_eq!(font.info.properties.value("designers"), Some("Someone"));
+    let out = write(&font).unwrap();
+    assert!(out.contains("copyright = \"Copy!\";") && !out.contains("properties"), "the names are written where they were: {out}");
+    // An edited name is written as a property, which wins over the key when read again.
+    let mut edited = font.clone();
+    std::sync::Arc::make_mut(&mut edited.info).properties.set("copyrights", "Edited", true);
+    let again = read(&write(&edited).unwrap()).unwrap();
+    assert_eq!(again.info.properties.value("copyrights"), Some("Edited"));
+
+    let v2 = "{\nfamilyName = V2;\nfontMaster = (\n{\nid = m01;\n}\n);\nglyphs = (\n{\nglyphname = a;\nlayers = (\n{\nlayerId = m01;\n}\n);\n}\n);\nunitsPerEm = 1000;\n}\n";
+    assert_eq!(read(v2).unwrap().glyph("a").unwrap().layers[0].width, 600.0);
+}

@@ -94,14 +94,14 @@ reason = "Source reading: the glyphs the reference makes of alternate and colour
 [[allow]]
 table = "OS/2"
 key = "OS/2.xAvgCharWidth"
-sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/bracket-rules-processed", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
+sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/bracket-rules-processed", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
 reason = "Source reading: the average advance counts the glyphs the reference makes of alternate and colour layers (see maxp), and non-spacing marks the glyph database knows (see hmtx); M4, M8, M9, M11."
 
 [[allow]]
 table = "hhea"
 key = "hhea.advanceWidthMax"
 keys = ["hhea.xMaxExtent", "hhea.minRightSideBearing", "hhea.minLeftSideBearing"]
-sources = ["/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/glyph-with-bracket-component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-"]
+sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/glyph-with-bracket-component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-"]
 reason = "Source reading: the extremes over all glyphs include the glyphs the reference makes of alternate and colour layers (see maxp), and the zero advances of non-spacing marks (see hmtx); M4, M8, M9, M11."
 
 [[allow]]
@@ -110,6 +110,21 @@ key = "head.xMax"
 keys = ["head.xMin"]
 sources = ["/AlumniSans-wononly", "/BlankAlternateLayers", "decreasing_axis/axis.glyphs"]
 reason = "Source reading: the font box includes the glyphs the reference makes of alternate layers (see maxp); M8, M9."
+
+[[allow]]
+table = "cmap"
+key = "cmap *"
+oracle = "fontmake"
+sources = ["glyphs2/AxisRules.glyphs"]
+reason = "Source reading: the glyph has an alternate (bracket) layer and no master layer. glyphsLib makes only `space.BRACKET.varAlt01`, without the code point, and fontmake writes no character map; FontCraft keeps the glyph, empty, with its code point. Alternate layers are compiled from M9."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.ulUnicodeRange1"
+keys = ["OS/2.usFirstCharIndex", "OS/2.usLastCharIndex"]
+oracle = "fontmake"
+sources = ["glyphs2/AxisRules.glyphs"]
+reason = "Follows from the code point fontmake does not map (see cmap); M9."
 
 # --- A designspace whose first source lacks a glyph the others have -----------------------------
 
@@ -191,93 +206,53 @@ key = "hhea.xMaxExtent"
 sources = ["/SmartComponents.glyphs"]
 reason = "Follows from the smart components the reference interpolates (see glyf); M6."
 
-# --- Reading questions ------------------------------------------------------------------------
+# --- glyphsLib reads keys in file order ----------------------------------------------------------
 
 [[allow]]
-table = "hmtx"
-key = "hmtx * advance"
-sources = ["/MissingWidth.glyphs", "/VersionMajorMinor.glyphs", "/An-Italic.glyphs", "/SuperscriptCustomParamFallback.glyphs"]
-reason = "Source reading: a `.glyphs` layer without a `width` key reads as 0 in FontCraft; glyphsLib and fontc read it as 600. Files from the reference app always state the width; these are hand-written tests. Open question for the `.glyphs` reader."
+table = "maxp"
+key = "maxp.numGlyphs"
+oracle = "fontmake"
+sources = ["/VersionMajorMinor.glyphs"]
+reason = "Source reading: the file lists its glyphs before its masters. glyphsLib reads keys in file order and links a layer to its master only when the master is already known, so the glyph's one layer belongs to no master and the glyph is left out. The reference app writes the masters first; fontc and FontCraft keep the glyph."
+
+[[allow]]
+table = "post"
+key = "post.numGlyphs"
+oracle = "fontmake"
+sources = ["/VersionMajorMinor.glyphs"]
+reason = "Follows from the glyph glyphsLib leaves out (see maxp)."
 
 [[allow]]
 table = "hhea"
 key = "hhea.advanceWidthMax"
-sources = ["/MissingWidth.glyphs", "/VersionMajorMinor.glyphs", "/An-Italic.glyphs", "/SuperscriptCustomParamFallback.glyphs"]
-reason = "Follows from a layer without a width (see hmtx)."
+oracle = "fontmake"
+sources = ["/VersionMajorMinor.glyphs"]
+reason = "Follows from the glyph glyphsLib leaves out (see maxp)."
 
 [[allow]]
 table = "OS/2"
 key = "OS/2.xAvgCharWidth"
-sources = ["/MissingWidth.glyphs", "/VersionMajorMinor.glyphs", "/An-Italic.glyphs", "/SuperscriptCustomParamFallback.glyphs"]
-reason = "Follows from a layer without a width (see hmtx)."
-
-[[allow]]
-table = "OS/2"
-key = "OS/2.s*"
-keys = ["OS/2.usWin*", "OS/2.yStrikeoutPosition"]
-sources = ["/fontinfo_var.designspace"]
-reason = "Source reading: the designspace's first source has no ascender, descender, x-height or cap height while another source has them. The reference builds that UFO alone and uses ufo2ft's defaults; the model holds one list of metrics for all masters and reads a value a master lacks as 0. Open question for the designspace reader."
-
-[[allow]]
-table = "hhea"
-key = "hhea.ascender"
-keys = ["hhea.descender"]
-sources = ["/fontinfo_var.designspace"]
-reason = "Follows from the metrics the first source lacks (see OS/2)."
-
-[[allow]]
-table = "head"
-key = "head.yMin"
-keys = ["head.yMax"]
-sources = ["/fontinfo_var.designspace"]
-reason = "Follows from the metrics the first source lacks (see OS/2): the drawn `.notdef` spans the descender to the ascender."
-
-[[allow]]
-table = "glyf"
-key = "glyf .notdef *"
-sources = ["/fontinfo_var.designspace"]
-reason = "Follows from the metrics the first source lacks (see OS/2): the drawn `.notdef` spans the descender to the ascender."
-
-[[allow]]
-table = "CFF"
-key = "CFF .notdef *"
-sources = ["/fontinfo_var.designspace"]
-reason = "Follows from the metrics the first source lacks (see OS/2): the drawn `.notdef` spans the descender to the ascender."
-
-[[allow]]
-table = "name"
-key = "name *"
-sources = ["/TheBestV2NamesInAV3File.glyphs"]
-reason = "Source reading: a version 3 file with version 2's top-level name keys (`copyright`, `designer`…). FontCraft's version 3 reader keeps them as unknown keys; fontc reads them as names. Open question for the `.glyphs` reader."
-
-[[allow]]
-table = "vmtx"
-key = "vmtx * advance"
-sources = ["HVVAR/SingleModel_", "/Vertical.ufo"]
-reason = "Source reading: a UFO glyph without a height has advance height 0 in ufo2ft and fontc. The UFO reader, following glyphsLib's crosswalk, keeps no height both for such a glyph and for one whose height is the default, so FontCraft writes the default. Open question for the UFO reader."
-
-[[allow]]
-table = "vhea"
-key = "vhea.minBottomSideBearing"
-sources = ["HVVAR/SingleModel_"]
-reason = "Follows from the UFO glyphs without a height (see vmtx)."
+oracle = "fontmake"
+sources = ["/VersionMajorMinor.glyphs"]
+reason = "Follows from the glyph glyphsLib leaves out (see maxp)."
 
 # --- Decided differences ----------------------------------------------------------------------
 
 [[allow]]
 table = "OS/2"
-key = "OS/2.fsSelection"
-keys = ["OS/2.ulUnicodeRange*"]
+key = "OS/2.ulUnicodeRange*"
+keys = ["OS/2.achVendID"]
 oracle = "fontc"
 sources = ["/master_custom_params_override.glyphs"]
-reason = "A static build of a master uses the master's custom parameters in place of the font's, as glyphsLib (fontmake's reader) and the reference app do; fontc reads these parameters from the font only (docs/spec/40-compile.md › Where FontCraft differs from fontc)."
+reason = "A static build of a master uses the master's custom parameters in place of the font's, as glyphsLib (fontmake's reader) and the reference app do; fontc reads these parameters from the font only (docs/spec/40-compile.md › Where FontCraft differs from fontc). fontmake's build agrees with FontCraft's."
 
 [[allow]]
 table = "name"
 key = "name 3/1/0x0409/7"
+keys = ["name 3/1/0x0409/3", "name 3/1/0x0409/13"]
 oracle = "fontc"
 sources = ["/master_custom_params_override.glyphs"]
-reason = "The master's `trademark` parameter in place of the font's, as for the other parameters of this source (see OS/2)."
+reason = "The master's `trademark`, `vendorID` (in the unique id) and `license` parameters in place of the font's, as for the other parameters of this source (see OS/2)."
 
 # --- fontmake and fontc disagree; FontCraft follows fontc (M2.2) ------------------------------
 # Where the two reference compilers write different values, M2.2 matched fontc. Each entry below
@@ -531,7 +506,7 @@ reason = "A master without a name: glyphsLib names its style `Regular` in the fu
 [[allow]]
 table = "name"
 key = "name 3/1/0x0409/18"
-sources = ["/TheBestNames.glyphs"]
+sources = ["/TheBestNames.glyphs", "/TheBestV2NamesInAV3File.glyphs"]
 oracle = "fontmake"
 reason = "The compatible full name: glyphsLib writes it for `.glyphs` sources, fontc only for UFOs (FontCraft follows fontc)."
 

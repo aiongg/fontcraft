@@ -833,6 +833,19 @@ Notes on the outline:
 - **Size.** `Node` stays at 32 bytes and `Extra`/`UserData` at one pointer when empty, which matters
   for CJK-sized families with every master in memory.
 
+## Values a source leaves out
+
+Where a file leaves a value out, the readers fill what the reference compilers read (glyphsLib and
+ufo2ft for fontmake, fontc's readers), checked with the oracle harness (`docs/plans/M2.md` › M2.6).
+
+| Case | glyphsLib / ufo2ft | fontc | FontCraft |
+|---|---|---|---|
+| A `.glyphs` layer without `width` | 600 | 600 | 600, versions 2 to 4 |
+| Version 2's top-level `copyright`, `designer`, `designerURL`, `manufacturer`, `manufacturerURL` in a version 3 or 4 file | names | names, where the font has no such property | the property, where the font has none; the key stays and is written back where it was, and the property is left out while the key holds the same text |
+| A designspace source without a metric another source has | ufo2ft's default for that UFO (0.8, −0.2, 0.5, 0.7 em) | the same: it builds that UFO alone | absent when no later metric is stated, so the compiler uses the same default; 0 when the source states a later metric, since a master's value list has no gaps |
+| A GLIF without a height, in a UFO with the three `openTypeVheaVertTypo…` keys | 0 (glyphsLib's crosswalk reads it as `vertWidth` 0) | 0 | 0, written back as no height |
+| A GLIF whose height is the default (typographic ascender minus descender) | no `vertWidth` (glyphsLib) | the height | no height in the model; the compiler writes the default, the same number |
+
 ## Open questions
 
 1. **Angle signs in Glyphs files.** The format document calls component, guide, image and annotation
