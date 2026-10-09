@@ -53,7 +53,8 @@ Details: [`docs/development.md`](docs/development.md), [`docs/mcp.md`](docs/mcp.
   is swept with hostile parameters on every test run.
 - **Checked against oracles.** `fontcraft-cli oracle` compares compiled fonts, table by table,
   with what the open reference compilers produce from the same source
-  ([testing](docs/testing.md)). Few tables match yet; M2 brings them to parity.
+  ([testing](docs/testing.md)). Over the 354-source corpus, every core table matches them or
+  has a written reason.
 - **Clean-room.** Specified from public documentation; no code, prose or assets copied from any
   reference ([policy](docs/clean-room.md)).
 - **Rust only.** Built and run on Linux so far; macOS, Windows and the browser are targets (the
