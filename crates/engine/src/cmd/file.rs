@@ -33,7 +33,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF). A compiled font opens view-only: save it with Save As to a source format. warnings lists what reading a compiled font left out → {title, path, format, version?, glyphs, masters, viewOnly, warnings}",
+            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. warnings lists what reading a compiled font left out → {title, path, format, version?, glyphs, masters, viewOnly, warnings}",
             always,
             open
         ),

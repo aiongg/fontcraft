@@ -2123,7 +2123,7 @@ kind = "engine"
 params = "{font: path, face?: int|name|\"all\", sort?: \"file\"|\"tag\"|\"size\"}"
 area = "cli-tools"
 milestone = "M1"
-summary = "Read-only query returning the sfnt version and, per table, tag, checksum, offset, length and (for WOFF/WOFF2) compressed length; for collections one list per member with shared tables marked."
+summary = "Read-only query returning the sfnt version and, per table, tag, checksum, offset and length, with the compressed length for WOFF and, for WOFF2 (no checksums, offsets in the decompressed table data), the stored length of a transformed table as transformLength; for collections one list per member with shared tables marked."
 ref = "docs/spec/20-cli.md › tables"
 status = "docs"
 

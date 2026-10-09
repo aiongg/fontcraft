@@ -59,7 +59,7 @@ USAGE:
       Print a JSON summary of FILE (a compiled font or a source) without opening it: format, names,
       metrics, style, tables, cmap, layout, axes, instances, masters, color, hinting, faces.
   fontcraft-cli tables list FONT [--sort file|tag|size] [--face N|all]
-      Print the table directory of a compiled font, collection or WOFF file as JSON.
+      Print the table directory of a compiled font, collection, WOFF or WOFF2 file as JSON.
   fontcraft-cli glyphs list FONT [--face N]
       Print the glyphs of FONT (a compiled font or a source) in glyph order as JSON.
 

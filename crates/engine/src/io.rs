@@ -3,10 +3,10 @@
 //!
 //! A source is recognised by its content, never by its file name: a folder with `metainfo.plist`
 //! is a UFO and one with `fontinfo.plist` a `.glyphspackage`, a file that starts with an sfnt,
-//! collection or WOFF signature is a compiled font, a JSON file whose `format` is `fontcraft` is a
-//! native file, XML whose root is `<designspace>` a designspace (opened with the UFOs it names,
-//! relative to its folder), a ZIP archive a UFOZ, and other text that starts with `{` is a
-//! `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
+//! collection, WOFF or WOFF2 signature is a compiled font, a JSON file whose `format` is
+//! `fontcraft` is a native file, XML whose root is `<designspace>` a designspace (opened with the
+//! UFOs it names, relative to its folder), a ZIP archive a UFOZ, and other text that starts with
+//! `{` is a `.glyphs` file. Every read is bounded ([`MAX_PACKAGE_FILES`],
 //! [`fontcraft_format::MAX_BYTES`] in all) and follows no symlinked folders, so a hostile folder
 //! can neither exhaust memory nor loop.
 

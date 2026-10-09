@@ -217,7 +217,7 @@ Each section gives the usage line, behaviour the options alone do not convey, an
 
 ### `compile`
 
-Compiles sources into binary fonts: static TTF or OTF per master or instance, variable TTF (gvar) or CFF2, and interpolatable masters. Sources are a native project, a .glyphs file or package, a designspace, one or more UFOs, or a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format a source with one master yields a static TTF and a source with several masters yields a variable TTF.
+Compiles sources into binary fonts: static TTF or OTF per instance or master, each plain or wrapped as WOFF or WOFF2; later, variable TTF (gvar) or CFF2 and interpolatable masters (M9). Sources are a native project, a .glyphs file or package, a designspace or a UFO; later also a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format every source yields static TTFs.
 
 ```
 fontcraft-cli compile SOURCE... [--format FMT]... [--container plain|woff|woff2]... [-o PATH | --output-dir DIR] [options]
@@ -233,13 +233,27 @@ chosen by the kind of source and by `--format`:
 | bare CFF / OTF / Type 1 / TrueType | `otf`, `ttf` | keep the outlines, build cmap, name, OS/2, hhea, post, layout from feature code, menu-name file and GOADB (AFDKO `makeotf` / `addfeatures` style) |
 | bare CFF2 variable font | `variable-cff2` | as above, with variable feature code; `fvar`, `avar`, `HVAR` are carried over, `MVAR` merged when `--keep-mvar` |
 
-**Defaults.** One master and no `--format`: `ttf`. Several masters: `variable`. `--afdko-project`: `otf`.
-Overlaps are removed for static outputs and kept for interpolatable and variable outputs. Contours are
-reversed for TrueType unless `--keep-direction`. Glyphs get production names unless
-`--no-production-names`. Glyphs flagged as not exported are left out unless `--no-subset`. With
-`--output-layout by-format`, outputs and intermediate sources go to per-format folders in the working
-directory as fontmake arranges them (`master_ufo`, `instance_ufo`, `master_ttf`, `variable_ttf` and so on). CFF output is
-specialised and subroutinized (`--optimize-cff 2`). Variable `gvar` is IUP-optimised.
+**Built (M2).** `--format ttf|otf`, `--container plain|woff|woff2`, `-o`/`--output-dir`,
+`--instances[=NAME,...]`, `--masters-as-instances`, `--keep-overlaps`, `--keep-direction`,
+`--conversion-error`, `--timestamp` and `--plan`. Each SOURCE is opened as a document and built by
+`font.compile` (or described by `font.compilePlan`); the command prints one JSON line per SOURCE, and
+with several sources one that fails does not stop the others. The other options in the table below
+are later work.
+
+**Defaults.** Without `--format`: `ttf`, whatever the number of masters (`variable` comes with M9).
+`--afdko-project`: `otf`. Without `--container`: `plain`. Every exportable instance is built; a font
+without instances builds its first master. `--instances=NAME,...` builds only the instances with those
+exact names (a comma-separated list, not a pattern); `--masters-as-instances` adds one font per master.
+Until interpolation (M9) an instance is built only where it sits at a master; the others are listed as
+skipped, and a source that builds nothing fails. Overlaps are kept with a warning until overlap removal
+exists (M3); asking to remove them fails. Contours are reversed for TrueType unless
+`--keep-direction`; curves are converted to quadratics within `--conversion-error` em (default 0.001).
+`--timestamp` sets `head.created` and `head.modified` (default `SOURCE_DATE_EPOCH`, else now). CFF output
+is not subroutinised yet. Later: production names unless `--no-production-names`; glyphs flagged as not
+exported left out unless `--no-subset` (until then they are always left out); with `--output-layout
+by-format`, outputs and intermediate sources in per-format folders as fontmake arranges them
+(`master_ufo`, `instance_ufo`, `master_ttf`, `variable_ttf` and so on); CFF specialised and
+subroutinised (`--optimize-cff 2`); variable `gvar` IUP-optimised.
 
 **Option sources and precedence.** Lowest to highest: values stored in the source (custom parameters,
 instance settings), `--afdko-fontinfo`, `--options` file, command line left to right. `--release` is a
@@ -259,8 +273,12 @@ per line for CID fonts and two for name-keyed fonts.
 **fsSelection.** Turning any of bits 7, 8, 9 on or off requires all three to be stated, because the table
 version then becomes 4 where both states carry meaning.
 
-**Output naming.** `-o` is allowed only when exactly one file results. Otherwise files are named
-`<stem>.<ext>` (or by PostScript name) inside `--output-dir`.
+**Output naming.** `-o` names one file and takes one SOURCE. The build must give exactly one file,
+and the file's extension must match its format and container (`.woff` or `.woff2` chooses that
+container when `--container` is not given). Otherwise each
+file is named by the instance's `fileName` parameter, else by its PostScript name, inside
+`--output-dir` (default: the current folder); with both formats, each goes into a `ttf` or `otf`
+subfolder.
 
 **Looking inside a build.** `--plan` answers questions such as "what will the glyph order be" or "what
 feature code is actually compiled" without building (`font.compilePlan`). `--tables GSUB,GPOS` builds
@@ -340,7 +358,7 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | fontmake | `-o ufo` | convert --to ufo, or instance --to ufo for interpolated instances |  |
 | fontmake | `--output-path` | -o |  |
 | fontmake | `--output-dir` | --output-dir (--output-layout by-format for fontmake's folders) |  |
-| fontmake | `-i / --interpolate` | --instances[=REGEX] |  |
+| fontmake | `-i / --interpolate` | --instances[=NAME,...] | exact instance names, not a regular expression |
 | fontmake | `--variable-fonts` | --variable-fonts |  |
 | fontmake | `-M / --masters-as-instances` | --masters-as-instances |  |
 | fontmake | `--family-name` | --family-name |  |

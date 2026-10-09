@@ -474,6 +474,7 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | Names and panose of the variable font's export settings | merged into the font's | not used | they belong to the variable font (M9) and instances (M2.5) |
 | `openTypeNameRecords` of a UFO | written as English records whatever their language | each in its own language | the records state their language |
 | Non-spacing marks the glyph database knows | advance 0 | advance 0 only when the glyph states its category | the glyph database is M4 |
+| Yes-or-no custom parameters of a `.glyphs` source (`Use Typo Metrics`, `Has WWS Names`, `isFixedPitch`, `postscriptForceBold`) | on only when the value is exactly 1 | on for any number, or text that reads as a number, other than 0 (`fontcraft_model::param_flag`) | glyphsLib applies `bool(value)`, so fontmake builds a hand-written 2 as on; the reference app writes only 0 and 1. No corpus source has another value, so this row has no allow-list entry |
 
 The readers follow fontc where a source leaves a value out (`docs/spec/30-source-formats.md` ›
 Values a source leaves out): a `.glyphs` layer without a `width` is 600 wide; a designspace
