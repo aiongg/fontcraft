@@ -378,9 +378,17 @@ status = "handbook"
 id = "export.ufoDecomposeSmartStuff"
 area = "import-export"
 milestone = "M1"
-summary = "UFO cannot hold editor-only constructs such as smart components and corner components. With Decompose Smart Stuff on they are converted to ordinary paths; with it off they are left out of the exported UFO altogether."
+summary = "UFO cannot hold editor-only constructs such as smart components and corner components. With Decompose Smart Stuff on they are converted to ordinary paths; with it off they are left out of the exported UFO altogether. FontCraft draws smart components as outlines when it is on (export.ufoSmartComponentsAsOutlines) and keeps them as components with their values in the glyph lib when it is off."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
+
+[[behavior]]
+id = "export.ufoSmartComponentsAsOutlines"
+area = "import-export"
+milestone = "M2"
+summary = "Writing a UFO or designspace keeps smart components as components, their values in the glyph lib key com.schriftgestaltung.componentsSmartComponentValues, unless smart components are to be drawn as outlines (file.saveAs and convert with smartComponents outlines, file.exportUfo with decomposeSmartStuff). Then, as glyphsLib does, each component of a glyph with smart properties and more than one pole layer for the layer's master becomes the pole layers' outlines interpolated at the component's values: the master layer (else the first pole layer) is the default location, the others sit at -1 or 1 on each property whose end differs from it, values are normalized with the property's bottom, default and top, and a variation model with extrapolation weighs the layers. Smart components inside pole layers are drawn first; the component's transform is applied and contours are reversed when it flips them. One pole layer: a plain component. A smart component that cannot be interpolated (pole layers with different node counts, no pole layer for the master) stays a component and is listed in the losses. The document keeps its components."
+ref = "glyphsLib builder/smart_components.py, builder/components.py; docs/spec/31-glyphslib-crosswalk.md § 9.3"
+status = "docs"
 
 [[behavior]]
 id = "export.ufoWritesVersion3"

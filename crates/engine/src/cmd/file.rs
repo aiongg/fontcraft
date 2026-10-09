@@ -51,7 +51,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save As…",
             ["File"],
             Some("Cmd+Shift+S"),
-            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\"|\"ufo\"|\"designspace\", version?: 2|3|4, compress?: bool, force?: bool} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document; .glyphs has 2 to 4, UFO 2 and 3). A single UFO holds one master; a designspace writes a UFO per master beside it. compress: gzip a .fontcraft file (default: as it was opened). losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\"|\"ufo\"|\"designspace\", version?: 2|3|4, compress?: bool, force?: bool, smartComponents?: \"components\"|\"outlines\"} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document; .glyphs has 2 to 4, UFO 2 and 3). A single UFO holds one master; a designspace writes a UFO per master beside it. compress: gzip a .fontcraft file (default: as it was opened). smartComponents (UFO and designspace): keep smart components as components with their values in the glyph lib (default), or draw them as outlines interpolated from the smart glyph's pole layers; the document keeps its components. losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save_as
         ),
@@ -60,7 +60,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export UFO",
             [],
             None,
-            "{destination: string, masters?: [string], productionNames?: bool, decomposeSmartStuff?: bool} write each chosen master (default: all) as its own UFO 3 into the destination folder, named Family-Style.ufo. The document keeps its file and format. productionNames: rename glyphs to production names (not supported yet). decomposeSmartStuff: turn editor-only constructs into plain outlines (default true; the model holds none yet) → {files: [{path, master, filesWritten}], losses}",
+            "{destination: string, masters?: [string], productionNames?: bool, decomposeSmartStuff?: bool} write each chosen master (default: all) as its own UFO 3 into the destination folder, named Family-Style.ufo. The document keeps its file and format. productionNames: rename glyphs to production names (not supported yet). decomposeSmartStuff: draw smart components as outlines interpolated from the smart glyph's pole layers (default true); false keeps them as components with their values in the glyph lib → {files: [{path, master, filesWritten}], losses}",
             has_doc,
             export_ufo
         ),
@@ -143,6 +143,10 @@ fn open(_: &mut Session, _: &Value) -> Result<Value> {
 #[cfg(not(target_arch = "wasm32"))]
 fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format: crate::io::SaveFormat, version: Option<u32>) -> Result<Value> {
     use crate::io::{self, SaveFormat};
+    let outlines = smart_outlines(p)?;
+    if outlines && !matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
+        return Err(p.bad("`smartComponents` applies to UFO and designspace files"));
+    }
     let doc = s.doc()?;
     // Another program may have changed the file since it was read or last written here.
     if doc.path.as_deref() == Some(path.as_path()) && !p.bool_or("force", false)? {
@@ -184,7 +188,9 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
         SaveFormat::Ufo => fontcraft_model::SourceFormat::Ufo,
         SaveFormat::Designspace => fontcraft_model::SourceFormat::Designspace,
     };
-    let saved = io::save(&font, &path, format)?;
+    let (smart, smart_losses) = smart_choice(&font, outlines);
+    let mut saved = io::save(smart.as_ref().unwrap_or(&font), &path, format)?;
+    saved.losses.extend(smart_losses);
     let font = Arc::new(font);
     let doc = s.doc_mut()?;
     doc.title = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| doc.title.clone());
@@ -196,6 +202,34 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
         "path": path.to_string_lossy(), "format": format.name(), "version": version, "bytes": saved.bytes,
         "filesWritten": saved.files_written, "filesRemoved": saved.files_removed, "losses": saved.losses,
     }))
+}
+
+/// `smartComponents`: whether a UFO or designspace write draws smart components as outlines.
+#[cfg(not(target_arch = "wasm32"))]
+fn smart_outlines(p: &Params) -> Result<bool> {
+    match p.opt_str("smartComponents")? {
+        None | Some("components") => Ok(false),
+        Some("outlines") => Ok(true),
+        Some(other) => Err(p.bad(format!("`smartComponents` must be \"components\" or \"outlines\", got \"{other}\""))),
+    }
+}
+
+/// With `outlines`, the font to write with its smart components drawn as outlines, and what that
+/// did, for the losses. The document keeps its components.
+#[cfg(not(target_arch = "wasm32"))]
+fn smart_choice(font: &Font, outlines: bool) -> (Option<Font>, Vec<Value>) {
+    if !outlines {
+        return (None, Vec::new());
+    }
+    let (drawn, report) = fontcraft_model::smart::draw_smart_components(font);
+    let mut losses = Vec::new();
+    if report.drawn > 0 {
+        losses.push(json!({ "family": "glyphs", "entries": report.drawn, "what": "smart components written as outlines (the document keeps them as components)" }));
+    }
+    if !report.kept.is_empty() {
+        losses.push(json!({ "family": "glyphs", "entries": report.kept.len(), "what": "smart components written as components because they cannot be drawn as outlines", "items": report.kept }));
+    }
+    (Some(drawn), losses)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -268,7 +302,7 @@ fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
     if p.bool_or("productionNames", false)? {
         return Err(EngineError::Unsupported("renaming glyphs to production names on export (needs the glyph database, ROADMAP.md M4)".into()));
     }
-    let _ = p.bool_or("decomposeSmartStuff", true)?;
+    let outlines = p.bool_or("decomposeSmartStuff", true)?;
     let font = s.font()?;
     let masters: Vec<String> = match p.get("masters") {
         None => font.masters.iter().map(|m| m.id.clone()).collect(),
@@ -287,7 +321,9 @@ fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(p.bad(format!("{} is a file: give a folder", destination.display())));
     }
     std::fs::create_dir_all(&destination).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", destination.display())))?;
-    let exported = crate::io::export_ufos(font, &masters, &destination)?;
+    let (smart, smart_losses) = smart_choice(font, outlines);
+    let mut exported = crate::io::export_ufos(smart.as_ref().unwrap_or(font), &masters, &destination)?;
+    exported.losses.extend(smart_losses);
     let files: Vec<Value> =
         exported.files.iter().map(|(path, master, n)| json!({ "path": path.to_string_lossy(), "master": master, "filesWritten": n })).collect();
     Ok(json!({ "files": files, "losses": exported.losses }))

@@ -538,3 +538,121 @@ fn a_ufo_is_not_written_into_a_folder_that_is_not_one() {
     assert_eq!(std::fs::read_to_string(target.join("notes.txt")).unwrap(), "mine");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A smart glyph `_part.box` with two properties (Width and Height, 0 to 100, default at the
+/// bottom of both) and three pole layers in master m01: the default 100 by 100, Width at its top
+/// 300 wide, Height at its top 300 high. `boxes` uses it twice at Width 50, Height 25 (a 200 by
+/// 150 box): moved by (10, 20), and mirrored around x = 250.
+fn smart_font() -> fontcraft_engine::model::Font {
+    use fontcraft_engine::model::*;
+    let mut font = Font::new("Smart Test");
+    let pole = |id: &str, top_w: bool, top_h: bool, path: Path| {
+        let mut l = Layer::new("m01", 100.0);
+        if id != "m01" {
+            l.id = id.into();
+        }
+        l.shapes.push(Shape::Path(path));
+        let poles = vec![SmartPole { property: "Width".into(), top: top_w }, SmartPole { property: "Height".into(), top: top_h }];
+        l.info = LayerInfoBox::new(LayerInfo {
+            name: (id != "m01").then(|| id.to_string()),
+            attrs: LayerAttrs { smart_poles: poles, ..Default::default() },
+            ..Default::default()
+        });
+        l
+    };
+    let mut part = Glyph::new("_part.box");
+    let prop =
+        |name: &str| PartProperty { name: name.into(), bottom_value: 0.0, top_value: 100.0, bottom_name: None, top_name: None, extra: Extra::new() };
+    part.info = GlyphInfoBox::new(GlyphInfo { parts: vec![prop("Width"), prop("Height")], ..Default::default() });
+    part.layers.push(pole("m01", false, false, Path::rect(0.0, 0.0, 100.0, 100.0)));
+    part.layers.push(pole("wide", true, false, Path::rect(0.0, 0.0, 300.0, 100.0)));
+    part.layers.push(pole("tall", false, true, Path::rect(0.0, 0.0, 100.0, 300.0)));
+    font.glyphs.push(part);
+    let values = ComponentInfoBox::new(ComponentInfo {
+        smart_values: vec![SmartValue { property: "Width".into(), value: 50.0 }, SmartValue { property: "Height".into(), value: 25.0 }],
+        ..Default::default()
+    });
+    let mut boxes = Glyph::new("boxes");
+    let mut layer = Layer::new("m01", 600.0);
+    let mut moved = Component::new("_part.box", 10.0, 20.0);
+    moved.info = values.clone();
+    let mut mirrored = Component::new("_part.box", 0.0, 0.0);
+    mirrored.transform = Transform::Matrix([-1.0, 0.0, 0.0, 1.0, 500.0, 0.0]);
+    mirrored.info = values;
+    layer.shapes.extend([Shape::Component(moved), Shape::Component(mirrored)]);
+    boxes.layers.push(layer);
+    font.glyphs.push(boxes);
+    font
+}
+
+/// The GLIF text of `glyph` in a UFO folder.
+fn glif(ufo: &Path, glyph: &str) -> String {
+    let dir = ufo.join("glyphs");
+    std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| std::fs::read_to_string(e.path()).unwrap())
+        .find(|t| t.contains(&format!("<glyph name=\"{glyph}\"")))
+        .unwrap_or_else(|| panic!("no {glyph} in {}", dir.display()))
+}
+
+/// Each contour of a GLIF as its points, turned to start at its lowest-leftmost point so that
+/// contours compare without regard to their start.
+#[allow(clippy::indexing_slicing, clippy::string_slice)]
+fn contours(glif: &str) -> Vec<Vec<(f64, f64)>> {
+    let attr = |el: &str, name: &str| -> f64 {
+        let rest = el.split(&format!(" {name}=\"")).nth(1).unwrap();
+        rest[..rest.find('"').unwrap()].parse().unwrap()
+    };
+    glif.split("<contour>")
+        .skip(1)
+        .map(|c| {
+            let body = &c[..c.find("</contour>").unwrap()];
+            let mut pts: Vec<(f64, f64)> = body.split("<point").skip(1).map(|p| (attr(p, "x"), attr(p, "y"))).collect();
+            let start = (0..pts.len()).min_by(|&a, &b| pts[a].partial_cmp(&pts[b]).unwrap()).unwrap();
+            pts.rotate_left(start);
+            pts
+        })
+        .collect()
+}
+
+#[test]
+#[allow(clippy::indexing_slicing)]
+fn smart_components_are_written_as_outlines_when_asked() {
+    let dir = temp("smart");
+    let mut s = Session::new();
+    s.add_document(smart_font(), None).unwrap();
+
+    // Default: the components stay, with their values in the glyph lib.
+    let kept = dir.join("Kept.ufo");
+    run(&mut s, "file.saveAs", json!({"path": kept, "format": "ufo"}));
+    let text = glif(&kept, "boxes");
+    assert_eq!(text.matches("<component base=\"_part.box\"").count(), 2, "{text}");
+    assert!(text.contains("com.schriftgestaltung.componentsSmartComponentValues"), "{text}");
+
+    // Outlines: Width 50 and Height 25 are halfway and a quarter up their ranges, so the box is
+    // 100 + 200 / 2 wide and 100 + 200 / 4 high, then moved; the mirrored copy keeps its
+    // counter-clockwise direction.
+    let drawn = dir.join("Drawn.ufo");
+    let out = run(&mut s, "file.saveAs", json!({"path": drawn, "format": "ufo", "smartComponents": "outlines"}));
+    assert!(out["losses"].to_string().contains("smart components written as outlines"), "{out}");
+    let text = glif(&drawn, "boxes");
+    assert!(!text.contains("<component"), "{text}");
+    assert_eq!(
+        contours(&text),
+        [vec![(10.0, 20.0), (210.0, 20.0), (210.0, 170.0), (10.0, 170.0)], vec![(300.0, 0.0), (500.0, 0.0), (500.0, 150.0), (300.0, 150.0)],]
+    );
+    // The document keeps its components.
+    let layer = &s.font().unwrap().glyphs.get("boxes").unwrap().layers[0];
+    assert!(layer.shapes.iter().all(|x| matches!(x, fontcraft_engine::model::Shape::Component(_))));
+
+    // Export UFO draws them by default, as the reference's Decompose Smart Stuff does.
+    let export = dir.join("export");
+    run(&mut s, "file.exportUfo", json!({"destination": export}));
+    let ufo = std::fs::read_dir(&export).unwrap().flatten().next().unwrap().path();
+    assert!(!glif(&ufo, "boxes").contains("<component"));
+
+    let err = s.execute("file.saveAs", &json!({"path": dir.join("x.glyphs"), "smartComponents": "outlines"})).unwrap_err();
+    assert!(err.to_string().contains("smartComponents"), "{err}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

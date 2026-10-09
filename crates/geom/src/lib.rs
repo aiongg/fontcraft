@@ -5,6 +5,8 @@
 //! conversion, extremes, rounding to the grid) lands here as the milestones need it.
 #![forbid(unsafe_code)]
 
+pub mod variation;
+
 pub use kurbo::{
     Affine, BezPath, CubicBez, Line, ParamCurve, ParamCurveNearest, PathEl, Point, QuadBez, QuadSpline, Rect, Shape, Vec2,
     cubics_to_quadratic_splines, flatten,

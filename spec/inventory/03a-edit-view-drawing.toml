@@ -142,10 +142,10 @@ label = "Save As…"
 menu = ["File"]
 shortcut = "Cmd+Shift+S"
 kind = "engine"
-params = "{path: string, format?: string}"
+params = "{path: string, format?: string, smartComponents?: components|outlines}"
 area = "import-export"
 milestone = "M1"
-summary = "Saves the document under a new name or location, and is the way to switch an existing document to another of the source file formats at any time."
+summary = "Saves the document under a new name or location, and is the way to switch an existing document to another of the source file formats at any time. FontCraft: smartComponents chooses whether a UFO or designspace holds smart components as components (default) or drawn as outlines (export.ufoSmartComponentsAsOutlines)."
 ref = "Create"
 status = "handbook"
 

@@ -24,6 +24,7 @@ mod layer_info;
 mod rare;
 mod resolve;
 mod shape_info;
+pub mod smart;
 
 pub use extra::{Extra, ExtraEntry, Family};
 pub use features::{Features, Group, Snippet};

@@ -124,7 +124,10 @@ on, so the engine track, where oracles prove correctness, goes first.
   UFO 2 and 3 (a UFO is a master) and designspace documents with their UFOs (one document)
   open and save back byte for byte in fontTools' layout, keeping each file's own layout and
   spellings while they still mean what the model holds; UFOZ opens; `file.exportUfo` writes
-  masters as UFOs. Compiled fonts (TrueType, CFF, collections, WOFF 1) open view-only. Kerning,
+  masters as UFOs. Smart components stay components in a UFO or designspace, or on request
+  (`smartComponents: outlines`, `convert --smart-components outlines`, and `file.exportUfo` by
+  default) are drawn as outlines interpolated from their pole layers, as glyphsLib draws them
+  (identical to glyphsLib's points in all 10 glyph layers of the corpus that use them). Compiled fonts (TrueType, CFF, collections, WOFF 1) open view-only. Kerning,
   axes, instances, master locations, features, display strings and the note are fields of the
   model, and so are the font's properties, custom parameters, settings, date and user data: UFO
   font information maps to the reference's names through a crosswalk ported from glyphsLib.

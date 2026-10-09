@@ -16,7 +16,8 @@
 //!
 //! glyphsLib writes `shapeOrder` whenever a layer has both kinds of shape, so it follows the
 //! defaults rule of [`crate::libkeys`]. A smart component stays a component, with its values in
-//! `componentsSmartComponentValues` (glyphsLib draws it as outlines). An anchor with user data and
+//! `componentsSmartComponentValues` (glyphsLib draws it as outlines; the engine does that first,
+//! with `fontcraft_model::smart`, when asked). An anchor with user data and
 //! no identifier gets one derived from the glyph's name and the anchor's name and position in the
 //! layer, so that saving twice writes the same file (glyphsLib makes a random one); reading takes
 //! that identifier off again.

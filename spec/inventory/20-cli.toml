@@ -819,6 +819,7 @@ options = [
   "--ufo-version 2|3, --ufo-structure package|zip|json, --indent-json: form of UFO output",
   "--skip-export-key public|glyphs: when writing UFOs from a .glyphs source, store export flags in public.skipExportGlyphs (default) or in the older per-glyph lib key",
   "--emit-designspace PATH, --master-dir DIR, --family-name NAME: where the designspace and master UFOs go when a multi-master source is converted",
+  "--smart-components components|outlines: when writing a UFO or designspace, keep smart components as components with their values (default) or draw them as interpolated outlines (export.ufoSmartComponentsAsOutlines)",
   "--normalize: write sources in canonical form: sorted keys, fixed number formatting and indentation",
   "--svg-glyph-names none|non-ascii|all, --svg-absolute, --svg-standalone: SVG-font output: which glyphs carry glyph-name attributes, absolute instead of relative path coordinates, and a complete SVG document instead of a font fragment",
   "--recalc-bounds / --no-recalc-bounds: recompute bounding boxes when compiling TTX (default) or trust the values in the dump",

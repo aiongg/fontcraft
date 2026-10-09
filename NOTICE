@@ -74,7 +74,11 @@ bundled, the file says so in its header and the project is listed here with its 
   image matrix into position, scale, rotation and slant is ported from its
   decomposeGlyphs3Transform (crates/io-glyphs/src/lib.rs, decompose). The blue values written
   from a master's alignment zones (crates/model/src/resolve.rs, blue_values) port its
-  to_ufo_blue_values (builder/blue_values.py).
+  to_ufo_blue_values (builder/blue_values.py). Smart components drawn as outlines (the pole
+  layer locations, the normalisation of component values, nested components first, the
+  component matrix and contour reversal) are ported from its smart-component and component
+  builders (crates/model/src/smart.rs, from builder/smart_components.py and components.py), with
+  the reversal of its path class (GSPath.reverse).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data
@@ -86,7 +90,8 @@ bundled, the file says so in its header and the project is listed here with its 
   designspace writer follows the element order of designspaceLib. crates/io-ufo/src/designspace/rules.rs
   ports varLib's overlayFeatureVariations, overlayBox and cleanupBox (featureVars.py), and
   crates/io-glyphs/src/lib.rs (quadratic_roots) the quadratic solver of misc/bezierTools.py.
-  The CFF writer (crates/cff) ports cffLib: the table layout and offset passes, INDEX, charset
+  crates/geom/src/variation.rs ports varLib's normalizeValue, supportScalar and VariationModel
+  (models.py). The CFF writer (crates/cff) ports cffLib: the table layout and offset passes, INDEX, charset
   and DICT compilers, the standard strings and predefined charsets (data from Adobe Technical
   Note #5176), the specialiser (specializer.py) and the width optimiser (width.py); the number
   encoders of misc/psCharStrings.py; the rounding of misc/roundTools.py; the charstring pen
