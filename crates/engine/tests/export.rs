@@ -368,3 +368,33 @@ fn one_file_destination_takes_its_format_from_the_extension() {
     assert_eq!(container::sniff(&std::fs::read(&otf).unwrap()), Some(container::Kind::Cff));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn an_export_that_cannot_place_every_file_leaves_the_folder_as_it_was() {
+    let dir = temp("blocked");
+    let mut s = two_masters(&dir, TWO_MASTERS);
+    let out_dir = dir.join("out");
+    std::fs::create_dir_all(out_dir.join("TestSans-Heavy.ttf")).unwrap();
+    std::fs::write(out_dir.join("TestSans-Heavy.ttf/keep.txt"), b"kept").unwrap();
+    std::fs::write(out_dir.join("TestSans-Regular.ttf"), b"old").unwrap();
+    let e = s.execute("file.exportStatic", &json!({"destination": out_dir})).unwrap_err().to_string();
+    assert!(e.contains("TestSans-Heavy.ttf") && e.contains("folder"), "{e}");
+    assert_eq!(names(&out_dir), ["TestSans-Heavy.ttf/keep.txt", "TestSans-Regular.ttf"]);
+    assert_eq!(std::fs::read(out_dir.join("TestSans-Regular.ttf")).unwrap(), b"old");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn file_names_that_differ_only_in_case_collide() {
+    let dir = temp("case");
+    let regular = "400\n);\nname = Regular;";
+    assert!(TWO_MASTERS.contains(regular));
+    let text =
+        TWO_MASTERS.replacen(regular, "400\n);\ncustomParameters = (\n{\nname = fileName;\nvalue = \"testsans-heavy\";\n}\n);\nname = Regular;", 1);
+    let mut s = two_masters(&dir, &text);
+    let out_dir = dir.join("out");
+    let out = run(&mut s, "file.exportStatic", json!({"destination": out_dir, "timestamp": 0}));
+    assert_eq!(names(&out_dir), ["TestSans-Heavy.ttf"]);
+    assert!(out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("two fonts are written")), "{out}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

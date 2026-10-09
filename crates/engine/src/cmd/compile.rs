@@ -506,6 +506,60 @@ pub(super) struct Stage {
     made: Vec<std::path::PathBuf>,
 }
 
+/// Whether two output paths can name the same file: some file systems ignore case.
+#[cfg(not(target_arch = "wasm32"))]
+fn same_output(a: &std::path::Path, b: &std::path::Path) -> bool {
+    a == b || a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+}
+
+/// The folder that holds `path`.
+#[cfg(not(target_arch = "wasm32"))]
+fn folder_of(path: &std::path::Path) -> std::path::PathBuf {
+    path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new(".")).to_path_buf()
+}
+
+/// How many names [`scratch_path`] tries before giving up.
+#[cfg(not(target_arch = "wasm32"))]
+const SCRATCH_TRIES: usize = 16;
+
+/// A path in `dir` for a temporary (`kind` "tmp") or set-aside ("bak") file of an export. The
+/// name never depends on the final file name, so two long names cannot shorten to the same one.
+#[cfg(not(target_arch = "wasm32"))]
+fn scratch_path(dir: &std::path::Path, kind: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    dir.join(format!(".fontcraft-export-{}-{n}.{kind}", std::process::id()))
+}
+
+/// Creates a new temporary file in `dir`, never opening one that exists.
+#[cfg(not(target_arch = "wasm32"))]
+fn create_scratch(dir: &std::path::Path) -> std::io::Result<(std::path::PathBuf, std::fs::File)> {
+    for _ in 0..SCRATCH_TRIES {
+        let path = scratch_path(dir, "tmp");
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(f) => return Ok((path, f)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists))
+}
+
+/// Moves `target` to a free set-aside name next to it; returns that name.
+#[cfg(not(target_arch = "wasm32"))]
+fn set_aside(target: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    let dir = folder_of(target);
+    for _ in 0..SCRATCH_TRIES {
+        let backup = scratch_path(&dir, "bak");
+        if std::fs::symlink_metadata(&backup).is_err() {
+            std::fs::rename(target, &backup)?;
+            return Ok(backup);
+        }
+    }
+    Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists))
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl Stage {
     fn new(root: std::path::PathBuf, single: bool) -> Self {
@@ -515,7 +569,7 @@ impl Stage {
     fn put(&mut self, name: &str, bytes: &[u8], warnings: &mut Vec<String>) -> Result<std::path::PathBuf> {
         use std::io::Write as _;
         let target = if self.single { self.root.clone() } else { name.split('/').fold(self.root.clone(), |p, part| p.join(part)) };
-        if let Some(i) = self.staged.iter().position(|(_, f)| *f == target) {
+        if let Some(i) = self.staged.iter().position(|(_, f)| same_output(f, &target)) {
             let (tmp, _) = self.staged.remove(i);
             let _ = std::fs::remove_file(tmp);
             warnings.push(format!(
@@ -523,21 +577,18 @@ impl Stage {
                 target.display()
             ));
         }
-        let file = target.file_name().ok_or_else(|| EngineError::Io(format!("{} is not a file path", target.display())))?;
-        let dir = target.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new(".")).to_path_buf();
+        if target.file_name().is_none() {
+            return Err(EngineError::Io(format!("{} is not a file path", target.display())));
+        }
+        let dir = folder_of(&target);
         self.make_dir(&dir)?;
-        let mut tmp_name = std::ffi::OsString::from(".");
-        tmp_name.push(file);
-        tmp_name.push(format!(".{}.export.tmp", std::process::id()));
-        let tmp = dir.join(tmp_name);
-        let written = (|| {
-            let mut f = std::fs::File::create(&tmp)?;
-            f.write_all(bytes)?;
-            f.sync_all()
-        })();
+        let cannot = |e: std::io::Error| EngineError::Io(format!("cannot write {}: {e}", target.display()));
+        let (tmp, mut f) = create_scratch(&dir).map_err(cannot)?;
+        let written = f.write_all(bytes).and_then(|()| f.sync_all());
+        drop(f);
         if let Err(e) = written {
             let _ = std::fs::remove_file(&tmp);
-            return Err(EngineError::Io(format!("cannot write {}: {e}", target.display())));
+            return Err(cannot(e));
         }
         self.staged.push((tmp, target.clone()));
         Ok(target)
@@ -560,32 +611,71 @@ impl Stage {
     }
 
     fn commit(mut self) -> Result<()> {
-        let staged = std::mem::take(&mut self.staged);
-        let mut moved = 0usize;
+        self.check()?;
+        self.swap()?;
+        self.made.clear();
+        Ok(())
+    }
+
+    /// Refuses, before anything moves, a final path that cannot take a file. Each temporary file
+    /// was written next to its final path, so that folder exists and takes new files.
+    fn check(&self) -> Result<()> {
+        for (tmp, target) in &self.staged {
+            if target.is_dir() {
+                return Err(EngineError::Io(format!("cannot write {}: a folder has that name", target.display())));
+            }
+            if !tmp.is_file() {
+                return Err(EngineError::Io(format!("cannot write {}: its temporary file is gone", target.display())));
+            }
+        }
+        Ok(())
+    }
+
+    /// Sets every existing final file aside, then moves every staged file into place. On a
+    /// failure it removes what it moved in and puts back what it set aside, so the folder is as
+    /// it was; on success it deletes what it set aside.
+    fn swap(&mut self) -> Result<()> {
+        let mut aside: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
         let mut failure = None;
-        for (tmp, target) in &staged {
-            match std::fs::rename(tmp, target) {
-                Ok(()) => moved += 1,
+        for (_, target) in &self.staged {
+            if std::fs::symlink_metadata(target).is_err() {
+                continue;
+            }
+            match set_aside(target) {
+                Ok(backup) => aside.push((backup, target.clone())),
                 Err(e) => {
-                    failure = Some(EngineError::Io(format!("cannot write {}: {e}", target.display())));
+                    failure = Some(format!("cannot replace {}: {e}", target.display()));
                     break;
                 }
             }
         }
-        match failure {
-            None => {
-                self.made.clear();
-                Ok(())
-            }
-            Some(e) => {
-                // What was not moved is removed when the stage is dropped.
-                self.staged = staged.into_iter().skip(moved).collect();
-                if moved > 0 {
-                    self.made.clear();
+        let mut moved = 0usize;
+        if failure.is_none() {
+            for (tmp, target) in &self.staged {
+                if let Err(e) = std::fs::rename(tmp, target) {
+                    failure = Some(format!("cannot write {}: {e}", target.display()));
+                    break;
                 }
-                Err(e)
+                moved += 1;
             }
         }
+        let Some(failure) = failure else {
+            for (backup, _) in &aside {
+                let _ = std::fs::remove_file(backup);
+            }
+            self.staged.clear();
+            return Ok(());
+        };
+        for (_, target) in self.staged.drain(..moved) {
+            let _ = std::fs::remove_file(target);
+        }
+        let mut lost = Vec::new();
+        for (backup, target) in aside.iter().rev() {
+            if let Err(e) = std::fs::rename(backup, target) {
+                lost.push(format!("the previous {} could not be put back ({e}) and is kept as {}", target.display(), backup.display()));
+            }
+        }
+        if lost.is_empty() { Err(EngineError::Io(failure)) } else { Err(EngineError::Io(format!("{failure}; {}", lost.join("; ")))) }
     }
 }
 
@@ -598,6 +688,33 @@ impl Drop for Stage {
         for d in self.made.iter().rev() {
             let _ = std::fs::remove_dir(d);
         }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod stage_tests {
+    #![allow(clippy::unwrap_used)]
+    use super::Stage;
+
+    #[test]
+    fn a_failed_move_puts_back_the_files_it_replaced() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-stage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("A.ttf"), b"old").unwrap();
+        let mut stage = Stage::new(dir.clone(), false);
+        let mut warnings = Vec::new();
+        stage.put("A.ttf", b"new", &mut warnings).unwrap();
+        stage.put("sub/B.ttf", b"new", &mut warnings).unwrap();
+        // The second file's folder disappears after staging, so its move fails after `A.ttf`
+        // was already replaced.
+        std::fs::remove_dir_all(dir.join("sub")).unwrap();
+        assert!(stage.swap().is_err());
+        drop(stage);
+        let left: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(left, ["A.ttf"]);
+        assert_eq!(std::fs::read(dir.join("A.ttf")).unwrap(), b"old");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
 
