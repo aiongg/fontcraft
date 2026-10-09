@@ -318,6 +318,8 @@ pub(crate) fn tables<'a>(dir: &Woff2Directory, data: &'a [u8]) -> Result<Vec<Own
         _ => None,
     };
     let mut out = Vec::with_capacity(dir.tables.len());
+    // The tables' padded sizes so far, checked before they are put together.
+    let mut total = 0usize;
     for t in &dir.tables {
         let bytes = if !t.transformed() {
             Cow::Borrowed(raw(t)?)
@@ -342,10 +344,18 @@ pub(crate) fn tables<'a>(dir: &Woff2Directory, data: &'a [u8]) -> Result<Vec<Own
                     Cow::Owned(glyf::x_mins(glyf_data, loca, long, usize::from(count))?)
                 }
             };
-            Cow::Owned(hmtx::reconstruct(raw(t)?, metrics, &x_mins)?)
+            let hmtx = hmtx::reconstruct(raw(t)?, metrics, &x_mins)?;
+            if hmtx.len() != t.orig_length as usize {
+                return Err(bad("the rebuilt hmtx table differs in size from the original"));
+            }
+            Cow::Owned(hmtx)
         } else {
             return Err(bad(format!("table '{}' uses an unknown transform", sfnt::tag_str(t.tag))));
         };
+        total = pad4(bytes.len()).and_then(|n| total.checked_add(n)).unwrap_or(usize::MAX);
+        if total > MAX_SFNT {
+            return Err(bad("the font is too large"));
+        }
         out.push((t.tag, bytes));
     }
     Ok(out)

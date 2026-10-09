@@ -347,6 +347,13 @@ fn damaged_transformed_tables_never_panic() {
     for cut in 0..hmtx.len() {
         assert!(woff2::hmtx::reconstruct(&hmtx[..cut], 4, &x_mins).is_err());
     }
+    // hhea naming more metrics than there are glyphs, or a rebuilt hmtx of another size than the
+    // directory states, is damage.
+    assert_eq!(woff2::hmtx::reconstruct(&[3, 1, 244, 1, 244], 2, &[0, 0]).unwrap().len(), 8);
+    assert!(woff2::hmtx::reconstruct(&[3, 1, 244, 1, 244], 3, &[0, 0]).is_err());
+    let mut longer = dir.clone();
+    longer.tables.iter_mut().find(|t| &t.tag == b"hmtx").unwrap().orig_length += 2;
+    assert!(woff2::tables(&longer, &data).is_err());
     // Damaged glyphs on the way in leave glyf untransformed rather than fail.
     let glyf_at = {
         let parsed = sfnt::parse(&f).unwrap();

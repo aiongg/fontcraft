@@ -75,7 +75,10 @@ pub(crate) fn reconstruct(data: &[u8], number_of_hmetrics: u16, x_mins: &[i16]) 
         return Err(bad("the transformed hmtx table leaves out no side bearings"));
     }
     let glyphs = x_mins.len();
-    let n = usize::from(number_of_hmetrics).min(glyphs);
+    let n = usize::from(number_of_hmetrics);
+    if n > glyphs {
+        return Err(bad("hhea names more horizontal metrics than the font has glyphs"));
+    }
     if n == 0 {
         return Err(bad("the transformed hmtx table has no metrics"));
     }

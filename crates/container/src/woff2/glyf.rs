@@ -657,33 +657,39 @@ pub(crate) fn reconstruct(data: &[u8]) -> Result<Rebuilt, Error> {
         instructions: Cursor::new(instructions?, "the instruction stream"),
         overlap_bitmap,
     };
-    let mut glyphs: Vec<Vec<u8>> = Vec::with_capacity(count);
+    let mut glyf = Vec::new();
+    let mut offsets = Vec::with_capacity(count + 1);
     let mut x_mins = Vec::with_capacity(count);
-    let mut total = 0usize;
     for id in 0..count {
         let g = decode_glyph(&mut input, id)?;
-        let mut bytes = Vec::new();
-        compile(&g, &mut bytes)?;
-        total = total.saturating_add(bytes.len());
-        if total > MAX_SFNT {
+        offsets.push(glyf.len());
+        compile(&g, &mut glyf)?;
+        if glyf.len() > MAX_SFNT {
             return Err(bad("the rebuilt glyf table is too large"));
         }
         x_mins.push(g.x_min());
-        glyphs.push(bytes);
-    }
-    let odd = glyphs.iter().filter(|g| g.len() % 2 == 1).count();
-    if total < SHORT_LOCA_LIMIT && odd > 0 && total + odd < SHORT_LOCA_LIMIT {
-        for g in glyphs.iter_mut().filter(|g| g.len() % 2 == 1) {
-            g.push(0);
-        }
-    }
-    let mut glyf = Vec::with_capacity(total.saturating_add(odd));
-    let mut offsets = Vec::with_capacity(count + 1);
-    for g in &glyphs {
-        offsets.push(glyf.len());
-        glyf.extend_from_slice(g);
     }
     offsets.push(glyf.len());
+    let odd_length = |w: &[usize]| matches!(w, [a, b] if b.saturating_sub(*a) % 2 == 1);
+    let odd = offsets.windows(2).filter(|w| odd_length(w)).count();
+    let total = glyf.len();
+    if total < SHORT_LOCA_LIMIT && odd > 0 && total + odd < SHORT_LOCA_LIMIT {
+        // Small enough for short offsets once each odd glyph gets a pad byte; copying is cheap
+        // below this size.
+        let mut padded = Vec::with_capacity(total + odd);
+        let mut padded_offsets = Vec::with_capacity(count + 1);
+        for w in offsets.windows(2) {
+            let &[a, b] = w else { continue };
+            padded_offsets.push(padded.len());
+            padded.extend_from_slice(glyf.get(a..b).unwrap_or_default());
+            if odd_length(w) {
+                padded.push(0);
+            }
+        }
+        padded_offsets.push(padded.len());
+        glyf = padded;
+        offsets = padded_offsets;
+    }
     let long = index_format != 0;
     if !long && (glyf.len() >= SHORT_LOCA_LIMIT || offsets.iter().any(|o| o % 2 == 1)) {
         return Err(bad("the glyphs do not fit the short loca format the transformed glyf table names"));
