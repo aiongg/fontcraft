@@ -26,6 +26,7 @@ use std::sync::Arc;
 
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use fontcraft_compile as compile;
+pub use fontcraft_container as container;
 pub use fontcraft_format as format;
 pub use fontcraft_model as model;
 use fontcraft_model::Font;

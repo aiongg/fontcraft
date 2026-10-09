@@ -28,10 +28,10 @@ label = "Export All"
 menu = ["File"]
 shortcut = "Cmd+Alt+E"
 kind = "engine"
-params = '{documents?: [paths]}'
+params = '{documents?: [titles or paths], outlines?: ["truetype"|"cff"], containers?: ["plain"|"woff"|"woff2"], destination: path, removeOverlap?: bool, autohint?: bool, timestamp?: number|"now"}'
 area = "compile"
 milestone = "M2"
-summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. The handbook does not say which options are used; we assume each document's last-used export settings (to be confirmed)."
+summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. The handbook does not say which options are used; we assume each document's last-used export settings (to be confirmed). FontCraft has no remembered settings yet, so the command takes them as parameters: every exportable instance of each chosen document, in each outline flavour and container asked for, into one destination folder, reporting what it wrote and what it skipped."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
 
@@ -41,7 +41,7 @@ label = "Export Static Fonts"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{document?: path, instances?: [names], outlines: "cff"|"truetype", containers: ["plain"|"woff"|"woff2"], removeOverlap: bool, autohint: bool, destination?: path, testInstall?: bool}'
+params = '{instances?: [names], outlines?: "cff"|"truetype", containers?: ["plain"|"woff"|"woff2"], removeOverlap?: bool, autohint?: bool, destination?: path, testInstall?: bool, timestamp?: number|"now"}'
 area = "compile"
 milestone = "M2"
 summary = "Compiles one static font per export instance (or one default instance derived from the first master when the font defines none) in the chosen outline flavour, writing each requested container format. Existing files with the same name are replaced. This is the headless form of the dialog's OTF tab."
@@ -205,6 +205,46 @@ milestone = "M2"
 summary = "Static export produces the font's configured instances. A font with no instances still exports: a default instance is synthesised from the first master."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
+
+[[behavior]]
+id = "export.fileNaming"
+area = "compile"
+milestone = "M2"
+summary = "Each exported file is named by the font's PostScript name (family and style without spaces, joined by a hyphen) plus the extension of its flavour and container: .ttf or .otf, .woff, .woff2. An instance's fileName custom parameter replaces that stem. FontCraft drops characters that cannot be in a file name."
+ref = "Import & Export › Exporting Font Files; Appendix › Custom Parameters › fileName"
+status = "memory"
+
+[[behavior]]
+id = "export.instancesBetweenMasters"
+area = "compile"
+milestone = "M2"
+summary = "Until interpolation exists (M9), static export builds an instance only where it sits exactly at a master and draws that master's layers; an instance between masters is skipped and listed in the result with the reason. An export in which nothing can be built fails."
+ref = "docs/plans/M2.md › Open questions: answers for M2"
+status = "inferred"
+
+[[behavior]]
+id = "export.flavourSubfolders"
+area = "compile"
+milestone = "M2"
+summary = "An export that writes both outline flavours at once (file.exportAll, font.compile) puts each flavour's files into a subfolder named ttf or otf of the destination, so the WOFF and WOFF2 files of the two flavours do not overwrite each other. Two fonts with the same file name in one export: the later one is kept, with a warning."
+ref = "docs/spec/40-compile.md › 1.12 Export"
+status = "inferred"
+
+[[behavior]]
+id = "export.failingExportWritesNothing"
+area = "compile"
+milestone = "M2"
+summary = "Every font of an export is compiled and wrapped before any file is moved into place: files are written under temporary names beside their destination and renamed at the end. When any font fails, the temporary files and the folders the export created are removed, and the destination is as it was."
+ref = "docs/spec/40-compile.md › 1.12 Export"
+status = "inferred"
+
+[[behavior]]
+id = "export.singleFileDestination"
+area = "compile"
+milestone = "M2"
+summary = "A headless static export may name one file instead of a folder. Its extension (.ttf, .otf, .woff, .woff2) sets the outline flavour and container when they are not given and must agree with them when they are; the file receives the first instance that can be built, and the others are listed as skipped."
+ref = "docs/spec/40-compile.md › 1.12 Export"
+status = "inferred"
 
 [[behavior]]
 id = "export.outlineFlavorChoice"

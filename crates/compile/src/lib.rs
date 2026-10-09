@@ -34,6 +34,7 @@ pub mod cff;
 pub mod info;
 pub mod order;
 pub mod outline;
+pub mod plan;
 pub mod preflight;
 mod ranges;
 

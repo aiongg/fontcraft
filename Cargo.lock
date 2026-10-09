@@ -843,6 +843,7 @@ version = "0.0.1"
 dependencies = [
  "base64 0.22.1",
  "fontcraft-compile",
+ "fontcraft-container",
  "fontcraft-decompile",
  "fontcraft-format",
  "fontcraft-geom",

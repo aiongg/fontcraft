@@ -8,6 +8,7 @@
 //! parameters through [`crate::params::Params`] and changes fonts only through
 //! [`crate::Session::edit`], which makes the change one undo step.
 
+mod compile;
 mod edit;
 mod file;
 mod font;
@@ -111,6 +112,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(path::specs());
         v.extend(spacing::specs());
         v.extend(font::specs());
+        v.extend(compile::specs());
         v.extend(meta::specs());
         v.extend(session::specs());
         v.extend(inspect::specs());

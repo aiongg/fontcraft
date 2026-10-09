@@ -200,6 +200,24 @@ above. The rules are recorded so the mode can be implemented without re-reading 
   `compile.kernClassOptimisation`. Synthetic glyphs are not reproduced
   (`compile.makeotfSyntheticGlyphs`).
 
+### 1.12 Export
+
+`file.exportStatic`, `file.exportAll` and `font.compile` share one way of choosing, naming and
+writing fonts; `font.compilePlan` describes the same choices without building.
+
+| Question | Rule | Row |
+|---|---|---|
+| Which fonts | The exportable static instances; the first master when the font has no static instance. Named instances are built whether they export or not. `font.compile` can add each master | `export.staticUsesInstancesOrDefault` |
+| Instances between masters | Skipped with a reason in the result until interpolation (M9). An export that builds nothing fails | `export.instancesBetweenMasters` |
+| File name | The instance's `fileName` parameter, else the PostScript name (name ID 6, as the compiler derives it), plus `.ttf`, `.otf`, `.woff` or `.woff2`; characters a file name cannot hold are dropped | `export.fileNaming`, `compile.outputNaming` |
+| Both flavours at once | Each into a `ttf` or `otf` subfolder; a repeated file name keeps the later font, with a warning | `export.flavourSubfolders` |
+| One file as destination | Its extension sets the flavour and container; it receives the first font that can be built | `export.singleFileDestination` |
+| Failure | Files are staged under temporary names and renamed only when every font is built; a failure leaves the destination as it was | `export.failingExportWritesNothing` |
+| Overlaps | Kept, with a warning, until overlap removal (M3); asking for removal is an error | `export.removeOverlapOption` |
+
+WOFF2 uses the container's default options: `glyf` and `loca` transformed, `hmtx` not, as
+fontTools does.
+
 ---
 
 ## 2. Table matrix
