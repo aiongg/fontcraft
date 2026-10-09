@@ -210,8 +210,6 @@ fn cff_export_in_every_container_decodes_to_the_same_font() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// Needs the WOFF2 glyf/loca transform (M2.4b): until then the default WOFF2 options refuse a
-/// TrueType font.
 #[test]
 fn truetype_woff2_export_decodes_to_the_plain_font() {
     let mut s = drawn();

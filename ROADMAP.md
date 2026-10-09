@@ -4,7 +4,7 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-08 (M2.4a done: WOFF 1 and untransformed WOFF2 in the new `container` crate; M2.4b, the WOFF2 transforms, next)._
+_Last updated: 2026-10-09 (M2 done: static TrueType and CFF export in plain, WOFF and WOFF2 from the commands and the CLI, measured against fontc and fontmake; M3's planning pass next)._
 
 ## Where we are
 
@@ -13,11 +13,11 @@ _Last updated: 2026-10-08 (M2.4a done: WOFF 1 and untransformed WOFF2 in the new
 | Planning: charter, rules, references, decisions | **done** for this stage (`docs/`) |
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,621 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, guard, CLI, control channel, MCP, UI shell, tests | **~35%** of what the siblings' "infrastructure" row covers |
-| Feature surface against the references (weighted, by behaviour, self-graded) | **~3%** |
-| Commands that exist (not: that behave like the reference) | **32 of 920** (`docs/parity.md`) |
+| Feature surface against the references (weighted, by behaviour, self-graded) | **~5%** |
+| Commands that exist (not: that behave like the reference) | **35 of 920** (`docs/parity.md`) |
 | Observed against the running reference app | **nothing** |
 
-## Honest assessment (2026-10-08)
+## Honest assessment (2026-10-09)
 
 **In one line:** the project reads and writes `.glyphs`, UFO and designspace sources without loss and opens compiled fonts; it is not yet a font editor.
 
@@ -30,26 +30,32 @@ write. A `.glyphs` document saves as UFO or designspace and back: every referenc
 source comes back with the same model except what the loss report lists, and fontmake builds
 Oswald from our designspace with the same outlines (but the advance widths of non-spacing marks),
 names and OS/2 values as from the `.glyphs` source.
-Compiled TrueType, CFF, collection and WOFF 1 fonts
-open view-only (all 342 corpus fonts). The native `.fontcraft` format holds everything a `.glyphs`
+Compiled TrueType, CFF, collection, WOFF 1 and WOFF2 fonts
+open view-only (all 391 corpus fonts). The native `.fontcraft` format holds everything a `.glyphs`
 source holds. A new font can be created, glyphs added, removed and encoded, outlines added from
 node lists, widths and font info set, everything undone and redone, several edits batched into
-one undo step, and a static TrueType font exported (of a master, or of an instance at a master,
-with composites kept and `.notdef` drawn when the font has none) that fonttools and skrifa read
-back correctly. All of that works headless (`fontcraft-cli run`), over MCP, over the control
+one undo step, and static fonts exported with TrueType or CFF outlines, plain or as WOFF or
+WOFF2, for every instance that sits at a master (or for the masters), named as the reference
+names them, from `file.exportStatic`, `file.exportAll`, `font.compile` and `fontcraft-cli
+compile`. Built from the 347 corpus sources FontCraft compiles, all 1,102 TTF and OTF fonts read
+back in skrifa and fontTools without an error, wrap and unwrap as WOFF2 to the same tables, and
+the same source and timestamp give the same bytes. All of that works headless (`fontcraft-cli run`), over MCP, over the control
 channel into the running window. From the window's menus only the commands that need no
 parameters work (New, Close, Undo, Redo, New Glyph, the View and Window toggles): there are no
 dialogs yet. Font View and Edit View draw. `fontcraft-cli oracle` compiles a source with
 FontCraft and with fontc or fontmake and compares the two fonts table by table; over 354 corpus
 sources it measures the compiler: 332 compared with fontc, and every core table identical,
 equivalent or allow-listed with a reason in all of them; 331 compared with fontmake's CFF builds,
-whose outlines FontCraft's match in 320. `crates/container` wraps and unwraps WOFF 1 and untransformed WOFF2 for all 342 corpus fonts. 487 tests pass, including a sweep that runs every engine
+whose outlines FontCraft's match in 322 (the other 9 are source reading, allow-listed).
+`crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
+transforms; fontTools reads all of its output back. 487 tests pass, including a sweep that runs every engine
 command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
 **What is not.** There is no drawing with the pointer, no selection of nodes, no path operations,
 no kerning editing, no component editing (components are exported as composites), no feature compilation, no
-variable fonts, no CFF, WOFF or WOFF2 export command (the compiler and the container crate build them; the commands come in M2.5), no hinting, no WOFF2 table transforms (the 48 transformed corpus WOFF2 files do not open yet), no screenshots over the control channel,
+variable fonts and no instances between masters (M9), no overlap removal on export (overlaps are
+kept with a warning until M3), no CFF subroutines, no hinting, no export dialogs, no screenshots over the control channel,
 no web app, no packaging. Glyphs-only data travels in glyphsLib's UFO lib keys where glyphsLib
 has a key for it, and alternate and intermediate layers travel as designspace rules and sparse
 sources; the data no key holds (glyph tags, locks, sort names, layer colours, drawing
@@ -71,8 +77,8 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 |---|---|---|
 | **Breadth:** commands, tools and panels exist | ~3% | 32 of 920 commands; 0 of 33 tools; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~1–2% | only the M0 slice has behaviour, and none of it has been compared with the reference |
-| **File interop** | ~35% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections and WOFF 1 open (all 342 corpus fonts); static TrueType out from the export command; static CFF from the compiler and the oracle. Missing: the OTF, WOFF and WOFF2 export commands, WOFF2 table transforms (reading most WOFF2 files), variable, version conversion, a glyph database for production names |
-| **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF). Against fontc over 332 corpus sources every core table is identical, equivalent or allow-listed: allowed differences come from fontc building variable fonts, its bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6) and four reader questions (`docs/plans/M2.md` › M2.2). Against fontmake's CFF builds over 331 sources, 320 CFF tables decode to the same outlines and 195 are byte-identical; where fontmake and fontc disagree FontCraft follows fontc and the allow-list says why; 9 to 11 sources per table are left different (`docs/plans/M2.md` › M2.3b). No variable font, no features |
+| **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands and the CLI. Missing: variable fonts, instances between masters, version conversion, a glyph database for production names |
+| **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). No variable font, no features, no hinting, no subroutines |
 | **Agent automation** | ~40% | every existing command is reachable from CLI, control channel and MCP; no pointer injection, dialogs, screenshots, resources or prompts yet |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests); one dependency panic found and fenced; one adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, no corpus runs, and the known scaling limits in `docs/status.md` |
 | **Performance** | unmeasured | targets written down (`docs/architecture.md`); no budget suite |
@@ -81,17 +87,17 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 ### What to build next (in priority order)
 
-1. **M2, the compile core** (plan accepted, `docs/plans/M2.md`): M2.0 (the oracle harness),
-   M2.1 (the staged pipeline), M2.2 (core tables at fontc parity) and M2.3 (static CFF) are
-   done, and M2.4a (WOFF 1 and untransformed WOFF2, `crates/container`). Next M2.4b (the WOFF2
-   `glyf`/`loca` and `hmtx` transforms, WOFF2 opening) and the export commands (M2.5, which also
-   offer CFF and the containers). Four
-   reader questions from M2.2 and the differences left against fontmake (plan › M2.3b) are open.
-2. **M3, Edit View drawing**, in parallel with 1 now that the model has settled: the `tools` crate,
-   selection, the Draw tool, node editing, transforms, the renderer, `ui.pointer` and
-   `ui.screenshot` on the control channel, path operations.
-3. Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
-   orders them.
+1. **M3, Edit View drawing**: the `tools` crate, selection, the Draw tool, node editing,
+   transforms, the renderer, `ui.pointer` and `ui.screenshot` on the control channel, path
+   operations (which also give static export its overlap removal). It starts with a planning
+   pass (`docs/execution-plan.md` § 3): list its rows, answer or keep its open questions, verify
+   its `memory` rows, and write `docs/plans/M3.md` with packages and measures for the owner to
+   accept.
+2. Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
+   orders them. Left from M2 for later milestones: instances between masters (M9), CFF
+   subroutines (before M12), production names (M4), the compile plan's `productionNames` and
+   `features` sections, and the CLI's `--name-by`, `--output-layout` and pattern instance
+   selection (`docs/plans/M2.md` › M2.5).
 
 **The primary reference cannot be observed directly** (open decision O1: no licence). Editor
 behaviour comes from the handbook and from public tutorial videos the owner watches and reports
@@ -107,7 +113,7 @@ on, so the engine track, where oracles prove correctness, goes first.
 - **Workspace:** 15 library crates in enforced layers, two apps, `xtask`; about 52,800 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
-- **Engine:** sessions, per-document history, the command registry (18 engine commands), atomic
+- **Engine:** sessions, per-document history, the command registry (26 engine commands), atomic
   failure, the panic guard, the journal.
 - **Formats:** `.fontcraft` version 2 (versioned JSON, stable output, atomic writes, upgrade from
   version 1). `.glyphs` versions 2, 3 and 4 and `.glyphspackage`, read into the model and written
@@ -178,20 +184,31 @@ on, so the engine track, where oracles prove correctness, goes first.
 - **Static CFF in the compiler:** `Flavour::Cff` builds an OTF of a master as fontmake does:
   decomposed cubic outlines in their drawn direction, glyph names in the charset, Top DICT
   names from the `name` table, blue zones and stems from the master, `maxp` 0.5, `post` 3.0,
-  metrics from the charstring bounds. Against fontmake over 331 corpus sources: 320 CFF tables
-  decode to the same outlines, 195 are byte-identical. Every font built from the corpus (347
-  OTF, 347 TTF) reads back in fontTools.
-- **Containers:** `crates/container` (standalone): WOFF 1 and WOFF2 with untransformed tables,
-  written and read with fontTools' table order, checksums, header fields and compression
-  settings. All 342 corpus fonts wrap and unwrap to the same tables; fontTools reads all 340
-  TTF and OTF wrappings back to its own tables; 19 WOFF2 files are byte-identical to fontTools'
-  and the rest differ only in the compressed streams. Transformed WOFF2 is refused for now.
-  `file.open` reads WOFF 1 through it.
+  metrics from the charstring bounds. Against fontmake over 331 corpus sources: 322 CFF tables
+  decode to the same outlines, 206 are byte-identical, the other 9 are allow-listed source
+  reading. Every font built from the corpus (551 OTF, 551 TTF, masters and instances) reads back
+  in skrifa and fontTools.
+- **Containers:** `crates/container` (standalone): WOFF 1 and WOFF2, written and read with
+  fontTools' table order, checksums, header fields and compression settings; the WOFF2 `glyf`/
+  `loca` transform (by default) and `hmtx` transform (on request), both ways. All 342 corpus
+  fonts and all 1,102 fonts compiled from the corpus wrap and unwrap to the same tables;
+  fontTools reads all 340 corpus TTF and OTF wrappings back to its own tables, and our reader
+  reads fontTools' (339 of 340 with `hmtx`: fontTools shortens one font's `hmtx`); 21 WOFF2
+  files are byte-identical to fontTools' and the rest differ only in the Brotli stream.
+  `file.open`, `font.inspect` and `tables.list` read WOFF 1 and WOFF2 through it.
+- **Export:** `file.exportStatic`, `file.exportAll`, `font.compile` and `font.compilePlan`, and
+  `fontcraft-cli compile` (`--plan` for the plan): static TTF and OTF of every exportable
+  instance at a master, of the first master when there are none, or of each master; plain, WOFF
+  and WOFF2; named by the `fileName` parameter or the PostScript name, with `ttf` and `otf`
+  subfolders when both are written. Instances between masters are skipped with a reason;
+  overlaps are kept with a warning. A failing export writes nothing: the files are staged and
+  renamed only when every font is built. `convert` also writes `.otf`, `.woff` and `.woff2`.
+  The same source and timestamp give the same bytes (`crates/engine/tests/determinism.rs`).
 - **Oracle harness:** `crates/oracle` and `fontcraft-cli oracle`: FontCraft's build and fontc's
   or fontmake's (TrueType, or CFF from fontmake) of the same master, compared per table after
   normalisation (identical, equivalent, allowed with a reason, different, skipped), with
   source-reading differences reported apart; `--corpus` over 354 sources; opt-in oracle tests.
-- **Agent surfaces:** CLI (`commands`, `run`, `convert`, `info`, `oracle`, `mcp`), control channel
+- **Agent surfaces:** CLI (`commands`, `run`, `convert`, `compile`, `info`, `oracle`, `mcp`), control channel
   (7 methods, loopback, request-only), MCP server (3 tools, headless or attached).
 - **UI:** egui shell with a registry-built menu bar, Font View grid, Edit View display, Palette
   stub, status line, 9 shell commands; runs in a window and in headless test frames.
@@ -207,7 +224,7 @@ measured by what works (the parity table below and the measures in each mileston
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
-| M2 | Compile core: static TTF and OTF, oracle harness | 🟨 M2.0 to M2.3 done: the oracle harness, the staged pipeline, the core tables at fontc parity, static CFF compared with fontmake, and M2.4a (WOFF 1 and untransformed WOFF2 wrap and unwrap every corpus font table for table) (`docs/plans/M2.md`); M2.4b next | 6 (1) |
+| M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 6 (4) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ | 210 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
@@ -222,7 +239,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default) | ⬜ | |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 920 (32) |
+| | **Total** | | 920 (35) |
 
 ## Parity estimate
 
@@ -249,14 +266,14 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | PostScript hinting | 3 | 27 | 0 | 0% | everything |
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
-| Source formats | 6 | 14 | 5 | 55% | WOFF2 import; Glyphs-only data glyphsLib has no UFO key for; alternate layers' order and ids through a designspace, and alternate layers in a single UFO; STAT labels derived from instances; production names and mark widths from a glyph database; UFO 1; shape groups, gradients and shadows kept as stored values; right-to-left, vertical and contextual kerning in UFO; version conversion |
-| Compiling | 9 | 11 | 1 | 4% | measured against fontc (TrueType) and fontmake (CFF): core tables identical, equivalent or allow-listed in most sources; static CFF from the compiler, not yet from the export command; WOFF 1 and untransformed WOFF2 written by the container crate (not yet from a command), no WOFF2 transforms, no variable fonts, no features |
+| Source formats | 6 | 14 | 5 | 57% | Glyphs-only data glyphsLib has no UFO key for; alternate layers' order and ids through a designspace, and alternate layers in a single UFO; STAT labels derived from instances; production names and mark widths from a glyph database; UFO 1; shape groups, gradients and shadows kept as stored values; right-to-left, vertical and contextual kerning in UFO; version conversion |
+| Compiling | 9 | 11 | 4 | 10% | static TTF and OTF, plain, WOFF and WOFF2, from the commands; core tables identical, equivalent or allow-listed against fontc and fontmake in every corpus source. Missing: variable fonts and instances between masters (M9), features (M8), hinting (M10), overlap removal (M3), CFF subroutines, production names (M4), 37 of 50 tables |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
-| Command-line tools | 8 | 42 | 4 | 1% | `commands`, `run`, `convert`, `info`, `tables list`, `glyphs list`, `oracle`; no dump, subset, instance, merge |
+| Command-line tools | 8 | 42 | 4 | 3% | `commands`, `run`, `convert`, `compile` (static fonts; most of the reference compilers' options not yet), `info`, `tables list`, `glyphs list`, `oracle`; no dump, subset, instance, merge |
 | Quality checks | 3 | 33 | 0 | 0% | everything |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
 | Agent surfaces | 4 | 11 | 2 | 25% | execute, list, inspect over three surfaces; no pointer, dialogs, screenshots, resources |
-| **Feature parity** | **117** | **920** | **32** | **~3%** | |
+| **Feature parity** | **117** | **920** | **35** | **~5%** | |
 
 ## Out of scope (by design or by law)
 

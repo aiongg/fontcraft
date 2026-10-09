@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-08, M2.4a done (WOFF 1 and untransformed WOFF2 in `crates/container`; numbers in `docs/plans/M2.md` › M2.4)._
+_Updated: 2026-10-09, M2 done (every measure in `docs/plans/M2.md` § 5 met); M3's planning pass next._
 
 ## State of the tree
 
@@ -15,34 +15,19 @@ _Updated: 2026-10-08, M2.4a done (WOFF 1 and untransformed WOFF2 in `crates/cont
 
 ## Where to start
 
-**M2, the compile core** (`docs/plans/M2.md`, accepted): M2.0 (the oracle harness), M2.1 (the
-staged pipeline), M2.2 (the core tables at fontc parity) and M2.3 (CFF: the `cff` crate and
-`Flavour::Cff` in the compiler) are done. Against fontc every core table is identical,
-equivalent or allow-listed with a reason (`crates/oracle/allow.toml`). Against fontmake's CFF
-builds (`fontcraft-cli oracle --corpus --format otf`), 320 of 331 CFF tables decode to the same
-outlines and 195 are byte-identical; the rest follow from source reading or from fields where
-fontmake and fontc disagree, which are now allow-listed for fontmake with reasons. M2.4a is done:
-the standalone `crates/container` writes and reads WOFF 1 and WOFF2 with untransformed tables,
-and `crates/decompile` reads WOFF 1 through it. Next is M2.4b (the WOFF2 `glyf`/`loca` and
-`hmtx` transforms, encode and decode, and WOFF2 opening in `crates/decompile`; the to-do list is
-in the plan › M2.4b), then M2.5 (the export commands: `file.exportStatic` still refuses
-`outlines: "cff"`, the CLI exports TrueType only, and no command writes WOFF yet). The
-cross-check against fontTools needs Python Brotli, which the fontmake environment lacks:
-`crates/container/crosscheck/crosscheck.py` has the venv recipe. Open: four reader questions from M2.2 (plan › M2.2) and the differences left against
-fontmake (plan › M2.3b: 9 axis-mapping sources where fontmake's master file has other advances,
-a master's vendor id and licence parameters, a bracket layer source).
+**M3, Edit View drawing**, starting with its planning pass (`docs/execution-plan.md` § 3): list
+the M3 rows (`docs/parity.md` › By milestone: 210 commands), answer or keep the open questions in
+their notes, verify or drop the `memory` rows among them, group the rows into packages on
+disjoint crates, and write `docs/plans/M3.md` with measures for the owner to accept. M3 also owes
+static export its overlap removal (export keeps overlaps with a warning until then) and the
+export dialogs (`dialog.exportOtf`).
 
-M1 (`docs/plans/M1.md`) so far:
-
-| Package | State |
-|---|---|
-| M1.0 corpus, harness, spikes | done (plan § 8) |
-| M1.1 property lists | done: OpenStep and XML |
-| M1.2 the model, with M1.3 `.glyphs` | done; M1.7 typed the rest. `crates/io-glyphs`: versions 2 to 4, files and packages, every reference-written source identical |
-| M1.4 UFO and designspace | done: `crates/io-ufo`, UFO 2 and 3, designspace, UFOZ read; every readable corpus UFO and designspace identical; norad reads our output. Gaps in the plan's M1.4 section |
-| M1.5 compiled fonts | done |
-| M1.6 commands and CLI | done: open, save, save as and export for every source format, batch, document switching, inspection queries, CLI `info`, `tables list`, `glyphs list`, `convert` (`dump` moved to M12) |
-| M1.7 the typed model | done: every documented field of the three formats is a model field; Glyphs-only data in glyphsLib's lib keys; intermediate and alternate layers in a designspace. Measures met: round trips unchanged; census explained; 35 of 35 reference-written sources through a designspace and back; fontmake builds of Oswald equal except non-spacing mark widths (plan § M1.7) |
+M1 and M2 are done (`docs/plans/M1.md`, `docs/plans/M2.md`). M2 left on purpose: instances
+between masters (M9), CFF subroutines (before M12), production names (M4), the compile plan's
+`productionNames` and `features` sections, the CLI's `--name-by`, `--output-layout` and pattern
+instance selection, and one reader case (a designspace master missing a metric before one it
+states reads it as 0). `fontcraft-cli oracle --corpus` (fontc, or fontmake with `--format otf`)
+measures the compiler; `crates/oracle/allow.toml` holds every accepted difference with its reason.
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
@@ -67,9 +52,10 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   before implementing.
 - **Nothing has been observed in the reference app.** About 440 open questions are listed at the
   ends of the notes.
-- **The compiler writes static TrueType only.** The core tables match fontc over the corpus
-  (with allow-listed causes: variable references, bracket and colour glyphs, the glyph database,
-  smart components); no CFF, features, variations or hinting yet (`docs/plans/M2.md` › M2.2).
+- **The compiler writes static fonts only.** TrueType and CFF, plain, WOFF and WOFF2; the core
+  tables match fontc and fontmake over the corpus (with allow-listed causes: variable references,
+  bracket and colour glyphs, the glyph database, smart components); no features, variations,
+  hinting, overlap removal or CFF subroutines yet (`docs/plans/M2.md` § 5).
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
 
@@ -189,3 +175,26 @@ Append one terse entry per session: what landed, numbers, what is still open.
   (miniz_oxide is not zlib), WOFF2 19, the rest equal apart from the compressed streams.
   Transformed WOFF2 and collections refused with `Unsupported`. decompile's `woff.rs` moved
   into the crate. 12 new tests. Round trips unchanged.
+- **2026-10-09, M2.4b.** WOFF2 `glyf`/`loca` (default) and `hmtx` (on request) transforms, encode
+  and decode, ported from fontTools; `file.open`, `font.inspect` and `tables.list` read WOFF2.
+  Corpus round trip 342 of 342 for WOFF, WOFF2 untransformed, default and with `hmtx`; 49 of 49
+  corpus WOFF2 files read; byte identity with fontTools 21 of 340 (default) and 24 (with `hmtx`),
+  the rest differ only in the Brotli stream; fontTools reads all 340 of ours; ours reads
+  fontTools' 340 and 339 of 340 (fontTools shortens `hmtx` in Oswald-Stencil).
+- **2026-10-09, M2.6.** Follow-ups of M2.2 and M2.3b: no core table differs from fontc or from
+  fontmake (TTF and CFF) over the corpus; the rest allow-listed with reasons. fontmake CFF
+  byte-identical 195 to 206. The four reader questions answered (`docs/spec/30-source-formats.md`
+  › Values a source leaves out). Open: a designspace master missing a metric before one it
+  states; alternate and colour glyphs (M9, M11).
+- **2026-10-09, M2.5.** `file.exportStatic` (instances at masters, TrueType and CFF, plain, WOFF,
+  WOFF2), `file.exportAll`, `font.compile`, `font.compilePlan`, CLI `compile` (`--plan`),
+  `convert` to otf, woff, woff2. A failing export writes nothing. Instances between masters
+  skipped (M9), overlaps kept with a warning (M3). Not built: the plan's `productionNames` and
+  `features` sections, `--name-by`, `--output-layout`, `familyName`, `testInstall`, pattern
+  instance selection.
+- **2026-10-09, M2 closed.** § 5 measures: core tables and CFF outlines as in M2.6; the 347
+  buildable comparison sources give 551 TTF and 551 OTF (masters and instances), all read back by
+  skrifa and fontTools without error, all 1,102 round trip through WOFF2 (default and `hmtx`) to
+  the same tables, and the 1,102 WOFF2 files `compile` wrote decode to the plain fonts' tables.
+  New `crates/engine/tests/determinism.rs`: two sessions, 12 files (TTF and OTF, plain, WOFF,
+  WOFF2), byte-identical. Next: M3's planning pass.
