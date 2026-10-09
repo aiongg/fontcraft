@@ -6,7 +6,7 @@ _Updated: 2026-10-09, M2 done (every measure in `docs/plans/M2.md` § 5 met) and
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (507 tests; about 56,500 lines of Rust in 15 crates).
+- `cargo xtask ci` passes all nine steps (516 tests; about 57,500 lines of Rust in 15 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.

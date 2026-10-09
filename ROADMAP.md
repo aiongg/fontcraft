@@ -48,7 +48,7 @@ sources it measures the compiler: 332 compared with fontc, and every core table 
 equivalent or allow-listed with a reason in all of them; 331 compared with fontmake's CFF builds,
 whose outlines FontCraft's match in 322 (the other 9 are source reading, allow-listed).
 `crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
-transforms; fontTools reads all of its output back. 507 tests pass, including a sweep that runs every engine
+transforms; fontTools reads all of its output back. 516 tests pass, including a sweep that runs every engine
 command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
