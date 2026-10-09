@@ -1,0 +1,335 @@
+//! The Edit View selection, and the target object commands take (decision 0004, "How commands
+//! name their targets").
+//!
+//! The selection lives in the shell's UI state; the engine never stores it. Its lists use the
+//! same addresses as command targets: points as `[shape, node]`, shapes by index, anchors by
+//! name, guides as `{scope, index}`, annotations by index.
+
+use std::collections::BTreeSet;
+
+use fontcraft_geom::Point;
+use fontcraft_model::{NodeKind, Shape};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value, json};
+
+use crate::MAX_SELECTION_LIST;
+use crate::geometry::point_in_polygon;
+use crate::scene::Scene;
+
+/// Whether a guide belongs to the layer or to its master.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GuideScope {
+    Local,
+    Global,
+}
+
+impl GuideScope {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            GuideScope::Local => "local",
+            GuideScope::Global => "global",
+        }
+    }
+}
+
+/// A guide's address: local guides are indexed in the layer, global ones in its master.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct GuideRef {
+    pub scope: GuideScope,
+    pub index: usize,
+}
+
+/// One selectable thing.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Item {
+    /// A node or a handle, as `(shape, node)`.
+    Point(usize, usize),
+    /// A path or a component, by index.
+    Shape(usize),
+    Anchor(String),
+    Guide(GuideRef),
+    Annotation(usize),
+}
+
+/// How a list of items changes a selection.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SelectMode {
+    #[default]
+    Replace,
+    Add,
+    Remove,
+    Toggle,
+}
+
+/// The selection in one layer.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Selection {
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub points: BTreeSet<(usize, usize)>,
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub shapes: BTreeSet<usize>,
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub anchors: BTreeSet<String>,
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub guides: BTreeSet<GuideRef>,
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub annotations: BTreeSet<usize>,
+}
+
+impl Selection {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn from_items(items: impl IntoIterator<Item = Item>) -> Self {
+        let mut s = Self::default();
+        for item in items {
+            s.insert(item);
+        }
+        s
+    }
+
+    /// A selection from a target-shaped JSON object (`points`, `shapes`, `anchors`, `guides`,
+    /// `annotations`; other keys are ignored). Each list is capped at [`MAX_SELECTION_LIST`].
+    pub fn from_value(value: &Value) -> Result<Self, String> {
+        for key in ["points", "shapes", "anchors", "guides", "annotations"] {
+            if let Some(list) = value.get(key).and_then(Value::as_array)
+                && list.len() > MAX_SELECTION_LIST
+            {
+                return Err(format!("`{key}` holds {} entries; at most {MAX_SELECTION_LIST} are allowed", list.len()));
+            }
+        }
+        let mut object = Map::new();
+        for key in ["points", "shapes", "anchors", "guides", "annotations"] {
+            if let Some(v) = value.get(key) {
+                object.insert(key.to_string(), v.clone());
+            }
+        }
+        serde_json::from_value(Value::Object(object)).map_err(|e| format!("selection: {e}"))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.points.is_empty() && self.shapes.is_empty() && self.anchors.is_empty() && self.guides.is_empty() && self.annotations.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.points.len() + self.shapes.len() + self.anchors.len() + self.guides.len() + self.annotations.len()
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn contains(&self, item: &Item) -> bool {
+        match item {
+            Item::Point(s, n) => self.points.contains(&(*s, *n)),
+            Item::Shape(s) => self.shapes.contains(s),
+            Item::Anchor(name) => self.anchors.contains(name),
+            Item::Guide(g) => self.guides.contains(g),
+            Item::Annotation(i) => self.annotations.contains(i),
+        }
+    }
+
+    /// Adds `item`; `false` when it was already there.
+    pub fn insert(&mut self, item: Item) -> bool {
+        match item {
+            Item::Point(s, n) => self.points.insert((s, n)),
+            Item::Shape(s) => self.shapes.insert(s),
+            Item::Anchor(name) => self.anchors.insert(name),
+            Item::Guide(g) => self.guides.insert(g),
+            Item::Annotation(i) => self.annotations.insert(i),
+        }
+    }
+
+    /// Removes `item`; `false` when it was not there.
+    pub fn remove(&mut self, item: &Item) -> bool {
+        match item {
+            Item::Point(s, n) => self.points.remove(&(*s, *n)),
+            Item::Shape(s) => self.shapes.remove(s),
+            Item::Anchor(name) => self.anchors.remove(name),
+            Item::Guide(g) => self.guides.remove(g),
+            Item::Annotation(i) => self.annotations.remove(i),
+        }
+    }
+
+    pub fn toggle(&mut self, item: Item) {
+        if !self.remove(&item) {
+            self.insert(item);
+        }
+    }
+
+    /// Every item, points first.
+    pub fn items(&self) -> Vec<Item> {
+        let mut out = Vec::with_capacity(self.len());
+        out.extend(self.points.iter().map(|&(s, n)| Item::Point(s, n)));
+        out.extend(self.shapes.iter().map(|&s| Item::Shape(s)));
+        out.extend(self.anchors.iter().map(|a| Item::Anchor(a.clone())));
+        out.extend(self.guides.iter().map(|&g| Item::Guide(g)));
+        out.extend(self.annotations.iter().map(|&i| Item::Annotation(i)));
+        out
+    }
+
+    /// Changes the selection by `items` as `mode` says.
+    pub fn apply(&mut self, mode: SelectMode, items: impl IntoIterator<Item = Item>) {
+        if mode == SelectMode::Replace {
+            self.clear();
+        }
+        for item in items {
+            match mode {
+                SelectMode::Replace | SelectMode::Add => {
+                    self.insert(item);
+                }
+                SelectMode::Remove => {
+                    self.remove(&item);
+                }
+                SelectMode::Toggle => self.toggle(item),
+            }
+        }
+    }
+
+    /// The command target object for this selection in `scene`'s layer: `glyph`, `layer`, and
+    /// each non-empty list. Commands add their own parameters to it.
+    pub fn targets(&self, scene: &Scene) -> Map<String, Value> {
+        let mut m = Map::new();
+        m.insert("glyph".into(), Value::from(scene.glyph.as_str()));
+        m.insert("layer".into(), Value::from(scene.layer_id.as_str()));
+        if !self.points.is_empty() {
+            m.insert("points".into(), Value::Array(self.points.iter().map(|&(s, n)| json!([s, n])).collect()));
+        }
+        if !self.shapes.is_empty() {
+            m.insert("shapes".into(), Value::Array(self.shapes.iter().map(|&s| json!(s)).collect()));
+        }
+        if !self.anchors.is_empty() {
+            m.insert("anchors".into(), Value::Array(self.anchors.iter().map(|a| json!(a)).collect()));
+        }
+        if !self.guides.is_empty() {
+            m.insert("guides".into(), Value::Array(self.guides.iter().map(|g| json!({"scope": g.scope.as_str(), "index": g.index})).collect()));
+        }
+        if !self.annotations.is_empty() {
+            m.insert("annotations".into(), Value::Array(self.annotations.iter().map(|&i| json!(i)).collect()));
+        }
+        m
+    }
+
+    /// Drops every entry that does not resolve in `scene` (after undo, redo or another edit).
+    pub fn retain_valid(&mut self, scene: &Scene) {
+        let layer = scene.layer;
+        self.points.retain(|&(s, n)| scene.node(s, n).is_some());
+        self.shapes.retain(|&s| s < layer.shapes.len());
+        self.anchors.retain(|name| layer.anchors.iter().any(|a| &a.name == name));
+        let (local, global) = (scene.local_guides().len(), scene.global_guides.len());
+        self.guides.retain(|g| match g.scope {
+            GuideScope::Local => g.index < local,
+            GuideScope::Global => g.index < global,
+        });
+        let annotations = layer.info.annotations.len();
+        self.annotations.retain(|&i| i < annotations);
+    }
+
+    /// The selected on-curve nodes.
+    pub fn on_curve_points(&self, scene: &Scene) -> Vec<(usize, usize)> {
+        self.points.iter().copied().filter(|&(s, n)| scene.node(s, n).is_some_and(|node| node.on_curve())).collect()
+    }
+
+    /// Whether the selection holds more than handles: an on-curve node, a shape, an anchor, a
+    /// guide or an annotation. Only such a selection can be duplicated by dragging.
+    pub fn has_structure(&self, scene: &Scene) -> bool {
+        !self.shapes.is_empty()
+            || !self.anchors.is_empty()
+            || !self.guides.is_empty()
+            || !self.annotations.is_empty()
+            || !self.on_curve_points(scene).is_empty()
+    }
+}
+
+/// Every point of the path at `shape` (what a double-click near a segment selects).
+pub fn path_points(scene: &Scene, shape: usize) -> Selection {
+    let mut s = Selection::new();
+    if let Some(path) = scene.path(shape) {
+        s.points.extend((0..path.nodes.len()).map(|n| (shape, n)));
+    }
+    s
+}
+
+/// `edit.selectAll`: every point of every path; when they are all selected already, the anchors
+/// and components too.
+pub fn select_all(scene: &Scene, current: &Selection) -> Selection {
+    let mut s = Selection::new();
+    for (i, path) in scene.paths() {
+        s.points.extend((0..path.nodes.len()).map(|n| (i, n)));
+    }
+    let all_points = s.points.iter().all(|p| current.points.contains(p));
+    if all_points {
+        s.anchors.extend(scene.layer.anchors.iter().map(|a| a.name.clone()));
+        for (i, shape) in scene.layer.shapes.iter().enumerate() {
+            if matches!(shape, Shape::Component(_)) && scene.shape_editable(i) {
+                s.shapes.insert(i);
+            }
+        }
+    }
+    s
+}
+
+/// `edit.invertSelection`: the points and anchors that are not selected.
+pub fn invert(scene: &Scene, current: &Selection) -> Selection {
+    let mut s = Selection::new();
+    for (i, path) in scene.paths() {
+        s.points.extend((0..path.nodes.len()).map(|n| (i, n)).filter(|p| !current.points.contains(p)));
+    }
+    s.anchors.extend(scene.layer.anchors.iter().map(|a| a.name.clone()).filter(|a| !current.anchors.contains(a)));
+    s
+}
+
+/// The order `Tab` walks: the points of each path in path order, then the anchors, then the local
+/// guides, then the global guides.
+pub fn tab_order(scene: &Scene) -> Vec<Item> {
+    let mut out = Vec::new();
+    for (i, path) in scene.paths() {
+        out.extend((0..path.nodes.len()).map(|n| Item::Point(i, n)));
+    }
+    out.extend(scene.layer.anchors.iter().map(|a| Item::Anchor(a.name.clone())));
+    out.extend((0..scene.local_guides().len()).map(|index| Item::Guide(GuideRef { scope: GuideScope::Local, index })));
+    out.extend((0..scene.global_guides.len()).map(|index| Item::Guide(GuideRef { scope: GuideScope::Global, index })));
+    out
+}
+
+/// `selection.selectNext` (`forward`) and `selection.selectPrevious`: with exactly one item
+/// selected, the selection of the item after (or before) it in [`tab_order`], wrapping around.
+/// `None` when the selection is not exactly one item that the order knows.
+pub fn step(scene: &Scene, current: &Selection, forward: bool) -> Option<Selection> {
+    let items = current.items();
+    let [only] = items.as_slice() else { return None };
+    let order = tab_order(scene);
+    let count = order.len();
+    let i = order.iter().position(|it| it == only)?;
+    let next = if forward { (i + 1) % count } else { (i + count - 1) % count };
+    order.get(next).cloned().map(|it| Selection::from_items([it]))
+}
+
+/// `selection.selectInRegion`: the points and anchors inside `polygon` (a marquee's four corners
+/// or a lasso's outline). `nodes_only` leaves the handles out.
+pub fn in_region(scene: &Scene, polygon: &[Point], nodes_only: bool) -> Selection {
+    let mut s = Selection::new();
+    if polygon.len() < 3 {
+        return s;
+    }
+    for (i, path) in scene.paths() {
+        for (n, node) in path.nodes.iter().enumerate() {
+            if nodes_only && node.kind == NodeKind::OffCurve {
+                continue;
+            }
+            if point_in_polygon(node.point(), polygon) {
+                s.points.insert((i, n));
+            }
+        }
+    }
+    for a in &scene.layer.anchors {
+        if point_in_polygon(Point::new(a.x, a.y), polygon) {
+            s.anchors.insert(a.name.clone());
+        }
+    }
+    s
+}
