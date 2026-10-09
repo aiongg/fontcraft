@@ -431,14 +431,9 @@ const NAME_PARAMS: [(&str, &str); 8] = [
 /// reads the font's only, which gives the same bit).
 const SELECTION_PARAMS: [&str; 2] = ["Use Typo Metrics", "Has WWS Names"];
 
-/// Whether a parameter's value is on: a true boolean or a number other than 0.
+/// Whether a parameter's value is on, read as the compiler reads it ([`crate::param_flag`]).
 fn is_on(v: &fontcraft_plist::Value) -> bool {
-    match v {
-        fontcraft_plist::Value::Bool(b) => *b,
-        fontcraft_plist::Value::Number(n) => n.value().as_f64() != 0.0,
-        fontcraft_plist::Value::String(s) => s.as_str().trim().parse::<f64>().is_ok_and(|f| f != 0.0),
-        _ => false,
-    }
+    crate::param_flag(v).unwrap_or(false)
 }
 
 /// Puts `own` properties and enabled parameters in place of those of the same key or name. An

@@ -143,11 +143,10 @@ pub(crate) fn float(v: &Value) -> Option<f64> {
     }
 }
 
+/// A yes-or-no parameter, read as the model reads it when it merges a master's parameters over
+/// the font's.
 pub(crate) fn boolean(v: &Value) -> Option<bool> {
-    match v {
-        Value::Bool(b) => Some(*b),
-        _ => int(v).map(|i| i == 1),
-    }
+    fontcraft_model::param_flag(v)
 }
 
 /// A list of integers; a value that is not one is no list.

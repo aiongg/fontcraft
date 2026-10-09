@@ -794,6 +794,15 @@ fn hand_written_files_read_as_the_reference_compilers_read_them() {
     std::sync::Arc::make_mut(&mut edited.info).properties.set("copyrights", "Edited", true);
     let again = read(&write(&edited).unwrap()).unwrap();
     assert_eq!(again.info.properties.value("copyrights"), Some("Edited"));
+    // A deleted name stays deleted, in every version.
+    let mut deleted = font.clone();
+    assert!(std::sync::Arc::make_mut(&mut deleted.info).properties.remove("designers"));
+    for version in [2, 3, 4] {
+        deleted.source.glyphs_version = Some(version);
+        let again = read(&write(&deleted).unwrap()).unwrap();
+        assert_eq!(again.info.properties.value("designers"), None, "version {version}");
+        assert_eq!(again.info.properties.value("copyrights"), Some("Copy!"), "version {version}");
+    }
 
     let v2 = "{\nfamilyName = V2;\nfontMaster = (\n{\nid = m01;\n}\n);\nglyphs = (\n{\nglyphname = a;\nlayers = (\n{\nlayerId = m01;\n}\n);\n}\n);\nunitsPerEm = 1000;\n}\n";
     assert_eq!(read(v2).unwrap().glyph("a").unwrap().layers[0].width, 600.0);

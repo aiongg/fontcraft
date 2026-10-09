@@ -804,7 +804,7 @@ pub(crate) fn write_font(font: &Font) -> Result<Dict> {
     if !font.kerning.rtl.is_empty() {
         return Err(GlyphsError::Unsupported("right-to-left kerning in format version 2".into()));
     }
-    Ok(finish(e, &font.extra))
+    Ok(finish(e, &crate::without_deleted_v2_names(&font.info.properties, &font.extra)))
 }
 
 fn write_master(font: &Font, m: &Master) -> Result<Value> {

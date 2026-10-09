@@ -36,6 +36,18 @@ impl Param {
     }
 }
 
+/// A yes-or-no parameter's value: a boolean, or a number (also as text) that is on unless it is
+/// 0, as glyphsLib reads these parameters. `None` for any other value.
+pub fn param_flag(v: &Value) -> Option<bool> {
+    let number = match v {
+        Value::Bool(b) => return Some(*b),
+        Value::Number(n) => n.value().as_f64(),
+        Value::String(s) => s.as_str().trim().parse::<f64>().ok()?,
+        _ => return None,
+    };
+    number.is_finite().then_some(number != 0.0)
+}
+
 /// Parameters in order.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Params(pub Vec<Param>);

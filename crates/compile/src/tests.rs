@@ -841,9 +841,10 @@ fn a_masters_parameters_replace_the_fonts_as_glyphslib_applies_them() {
     let m = &mut Arc::make_mut(&mut f.masters)[0];
     m.params.0.push(fontcraft_model::Param::new("vendorID", text("MAST")));
     m.params.0.push(fontcraft_model::Param::new("license", text("Master licence")));
-    // A selection bit the font sets stays set when the master's parameter is off (glyphsLib).
+    // A selection bit the font sets stays set when the master's parameter is off, and any number
+    // but 0 sets it (glyphsLib).
     m.params.0.push(fontcraft_model::Param::new("Use Typo Metrics", fontcraft_model::plist::Value::Number(fontcraft_model::plist::Number::int(0))));
-    int_param(&mut f, "Use Typo Metrics", 1);
+    int_param(&mut f, "Use Typo Metrics", 2);
     let out = compile_sample(&f);
     let font = FontRef::new(&out.bytes).unwrap();
     assert_eq!(font.os2().unwrap().ach_vend_id(), skrifa::raw::types::Tag::new(b"MAST"));

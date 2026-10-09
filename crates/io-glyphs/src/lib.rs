@@ -286,6 +286,24 @@ fn without_kept_v2_names<'a>(properties: &'a fontcraft_model::Properties, extra:
     }
 }
 
+/// The font's extra data without the version 2 names whose property was deleted: the reader made
+/// a property from each, so writing the key back would bring the property back on reopening.
+pub(crate) fn without_deleted_v2_names<'a>(properties: &fontcraft_model::Properties, extra: &'a Extra) -> std::borrow::Cow<'a, Extra> {
+    let deleted: Vec<&str> = v2::NAMES
+        .iter()
+        .filter(|(key, property, _)| properties.get(property).is_none() && extra.get(Family::Glyphs, key).and_then(Value::as_str).is_some())
+        .map(|(key, _, _)| *key)
+        .collect();
+    if deleted.is_empty() {
+        return std::borrow::Cow::Borrowed(extra);
+    }
+    let mut out = extra.clone();
+    for key in deleted {
+        out.remove(Family::Glyphs, key);
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 /// A string the writer would spell the same way.
 pub(crate) fn take_plain_string(d: &mut Dict, key: &str) -> Option<String> {
     match d.get(key) {
@@ -934,7 +952,8 @@ fn sync_v4_family_name(props: &fontcraft_model::Properties, family: &str) -> fon
 
 fn write_font(font: &Font, version: u32) -> Result<Dict> {
     let mut e: Vec<(Str, Value)> = vec![(".formatVersion".into(), int(version))];
-    let extra: &Extra = &font.extra;
+    let extra = without_deleted_v2_names(&font.info.properties, &font.extra);
+    let extra: &Extra = &extra;
     if version < 4 && !font.family_name.is_empty() {
         e.push(("familyName".into(), string(&font.family_name)));
     }
