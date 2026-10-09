@@ -5,18 +5,19 @@
 //!   compressed with zlib on its own, at level 6, and stored raw when that does not make it
 //!   smaller; `head` is always stored raw.
 //! - [`woff2::encode`] and [`woff2::decode`]: WOFF 2.0 (W3C recommendation). All tables go into
-//!   one Brotli stream (quality 11, window 22, font mode). This version writes and reads the null
-//!   transform only; a file with transformed `glyf`/`loca` or `hmtx` tables is refused with
-//!   [`Error::Unsupported`].
+//!   one Brotli stream (quality 11, window 22, font mode). The `glyf`/`loca` transform and the
+//!   `hmtx` transform are written when [`woff2::Options`] asks for them and read back.
 //! - [`to_sfnt`]: whatever the container, the sfnt inside.
 //!
 //! Byte choices (table order, padding, checksums, header versions, the metadata and private
 //! blocks) follow fontTools, whose `ttLib/sfnt.py` and `ttLib/woff2.py` (MIT) these modules port.
 //! Collections are refused in both directions.
 //!
-//! Every input is untrusted. Counts are capped ([`MAX_TABLES`]), every offset and length is checked
-//! against the file, tables may not overlap, and decompression stops at the size the file states,
-//! which is capped by [`MAX_SFNT`] (fonts) and [`MAX_METADATA`] (metadata). Nothing here panics.
+//! Every input is untrusted. Counts are capped ([`MAX_TABLES`]; glyph, contour and point counts
+//! by the 16-bit fields that hold them and by the data actually present), every offset and length
+//! is checked against the file, tables may not overlap, and decompression stops at the size the
+//! file states, which is capped by [`MAX_SFNT`] (fonts, rebuilt `glyf` tables) and [`MAX_METADATA`]
+//! (metadata). Nothing here panics.
 #![forbid(unsafe_code)]
 
 mod compress;

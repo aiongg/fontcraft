@@ -1,5 +1,6 @@
-//! Every compiled font in the corpus opens, and each glyph's outline in the model matches what
-//! skrifa draws from the file (area and bounding box). Skipped when `corpus/` is absent.
+//! Every compiled font in the corpus opens, WOFF and WOFF2 files included, and each glyph's outline
+//! in the model matches what skrifa draws from the file (area and bounding box; skrifa does not
+//! read WOFF or WOFF2, so those files only have to open). Skipped when `corpus/` is absent.
 //!
 //! The box is compared by its size and vertical position, not its horizontal position: skrifa
 //! moves a TrueType outline so its left edge sits on the `hmtx` side bearing, and where a font's
@@ -26,7 +27,7 @@ fn fonts(dir: &Path, out: &mut Vec<PathBuf>) {
         }
         if p.is_dir() {
             fonts(&p, out);
-        } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["ttf", "otf", "woff"].contains(&x.to_ascii_lowercase().as_str())) {
+        } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["ttf", "otf", "woff", "woff2"].contains(&x.to_ascii_lowercase().as_str())) {
             out.push(p);
         }
     }

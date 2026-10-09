@@ -31,6 +31,21 @@ fn a_compiled_font_reads_back() {
 }
 
 #[test]
+fn woff_and_woff2_read_as_the_font_they_wrap() {
+    let ttf = compile_ttf(&sample(), &Options::default()).unwrap().bytes;
+    let plain = decompile(&ttf, None).unwrap().font;
+    let woff = fontcraft_container::woff::encode(&ttf, &fontcraft_container::Extras::default()).unwrap();
+    let woff2 = fontcraft_container::woff2::encode(&ttf, &fontcraft_container::woff2::Options::default()).unwrap();
+    assert!(woff2_directory(&woff2).unwrap().tables.iter().any(|t| t.transformed()), "glyf is transformed");
+    for wrapped in [woff, woff2] {
+        let f = decompile(&wrapped, None).unwrap().font;
+        assert_eq!(f.family_name, plain.family_name);
+        let (a, b) = (f.glyph("A").unwrap(), plain.glyph("A").unwrap());
+        assert_eq!((&a.layers[0].shapes, a.layers[0].width), (&b.layers[0].shapes, b.layers[0].width));
+    }
+}
+
+#[test]
 fn quadratic_contours_stay_quadratic() {
     // A cubic oval compiles to quadratic curves; reading them back must not turn them cubic.
     let mut f = sample();
@@ -99,7 +114,7 @@ fn damaged_fonts_are_errors_not_panics() {
         bad[i] = bad[i].wrapping_add(97);
         let _ = decompile(&bad, None);
     }
-    for junk in [&b""[..], b"wOFF", b"wOFF\0\0\0\0\0\0\0\0\xff\xff", b"ttcf\0\0\0\0", b"OTTO"] {
+    for junk in [&b""[..], b"wOFF", b"wOFF\0\0\0\0\0\0\0\0\xff\xff", b"wOF2", b"ttcf\0\0\0\0", b"OTTO"] {
         assert!(decompile(junk, None).is_err());
     }
 }

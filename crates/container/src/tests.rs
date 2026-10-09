@@ -183,49 +183,184 @@ fn woff2_round_trip_untransformed() {
     }
 }
 
+/// A TrueType font with real outlines: a box with instructions, an empty glyph, a glyph whose
+/// moves use every triplet size (with off-curve points and the overlap flag), a glyph whose stored
+/// bounding box is not the computed one, and two composites (offsets, scales, a 2×2 matrix, word
+/// arguments, instructions). Glyphs are written as fontTools writes them and padded to two bytes,
+/// as fontTools' WOFF2 reader lays them out. `lsb` gives the side bearing of glyph 2.
+fn outline_font(lsb: i16) -> Vec<u8> {
+    use crate::woff2::glyf::test_glyphs::{composite, simple};
+    let square: &[(i32, i32, bool)] = &[(0, 0, true), (0, 700, true), (500, 700, true), (500, 0, true)];
+    let moves: &[(i32, i32, bool)] = &[
+        (10, 10, true),
+        (10, 300, false),
+        (1500, 300, true),
+        (1530, 340, false),
+        (2230, 1000, true),
+        (5000, -2000, true),
+        (-27000, 2000, false),
+        (-27000, 2000, true),
+        (-26990, 2000, true),
+    ];
+    let glyphs = [
+        simple(&[square], &[0xb0, 0x01], false, None),
+        Vec::new(),
+        simple(&[moves, &[(1, 1, true), (2, 2, true), (2, 3, true)]], &[], true, None),
+        simple(&[square], &[], false, Some([-5, 0, 600, 700])),
+        composite(&[(0, 10, 20, None), (2, -300, 900, Some([8192, 0, 0, 8192]))], [0, 0, 900, 1600], Some(&[0x2c])),
+        composite(&[(3, 1, 2, Some([16384, 4096, -4096, 16384])), (0, 0, 0, Some([16384, 0, 0, -16384]))], [-5, -700, 600, 700], None),
+    ];
+    let mut glyf = Vec::new();
+    let mut loca = Vec::new();
+    let mut x_mins = Vec::new();
+    for g in &glyphs {
+        loca.extend_from_slice(&u16::try_from(glyf.len() / 2).unwrap().to_be_bytes());
+        glyf.extend_from_slice(g);
+        if glyf.len() % 2 == 1 {
+            glyf.push(0);
+        }
+        x_mins.push(if g.is_empty() { 0 } else { i16::from_be_bytes([g[2], g[3]]) });
+    }
+    loca.extend_from_slice(&u16::try_from(glyf.len() / 2).unwrap().to_be_bytes());
+    // Four long metrics, then two side bearings; every side bearing is the glyph's xMin but glyph 2's.
+    let mut hmtx = Vec::new();
+    for (i, x) in x_mins.iter().enumerate() {
+        let bearing = if i == 2 { lsb } else { *x };
+        if i < 4 {
+            hmtx.extend_from_slice(&(500 + 10 * i as u16).to_be_bytes());
+        }
+        hmtx.extend_from_slice(&bearing.to_be_bytes());
+    }
+    let mut hhea = vec![0u8; 36];
+    hhea[34..36].copy_from_slice(&4u16.to_be_bytes());
+    let maxp = [0, 0, 0x50, 0, 0, glyphs.len() as u8].to_vec();
+    let owned: Vec<(Tag, Vec<u8>)> = vec![
+        (*b"head", head_table()),
+        (*b"hhea", hhea),
+        (*b"maxp", maxp),
+        (*b"hmtx", hmtx),
+        (*b"loca", loca),
+        (*b"glyf", glyf),
+        (*b"name", b"FontCraft".to_vec()),
+    ];
+    let list: Vec<Table<'_>> = owned.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
+    sfnt::assemble(sfnt::TRUETYPE, &list).unwrap()
+}
+
+fn transform_of(w: &[u8], tag: &[u8; 4]) -> u8 {
+    woff2::directory(w).unwrap().tables.iter().find(|t| &t.tag == tag).unwrap().transform
+}
+
 #[test]
-fn transforms_are_refused_for_now() {
-    let tt = font(true);
-    assert!(matches!(woff2::encode(&tt, &Options::default()), Err(Error::Unsupported { .. })));
-    let hmtx = Options { transform_hmtx: true, ..Options::untransformed() };
-    assert!(matches!(woff2::encode(&tt, &hmtx), Err(Error::Unsupported { .. })));
-    // A CFF font has nothing to transform: the default options work.
-    let otf = font(false);
-    assert_eq!(woff2::encode(&otf, &Options::default()).unwrap(), woff2::encode(&otf, &Options::untransformed()).unwrap());
-    // A file with a transformed glyf and loca: the directory reads, decoding is refused.
-    let mut w = woff2::encode(&tt, &Options::untransformed()).unwrap();
-    let dir = woff2::directory(&w).unwrap();
-    let mut rebuilt = Vec::new();
-    for t in &dir.tables {
-        let index = woff2::known_tag_index(t.tag);
-        match &t.tag {
-            b"glyf" => {
-                rebuilt.push(index);
-                woff2::push_base128(&mut rebuilt, t.orig_length);
-                woff2::push_base128(&mut rebuilt, t.orig_length);
-            }
-            b"loca" => {
-                rebuilt.push(index);
-                woff2::push_base128(&mut rebuilt, t.orig_length);
-                woff2::push_base128(&mut rebuilt, 0);
-            }
-            _ => {
-                rebuilt.push(index | (t.transform << 6));
-                if index == 63 {
-                    rebuilt.extend_from_slice(&t.tag);
-                }
-                woff2::push_base128(&mut rebuilt, t.orig_length);
-            }
+fn woff2_transforms_round_trip() {
+    let with_hmtx = Options::all_transforms();
+    for lsb in [0, -7] {
+        let f = outline_font(lsb);
+        for options in [Options::default(), with_hmtx.clone()] {
+            let w = woff2::encode(&f, &options).unwrap();
+            assert_eq!((transform_of(&w, b"glyf"), transform_of(&w, b"loca")), (0, 0), "glyf and loca are transformed");
+            let dir = woff2::directory(&w).unwrap();
+            assert_eq!(dir.tables.iter().find(|t| t.tag == *b"loca").unwrap().transform_length, Some(0));
+            // Glyph 2's side bearing is not its xMin when lsb is -7: the proportional side
+            // bearings are kept, the transform still applies.
+            assert_eq!(transform_of(&w, b"hmtx"), u8::from(options.transform_hmtx));
+            let back = woff2::decode(&w).unwrap();
+            valid_checksums(&back.sfnt);
+            same_tables(&f, &back.sfnt, true);
+            assert!(read_fonts::FontRef::new(&back.sfnt).is_ok());
+            assert_eq!(woff2::encode(&back.sfnt, &options).unwrap(), w, "a second pass is stable");
         }
     }
-    let old_len = dir.compressed.0 - 48;
-    w.splice(48..48 + old_len, rebuilt.iter().copied());
-    let len = w.len() as u32;
-    w[8..12].copy_from_slice(&len.to_be_bytes());
-    // The stream is now shorter than stated (loca counts zero): the directory still reads.
+    // A CFF font has nothing to transform: the options change nothing.
+    let otf = font(false);
+    assert_eq!(woff2::encode(&otf, &with_hmtx).unwrap(), woff2::encode(&otf, &Options::untransformed()).unwrap());
+}
+
+#[test]
+fn woff2_glyf_is_normalised_before_the_transform() {
+    // The same outlines with long loca offsets and no padding: the writer lays glyf out with
+    // 4-byte padding and short offsets, and head.indexToLocFormat follows.
+    let f = outline_font(0);
+    let glyf = table(&f, b"glyf").unwrap();
+    let loca = table(&f, b"loca").unwrap();
+    let mut long_loca = Vec::new();
+    for w in loca.chunks(2) {
+        long_loca.extend_from_slice(&(2 * u32::from(u16::from_be_bytes([w[0], w[1]]))).to_be_bytes());
+    }
+    let mut head = table(&f, b"head").unwrap().to_vec();
+    head[50..52].copy_from_slice(&1u16.to_be_bytes());
+    let mut owned: Vec<(Tag, Vec<u8>)> = sfnt::parse(&f).unwrap().tables.iter().map(|t| (t.tag, t.data.to_vec())).collect();
+    for (tag, data) in &mut owned {
+        match &*tag {
+            b"loca" => *data = long_loca.clone(),
+            b"head" => *data = head.clone(),
+            _ => {}
+        }
+    }
+    let list: Vec<Table<'_>> = owned.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
+    let long = sfnt::assemble(sfnt::TRUETYPE, &list).unwrap();
+    let back = woff2::decode(&woff2::encode(&long, &Options::default()).unwrap()).unwrap();
+    assert_eq!(table(&back.sfnt, b"glyf").unwrap(), glyf);
+    assert_eq!(table(&back.sfnt, b"loca").unwrap(), loca);
+    assert_eq!(&table(&back.sfnt, b"head").unwrap()[50..52], &[0, 0]);
+    let w = woff2::encode(&long, &Options::untransformed()).unwrap();
+    assert_eq!(transform_of(&w, b"glyf"), 3);
+    assert_eq!(table(&woff2::decode(&w).unwrap().sfnt, b"loca").unwrap(), long_loca, "untransformed tables are kept as they are");
+
+    // A cubic point cannot be carried: glyf and loca stay untransformed, but normalised.
+    let mut owned: Vec<(Tag, Vec<u8>)> = sfnt::parse(&f).unwrap().tables.iter().map(|t| (t.tag, t.data.to_vec())).collect();
+    let glyf_slot = owned.iter_mut().find(|t| &t.0 == b"glyf").unwrap();
+    glyf_slot.1[17] |= 0x80; // the box's second point: the flags follow the header, one end point and two instructions
+    let list: Vec<Table<'_>> = owned.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
+    let cubic = sfnt::assemble(sfnt::TRUETYPE, &list).unwrap();
+    let w = woff2::encode(&cubic, &Options::all_transforms()).unwrap();
+    assert_eq!((transform_of(&w, b"glyf"), transform_of(&w, b"loca"), transform_of(&w, b"hmtx")), (3, 3, 1));
+    let back = woff2::decode(&w).unwrap();
+    let glyf = table(&back.sfnt, b"glyf").unwrap();
+    assert_eq!(glyf.len() % 4, 0);
+    assert_eq!(table(&back.sfnt, b"hmtx"), table(&cubic, b"hmtx"), "hmtx is rebuilt from the untransformed glyf");
+}
+
+#[test]
+fn damaged_transformed_tables_never_panic() {
+    let f = outline_font(-7);
+    let w = woff2::encode(&f, &Options::all_transforms()).unwrap();
     let dir = woff2::directory(&w).unwrap();
-    assert!(dir.tables.iter().any(|t| t.transformed()));
-    assert!(matches!(woff2::decode(&w), Err(Error::Unsupported { .. })));
+    let data = woff2::stream(&w, &dir).unwrap();
+    assert!(woff2::tables(&dir, &data).is_ok());
+    for i in 0..data.len() {
+        for delta in [1u8, 0x80, 0xff] {
+            let mut bad = data.clone();
+            bad[i] = bad[i].wrapping_add(delta);
+            let _ = woff2::tables(&dir, &bad);
+        }
+    }
+    let part = |tag: &[u8; 4]| {
+        let t = dir.tables.iter().find(|t| &t.tag == tag).unwrap();
+        data[t.stream_offset..t.stream_offset + t.stream_length() as usize].to_vec()
+    };
+    let (glyf, hmtx) = (part(b"glyf"), part(b"hmtx"));
+    for cut in 0..glyf.len() {
+        assert!(woff2::glyf::reconstruct(&glyf[..cut]).is_err());
+    }
+    let x_mins = woff2::glyf::reconstruct(&glyf).unwrap().x_mins;
+    for cut in 0..hmtx.len() {
+        assert!(woff2::hmtx::reconstruct(&hmtx[..cut], 4, &x_mins).is_err());
+    }
+    // Damaged glyphs on the way in leave glyf untransformed rather than fail.
+    let glyf_at = {
+        let parsed = sfnt::parse(&f).unwrap();
+        let g = parsed.get(*b"glyf").unwrap();
+        g.as_ptr() as usize - f.as_ptr() as usize
+    };
+    for i in glyf_at..glyf_at + table(&f, b"glyf").unwrap().len() {
+        for delta in [1u8, 0x80, 0xff] {
+            let mut bad = f.clone();
+            bad[i] = bad[i].wrapping_add(delta);
+            let w = woff2::encode(&bad, &Options::all_transforms()).unwrap();
+            let _ = woff2::decode(&w);
+        }
+    }
 }
 
 #[test]

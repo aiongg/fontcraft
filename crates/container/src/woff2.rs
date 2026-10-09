@@ -1,18 +1,23 @@
 //! WOFF 2.0: a 48-byte header, a compact table directory, and every table in one Brotli stream
 //! (W3C WOFF File Format 2.0).
 //!
-//! This version writes and reads the null transform only: every table is stored as it is in the
-//! sfnt. A file with transformed `glyf`/`loca` or `hmtx` tables is read up to its directory and
-//! then refused with [`Error::Unsupported`]. Collections are refused.
+//! Both table transforms are supported, in both directions: `glyf`/`loca` (version 0,
+//! `woff2/glyf.rs`) and `hmtx` (version 1, `woff2/hmtx.rs`). Collections are refused.
 //!
 //! The writer is a port of fontTools' `WOFF2Writer` (`ttLib/woff2.py`, MIT): `DSIG` dropped, bit 11
-//! of `head.flags` set, tables sorted by tag, `checkSumAdjustment` computed for the sfnt laid
-//! out in that order, the stream compressed at Brotli quality 11 with a 22-bit window in font
-//! mode, the metadata in text mode. The known-tag table and the UIntBase128 and 255UInt16
-//! encodings are ported from the same file.
+//! of `head.flags` set, for the `glyf` transform `glyf` and `loca` laid out again with 4-byte glyph
+//! padding (and `head.indexToLocFormat` set to match), tables sorted by tag, `checkSumAdjustment`
+//! computed for the sfnt laid out in that order, the stream compressed at Brotli quality 11 with a
+//! 22-bit window in font mode, the metadata in text mode. The known-tag table and the UIntBase128
+//! and 255UInt16 encodings are ported from the same file.
+
+pub(crate) mod glyf;
+pub(crate) mod hmtx;
+
+use std::borrow::Cow;
 
 use crate::compress::{self, Mode, unbrotli};
-use crate::sfnt::{self, DSIG, GLYF, HEAD, HMTX, LOCA, Table, Tag};
+use crate::sfnt::{self, DSIG, GLYF, HEAD, HMTX, LOCA, OTTO, Table, Tag};
 use crate::{Error, Extras, MAX_METADATA, MAX_SFNT, MAX_TABLES, Unwrapped, pad4, put_u16, put_u32, to_u32, u16_at, u32_at};
 
 const FORMAT: &str = "WOFF2";
@@ -281,31 +286,87 @@ pub fn extras(woff2: &[u8], dir: &Woff2Directory) -> Result<Blocks, Error> {
     Ok((metadata, private))
 }
 
-/// Unwraps a WOFF2 file whose tables all use the null transform: the sfnt with the tables in
-/// directory order, the header's version, the metadata (decompressed) and the private data.
+/// Unwraps a WOFF2 file: the sfnt with the tables in directory order (transformed ones rebuilt),
+/// the header's version, the metadata (decompressed) and the private data.
 pub fn decode(woff2: &[u8]) -> Result<Unwrapped, Error> {
     let dir = directory(woff2)?;
-    if dir.tables.iter().any(Woff2Table::transformed) {
-        return Err(Error::Unsupported { format: FORMAT, what: "reading transformed glyf, loca or hmtx tables" });
-    }
     let data = stream(woff2, &dir)?;
     let (metadata, private) = extras(woff2, &dir)?;
-    let mut tables = Vec::with_capacity(dir.tables.len());
-    for t in &dir.tables {
-        let end = t.stream_offset.saturating_add(t.orig_length as usize);
-        let bytes = data.get(t.stream_offset..end).ok_or_else(|| bad("a table lies outside the table data"))?;
-        tables.push(Table { tag: t.tag, data: bytes });
-    }
-    let sfnt = sfnt::assemble(dir.flavor, &tables)?;
+    let owned = tables(&dir, &data)?;
+    let list: Vec<Table<'_>> = owned.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
+    let sfnt = sfnt::assemble(dir.flavor, &list)?;
     Ok(Unwrapped { sfnt, version: dir.version, metadata, private })
 }
+
+/// A table's tag and data, borrowed from the table stream or rebuilt.
+pub(crate) type OwnedTable<'a> = (Tag, Cow<'a, [u8]>);
+
+/// The sfnt tables of a WOFF2 file, in directory order, from its decompressed table stream;
+/// transformed tables are rebuilt.
+pub(crate) fn tables<'a>(dir: &Woff2Directory, data: &'a [u8]) -> Result<Vec<OwnedTable<'a>>, Error> {
+    let raw = |t: &Woff2Table| {
+        let end = t.stream_offset.saturating_add(t.stream_length() as usize);
+        data.get(t.stream_offset..end).ok_or_else(|| bad("a table lies outside the table data"))
+    };
+    let find = |tag: Tag| dir.tables.iter().find(|t| t.tag == tag);
+    let untransformed = |tag: Tag| match find(tag) {
+        Some(t) if !t.transformed() => raw(t).map(Some),
+        _ => Ok(None),
+    };
+    let mut rebuilt = match find(GLYF) {
+        Some(t) if t.transformed() => Some(glyf::reconstruct(raw(t)?)?),
+        _ => None,
+    };
+    let mut out = Vec::with_capacity(dir.tables.len());
+    for t in &dir.tables {
+        let bytes = if !t.transformed() {
+            Cow::Borrowed(raw(t)?)
+        } else if t.tag == GLYF {
+            Cow::Owned(rebuilt.as_mut().map(|r| std::mem::take(&mut r.glyf)).unwrap_or_default())
+        } else if t.tag == LOCA {
+            let loca = rebuilt.as_mut().map(|r| std::mem::take(&mut r.loca)).unwrap_or_default();
+            if loca.len() != t.orig_length as usize {
+                return Err(bad("the rebuilt loca table differs in size from the original"));
+            }
+            Cow::Owned(loca)
+        } else if t.tag == HMTX {
+            let hhea = untransformed(HHEA)?.ok_or_else(|| bad("the hmtx transform needs an hhea table"))?;
+            let metrics = u16_at(hhea, HHEA_METRICS_AT).ok_or_else(|| bad("the hhea table is too short"))?;
+            let x_mins = match &rebuilt {
+                Some(r) => Cow::Borrowed(r.x_mins.as_slice()),
+                None => {
+                    let need = |tag: Tag, name: &str| untransformed(tag)?.ok_or_else(|| bad(format!("the hmtx transform needs a {name} table")));
+                    let (glyf_data, loca, head, maxp) = (need(GLYF, "glyf")?, need(LOCA, "loca")?, need(HEAD, "head")?, need(MAXP, "maxp")?);
+                    let long = u16_at(head, HEAD_LOCA_FORMAT_AT).ok_or_else(|| bad("the head table is too short"))? != 0;
+                    let count = u16_at(maxp, MAXP_GLYPHS_AT).ok_or_else(|| bad("the maxp table is too short"))?;
+                    Cow::Owned(glyf::x_mins(glyf_data, loca, long, usize::from(count))?)
+                }
+            };
+            Cow::Owned(hmtx::reconstruct(raw(t)?, metrics, &x_mins)?)
+        } else {
+            return Err(bad(format!("table '{}' uses an unknown transform", sfnt::tag_str(t.tag))));
+        };
+        out.push((t.tag, bytes));
+    }
+    Ok(out)
+}
+
+const HHEA: Tag = *b"hhea";
+const MAXP: Tag = *b"maxp";
+/// Where `numberOfHMetrics` sits in `hhea`.
+const HHEA_METRICS_AT: usize = 34;
+/// Where `indexToLocFormat` sits in `head`.
+const HEAD_LOCA_FORMAT_AT: usize = 50;
+/// Where `numGlyphs` sits in `maxp`.
+const MAXP_GLYPHS_AT: usize = 4;
 
 /// How [`encode`] stores the tables.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Options {
-    /// Apply the `glyf`/`loca` transform to TrueType outlines (fontTools' default).
+    /// Apply the `glyf`/`loca` transform to TrueType outlines (on in fontTools' default).
     pub transform_glyf: bool,
-    /// Apply the `hmtx` transform where it applies (off in fontTools' default).
+    /// Apply the `hmtx` transform where it applies (off in fontTools' default). It needs `glyf`;
+    /// it works with or without the `glyf` transform.
     pub transform_hmtx: bool,
     /// Header version, metadata and private data.
     pub extras: Extras,
@@ -323,6 +384,11 @@ impl Options {
     pub fn untransformed() -> Self {
         Options { transform_glyf: false, transform_hmtx: false, extras: Extras::default() }
     }
+
+    /// Both transforms, wherever they apply: the smallest files.
+    pub fn all_transforms() -> Self {
+        Options { transform_glyf: true, transform_hmtx: true, extras: Extras::default() }
+    }
 }
 
 /// Bit 11 of `head.flags`: the font has been through a lossless transform.
@@ -330,20 +396,19 @@ const LOSSLESS_TRANSFORM: u16 = 1 << 11;
 /// Where `flags` sits in `head`.
 const HEAD_FLAGS_AT: usize = 16;
 
-/// Wraps an sfnt font in WOFF2. A TrueType font asked for the `glyf` or `hmtx` transform is
-/// refused with [`Error::Unsupported`] in this version; for a CFF font the transforms do not
-/// apply and are ignored.
+/// Wraps an sfnt font in WOFF2 with the transforms `options` asks for. A transform that does not
+/// apply is skipped, as fontTools skips it: both on a CFF font; `glyf` when a glyph has cubic
+/// points or `loca` does not fit `glyf`; `hmtx` when both side-bearing arrays would be needed, or
+/// the table's size does not match `hhea`, `maxp` and `loca`. A damaged glyph also leaves `glyf`
+/// untransformed, so wrapping never loses data.
 pub fn encode(sfnt_bytes: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
     let font = sfnt::parse(sfnt_bytes)?;
-    if font.get(GLYF).is_some() && (options.transform_glyf || options.transform_hmtx && font.get(HMTX).is_some()) {
-        return Err(Error::Unsupported { format: FORMAT, what: "writing transformed glyf, loca or hmtx tables" });
-    }
-    let mut tables: Vec<Table<'_>> = font.tables.iter().copied().filter(|t| t.tag != DSIG).collect();
+    let mut tables: Vec<(Tag, Cow<'_, [u8]>)> = font.tables.iter().filter(|t| t.tag != DSIG).map(|t| (t.tag, Cow::Borrowed(t.data))).collect();
     if tables.is_empty() {
         return Err(bad("the font has no tables"));
     }
-    tables.sort_by_key(|t| t.tag);
-    let flagged = match font.get(HEAD) {
+    tables.sort_by_key(|t| t.0);
+    let mut head = match font.get(HEAD) {
         Some(head) => {
             let flags = u16_at(head, HEAD_FLAGS_AT).ok_or_else(|| bad("the head table is too short"))?;
             let mut copy = head.to_vec();
@@ -352,29 +417,74 @@ pub fn encode(sfnt_bytes: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
         }
         None => None,
     };
-    if let (Some(h), Some(slot)) = (&flagged, tables.iter_mut().find(|t| t.tag == HEAD)) {
-        slot.data = h;
+    let truetype = font.flavor != OTTO;
+    let loca_format = font.get(HEAD).and_then(|h| u16_at(h, HEAD_LOCA_FORMAT_AT));
+    // The glyphs as the original `loca` cuts them; the transforms read them from here.
+    let glyphs = match (font.get(GLYF), font.get(LOCA), loca_format) {
+        (Some(g), Some(l), Some(format)) if truetype => glyf::glyph_slices(g, l, format != 0),
+        _ => None,
+    };
+    let mut glyf_stream = None;
+    if options.transform_glyf
+        && let (Some(glyphs), Some(head)) = (&glyphs, &mut head)
+        && let Some((glyf_data, loca, long)) = glyf::normalise(glyphs)
+    {
+        put_u16(head, HEAD_LOCA_FORMAT_AT, u16::from(long));
+        glyf_stream = glyf::transform(glyphs, u16::from(long));
+        for (tag, data) in &mut tables {
+            if *tag == GLYF {
+                *data = Cow::Owned(glyf_data.clone());
+            } else if *tag == LOCA {
+                *data = Cow::Owned(loca.clone());
+            }
+        }
     }
-    let adjustment = sfnt::checksum_adjustment(font.flavor, &tables)?;
-    let head = flagged.as_deref().map(|h| sfnt::with_adjustment(h, adjustment)).transpose()?;
-    let mut total_sfnt = 12 + 16 * tables.len();
+    let mut hmtx_stream = None;
+    if options.transform_hmtx
+        && let (Some(glyphs), Some(hmtx_data), Some(hhea), Some(maxp)) = (&glyphs, font.get(HMTX), font.get(HHEA), font.get(MAXP))
+        && let (Some(metrics), Some(count)) = (u16_at(hhea, HHEA_METRICS_AT), u16_at(maxp, MAXP_GLYPHS_AT))
+        && usize::from(count) == glyphs.len()
+        && let Some(x_mins) = glyphs.iter().map(|g| glyf::x_min(g, glyf_stream.is_some())).collect::<Option<Vec<i16>>>()
+    {
+        hmtx_stream = hmtx::transform(hmtx_data, metrics, &x_mins);
+    }
+    if let (Some(h), Some(slot)) = (&head, tables.iter_mut().find(|t| t.0 == HEAD)) {
+        slot.1 = Cow::Borrowed(h.as_slice());
+    }
+    let list: Vec<Table<'_>> = tables.iter().map(|(tag, data)| Table { tag: *tag, data }).collect();
+    let adjustment = sfnt::checksum_adjustment(font.flavor, &list)?;
+    let head = head.as_deref().map(|h| sfnt::with_adjustment(h, adjustment)).transpose()?;
+    let mut total_sfnt = 12 + 16 * list.len();
     let mut stream = Vec::new();
-    let mut directory = Vec::with_capacity(HEADER + 10 * tables.len());
+    let mut directory = Vec::with_capacity(HEADER + 10 * list.len());
     directory.resize(HEADER, 0);
-    for t in &tables {
+    for t in &list {
         let data = match (&head, t.tag == HEAD) {
             (Some(h), true) => h.as_slice(),
             _ => t.data,
         };
-        stream.extend_from_slice(data);
+        let transformed: Option<&[u8]> = match t.tag {
+            GLYF => glyf_stream.as_deref(),
+            LOCA => glyf_stream.as_ref().map(|_| &[][..]),
+            HMTX => hmtx_stream.as_deref(),
+            _ => None,
+        };
+        stream.extend_from_slice(transformed.unwrap_or(data));
         total_sfnt = total_sfnt.saturating_add(pad4(data.len()).unwrap_or(usize::MAX));
         let index = known_tag_index(t.tag);
-        let null = if t.tag == GLYF || t.tag == LOCA { 3 << 6 } else { 0 };
-        directory.push(index | null);
+        let version = match (t.tag, transformed.is_some()) {
+            (GLYF | LOCA, false) => 3,
+            (HMTX, true) => 1,
+            _ => 0,
+        };
+        directory.push(index | (version << 6));
         if index == UNKNOWN_TAG {
             directory.extend_from_slice(&t.tag);
         }
         push_base128(&mut directory, to_u32(FORMAT, data.len(), "a table")?);
+        if let Some(stored) = transformed {
+            push_base128(&mut directory, to_u32(FORMAT, stored.len(), "a table")?);
+        }
     }
     if total_sfnt > MAX_SFNT {
         return Err(bad("the font is too large"));
@@ -410,7 +520,7 @@ pub fn encode(sfnt_bytes: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
     }
     put_u32(&mut out, 4, font.flavor);
     put_u32(&mut out, 8, length);
-    put_u16(&mut out, 12, u16::try_from(tables.len()).map_err(|_| bad("too many tables"))?);
+    put_u16(&mut out, 12, u16::try_from(list.len()).map_err(|_| bad("too many tables"))?);
     put_u32(&mut out, 16, to_u32(FORMAT, total_sfnt, "the font")?);
     put_u32(&mut out, 20, to_u32(FORMAT, compressed_length, "the compressed data")?);
     put_u16(&mut out, 24, version.0);

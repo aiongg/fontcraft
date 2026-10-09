@@ -31,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Tables",
             [],
             None,
-            "{font: path, face?: number|\"all\", sort?: \"file\"|\"tag\"|\"size\"} the table directory of a compiled font, collection or WOFF file; for a collection, one list per member (all of them by default) with tables the members share marked → {format, faces: [{face, sfntVersion, tables: [{tag, checksum, offset, length, compressedLength?, shared?}]}]}",
+            "{font: path, face?: number|\"all\", sort?: \"file\"|\"tag\"|\"size\"} the table directory of a compiled font, collection, WOFF or WOFF2 file; for a collection, one list per member (all of them by default) with tables the members share marked; a WOFF2 table has no checksum, its offset is in the decompressed table data, and a transformed one gives its stored size as transformLength → {format, faces: [{face, sfntVersion, tables: [{tag, checksum?, offset, length, compressedLength?, transformLength?, shared?}]}]}",
             always,
             tables_list
         ),
@@ -84,6 +84,25 @@ fn tables_list(_: &mut Session, p: &Value) -> Result<Value> {
             .collect();
         sort_rows(&mut rows, sort);
         faces.push(json!({ "face": 0, "sfntVersion": hex32(u32::from_be_bytes(bytes.get(4..8).and_then(|b| b.try_into().ok()).unwrap_or_default())), "tables": rows.into_iter().map(|r| r.4).collect::<Vec<_>>() }));
+        return Ok(json!({ "format": format, "faces": faces }));
+    }
+    if format == "WOFF2" {
+        let dir = fontcraft_decompile::woff2_directory(&bytes)?;
+        let mut rows: Vec<(String, u32, u32, u32, Value)> = dir
+            .tables
+            .iter()
+            .map(|t| {
+                let name = tag(Tag::new(&t.tag));
+                let offset = u32::try_from(t.stream_offset).unwrap_or(u32::MAX);
+                let mut row = json!({ "tag": name, "offset": offset, "length": t.orig_length });
+                if let (Some(stored), Some(obj)) = (t.transform_length, row.as_object_mut()) {
+                    obj.insert("transformLength".into(), json!(stored));
+                }
+                (name, offset, t.orig_length, 0, row)
+            })
+            .collect();
+        sort_rows(&mut rows, sort);
+        faces.push(json!({ "face": 0, "sfntVersion": hex32(dir.flavor), "tables": rows.into_iter().map(|r| r.4).collect::<Vec<_>>() }));
         return Ok(json!({ "format": format, "faces": faces }));
     }
     let bad = |e: skrifa::raw::ReadError| EngineError::Io(format!("{path}: {e}"));
@@ -185,13 +204,8 @@ fn section(out: &mut Map<String, Value>, wanted: &[&str], key: &str, f: impl FnO
 }
 
 fn inspect_binary(path: &str, kind: &str, bytes: &[u8], face: Option<u32>, wanted: &[&str], all_names: bool) -> Result<Value> {
-    let unwrapped;
-    let sfnt = if kind == "WOFF" {
-        unwrapped = fontcraft_decompile::woff_to_sfnt(bytes)?;
-        unwrapped.as_slice()
-    } else {
-        bytes
-    };
+    let unwrapped = fontcraft_decompile::to_sfnt(bytes)?;
+    let sfnt = unwrapped.as_ref();
     let bad = |e: skrifa::raw::ReadError| EngineError::Io(format!("{path}: {e}"));
     let (font, member_count) = match FileRef::new(sfnt).map_err(bad)? {
         FileRef::Font(f) => (f, 1),

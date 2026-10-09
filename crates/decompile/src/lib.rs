@@ -1,5 +1,5 @@
-//! Compiled fonts read into the source model (L3): `file.open` on a `.ttf`, `.otf`, collection or
-//! WOFF file.
+//! Compiled fonts read into the source model (L3): `file.open` on a `.ttf`, `.otf`, collection,
+//! WOFF or WOFF2 file.
 //!
 //! Opening a compiled font is a reconstruction, not a load (`open.compiledIsLossy`): the result is
 //! a one-master document with the outlines, advance widths, code points, glyph names, vertical
@@ -9,11 +9,14 @@
 //! them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
 //! the glyph ids (`open.recordsGlyphOrder`).
 //!
-//! Input is untrusted: every offset and size is checked, WOFF data is inflated only up to the size
-//! its header states and at most [`MAX_SFNT`], and nothing here panics.
+//! Input is untrusted: every offset and size is checked, WOFF and WOFF2 data is decompressed only up
+//! to the size its header states and at most [`MAX_SFNT`], and nothing here panics.
 #![forbid(unsafe_code)]
 
+/// The container crate, for callers that wrap fonts as well as open them.
+pub use fontcraft_container as container;
 pub use fontcraft_container::woff::WoffTable;
+pub use fontcraft_container::woff2::Woff2Directory;
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
@@ -31,7 +34,7 @@ use skrifa::raw::types::{GlyphId, Tag};
 use skrifa::raw::{FileRef, FontRef, TableProvider};
 use skrifa::string::StringId;
 
-/// Largest uncompressed font accepted, in bytes (WOFF data is inflated up to this).
+/// Largest uncompressed font accepted, in bytes (WOFF and WOFF2 data is decompressed up to this).
 pub use fontcraft_container::MAX_SFNT;
 
 #[derive(Debug, thiserror::Error)]
@@ -60,6 +63,17 @@ pub fn woff_to_sfnt(woff: &[u8]) -> Result<Vec<u8>, DecompileError> {
     fontcraft_container::woff::decode(woff).map(|u| u.sfnt).map_err(container)
 }
 
+/// The header and table directory of a WOFF2 file.
+pub fn woff2_directory(woff2: &[u8]) -> Result<Woff2Directory, DecompileError> {
+    fontcraft_container::woff2::directory(woff2).map_err(container)
+}
+
+/// The sfnt (or collection) inside `bytes`: WOFF and WOFF2 files are unwrapped, anything else is
+/// returned as it is (`fontcraft_container::to_sfnt`).
+pub fn to_sfnt(bytes: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, DecompileError> {
+    fontcraft_container::to_sfnt(bytes).map_err(container)
+}
+
 /// A document read from a compiled font, and what was left out.
 pub struct Decompiled {
     pub font: Font,
@@ -80,15 +94,8 @@ pub fn sniff(bytes: &[u8]) -> Option<&'static str> {
 
 /// Reads a compiled font. `face` chooses a member of a collection.
 pub fn decompile(bytes: &[u8], face: Option<u32>) -> Result<Decompiled, DecompileError> {
-    let unwrapped;
-    let bytes = match bytes.get(..4) {
-        Some(b"wOFF") => {
-            unwrapped = woff_to_sfnt(bytes)?;
-            unwrapped.as_slice()
-        }
-        Some(b"wOF2") => return Err(DecompileError::Unreadable("WOFF2 is not supported yet (ROADMAP.md, M2)".into())),
-        _ => bytes,
-    };
+    let unwrapped = to_sfnt(bytes)?;
+    let bytes = unwrapped.as_ref();
     let bad = |e: skrifa::raw::ReadError| DecompileError::Unreadable(e.to_string());
     let font = match FileRef::new(bytes).map_err(bad)? {
         FileRef::Font(f) => f,
