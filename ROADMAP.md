@@ -14,7 +14,7 @@ _Last updated: 2026-10-10 (M3 waves 3 and 4: path-operation commands and the Kni
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,643 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, pointer and key injection, dialogs, panels, tests | **~55%** of what the siblings' "infrastructure" row covers; missing: context menus, menu items enabled by the selection, a toolbar, the settings window, MCP resources and prompts, a performance suite |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~10%** |
-| Commands that exist (not: that behave like the reference) | **207 of 932** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **209 of 932** (`docs/parity.md`) |
 | Observed against the running reference | **52 rows**: 47 compiled-output rows checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
 ## Honest assessment (2026-10-10)
@@ -47,7 +47,7 @@ whose outlines FontCraft's match in 322 (the other 9 are source reading, allow-l
 `crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
 transforms; fontTools reads all of its output back.
 
-**What is real: editing by command (M3).** 207 of the 932 commands exist, 178 of them from M3.
+**What is real: editing by command (M3).** 209 of the 932 commands exist.
 Every editing command takes explicit targets (shapes, nodes, segments, the foreground or the
 background) and runs the same from the window, `fontcraft-cli run`, MCP and the control channel:
 
@@ -84,7 +84,7 @@ restores the font. Each filter opens a dialog built from its parameter schema. A
 window with `ui.pointer`, `ui.key`, `ui.text`, `ui.tool.select` and the `ui.dialog.*` methods,
 and see it with `ui.screenshot`; `ui.render` draws glyphs to PNG without a window, the same
 bytes every time. `layer.inspect` reads a layer's outline with addresses. One crate has no
-commands yet: `audit` (34 of the 36 outline checks). 871 tests pass, including a sweep that
+commands yet: `audit` (34 of the 36 outline checks). 899 tests pass, including a sweep that
 runs every engine command with hostile parameters. The whole gate (`cargo xtask ci`: format,
 lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
@@ -93,10 +93,10 @@ unconfirmed, it follows the handbook (Remove Overlap, for example, deletes open 
 
 | Gap | Detail |
 |---|---|
-| Overlaps at export | exported fonts keep overlaps, with a warning, until M3.7 |
+| Overlaps at export | removed by default (M3.7), with a 5 s limit per glyph; not compared with the reference app |
 | Strokes and masks | commands only: the canvas does not draw them and export does not expand them |
-| Audit | no `audit.*` command, live audit or markers |
-| Window | no context menus and no toolbar; menu items are not greyed out by the selection; every tab edits the first master's layer (no master switching) |
+| Audit | 34 of 36 outline checks with commands, live audit and canvas markers; the other 264 checks are M12 |
+| Window | no toolbar yet; context-menu items are enabled by the kind of selection only; every tab edits the first master's layer (no master switching) |
 | Panels | the Palette's Transformations buttons draw as empty boxes, because the UI font has no glyphs for their symbols; there is no Stroke section; the Transformations dialog lacks Translate, Scale and its "…" menu; Shape Order has no dialog; Export has only its OTF tab |
 
 Beyond M3 there is no kerning editing, no component editing (components are exported as
@@ -166,7 +166,7 @@ on, so the engine track, where oracles prove correctness, goes first.
   parameters, 1,753 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 23
   behaviour notes (about 150,000 words), all in our own words. Every M3 command's `params` name
   its targets; shortcuts carry a `when` (the context they apply in).
-- **Workspace:** 20 library crates in enforced layers, two apps, `xtask`; about 102,600 lines of Rust.
+- **Workspace:** 20 library crates in enforced layers, two apps, `xtask`; about 109,000 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry, atomic failure, the panic
