@@ -15,6 +15,7 @@
 //! the glyphs the filter runs on or skips.
 
 pub mod extrude;
+pub mod hatch_outline;
 pub mod round_corners;
 
 use std::fmt;
@@ -23,6 +24,7 @@ use crate::PathOpError;
 use crate::contour::Contour;
 
 pub use extrude::Extrude;
+pub use hatch_outline::HatchOutline;
 pub use round_corners::RoundCorners;
 
 /// Longest filter string read, in bytes.
@@ -39,6 +41,7 @@ pub fn registry() -> &'static [&'static dyn Filter] {
     static FILTERS: &[&dyn Filter] = &[
         &Extrude,
         &RoundCorners,
+        &HatchOutline,
     ];
     FILTERS
 }

@@ -101,6 +101,22 @@ Fills the glyph shape with parallel strokes.
 
 The open-path output exists so that other filters or plug-ins can process the lines further.
 
+How FontCraft runs it (our design, documented behaviour not yet observed):
+
+- The hatched area is the filled area of the closed paths, by the nonzero rule. Open paths,
+  single-node paths and components stay as they are.
+- One line passes through the origin; the others repeat every `stepWidth` units, measured at
+  right angles to the lines. The angle is in degrees, counter-clockwise.
+- Offset Path on: each line becomes a rectangle `strokeWidth` units thick, intersected with the
+  outline. Stroke ends follow the outline, and strokes as wide as the step merge.
+- Offset Path off: each piece of line inside the outline becomes an open path of two line nodes,
+  drawn in the direction of the angle. Its ends lie on the outline.
+- A layer may get at most 10 000 lines; a finer hatch is an error. New points are rounded to the
+  grid.
+- First values: origin (0, 0), step width 20, angle 45, Offset Path on, thickness 5.
+- Export string: `Offset: thickness` turns Offset Path on; without `Offset`, or with `Offset: 0`,
+  the lines stay open.
+
 ### Offset Curve (`filter.offsetCurve`)
 
 Changes stem thickness by moving the outline, or turns paths into strokes.
@@ -271,6 +287,8 @@ dispatches it through the registry (`filter.customParameter.sameRegistryAsComman
 - Roughen export string has a fourth `angle` value with no dialog field in the chapter.
 - Offset Curve export string has no slots for Keep Compatible or Cap Style; are they settable at export?
 - Hatch Outline: can the export string turn Offset Path off (open paths), e.g. `Offset: 0`?
+  **Answered for M3 (our decision, 2026-10-10):** yes. A string without `Offset`, or with
+  `Offset: 0`, gives open paths.
 - Transformations string: meaning of the `±shift` notation (the appendix marks LSB/RSB with an
   asterisk it does not explain), whether an unsigned value is absolute, and whether `SlantCorrection`
   is the same as Cursivy. In the same video a plain slant (not Cursivy) is copied as

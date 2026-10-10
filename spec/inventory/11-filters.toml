@@ -172,12 +172,13 @@ label = "Hatch Outline"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids], originX: number, originY: number, stepWidth: number, angle: number, offsetPath?: bool, strokeWidth?: number}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], originX?: number = 0, originY?: number = 0, stepWidth?: number = 20, angle?: number = 45, offsetPath?: bool = true, strokeWidth?: number = 5}"
 area = "path-ops"
 milestone = "M3"
 summary = "Replaces the glyph shape with parallel hatch strokes clipped to it. Strokes start from an origin point, repeat every Step Width units at the given angle, and are either expanded to closed shapes of the Offset Path thickness or left as open centre lines when Offset Path is off."
 ref = "Filters › Built-in Filters › Hatch Outline"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft geometry (ours): the hatched area is the filled area of the closed paths (nonzero rule). One line passes through the origin, the others repeat every stepWidth units (1 to 1000000). With offsetPath each line becomes a rectangle strokeWidth units thick (1 to 1000000) intersected with the outline, so the stroke ends follow the outline; without it each piece of line inside the outline becomes an open path of two nodes whose ends lie on the outline. At most 10000 lines per layer, else an error. Open paths, single-node paths and components stay; locked paths are not changed; new points are rounded to the grid."
 
 [[panel]]
 id = "dialog.filterHatchOutline"
@@ -194,6 +195,7 @@ milestone = "M3"
 summary = "Options dialog of the Hatch Outline filter. No default values are stated in the source."
 ref = "Filters › Built-in Filters › Hatch Outline"
 status = "handbook"
+notes = "FontCraft first values (ours): origin (0, 0), step width 20, angle 45, Offset Path on with thickness 5 (the `default` of each parameter in filter.list)."
 
 [[behavior]]
 id = "filter.hatchOutline.origin"
@@ -202,6 +204,7 @@ milestone = "M3"
 summary = "Origin (X, Y) is the point the hatch pattern is anchored to; moving it shifts the phase of the stripes."
 ref = "Filters › Built-in Filters › Hatch Outline"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: one hatch line passes through the origin (originX, originY)."
 
 [[behavior]]
 id = "filter.hatchOutline.stepWidth"
@@ -210,6 +213,7 @@ milestone = "M3"
 summary = "Step Width is the spacing between neighbouring hatch strokes."
 ref = "Filters › Built-in Filters › Hatch Outline"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: stepWidth is measured at right angles to the lines, in units, from 1 to 1000000."
 
 [[behavior]]
 id = "filter.hatchOutline.angleConvention"
@@ -218,6 +222,7 @@ milestone = "M3"
 summary = "Hatch angle: 0 degrees gives horizontal strokes, 90 degrees vertical strokes."
 ref = "Filters › Built-in Filters › Hatch Outline"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: degrees counter-clockwise from horizontal, from -360 to 360."
 
 [[behavior]]
 id = "filter.hatchOutline.openPathsWhenOffsetOff"
@@ -226,6 +231,7 @@ milestone = "M3"
 summary = "Offset Path sets the stroke thickness. Switching it off outputs the hatch lines as open paths, meant as input for further filters or plug-ins."
 ref = "Filters › Built-in Filters › Hatch Outline"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: each piece of line inside the outline is an open path of two line nodes, drawn in the direction of the angle."
 
 # --- Offset Curve ---
 
@@ -810,6 +816,7 @@ milestone = "M7"
 summary = "Export string: HatchOutlineFilter; OriginX: x; OriginY: y; StepWidth: distance; Angle: angle; Offset: thickness (keyed arguments)."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "FontCraft (ours, not yet observed): `Offset: thickness` turns Offset Path on with that thickness; without `Offset`, or with `Offset: 0`, the lines stay open paths. Written strings carry all four other keys, and `Offset` only when Offset Path is on."
 
 [[behavior]]
 id = "filter.customParameter.offsetCurve"
