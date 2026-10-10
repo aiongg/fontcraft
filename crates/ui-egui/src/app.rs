@@ -76,6 +76,11 @@ impl FontcraftApp {
         } else {
             self.session.execute(id, params).map_err(|e| e.to_string())
         };
+        if id == "glyph.rename"
+            && let Ok(r) = &result
+        {
+            self.follow_rename(params, r);
+        }
         self.after_command();
         shell::font_view::remember_node_selection(self);
         if result.is_ok() && matches!(id, "audit.run" | "audit.fix") {
@@ -102,6 +107,33 @@ impl FontcraftApp {
             self.state.status = e;
         }
         Ok(result)
+    }
+
+    /// Points the UI's references to a renamed glyph at its new name: the Font View selection,
+    /// the tabs and the remembered node selections.
+    fn follow_rename(&mut self, params: &Value, result: &Value) {
+        let (Some(old), Some(new)) = (params.get("glyph").and_then(Value::as_str), result.get("glyph").and_then(Value::as_str)) else { return };
+        if old == new {
+            return;
+        }
+        let rename = |name: &mut String| {
+            if name == old {
+                *name = new.to_string();
+            }
+        };
+        let state = &mut self.state;
+        state.selected_glyphs.iter_mut().for_each(rename);
+        state.font_view.anchor.iter_mut().for_each(rename);
+        for tab in &mut state.tabs {
+            tab.glyphs.iter_mut().for_each(rename);
+            tab.selection_glyph.iter_mut().for_each(rename);
+            if let Some(layer) = tab.layers.remove(old) {
+                tab.layers.insert(new.to_string(), layer);
+            }
+        }
+        if let Some(kept) = state.font_view.node_selections.remove(old) {
+            state.font_view.node_selections.insert(new.to_string(), kept);
+        }
     }
 
     /// Drops UI references to glyphs a command removed (or to a closed document). A tab whose

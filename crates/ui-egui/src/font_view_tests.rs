@@ -305,6 +305,7 @@ fn grid_clicks_drags_and_renames_go_through_commands() {
     window.type_and_enter(&mut app, "ee");
     assert!(app.session.font().unwrap().glyph("Bee").is_some(), "{}", app.state.status);
     assert!(app.font_view.edit.is_none());
+    assert_eq!(app.state.selected_glyphs, ["Bee"], "the renamed glyph stays selected");
 
     // A double-click opens the glyph (after a pause, so the clicks before do not make it a
     // triple-click).
@@ -502,4 +503,31 @@ fn measure_font_view_on_the_largest_corpus_source() {
         frames[frames.len() / 2],
         frames.last().unwrap()
     );
+}
+
+#[test]
+fn glyph_order_section_headers_head_their_glyphs_in_the_grid() {
+    use fontcraft_model::GLYPH_ORDER_PARAM;
+    use fontcraft_model::plist::{Array, Str, Value as Plist};
+    let mut app = FontcraftApp::default();
+    app.session
+        .edit("order", |f| {
+            let items = ["**Capitals**", "A", "B", "**Small**", "a", "b"].iter().map(|n| Plist::String(Str::new(*n))).collect();
+            Arc::make_mut(&mut f.info).params.set(GLYPH_ORDER_PARAM, Plist::Array(Array { items, ..Default::default() }));
+            Ok(())
+        })
+        .unwrap();
+    let s = state(&mut app);
+    assert_eq!(s["sections"], json!([{"at": 0, "title": "Capitals"}, {"at": 2, "title": "Small"}]));
+    assert_eq!(names(&s["visible"])[..5], ["A".to_string(), "B".into(), "a".into(), "b".into(), ".notdef".into()]);
+    let window = Window::new();
+    let shapes = window.frame(&mut app);
+    let (a, b, small_a) = (cell(&app, "A"), cell(&app, "B"), cell(&app, "a"));
+    assert_eq!(a.min.y, b.min.y);
+    assert!(small_a.min.y > b.max.y, "a new section starts a new line");
+    let header = Rect::from_min_max(egui::pos2(0.0, b.max.y), egui::pos2(1280.0, small_a.min.y));
+    assert!(texts_in(&shapes, header).contains(&"Small".to_string()));
+    // Sorted, the view has no sections.
+    app.run("fontView.sortByColumn", &json!({"column": "name"})).unwrap();
+    assert_eq!(state(&mut app)["sections"], json!([]));
 }
