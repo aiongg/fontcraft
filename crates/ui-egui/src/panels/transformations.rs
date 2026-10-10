@@ -10,6 +10,7 @@ use serde_json::{Map, Value, json};
 
 use super::{METRICS, Pending, edit_targets, palette, stroke, widgets, with};
 use crate::app::FontcraftApp;
+use crate::icons::Icon;
 use crate::shell::transform::OriginMode;
 
 /// The targets of transform command `id`: the Edit View selection (the whole edited layer when it
@@ -71,10 +72,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             pending.push(("transform.setOrigin", json!({"mode": "box", "boxPoint": point})));
         }
         let reference = settings.point;
-        if widgets::button(
+        if widgets::icon_button(
             ui,
             widgets::id("transform.reference"),
-            "⌖",
+            Icon::ReferencePoint,
             "Reference point",
             reference.is_some(),
             settings.mode == OriginMode::Reference,
@@ -94,10 +95,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     });
 
     ui.horizontal(|ui| {
-        if widgets::button(ui, widgets::id("transform.mirrorHorizontal"), "↔", "Mirror Horizontally", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.mirrorHorizontal"), Icon::MirrorHorizontal, "Mirror Horizontally", enabled, false) {
             press(pending, "transform.mirrorHorizontal", json!({ "origin": origin }));
         }
-        if widgets::button(ui, widgets::id("transform.mirrorVertical"), "↕", "Mirror Vertically", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.mirrorVertical"), Icon::MirrorVertical, "Mirror Vertically", enabled, false) {
             press(pending, "transform.mirrorVertical", json!({ "origin": origin }));
         }
     });
@@ -105,7 +106,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let (sx, sy) = settings.scale_percent();
     let [scale_x, _] = settings.scale;
     ui.horizontal(|ui| {
-        if widgets::button(ui, widgets::id("transform.reverseScale"), "÷", "Reverse Scale", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.reverseScale"), Icon::ReverseScale, "Reverse Scale", enabled, false) {
             press(pending, "transform.reverseScale", json!({"x": sx, "y": sy, "origin": origin}));
         }
         ui.vertical(|ui| {
@@ -118,69 +119,76 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 }
             });
         });
-        let lock = if settings.scale_locked { "🔒" } else { "🔓" };
-        if widgets::button(ui, widgets::id("transform.scaleLock"), lock, "Lock Scale Proportions", true, settings.scale_locked) {
+        let lock = if settings.scale_locked { Icon::Locked } else { Icon::Unlocked };
+        if widgets::icon_button(ui, widgets::id("transform.scaleLock"), lock, "Lock Scale Proportions", true, settings.scale_locked) {
             pending.push(("transform.setScaleLock", json!({ "locked": !settings.scale_locked })));
         }
-        if widgets::button(ui, widgets::id("transform.scale"), "×", "Scale", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.scale"), Icon::ScaleUp, "Scale", enabled, false) {
             press(pending, "transform.scale", json!({"x": sx, "y": sy, "origin": origin}));
         }
     });
 
     ui.horizontal(|ui| {
         let angle = json!({"angle": settings.rotate_angle, "origin": origin});
-        if widgets::button(ui, widgets::id("transform.rotateCounterclockwise"), "⟲", "Rotate Counterclockwise", enabled, false) {
+        if widgets::icon_button(
+            ui,
+            widgets::id("transform.rotateCounterclockwise"),
+            Icon::RotateCounterclockwise,
+            "Rotate Counterclockwise",
+            enabled,
+            false,
+        ) {
             press(pending, "transform.rotateCounterclockwise", angle.clone());
         }
         if let Some(widgets::NumberEdit::Set(v)) = widgets::number(ui, widgets::id("transform.rotate"), Some(settings.rotate_angle), width, false) {
             pending.push(("transform.setSettings", json!({ "rotate": v })));
         }
-        if widgets::button(ui, widgets::id("transform.rotateClockwise"), "⟳", "Rotate Clockwise", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.rotateClockwise"), Icon::RotateClockwise, "Rotate Clockwise", enabled, false) {
             press(pending, "transform.rotateClockwise", angle);
         }
     });
 
     ui.horizontal_wrapped(|ui| {
         let angle = json!({"angle": settings.slant_angle, "origin": origin});
-        if widgets::button(ui, widgets::id("transform.slantLeft"), "⇠", "Slant Left", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.slantLeft"), Icon::SlantLeft, "Slant Left", enabled, false) {
             press(pending, "transform.slantLeft", angle.clone());
         }
         if let Some(widgets::NumberEdit::Set(v)) = widgets::number(ui, widgets::id("transform.slant"), Some(settings.slant_angle), width, false) {
             pending.push(("transform.setSettings", json!({ "slant": v })));
         }
-        if widgets::button(ui, widgets::id("transform.slantRight"), "⇢", "Slant Right", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.slantRight"), Icon::SlantRight, "Slant Right", enabled, false) {
             press(pending, "transform.slantRight", angle.clone());
         }
-        if widgets::button(ui, widgets::id("transform.slantDown"), "⇣", "Slant Down", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.slantDown"), Icon::SlantDown, "Slant Down", enabled, false) {
             press(pending, "transform.slantDown", angle.clone());
         }
-        if widgets::button(ui, widgets::id("transform.slantUp"), "⇡", "Slant Up", enabled, false) {
+        if widgets::icon_button(ui, widgets::id("transform.slantUp"), Icon::SlantUp, "Slant Up", enabled, false) {
             press(pending, "transform.slantUp", angle);
         }
     });
 
     ui.horizontal(|ui| {
-        for (id, label, hover) in [
-            ("transform.alignLeft", "⇤", "Align Left"),
-            ("transform.alignCenterHorizontal", "⇿", "Align Horizontal Centers"),
-            ("transform.alignRight", "⇥", "Align Right"),
-            ("transform.alignTop", "⤒", "Align Top"),
-            ("transform.alignCenterVertical", "⇳", "Align Vertical Centers"),
-            ("transform.alignBottom", "⤓", "Align Bottom"),
+        for (id, icon, hover) in [
+            ("transform.alignLeft", Icon::AlignLeft, "Align Left"),
+            ("transform.alignCenterHorizontal", Icon::AlignCenterHorizontal, "Align Horizontal Centers"),
+            ("transform.alignRight", Icon::AlignRight, "Align Right"),
+            ("transform.alignTop", Icon::AlignTop, "Align Top"),
+            ("transform.alignCenterVertical", Icon::AlignCenterVertical, "Align Vertical Centers"),
+            ("transform.alignBottom", Icon::AlignBottom, "Align Bottom"),
         ] {
-            if widgets::button(ui, widgets::id(id), label, hover, align, false) {
+            if widgets::icon_button(ui, widgets::id(id), icon, hover, align, false) {
                 press(pending, id, json!({}));
             }
         }
     });
 
     ui.horizontal(|ui| {
-        for (id, label, hover) in [
-            ("transform.booleanUnion", "Union", "Union: merge the closed paths"),
-            ("transform.booleanSubtract", "Subtract", "Subtract the selected paths from the others"),
-            ("transform.booleanIntersect", "Intersect", "Intersect: keep where the selected paths overlap the others"),
+        for (id, icon, hover) in [
+            ("transform.booleanUnion", Icon::Union, "Union: merge the closed paths"),
+            ("transform.booleanSubtract", Icon::Subtract, "Subtract the selected paths from the others"),
+            ("transform.booleanIntersect", Icon::Intersect, "Intersect: keep where the selected paths overlap the others"),
         ] {
-            if widgets::button(ui, widgets::id(id), label, hover, enabled, false)
+            if widgets::icon_button(ui, widgets::id(id), icon, hover, enabled, false)
                 && let Some(t) = boolean_targets(app, id)
             {
                 pending.push((id, Value::Object(t)));

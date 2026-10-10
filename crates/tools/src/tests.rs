@@ -463,6 +463,8 @@ fn tool_letters_and_space_choose_tools() {
     assert_eq!(tools.select("zoom").unwrap().previous, "lasso");
     let out = h.key(&mut tools, Key::Char('v'), NONE);
     assert_eq!(runs(&out)[0].params, json!({"tool": "lasso"}), "V returns to the group's last tool");
+    assert_eq!(tools.last_in_group("select"), Some("lasso"), "the toolbar's shared button shows it too");
+    assert_eq!(tools.last_in_group("annotation"), None, "no annotation tool chosen yet");
     assert!(tools.select("no such tool").is_err());
     assert_eq!(tools.base_id(), "zoom");
 

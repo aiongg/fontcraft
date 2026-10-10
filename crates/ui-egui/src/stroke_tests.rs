@@ -111,6 +111,8 @@ fn a_stroked_open_path_fills_as_its_outline() {
     let tokens = plain.tokens.clone();
     // The Hand tool fills the edited glyph.
     plain.run("tool.select", &json!({"tool": "hand"})).unwrap();
+    // Greyed-out Transformations icons share the source outline's colour and width.
+    collapse(&mut plain, &["transformations"]);
     let mut w = Window::default();
     w.settle(&mut plain);
     assert!(w.filled_pixels(&plain) < 100, "an open path without a stroke fills nothing");

@@ -186,6 +186,19 @@ Tools sharing a button share a shortcut letter; `Shift`+letter switches to the o
 click-and-hold on the button lists them. Groups seen in this chapter: Select/Lasso (`V`), the two
 Primitives modes (`F`), Erase/Knife (`E`).
 
+**The toolbar in FontCraft (`editView.toolbar`, M3.2).** A row above the canvas with one button
+per toolbar group of `tool.list`, in its order; an ungrouped tool has a button of its own.
+
+- A shared button shows the active tool when it is one of its group, else the group's tool used
+  last, else the first. It carries a small triangle in its corner.
+- Click: `tool.select` for the tool the button shows. The active tool's button is highlighted.
+- Holding a shared button for 0.4 s, or clicking it with the secondary button, opens a menu of
+  the group's tools (icon, name, key). Releasing the hold selects nothing; choosing a row runs
+  `tool.select`. A click outside the menu or `Escape` closes it.
+- Hover text: name and key, as in `Knife (E)`.
+- The buttons never take the keyboard focus, so the tool keys keep working after a click.
+- The icons are our own drawings, made with egui shapes in `crates/ui-egui/src/icons.rs`.
+
 ### How FontCraft builds the drawing tools (M3.13)
 
 Our decisions where the handbook is silent. Gestures the handbook documents and no video shows

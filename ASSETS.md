@@ -20,4 +20,4 @@ Rules for fonts (the full text is in [docs/clean-room.md](docs/clean-room.md)):
 
 | Path | What | Author | Source | Licence |
 |---|---|---|---|---|
-| *(none yet)* | | | | |
+| `crates/ui-egui/src/icons.rs` | Toolbar and palette icons, drawn in code | FontCraft contributors | original | MIT OR Apache-2.0 |

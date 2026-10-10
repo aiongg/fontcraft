@@ -74,6 +74,11 @@ impl Toolbox {
         Ok(Switch { tool: now, previous, output })
     }
 
+    /// The tool of toolbar group `group` chosen last, if any of its tools was chosen.
+    pub fn last_in_group(&self, group: &str) -> Option<&'static str> {
+        self.recent.iter().rev().copied().find(|id| TOOLS.iter().any(|t| t.id == *id && !t.group.is_empty() && t.group == group))
+    }
+
     /// `tool.list`: `{active, tools: [{id, label, shortcut, group}]}`.
     pub fn list(&self) -> Value {
         json!({ "active": self.active_id(), "tools": TOOLS })

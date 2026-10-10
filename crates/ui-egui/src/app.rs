@@ -165,6 +165,7 @@ impl FontcraftApp {
         shell::status_bar::show(self, ui);
         crate::panels::show(self, ui, &mut pending);
         if self.state.tab().is_some() {
+            shell::toolbar::show(self, ui, &mut pending);
             canvas::show(self, ui, &mut pending);
         } else {
             shell::font_view::show(self, ui, &mut pending);

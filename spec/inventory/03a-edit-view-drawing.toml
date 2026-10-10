@@ -489,6 +489,23 @@ summary = "Query that returns one layer's outline with the address of every shap
 ref = "Edit View › Selecting Nodes and Paths"
 status = "inferred"
 
+[[panel]]
+id = "editView.toolbar"
+label = "Edit View Toolbar"
+location = "toolbar"
+controls = [
+  "one button per tool, or per group of tools sharing a key (Select/Lasso, the two Primitives modes, Erase/Knife, the annotation tools)",
+  "the active tool's button highlighted",
+  "a shared button shows the group's tool used last and carries a small corner triangle; click-and-hold opens a menu of the group's tools",
+  "hover text: the tool's name and key, e.g. Knife (E)",
+]
+area = "ui-chrome"
+milestone = "M3"
+summary = "Row of tool buttons above the Edit View canvas. A click makes the tool active (`tool.select`); a shared button's menu lists the tools of its group."
+ref = "Edit View › Draw Tool; Edit View › Cutting Paths"
+status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (https://www.youtube.com/watch?v=VGe96Qjlvvc; Glyphs 3), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. FontCraft: the buttons come from `tool.list` in its order; the icons are our own drawings (`crates/ui-egui/src/icons.rs`); the secondary button also opens a shared button's menu."
+
 [[behavior]]
 id = "tools.sharedButtonCycling"
 area = "ui-chrome"
@@ -496,7 +513,7 @@ milestone = "M3"
 summary = "Tools that share one toolbar button (Select/Lasso, the two Primitives modes, Erase/Knife) have one shortcut letter; pressing Shift plus that letter switches to the other tool of the group, and click-and-hold on the button opens a menu listing the group's tools."
 ref = "Edit View › Cutting Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. Not shown: Shift plus the letter (documented, not yet observed). FontCraft: the letter returns to the group's tool used last (the first one before any); Shift with the letter steps to the next tool of the group. The click-and-hold menu waits for the toolbar."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. Not shown: Shift plus the letter (documented, not yet observed). FontCraft: the letter returns to the group's tool used last (the first one before any); Shift with the letter steps to the next tool of the group. The shared button shows the group's tool used last; holding it 0.4 s, or clicking it with the secondary button, opens the menu (`editView.toolbar`). The hold time is ours: the reference's is not documented."
 
 [[behavior]]
 id = "points.terminology"

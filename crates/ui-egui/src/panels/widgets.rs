@@ -15,6 +15,7 @@ use std::hash::Hash;
 use egui::text::CCursorRange;
 use egui::{Id, Key, Modifiers, Sense, StrokeKind};
 
+use crate::icons::{self, Icon};
 use crate::theme::Tokens;
 
 /// Up and Down change a number by this much, and by [`BIG_STEP`] with Shift.
@@ -149,6 +150,20 @@ pub fn button(ui: &mut egui::Ui, id: Id, label: &str, hover: &str, enabled: bool
         let color = if enabled { visuals.text_color() } else { ui.visuals().weak_text_color() };
         ui.painter().rect(rect.expand(visuals.expansion), visuals.corner_radius, visuals.weak_bg_fill, visuals.bg_stroke, StrokeKind::Inside);
         ui.painter().galley_with_override_text_color(rect.center() - galley.size() / 2.0, galley, color);
+    }
+    enabled && response.on_hover_text(hover).clicked()
+}
+
+/// A square push button showing a drawn icon (`crate::icons`) instead of a label.
+pub fn icon_button(ui: &mut egui::Ui, id: Id, icon: Icon, hover: &str, enabled: bool, selected: bool) -> bool {
+    let side = ui.spacing().interact_size.y;
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(side, side), Sense::hover());
+    let response = ui.interact(rect, id, if enabled { Sense::click() } else { Sense::hover() });
+    if ui.is_rect_visible(rect) {
+        let visuals = ui.style().interact_selectable(&response, selected);
+        let color = if enabled { visuals.text_color() } else { ui.visuals().weak_text_color() };
+        ui.painter().rect(rect.expand(visuals.expansion), visuals.corner_radius, visuals.weak_bg_fill, visuals.bg_stroke, StrokeKind::Inside);
+        icons::paint(ui.painter(), rect.shrink(side * 0.18), icon, color);
     }
     enabled && response.on_hover_text(hover).clicked()
 }

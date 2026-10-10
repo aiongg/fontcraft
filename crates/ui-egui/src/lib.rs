@@ -20,6 +20,7 @@ pub mod app;
 pub mod canvas;
 pub mod control;
 pub mod dialogs;
+pub mod icons;
 pub mod panels;
 pub mod shell;
 pub mod state;
@@ -47,6 +48,8 @@ mod panels_tests;
 mod stroke_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod toolbar_tests;
 #[cfg(test)]
 mod tools_tests;
 #[cfg(test)]

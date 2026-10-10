@@ -191,6 +191,12 @@ pub struct Tokens {
     /// A result's badge, and how far up and right of the reported spot it sits.
     pub audit_badge_radius: f32,
     pub audit_badge_offset: f32,
+    /// Edit View's toolbar: a button's side, its icon's side, the space between buttons and the
+    /// width of a shared button's menu.
+    pub toolbar_button: f32,
+    pub toolbar_icon: f32,
+    pub toolbar_gap: f32,
+    pub toolbar_menu_width: f32,
 }
 
 impl Tokens {
@@ -310,6 +316,10 @@ impl Tokens {
             audit_ring_width: 1.5,
             audit_badge_radius: 5.0,
             audit_badge_offset: 14.0,
+            toolbar_button: 28.0,
+            toolbar_icon: 18.0,
+            toolbar_gap: 2.0,
+            toolbar_menu_width: 200.0,
         }
     }
 

@@ -19,6 +19,7 @@ pub mod pickers;
 pub mod selection;
 pub mod status_bar;
 pub mod tabs;
+pub mod toolbar;
 pub mod transform;
 pub mod view;
 
