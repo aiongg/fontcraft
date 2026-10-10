@@ -381,6 +381,15 @@ fn glyph_data_lookup_and_search() {
     assert!(r["results"].as_array().unwrap().iter().any(|x| x["name"] == "Zhe-cy" && x["unicode"] == "0416"));
     assert!(r["count"].as_u64().unwrap() <= 50);
     refused(&mut s, "glyphData.search", json!({"query": "a", "sortBy": "size"}));
+    // An empty query lists the whole database from the start of the sort order.
+    let all = run(&mut s, "glyphData.search", json!({"query": "", "limit": 5}));
+    assert_eq!(all["count"], 5);
+    let by_code = run(&mut s, "glyphData.search", json!({"query": " ", "sortBy": "unicode", "limit": 3}));
+    let codes: Vec<&str> = by_code["results"].as_array().unwrap().iter().map(|r| r["unicode"].as_str().unwrap()).collect();
+    assert_eq!(codes.len(), 3);
+    assert!(codes.windows(2).all(|w| u32::from_str_radix(w[0], 16).unwrap() < u32::from_str_radix(w[1], 16).unwrap()), "{codes:?}");
+    let names: Vec<&str> = all["results"].as_array().unwrap().iter().map(|r| r["name"].as_str().unwrap()).collect();
+    assert!(names.windows(2).all(|w| w[0] <= w[1]), "sorted by name: {names:?}");
 
     // Both work without a document too.
     let mut empty = Session::new();

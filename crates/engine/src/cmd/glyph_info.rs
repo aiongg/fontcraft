@@ -244,7 +244,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Search Glyph Data",
             [],
             None,
-            "{query: string, sortBy?: \"name\" | \"unicode\" | \"category\" | \"subCategory\" | \"script\" | \"description\" | \"production\", limit?: 1..10000 (default 10000)} glyph data records whose name, description or hex code point contains the query (ignoring case), or whose character it is; custom records first shadow built-in ones. The query is at most 256 bytes → {results: [{name, unicode, category, subCategory, script, case, direction, production, description, altNames, legacyUnicode}], count}",
+            "{query: string, sortBy?: \"name\" | \"unicode\" | \"category\" | \"subCategory\" | \"script\" | \"description\" | \"production\", limit?: 1..10000 (default 10000)} glyph data records whose name, description or hex code point contains the query (ignoring case), or whose character it is; an empty query gives every record, up to limit. Custom records shadow built-in ones. The query is at most 256 bytes → {results: [{name, unicode, category, subCategory, script, case, direction, production, description, altNames, legacyUnicode}], count}",
             always,
             search
         ),
@@ -1030,8 +1030,8 @@ fn record_json(r: &Record) -> Value {
 fn search(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("glyphData.search", v)?;
     let query = p.str("query")?;
-    if query.trim().is_empty() || query.len() > MAX_QUERY_BYTES {
-        return Err(p.bad(format!("`query` must be from 1 to {MAX_QUERY_BYTES} bytes and not blank")));
+    if query.len() > MAX_QUERY_BYTES {
+        return Err(p.bad(format!("`query` must be at most {MAX_QUERY_BYTES} bytes")));
     }
     let sort_by = match p.opt_str("sortBy")? {
         None => None,

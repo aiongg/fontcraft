@@ -1,7 +1,8 @@
 //! Searching the database (`glyphData.search`; the guess on that row).
 //!
 //! A query matches a record when it is a case-insensitive substring of the name, the
-//! description or the hex code point, or when it is the record's character itself.
+//! description or the hex code point, or when it is the record's character itself. An empty
+//! query matches every record.
 
 use crate::GlyphData;
 use crate::names::code_point_name;
@@ -40,6 +41,7 @@ impl SortBy {
 }
 
 struct Query {
+    all: bool,
     lower: String,
     upper_hex: String,
     character: Option<u32>,
@@ -48,7 +50,7 @@ struct Query {
 impl Query {
     fn new(text: &str) -> Option<Query> {
         let text = text.trim();
-        if text.is_empty() || text.len() > MAX_QUERY_BYTES {
+        if text.len() > MAX_QUERY_BYTES {
             return None;
         }
         let mut chars = text.chars();
@@ -57,10 +59,13 @@ impl Query {
             _ => None,
         };
         let hex = text.strip_prefix("U+").or_else(|| text.strip_prefix("u+")).unwrap_or(text);
-        Some(Query { lower: text.to_lowercase(), upper_hex: hex.to_ascii_uppercase(), character })
+        Some(Query { all: text.is_empty(), lower: text.to_lowercase(), upper_hex: hex.to_ascii_uppercase(), character })
     }
 
     fn matches(&self, name: &str, description: Option<&str>, unicode: Option<u32>) -> bool {
+        if self.all {
+            return true;
+        }
         if let Some(cp) = unicode
             && (self.character == Some(cp) || format!("{cp:04X}").contains(&self.upper_hex))
         {

@@ -195,11 +195,8 @@ fn key(app: &FontcraftApp, query: &str, sort_by: Option<Column>) -> Key {
     Key { query: query.to_string(), sort_by, data }
 }
 
-/// Runs the search for `key`. A blank query shows no rows: the search needs text.
+/// Runs the search for `key`. A blank query lists the whole database, up to [`MAX_ROWS`].
 fn search(app: &mut FontcraftApp, key: Key) -> Results {
-    if key.query.trim().is_empty() {
-        return Results { key: Some(key), rows: Vec::new(), error: None };
-    }
     match app.session.execute("glyphData.search", &search_params(&key.query, key.sort_by)) {
         Ok(v) => {
             let rows = v.get("results").and_then(Value::as_array).map(|a| a.iter().filter_map(Row::of).collect()).unwrap_or_default();
@@ -418,8 +415,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             ui.horizontal(|ui| {
                 let note = match &gi.results.error {
                     Some(e) => e.clone(),
-                    None if gi.query.trim().is_empty() => "Type a glyph name, a character or a code point".to_string(),
-                    None if gi.results.rows.len() >= MAX_ROWS => format!("The first {MAX_ROWS} matches"),
+                    None if gi.results.rows.len() >= MAX_ROWS && gi.query.trim().is_empty() => {
+                        format!("The first {MAX_ROWS} records; search to find the others, {} selected", gi.selected.len())
+                    }
+                    None if gi.results.rows.len() >= MAX_ROWS => format!("The first {MAX_ROWS} matches, {} selected", gi.selected.len()),
                     None => format!("{} matches, {} selected", gi.results.rows.len(), gi.selected.len()),
                 };
                 let color = if gi.results.error.is_some() { tokens.error_text } else { tokens.text_dim };

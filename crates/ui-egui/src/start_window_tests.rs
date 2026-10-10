@@ -99,6 +99,13 @@ fn glyph_info_shows_the_search_selects_rows_and_adds_them_as_the_command_does() 
     assert_eq!(rows, again);
     assert!(app.state.glyph_info.selected.iter().all(|n| again.contains(n)));
 
+    // An empty field lists the whole database, as the empty query does.
+    let shown = app.run("window.glyphInfo", &json!({"query": "", "sortBy": "name"})).unwrap();
+    let all = app.run("glyphData.search", &json!({"query": "", "sortBy": "name", "limit": 10000})).unwrap();
+    assert_eq!(shown["count"], all["count"]);
+    assert_eq!(all["count"], json!(10_000), "the database has more records than the window lists");
+    assert_eq!(app.state.glyph_info.results.rows.first().map(|r| r.name.clone()), Some(result_names(&all)[0].clone()));
+
     // Refused parameters change nothing.
     let before = app.state.glyph_info.clone();
     assert!(app.run("window.glyphInfo", &json!({"sortBy": "size"})).is_err());

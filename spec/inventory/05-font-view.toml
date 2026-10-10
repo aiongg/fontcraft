@@ -287,7 +287,7 @@ status = "handbook"
 notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) lists the columns: glyph name, Unicode value, category, subcategory, script and composition. Multiple rows are selected with Shift or Cmd. The composition column is left out until M6 provides decomposition data. Documented, not yet observed. FontCraft: crates/ui-egui/src/shell/glyph_info.rs; the table shows what glyphData.search returns for the search field and the sorted column, so the window and the headless query agree. Add to Font runs glyphInfo.addToFont with the selected names."
 guesses = [
   "The table adds a Description column (ours). Settled by observing the window.",
-  "With an empty search field the table is empty and asks for a name, a character or a code point: glyphData.search needs a query, and the whole database (with every CJK ideograph) is too long a list to be useful. Settled by observing the window when it opens.",
+  "With an empty search field the table lists the whole database in the sorted order, up to the search's limit of 10,000 rows (the CJK ideographs past it are reached by searching). Settled by observing the window when it opens.",
   "Sorting is ascending only; a second click on the sorted header keeps the order. Settled by observing a second header click.",
   "Shift+click selects the rows from the last clicked one; Cmd+click adds or removes one row. Settled by observing the window.",
 ]
@@ -691,7 +691,7 @@ status = "inferred"
 notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) says the Glyph Info search matches glyph names, Unicode values and characters, and that typing a script suffix such as -deva lists that script's glyphs. The search is GlyphData::search in crates/glyphdata (M4.1); the command is registered with M4.3."
 guesses = [
   "A query matches as a case-insensitive substring of the name, the description, the hex code point, or equals the character. Settled by observation.",
-  "Results are sorted by name unless another field is asked for, and at most 10,000 are returned.",
+  "Results are sorted by name unless another field is asked for, and at most 10,000 are returned. An empty query matches every record.",
 ]
 
 [[command]]
