@@ -205,8 +205,8 @@ fn the_window_takes_clicks_typing_return_and_escape() {
     let mut app = square_app();
     let ctx = egui::Context::default();
     open_round_corners(&mut app);
-    // The window sizes itself over the first frames.
-    for _ in 0..3 {
+    // The dialog sizes itself over the first frames.
+    for _ in 0..5 {
         frame(&ctx, &mut app, Vec::new());
     }
     let field = ctx.read_response(dialogs::form::widget_id("radius")).expect("the radius field is drawn").rect.right_center() - egui::vec2(2.0, 0.0);

@@ -19,8 +19,17 @@ impl Window {
 
     /// One frame with these events; the shapes it drew, nested lists flattened.
     fn frame(&self, app: &mut FontcraftApp, events: Vec<Event>) -> Vec<Shape> {
-        let input =
-            egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
+        self.frame_at(app, None, events)
+    }
+
+    /// One frame at `time` (seconds) with these events.
+    fn frame_at(&self, app: &mut FontcraftApp, time: Option<f64>, events: Vec<Event>) -> Vec<Shape> {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))),
+            events,
+            time,
+            ..Default::default()
+        };
         let mut output = self.ctx.run_ui(input, |ui| app.ui(ui));
         output.textures_delta.clear();
         let mut out: Vec<Shape> = output.shapes.into_iter().map(|c| c.shape).collect();
@@ -191,4 +200,36 @@ fn a_badge_keeps_clear_of_the_outline_it_reports() {
         let gap = badge.distance(a + (b - a) * t);
         assert!(gap > app.tokens.audit_badge_radius, "the badge for {at:?} at {badge:?} lies on the line ({gap} points away)");
     }
+}
+
+#[test]
+fn an_open_dialog_keeps_canvas_tooltips_away() {
+    let mut app = curve_app();
+    add_open_path(&mut app, 100.0);
+    let w = Window::new();
+    w.idle(&mut app);
+    app.run("audit.run", &json!({"profile": "outlines", "glyphs": ["A"]})).unwrap();
+    app.run("audit.toggleMarkers", &json!({"on": true})).unwrap();
+    w.idle(&mut app);
+    let markers = app.state.audit.shown.markers.clone();
+    let font = app.session.font().unwrap();
+    let layer = font.glyph("A").unwrap().layer(&font.masters[0].id).unwrap().clone();
+    let view = tools_glue::current_view(&app).unwrap();
+    let (_, badge) = audit_markers::badges(&layer, &markers, view, &app.tokens)[0].unwrap();
+    let message = markers[0].message.clone();
+    let shows_tooltip = |app: &mut FontcraftApp, start: f64| {
+        let mut drawn = false;
+        for k in 0..20 {
+            let events = if k == 0 { vec![Event::PointerMoved(badge)] } else { Vec::new() };
+            let shapes = w.frame_at(app, Some(start + f64::from(k) * 0.1), events);
+            drawn |= shapes.iter().any(|s| matches!(s, Shape::Text(t) if t.galley.text() == message));
+        }
+        drawn
+    };
+    assert!(shows_tooltip(&mut app, 0.0), "hovering a badge shows its message");
+
+    // Export previews nothing, so the markers stay current.
+    app.run("file.export", &json!({})).unwrap();
+    w.frame_at(&mut app, Some(10.0), vec![Event::PointerMoved(Pos2::new(5.0, 790.0))]);
+    assert!(!shows_tooltip(&mut app, 11.0), "no canvas tooltip while a dialog is open");
 }

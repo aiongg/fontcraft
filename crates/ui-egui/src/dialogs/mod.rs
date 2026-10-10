@@ -6,6 +6,9 @@
 //! the dialog opened on. Agents can skip the dialog and run the command with the same
 //! parameters: the result is the same font.
 //!
+//! A dialog is modal: a light backdrop (`dialog_backdrop`) covers the window behind it, which
+//! takes no pointer input, hover or tooltip until the dialog closes.
+//!
 //! A dialog whose command acts outside the font (exporting writes files) has
 //! [`Mode::RunOnOk`]: nothing runs while it is open, OK runs the command once as a menu item
 //! would, and a command that fails keeps the dialog open with its message.
@@ -952,12 +955,16 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
     let can_choose = app.picker.is_some();
     let mut events = Vec::new();
     let mut menu_events = Vec::new();
-    egui::Window::new(d.title.as_str())
-        .id(egui::Id::new("fontcraft-dialog"))
-        .collapsible(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, tokens.dialog_top))
+    // A modal area: the window behind it takes no pointer input, so no canvas hover or tooltip
+    // reacts while the dialog is open.
+    let area = egui::Modal::default_area(egui::Id::new("fontcraft-dialog")).anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, tokens.dialog_top));
+    egui::Modal::new(egui::Id::new("fontcraft-dialog"))
+        .area(area)
+        .backdrop_color(tokens.dialog_backdrop)
+        .frame(egui::Frame::window(ui.style()))
         .show(ui.ctx(), |ui| {
+            ui.label(egui::RichText::new(d.title.as_str()).strong());
+            ui.add_space(tokens.dialog_spacing);
             if let Some(tabs) = &d.tabs {
                 ui.horizontal(|ui| {
                     for (i, tab) in tabs.list.iter().enumerate() {
