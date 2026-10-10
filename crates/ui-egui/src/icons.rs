@@ -458,22 +458,30 @@ fn draw(pen: &mut Pen, icon: Icon) {
             pen.closed(&[(0.38, 0.38), (0.86, 0.38), (0.86, 0.86), (0.38, 0.86)]);
             pen.rect_fill((0.38, 0.38), (0.62, 0.62), 0.0);
         }
-        // Joins: a band turning a corner, filled.
+        // Joins: a wide band turning a corner, filled. Outer edge at 0.1, inner edge at 0.54, the
+        // path along 0.32; the corner shape is the only difference between them.
         Icon::JoinMiter => {
-            pen.rect_fill((0.16, 0.16), (0.44, 0.9), 0.0);
-            pen.rect_fill((0.16, 0.16), (0.9, 0.44), 0.0);
+            pen.rect_fill((0.1, 0.1), (0.54, 0.92), 0.0);
+            pen.rect_fill((0.1, 0.1), (0.92, 0.54), 0.0);
         }
         Icon::JoinBevel => {
-            pen.rect_fill((0.16, 0.3), (0.44, 0.9), 0.0);
-            pen.rect_fill((0.3, 0.16), (0.9, 0.44), 0.0);
-            pen.fill(&[(0.16, 0.3), (0.3, 0.16), (0.44, 0.16), (0.44, 0.44), (0.16, 0.44)]);
+            pen.rect_fill((0.1, 0.32), (0.54, 0.92), 0.0);
+            pen.rect_fill((0.32, 0.1), (0.92, 0.54), 0.0);
+            pen.fill(&[(0.1, 0.32), (0.32, 0.1), (0.54, 0.1), (0.54, 0.54), (0.1, 0.54)]);
         }
         Icon::JoinRound | Icon::JoinRoundFull => {
-            pen.rect_fill((0.16, 0.3), (0.44, 0.9), 0.0);
-            pen.rect_fill((0.3, 0.16), (0.9, 0.44), 0.0);
-            pen.dot((0.3, 0.3), 0.14);
+            pen.rect_fill((0.1, 0.32), (0.54, 0.92), 0.0);
+            pen.rect_fill((0.32, 0.1), (0.92, 0.54), 0.0);
+            pen.dot((0.32, 0.32), 0.22);
             if icon == Icon::JoinRoundFull {
-                pen.dot((0.44, 0.44), 0.08);
+                // The inner corner filled with a quarter-round fillet of the same radius.
+                let (c, r) = ((0.76, 0.76), 0.22);
+                let arc: Vec<P> = (0..=8).map(|i| PI + PI / 2.0 * i as f32 / 8.0).map(|a| (c.0 + r * a.cos(), c.1 + r * a.sin())).collect();
+                for pair in arc.windows(2) {
+                    if let [a, b] = pair {
+                        pen.fill(&[(0.54, 0.54), *a, *b]);
+                    }
+                }
             }
         }
         // Caps: the outline of a band's end, with its end node.
