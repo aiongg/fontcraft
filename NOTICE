@@ -9,9 +9,23 @@ ArtCraft name and logos are trademarks of the ArtCraft Team and are not used her
 
 Third-party material
 
-This repository bundles no third-party assets today. When it does, each file gets a row in
-ASSETS.md (path, author, source, licence), its licence text sits next to it, and it is summarised
-here. `cargo xtask assets` fails on an asset without a row.
+Each bundled third-party file has a row in ASSETS.md (path, author, source, licence), its
+licence text sits next to it, and it is summarised here. `cargo xtask assets` fails on an asset
+without a row.
+
+  crates/glyphdata/data/glyphdata.bin, the built-in glyph database, is compiled from three
+  sources (pinned in xtask/glyphdata.toml); the licence texts are in the same folder:
+
+  - GlyphsInfo (https://github.com/schriftgestalt/GlyphsInfo), GlyphData.xml and
+    GlyphData_Ideographs.xml at commit 1f126bd1f07cc6a40561900edf87132ea6233967.
+    BSD 3-Clause License, Copyright (c) 2024, Georg Seifert (LICENSE-GlyphsInfo.txt, which also
+    carries the Adobe Glyph List notice of its README).
+  - The Adobe Glyph List and AGLFN (https://github.com/adobe-type-tools/agl-aglfn), glyphlist.txt
+    and aglfn.txt at commit 4036a9ca80a62f64f9de4f7321a9a045ad0ecfd6. BSD 3-Clause License,
+    Copyright 2002-2019 Adobe (LICENSE-AGL.txt).
+  - The Unicode Character Database 17.0.0 (https://www.unicode.org/Public/17.0.0/ucd/):
+    UnicodeData.txt, Scripts.txt and extracted/DerivedBidiClass.txt. Unicode License v3,
+    Copyright (c) 1991-2026 Unicode, Inc. (LICENSE-Unicode.txt).
 
 Rust dependencies (kurbo, write-fonts, read-fonts, skrifa, egui, eframe, serde, …) are fetched
 through crates.io under their own permissive licences (MIT and/or Apache-2.0 for the ones named
@@ -131,7 +145,13 @@ bundled, the file says so in its header and the project is listed here with its 
   metrics_and_limits.rs, vertical_metrics.rs, head.rs, os2.rs, post.rs); the OS/2 Unicode range
   table and code page rules (crates/compile/src/ranges.rs, from fontbe/src/os2.rs, which takes
   them from fontTools and ufo2ft, both MIT); the format defaults of master metrics and the
-  `*origin` anchor (crates/model/src/resolve.rs, from glyphs2fontir/src/source.rs).
+  `*origin` anchor (crates/model/src/resolve.rs, from glyphs2fontir/src/source.rs). The glyph
+  database's synthesis rules (crates/glyphdata/src/data.rs: suffix and ligature splitting with the
+  script suffix distributed, ligature categories, the general-category fallback, and production
+  names built from parts) are ported from glyphs-reader/src/glyphdata.rs (1.0.0), which ports
+  them from glyphsLib's glyphdata.py (Apache License 2.0); the Adobe Glyph List name parsing
+  (crates/glyphdata/src/agl.rs) from fontdrasil/src/agl.rs, which ports fontTools' agl.toUnicode
+  (MIT License).
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

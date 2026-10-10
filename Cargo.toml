@@ -32,6 +32,7 @@ fontcraft-tools = { path = "crates/tools" }
 fontcraft-testkit = { path = "crates/testkit" }
 fontcraft-pathops = { path = "crates/pathops" }
 fontcraft-render = { path = "crates/render" }
+fontcraft-glyphdata = { path = "crates/glyphdata" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }

@@ -20,9 +20,9 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
               │
    L4   tools: pointer and key events → commands (begin / preview / commit)        (4 tools today)
    L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (8 of 9 today)
-   L2   pathops · interp · spacing · components · features · hinting · audit · plugins   (pathops, audit today)
+   L2   pathops · interp · spacing · components · features · hinting · audit · glyphquery · plugins   (pathops, audit today)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
-   L0   geom (kurbo)  ·  standalone format crates: plist, cff, ttinstr, container, glyphdata  (geom, plist, cff, container today)
+   L0   geom (kurbo)  ·  standalone crates: plist, cff, ttinstr, container, glyphdata  (all but ttinstr today)
 ```
 
 Everything a person does goes through `app.run(id, params)`, which is the same call the control
@@ -38,7 +38,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 |---|---|---|---|
 | L0 | `geom` | today | kurbo re-exports; cubic → quadratic; rounding. Later: extremes, inflections, curve fitting |
 | L0 alone | `plist` | today (OpenStep); XML in M1 | OpenStep and XML property lists, reading and writing, keeping spelling, key order and layout (for `.glyphs` and UFO) |
-| L0 alone | `glyphdata` | M4 | glyph name database: Unicode, category, script, case, production name; built from GlyphData, AGL and the UCD |
+| L0 alone | `glyphdata` | today (M4.1) | the glyph database: record lookup by nice, alternative and production name and code point, synthesis for suffixes, ligatures and code-point names, production names, nice and canonical names, the naming rules, direction, the default sort key, search, and custom `GlyphData.xml` files read within limits. Built-in tables (`data/glyphdata.bin`) compiled from GlyphsInfo, the Adobe Glyph List and the UCD by `cargo xtask glyphdata`; equal to fontc's and glyphsLib's answers on the cross-check apart from listed causes |
 | L0 alone | `cff` | today (M2.3a: static CFF writer) | CFF tables from plain data: DICTs, INDEXes, charsets, Type 2 charstrings with the reference's specialiser, width optimisation and FontBBox; byte-identical to fontTools on the cross-check. Later: subroutiniser, hints (M10), CFF2 (M9), CID-keyed fonts (M12). Not in any crate we can use |
 | L0 alone | `container` | today (M2.4a: WOFF 1, untransformed WOFF2) | WOFF and WOFF2 wrapping and unwrapping of sfnt fonts, as fontTools writes them; `crates/decompile` reads WOFF through it. Later: the WOFF2 glyf/loca and hmtx transforms (M2.4b), collections (M12) |
 | L0 alone | `ttinstr` | M10 | TrueType instruction assembler and disassembler |
@@ -49,6 +49,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L2 | `components` | M6 | automatic alignment, anchor propagation, smart, corner, cap and segment components |
 | L2 | `features` | M8 | feature-code preprocessing (tokens), automatic features, compiling (on fea-rs), kern and mark writers |
 | L2 | `hinting` | M10 | PostScript and TrueType hinting models and autohinters |
+| L2 | `glyphquery` | M4.5 | the glyph predicate language: smart-filter rule trees, the Custom rule, global-guide filters and, in M8, the feature-code glyph tokens |
 | L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them |
 | L2 | `plugins` | M13 | sandboxed WebAssembly plug-ins (same manifest as the sibling apps) |
 | L3 | `format` | today | the native `.fontcraft` format, atomic writes |

@@ -7,11 +7,14 @@ mod audit;
 mod brands;
 mod codecs;
 mod corpus;
+mod glyphdata;
+mod glyphdata_check;
 mod guesses;
 mod layers;
 mod overlap;
 mod parity;
 mod roundtrip;
+mod sha256;
 mod spec;
 
 use std::path::{Path, PathBuf};
@@ -37,6 +40,10 @@ commands:
   wasm            cargo check --target wasm32-unknown-unknown for every crate that must run in the browser
   corpus [--fetch]
                   list the pinned real-file test corpora; --fetch downloads them into corpus/ (git-ignored)
+  glyphdata [--fetch] [--generate] [--check [-v]]
+                  --fetch downloads the pinned glyph database sources into corpus/glyphdata/ (git-ignored);
+                  --generate rebuilds crates/glyphdata/data/glyphdata.bin; --check compares the database
+                  with fontc's glyphs-reader and glyphsLib (known differences: crates/glyphdata/crosscheck/allow.toml)
   roundtrip [--mode plist|model|native] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
                   read every corpus source and write it back; count byte-identical results
                   (known differences with a reason: xtask/roundtrip-allow.toml)
@@ -61,6 +68,7 @@ fn main() -> ExitCode {
         Some("layers") => cmd_layers(),
         Some("wasm") => cmd_wasm(),
         Some("corpus") => corpus::run(&root(), rest.contains(&"--fetch")),
+        Some("glyphdata") => glyphdata::run(&root(), &rest),
         Some("roundtrip") => roundtrip::run(&root(), &rest),
         Some("audit") => audit::run(&root(), &rest),
         Some("overlap") => overlap::run(&root(), &rest),

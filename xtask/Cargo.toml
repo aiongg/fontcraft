@@ -17,6 +17,7 @@ serde_json.workspace = true
 toml = "1"
 fontcraft-engine.workspace = true
 fontcraft-geom.workspace = true
+fontcraft-glyphdata = { workspace = true, features = ["build"] }
 fontcraft-oracle.workspace = true
 fontcraft-pathops.workspace = true
 fontcraft-plist.workspace = true

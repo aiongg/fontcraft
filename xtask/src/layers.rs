@@ -26,6 +26,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("plist", Class::Standalone),
     ("cff", Class::Standalone),
     ("container", Class::Standalone),
+    ("glyphdata", Class::Standalone),
     ("model", Class::Layer(1)),
     ("pathops", Class::Layer(2)),
     ("audit", Class::Layer(2)),

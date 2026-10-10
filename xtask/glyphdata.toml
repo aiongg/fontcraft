@@ -1,0 +1,32 @@
+# Sources of the built-in glyph database, crates/glyphdata/data/glyphdata.bin.
+#
+# `cargo xtask glyphdata --fetch` downloads them into corpus/glyphdata/ (git-ignored),
+# `--generate` rebuilds the blob and the licence files beside it, `--check` compares the database
+# with the oracles. A git commit names its content; the Unicode files are checked by SHA-256.
+
+[glyphsinfo]
+repo = "https://github.com/schriftgestalt/GlyphsInfo"
+# 2026-04-28. Its two XML files are the same blobs as glyphsLib 6.15.0's copies (fontmake's) and
+# glyphsLib 6.13.1's (which fontc glyphs-reader 1.0.0's tables were generated from).
+commit = "1f126bd1f07cc6a40561900edf87132ea6233967"
+licence = "BSD-3-Clause (LICENSE at this commit); README.md carries Adobe's BSD-3-Clause notice for the AGL"
+paths = ["GlyphData.xml", "GlyphData_Ideographs.xml", "LICENSE", "README.md"]
+
+[agl]
+repo = "https://github.com/adobe-type-tools/agl-aglfn"
+commit = "4036a9ca80a62f64f9de4f7321a9a045ad0ecfd6"
+licence = "BSD-3-Clause"
+paths = ["glyphlist.txt", "aglfn.txt", "LICENSE.md"]
+
+[ucd]
+# Unicode 17.0: every code point the pinned GlyphsInfo files use is assigned in 17.0 (14 are
+# unassigned in 17.0 and 18.0 alike), and general categories of code points assigned in 17.0 are
+# the same in 18.0. The licence text is committed as crates/glyphdata/data/LICENSE-Unicode.txt.
+version = "17.0.0"
+url = "https://www.unicode.org/Public/17.0.0/ucd/"
+licence = "Unicode-3.0"
+files = [
+  { path = "UnicodeData.txt", sha256 = "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c" },
+  { path = "Scripts.txt", sha256 = "9f5e50d3abaee7d6ce09480f325c706f485ae3240912527e651954d2d6b035bf" },
+  { path = "extracted/DerivedBidiClass.txt", sha256 = "4867b4b7f0731ed1bfcd34cc6251211ff1542541fce0734b6fbda139ee80b3a4" },
+]

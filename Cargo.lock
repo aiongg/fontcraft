@@ -914,6 +914,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-glyphdata"
+version = "0.0.1"
+dependencies = [
+ "miniz_oxide 0.8.9",
+]
+
+[[package]]
 name = "fontcraft-io-glyphs"
 version = "0.0.1"
 dependencies = [
@@ -4002,6 +4009,7 @@ version = "0.0.0"
 dependencies = [
  "fontcraft-engine",
  "fontcraft-geom",
+ "fontcraft-glyphdata",
  "fontcraft-io-glyphs",
  "fontcraft-io-ufo",
  "fontcraft-oracle",

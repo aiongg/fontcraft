@@ -1,7 +1,7 @@
 //! `cargo xtask assets`: every asset is attributed, and no font binary is in the repository.
 //!
-//! * Every file under `assets/` or under a `tests/data/` folder, and every image anywhere, must
-//!   have a row in `ASSETS.md`: a table row whose first cell is the file's path (or the path of a
+//! * Every file under `assets/`, under a `tests/data/` folder or under a crate's `data/` folder
+//!   (bundled data tables), and every image anywhere, must have a row in `ASSETS.md`: a table row whose first cell is the file's path (or the path of a
 //!   folder that holds it) in backticks.
 //! * Compiled fonts are never committed, anywhere: tests build the fonts they need in code, and
 //!   real fonts come from the pinned corpus (`cargo xtask corpus --fetch`, git-ignored). A font is
@@ -25,6 +25,11 @@ fn extension(path: &str) -> String {
 fn is_font_source(path: &str) -> bool {
     FONT_SOURCES.contains(&extension(path).as_str())
         || path.split('/').any(|part| FONT_SOURCES.iter().any(|e| part.to_ascii_lowercase().ends_with(&format!(".{e}"))))
+}
+
+/// A file a crate bundles as data: `crates/<name>/data/…`.
+fn is_crate_data(path: &str) -> bool {
+    path.strip_prefix("crates/").and_then(|rest| rest.split_once('/')).is_some_and(|(_, rest)| rest.starts_with("data/"))
 }
 
 fn is_fixture(path: &str) -> bool {
@@ -57,7 +62,7 @@ pub fn problems(files: &[String], assets_md: &str, starts_with_font_magic: &dyn 
             out.push(format!("{path}: font sources may be committed only as fixtures under a tests/data/ folder"));
             continue;
         }
-        let needs_row = path.starts_with("assets/") || is_fixture(path) || IMAGES.contains(&extension(path).as_str());
+        let needs_row = path.starts_with("assets/") || is_fixture(path) || is_crate_data(path) || IMAGES.contains(&extension(path).as_str());
         if needs_row && !is_listed(path) {
             out.push(format!("{path}: no row in ASSETS.md (path, what, author, source, licence)"));
         }
@@ -109,6 +114,8 @@ mod tests {
             "tests/data/top.fea",
             "packaging/icon.png",
             "docs/renamed.bin",
+            "crates/z/data/table.bin",
+            "crates/z/src/data/mod.rs",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -124,6 +131,7 @@ mod tests {
             "tests/data/top.fea: no row",
             "packaging/icon.png: no row",
             "docs/renamed.bin: compiled fonts",
+            "crates/z/data/table.bin: no row",
             "ASSETS.md lists `gone/old.svg`",
         ];
         assert_eq!(found.len(), expect.len(), "{found:?}");
