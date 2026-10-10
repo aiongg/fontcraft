@@ -2,7 +2,8 @@
 #   Glyphs, Managing the Glyph Set, Glyph Properties, Names & Unicode, Batch-Processing, Filtering
 #   Font View, Glyph Order, Images).
 # Supporting sources (permissive licences, read for facts about the glyph database):
-#   refs/GlyphsInfo (BSD-3-Clause): README.md, the GlyphData.xml DTD and attribute vocabulary,
+#   refs/GlyphsInfo (MIT until 2024-11-22, BSD-3-Clause after; its README carries the Adobe Glyph List's BSD-3-Clause notice): README.md,
+#     the GlyphData.xml DTD and attribute vocabulary,
 #     "Convert to tabbed file.py" (field list of the tabular form)
 #   refs/agl-aglfn (BSD-3-Clause): README.md, glyphlist.txt / aglfn.txt record formats
 #   refs/fontc glyphs-reader/src/glyphdata.rs (Apache-2.0): name -> category / production-name rules
@@ -146,6 +147,9 @@ milestone = "M4"
 summary = "Our query for agents: returns view mode, cell size, sort column, selected sidebar entries, search query and options, the selected glyph names, the visible glyph names in display order, and the three counts shown in the status area."
 ref = "Font View › Filtering Font View"
 status = "inferred"
+guesses = [
+  "Our own query for agents; there is no reference behaviour to settle.",
+]
 
 # ───────────────────────────── Adding, duplicating, removing glyphs ─────────────────────────────
 
@@ -158,9 +162,16 @@ kind = "engine"
 params = "{text: string, onExisting?: \"ask\" | \"replace\" | \"keep\" | \"cancel\"}"
 area = "font-view"
 milestone = "M4"
-summary = "Opens a dialog with one text field and adds a glyph for every space-separated item: a glyph name, a literal character, a uniXXXX / uXXXXX value, a colon range, or a glyph recipe. Items given as a character or Unicode name are converted to the database nice name; names already in the font trigger the Replace / Keep Existing / Cancel dialog."
-ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs"
+summary = "Opens a dialog with one text field and adds a glyph for every item, items separated by spaces, line breaks or tabs: a glyph name, a literal character, a uniXXXX / uXXXXX value, a colon range, or a glyph recipe. Items given as a character, a Unicode name or a legacy name are converted to the database nice name; names already in the font trigger the Replace / Keep Existing / Cancel dialog."
+ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs; tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn)"
 status = "handbook"
+notes = "Separators and the conversion of legacy names (uni0421, dotlessi) come from the tutorial, checked in the M4 planning pass. Recipe items (component=glyph, base+mark=glyph) are built with M6, which owns components and anchors; until then they are listed in the result's `skipped`. Documented, not yet observed."
+guesses = [
+  "A comma is not a separator: an item containing one is an invalid name and is reported. Settled by observation (05 question 7).",
+  "A range covers every code point from the first endpoint's to the second's; code points Unicode does not assign, and surrogates, are skipped, and one range holds at most 65,536 code points. Settled by observation (05 question 7).",
+  "An invalid item is reported in `skipped` and the valid items are still added. Settled by observation.",
+  "Replace puts a fresh empty glyph with database properties in the old glyph's place in the glyph order; kerning and other references by name stay. Settled by observation (05 question 8).",
+]
 
 [[command]]
 id = "glyph.newGlyph"
@@ -174,6 +185,10 @@ milestone = "M4"
 summary = "Adds one empty glyph called newGlyph. The plus button at the bottom left of Font View runs the same command. The source does not say what name is used when newGlyph already exists."
 ref = "Font View › Adding New Glyphs › Adding a Single Glyph"
 status = "handbook"
+notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) adds that the new glyph's name is selected for typing, and that a typed legacy name or character becomes the nice name on Return; the shell's inline rename runs glyph.rename. Documented, not yet observed."
+guesses = [
+  "When newGlyph is taken the new glyph is named newGlyph.001, newGlyph.002 and so on, the rule documented for duplicated and pasted glyphs. Settled by observation (05 question 6).",
+]
 
 [[command]]
 id = "glyph.duplicateGlyph"
@@ -184,9 +199,14 @@ kind = "engine"
 params = "{glyphs?: [names], suffix?: string}"
 area = "font-view"
 milestone = "M4"
-summary = "Makes a copy of every selected glyph in the same font. This chapter only lists the command and shortcut; from memory the copy gets the next free numeric suffix (A.001, A.002 …), the same pattern the chapter documents for name clashes on paste."
-ref = "Font View › Batch-Processing › Batch Commands"
+summary = "Makes a copy of every selected glyph in the same font, named with the first free three-digit suffix (A.001, then A.002 when A.001 is taken). The copies become the selection."
+ref = "Font View › Batch-Processing › Batch Commands; tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn)"
 status = "handbook"
+notes = "The naming rule and the new selection come from the tutorial, checked in the M4 planning pass (05 question 6). Documented, not yet observed."
+guesses = [
+  "Each copy is placed directly after its original in the glyph order. Settled by observation.",
+  "A copy of a suffixed glyph gets one more suffix (A.ss01 gives A.ss01.001). Settled by observation.",
+]
 
 [[command]]
 id = "glyph.removeGlyph"
@@ -210,9 +230,15 @@ kind = "engine"
 params = "{glyphs?: [names]}"
 area = "font-view"
 milestone = "M4"
-summary = "Batch command on the selected glyphs. The chapter only lists it; from memory it re-reads each glyph's properties (nice name, Unicode values, category, subcategory, script, production name) from the glyph database and discards per-glyph deviations."
-ref = "Font View › Batch-Processing › Batch Commands"
-status = "memory"
+summary = "Batch command on the selected glyphs: re-derives each glyph's properties from the glyph database (built-in and custom), its name included. A legacy, production or alternative name (uni0416, ostroke) becomes the database nice name, and the Unicode values follow the name."
+ref = "Font Info › Other Settings › Use Custom Naming; Font View › Batch-Processing › Batch Commands; tutorial \"Getting your glyph names right\" (glyphsapp.com/learn)"
+status = "handbook"
+notes = "Checked against written sources in the M4 planning pass (it was a `memory` row). The handbook (Use Custom Naming) says the command updates the properties of the selected glyphs, the glyph name included. The tutorial says it synchronises names and Unicode values with the built-in database and respects custom glyph data; the tutorial \"Roll your own glyph data\" says legacy alternative names are updated to the nice name. Documented, not yet observed."
+guesses = [
+  "Stored overrides of category, subcategory, script, production name, case and direction are dropped, so those properties follow the database again; the sort name, tags, colour labels, note and export flag stay. Settled by observing a glyph with a custom category before and after the command (05 question 5).",
+  "With Use Custom Naming on, names are kept and only the other properties are updated. Settled by observation.",
+  "A rename the command makes goes through glyph.rename, so references follow it; a new name that is already taken leaves the glyph's name unchanged and is reported. Settled by observation.",
+]
 
 [[command]]
 id = "window.glyphInfo"
@@ -226,6 +252,7 @@ milestone = "M4"
 summary = "Opens the Glyph Info window: a searchable, sortable table of every entry in the glyph database."
 ref = "Font View › Names & Unicode › Glyph Info Database"
 status = "handbook"
+notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) lists the columns: glyph name, Unicode value, category, subcategory, script and composition. Multiple rows are selected with Shift or Cmd. The composition column is empty until M6 provides decomposition data. Documented, not yet observed."
 
 [[command]]
 id = "glyphInfo.addToFont"
@@ -278,6 +305,10 @@ milestone = "M4"
 summary = "Pastes copied glyphs over existing ones through a dialog with three modes (Glyphs With Same Name, Selected Glyphs, As Components) and, for the first two, a choice of which parts of each glyph to transfer. The menu item appears in place of Paste while Option is held."
 ref = "Font View › Copying Glyphs Between Files"
 status = "handbook"
+guesses = [
+  "Selected Glyphs pairs the copied glyphs, in copy order, with the selected targets in glyph order. Settled by observation (05 question 18).",
+  "Content of Active Layer writes into the target's layer for the master Font View shows. Settled by observation (05 question 18).",
+]
 
 # ───────────────────────────── Glyph properties ─────────────────────────────
 
@@ -306,6 +337,9 @@ milestone = "M4"
 summary = "Our query for agents: returns every property the inspector, List View and Selection Info show for each glyph, with a flag per property saying whether the value is stored in the file or resolved from the glyph database."
 ref = "Font View › Glyph Properties"
 status = "inferred"
+guesses = [
+  "Our own query for agents; there is no reference behaviour to settle.",
+]
 
 [[command]]
 id = "glyph.rename"
@@ -317,8 +351,13 @@ params = "{glyph: name, newName: string, updateInfo?: bool}"
 area = "font-view"
 milestone = "M4"
 summary = "Changes a glyph's name (click the name under a cell, in the Name column, or in the inspector). When the base name before the first dot changes, the database-derived properties (Unicode values, category and so on) are re-resolved; when only the dot suffix changes they are left alone. Fails if the new name is already taken."
-ref = "Font View › Names & Unicode › Renaming Glyphs"
+ref = "Font View › Names & Unicode › Renaming Glyphs; tutorial \"Getting your glyph names right\" (glyphsapp.com/learn)"
 status = "handbook"
+notes = "The tutorial adds that a Private Use Area value set on a glyph stays when the glyph is renamed to a name the database does not know. Documented, not yet observed."
+guesses = [
+  "Unicode values are replaced only when the new base name has a database code point; otherwise the stored values stay. Settled by observation (05 question 4).",
+  "Rename updates the font's references by name: components, kerning pairs, the glyphOrder parameter and metrics keys. Feature code is not rewritten; the result lists where the old name is still used. Settled by observation (05 question 9).",
+]
 
 [[command]]
 id = "glyph.setUnicodes"
@@ -384,6 +423,9 @@ milestone = "M4"
 summary = "Overrides the case of a glyph; null returns to the derived value. The chapter describes the property and its five values but does not say where it is edited, so the control placement is our design."
 ref = "Font View › Glyph Properties › Case"
 status = "inferred"
+guesses = [
+  "Case is edited in the Selection Info window and in List View's Case column; the handbook names no control for it. Settled by observation (05 question 15).",
+]
 
 [[command]]
 id = "glyph.setDirection"
@@ -397,6 +439,9 @@ milestone = "M4"
 summary = "Overrides a glyph's writing direction; null returns to the database value. The chapter describes the three values but not where the property is edited."
 ref = "Font View › Glyph Properties › Writing Direction"
 status = "inferred"
+guesses = [
+  "Writing direction is edited in the Selection Info window and in List View's Direction column; the handbook names no control for it. Settled by observation (05 question 15).",
+]
 
 [[command]]
 id = "glyph.setExport"
@@ -475,6 +520,9 @@ milestone = "M4"
 summary = "Removes one tag from every selected glyph (deleting its capsule in the Tags field). Whether picking an already checked tag in the context menu also removes it is not stated in the source."
 ref = "Font View › Glyph Properties › Tags"
 status = "inferred"
+guesses = [
+  "Deleting a capsule in the Tags field removes that tag from every selected glyph. Settled by observation.",
+]
 
 [[command]]
 id = "glyph.setSortName"
@@ -542,6 +590,9 @@ milestone = "M4"
 summary = "Our query: resolves a nice name, production name, alternative name, code point or character against the glyph database (custom entries first) and returns the full record, plus whether each field was found directly or synthesised from suffix, ligature or AGL rules."
 ref = "Font View › Names & Unicode › Glyph Info Database; GlyphsInfo GlyphData.xml"
 status = "inferred"
+guesses = [
+  "Our own query for agents; its answers must equal what the reference shows in Glyph Info and the inspector for the same name, which the oracles' copies of the data (fontc, glyphsLib) check.",
+]
 
 [[command]]
 id = "glyphData.search"
@@ -555,6 +606,10 @@ milestone = "M4"
 summary = "Our query behind the Glyph Info window's search field: returns database entries matching the text, optionally sorted by one field."
 ref = "Font View › Names & Unicode › Glyph Info Database"
 status = "inferred"
+notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) says the Glyph Info search matches glyph names, Unicode values and characters, and that typing a script suffix such as -deva lists that script's glyphs."
+guesses = [
+  "A query matches as a case-insensitive substring of the name, the description, the hex code point, or equals the character. Settled by observation.",
+]
 
 [[command]]
 id = "glyphData.productionName"
@@ -564,10 +619,14 @@ shortcut = ""
 kind = "engine"
 params = "{glyphs?: [names]}"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "Our query: returns the name each glyph will carry in an exported font, applying the per-glyph override, the database value, then the suffix and ligature rules, and falling back to the nice name."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "inferred"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4); the M2 compiler writes source names."
+guesses = [
+  "Our own query for agents; its answers must equal the names the oracles write (fontc and fontmake with production names on).",
+]
 
 [[command]]
 id = "font.validateGlyphNames"
@@ -581,6 +640,9 @@ milestone = "M4"
 summary = "Our query: reports every glyph whose name breaks the naming rules, with the position of the first offending character, so the problem can be found before an export or feature compile fails."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "inferred"
+guesses = [
+  "Our own query for agents; it applies the handbook's naming rules. There is no reference behaviour to settle.",
+]
 
 # ───────────────────────────── Batch renaming ─────────────────────────────
 
@@ -596,6 +658,9 @@ milestone = "M4"
 summary = "Renames the selected glyphs by replacing every occurrence of the Find text in their names with the Replace text. An empty Find appends the Replace text to each name; with Regex on, Find is a regular expression and Replace may use numbered group references such as \\1."
 ref = "Font View › Batch-Processing › Batch-Renaming Glyphs"
 status = "handbook"
+guesses = [
+  "A batch that would give two glyphs the same name, or any glyph an invalid name, is refused as a whole and the clashes are listed. Each rename follows glyph.rename. Settled by observation (05 question 9).",
+]
 
 # ───────────────────────────── Search and sidebar filters ─────────────────────────────
 
@@ -650,71 +715,79 @@ milestone = "M4"
 summary = "Our headless filter evaluation: returns the glyph names matching the given sidebar entries, an ad-hoc smart-filter rule tree and/or a search query, without touching the window state."
 ref = "Font View › Filtering Font View"
 status = "inferred"
+guesses = [
+  "Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text.",
+]
 
 [[command]]
 id = "fontView.setVisibleScripts"
 label = "Edit Languages List"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{show?: [script], hide?: [script]}"
 area = "font-view"
 milestone = "M4"
 summary = "Chooses which scripts are listed in the Languages section by default (the plus button beside the section title opens a checklist). Scripts that have glyphs in the font are listed regardless."
 ref = "Font View › Filtering Font View › Languages"
 status = "handbook"
+notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.addSmartFilter"
 label = "Add Smart Filter"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{name: string, rules: ruleTree, folder?: path}"
 area = "font-view"
 milestone = "M4"
 summary = "Creates a rule-based filter in the Filters section and opens the Smart Filter editor with a single empty rule. Chosen from the actions menu in the font window's bottom-left corner."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.addListFilter"
 label = "Add List Filter"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{name: string, glyphs?: [names], folder?: path}"
 area = "font-view"
 milestone = "M4"
 summary = "Creates a filter defined by an explicit, ordered list of glyph names, pre-filled with the currently selected glyphs. Chosen from the actions menu in the font window's bottom-left corner."
 ref = "Font View › Filtering Font View › List Filters"
 status = "handbook"
+notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.addFilterFolder"
 label = "Add Folder"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{name: string, parent?: path}"
 area = "font-view"
 milestone = "M4"
 summary = "Creates a folder in the Filters section. Folders hold filters and other folders; selecting one shows the union of everything inside it."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
+notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.editFilter"
 label = "Edit Filter"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{filter: path, name?: string, rules?: ruleTree, glyphs?: [names]}"
 area = "font-view"
 milestone = "M4"
 summary = "Opens the editor of the selected smart or list filter (also by double-clicking the filter's icon) and stores the new name, rules or name list on OK; Cancel discards the edits."
 ref = "Font View › Filtering Font View › Smart Filters; List Filters"
 status = "handbook"
+notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.renameFilter"
@@ -722,39 +795,42 @@ label = "Rename Filter"
 menu = []
 shortcut = "Return"
 when = "panel:fontView.sidebar.filters"
-kind = "ui"
+kind = "engine"
 params = "{filter: path, name: string}"
 area = "font-view"
 milestone = "M4"
 summary = "Renames a filter or folder in place without opening its editor: double-click the name, or select the entry and press Return."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
+notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.removeFilter"
 label = "Remove Filter"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{filter: path}"
 area = "font-view"
 milestone = "M4"
 summary = "Deletes the selected filter or folder (actions menu). Removing a folder removes every filter inside it as well."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
+notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.moveFilter"
 label = "Move Filter"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{filter: path, parent?: path, index: number}"
 area = "font-view"
 milestone = "M4"
 summary = "Reorders a filter within the Filters list or moves it into or out of a folder (drag and drop in the UI)."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
+notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 # ───────────────────────────── Images ─────────────────────────────
 
@@ -1146,6 +1222,7 @@ milestone = "M4"
 summary = "Every grid cell draws the glyph's layer for the master currently selected in the font window, so switching masters redraws the whole grid."
 ref = "Font View › Grid View"
 status = "handbook"
+notes = "Font View's master is chosen with view.selectMaster while Font View shows (Cmd+1 to Cmd+9); the toolbar's master icons are M9 (`preview.masterIconsInToolbar`)."
 
 [[behavior]]
 id = "fontView.cell.contentBySize"
@@ -1154,6 +1231,9 @@ milestone = "M4"
 summary = "Large cells show outline, glyph name and Unicode information; small cells show the outline only. The size at which the labels disappear is not stated."
 ref = "Font View › Grid View"
 status = "handbook"
+guesses = [
+  "Names and Unicode markers show from a cell size of 64 points up. Settled by observation.",
+]
 
 [[behavior]]
 id = "fontView.cell.unicodeIndicator"
@@ -1162,6 +1242,9 @@ milestone = "M4"
 summary = "A glyph with a code point shows a small marker at the bottom right of its cell, beside the name. For CJK glyphs the marker is replaced by the character itself rendered small in the system font."
 ref = "Font View › Grid View"
 status = "handbook"
+guesses = [
+  "CJK glyphs are those whose first code point is in the Han, Hiragana, Katakana, Hangul or Bopomofo script; the character is drawn with the interface font, and the marker is drawn when that font lacks it. Settled by observation.",
+]
 
 [[behavior]]
 id = "fontView.cell.displayUnicodeValue"
@@ -1186,6 +1269,9 @@ milestone = "M4"
 summary = "A yellow note badge marks a glyph that has an annotation on the layer of the active master."
 ref = "Font View › Grid View"
 status = "handbook"
+guesses = [
+  "Drawn in the top-left corner; the handbook gives no position. Settled by observation (05 question 15).",
+]
 
 [[behavior]]
 id = "fontView.cell.badgeCustomInfo"
@@ -1194,6 +1280,10 @@ milestone = "M4"
 summary = "A black info badge marks a glyph whose stored properties deviate from what the glyph database would give for its name."
 ref = "Font View › Grid View"
 status = "handbook"
+guesses = [
+  "Drawn in the bottom-left corner; the handbook gives no position. Settled by observation (05 question 15).",
+  "A glyph counts as custom when it stores a category, subcategory, script, production name, case, direction or sort name that differs from the database's, or Unicode values that differ from the database's for its name. Settled by observation.",
+]
 
 [[behavior]]
 id = "fontView.cell.badgeIncompatible"
@@ -1210,6 +1300,9 @@ milestone = "M4"
 summary = "A glyph whose export flag is off is marked by a struck-through red ring."
 ref = "Font View › Grid View"
 status = "handbook"
+guesses = [
+  "Drawn at the top centre of the cell; the handbook gives no position. Settled by observation (05 question 15).",
+]
 
 [[behavior]]
 id = "fontView.cell.colorGlyphOnly"
@@ -1305,9 +1398,14 @@ status = "handbook"
 id = "fontView.column.otherProperties"
 area = "font-view"
 milestone = "M4"
-summary = "The source says every glyph property has a column but names only seven. We plan columns for production name, script, category, subcategory, case, direction, export, colour label, tags, sort name, metrics, metrics keys and kerning groups as well; the reference's actual column set must be observed."
+summary = "List View has a column for every property the Glyph Properties section describes: besides ID, Char, Name, Unicode, Note, Components and Last Changed, these are the metrics (LSB, RSB, width), kerning groups, Exports, colour label, tags, production name, script, category, subcategory, case, writing direction and sort name."
 ref = "Font View › List View"
-status = "inferred"
+status = "handbook"
+notes = "The handbook says each column is a glyph property and points at Glyph Properties for the list (05 question 14, checked in the M4 planning pass). Metric and kerning-group cells are read-only until M5. Documented, not yet observed."
+guesses = [
+  "Every column is shown by default, in the order the Glyph Properties section lists the properties. Settled by observation (05 question 14).",
+  "Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation.",
+]
 
 # ── Inspector ──
 
@@ -1358,6 +1456,7 @@ milestone = "M4"
 summary = "The Tags submenu of the glyph context menu lists every tag used anywhere in the font and is absent when the font has no tags. A checkmark means the selected glyphs carry the tag, a dash means only some do; choosing a tag adds it to all selected glyphs."
 ref = "Font View › Glyph Properties › Tags"
 status = "handbook"
+notes = "Answers 05 question 17 from the handbook: choosing a tag adds it to all selected glyphs, a checked tag included; tags are removed in the Tags field (glyph.removeTag). Documented, not yet observed."
 
 # ── Glyph properties: rules ──
 
@@ -1372,10 +1471,11 @@ status = "handbook"
 [[behavior]]
 id = "glyph.niceNameVersusProductionName"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "Each glyph has a readable nice name used everywhere in the editor and a production name used only in exported font files. The swap happens automatically at export."
 ref = "Font View › Glyph Properties › Glyph Name; Production Name"
 status = "handbook"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
 
 [[behavior]]
 id = "glyph.exportDefault"
@@ -1444,10 +1544,11 @@ status = "handbook"
 [[behavior]]
 id = "glyph.productionNameDefault"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "Every glyph has a default production name following the Adobe Glyph List conventions, often of the uniXXXX or uXXXXX form. The user can override it per glyph in the expanded inspector or in Selection Info."
 ref = "Font View › Glyph Properties › Production Name"
 status = "handbook"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
 
 [[behavior]]
 id = "glyph.scriptProperty"
@@ -1511,9 +1612,10 @@ status = "handbook"
 id = "addGlyphs.itemSeparator"
 area = "font-view"
 milestone = "M4"
-summary = "The Add Glyphs text is split into items at spaces. Whether line breaks and tabs also separate items is not stated; we treat any whitespace as a separator."
-ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs"
+summary = "The Add Glyphs text is split into items at spaces, line breaks and tabs."
+ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs; tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn)"
 status = "handbook"
+notes = "Line breaks and tabs come from the tutorial, checked in the M4 planning pass. Documented, not yet observed."
 
 [[behavior]]
 id = "addGlyphs.byName"
@@ -1780,18 +1882,23 @@ status = "docs"
 [[behavior]]
 id = "glyphData.implicitProductionName"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "A database record without a production attribute uses its nice name as the production name (Aacute stays Aacute). Records that need a different export name state it, mostly as uniXXXX or uXXXXX and occasionally as a custom name such as two_fraction_seven."
 ref = "GlyphsInfo GlyphData.xml"
 status = "docs"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
 
 [[behavior]]
 id = "glyphData.legacyUnicode"
 area = "font-view"
 milestone = "M4"
-summary = "unicodeLegacy records a compatibility or presentation-form code point (noon-ar.init has FEE7, f_f_l has FB04) for glyphs that should normally be reached through features. We read it as informational: it is not assigned to a new glyph automatically. This reading needs confirmation."
-ref = "GlyphsInfo GlyphData.xml"
-status = "inferred"
+summary = "unicodeLegacy records a code point that is not written into a font, mostly a compatibility or presentation form (noon-ar.init has FEE7, f_f_l has FB04). It is never assigned to a glyph."
+ref = "GlyphsInfo GlyphData.xml; tutorial \"Roll your own glyph data\" (glyphsapp.com/learn)"
+status = "docs"
+notes = "Answers 05 question 3 from the tutorial, checked in the M4 planning pass. The tutorial names one exception, the Use Arabic Presentation Form Unicodes parameter, meant for testing only; it is not an M4 row. Documented, not yet observed."
+guesses = [
+  "Adding by a legacy character (typing U+FB04) finds the record through unicodeLegacy and creates f_f_l without a code point. Settled by observation.",
+]
 
 [[behavior]]
 id = "glyphData.altNames"
@@ -1868,52 +1975,58 @@ status = "handbook"
 [[behavior]]
 id = "glyphData.aglRecordFormats"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "The Adobe Glyph List is a text file of name;codepoints records (one or more four-digit uppercase hex values separated by spaces). AGLFN, the subset recommended for new fonts, has codepoint;name;character-name records. Lines starting with # are comments and blank lines are skipped."
 ref = "agl-aglfn README.md; glyphlist.txt; aglfn.txt"
 status = "docs"
+notes = "Moved from M2 in the M4 planning pass: the Adobe Glyph List arrives with the glyph database (M4)."
 
 # ── Production names at export ──
 
 [[behavior]]
 id = "export.productionNameResolution"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "At export each glyph is written under, in order of preference: its own production-name override, the production name of its database record, a name synthesised from suffix and ligature rules, or its unchanged nice name."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "docs"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
 
 [[behavior]]
 id = "export.productionNameSuffix"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "For a suffixed name whose base has a database production name, the result is that production name followed by the same dot suffix (a small-cap Cyrillic A-cy.sc becomes uni0410.sc)."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
 
 [[behavior]]
 id = "export.productionNameLigature"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "For an underscore-joined name each part is resolved to its production name, or kept if it is already an AGLFN name; if any part is unknown, no production name is synthesised. If at least one part is a uniXXXX name and no part lies beyond the BMP, the parts collapse to uni followed by all the four-digit values; otherwise the parts are joined with underscores. The dot suffix is re-attached at the end."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
 
 [[behavior]]
 id = "export.productionNameForm"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "A code-point production name is uni plus exactly four uppercase hexadecimal digits for the BMP, and u plus five or six uppercase hexadecimal digits above it."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "handbook"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
 
 [[behavior]]
 id = "export.aglNameParsing"
 area = "import-export"
-milestone = "M2"
+milestone = "M4"
 summary = "Reading a production name back to text follows the Adobe Glyph List specification: drop everything from the first dot, split at underscores, and map each part through the glyph list, the uniXXXX form (groups of four hex digits) or the uXXXX to uXXXXXX form; parts that match nothing map to no character."
 ref = "agl-aglfn README.md (AGL Specification)"
 status = "docs"
+notes = "Moved from M2 in the M4 planning pass: the Adobe Glyph List arrives with the glyph database (M4)."
 
 [[behavior]]
 id = "export.cidMapping"
@@ -1952,10 +2065,11 @@ status = "handbook"
 [[behavior]]
 id = "glyphName.invalidBlocksExport"
 area = "compile"
-milestone = "M2"
+milestone = "M4"
 summary = "A font with an invalid glyph name cannot be exported. The export results report an Illegal glyph name error that names the glyph and the position of the bad character, with a Show button that opens the glyph in a new tab; the same error can come from compiling feature code in Font Info."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
+notes = "Moved from M2 in the M4 planning pass: the name check (font.validateGlyphNames) is M4. File › Export refuses a font with an invalid name, as the handbook says. font.compile and the CLI follow fontc instead and write a sanitised name with a warning (compile.productionNameSanitising): oracles decide compiler questions (docs/plans/M4.md, owner question 8)."
 
 [[behavior]]
 id = "glyphName.underscorePrefix"
@@ -2096,6 +2210,9 @@ milestone = "M4"
 summary = "In Font View, edit.invertSelection (Cmd+Alt+Shift+I) selects exactly the glyphs that were not selected. We take the scope to be the visible glyphs, as for Select All; the source does not say."
 ref = "Font View › Batch-Processing › Selecting Glyphs"
 status = "handbook"
+guesses = [
+  "Invert Selection works among the visible glyphs, as Select All does. Settled by observation (05 question 12).",
+]
 
 [[behavior]]
 id = "fontView.batch.appliesToSelection"
@@ -2339,6 +2456,9 @@ milestone = "M4"
 summary = "With Regex on the term is a regular expression that must match the whole glyph name: one dot finds one-character names, two dots two-character names, a pattern ending in an escaped .sc finds small caps, and a bracketed A or a followed by anything and -cy finds Cyrillic names starting with A or a."
 ref = "Font View › Filtering Font View › Search Field"
 status = "handbook"
+guesses = [
+  "With Regex on, the pattern must match a whole field (name, hex code point or note) among the fields the magnifier menu selects; the handbook's examples only show names. Settled by observation (05 question 13).",
+]
 
 [[behavior]]
 id = "fontView.search.combinesWithSidebar"
@@ -2431,6 +2551,9 @@ milestone = "M4"
 summary = "Rule Glyph Name tests the glyph's nice name as text. The comparison operators offered are not listed in the source."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+guesses = [
+  "Text rules (Glyph Name, Tags, Script, Category & Subcategory) offer is, is not, contains, does not contain, begins with, ends with and matches (a regular expression); number rules offer =, ≠, <, ≤, >, ≥; yes-or-no rules offer is and is not. The reference's stored predicates use ==, !=, <, >, CONTAINS, IN, BEGINSWITH and ENDSWITH (tutorial \"Custom sidebar entries in Font View\"), which this set covers. Settled by observing the rule editor (05 question 10).",
+]
 
 [[behavior]]
 id = "smartFilter.rule.countOfPaths"
@@ -2479,6 +2602,9 @@ milestone = "M4"
 summary = "Rule Case matches on the glyph's case: uppercase, lowercase, small capital or caseless. Minor is not named among the choices in the source."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+guesses = [
+  "The rule offers all five case values, minor included, as the Case property has five; the rule's own description lists four. Settled by observation (05 question 10).",
+]
 
 [[behavior]]
 id = "smartFilter.rule.masterCompatible"
@@ -2671,6 +2797,9 @@ milestone = "M4"
 summary = "A smart filter stores rules, not glyphs: its contents are recomputed from the current font whenever it is shown. The refresh timing is not described in the source."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "inferred"
+guesses = [
+  "Results are recomputed from the current font whenever the filter is shown and after every edit, for the master Font View shows. Settled by observation (05 question 11).",
+]
 
 # ── List filters ──
 
@@ -2713,8 +2842,13 @@ id = "glyphOrder.default"
 area = "font-view"
 milestone = "M4"
 summary = "Without a custom order, glyphs are ordered by sort name, where a glyph's sort name is its own override, else the database value, else its glyph name. The same order is used in Font View and in exported fonts."
-ref = "Font View › Glyph Order; Sort Name; GlyphsSDK GlyphsFileFormatv3.md"
+ref = "Font View › Glyph Order; Sort Name; GlyphsSDK GlyphsFileFormatv3.md; tutorials \"Alter the glyph order in Font view\" and \"Roll your own glyph data\" (glyphsapp.com/learn)"
 status = "handbook"
+notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed."
+guesses = [
+  "An opened file keeps its stored glyph order, which is the order the oracles compile; only glyphs added later, renamed, or given a sort name move to the place the sort key gives. Settled by observing where the reference puts a new glyph (05 question 2).",
+  "The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2).",
+]
 
 [[behavior]]
 id = "glyphOrder.customParameter"

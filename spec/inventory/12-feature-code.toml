@@ -1485,6 +1485,9 @@ milestone = "M4"
 summary = "FontCraft uses the Rust `regex` crate: the documented subset is fully covered, replacement references written `\\N` are translated to the crate's `${N}`, and look-around or back-references inside the pattern are not available."
 ref = "Appendix › Regular Expressions"
 status = "inferred"
+guesses = [
+  "Patterns use the Rust regex crate, which has no look-around and no back-references inside a pattern; the reference's engine may accept them. Settled by observation.",
+]
 
 # ----------------------------------------------------------------------------
 # Behaviours: URL scheme

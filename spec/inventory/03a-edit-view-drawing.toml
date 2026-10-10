@@ -114,6 +114,9 @@ milestone = "M4"
 summary = "Opens the script and glyph-set chooser (the same one the Start Window plus button shows), preselected with the choices made last time, and creates a document holding one empty glyph for every glyph of the chosen sets. With explicit params it creates the document without showing the chooser."
 ref = "Create"
 status = "handbook"
+guesses = [
+  "The scripts and glyph sets offered come from our own data source (docs/plans/M4.md, owner question 3); the reference's lists are app data we may not use, so the sets differ from the reference's by design.",
+]
 
 [[behavior]]
 id = "start.scriptChooserRules"

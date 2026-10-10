@@ -468,11 +468,12 @@ name = "Don't use Production Names"
 scope = []
 kind = "bool"
 area = "compile"
-milestone = "M2"
+milestone = "M4"
 effect = "export-filter"
 summary = "When checked, glyphs keep their source names in the exported font instead of being renamed to the production names from the glyph database. Same effect as Font Info > Other Settings > Use Custom Naming; some older environments expect AGL-style names."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Moved from M2 in the M4 planning pass, with the production names it switches off."
 
 [[parameter]]
 name = "EditView Line Height"
@@ -776,11 +777,12 @@ name = "glyphOrder"
 scope = ["font"]
 kind = "list"
 area = "font-info"
-milestone = "M7"
+milestone = "M4"
 effect = "other"
 summary = "List of glyph names, one per line, fixing the glyph order in the working file and in exports. Glyphs not listed are appended afterwards in the application's default order."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Moved from M7 in the M4 planning pass: Font View's order (glyphOrder.default, M4) reads it, and export uses the same order. Editing it in Font Info comes with M7's parameter commands. The tutorial \"Alter the glyph order in Font view\" (glyphsapp.com/learn) adds that a line written **Title** shows as a section header in Font View; such lines name no glyph and are ignored at export. Documented, not yet observed."
 
 [[parameter]]
 name = "Grid Spacing"

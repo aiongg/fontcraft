@@ -41,19 +41,19 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0: Skeleton and vertical slice | 5 | 5 (100.0%) | 0 | 0 | 11 | 0 | 0 | 3 | 0 | 0 |
 | M1: Source model and file I/O (native, UFO, designspace, .glyphs, binary import) | 10 | 10 (100.0%) | 0 | 2 | 84 | 3 | 0 | 3 | 15 | 0 |
-| M2: Compile core: static TTF and OTF, oracle harness | 6 | 5 (83.3%) | 0 | 0 | 111 | 48 | 0 | 2 | 4 | 13 |
+| M2: Compile core: static TTF and OTF, oracle harness | 5 | 5 (100.0%) | 0 | 0 | 99 | 47 | 0 | 2 | 4 | 13 |
 | M3: Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 184 | 184 (100.0%) | 19 | 25 | 185 | 11 | 34 | 0 | 2 | 0 |
-| M4: Font View and glyph management | 57 | 6 (10.5%) | 0 | 24 | 143 | 1 | 0 | 0 | 0 | 0 |
+| M4: Font View and glyph management | 61 | 6 (9.8%) | 0 | 24 | 155 | 3 | 0 | 0 | 0 | 0 |
 | M5: Spacing, kerning and text mode | 109 | 1 (0.9%) | 1 | 23 | 101 | 6 | 0 | 0 | 2 | 0 |
 | M6: Components and anchors | 65 | 0 (0.0%) | 1 | 16 | 142 | 6 | 0 | 0 | 0 | 0 |
-| M7: Font Info and custom parameters | 62 | 2 (3.2%) | 0 | 11 | 70 | 70 | 0 | 0 | 0 | 0 |
+| M7: Font Info and custom parameters | 62 | 2 (3.2%) | 0 | 11 | 70 | 69 | 0 | 0 | 0 | 0 |
 | M8: OpenType features | 40 | 0 (0.0%) | 0 | 10 | 337 | 20 | 0 | 0 | 2 | 4 |
 | M9: Interpolation and variable fonts | 67 | 0 (0.0%) | 2 | 15 | 144 | 33 | 0 | 0 | 4 | 8 |
 | M10: Hinting (PostScript and TrueType) | 57 | 0 (0.0%) | 1 | 9 | 165 | 25 | 0 | 0 | 0 | 5 |
 | M11: Colour fonts and images | 50 | 0 (0.0%) | 3 | 11 | 91 | 11 | 2 | 0 | 3 | 5 |
 | M12: Command-line tool suite and quality checks | 71 | 0 (0.0%) | 0 | 2 | 42 | 0 | 263 | 61 | 6 | 15 |
 | M13: Plug-ins, scripting and automation depth | 114 | 0 (0.0%) | 4 | 17 | 80 | 2 | 1 | 1 | 10 | 0 |
-| M14: 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | 31 | 0 (0.0%) | 0 | 7 | 40 | 5 | 0 | 0 | 1 | 0 |
+| M14: 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | 28 | 0 (0.0%) | 0 | 7 | 40 | 5 | 0 | 0 | 1 | 0 |
 | fidelity: Interaction-fidelity pass: side by side with the reference, every modifier, cursor and default | 4 | 0 (0.0%) | 2 | 0 | 7 | 0 | 0 | 0 | 0 | 0 |
 
 ## By source
@@ -62,10 +62,10 @@ How each row is known. `handbook` and `docs` come from public documentation, `in
 
 | Status | Rows |
 |---|---:|
-| handbook | 2107 |
-| docs | 1055 |
-| inferred | 401 |
-| memory | 30 |
+| handbook | 2109 |
+| docs | 1056 |
+| inferred | 400 |
+| memory | 28 |
 | observed | 52 |
 
 ## Live commands

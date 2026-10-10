@@ -27,10 +27,14 @@ shortcut = ""
 kind = "engine"
 params = "{id?: string}"
 area = "ui-chrome"
-milestone = "M14"
+milestone = "M4"
 summary = "Read-only query returning one preference value by setting id, or all of them when no id is given. Not in the reference; proposed so every preference is reachable headless."
 ref = "Settings (whole chapter)"
 status = "inferred"
+notes = "Moved from M14 in the M4 planning pass: the Start Window, the Filters sidebar, the Languages list and Display Unicode Value keep user settings (docs/plans/M4.md, owner question 4). The settings window stays M14."
+guesses = [
+  "Our own command; the reference has no headless access to settings, so there is nothing to settle.",
+]
 
 [[command]]
 id = "settings.set"
@@ -40,10 +44,14 @@ shortcut = ""
 kind = "engine"
 params = "{id: string, value: any}"
 area = "ui-chrome"
-milestone = "M14"
+milestone = "M4"
 summary = "Writes one preference by setting id, with the same validation and side effects as changing it in the settings window. Not in the reference; proposed for agents and the CLI."
 ref = "Settings (whole chapter)"
 status = "inferred"
+notes = "Moved from M14 in the M4 planning pass, with settings.get."
+guesses = [
+  "Our own command; the reference has no headless access to settings, so there is nothing to settle.",
+]
 
 [[panel]]
 id = "window.settings"
@@ -181,10 +189,14 @@ kind = "bool"
 section = "Appearance"
 values = ""
 area = "font-view"
-milestone = "M14"
+milestone = "M4"
 summary = "Chooses what an encoded glyph's Font View cell shows in its bottom-right corner: either a small generic Unicode badge or the actual code point. Which state of the option gives which is not spelled out (presumably on shows the code point)."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "Moved from M14 in the M4 planning pass: the Font View cell behaviour `fontView.cell.displayUnicodeValue` (M4) depends on it; it is set with settings.set until the settings window (M14)."
+guesses = [
+  "On shows the code point, off the small marker, as the handbook's wording implies. Settled by observation.",
+]
 
 [[setting]]
 id = "appearance.alwaysLightModeFontView"

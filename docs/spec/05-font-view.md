@@ -1,8 +1,12 @@
 # Font View: behaviour notes
 
-Sources: Glyphs 4 Handbook, chapter "Font View"; GlyphsInfo (`GlyphData.xml`, BSD-3-Clause);
-agl-aglfn (BSD-3-Clause); fontc `glyphs-reader/src/glyphdata.rs` (Apache-2.0); GlyphsSDK file-format
-notes. Rows: `spec/inventory/05-font-view.toml`. Date: 2026-10-07.
+Sources: Glyphs 4 Handbook, chapter "Font View"; GlyphsInfo (`GlyphData.xml`, MIT until 2024-11-22, BSD-3-Clause after,
+copyright Georg Seifert; its README carries the Adobe Glyph List's BSD-3-Clause notice); agl-aglfn
+(BSD-3-Clause); fontc `glyphs-reader/src/glyphdata.rs` (Apache-2.0); GlyphsSDK file-format notes.
+The M4 planning pass (2026-10-10) added the reference's written tutorials at glyphsapp.com/learn:
+"Adding glyphs to your font", "Alter the glyph order in Font view", "Custom sidebar entries in Font
+View", "Getting your glyph names right" and "Roll your own glyph data". Rows:
+`spec/inventory/05-font-view.toml`. Date: 2026-10-07, open questions answered 2026-10-10.
 
 Ids in `code` are command ids unless marked as a panel or behaviour row.
 
@@ -93,11 +97,16 @@ value on every selected glyph; the Exports checkbox shows a line.
 | Metrics, metrics keys | layer widths; `metricLeft` / `metricRight` / `metricWidth` / `metricTop` / `metricBottom` / `metricVertOrigin` / `metricVertWidth` | – | spacing commands | inspector toggles horizontal ↔ vertical (`fontView.toggleMetricsOrientation`) |
 | Kerning groups | `kernLeft`, `kernRight` (`kernTop`, `kernBottom`) | none | kerning commands | inspector fields |
 
-Every database-backed property (Unicode, production name, script, category, subcategory, case,
-direction, sort name) is *unset* in the file unless the user overrides it; an unset property is
-resolved live from the database. A glyph with at least one override carries the black info badge
-and matches the smart-filter rule *Has Custom Glyph Info*. `glyph.updateGlyphInfo` (Glyph → Update
-Glyph Info) is, from memory, the command that drops overrides and re-reads the database.
+Every database-backed property except Unicode (production name, script, category, subcategory,
+case, direction, sort name) is *unset* in the file unless the user overrides it; an unset property
+is resolved live from the database. Unicode values are different: the source formats store them on
+every encoded glyph, so FontCraft stores them too, sets them from the database when a glyph is
+created or its base name changes, and compares them with the database for the badge. A glyph with
+at least one override carries the black info badge and matches the smart-filter rule *Has Custom
+Glyph Info*. `glyph.updateGlyphInfo` (Glyph → Update Glyph Info) re-derives the selected glyphs'
+properties from the database, the name included (handbook, Use Custom Naming; tutorial "Getting
+your glyph names right"): legacy and alternative names become nice names and the Unicode values
+follow.
 
 **Colour labels.** Twelve fixed colours, addressed by index or name in filters and scripts:
 0 Red, 1 Orange, 2 Brown, 3 Yellow, 4 Light Green, 5 Dark Green, 6 Cyan, 7 Blue, 8 Purple, 9 Pink,
@@ -123,7 +132,7 @@ punctuation (`question` upper, `questiondown` lower) and to marks (`acutecomb` l
 Four entry points.
 
 1. **`glyph.addGlyphs`** (Glyph → Add Glyphs…, Cmd+Shift+G; panel `dialog.addGlyphs`). One text
-   field; items separated by spaces. Item grammar:
+   field; items separated by spaces, line breaks or tabs (the tutorial). Item grammar:
 
    | Item | Example | Result |
    |---|---|---|
@@ -131,9 +140,10 @@ Four entry points.
    | literal character | `Ç` | glyph for that code point, under its nice name |
    | code-point name | `uni00C7`, `u10330` | same, converted to the nice name when one exists |
    | range `a:b` | `uni0218:uni021B`, `alpha:omega` | every code point from a to b inclusive |
-   | recipe | (defined in the components chapter) | composite built from named parts |
+   | recipe | `x+acutecomb=xacute`, `Eth=Dtail` (components chapter) | composite built from named parts (M6) |
 
-   Conversion to nice names is skipped when the font has *Use Custom Naming* on.
+   Conversion to nice names, legacy names such as `dotlessi` included, is skipped when the font has
+   *Use Custom Naming* on. The dialog's confirm button is *Generate* (tutorial).
 
    If any requested name already exists, nothing is added yet; a dialog
    (`dialog.addGlyphsExisting`) lists the existing names and offers *Replace* (they become new empty
@@ -141,6 +151,8 @@ Four entry points.
    Headless: `onExisting` selects the outcome; the default for agents should be `keep`.
 
 2. **`glyph.newGlyph`** (Cmd+Alt+Shift+N, or the plus button): one empty glyph named `newGlyph`.
+   Its name is selected for typing; a typed legacy name or character becomes the nice name on
+   Return (tutorial).
 
 3. **Glyph Info window** (`window.glyphInfo` → `glyphInfo.addToFont`): add selected database rows.
 
@@ -154,8 +166,9 @@ the database record of its name (§4).
 
 ### 3.2 Duplicating
 
-`glyph.duplicateGlyph` (Cmd+D) copies each selected glyph within the font. The chapter gives no
-naming rule; we use the same counter suffix as paste (`A.001`, `A.002`, …).
+`glyph.duplicateGlyph` (Cmd+D) copies each selected glyph within the font. The copy gets the
+suffix `.001`, or `.002` when that is taken, and so on; the copies become the selection (tutorial
+"Adding glyphs to your font").
 
 ### 3.3 Copy and paste between fonts
 
@@ -220,7 +233,7 @@ Its DTD defines exactly these attributes:
 | `production` | no | export name when it differs from `name` | glyph name |
 | `script` | no | writing system | lowercase id, e.g. `latin`, `arabic`, `cyrillic`, `han` |
 | `case` | no | `upper`, `lower`, `minor`, `smallCaps` | absent = no case |
-| `direction` | no | `RTL` or `BIDI` | absent = LTR |
+| `direction` | no | `LTR`, `RTL` or `BIDI` | absent: from the script (see below), else LTR |
 | `description` | no | Unicode character name or a descriptive phrase | text |
 | `altNames` | no | other names that resolve to this record | comma-separated |
 
@@ -249,7 +262,12 @@ The tab-separated form used for editing the data lists these columns: `unicode`,
 | `accents` | marks offered in the mark cloud | no |
 
 These five match the handbook's "components, anchors, marks" and the sort-name property, but their
-values are not in the public data. FontCraft must either author them or derive them (for example
+values are not in the public data. The tutorial "Roll your own glyph data" documents them as XML
+attributes too (`sortName`, `sortNameKeep`, `decompose`, `anchors`, and `marks`, called `accents`
+in version 2), so a custom `GlyphData.xml` may carry them and FontCraft reads them there. The same
+tutorial says a missing `direction` is filled from an internal list of directions per script
+(a Hebrew glyph is right to left without the attribute); FontCraft keeps that list as data of its
+own: the scripts Unicode writes right to left are RTL. FontCraft must either author them or derive them (for example
 `decompose` from Unicode canonical decomposition). See Open questions.
 
 Naming scheme of nice names: Adobe Glyph List names where they exist, adjusted in places; otherwise
@@ -278,7 +296,8 @@ Commands: `glyphData.lookup` exposes this, with provenance per field.
 - Direct record: its `unicode` value.
 - `uniXXXX` (four hex digits) or `uXXXXX` / `uXXXXXX` (five or six): the code point itself.
 - A suffixed name (`A.alt`) has no code point: the Unicode value belongs to the base glyph only.
-- `unicodeLegacy` is not assigned automatically (our reading; unconfirmed).
+- `unicodeLegacy` is never assigned: the tutorial "Roll your own glyph data" says such a value is
+  not written into a font.
 - No record and not a code-point name: no Unicode value; the user sets one by hand
   (`glyph.setUnicodes`). The handbook suggests the Private Use Area (for example U+E000–U+F8FF) for
   characters outside Unicode, and warns against reusing a registered name for a custom glyph.
@@ -446,10 +465,16 @@ nice name can be exported as is, and the AGL mapping for the category fallback i
 
 `window.glyphInfo` (Window → Glyph Info): table of all records, searchable and sortable by column,
 with *Add to Font* (`glyphInfo.addToFont`). It is also the documented place to look up script
-suffixes. `glyphData.search` is the headless equivalent.
+suffixes. `glyphData.search` is the headless equivalent. The tutorial "Adding glyphs to your font"
+gives the columns (name, Unicode value, category, subcategory, script, composition) and says the
+search matches names, Unicode values and characters, so typing `-deva` lists Devanagari.
 
 A custom `GlyphData.xml` changes properties for every file on the machine; per-glyph overrides (§2)
-change them for one file.
+change them for one file. A `GlyphData.xml` beside a source file, or in an `Info` folder beside it,
+applies to that file unless its *Ignore custom GlyphData file* parameter is set. Custom records
+complement the built-in ones: a custom file may hold only the glyphs it changes. A file that is
+not well-formed XML is ignored as a whole (tutorial "Roll your own glyph data"); FontCraft also
+reports it.
 
 ## 5. Selection and batch processing
 
@@ -596,6 +621,20 @@ Everything here goes through the bottom-left actions menu, or by direct manipula
 - *Remove Filter* deletes the selected filter or folder; a folder takes its contents with it
   (`fontView.removeFilter`).
 
+**Where filters live.** The tutorial "Adding glyphs to your font" says sidebar entries, filters
+included, are available in all files; "Custom sidebar entries in Font View" says the reference
+keeps them in one `CustomFilter.plist` in its application support folder, and that a file named
+`CustomFilter <title>.plist` beside a source adds a per-file section. FontCraft keeps filters in the
+user settings (`settings.get`, `settings.set`; M4). Per-file filter files are not read in M4: their
+smart filters are predicates over the reference's scripting properties, which no source lists.
+
+**Custom Categories and Languages.** The tutorial "Custom sidebar entries in Font View" documents
+`Groups*.plist` files (old-style property lists) in the application's `Info` folder: a
+`categories` and a `languages` list of entries, each with a `name`, an optional `icon`, a `script`
+or `predicate`, and either a `subGroup` list of entries or a `list` of glyph names (a character in
+place of a name means its code-point name). FontCraft reads the same files from its own settings
+folder.
+
 ## 7. Glyph order
 
 Order in Font View (when no list filter is active) and in exported fonts is the same:
@@ -606,6 +645,14 @@ Order in Font View (when no list filter is active) and in exported fonts is the 
    glyph name.
 
 The ID column of List View shows the resulting index. Sidebar filters and search never change it.
+
+The tutorials "Alter the glyph order in Font view" and "Roll your own glyph data" add: the default
+orders glyphs alphabetically within their category; glyph data can set a `sortName` (and a
+`sortNameKeep` for *Keep Alternates Next to Base Glyph*); and a `glyphOrder` line written `**Title**`
+shows as a section header in Font View. The published data has no sort names, so FontCraft's key is
+its own (`glyphOrder.default` guesses). An opened file keeps its stored order, which is also the
+order the oracles compile; a glyph added, renamed or given a sort name later takes the place the key
+gives it.
 
 ## 8. Images
 
@@ -620,39 +667,66 @@ The ID column of List View shows the resulting index. Sidebar filters and search
 
 ## Open questions
 
+Answers from the M4 planning pass (2026-10-10). "Source" answers come from the handbook or a
+written tutorial and are documented, not yet observed. "Ours" answers are best guesses, recorded in
+the named row's `guesses`; an observation settles them. Questions marked ▶ are worth a tutorial
+video (`docs/plans/M4.md` § 7).
+
 1. **Database fields not in the public data.** `sortName`, `sortNameKeep`, `decompose`, `anchors`
    and `accents` exist as columns but ship with no values in GlyphsInfo. What does the reference
    use, and can we derive equivalents (Unicode decomposition, our own anchor tables) well enough for
    Create Composite, Set Anchors, the mark cloud and the default glyph order to match?
-2. **Default sort order.** With no `glyphOrder` and no stored sort names, the reference orders
-   glyphs by database sort names (category, script, then alphabet-like order). The exact key
-   construction must be observed; plain name order will not reproduce it.
-3. **`unicodeLegacy`.** Is it ever assigned to a new glyph, or only used for lookups and import?
-4. **Rename and stored Unicode.** When a base name changes, does the reference overwrite a Unicode
-   value the user typed, or only refresh database-derived ones?
-5. **Update Glyph Info.** Exact effect: does it also rename glyphs to nice names, and does it clear
-   every per-glyph override?
-6. **Duplicate Glyph naming** and **New Glyph naming when `newGlyph` exists** (`.001` assumed).
-7. **Add Glyphs parsing.** Are line breaks and commas separators? How is a range between two named
-   glyphs with non-adjacent code points handled, and what happens to code points in a range that
-   have no database record? Full recipe grammar lives in the components chapter.
-8. **Replace in Add Glyphs.** Does *Replace* keep the old glyph's properties, colour and kerning
-   membership, or produce a truly fresh glyph?
-9. **Find and Replace collisions.** Behaviour when a rename would produce an existing or invalid
-   name; whether renames update component references, feature code, kerning and metrics keys.
-10. **Smart filter operators.** The comparison operators per rule (is, is not, contains, begins
-    with, less than, …) and whether *Case* offers Minor are not listed.
-11. **Smart filter refresh.** When results are recomputed (live, on selection, on master change).
-12. **Invert Selection scope.** Visible glyphs only, or the whole font?
-13. **Regex search anchoring and target.** Whole-name match is implied by the examples; does regex
-    also apply to notes and Unicode values?
-14. **List View columns.** The complete column set, default visibility and which cells are editable.
-15. **Inspector and Selection Info fields.** Where case and writing direction are edited; the full
-    Selection Info layout; the positions of the three cell badges whose corner is not stated.
-16. **Components cell syntax** in List View (separator, effect on other masters, placement).
-17. **Tags context menu.** Whether choosing a checked tag removes it.
-18. **Paste Special pairing.** Order used to pair copied glyphs with selected targets (copy order
-    vs. glyph order) and which layers *Content of Active Layer* writes to in a multi-master target.
-19. **`glyphOrder` gaps.** Placement of glyphs not named in the parameter, and of `.notdef`.
-20. **Batch image import.** Treatment of files without a matching glyph and of glyphs that already
-    have an image.
+   **Partly answered (source):** a custom `GlyphData.xml` may carry all five, and FontCraft reads
+   them there (§ 4.1). The built-in values stay unpublished. For M4 only the sort key matters
+   (question 2). Decomposition, anchors and marks stay open for M6 (open decision D6).
+2. **Default sort order.** ▶ **Answered for M4 (source and ours):** the tutorials say glyphs sort
+   alphabetically within their category, adjustable by sort names. The key's details are ours
+   (`glyphOrder.default`). An opened file keeps its order.
+3. **`unicodeLegacy`.** **Answered (source):** never assigned and never written into a font
+   (`glyphData.legacyUnicode`).
+4. **Rename and stored Unicode.** ▶ **Answered for M4 (source and ours):** a base-name change takes
+   the new name's database values (handbook); a name the database does not know keeps the stored
+   values (tutorial). Ours: a new name with a database code point replaces values the user typed
+   (`glyph.rename`).
+5. **Update Glyph Info.** ▶ **Answered for M4 (source and ours):** it renames to nice names and
+   re-syncs Unicode values, respecting custom data (handbook, tutorial). Ours: it drops stored
+   overrides of the other database properties and keeps names under *Use Custom Naming*
+   (`glyph.updateGlyphInfo`).
+6. **Duplicate Glyph naming** and **New Glyph naming when `newGlyph` exists**. **Answered (source
+   for duplicates, ours for New Glyph):** `.001`, then `.002`; the copies become the selection.
+   `newGlyph.001` follows the same rule (`glyph.newGlyph`).
+7. **Add Glyphs parsing.** **Answered for M4 (source and ours):** spaces, line breaks and tabs
+   separate items (tutorial). Ours: commas do not; a range takes every assigned code point between
+   its ends, at most 65,536; recipes wait for M6 (`glyph.addGlyphs`).
+8. **Replace in Add Glyphs.** ▶ **Answered for M4 (ours):** a fresh empty glyph with database
+   properties, in the old glyph's place; references by name stay (`glyph.addGlyphs`).
+9. **Find and Replace collisions.** ▶ **Answered for M4 (ours):** a batch with a clash or an
+   invalid result is refused as a whole; renames update components, kerning, the `glyphOrder`
+   parameter and metrics keys, not feature code (`edit.findAndReplace`, `glyph.rename`).
+10. **Smart filter operators.** ▶ **Answered for M4 (ours):** text rules offer is, is not,
+    contains, does not contain, begins with, ends with and matches (regex); number rules =, ≠, <,
+    ≤, >, ≥; yes-or-no rules is and is not; choice rules is and is not. The tutorial "Custom sidebar
+    entries in Font View" shows the reference's stored predicates use `==`, `!=`, `<`, `>`,
+    `CONTAINS`, `IN`, `BEGINSWITH` and `ENDSWITH`, which this set covers. *Case* offers minor too
+    (`smartFilter.rule.case`).
+11. **Smart filter refresh.** **Answered for M4 (ours):** live, after every edit and on a master
+    change (`smartFilter.live`).
+12. **Invert Selection scope.** **Answered for M4 (ours):** the visible glyphs, as Select All
+    (`fontView.invertSelection`).
+13. **Regex search anchoring and target.** **Answered for M4 (ours):** a regex matches a whole
+    field, in every field the magnifier menu selects (`fontView.search.regex`).
+14. **List View columns.** **Answered for M4 (source and ours):** one column per property of the
+    Glyph Properties section (handbook). Ours: all shown by default; editable where a set command
+    exists (`fontView.column.otherProperties`).
+15. **Inspector and Selection Info fields.** ▶ **Answered for M4 (ours):** case and direction are
+    edited in Selection Info and List View; the badge corners are in the cell rows' `guesses`.
+    The full Selection Info layout stays open.
+16. **Components cell syntax** in List View. Open; M6 builds component editing.
+17. **Tags context menu.** **Answered (source):** choosing a tag always adds it; tags are removed
+    in the Tags field (`fontView.contextMenu.tags`).
+18. **Paste Special pairing.** ▶ **Answered for M4 (ours):** copy order against the targets'
+    glyph order; *Content of Active Layer* writes the shown master's layer (`edit.pasteSpecial`).
+19. **`glyphOrder` gaps.** **Answered (source):** glyphs the parameter does not name follow in the
+    default order (`glyphOrder` parameter row). `.notdef` follows the same rule in Font View; export
+    still moves it to glyph 0.
+20. **Batch image import.** Open; images are M11.

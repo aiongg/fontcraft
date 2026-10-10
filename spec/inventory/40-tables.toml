@@ -896,18 +896,20 @@ status = "inferred"
 [[behavior]]
 id = "compile.productionNames"
 area = "compile"
-milestone = "M2"
+milestone = "M4"
 summary = "By default glyphs are renamed to production names in the binary. fontmake: use the source's name map (public.postscriptNames); encoded glyphs without an entry become uniXXXX, unencoded ligatures are named from their components' production names, other unencoded glyphs keep their name; --no-production-names disables all renaming. fontc applies only the source's map (glyphs without an entry keep their name) and has the same flag."
 ref = "fontmake USAGE.md (--no-production-names); fontc fontc/src/args.rs, fontbe/src/post.rs, ufo2fontir/src/source.rs"
 status = "docs"
+notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4). The oracle harness then builds with production names on and compares the post table's glyph names."
 
 [[behavior]]
 id = "compile.productionNameSanitising"
 area = "compile"
-milestone = "M2"
+milestone = "M4"
 summary = "Final names are stripped of every character outside A-Z, a-z, 0-9, period and underscore; a name that collides with an earlier one gets .1, .2 and so on appended. The stricter Adobe Glyph List rules (no leading digit or period, at most 63 characters) are not enforced by fontc; we enforce them as warnings."
 ref = "fontc fontbe/src/post.rs"
 status = "docs"
+notes = "Moved from M2 in the M4 planning pass. The M2 compiler writes `glyphNNNNN` with a warning for a name post cannot hold; M4 follows this row with the production names."
 
 [[behavior]]
 id = "compile.goadbRenaming"

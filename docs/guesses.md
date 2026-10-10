@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**203 guesses on 160 rows (90 of them live commands).**
+**250 guesses on 196 rows (91 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -22,6 +22,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.livePreview` (behavior) | M3 | inferred | – | Every filter dialog previews its result live and OK keeps it as one undo step; a tutorial video shows this for Transformations only. |
 | `dialog.livePreview` (behavior) | M3 | inferred | – | Dialogs remember their last values for the session, and their first values are ours (11-filters open questions). |
 | `dialog.fieldKeys` (behavior) | M3 | inferred | – | Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only. |
+| `file.openRecent` | M4 | inferred | no | The list holds the last ten documents opened or saved, newest first, in the user settings; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window. |
 
 ## `03a-edit-view-drawing.toml`
 
@@ -88,6 +89,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `guides.knobAndSelection` (behavior) | M3 | handbook | – | A double-click on the guide away from its knob opens dialog.guideProperties, our addition. |
 | `guides.angleLock` (behavior) | M3 | handbook | – | A drag on an angle-locked guide away from its knob moves the guide, as a knob drag does (03a question 27). |
 | `guides.sidebearingReference` (behavior) | M3 | handbook | – | Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27). |
+| `file.newFromGlyphSets` | M4 | handbook | no | The scripts and glyph sets offered come from our own data source (docs/plans/M4.md, owner question 3); the reference's lists are app data we may not use, so the sets differ from the reference's by design. |
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The width and height fields run from 1 to 2,000,000 units and open at 100. |
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The click is the shape's bottom-left corner (03a question 5). |
 | `editView.toolbar` (panel) | M3 | handbook | – | A secondary click on a shared button also opens its menu; no source shows the reference doing so. |
@@ -162,11 +164,52 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `glyph.newGlyph` | M4 | handbook | yes | When newGlyph is taken the new glyph is named newGlyph.001, newGlyph.002 and so on, the rule documented for duplicated and pasted glyphs. Settled by observation (05 question 6). |
 | `path.roundCoordinates` | M3 | handbook | yes | A font whose grid is off (spacing 0) rounds to whole units. |
 | `path.roundCoordinatesForAllMasters` | M3 | handbook | yes | The label "… for All Masters" is ours; the handbook describes the Option key but not the item's label (03a question 18). |
 | `path.removeOverlapForAllMasters` | M3 | handbook | yes | The label "… for All Masters" is ours; the handbook describes the Option key but not the item's label (03a question 18). |
 | `path.convertToQuadratic` | M3 | handbook | yes | New off-curve points are rounded to the grid. |
 | `path.convertToQuadratic` | M3 | handbook | yes | With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible. |
+| `fontView.cell.contentBySize` (behavior) | M4 | handbook | – | Names and Unicode markers show from a cell size of 64 points up. Settled by observation. |
+| `fontView.cell.unicodeIndicator` (behavior) | M4 | handbook | – | CJK glyphs are those whose first code point is in the Han, Hiragana, Katakana, Hangul or Bopomofo script; the character is drawn with the interface font, and the marker is drawn when that font lacks it. Settled by observation. |
+| `fontView.cell.badgeAnnotation` (behavior) | M4 | handbook | – | Drawn in the top-left corner; the handbook gives no position. Settled by observation (05 question 15). |
+| `fontView.cell.badgeCustomInfo` (behavior) | M4 | handbook | – | Drawn in the bottom-left corner; the handbook gives no position. Settled by observation (05 question 15). |
+| `fontView.cell.badgeCustomInfo` (behavior) | M4 | handbook | – | A glyph counts as custom when it stores a category, subcategory, script, production name, case, direction or sort name that differs from the database's, or Unicode values that differ from the database's for its name. Settled by observation. |
+| `fontView.cell.badgeNonExporting` (behavior) | M4 | handbook | – | Drawn at the top centre of the cell; the handbook gives no position. Settled by observation (05 question 15). |
+| `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Every column is shown by default, in the order the Glyph Properties section lists the properties. Settled by observation (05 question 14). |
+| `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation. |
+| `glyphData.legacyUnicode` (behavior) | M4 | docs | – | Adding by a legacy character (typing U+FB04) finds the record through unicodeLegacy and creates f_f_l without a code point. Settled by observation. |
+| `fontView.invertSelection` (behavior) | M4 | handbook | – | Invert Selection works among the visible glyphs, as Select All does. Settled by observation (05 question 12). |
+| `fontView.search.regex` (behavior) | M4 | handbook | – | With Regex on, the pattern must match a whole field (name, hex code point or note) among the fields the magnifier menu selects; the handbook's examples only show names. Settled by observation (05 question 13). |
+| `smartFilter.rule.glyphName` (behavior) | M4 | handbook | – | Text rules (Glyph Name, Tags, Script, Category & Subcategory) offer is, is not, contains, does not contain, begins with, ends with and matches (a regular expression); number rules offer =, ≠, <, ≤, >, ≥; yes-or-no rules offer is and is not. The reference's stored predicates use ==, !=, <, >, CONTAINS, IN, BEGINSWITH and ENDSWITH (tutorial "Custom sidebar entries in Font View"), which this set covers. Settled by observing the rule editor (05 question 10). |
+| `smartFilter.rule.case` (behavior) | M4 | handbook | – | The rule offers all five case values, minor included, as the Case property has five; the rule's own description lists four. Settled by observation (05 question 10). |
+| `smartFilter.live` (behavior) | M4 | inferred | – | Results are recomputed from the current font whenever the filter is shown and after every edit, for the master Font View shows. Settled by observation (05 question 11). |
+| `glyphOrder.default` (behavior) | M4 | handbook | – | An opened file keeps its stored glyph order, which is the order the oracles compile; only glyphs added later, renamed, or given a sort name move to the place the sort key gives. Settled by observing where the reference puts a new glyph (05 question 2). |
+| `glyphOrder.default` (behavior) | M4 | handbook | – | The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2). |
+| `fontView.getState` | M4 | inferred | no | Our own query for agents; there is no reference behaviour to settle. |
+| `glyph.addGlyphs` | M4 | handbook | no | A comma is not a separator: an item containing one is an invalid name and is reported. Settled by observation (05 question 7). |
+| `glyph.addGlyphs` | M4 | handbook | no | A range covers every code point from the first endpoint's to the second's; code points Unicode does not assign, and surrogates, are skipped, and one range holds at most 65,536 code points. Settled by observation (05 question 7). |
+| `glyph.addGlyphs` | M4 | handbook | no | An invalid item is reported in `skipped` and the valid items are still added. Settled by observation. |
+| `glyph.addGlyphs` | M4 | handbook | no | Replace puts a fresh empty glyph with database properties in the old glyph's place in the glyph order; kerning and other references by name stay. Settled by observation (05 question 8). |
+| `glyph.duplicateGlyph` | M4 | handbook | no | Each copy is placed directly after its original in the glyph order. Settled by observation. |
+| `glyph.duplicateGlyph` | M4 | handbook | no | A copy of a suffixed glyph gets one more suffix (A.ss01 gives A.ss01.001). Settled by observation. |
+| `glyph.updateGlyphInfo` | M4 | handbook | no | Stored overrides of category, subcategory, script, production name, case and direction are dropped, so those properties follow the database again; the sort name, tags, colour labels, note and export flag stay. Settled by observing a glyph with a custom category before and after the command (05 question 5). |
+| `glyph.updateGlyphInfo` | M4 | handbook | no | With Use Custom Naming on, names are kept and only the other properties are updated. Settled by observation. |
+| `glyph.updateGlyphInfo` | M4 | handbook | no | A rename the command makes goes through glyph.rename, so references follow it; a new name that is already taken leaves the glyph's name unchanged and is reported. Settled by observation. |
+| `edit.pasteSpecial` | M4 | handbook | no | Selected Glyphs pairs the copied glyphs, in copy order, with the selected targets in glyph order. Settled by observation (05 question 18). |
+| `edit.pasteSpecial` | M4 | handbook | no | Content of Active Layer writes into the target's layer for the master Font View shows. Settled by observation (05 question 18). |
+| `glyph.getInfo` | M4 | inferred | no | Our own query for agents; there is no reference behaviour to settle. |
+| `glyph.rename` | M4 | handbook | no | Unicode values are replaced only when the new base name has a database code point; otherwise the stored values stay. Settled by observation (05 question 4). |
+| `glyph.rename` | M4 | handbook | no | Rename updates the font's references by name: components, kerning pairs, the glyphOrder parameter and metrics keys. Feature code is not rewritten; the result lists where the old name is still used. Settled by observation (05 question 9). |
+| `glyph.setCase` | M4 | inferred | no | Case is edited in the Selection Info window and in List View's Case column; the handbook names no control for it. Settled by observation (05 question 15). |
+| `glyph.setDirection` | M4 | inferred | no | Writing direction is edited in the Selection Info window and in List View's Direction column; the handbook names no control for it. Settled by observation (05 question 15). |
+| `glyph.removeTag` | M4 | inferred | no | Deleting a capsule in the Tags field removes that tag from every selected glyph. Settled by observation. |
+| `glyphData.lookup` | M4 | inferred | no | Our own query for agents; its answers must equal what the reference shows in Glyph Info and the inspector for the same name, which the oracles' copies of the data (fontc, glyphsLib) check. |
+| `glyphData.search` | M4 | inferred | no | A query matches as a case-insensitive substring of the name, the description, the hex code point, or equals the character. Settled by observation. |
+| `glyphData.productionName` | M4 | inferred | no | Our own query for agents; its answers must equal the names the oracles write (fontc and fontmake with production names on). |
+| `font.validateGlyphNames` | M4 | inferred | no | Our own query for agents; it applies the handbook's naming rules. There is no reference behaviour to settle. |
+| `edit.findAndReplace` | M4 | handbook | no | A batch that would give two glyphs the same name, or any glyph an invalid name, is refused as a whole and the clashes are listed. Each rename follows glyph.rename. Settled by observation (05 question 9). |
+| `fontView.queryGlyphs` | M4 | inferred | no | Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text. |
 
 ## `07-import-export.toml`
 
@@ -243,6 +286,20 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.filterRoughen` (panel) | M3 | handbook | – | The Angle field is ours: the handbook's export string has an angle value, but its dialog has no such field. |
 | `dialog.filterRoundCorners` (panel) | M3 | handbook | – | First values: radius 20, visual corrections off. |
 | `dialog.interpolateWithBackground` (panel) | M3 | handbook | – | It opens at 50 %; the handbook gives no default. |
+
+## `12-feature-code.toml`
+
+| Row | Milestone | Status | Live | Guess |
+|---|---|---|---|---|
+| `regex.engine` (behavior) | M4 | inferred | – | Patterns use the Rust regex crate, which has no look-around and no back-references inside a pattern; the reference's engine may accept them. Settled by observation. |
+
+## `16-settings.toml`
+
+| Row | Milestone | Status | Live | Guess |
+|---|---|---|---|---|
+| `settings.get` | M4 | inferred | no | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
+| `settings.set` | M4 | inferred | no | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
+| `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | On shows the code point, off the small marker, as the handbook's wording implies. Settled by observation. |
 
 ## `21-qa-checks.toml`
 
