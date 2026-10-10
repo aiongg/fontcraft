@@ -21,6 +21,7 @@ use std::collections::HashSet;
 use fontcraft_geom::{Point, Vec2};
 
 use super::{Args, Context, Filter, Param, ParamKind, Slot, Value};
+use crate::boolean::takes_part;
 use crate::contour::{Contour, Node, NodeKind, Piece, Ring, round_to_grid};
 use crate::{BoolOp, MAX_COORDINATE, MAX_NODES, PathOpError, SMOOTH_MAX_DEGREES, boolean};
 
@@ -144,11 +145,6 @@ pub fn extrude(contours: &[Contour], offset: f64, angle: f64, keep_original: boo
     let op = if keep_original { BoolOp::Union } else { BoolOp::Difference };
     let result = boolean(&ribbons, &originals, op, grid)?;
     finish(result, contours, grid)
-}
-
-/// Whether a contour takes part in the boolean operation, as [`boolean`] decides it.
-fn takes_part(c: &Contour) -> bool {
-    c.closed && c.nodes.len() > 1
 }
 
 /// One piece of a ring after splitting, or a run of whole quadratic pieces of one spline: the

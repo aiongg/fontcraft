@@ -94,7 +94,7 @@ fn segment_count(path: &BezPath) -> usize {
 
 /// Does this contour take part in a boolean operation? Open paths and paths of a single node
 /// (stray nodes) do not.
-fn takes_part(c: &Contour) -> bool {
+pub(crate) fn takes_part(c: &Contour) -> bool {
     c.closed && c.nodes.len() > 1
 }
 

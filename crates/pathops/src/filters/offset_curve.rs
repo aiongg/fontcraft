@@ -22,9 +22,10 @@
 
 use fontcraft_geom::{CubicBez, ParamCurve, ParamCurveNearest, Point, Vec2};
 
+use super::round_corners::fill_sides;
 use super::{Args, Context, Filter, Input, Item, Param, ParamKind, Slot, Value};
+use crate::boolean::takes_part;
 use crate::contour::{Contour, DIRECTION_EPSILON, Node, NodeKind, Piece, RNode, Ring, Seg, round_to_grid};
-use crate::direction::correct_direction;
 use crate::{BoolOp, MAX_NODES, MAX_SEGMENTS, OpenPaths, OverlapOptions, PathOpError, SMOOTH_MAX_DEGREES, boolean, remove_overlap};
 
 /// Largest distance, in units, either way.
@@ -290,11 +291,6 @@ pub fn offset_curve(contours: &[Contour], o: &OffsetOptions, grid: f64) -> Resul
 
 // ── The three modes ─────────────────────────────────────────────────────────────────────────────
 
-/// Does this contour take part in a boolean operation (closed, more than one node)?
-fn takes_part(c: &Contour) -> bool {
-    c.closed && c.nodes.len() > 1
-}
-
 fn offset_exact(contours: &[Contour], rings: &[Ring], h: f64, v: f64, grid: f64) -> Result<Vec<Contour>, PathOpError> {
     // Each pass: a pen of non-negative distances, and whether the outline grows.
     let passes: Vec<(Vec2, bool)> = if h * v >= 0.0 {
@@ -428,29 +424,6 @@ fn squeeze(mut rings: Vec<Ring>, v: f64) -> Vec<Ring> {
         }
     }
     rings
-}
-
-/// For each contour: 1 when the filled area lies to the left of its direction, -1 when it lies to
-/// the right, 0 for an open contour or one without area. Correct Path Direction turns every closed
-/// contour so the filled area is on its left; a contour it reverses has it on the right.
-fn fill_sides(contours: &[Contour], rings: &[Ring]) -> Result<Vec<f64>, PathOpError> {
-    let directed = correct_direction(contours)?;
-    let mut sides = vec![0.0; rings.len()];
-    for (k, &i) in directed.order.iter().enumerate() {
-        let (Some(ring), Some(c), Some(side)) = (rings.get(i), directed.contours.get(k), sides.get_mut(i)) else { continue };
-        if !ring.closed {
-            continue;
-        }
-        let (before, after) = (ring.area(), Ring::from_contour(c)?.area());
-        *side = if before == 0.0 {
-            0.0
-        } else if (before > 0.0) == (after > 0.0) {
-            1.0
-        } else {
-            -1.0
-        };
-    }
-    Ok(sides)
 }
 
 // ── The pen and the offset of a curve ───────────────────────────────────────────────────────────
