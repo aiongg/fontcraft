@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**387 guesses on 266 rows (131 of them live commands).**
+**388 guesses on 266 rows (131 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -248,7 +248,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `edit.findAndReplace` | M4 | handbook | yes | A batch that would give two glyphs the same name, or any glyph an invalid name, is refused as a whole and the clashes are listed. Each rename follows glyph.rename. Settled by observation (05 question 9). |
 | `edit.findAndReplace` | M4 | handbook | yes | The results are not converted to nice names: Find and Replace gives the names it computes. Settled by observation. |
 | `edit.findAndReplace` | M4 | handbook | yes | In Regex mode a group reference is a backslash and one digit (`\0` is the whole match, `\10` is group 1 followed by 0), `\\` is a backslash, and `$` is plain text. Settled by renaming with a two-digit group reference and a `$` in the reference app. |
-| `edit.findAndReplace` | M4 | handbook | yes | Regex mode is case-sensitive, and an empty Find appends Replace in Regex mode as in plain mode. Settled by observation. |
+| `edit.findAndReplace` | M4 | handbook | yes | Matching is case-sensitive unless `matchCase` is false, in plain and Regex mode alike; with it false, plain Find is still plain text. Settled by observation. |
+| `edit.findAndReplace` | M4 | handbook | yes | An empty Find appends Replace in Regex mode as in plain mode. Settled by observation. |
 | `fontView.setSearch` | M4 | handbook | yes | Glyphs that a new search hides are deselected, so batch commands never act on glyphs the view does not show. Settled by observing whether the reference keeps hidden glyphs selected after a search. |
 | `fontView.setSearch` | M4 | handbook | yes | A term the matcher refuses (a regular expression that does not compile yet) is refused and the view stays as it was; the field keeps the typed text while it has the keyboard. Settled by typing an unfinished regular expression in the reference's field. |
 | `fontView.selectSidebarEntries` | M4 | handbook | yes | Shift-click selects every entry listed between the last entry selected in the clicked entry's section and the clicked one, in any section (the handbook names filters only), and keeps the other sections' entries. Settled by Shift-clicking categories and languages in the reference. |

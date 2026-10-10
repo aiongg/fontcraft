@@ -219,7 +219,7 @@ pub enum Edit {
     ClearSortName,
 }
 
-/// The commands an edit runs on `glyphs`: one per edit, except one `glyph.addTag` per tag.
+/// The commands an edit runs on `glyphs`: one per edit.
 pub fn commands(app: &FontcraftApp, glyphs: &[String], edit: &Edit) -> Vec<(&'static str, Value)> {
     if glyphs.is_empty() {
         return Vec::new();
@@ -240,7 +240,11 @@ pub fn commands(app: &FontcraftApp, glyphs: &[String], edit: &Edit) -> Vec<(&'st
             vec![(id, params)]
         }
         Edit::Export(on) => vec![("glyph.setExport", json!({"glyphs": glyphs, "export": on}))],
-        Edit::AddTags(tags) => tags.iter().map(|t| ("glyph.addTag", json!({"glyphs": glyphs, "tag": t}))).collect(),
+        Edit::AddTags(tags) => match tags.as_slice() {
+            [] => Vec::new(),
+            [tag] => vec![("glyph.addTag", json!({"glyphs": glyphs, "tag": tag}))],
+            _ => vec![("glyph.addTag", json!({"glyphs": glyphs, "tags": tags}))],
+        },
         Edit::RemoveTag(tag) => vec![("glyph.removeTag", json!({"glyphs": glyphs, "tag": tag}))],
         Edit::ClearSortName => vec![("glyph.setSortName", json!({"glyphs": glyphs, "sortName": null}))],
     }

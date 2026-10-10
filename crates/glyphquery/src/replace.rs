@@ -21,13 +21,11 @@ pub struct Replacement {
 }
 
 impl Replacement {
-    /// Compiles `find` (case-sensitive, unanchored) within the same limits as search patterns,
-    /// and reads `replace`. A group reference the pattern lacks is an error.
-    pub fn new(find: &str, replace: &str) -> Result<Replacement, QueryError> {
-        if replace.len() > MAX_PATTERN_BYTES {
-            return fail(format!("the replacement is {} bytes long; at most {MAX_PATTERN_BYTES} are allowed", replace.len()));
-        }
-        let regex = limited_regex(find, find, false)?;
+    /// Compiles `find` (unanchored) within the same limits as search patterns, and reads
+    /// `replace`. A group reference the pattern lacks is an error.
+    pub fn new(find: &str, replace: &str, case_insensitive: bool) -> Result<Replacement, QueryError> {
+        check_replace(replace)?;
+        let regex = limited_regex(find, find, case_insensitive)?;
         let template = parse_template(replace);
         let groups = regex.captures_len();
         if let Some(missing) = template.iter().find_map(|p| match p {
@@ -40,6 +38,14 @@ impl Replacement {
                 if has == 1 { "" } else { "s" }
             ));
         }
+        Ok(Replacement { regex, template })
+    }
+
+    /// Finds `find` as plain text and puts `replace` in its place as plain text.
+    pub fn literal(find: &str, replace: &str, case_insensitive: bool) -> Result<Replacement, QueryError> {
+        check_replace(replace)?;
+        let regex = limited_regex(find, &regex::escape(find), case_insensitive)?;
+        let template = if replace.is_empty() { Vec::new() } else { vec![Piece::Text(replace.to_string())] };
         Ok(Replacement { regex, template })
     }
 
@@ -61,6 +67,13 @@ impl Replacement {
         out.push_str(text.get(last..).unwrap_or_default());
         out
     }
+}
+
+fn check_replace(replace: &str) -> Result<(), QueryError> {
+    if replace.len() > MAX_PATTERN_BYTES {
+        return fail(format!("the replacement is {} bytes long; at most {MAX_PATTERN_BYTES} are allowed", replace.len()));
+    }
+    Ok(())
 }
 
 fn parse_template(replace: &str) -> Vec<Piece> {

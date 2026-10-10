@@ -223,6 +223,12 @@ fn on_three_glyphs_fields_show_multiple_values_and_edit_all_of_them() {
     assert_eq!(last(&app), ("glyph.addTag".into(), json!({"glyphs": three, "tag": "new"})));
     assert_eq!(info(&mut app, "A")["tags"], json!(["new", "x"]), "a tag is added, not a set replaced");
     assert_eq!(info(&mut app, "C")["tags"], json!(["new"]));
+    let steps = app.session.journal().len();
+    w.focus(&mut app, widgets::id((SALT, "tags")));
+    w.type_text(&mut app, "p,q,r,");
+    assert_eq!(last(&app), ("glyph.addTag".into(), json!({"glyphs": three, "tags": ["p", "q", "r"]})));
+    assert_eq!(app.session.journal().len(), steps + 1, "pasted tags are one command");
+    assert_eq!(info(&mut app, "C")["tags"], json!(["new", "p", "q", "r"]));
 
     w.click(&mut app, widgets::id((SALT, "export")));
     assert_eq!(last(&app), ("glyph.setExport".into(), json!({"glyphs": three, "export": true})), "mixed: the click exports all");

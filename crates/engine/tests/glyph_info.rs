@@ -172,6 +172,28 @@ fn find_and_replace_with_a_regular_expression_uses_numbered_groups() {
 }
 
 #[test]
+fn find_and_replace_without_match_case_ignores_case() {
+    let mut s = built("A.Alt");
+    run(&mut s, "glyph.newGlyph", json!({"name": "b.alt"}));
+    let names = json!(["A.Alt", "b.alt"]);
+    // Case-sensitive by default: only `b.alt` has `.alt`.
+    let r = run(&mut s, "edit.findAndReplace", json!({"glyphs": names, "find": ".alt", "replace": ".ss01"}));
+    assert_eq!(r["renamed"], json!([{"from": "b.alt", "to": "b.ss01"}]));
+    // Match Case off: plain find matches regardless of case, and regex syntax in it is plain text.
+    let r = run(&mut s, "edit.findAndReplace", json!({"glyphs": ["A.Alt", "b.ss01"], "find": ".ALT", "replace": ".ss02", "matchCase": false}));
+    assert_eq!(r["renamed"], json!([{"from": "A.Alt", "to": "A.ss02"}]));
+    let r = run(&mut s, "edit.findAndReplace", json!({"glyphs": ["b.ss01"], "find": "s+0", "replace": "_", "matchCase": false}));
+    assert_eq!(r["renamed"], json!([]), "plain find escapes regex syntax");
+    let r = run(
+        &mut s,
+        "edit.findAndReplace",
+        json!({"glyphs": ["A.ss02", "b.ss01"], "find": "^(.)\\.SS", "replace": "\\1.alt", "regex": true, "matchCase": false}),
+    );
+    assert_eq!(r["renamed"], json!([{"from": "A.ss02", "to": "A.alt02"}, {"from": "b.ss01", "to": "b.alt01"}]));
+    check_session(&s).unwrap();
+}
+
+#[test]
 fn update_glyph_info_renames_resyncs_and_drops_overrides() {
     let mut s = Session::with_document();
     run(&mut s, "glyph.newGlyph", json!({"name": "uni0416"}));
@@ -274,6 +296,13 @@ fn export_colour_labels_tags_notes_and_sort_names() {
     assert_eq!(s.font().unwrap().glyph("B").unwrap().info.tags, ["Top"]);
     assert_eq!(s.font().unwrap().glyph("D").unwrap().info.tags, ["accent"]);
     refused(&mut s, "glyph.addTag", json!({"glyphs": ["A"], "tag": "a,b"}));
+    // Several tags at once are one undo step; a bad one refuses them all.
+    let before = s.font().unwrap().glyph("E").unwrap().info.tags.clone();
+    refused(&mut s, "glyph.addTag", json!({"glyphs": ["E"], "tags": ["ok", " "]}));
+    run(&mut s, "glyph.addTag", json!({"glyphs": ["E"], "tags": ["b", "a", "b"]}));
+    assert_eq!(s.font().unwrap().glyph("E").unwrap().info.tags, ["a", "b"]);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.font().unwrap().glyph("E").unwrap().info.tags, before);
     refused(&mut s, "glyph.setTags", json!({"glyphs": ["A"], "tags": [" "]}));
 
     run(&mut s, "glyph.setNote", json!({"glyphs": ["E"], "note": "check the bowl"}));

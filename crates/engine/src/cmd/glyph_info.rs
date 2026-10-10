@@ -145,7 +145,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Tag",
             [],
             None,
-            "{glyphs: [names], tag: string} adds one tag to every glyph that lacks it (rules as in glyph.setTags) → {glyphs: [names]}",
+            "{glyphs: [names], tag?: string, tags?: [strings]} give `tag` or `tags`: adds each tag to every glyph that lacks it, as one undo step (rules as in glyph.setTags) → {glyphs: [names]}",
             has_doc,
             add_tag
         )
@@ -215,7 +215,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Find and Replace…",
             ["Edit", "Find"],
             Some("Cmd+Shift+F"),
-            "{glyphs: [names], find: string, replace: string, regex?: bool} renames the glyphs by replacing every occurrence of `find` in their names with `replace`; an empty `find` appends `replace` to every name. Names without `find` stay. Each rename follows glyph.rename (references follow; Unicode values follow a changed base name) without converting to nice names. With `regex`, `find` is a regular expression and `replace` may name its groups as \\1 to \\9 (\\0: the whole match). If any result is taken, given twice or breaks the naming rules, nothing is renamed and the problems are listed → {renamed: [{from, to}], updated: [{name, place}], stillUsed: [{name, place}]}",
+            "{glyphs: [names], find: string, replace: string, matchCase?: bool (default true), regex?: bool} renames the glyphs by replacing every occurrence of `find` in their names with `replace`; an empty `find` appends `replace` to every name. With `matchCase` false, `find` matches regardless of case. Names without `find` stay. Each rename follows glyph.rename (references follow; Unicode values follow a changed base name) without converting to nice names. With `regex`, `find` is a regular expression and `replace` may name its groups as \\1 to \\9 (\\0: the whole match). If any result is taken, given twice or breaks the naming rules, nothing is renamed and the problems are listed → {renamed: [{from, to}], updated: [{name, place}], stillUsed: [{name, place}]}",
             has_doc,
             find_and_replace
         )
@@ -415,9 +415,12 @@ fn find_and_replace(s: &mut Session, v: &Value) -> Result<Value> {
             return Err(p.bad(format!("`{key}` is longer than {MAX_NAME_LEN} bytes")));
         }
     }
+    let fold = !p.bool_or("matchCase", true)?;
     let pattern = match (p.bool_or("regex", false)?, find.is_empty()) {
-        (true, false) => Some(fontcraft_glyphquery::Replacement::new(find, replace).map_err(|e| p.bad(format!("`find`: {e}")))?),
-        _ => None,
+        (_, true) => None,
+        (true, false) => Some(fontcraft_glyphquery::Replacement::new(find, replace, fold).map_err(|e| p.bad(format!("`find`: {e}")))?),
+        (false, false) if fold => Some(fontcraft_glyphquery::Replacement::literal(find, replace, true).map_err(|e| p.bad(format!("`find`: {e}")))?),
+        (false, false) => None,
     };
     let data = s.glyph_data()?;
     let font = s.font()?;
@@ -744,14 +747,31 @@ fn add_tag(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("glyph.addTag", v)?;
     let font = s.font()?;
     let names = targets(&p, font)?;
-    let t = tag(&p, p.str("tag")?)?;
-    if let Some(full) = names.iter().find(|n| font.glyph(n).is_some_and(|g| g.info.tags.len() >= MAX_GLYPH_TAGS && !g.info.tags.contains(&t))) {
-        return Err(p.bad(format!("glyph `{full}` already has {MAX_GLYPH_TAGS} tags")));
+    let texts = match (p.opt_str("tag")?, p.opt_strings("tags")?) {
+        (Some(one), None) => vec![one],
+        (None, Some(list)) if !list.is_empty() => list,
+        (None, Some(_)) => return Err(p.bad("`tags` is empty")),
+        (Some(_), Some(_)) => return Err(p.bad("give `tag` or `tags`, not both")),
+        (None, None) => return Err(p.bad("missing `tag` or `tags`")),
+    };
+    if texts.len() > MAX_GLYPH_TAGS {
+        return Err(p.bad(format!("`tags` holds {} tags; a glyph may have at most {MAX_GLYPH_TAGS}", texts.len())));
+    }
+    let mut new = Vec::with_capacity(texts.len());
+    for text in texts {
+        new.push(tag(&p, text)?);
+    }
+    let new = sorted_tags(new);
+    if let Some(full) = names
+        .iter()
+        .find(|n| font.glyph(n).is_some_and(|g| g.info.tags.len() + new.iter().filter(|t| !g.info.tags.contains(t)).count() > MAX_GLYPH_TAGS))
+    {
+        return Err(p.bad(format!("glyph `{full}` would have more than {MAX_GLYPH_TAGS} tags")));
     }
     edit_info(s, "Add Tag", &names, |i| {
-        if !i.tags.contains(&t) {
+        if new.iter().any(|t| !i.tags.contains(t)) {
             let mut tags = i.tags.clone();
-            tags.push(t.clone());
+            tags.extend(new.iter().cloned());
             i.tags = sorted_tags(tags);
         }
     })?;
