@@ -138,6 +138,13 @@ fn results_are_kept_and_fixed_by_id() {
     assert_eq!(r["fix"]["params"], json!({"results": ["r1"]}));
     assert_eq!(r["stale"], json!(false));
 
+    // Saving keeps the run.
+    let dir = std::env::temp_dir().join(format!("fontcraft-audit-kept-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    run(&mut s, "file.save", json!({"path": dir.join("kept.fontcraft").to_string_lossy()}));
+    assert_eq!(run(&mut s, "audit.results", json!({}))["results"][0]["id"], json!("r1"), "saving keeps the run");
+    let _ = std::fs::remove_dir_all(&dir);
+
     // A dry run plans and changes nothing.
     let before = font_json(&s);
     let dry = run(&mut s, "audit.fix", json!({"results": ["r1"], "dryRun": true}));
@@ -288,6 +295,9 @@ fn the_registry_is_listed_and_described() {
     assert_eq!(d["thresholds"][0]["name"], json!("tolerance"));
     assert_eq!(d["profiles"], json!(["outlines", "universal", "strict"]));
     assert_eq!(d["fix"]["command"], json!("path.tidyUpPaths"));
+    assert_eq!(d["codes"], json!(["flat-curve"]));
+    let capped = run(&mut s, "audit.describe", json!({"check": "check.outlines.collinearLines"}));
+    assert_eq!(capped["codes"], json!(["collinear", "nearly-collinear", "too-many-results"]));
     assert!(s.execute("audit.describe", &json!({"check": "check.outlines.*"})).is_err());
 
     let profiles = run(&mut s, "audit.profile.list", json!({}));

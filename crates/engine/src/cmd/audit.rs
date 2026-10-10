@@ -12,7 +12,7 @@
 //! (decision D12), and the whole call is one undo step.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::sync::{Arc, Mutex, PoisonError, Weak};
+use std::sync::Arc;
 
 use fontcraft_audit::{self as audit, AuditContext, CHECKS, CheckSpec, Config, CurveType, Finding, Profile, Severity};
 use fontcraft_model::{Font, Glyph, Layer, Path, Shape};
@@ -37,8 +37,6 @@ const MAX_CONFIG_ENTRIES: usize = 1024;
 const MAX_MAX_RESULTS: i64 = 1_000_000;
 /// Most results one document lists; the rest are counted in `summary.truncated`.
 const MAX_REPORTED: usize = 100_000;
-/// Most documents whose last run is kept.
-const MAX_CACHED: usize = 32;
 const GROUPS: [&str; 16] = [
     "outlines",
     "components",
@@ -72,7 +70,7 @@ const FIX_ORDER: [&str; 9] = [
     "roundCoordinates",
 ];
 const FIX_LABEL: &str = "Fix Audit Results";
-const NO_RUN: &str = "no audit has run on this document since it was opened or last saved: run audit.run first";
+const NO_RUN: &str = "no audit has run on this document since it was opened: run audit.run first";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -99,7 +97,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Describe Check",
             [],
             None,
-            "{check: id} everything known about one check → {id, label, description, group, family, severity, scope, profile, profiles: [ids], thresholds: [{name, default, min, max, doc}], fix: {id, command, available, safe, description} | null, preconditions: [text], capped}",
+            "{check: id} everything known about one check → {id, label, description, group, family, severity, scope, profile, profiles: [ids], thresholds: [{name, default, min, max, doc}], codes: [message code], fix: {id, command, available, safe, description} | null, preconditions: [text], capped}",
             always,
             describe
         ),
@@ -108,7 +106,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Audit Results",
             [],
             None,
-            "{checks?: [id | prefix*], exclude?: [id | prefix*], glyphs?: [names], minSeverity?: \"info\" | \"warn\" | \"fail\", fixable?: bool, includeIgnored?: bool, target?: \"document\"} the result document of the last audit.run on the open document, without running anything, narrowed to the matching results. A result whose glyph changed since the run has `stale: true`. An error when no run is kept (none since the document was opened or last saved) → the result document of audit.run, with summary.stale",
+            "{checks?: [id | prefix*], exclude?: [id | prefix*], glyphs?: [names], minSeverity?: \"info\" | \"warn\" | \"fail\", fixable?: bool, includeIgnored?: bool, target?: \"document\"} the result document of the last audit.run on the open document, without running anything, narrowed to the matching results. A result whose glyph changed since the run has `stale: true`. An error when no run is kept (none since the document was opened) → the result document of audit.run, with summary.stale",
             has_doc,
             results
         ),
@@ -217,7 +215,7 @@ fn id_set(p: &Params, key: &str, exists: impl Fn(&str) -> bool) -> Result<Option
         return Err(p.bad(format!("`{key}` holds {} ids; at most {MAX_IDS} are allowed", a.len())));
     }
     let Some(list) = p.opt_strings(key)? else { return Ok(None) };
-    if let Some(missing) = list.iter().find(|id| !exists(**id)) {
+    if let Some(missing) = list.iter().find(|id| !exists(id)) {
         return Err(p.bad(format!("`{key}`: there is no `{missing}`")));
     }
     Ok(Some(list.into_iter().map(str::to_string).collect()))
@@ -494,14 +492,13 @@ fn document(doc: &DocState, run: &Run, ex: &Examined, how: FixParams) -> Result<
     }))
 }
 
-// ── The kept runs ───────────────────────────────────────────────────────────────────────────────
+// ── The kept run ────────────────────────────────────────────────────────────────────────────────
 //
-// The session has no slot for audit results, so the last run of each document is kept here,
-// keyed by the document's id and its saved font (unique while the document is open, also across
-// sessions). Saving the document starts afresh.
+// The last run of a document lives on its `DocState` until the next run or until the document
+// closes; saving keeps it.
 
 /// Where a kept result points.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ResultRef {
     id: String,
     check: &'static str,
@@ -509,34 +506,17 @@ struct ResultRef {
     layer: String,
 }
 
-struct Kept {
-    doc: u64,
-    saved: Weak<Font>,
+/// The last `audit.run` of a document.
+#[derive(Debug)]
+pub struct KeptRun {
     /// The font the run examined, to tell which glyphs changed since.
     font: Arc<Font>,
     report: Value,
     refs: Vec<ResultRef>,
 }
 
-static KEPT: Mutex<Vec<Kept>> = Mutex::new(Vec::new());
-
-fn same_doc(k: &Kept, d: &DocState) -> bool {
-    k.doc == d.id && k.saved.upgrade().is_some_and(|s| Arc::ptr_eq(&s, &d.saved))
-}
-
-fn keep(d: &DocState, report: Value, refs: Vec<ResultRef>) {
-    let mut kept = KEPT.lock().unwrap_or_else(PoisonError::into_inner);
-    kept.retain(|k| k.saved.strong_count() > 0 && !same_doc(k, d));
-    if kept.len() >= MAX_CACHED {
-        let extra = kept.len() + 1 - MAX_CACHED;
-        kept.drain(..extra);
-    }
-    kept.push(Kept { doc: d.id, saved: Arc::downgrade(&d.saved), font: d.font.clone(), report, refs });
-}
-
-fn kept_run(d: &DocState) -> Option<(Arc<Font>, Value, Vec<ResultRef>)> {
-    let kept = KEPT.lock().unwrap_or_else(PoisonError::into_inner);
-    kept.iter().find(|k| same_doc(k, d)).map(|k| (k.font.clone(), k.report.clone(), k.refs.clone()))
+fn kept_run(d: &DocState) -> Option<&KeptRun> {
+    d.audit.as_deref()
 }
 
 /// Has `glyph` changed between the kept font and `now`?
@@ -566,7 +546,8 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
             layer: h.finding.location.layer.clone(),
         })
         .collect();
-    keep(doc, report.clone(), refs);
+    let font = doc.font.clone();
+    s.doc_mut()?.audit = Some(Arc::new(KeptRun { font, report: report.clone(), refs }));
     Ok(report)
 }
 
@@ -588,7 +569,8 @@ fn results(s: &mut Session, v: &Value) -> Result<Value> {
     };
     p.bool_or("includeIgnored", false)?;
     let doc = s.doc()?;
-    let (then, mut report, _) = kept_run(doc).ok_or_else(|| p.bad(NO_RUN))?;
+    let last = kept_run(doc).ok_or_else(|| p.bad(NO_RUN))?;
+    let (then, mut report) = (last.font.clone(), last.report.clone());
     let mut changed: HashMap<String, bool> = HashMap::new();
     let mut kept = Vec::new();
     let (mut counts, mut stale_count) = ([0usize; 3], 0usize);
@@ -733,7 +715,8 @@ fn fix(s: &mut Session, v: &Value) -> Result<Value> {
 /// The layers and checks named by result ids of the kept run.
 fn groups_from_ids(s: &Session, p: &Params, ids: &[&str], run: &mut Run, report: &mut FixReport) -> Result<Vec<Group>> {
     let doc = s.doc()?;
-    let (then, _, refs) = kept_run(doc).ok_or_else(|| p.bad(NO_RUN))?;
+    let last = kept_run(doc).ok_or_else(|| p.bad(NO_RUN))?;
+    let (then, refs) = (last.font.clone(), last.refs.clone());
     let index: HashMap<&str, &ResultRef> = refs.iter().map(|r| (r.id.as_str(), r)).collect();
     let mut groups: BTreeMap<(usize, usize), Group> = BTreeMap::new();
     let mut checks: Vec<&'static CheckSpec> = Vec::new();
@@ -1071,6 +1054,10 @@ fn describe(_: &mut Session, v: &Value) -> Result<Value> {
     let family = serde_json::to_value(c.family).map_err(|e| EngineError::Internal(e.to_string()))?;
     let thresholds = serde_json::to_value(c.thresholds).map_err(|e| EngineError::Internal(e.to_string()))?;
     let fix = c.fix.map(|f| json!({"id": f.id, "command": f.command, "available": fix_available(c), "safe": f.safe, "description": f.description}));
+    let mut codes = c.codes.to_vec();
+    if c.capped {
+        codes.push(audit::TOO_MANY_RESULTS);
+    }
     let mut preconditions = vec!["the source is read as it is: no compile"];
     if c.skip_variable {
         preconditions.push("the source has one master: on several masters the heuristic misfires on outlines that must stay compatible");
@@ -1086,6 +1073,7 @@ fn describe(_: &mut Session, v: &Value) -> Result<Value> {
         "profile": c.profile.as_str(),
         "profiles": profiles,
         "thresholds": thresholds,
+        "codes": codes,
         "fix": fix,
         "preconditions": preconditions,
         "capped": c.capped,

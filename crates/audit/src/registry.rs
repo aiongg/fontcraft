@@ -28,6 +28,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: REMOVE_OVERLAP,
         skip_variable: false,
         capped: false,
+        codes: &["crossing", "nested-same-direction"],
         run: contours::overlap,
     },
     CheckSpec {
@@ -41,6 +42,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("tidyPaths", TIDY, true, "Remove the second point and, when it ends a curve, its handles."),
         skip_variable: false,
         capped: false,
+        codes: &["coincident"],
         run: points::coincident_points,
     },
     CheckSpec {
@@ -54,6 +56,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("tidyPaths", TIDY, true, "Turn the curve into a line."),
         skip_variable: false,
         capped: false,
+        codes: &["flat-curve"],
         run: points::flat_curve,
     },
     CheckSpec {
@@ -67,6 +70,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("tidyPaths", TIDY, true, "Remove the node between the two lines."),
         skip_variable: false,
         capped: true,
+        codes: &["collinear", "nearly-collinear"],
         run: points::collinear_lines,
     },
     CheckSpec {
@@ -80,6 +84,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("deleteTinyContours", None, false, "Delete the contour."),
         skip_variable: false,
         capped: false,
+        codes: &["tiny"],
         run: contours::tiny_contour,
     },
     CheckSpec {
@@ -93,6 +98,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: false,
         capped: false,
+        codes: &["no-contours"],
         run: contours::no_contours,
     },
     CheckSpec {
@@ -106,6 +112,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("correctPathDirection", Some("path.correctPathDirection"), false, "Recompute every contour's direction from its nesting."),
         skip_variable: false,
         capped: false,
+        codes: &["outer-clockwise", "counter-same-direction", "nested-clockwise"],
         run: contours::path_direction,
     },
     CheckSpec {
@@ -119,6 +126,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("snapToMetric", None, false, "Move the point and its handles onto the metric line."),
         skip_variable: false,
         capped: true,
+        codes: &["alignment-miss"],
         run: metrics::alignment_miss,
     },
     CheckSpec {
@@ -132,6 +140,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: true,
         capped: true,
+        codes: &["jaggy"],
         run: points::jaggy_segments,
     },
     CheckSpec {
@@ -145,6 +154,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: true,
         capped: true,
+        codes: &["almost-orthogonal"],
         run: points::almost_orthogonal_line,
     },
     CheckSpec {
@@ -158,6 +168,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: true,
         capped: true,
+        codes: &["short-segment"],
         run: points::short_segments,
     },
     CheckSpec {
@@ -171,6 +182,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: REMOVE_OVERLAP,
         skip_variable: false,
         capped: false,
+        codes: &["overlapping-segments"],
         run: points::overlapping_segments,
     },
     CheckSpec {
@@ -184,6 +196,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("convertCurveType", None, false, "Convert every contour to the font's main curve type."),
         skip_variable: false,
         capped: false,
+        codes: &["mixed-in-layer", "differs-from-font"],
         run: contours::mixed_curve_types,
     },
     CheckSpec {
@@ -197,6 +210,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("eraseOpenCorners", None, false, "Trim the corner to the crossing point."),
         skip_variable: false,
         capped: true,
+        codes: &["open-corner"],
         run: contours::open_corners,
     },
     CheckSpec {
@@ -210,6 +224,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("addExtremes", Some("path.addExtremes"), true, "Split the segment at each extreme without changing its shape."),
         skip_variable: false,
         capped: true,
+        codes: &["missing-extreme"],
         run: handles::missing_extremes,
     },
     CheckSpec {
@@ -223,6 +238,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("addInflections", Some("path.addInflections"), true, "Insert a node at each inflection without changing the shape."),
         skip_variable: false,
         capped: true,
+        codes: &["inflection"],
         run: handles::inflections,
     },
     CheckSpec {
@@ -236,6 +252,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("tidyPaths", TIDY, false, "Turn the curve into a line."),
         skip_variable: false,
         capped: true,
+        codes: &["almost-straight"],
         run: points::almost_straight_curve,
     },
     CheckSpec {
@@ -249,6 +266,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("snapHandles", None, false, "Snap the handle to the axis, keeping its length."),
         skip_variable: false,
         capped: true,
+        codes: &["almost-orthogonal"],
         run: handles::almost_orthogonal_handle,
     },
     CheckSpec {
@@ -262,6 +280,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("tidyPaths", TIDY, true, "Turn the segment into a line when both of its handles are retracted."),
         skip_variable: false,
         capped: true,
+        codes: &["retracted", "both-retracted"],
         run: handles::zero_length_handle,
     },
     CheckSpec {
@@ -275,6 +294,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("tidyPaths", TIDY, false, "Merge the two nodes into one, keeping the outer handles."),
         skip_variable: false,
         capped: false,
+        codes: &["near-coincident"],
         run: points::near_coincident_points,
     },
     CheckSpec {
@@ -288,6 +308,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("removeDuplicateContours", None, true, "Delete the extra copies."),
         skip_variable: false,
         capped: false,
+        codes: &["duplicate"],
         run: contours::duplicate_contour,
     },
     CheckSpec {
@@ -301,6 +322,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("closePaths", Some("path.closeOpenPaths"), false, "Close the path: join its ends when they coincide, else add a line."),
         skip_variable: false,
         capped: false,
+        codes: &["open-path"],
         run: contours::open_path,
     },
     CheckSpec {
@@ -314,6 +336,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("deleteTinyContours", None, true, "Delete the path."),
         skip_variable: false,
         capped: false,
+        codes: &["empty", "single-node", "off-curve-only"],
         run: contours::stray_point,
     },
     CheckSpec {
@@ -327,6 +350,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("deleteTinyContours", None, true, "Delete the path."),
         skip_variable: false,
         capped: false,
+        codes: &["zero-area"],
         run: contours::zero_area_contour,
     },
     CheckSpec {
@@ -340,6 +364,14 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: false,
         capped: false,
+        codes: &[
+            "no-on-curve",
+            "open-starts-off-curve",
+            "open-ends-off-curve",
+            "line-after-off-curve",
+            "curve-off-curve-count",
+            "qcurve-without-off-curve",
+        ],
         run: points::invalid_segment_structure,
     },
     CheckSpec {
@@ -353,6 +385,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("roundCoordinates", Some("path.roundCoordinates"), false, "Round every coordinate to the grid."),
         skip_variable: false,
         capped: false,
+        codes: &["off-grid"],
         run: metrics::nodes_off_grid,
     },
     CheckSpec {
@@ -366,6 +399,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: false,
         capped: false,
+        codes: &["not-a-number", "beyond-storage", "far-from-em"],
         run: metrics::coordinates_out_of_range,
     },
     CheckSpec {
@@ -379,6 +413,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: false,
         capped: true,
+        codes: &["near-zone"],
         run: metrics::near_alignment_zone,
     },
     CheckSpec {
@@ -392,6 +427,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("alignHandles", None, false, "Rotate the handles onto a common line, keeping their lengths."),
         skip_variable: false,
         capped: true,
+        codes: &["kinked"],
         run: handles::kinked_smooth_node,
     },
     CheckSpec {
@@ -405,6 +441,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("setSmooth", None, true, "Set the smooth flag."),
         skip_variable: false,
         capped: true,
+        codes: &["collinear-handles"],
         run: handles::unflagged_smooth_node,
     },
     CheckSpec {
@@ -418,6 +455,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: false,
         capped: true,
+        codes: &["beyond-intersection", "unbalanced"],
         run: handles::unbalanced_handles,
     },
     CheckSpec {
@@ -431,6 +469,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: None,
         skip_variable: false,
         capped: false,
+        codes: &["crossed"],
         run: handles::crossed_handles,
     },
     CheckSpec {
@@ -444,6 +483,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("harmonize", None, false, "Move the node along its handle line until the curvatures match."),
         skip_variable: false,
         capped: true,
+        codes: &["curvature-break"],
         run: handles::curvature_break,
     },
     CheckSpec {
@@ -457,6 +497,7 @@ pub static CHECKS: &[CheckSpec] = &[
         fix: fix("setStartPoint", Some("path.makeNodeFirst"), true, "Make the lowest, then leftmost, on-curve node the first node."),
         skip_variable: false,
         capped: true,
+        codes: &["start-point"],
         run: contours::start_point_position,
     },
 ];

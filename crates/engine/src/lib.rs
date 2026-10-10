@@ -159,6 +159,8 @@ pub struct DocState {
     /// change made by something else in between.
     #[cfg(not(target_arch = "wasm32"))]
     pub stamp: Option<io::Stamp>,
+    /// The last `audit.run` on this document, which `audit.results` and `audit.fix` read.
+    pub(crate) audit: Option<Arc<cmd::audit::KeptRun>>,
 }
 
 impl DocState {
@@ -267,6 +269,7 @@ impl Session {
             revision: 0,
             #[cfg(not(target_arch = "wasm32"))]
             stamp,
+            audit: None,
         });
         self.active = Some(self.docs.len() - 1);
     }

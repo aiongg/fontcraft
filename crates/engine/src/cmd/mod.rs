@@ -9,7 +9,7 @@
 //! [`crate::Session::edit`], which makes the change one undo step.
 
 mod annotation;
-mod audit;
+pub(crate) mod audit;
 mod background;
 mod clipboard;
 mod common;

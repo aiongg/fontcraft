@@ -205,6 +205,7 @@ fn every_check_reports_its_fixture() {
         assert!(!r.findings.is_empty(), "{id} reports nothing on its fixture");
         for f in &r.findings {
             assert_eq!(f.check, *id);
+            assert!(find(id).is_some_and(|c| c.codes.contains(&f.code)), "{id} emits `{}`, which its registry entry does not list", f.code);
             assert_eq!(f.location.glyph, "o");
             assert_eq!(f.location.layer, "m01");
             assert!(!f.message.is_empty());
@@ -451,6 +452,14 @@ fn hostile_layers_do_not_panic() {
         let g = o(shapes);
         for config in [&Config::default(), &loose, &strict] {
             let r = run_with(&font, &g, &checks, config);
+            for f in &r.findings {
+                assert!(
+                    f.code == TOO_MANY_RESULTS || find(f.check).is_some_and(|c| c.codes.contains(&f.code)),
+                    "{name}: {} emits unlisted `{}`",
+                    f.check,
+                    f.code
+                );
+            }
             for spec in CHECKS {
                 assert!(r.findings.iter().filter(|f| f.check == spec.id).count() <= MAX_FINDINGS_PER_CHECK, "{name} {}", spec.id);
             }

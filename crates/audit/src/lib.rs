@@ -164,6 +164,8 @@ pub struct CheckSpec {
     /// Heuristic: more than `maxResults` results in one font collapse into one summary
     /// (`audit.resultCap`, [`collapse`]).
     pub capped: bool,
+    /// The message codes the check emits, besides `too-many-results` when it is capped.
+    pub codes: &'static [&'static str],
     #[serde(skip)]
     pub(crate) run: CheckFn,
 }
@@ -179,6 +181,9 @@ impl CheckSpec {
         self.thresholds.iter().find(|t| t.name == name)
     }
 }
+
+/// The code of the one result a capped check collapses into (`audit.resultCap`).
+pub const TOO_MANY_RESULTS: &str = "too-many-results";
 
 /// The check with this id.
 pub fn find(id: &str) -> Option<&'static CheckSpec> {
@@ -432,7 +437,7 @@ pub fn collapse(findings: Vec<Finding>, max_results: usize) -> Vec<Finding> {
         let n = counts.get(f.check).copied().unwrap_or(0);
         out.push(Finding {
             check: f.check,
-            code: "too-many-results",
+            code: TOO_MANY_RESULTS,
             severity: Severity::Info,
             message: format!("{n} results, more than {max_results}: this check probably does not suit the design."),
             location: Location::default(),
