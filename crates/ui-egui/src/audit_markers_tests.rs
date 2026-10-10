@@ -164,3 +164,31 @@ fn markers_show_an_explicit_audit_run_and_a_click_selects_what_it_reports() {
     assert_eq!(selection, json!({"points": [[1, 0], [1, 1]]}), "the open path's two ends");
     assert_eq!(app.session.active().unwrap().revision, revision, "the click edits nothing");
 }
+
+#[test]
+fn a_badge_keeps_clear_of_the_outline_it_reports() {
+    let mut app = FontcraftApp::default();
+    // An open diagonal running up-right from its first node, where a badge goes first.
+    app.run("path.addPath", &json!({"glyph": "A", "closed": false, "nodes": [{"x": 100, "y": 100}, {"x": 400, "y": 400}]})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+    app.run("view.setZoom", &json!({"size": 1000, "center": [250, 250]})).unwrap();
+    app.run("audit.run", &json!({"profile": "outlines", "glyphs": ["A"]})).unwrap();
+    app.run("audit.toggleMarkers", &json!({"on": true})).unwrap();
+    Window::new().idle(&mut app);
+
+    let markers = app.state.audit.shown.markers.clone();
+    assert!(!markers.is_empty());
+    let font = app.session.font().unwrap();
+    let layer = font.glyph("A").unwrap().layer(&font.masters[0].id).unwrap().clone();
+    let view = tools_glue::current_view(&app).unwrap();
+    let screen = |x: f64, y: f64| {
+        let p = view.to_screen(fontcraft_geom::Point::new(x, y));
+        Pos2::new(p.x as f32, p.y as f32)
+    };
+    let (a, b) = (screen(100.0, 100.0), screen(400.0, 400.0));
+    for (at, badge) in audit_markers::badges(&layer, &markers, view, &app.tokens).into_iter().flatten() {
+        let t = ((badge - a).dot(b - a) / (b - a).length_sq()).clamp(0.0, 1.0);
+        let gap = badge.distance(a + (b - a) * t);
+        assert!(gap > app.tokens.audit_badge_radius, "the badge for {at:?} at {badge:?} lies on the line ({gap} points away)");
+    }
+}

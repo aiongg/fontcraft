@@ -8,7 +8,7 @@ use fontcraft_geom::Point;
 use fontcraft_model::NodeKind;
 
 use crate::contour::{SegKind, angle_between, dist_to_line, dist_to_segment};
-use crate::{Hit, LayerInput, Params, Sink, Threshold, num};
+use crate::{Hit, LayerInput, Nth, Params, Sink, Threshold, num};
 
 pub(crate) const NEAR_COINCIDENT_MIN_DISTANCE: Threshold = Threshold {
     name: "minDistance",
@@ -86,7 +86,7 @@ pub(crate) fn coincident_points(input: &LayerInput<'_>, _: &Params<'_>, sink: &m
         for seg in c.segs.iter().filter(|s| s.is_valid()) {
             if seg.points().iter().all(|p| *p == seg.p0) {
                 sink.push(
-                    Hit::new("coincident", format!("Nodes {} and {} of path {} are at the same place.", seg.start, seg.end, c.shape))
+                    Hit::new("coincident", format!("Nodes {} and {} of path {} are at the same place.", Nth(seg.start), Nth(seg.end), Nth(c.shape)))
                         .points(vec![[c.shape, seg.start], [c.shape, seg.end]])
                         .segments(vec![[c.shape, seg.end]])
                         .at(seg.p1),
@@ -108,11 +108,14 @@ pub(crate) fn near_coincident_points(input: &LayerInput<'_>, p: &Params<'_>, sin
             if len > 0.0 && len < min {
                 let d = seg.p0.distance(seg.p1);
                 sink.push(
-                    Hit::new("near-coincident", format!("Nodes {} and {} of path {} are {} units apart.", seg.start, seg.end, c.shape, num(d)))
-                        .points(vec![[c.shape, seg.start], [c.shape, seg.end]])
-                        .segments(vec![[c.shape, seg.end]])
-                        .at(seg.p1)
-                        .data("distance", d),
+                    Hit::new(
+                        "near-coincident",
+                        format!("Nodes {} and {} of path {} are {} units apart.", Nth(seg.start), Nth(seg.end), Nth(c.shape), num(d)),
+                    )
+                    .points(vec![[c.shape, seg.start], [c.shape, seg.end]])
+                    .segments(vec![[c.shape, seg.end]])
+                    .at(seg.p1)
+                    .data("distance", d),
                 );
             }
         }
@@ -131,7 +134,7 @@ pub(crate) fn flat_curve(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut Sink
             if dist_to_segment(c1, p0, p1) <= tol && dist_to_segment(c2, p0, p1) <= tol {
                 let handles: Vec<[usize; 2]> = seg.ctrl.iter().map(|(i, _)| [c.shape, *i]).collect();
                 sink.push(
-                    Hit::new("flat-curve", format!("The curve ending at node {} of path {} is straight.", seg.end, c.shape))
+                    Hit::new("flat-curve", format!("The curve ending at node {} of path {} is straight.", Nth(seg.end), Nth(c.shape)))
                         .points(handles)
                         .segments(vec![[c.shape, seg.end]])
                         .at(p0.midpoint(p1)),
@@ -159,7 +162,12 @@ pub(crate) fn almost_straight_curve(input: &LayerInput<'_>, p: &Params<'_>, sink
                 sink.push(
                     Hit::new(
                         "almost-straight",
-                        format!("The curve ending at node {} of path {} strays only {} units from a straight line.", seg.end, c.shape, num(dev)),
+                        format!(
+                            "The curve ending at node {} of path {} strays only {} units from a straight line.",
+                            Nth(seg.end),
+                            Nth(c.shape),
+                            num(dev)
+                        ),
                     )
                     .segments(vec![[c.shape, seg.end]])
                     .at(p0.midpoint(p1))
@@ -197,7 +205,7 @@ pub(crate) fn collinear_lines(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut
             };
             if let Some((code, verb)) = hit {
                 sink.push(
-                    Hit::new(code, format!("Node {node} of path {} {verb} on the line between its neighbours.", c.shape))
+                    Hit::new(code, format!("Node {node} of path {} {verb} on the line between its neighbours.", Nth(c.shape), node = Nth(node)))
                         .points(vec![[c.shape, node]])
                         .at(mid)
                         .data("angle", angle_between(mid - prev, next - mid)),
@@ -224,10 +232,13 @@ pub(crate) fn short_segments(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut 
             }
             if len < min_len || len < min_frac * total {
                 sink.push(
-                    Hit::new("short-segment", format!("The segment ending at node {} of path {} is {} units long.", seg.end, c.shape, num(len)))
-                        .segments(vec![[c.shape, seg.end]])
-                        .at(seg.p1)
-                        .data("length", len),
+                    Hit::new(
+                        "short-segment",
+                        format!("The segment ending at node {} of path {} is {} units long.", Nth(seg.end), Nth(c.shape), num(len)),
+                    )
+                    .segments(vec![[c.shape, seg.end]])
+                    .at(seg.p1)
+                    .data("length", len),
                 );
             }
         }
@@ -252,11 +263,14 @@ pub(crate) fn almost_orthogonal_line(input: &LayerInput<'_>, p: &Params<'_>, sin
             if off < max {
                 let axis = if angle < 45.0 { "horizontal" } else { "vertical" };
                 sink.push(
-                    Hit::new("almost-orthogonal", format!("The line ending at node {} of path {} is {}° off {axis}.", seg.end, c.shape, num(off)))
-                        .points(vec![[c.shape, seg.start], [c.shape, seg.end]])
-                        .segments(vec![[c.shape, seg.end]])
-                        .at(seg.p0.midpoint(seg.p1))
-                        .data("angle", off),
+                    Hit::new(
+                        "almost-orthogonal",
+                        format!("The line ending at node {} of path {} is {}° off {axis}.", Nth(seg.end), Nth(c.shape), num(off)),
+                    )
+                    .points(vec![[c.shape, seg.start], [c.shape, seg.end]])
+                    .segments(vec![[c.shape, seg.end]])
+                    .at(seg.p0.midpoint(seg.p1))
+                    .data("angle", off),
                 );
             }
         }
@@ -273,10 +287,18 @@ pub(crate) fn jaggy_segments(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut 
             let angle = angle_between(-arrive, leave);
             if angle > 0.0 && angle < max {
                 sink.push(
-                    Hit::new("jaggy", format!("Node {node} of path {} is a spike: its segments meet at {}°.", c.shape, num(angle.to_degrees())))
-                        .points(vec![[c.shape, node]])
-                        .at(a.p1)
-                        .data("angle", angle),
+                    Hit::new(
+                        "jaggy",
+                        format!(
+                            "Node {node} of path {} is a spike: its segments meet at {}°.",
+                            Nth(c.shape),
+                            num(angle.to_degrees()),
+                            node = Nth(node)
+                        ),
+                    )
+                    .points(vec![[c.shape, node]])
+                    .at(a.p1)
+                    .data("angle", angle),
                 );
             }
         }
@@ -318,7 +340,10 @@ pub(crate) fn overlapping_segments(input: &LayerInput<'_>, _: &Params<'_>, sink:
                             "overlapping-segments",
                             format!(
                                 "The segment ending at node {} of path {} repeats the one ending at node {} of path {}.",
-                                seg.end, c.shape, first_node, first_shape
+                                Nth(seg.end),
+                                Nth(c.shape),
+                                Nth(first_node),
+                                Nth(first_shape)
                             ),
                         )
                         .shapes(shapes)
@@ -342,21 +367,21 @@ pub(crate) fn invalid_segment_structure(input: &LayerInput<'_>, _: &Params<'_>, 
         let nodes = &c.path.nodes;
         let Some(last_on) = nodes.iter().rposition(|n| n.on_curve()) else {
             if !c.closed() && !nodes.is_empty() {
-                sink.push(Hit::new("no-on-curve", format!("Open path {} has only off-curve nodes.", c.shape)).shapes(vec![c.shape]));
+                sink.push(Hit::new("no-on-curve", format!("Open path {} has only off-curve nodes.", Nth(c.shape))).shapes(vec![c.shape]));
             }
             continue;
         };
         if !c.closed() {
             if nodes.first().is_some_and(|n| !n.on_curve()) {
                 sink.push(
-                    Hit::new("open-starts-off-curve", format!("Open path {} starts with an off-curve node.", c.shape))
+                    Hit::new("open-starts-off-curve", format!("Open path {} starts with an off-curve node.", Nth(c.shape)))
                         .shapes(vec![c.shape])
                         .points(vec![[c.shape, 0]]),
                 );
             }
             if last_on + 1 < nodes.len() {
                 sink.push(
-                    Hit::new("open-ends-off-curve", format!("Open path {} ends with off-curve nodes.", c.shape))
+                    Hit::new("open-ends-off-curve", format!("Open path {} ends with off-curve nodes.", Nth(c.shape)))
                         .shapes(vec![c.shape])
                         .points((last_on + 1..nodes.len()).map(|i| [c.shape, i]).collect()),
                 );
@@ -365,16 +390,17 @@ pub(crate) fn invalid_segment_structure(input: &LayerInput<'_>, _: &Params<'_>, 
         for seg in c.segs.iter().filter(|s| s.kind == SegKind::Invalid) {
             let count = seg.ctrl.len();
             let (code, message) = match nodes.get(seg.end).map(|n| n.kind) {
-                Some(NodeKind::Line) => {
-                    ("line-after-off-curve", format!("Node {} of path {} is a line node with {count} off-curve nodes before it.", seg.end, c.shape))
-                }
+                Some(NodeKind::Line) => (
+                    "line-after-off-curve",
+                    format!("Node {} of path {} is a line node with {count} off-curve nodes before it.", Nth(seg.end), Nth(c.shape)),
+                ),
                 Some(NodeKind::Curve) => (
                     "curve-off-curve-count",
-                    format!("Node {} of path {} is a curve node with {count} off-curve nodes before it; it needs 2.", seg.end, c.shape),
+                    format!("Node {} of path {} is a curve node with {count} off-curve nodes before it; it needs 2.", Nth(seg.end), Nth(c.shape)),
                 ),
                 _ => (
                     "qcurve-without-off-curve",
-                    format!("Node {} of path {} is a quadratic curve node with no off-curve node before it.", seg.end, c.shape),
+                    format!("Node {} of path {} is a quadratic curve node with no off-curve node before it.", Nth(seg.end), Nth(c.shape)),
                 ),
             };
             sink.push(

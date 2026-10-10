@@ -561,6 +561,16 @@ fn all_finite(v: &[f64]) -> bool {
     v.iter().all(|x| x.is_finite())
 }
 
+/// A node, handle or path index as messages show it, counted from 1. Result addresses
+/// (`points`, `shapes`, `segments`) stay 0-based.
+pub(crate) struct Nth(pub usize);
+
+impl std::fmt::Display for Nth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.saturating_add(1))
+    }
+}
+
 /// A number for a message: whole numbers without decimals, others with up to two.
 pub(crate) fn num(v: f64) -> String {
     if (v - v.round()).abs() < 1e-9 {

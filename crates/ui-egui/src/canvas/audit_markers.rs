@@ -19,7 +19,7 @@
 
 use egui::{Pos2, Rect, Sense, Shape, Stroke, Vec2};
 use fontcraft_engine::Session;
-use fontcraft_geom::{Point, segments};
+use fontcraft_geom::{Point, Segment, segments};
 use fontcraft_model::{Layer, Path, Shape as ModelShape};
 use fontcraft_tools::View;
 use serde_json::{Value, json};
@@ -128,15 +128,18 @@ fn path(layer: &Layer, shape: usize) -> Option<&Path> {
 fn segment_lines(path: &Path, c: &Painting, keep: impl Fn(usize) -> bool) -> Vec<Vec<Pos2>> {
     let mut out = Vec::new();
     for segment in segments(&path.node_points(), path.closed).iter().filter(|s| keep(s.end)) {
-        let mut line: Vec<Pos2> = Vec::with_capacity(segment.pieces.len() * SAMPLES + 1);
-        for piece in &segment.pieces {
-            line.extend((0..=SAMPLES).map(|k| pos(c.view.to_screen(piece.eval(k as f64 / SAMPLES as f64)))));
-        }
-        if line.len() > 1 && line.iter().all(|p| usable(*p)) {
-            out.push(line);
-        }
+        out.extend(sampled(segment, c.view));
     }
     out
+}
+
+/// `segment` as a screen polyline; `None` when it has no usable length on screen.
+fn sampled(segment: &Segment, view: View) -> Option<Vec<Pos2>> {
+    let mut line: Vec<Pos2> = Vec::with_capacity(segment.pieces.len() * SAMPLES + 1);
+    for piece in &segment.pieces {
+        line.extend((0..=SAMPLES).map(|k| pos(view.to_screen(piece.eval(k as f64 / SAMPLES as f64)))));
+    }
+    (line.len() > 1 && line.iter().all(|p| usable(*p))).then_some(line)
 }
 
 /// The spot a marker's badge points at, in font units.
@@ -184,25 +187,74 @@ pub fn selection_params(layer: &Layer, m: &Marker) -> Option<Value> {
 }
 
 /// Where each marker's badge goes, as `(the reported spot, the badge centre)` in screen points;
-/// `None` for a marker without a spot. A badge that would overlap an earlier one moves right.
+/// `None` for a marker without a spot. The badge takes the first spot around the reported one,
+/// up-right first, that keeps clear of the outline and of earlier badges; when none does, it
+/// sits up-right and moves right off earlier badges.
 pub fn badges(layer: &Layer, markers: &[Marker], view: View, tokens: &Tokens) -> Vec<Option<(Pos2, Pos2)>> {
     let radius = tokens.audit_badge_radius;
+    let offset = tokens.audit_badge_offset;
+    let outline = outline_lines(layer, view);
     let mut placed: Vec<Pos2> = Vec::new();
     markers
         .iter()
         .map(|m| {
             let at = anchor(layer, m).map(|p| pos(view.to_screen(p))).filter(|p| usable(*p))?;
-            let mut badge = at + Vec2::new(tokens.audit_badge_offset, -tokens.audit_badge_offset);
-            for _ in 0..MAX_SHIFTS {
-                if !placed.iter().any(|p| p.distance(badge) < radius * 2.0) {
-                    break;
+            let reach = offset * BADGE_DISTANCES.last().copied().unwrap_or(1.0) + radius * 2.0;
+            let near: Vec<&[Pos2]> =
+                outline.iter().filter(|(bounds, _)| bounds.expand(reach).contains(at)).map(|(_, line)| line.as_slice()).collect();
+            let free = |badge: Pos2| {
+                !placed.iter().any(|p| p.distance(badge) < radius * 2.0)
+                    && near.iter().all(|line| line.windows(2).all(|w| clearance(badge, w) > radius + BADGE_MARGIN))
+            };
+            let spot = BADGE_DISTANCES
+                .iter()
+                .flat_map(|d| BADGE_DIRECTIONS.iter().map(move |(x, y)| Vec2::new(*x, *y).normalized() * offset * *d))
+                .map(|v| at + v)
+                .find(|b| free(*b));
+            let badge = spot.unwrap_or_else(|| {
+                let mut badge = at + Vec2::new(offset, -offset);
+                for _ in 0..MAX_SHIFTS {
+                    if !placed.iter().any(|p| p.distance(badge) < radius * 2.0) {
+                        break;
+                    }
+                    badge.x += radius * 2.0 + 1.0;
                 }
-                badge.x += radius * 2.0 + 1.0;
-            }
+                badge
+            });
             placed.push(badge);
             Some((at, badge))
         })
         .collect()
+}
+
+/// The directions a badge tries from its spot, in screen axes (y down), in order.
+const BADGE_DIRECTIONS: [(f32, f32); 8] = [(1.0, -1.0), (-1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0), (0.0, 1.0)];
+/// The distances a badge tries, as multiples of `audit_badge_offset`.
+const BADGE_DISTANCES: [f32; 3] = [1.0, 1.6, 2.4];
+/// Space kept between a badge's edge and the outline, in screen points.
+const BADGE_MARGIN: f32 = 2.0;
+
+/// Every path of `layer` as screen polylines, each with its bounds.
+fn outline_lines(layer: &Layer, view: View) -> Vec<(Rect, Vec<Pos2>)> {
+    let mut out = Vec::new();
+    for shape in &layer.shapes {
+        let ModelShape::Path(path) = shape else { continue };
+        for segment in &segments(&path.node_points(), path.closed) {
+            if let Some(line) = sampled(segment, view) {
+                out.push((Rect::from_points(&line), line));
+            }
+        }
+    }
+    out
+}
+
+/// The distance from `p` to the line piece `w` (two points; anything else is far away).
+fn clearance(p: Pos2, w: &[Pos2]) -> f32 {
+    let [a, b] = w else { return f32::INFINITY };
+    let ab = *b - *a;
+    let len2 = ab.length_sq();
+    let t = if len2 > 0.0 { ((p - *a).dot(ab) / len2).clamp(0.0, 1.0) } else { 0.0 };
+    p.distance(*a + ab * t)
 }
 
 /// Draws the markers of the edited layer. With `interactive`, each badge shows its message on

@@ -5,7 +5,7 @@
 use fontcraft_geom::{Point, Vec2};
 
 use crate::contour::{Bez, Seg, angle_between, proper_cross, sign_changing_roots};
-use crate::{Hit, LayerInput, Params, Sink, Threshold, num};
+use crate::{Hit, LayerInput, Nth, Params, Sink, Threshold, num};
 
 /// Parameters this close to a segment's ends count as the ends.
 const T_EPSILON: f64 = 1e-3;
@@ -90,8 +90,8 @@ pub(crate) fn missing_extremes(input: &LayerInput<'_>, p: &Params<'_>, sink: &mu
                             "missing-extreme",
                             format!(
                                 "The segment ending at node {} of path {} has an extreme in {axis} at ({}, {}) between its nodes.",
-                                seg.end,
-                                c.shape,
+                                Nth(seg.end),
+                                Nth(c.shape),
                                 num(x.x),
                                 num(x.y)
                             ),
@@ -147,7 +147,7 @@ pub(crate) fn inflections(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sin
                     continue;
                 }
                 sink.push(
-                    Hit::new("inflection", format!("The curve ending at node {} of path {} has an inflection.", seg.end, c.shape))
+                    Hit::new("inflection", format!("The curve ending at node {} of path {} has an inflection.", Nth(seg.end), Nth(c.shape)))
                         .segments(vec![[c.shape, seg.end]])
                         .at(x)
                         .data("t", t),
@@ -182,7 +182,7 @@ pub(crate) fn almost_orthogonal_handle(input: &LayerInput<'_>, p: &Params<'_>, s
                 if off_angle < max_angle || (offset < max_offset && off_angle < ORTHOGONAL_OFFSET_RULE_MAX_ANGLE) {
                     let axis = if angle < 45.0 { "horizontal" } else { "vertical" };
                     sink.push(
-                        Hit::new("almost-orthogonal", format!("Handle {i} of path {} is {}° off {axis}.", c.shape, num(off_angle)))
+                        Hit::new("almost-orthogonal", format!("Handle {i} of path {} is {}° off {axis}.", Nth(c.shape), num(off_angle), i = Nth(i)))
                             .points(vec![[c.shape, i]])
                             .at(h)
                             .data("angle", off_angle)
@@ -204,7 +204,7 @@ pub(crate) fn zero_length_handle(input: &LayerInput<'_>, _: &Params<'_>, sink: &
             match retracted.as_slice() {
                 [] => {}
                 [(i, h)] => sink.push(
-                    Hit::new("retracted", format!("Handle {i} of path {} sits on its node.", c.shape))
+                    Hit::new("retracted", format!("Handle {i} of path {} sits on its node.", Nth(c.shape), i = Nth(*i)))
                         .points(vec![[c.shape, *i]])
                         .at(*h)
                         .without_fix(),
@@ -212,7 +212,7 @@ pub(crate) fn zero_length_handle(input: &LayerInput<'_>, _: &Params<'_>, sink: &
                 _ => sink.push(
                     Hit::new(
                         "both-retracted",
-                        format!("Both handles of the curve ending at node {} of path {} sit on their nodes.", seg.end, c.shape),
+                        format!("Both handles of the curve ending at node {} of path {} sit on their nodes.", Nth(seg.end), Nth(c.shape)),
                     )
                     .points(retracted.iter().map(|(i, _)| [c.shape, *i]).collect())
                     .segments(vec![[c.shape, seg.end]])
@@ -236,7 +236,7 @@ pub(crate) fn kinked_smooth_node(input: &LayerInput<'_>, p: &Params<'_>, sink: &
             let angle = angle_between(arrive, leave).to_degrees();
             if angle > max {
                 sink.push(
-                    Hit::new("kinked", format!("Smooth node {node} of path {} has a kink of {}°.", c.shape, num(angle)))
+                    Hit::new("kinked", format!("Smooth node {node} of path {} has a kink of {}°.", Nth(c.shape), num(angle), node = Nth(node)))
                         .points(vec![[c.shape, node]])
                         .at(n.point())
                         .data("angle", angle),
@@ -265,7 +265,7 @@ pub(crate) fn unflagged_smooth_node(input: &LayerInput<'_>, _: &Params<'_>, sink
             let (u, v) = (here - *h_in, *h_out - here);
             if u.cross(v).abs() <= PARALLEL_EPSILON * u.hypot() * v.hypot() && u.dot(v) > 0.0 {
                 sink.push(
-                    Hit::new("collinear-handles", format!("Corner node {node} of path {} has handles on one line.", c.shape))
+                    Hit::new("collinear-handles", format!("Corner node {node} of path {} has handles on one line.", Nth(c.shape), node = Nth(node)))
                         .points(vec![[c.shape, node]])
                         .at(here),
                 );
@@ -306,12 +306,17 @@ pub(crate) fn unbalanced_handles(input: &LayerInput<'_>, p: &Params<'_>, sink: &
             let (code, message) = if f1 > 1.0 || f2 > 1.0 {
                 (
                     "beyond-intersection",
-                    format!("A handle of the curve ending at node {} of path {} reaches past where the handles meet.", seg.end, c.shape),
+                    format!("A handle of the curve ending at node {} of path {} reaches past where the handles meet.", Nth(seg.end), Nth(c.shape)),
                 )
             } else if ratio > max {
                 (
                     "unbalanced",
-                    format!("The handles of the curve ending at node {} of path {} differ {}-fold in length.", seg.end, c.shape, num(ratio)),
+                    format!(
+                        "The handles of the curve ending at node {} of path {} differ {}-fold in length.",
+                        Nth(seg.end),
+                        Nth(c.shape),
+                        num(ratio)
+                    ),
                 )
             } else {
                 continue;
@@ -338,7 +343,7 @@ pub(crate) fn crossed_handles(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut
             if let Some(x) = proper_cross(p0, c1, p1, c2) {
                 let pts = seg.ctrl.iter().map(|(i, _)| [c.shape, *i]).collect();
                 sink.push(
-                    Hit::new("crossed", format!("The handles of the curve ending at node {} of path {} cross.", seg.end, c.shape))
+                    Hit::new("crossed", format!("The handles of the curve ending at node {} of path {} cross.", Nth(seg.end), Nth(c.shape)))
                         .points(pts)
                         .segments(vec![[c.shape, seg.end]])
                         .at(x),
@@ -375,12 +380,15 @@ pub(crate) fn curvature_break(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut
             let ratio = hi / lo;
             if ratio > max {
                 sink.push(
-                    Hit::new("curvature-break", format!("At smooth node {node} of path {} the curvature changes {}-fold.", c.shape, num(ratio)))
-                        .points(vec![[c.shape, node]])
-                        .at(n.point())
-                        .data("ratio", ratio)
-                        .data("curvatureIn", k_in)
-                        .data("curvatureOut", k_out),
+                    Hit::new(
+                        "curvature-break",
+                        format!("At smooth node {node} of path {} the curvature changes {}-fold.", Nth(c.shape), num(ratio), node = Nth(node)),
+                    )
+                    .points(vec![[c.shape, node]])
+                    .at(n.point())
+                    .data("ratio", ratio)
+                    .data("curvatureIn", k_in)
+                    .data("curvatureOut", k_out),
                 );
             }
         }

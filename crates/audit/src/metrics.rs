@@ -4,7 +4,7 @@
 use fontcraft_model::metric;
 
 use crate::contour::Contour;
-use crate::{Hit, LayerInput, Params, Severity, Sink, Threshold, num};
+use crate::{Hit, LayerInput, Nth, Params, Severity, Sink, Threshold, num};
 
 /// Largest magnitude a coordinate may have in a compiled font (16-bit, with room for deltas).
 pub(crate) const MAX_STORED_COORDINATE: f64 = 32766.0;
@@ -97,11 +97,14 @@ pub(crate) fn alignment_miss(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut 
             let Some((name, y, d)) = nearest else { continue };
             if d > 0.0 && d <= max {
                 sink.push(
-                    Hit::new("alignment-miss", format!("Node {i} of path {} is {} units off the {name} ({}).", c.shape, num(d), num(y)))
-                        .points(vec![[c.shape, i]])
-                        .at(n.point())
-                        .data("distance", d)
-                        .data("metric", y),
+                    Hit::new(
+                        "alignment-miss",
+                        format!("Node {i} of path {} is {} units off the {name} ({}).", Nth(c.shape), num(d), num(y), i = Nth(i)),
+                    )
+                    .points(vec![[c.shape, i]])
+                    .at(n.point())
+                    .data("distance", d)
+                    .data("metric", y),
                 );
             }
         }
@@ -144,10 +147,13 @@ pub(crate) fn near_alignment_zone(input: &LayerInput<'_>, p: &Params<'_>, sink: 
             let nearest = zones.iter().map(|(lo, hi)| if n.y < *lo { lo - n.y } else { n.y - hi }).fold(f64::INFINITY, f64::min);
             if nearest > 0.0 && nearest <= margin {
                 sink.push(
-                    Hit::new("near-zone", format!("Node {i} of path {} is {} units outside an alignment zone.", c.shape, num(nearest)))
-                        .points(vec![[c.shape, i]])
-                        .at(n.point())
-                        .data("distance", nearest),
+                    Hit::new(
+                        "near-zone",
+                        format!("Node {i} of path {} is {} units outside an alignment zone.", Nth(c.shape), num(nearest), i = Nth(i)),
+                    )
+                    .points(vec![[c.shape, i]])
+                    .at(n.point())
+                    .data("distance", nearest),
                 );
             }
         }
@@ -208,7 +214,7 @@ pub(crate) fn coordinates_out_of_range(input: &LayerInput<'_>, p: &Params<'_>, s
         }
         if !nan.is_empty() {
             sink.push(
-                Hit::new("not-a-number", format!("Path {} has {} coordinates that are not numbers.", c.shape, nan.len()))
+                Hit::new("not-a-number", format!("Path {} has {} coordinates that are not numbers.", Nth(c.shape), nan.len()))
                     .shapes(vec![c.shape])
                     .points(nan),
             );
@@ -219,7 +225,7 @@ pub(crate) fn coordinates_out_of_range(input: &LayerInput<'_>, p: &Params<'_>, s
                     "beyond-storage",
                     format!(
                         "Path {} has {} points beyond ±{} units, which a compiled font cannot store.",
-                        c.shape,
+                        Nth(c.shape),
                         stored.len(),
                         num(MAX_STORED_COORDINATE)
                     ),
@@ -230,7 +236,7 @@ pub(crate) fn coordinates_out_of_range(input: &LayerInput<'_>, p: &Params<'_>, s
         }
         if !far.is_empty() {
             sink.push(
-                Hit::new("far-from-em", format!("Path {} has {} points more than {} units from the origin.", c.shape, far.len(), num(em_limit)))
+                Hit::new("far-from-em", format!("Path {} has {} points more than {} units from the origin.", Nth(c.shape), far.len(), num(em_limit)))
                     .severity(Severity::Warn)
                     .shapes(vec![c.shape])
                     .points(far),

@@ -227,12 +227,14 @@ fn findings_carry_addresses_and_fixes() {
     let r = run(&o(vec![rect(0.0, 0.0, 100.0, 100.0), rect(50.0, 50.0, 150.0, 150.0)]), "check.outlines.overlap");
     let f = &r.findings[0];
     assert_eq!(f.location.shapes, vec![0, 1]);
+    assert_eq!(f.message, "Shapes 1 and 2 cross.", "messages count from 1; addresses from 0");
     assert!(f.location.point.is_some());
     assert_eq!(f.fix.map(|x| x.command), Some(Some("path.removeOverlap")));
 
     // One retracted handle is reported without a fix; both retracted can be tidied into a line.
     let one = run(&o(vec![closed(vec![line(0.0, 0.0), off(0.0, 0.0), off(70.0, 50.0), curve(100.0, 0.0)])]), "check.outlines.zeroLengthHandle");
     assert_eq!(one.findings[0].location.points, vec![[0, 1]]);
+    assert_eq!(one.findings[0].message, "Handle 2 of path 1 sits on its node.");
     assert!(one.findings[0].fix.is_none());
     let both = run(
         &o(vec![closed(vec![line(0.0, 0.0), off(0.0, 0.0), off(100.0, 0.0), curve(100.0, 0.0), line(50.0, 80.0)])]),

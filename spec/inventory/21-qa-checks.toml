@@ -3887,7 +3887,7 @@ milestone = "M3"
 summary = "In Edit View each current result with a point, segment, component or anchor location draws a marker coloured by severity at that location; hovering shows the message and clicking selects what the result reports in Edit View (its nodes, both ends of its segments, its components) and the result in the Font Audit panel."
 ref = "Our design"
 status = "inferred"
-notes = "Built in M3.17 without the panel (M12). A reported node gets a ring, a segment or a whole path is drawn over the outline, and each result has a round badge up and to the right of the spot it names, so badges never cover a node. With live audit off the markers show the last audit.run's results for the edited layer, except stale ones."
+notes = "Built in M3.17 without the panel (M12). A reported node gets a ring, a segment or a whole path is drawn over the outline, and each result has a round badge beside the spot it names, up and to the right where that keeps clear of the outline, else in the first clear direction around it, so badges never cover a node or lie on a path. Messages count nodes, handles and paths from 1; result addresses stay 0-based. With live audit off the markers show the last audit.run's results for the edited layer, except stale ones."
 
 [[behavior]]
 id = "audit.ignoreListStorage"

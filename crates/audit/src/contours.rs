@@ -7,7 +7,7 @@ use fontcraft_geom::{BezPath, PathEl, Point, Rect, Shape as _};
 use fontcraft_model::{NodeKind, Shape};
 
 use crate::contour::{Bez, MAX_NESTING_CONTOURS, ZERO_AREA_TOLERANCE, nesting, overlaps, polylines_cross, proper_cross, regions};
-use crate::{CurveType, Hit, LayerInput, MAX_LAYER_NODES, Params, Severity, Sink, Threshold, num};
+use crate::{CurveType, Hit, LayerInput, MAX_LAYER_NODES, Nth, Params, Severity, Sink, Threshold, num};
 
 /// Most pairs of line pieces the overlap test compares on one layer.
 pub(crate) const MAX_OVERLAP_TESTS: usize = 5_000_000;
@@ -101,8 +101,11 @@ pub(crate) fn overlap(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sink) {
         }
     }
     for ((a, b), x) in crossings {
-        let (message, shapes) =
-            if a == b { (format!("Path {a} crosses itself."), vec![a]) } else { (format!("Shapes {a} and {b} cross."), vec![a, b]) };
+        let (message, shapes) = if a == b {
+            (format!("Path {a} crosses itself.", a = Nth(a)), vec![a])
+        } else {
+            (format!("Shapes {a} and {b} cross.", a = Nth(a), b = Nth(b)), vec![a, b])
+        };
         sink.push(Hit::new("crossing", message).shapes(shapes).at(x));
     }
     let regions = regions(&input.contours);
@@ -115,7 +118,7 @@ pub(crate) fn overlap(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sink) {
             sink.push(
                 Hit::new(
                     "nested-same-direction",
-                    format!("Path {} lies inside path {} and runs the same way, so the two overlap.", inner.shape, outer.shape),
+                    format!("Path {} lies inside path {} and runs the same way, so the two overlap.", Nth(inner.shape), Nth(outer.shape)),
                 )
                 .shapes(vec![outer.shape, inner.shape])
                 .bounds(inner.bbox),
@@ -187,7 +190,7 @@ pub(crate) fn tiny_contour(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut Si
         let area = b.width() * b.height();
         if area < min {
             sink.push(
-                Hit::new("tiny", format!("Path {} covers only {} square units.", c.shape, num(area)))
+                Hit::new("tiny", format!("Path {} covers only {} square units.", Nth(c.shape), num(area)))
                     .shapes(vec![c.shape])
                     .bounds(b)
                     .at(b.center())
@@ -240,9 +243,11 @@ pub(crate) fn path_direction(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut 
             continue;
         }
         let (code, message) = match depth {
-            0 => ("outer-clockwise", format!("Path {} is an outer contour but runs clockwise.", r.shape)),
-            d if d % 2 == 1 => ("counter-same-direction", format!("Path {} is a counter but runs the same way as the contour around it.", r.shape)),
-            _ => ("nested-clockwise", format!("Path {} lies inside a counter but runs clockwise.", r.shape)),
+            0 => ("outer-clockwise", format!("Path {} is an outer contour but runs clockwise.", Nth(r.shape))),
+            d if d % 2 == 1 => {
+                ("counter-same-direction", format!("Path {} is a counter but runs the same way as the contour around it.", Nth(r.shape)))
+            }
+            _ => ("nested-clockwise", format!("Path {} lies inside a counter but runs clockwise.", Nth(r.shape))),
         };
         sink.push(Hit::new(code, message).shapes(vec![r.shape]).bounds(r.bbox).data("depth", depth as f64));
     }
@@ -259,7 +264,7 @@ pub(crate) fn open_path(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sink)
         if n > 1 {
             ends.push([c.shape, n - 1]);
         }
-        let mut hit = Hit::new("open-path", format!("Path {} is open.", c.shape)).shapes(vec![c.shape]).points(ends);
+        let mut hit = Hit::new("open-path", format!("Path {} is open.", Nth(c.shape))).shapes(vec![c.shape]).points(ends);
         if let Some(first) = c.path.nodes.first().filter(|_| c.finite) {
             hit = hit.at(first.point());
         }
@@ -272,10 +277,10 @@ pub(crate) fn stray_point(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sin
     for c in &input.contours {
         let nodes = &c.path.nodes;
         let (code, message) = match nodes.len() {
-            0 => ("empty", format!("Path {} has no nodes.", c.shape)),
-            1 => ("single-node", format!("Path {} is a single node.", c.shape)),
+            0 => ("empty", format!("Path {} has no nodes.", Nth(c.shape))),
+            1 => ("single-node", format!("Path {} is a single node.", Nth(c.shape))),
             n if c.on_curve_count() == 0 && (!c.closed() || n < 3) => {
-                ("off-curve-only", format!("Path {} has only off-curve nodes and makes no shape.", c.shape))
+                ("off-curve-only", format!("Path {} has only off-curve nodes and makes no shape.", Nth(c.shape)))
             }
             _ => continue,
         };
@@ -299,7 +304,7 @@ pub(crate) fn zero_area_contour(input: &LayerInput<'_>, _: &Params<'_>, sink: &m
         }
         let area = bez.area();
         if area.is_finite() && area.abs() < ZERO_AREA_TOLERANCE {
-            let mut hit = Hit::new("zero-area", format!("Path {} encloses no area.", c.shape)).shapes(vec![c.shape]);
+            let mut hit = Hit::new("zero-area", format!("Path {} encloses no area.", Nth(c.shape))).shapes(vec![c.shape]);
             if let Some(b) = c.bbox() {
                 hit = hit.bounds(b).at(b.center());
             }
@@ -324,7 +329,8 @@ pub(crate) fn duplicate_contour(input: &LayerInput<'_>, _: &Params<'_>, sink: &m
         let key = (c.closed(), pts);
         match seen.get(&key) {
             Some(&first) => {
-                let mut hit = Hit::new("duplicate", format!("Path {} repeats path {first}.", c.shape)).shapes(vec![first, c.shape]);
+                let mut hit =
+                    Hit::new("duplicate", format!("Path {} repeats path {first}.", Nth(c.shape), first = Nth(first))).shapes(vec![first, c.shape]);
                 if let Some(b) = c.bbox() {
                     hit = hit.bounds(b);
                 }
@@ -357,7 +363,12 @@ pub(crate) fn start_point_position(input: &LayerInput<'_>, _: &Params<'_>, sink:
             sink.push(
                 Hit::new(
                     "start-point",
-                    format!("Path {} starts at node {start}; the usual start is node {best_i}, the lowest then leftmost.", c.shape),
+                    format!(
+                        "Path {} starts at node {start}; the usual start is node {best_i}, the lowest then leftmost.",
+                        Nth(c.shape),
+                        start = Nth(start),
+                        best_i = Nth(best_i)
+                    ),
                 )
                 .shapes(vec![c.shape])
                 .points(vec![[c.shape, start]])
@@ -426,7 +437,7 @@ pub(crate) fn open_corners(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut Si
             }
             if let Some(x) = polylines_cross(&a.polyline(), &b.polyline()) {
                 sink.push(
-                    Hit::new("open-corner", format!("Path {} has an open corner at nodes {} and {}.", c.shape, mid.start, mid.end))
+                    Hit::new("open-corner", format!("Path {} has an open corner at nodes {} and {}.", Nth(c.shape), Nth(mid.start), Nth(mid.end)))
                         .shapes(vec![c.shape])
                         .points(vec![[c.shape, mid.start], [c.shape, mid.end]])
                         .segments(vec![[c.shape, mid.end]])
