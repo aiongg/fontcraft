@@ -678,6 +678,10 @@ written tutorial and are documented, not yet observed. "Ours" answers are best g
 the named row's `guesses`; an observation settles them. Questions marked ▶ are worth a tutorial
 video (`docs/plans/M4.md` § 7).
 
+FontCraft does what every answer below says (M4, `docs/plans/M4.md` § 5 › Results). Still open:
+the decomposition, anchor and mark data of question 1 (M6), the full Selection Info layout of
+question 15, question 16 (M6) and question 20 (M11).
+
 1. **Database fields not in the public data.** `sortName`, `sortNameKeep`, `decompose`, `anchors`
    and `accents` exist as columns but ship with no values in GlyphsInfo. What does the reference
    use, and can we derive equivalents (Unicode decomposition, our own anchor tables) well enough for
