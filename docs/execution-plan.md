@@ -29,7 +29,8 @@ lists the decision as the owner's.
 
 - [ ] Its row exists in `spec/inventory/*.toml` (add it if it is our own design, `status = "inferred"`).
 - [ ] Every choice of ours where no source says what the reference does is a sentence in the
-      row's `guesses`; a live `inferred` or `memory` command needs at least one.
+      row's `guesses`; a live `inferred` or `memory` command needs at least one, unless it has no
+      counterpart in the reference app (`own = true`).
 - [ ] The work is a function in the right lower-layer crate.
 - [ ] `cmd!(…)` in `crates/engine/src/cmd/<area>.rs`: the id from the inventory, label, menu
       path, shortcut, a params doc that starts with `{…}` and says what is returned after `→`.

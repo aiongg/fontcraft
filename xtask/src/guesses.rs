@@ -3,7 +3,8 @@
 //! A row's `guesses` list holds the choices FontCraft made where no source says what the reference
 //! does. This writes them all to `docs/guesses.md`, and fails when a live command whose status is
 //! `inferred` or `memory` records none: such a row is a guess by its status, so the guess must be
-//! written down.
+//! written down. A row with `own = true` has no counterpart in the reference app, so there is
+//! nothing to guess about it and the check skips it.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -16,12 +17,13 @@ use crate::spec::{self, Inventory, Row};
 /// must say what it guessed.
 const GUESSED_STATUSES: &[&str] = &["inferred", "memory"];
 
-/// Live commands whose status says they are a guess but whose row has no `guesses`.
+/// Live commands whose status says they are a guess but whose row has no `guesses` and no
+/// `own = true`.
 pub fn unrecorded<'a>(inv: &'a Inventory, live: &BTreeSet<&str>) -> Vec<&'a Row> {
     inv.rows
         .iter()
         .filter(|r| r.kind == "command" && live.contains(r.key.as_str()))
-        .filter(|r| GUESSED_STATUSES.contains(&r.status.as_str()) && r.guesses().is_empty())
+        .filter(|r| GUESSED_STATUSES.contains(&r.status.as_str()) && r.guesses().is_empty() && !r.own())
         .collect()
 }
 
@@ -46,7 +48,7 @@ pub fn render(inv: &Inventory, live: &BTreeSet<&str>) -> String {
     );
     let _ = writeln!(
         out,
-        "To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry. **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.\n"
+        "To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.\n"
     );
     let _ = writeln!(out, "**{entries} guesses on {} rows ({live_rows} of them live commands).**\n", with.len());
 
@@ -115,6 +117,9 @@ mod tests {
 
     fn row(kind: &'static str, key: &str, status: &str, guesses: &[&str]) -> Row {
         let mut fields = toml::Table::new();
+        if key.ends_with("Own") {
+            fields.insert("own".into(), toml::Value::Boolean(true));
+        }
         if !guesses.is_empty() {
             fields.insert("guesses".into(), toml::Value::Array(guesses.iter().map(|g| toml::Value::String((*g).into())).collect()));
         }
@@ -122,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn a_live_guessed_command_without_guesses_is_reported_and_live_rows_list_first() {
+    fn a_live_guessed_command_without_guesses_or_own_is_reported_and_live_rows_list_first() {
         let inv = Inventory {
             areas: vec![Area { id: "a".into(), title: "A".into(), weight: 1 }],
             milestones: vec![Milestone { id: "M3".into(), title: "M3".into() }],
@@ -130,11 +135,12 @@ mod tests {
                 row("behavior", "rule.one", "handbook", &["Ours | theirs."]),
                 row("command", "path.live", "inferred", &["We chose this."]),
                 row("command", "path.bare", "memory", &[]),
+                row("command", "path.queryOwn", "inferred", &[]),
                 row("command", "path.notLive", "inferred", &[]),
                 row("command", "path.documented", "handbook", &[]),
             ],
         };
-        let live: BTreeSet<&str> = ["path.live", "path.bare", "path.documented"].into_iter().collect();
+        let live: BTreeSet<&str> = ["path.live", "path.bare", "path.queryOwn", "path.documented"].into_iter().collect();
         let missing: Vec<&str> = unrecorded(&inv, &live).iter().map(|r| r.key.as_str()).collect();
         assert_eq!(missing, ["path.bare"]);
         let text = render(&inv, &live);

@@ -170,9 +170,7 @@ milestone = "M0"
 summary = "Summarises the open documents. `revision` grows with every change, so an agent can tell whether a document changed since it last looked, whoever changed it."
 ref = "FontCraft design (docs/control-protocol.md)"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "command.batch"
@@ -186,9 +184,7 @@ milestone = "M1"
 summary = "Runs several commands as one transaction and one undo step: if any step fails, none of them takes effect. The building block of actions, scripts and multi-step agent edits."
 ref = "FontCraft design, following the sibling apps"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "document.activate"
@@ -202,9 +198,7 @@ milestone = "M1"
 summary = "Makes another open document the one commands act on, chosen by its position among the open documents or by its file. The window's tab or document list calls it; agents call it to switch between fonts."
 ref = "FontCraft design, following the sibling apps"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[behavior]]
 id = "file.openTwiceActivates"
@@ -221,6 +215,7 @@ milestone = "M1"
 summary = "The edits of all steps of a command batch are one undo step per document they changed, labelled with the batch's label. Undo and redo cannot be steps of a batch."
 ref = "FontCraft design"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "commands.failedCommandChangesNothing"
@@ -229,6 +224,7 @@ milestone = "M0"
 summary = "A command that returns an error leaves every document, its history and the journal exactly as they were. The engine snapshots before each top-level command and restores on error or on an internal failure."
 ref = "FontCraft design (docs/architecture.md › Commands)"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "commands.neverPanic"
@@ -237,6 +233,7 @@ milestone = "M0"
 summary = "No command panics, whatever its parameters and the document state: wrong types, absurd sizes, missing glyphs, cyclic components and non-finite numbers are errors that name the command and the parameter. Checked by the junk-parameter sweep over the whole registry."
 ref = "AGENTS.md › Never crash"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "commands.explicitTargets"
@@ -245,6 +242,7 @@ milestone = "M0"
 summary = "Every engine command can name what it acts on (glyphs, layer, nodes, paths) in its parameters. The UI fills those from its selection; agents and the CLI pass them. No engine command depends on UI state."
 ref = "FontCraft design (docs/architecture.md › Commands)"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "commands.queriesNotJournaled"
@@ -253,6 +251,7 @@ milestone = "M0"
 summary = "Commands that only read are queries: they are not recorded in the journal and do not create undo steps."
 ref = "FontCraft design"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "shortcuts.platformMapping"
@@ -274,9 +273,7 @@ milestone = "M3"
 summary = "Opens a command's dialog, by the dialog's id or by the command it runs. Parameters of its fields set their first values; the others (glyph, glyphs, layer, points…) say what it acts on, else the selection does. A menu item whose command has a dialog opens it the same way. Agents fill it with ui.dialog.set and close it with ui.dialog.confirm or ui.dialog.cancel."
 ref = "FontCraft design (decision 0004, item 6)"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[behavior]]
 id = "dialog.livePreview"

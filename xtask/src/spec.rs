@@ -43,6 +43,11 @@ impl Row {
         self.fields.get(field).and_then(Value::as_str).unwrap_or("")
     }
 
+    /// `own = true`: the row has no counterpart in the reference app.
+    pub fn own(&self) -> bool {
+        self.fields.get("own").and_then(Value::as_bool).unwrap_or(false)
+    }
+
     /// The row's `guesses`: choices of ours where no source says what the reference does.
     pub fn guesses(&self) -> Vec<&str> {
         self.fields.get("guesses").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default()
@@ -256,6 +261,9 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                 });
                 if !guesses_ok {
                     err("`guesses` must be a non-empty list of sentences".into());
+                }
+                if fields.contains_key("own") && !flag("own") {
+                    err("`own` must be true or false".into());
                 }
                 if fields.contains_key("context") && kind != "command" {
                     err("only a command has `context`".into());

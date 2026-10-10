@@ -173,8 +173,9 @@ milestone = "M3"
 summary = "Query returning what the selection Info box shows: bounding box position at the reference point, width and height, and for a single node its coordinates, and for a single handle also delta X, delta Y and length to its on-curve node. Headless counterpart of reading the Info box; not a reference menu item."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "inferred"
+own = true
 guesses = [
-  "Our own query; its fields follow the Info box, and its default reference point (bottom left) is ours.",
+  "Its default reference point, bottom left, is ours; the handbook gives none for the Info box.",
 ]
 
 [[command]]
@@ -427,10 +428,8 @@ milestone = "M3"
 summary = "Pans the Edit View canvas to an absolute position or by an offset. Headless form of dragging with the Hand tool, scrolling or dragging the scroll bars."
 ref = "Edit View › Glyph Display › Panning"
 status = "inferred"
+own = true
 notes = "Built in M3.2: `x` and `y` name the font point (edited glyph's units) shown at the window's centre; `dx` and `dy` then move the content by that many screen points, right and down. The wheel scrolls through this command; Shift turns a vertical wheel horizontal. Scroll bars are not drawn yet."
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
 
 [[panel]]
 id = "editView.bottomBar"
@@ -669,10 +668,8 @@ milestone = "M3"
 summary = "Query returning the state of every View-menu display toggle, the zoom value, the writing direction and the active preview features of an Edit View tab, so an agent can read the view state before changing it."
 ref = "Edit View › Glyph Display › View Options"
 status = "inferred"
+own = true
 notes = "Built in M3.2: returns every toggle by its camelCase name (`nodes`, `metrics`, `fillPreview`…), `palette`, `zoom`, `center` (edited glyph's units), `tab`, `direction` (always `ltr` until text mode) and `previewFeatures` (empty until text mode)."
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
 
 [[behavior]]
 id = "view.reporterPluginsInViewMenu"
@@ -1432,10 +1429,8 @@ milestone = "M3"
 summary = "Query returning every on-curve node, off-curve point and anchor of a layer with coordinates, plus the X and Y deltas between consecutive on-curve nodes with X corrected for the italic angle. Headless form of the labels the Measurement tool draws."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "inferred"
+own = true
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: the Measurement tool labels every node and handle with X and Y and shows dx, dy deltas between consecutive on-curve nodes, the data this query returns."
-guesses = [
-  "The query is our design; its data is what the Measurement tool's labels show.",
-]
 
 [[command]]
 id = "guide.toggleMeasurement"
@@ -1765,9 +1760,7 @@ milestone = "M3"
 summary = "Query returning the annotations stored on a layer, in list order, with type, position and the values the type uses: text and width for a note, angle for an arrow, diameter for a circle. A type FontCraft does not know is returned as stored, with every value the file holds."
 ref = "Edit View › Annotating"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[behavior]]
 id = "annotation.storedPerLayer"

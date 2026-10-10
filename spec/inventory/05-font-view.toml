@@ -132,9 +132,7 @@ milestone = "M4"
 summary = "Our headless equivalent of clicking cells: sets the Font View glyph selection by name. Every batch command without explicit targets acts on this selection."
 ref = "Font View › Batch-Processing › Selecting Glyphs"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "fontView.getState"

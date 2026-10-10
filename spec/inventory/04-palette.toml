@@ -261,9 +261,7 @@ milestone = "M3"
 summary = "Query returning the current handle length percentage of each selected segment, the value the grey marker under the buttons indicates."
 ref = "Palette › Fit Curve"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[behavior]]
 id = "fitCurve.bothHandles"

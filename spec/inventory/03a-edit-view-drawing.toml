@@ -433,9 +433,7 @@ milestone = "M3"
 summary = "Makes the named pointer tool active in Edit View, as its toolbar button or key does. The control method ui.tool.select runs it. Our own command: the reference chooses tools only through the toolbar and keys."
 ref = "Edit View › Draw Tool; docs/control-protocol.md"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "tool.list"
@@ -449,9 +447,7 @@ milestone = "M3"
 summary = "Query that lists the pointer tools with their keys and toolbar groups and names the active one. The control method ui.tool.list runs it. Our own command."
 ref = "Edit View › Draw Tool; docs/control-protocol.md"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[panel]]
 id = "dialog.primitiveMeasurements"
@@ -481,9 +477,7 @@ milestone = "M3"
 summary = "Headless equivalent of the rectangle primitive: appends a closed four-node rectangular path to the layer. Our own command; the reference only has the tool."
 ref = "Edit View › Primitives"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "path.addEllipse"
@@ -497,9 +491,7 @@ milestone = "M3"
 summary = "Headless equivalent of the ellipse primitive: appends a closed elliptical path with nodes at its four extremes to the layer. Our own command; the reference only has the tool."
 ref = "Edit View › Primitives"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "path.addPath"
@@ -513,9 +505,7 @@ milestone = "M3"
 summary = "Headless equivalent of drawing with the Draw tool: appends a path given as an ordered point list in path direction. Its nodes are rounded to the font's grid, like every point a command creates (Addressing, decision 0004). Our own command."
 ref = "Edit View › Draw Tool"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "layer.inspect"
@@ -529,9 +519,7 @@ milestone = "M3"
 summary = "Query that returns one layer's outline with the address of every shape, node, anchor, guide and annotation, in the form the target parameters of the editing commands use. Agents and tests read outlines with it. Our own command."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[panel]]
 id = "editView.toolbar"
@@ -817,6 +805,7 @@ milestone = "M3"
 summary = "Headless equivalent of clicking and Shift-clicking: sets or amends the Edit View selection from explicit object references. Our own command."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "inferred"
+own = true
 notes = "An address that does not resolve is an error."
 guesses = [
   "The selection belongs to the showing tab and is cleared when another glyph is edited; the reference's rule is not documented.",
@@ -834,6 +823,7 @@ milestone = "M3"
 summary = "Headless equivalent of the marquee (optionally slanted) and of the lasso: selects the points inside a rectangle or polygon given in font units, with the same nodes-only and extend options as the pointer gestures. Our own command."
 ref = "Edit View › Free-form Selections"
 status = "inferred"
+own = true
 guesses = [
   "A turned region rotates about its corner (x, y), our reading of the marquee turned with Ctrl.",
 ]
@@ -1406,6 +1396,7 @@ milestone = "M3"
 summary = "Headless equivalent of the Knife tool: the segment from `from` to `to` cuts every path it crosses. Along the line, crossings with closed paths are paired in order within each stretch that enters and leaves the filled area (nonzero winding), and each pair is joined by straight segments along the line, so the pieces close along the cut and pieces of overlapping paths join one another. A stretch where the line starts or ends inside a shape is not cut; points where the line only touches a path are not crossings. Open paths are split where the line crosses them. Our own command."
 ref = "Edit View › Cutting Paths"
 status = "inferred"
+own = true
 guesses = [
   "Crossings are paired within each stretch where the line enters and leaves the filled area, so a cut through overlapping paths joins their pieces; no source shows the Knife on overlapping paths.",
 ]
@@ -1657,9 +1648,7 @@ milestone = "M3"
 summary = "Headless equivalent of the Draw tool's Shift-click on a segment: splits a segment at a parameter, or at the extremum or inflection closest to a given position, without changing the shape. Our own command."
 ref = "Edit View › Extremes & Inflections"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[behavior]]
 id = "extremes.addedAtExportByFilter"
@@ -2479,9 +2468,7 @@ milestone = "M3"
 summary = "Query returning every guide a layer shows, its own local guides and then its master's global guides, with all their properties. Our own command: what the canvas and the Info box read."
 ref = "Edit View › Local & Global Guides"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "guide.displayLines"
@@ -2495,6 +2482,7 @@ milestone = "M3"
 summary = "Query returning the lines Edit View draws for a layer besides guides: the grid step, the master's metrics with the per-script ascender, cap height and descender parameters and the small-cap and shoulder heights applied, the alignment zones, and the CJK grid, CJK guide and design grid parameters. Our own command: the canvas draws what it returns."
 ref = "Font Info › Masters › Metrics & Alignment Zones; Appendix › Custom Parameters"
 status = "inferred"
+own = true
 notes = "Script-prefixed parameters match the glyph's own script property."
 guesses = [
   "A display-lines parameter without a script prefix applies to every glyph, since the glyph data that marks CJK glyphs is not built yet.",

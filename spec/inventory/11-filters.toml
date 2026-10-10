@@ -39,6 +39,7 @@ milestone = "M3"
 summary = "Generic headless entry point: runs any registered filter (built-in or plug-in) by its filter name with the same arguments the export-time parameter string accepts. Not a reference menu item; proposed so agents and the CLI can run a filter without a dialog."
 ref = "Filters › Applying Filters; Appendix › Custom Parameters › Filter"
 status = "inferred"
+own = true
 notes = "`filter` is the export name (case ignored) or the command id; `string` holds a whole export string; include and exclude narrow the glyph list. Transformations, AddExtremes and RemoveOverlap run their Path menu commands."
 guesses = [
   "`args` as a list holds export-string items and as an object the filter command's parameters; the reference has only the export string.",
@@ -57,9 +58,7 @@ milestone = "M3"
 summary = "Read-only query returning every registered filter with its filter name, label, origin (built-in or plug-in) and parameter schema. Not in the reference; proposed so the Filter menu, the CLI and agents share one registry."
 ref = "Filters (chapter introduction)"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[behavior]]
 id = "filter.menu.contents"

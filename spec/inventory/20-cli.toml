@@ -130,6 +130,7 @@ milestone = "M0"
 summary = "--json switches standard output to machine-readable JSON: one object per input with the keys input, ok, outputs, warnings, errors and a subcommand-specific result. Human-readable progress never appears on standard output in this mode. The result object is exactly what the engine command returns, so the CLI, the control channel and MCP agree."
 ref = "ttx_diff --json; fontTools varLib.interpolatable --json"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "cli.global.exitCodes"
@@ -138,6 +139,7 @@ milestone = "M0"
 summary = "Exit status: 0 success; 1 the run worked but found something (differences in diff, failed checks in check, lint errors); 2 command-line usage error; 3 an input could not be read or is not a supported format; 4 the operation failed; 5 some inputs of a batch failed and some succeeded; 130 interrupted. --quiet does not change the status."
 ref = "ttx_diff exit codes (0 identical, 2 different); fontTools varLib.interpolatable --quiet"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "cli.global.logging"
@@ -162,6 +164,7 @@ milestone = "M2"
 summary = "The same inputs and options produce byte-identical output on every platform and with every --jobs value: table order, glyph order, name-record order, subroutine numbering and hash-map iteration are all fixed. Nothing derived from the clock, the user name, the host, the working directory or absolute paths is written into a font. Version stamps of the tool are written only when asked for."
 ref = "fontc ttx_diff (sets SOURCE_DATE_EPOCH so both compilers agree)"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "cli.global.timestamp"
@@ -258,6 +261,7 @@ milestone = "M0"
 summary = "Each subcommand builds a parameter object from its options and dispatches exactly one engine command (or, for the shells, a fixed sequence). 'fontcraft-cli run ID --params JSON' reaches the same command directly, so nothing is available from the CLI that an agent cannot also call."
 ref = "docs/spec/20-cli.md › Conventions"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "cli.global.sourceOrBinary"
@@ -1959,6 +1963,7 @@ milestone = "M0"
 summary = "Dispatches any registered engine command by id with a JSON parameter object and prints its JSON result, which makes every editor feature scriptable from a shell. A script file runs a sequence of commands, and session mode keeps documents open while commands arrive as JSON lines on standard input. Needed from the first milestone, since it is how the vertical slice is exercised headless."
 ref = "brief.md › everything is a command; AFDKO tx -s, sfntedit -X, spot -X (script files of command lines)"
 status = "inferred"
+own = true
 
 [[cli]]
 id = "commands"
@@ -1981,6 +1986,7 @@ milestone = "M0"
 summary = "Lists the command registry: id, label, kind, menu path, shortcut and summary of every command, filtered by a pattern, kind or area; --describe prints one command's parameter documentation. This is how a person or an agent discovers what 'run' can dispatch."
 ref = "brief.md › everything is a command; fonttools help (lists subcommands with one-line descriptions); afdko invoker help"
 status = "inferred"
+own = true
 
 [[cli]]
 id = "mcp"
@@ -2059,6 +2065,7 @@ milestone = "M0"
 summary = "Prints the list of subcommands with one line each, or the full reference of one subcommand: usage, options with defaults, examples and the engine command it runs. --all prints every subcommand's reference in one stream."
 ref = "AFDKO invoker (afdko -h, -h <command>, --help-all); fonttools help"
 status = "inferred"
+own = true
 
 
 # ============================================================ engine commands
@@ -2088,9 +2095,7 @@ milestone = "M2"
 summary = "Read-only query that resolves a compile request without building: which files would be written, the final glyph order and source-to-production name map, the tables each output would contain, the instances and their locations, and the complete feature code after the automatic feature generators have run. It takes the same parameters as font.compile. It runs the stages that decide the font's shape (resolve, preflight, glyph order, names) and fails where the build would fail in them. The productionNames and features sections arrive with production names and feature compilation (M8)."
 ref = "docs/spec/20-cli.md › compile; docs/spec/40-compile.md › Commands and data touched"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
 
 [[command]]
 id = "font.dumpTables"
@@ -2715,6 +2720,4 @@ milestone = "M0"
 summary = "Read-only query over the command registry returning id, label, kind, menu path, shortcut, parameter documentation and summary for each matching command, or the CLI subcommand table with the command each subcommand dispatches."
 ref = "docs/spec/20-cli.md › commands"
 status = "inferred"
-guesses = [
-  "Our own command with no counterpart in the reference; its parameters and result are our design.",
-]
+own = true
