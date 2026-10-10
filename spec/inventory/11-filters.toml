@@ -241,12 +241,13 @@ label = "Offset Curve"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids], horizontal: number, vertical?: number, makeStroke?: bool, autoStroke?: bool, position?: number 0..1, keepCompatible?: bool, capStyle?: \"flat\"|\"square\"|\"round\"|\"roundInset\"|\"aligned\"}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], horizontal: number, vertical: number, makeStroke?: bool = false, autoStroke?: bool = false, position?: percent 0..100 = 50, keepCompatible?: bool = false, capStyle?: \"flat\"|\"square\"|\"round\"|\"roundInset\"|\"aligned\" = \"flat\"}"
 area = "path-ops"
 milestone = "M3"
-summary = "Moves the outline outward (positive) or inward (negative) by separate horizontal and vertical distances, thickening or thinning stems. With Make Stroke it instead expands each path to both sides into a stroke outline, with a position split, optional vertical-dimension preservation (Auto Stroke) and a cap style for open paths. vertical defaults to horizontal (the locked state)."
+summary = "Moves the outline outward (positive) or inward (negative) by separate horizontal and vertical distances, thickening or thinning stems. With Make Stroke it instead expands each path to both sides into a stroke outline, with a position split, optional vertical-dimension preservation (Auto Stroke) and a cap style for open paths."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "Documented, not yet observed; the geometry is ours. A point whose path runs in unit direction t moves by (−t.y · horizontal, t.x · vertical) to the outward side, so vertical edges move by horizontal and horizontal edges by vertical. Corners stay sharp (a mitre, bevelled beyond 4 times the offset). Curves are offset as cubics within 0.25 units of the true offset, split where needed; the outline is then united with (positive) or reduced by (negative) the stroke of its own paths, so overlaps, loops and stems thinner than the offset resolve; distances of opposite signs run as two passes, horizontal first. Quadratic curves come out cubic. An open path without Make Stroke moves to the right of its direction, as the outward side of a counter-clockwise outer path does. Make Stroke uses the absolute distances. The command always takes both distances; the lock button belongs to the dialog. Export string: OffsetCurve; horizontal; vertical; makestroke; position, the position as a fraction 0–1 or `auto` for Auto Stroke; Keep Compatible and Cap Style have no place in it. Components and locked paths are not changed; new points are rounded to the grid."
 
 [[panel]]
 id = "dialog.filterOffsetCurve"
@@ -267,6 +268,7 @@ milestone = "M3"
 summary = "Options dialog of the Offset Curve filter. Default values are not stated in the source."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "FontCraft first values (ours): horizontal 10, vertical 10, Make Stroke off, Auto Stroke off, position 50 %, Keep Compatible off, cap style flat (the `default` of each parameter in filter.list). The lock button keeps vertical equal to horizontal while it is engaged."
 
 [[behavior]]
 id = "filter.offsetCurve.signConvention"
@@ -275,6 +277,7 @@ milestone = "M3"
 summary = "Positive Horizontal/Vertical values grow the outline, negative values shrink it; the two axes are offset independently."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: outward is away from the filled side, read from nesting as Correct Path Direction does, so a path drawn the wrong way grows the same way."
 
 [[behavior]]
 id = "filter.offsetCurve.lockUsesHorizontal"
@@ -283,6 +286,7 @@ milestone = "M3"
 summary = "With the lock button engaged the Horizontal value is applied to both axes and the Vertical field is ignored."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: the lock is the dialog's; the command always takes both distances."
 
 [[behavior]]
 id = "filter.offsetCurve.makeStroke"
@@ -291,6 +295,7 @@ milestone = "M3"
 summary = "Make Stroke offsets to both sides of the path and joins the two results into a stroke outline; this is the way to get an outlined (hollow) version of a closed shape. It is destructive, unlike stroke styles on paths."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: each side reaches horizontal and vertical units at position 50 (a stroke twice the distance wide), measured with the same pen as the offset; the two sides are joined with sharp outer corners and the overlaps of each path, then of all paths, removed. A closed path gives two paths: an outer one and a counter."
 
 [[behavior]]
 id = "filter.offsetCurve.autoStrokeKeepsVerticals"
@@ -299,6 +304,7 @@ milestone = "M3"
 summary = "Auto Stroke expands to both sides but keeps the shape's vertical dimensions unchanged; while it is on, Position is treated as 50 %."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "Documented, not yet observed; the method is ours. Before stroking, the layer's paths are squeezed vertically about the middle of their bounds by the vertical distance at the top and at the bottom, so the stroke's horizontal edges and round extremes end at the original height."
 
 [[behavior]]
 id = "filter.offsetCurve.positionDistribution"
@@ -307,6 +313,7 @@ milestone = "M3"
 summary = "Position splits the stroke across the path: 0 % puts all of it on the left of the path direction, 100 % all on the right, 50 % half on each side."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: the left side reaches 2 · (1 − position) times the distances and the right side 2 · position times them."
 
 [[behavior]]
 id = "filter.offsetCurve.keepCompatible"
@@ -315,6 +322,7 @@ milestone = "M3"
 summary = "Keep Compatible forbids adding nodes or handles, so the result keeps the same point structure in every master; the price is a less accurate offset."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "Documented, not yet observed; the method is ours. Each node moves to where the offset lines of its two segments meet (a mitre, shortened to 4 times the offset), each pair of handles is refitted to the new ends along the offset's directions, quadratic off-curve points move to where the offset legs of their control polygon meet; retracted handles stay retracted. No overlap is removed. In a stroke, caps add a fixed number of nodes, so masters stay compatible."
 
 [[behavior]]
 id = "filter.offsetCurve.capStyles"
@@ -323,6 +331,7 @@ milestone = "M3"
 summary = "Cap Style applies to the ends of open paths when making a stroke. Five choices: flat, square, round, round inset, and aligned to the horizontal/vertical axes."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
+notes = "Documented, not yet observed; the shapes are ours. Flat: a line across the end. Square: extends by half the stroke width. Round: a half ellipse beyond the end. Round inset: the stroke is shortened by half its width at each end, then capped round, so the cap ends at the path's end. Aligned: the end is cut along the vertical through the end node when the path ends closer to horizontal, else along the horizontal."
 
 [[behavior]]
 id = "filter.offsetCurve.nonDestructiveAlternative"

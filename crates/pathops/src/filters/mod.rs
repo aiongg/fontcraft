@@ -16,6 +16,7 @@
 
 pub mod extrude;
 pub mod hatch_outline;
+pub mod offset_curve;
 pub mod roughen;
 pub mod round_corners;
 pub mod rounded_font;
@@ -27,6 +28,7 @@ use crate::contour::Contour;
 
 pub use extrude::Extrude;
 pub use hatch_outline::HatchOutline;
+pub use offset_curve::OffsetCurve;
 pub use roughen::Roughen;
 pub use round_corners::RoundCorners;
 pub use rounded_font::RoundedFont;
@@ -45,6 +47,7 @@ pub fn registry() -> &'static [&'static dyn Filter] {
     static FILTERS: &[&dyn Filter] = &[
         &Extrude,
         &Roughen,
+        &OffsetCurve,
         &RoundCorners,
         &HatchOutline,
         &RoundedFont,

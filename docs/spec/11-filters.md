@@ -124,7 +124,7 @@ Changes stem thickness by moving the outline, or turns paths into strokes.
 | Param | Meaning |
 |---|---|
 | `horizontal`, `vertical` | offset per axis; positive expands, negative contracts |
-| lock button | when locked, `horizontal` is used for both (`vertical` omitted in the command) |
+| lock button | when locked, `vertical` follows `horizontal`; a dialog control only, the command always takes both |
 | `makeStroke` | offset to both sides and join into a stroke outline; the way to outline a closed shape |
 | `autoStroke` | like Make Stroke but vertical dimensions of the shape are preserved; implies position 50 % |
 | `position` | split of the stroke across the path: 0 % all left, 100 % all right, 50 % centred |
@@ -133,6 +133,27 @@ Changes stem thickness by moving the outline, or turns paths into strokes.
 
 "Left" and "right" are relative to path direction. A non-destructive equivalent exists as a stroke
 style on paths; this filter bakes the result.
+
+How FontCraft runs it (our design, documented behaviour not yet observed):
+
+- The pen: a point whose path runs in unit direction `t` moves by `(−t.y · horizontal, t.x · vertical)`
+  times a side factor. Vertical edges move by `horizontal`, horizontal edges by `vertical`, and equal
+  values give the usual parallel curve. Outward is away from the filled side, read from nesting.
+- Corners stay sharp: the offset lines meet in a mitre, bevelled beyond 4 times the offset.
+- Exact mode (the default): curves are offset as cubics within 0.25 units of the true offset, split
+  where needed. The outline is united with the stroke of its own paths (positive) or reduced by it
+  (negative), so overlaps, loops and stems thinner than the offset resolve. Opposite signs run as two
+  passes, horizontal first. Quadratic curves come out cubic.
+- An open path without Make Stroke moves to the right of its direction.
+- Make Stroke: each side reaches `2 · (1 − position)` (left) and `2 · position` (right) times the
+  distances, so position 50 gives a stroke twice the distance wide. Overlaps are removed.
+- Auto Stroke: the layer's paths are first squeezed vertically about their middle by the vertical
+  distance at the top and bottom, then stroked at position 50.
+- Caps: flat; square (half the width beyond the end); round (a half ellipse beyond the end); round
+  inset (the stroke shortened by half its width, then round); aligned (cut along the vertical
+  through the end when the path ends closer to horizontal, else along the horizontal).
+- Keep Compatible: every node moves to where the offset lines of its segments meet, handles are
+  refitted, nothing is merged; in a stroke, caps add a fixed number of nodes.
 
 ### Roughen (`filter.roughen`)
 
