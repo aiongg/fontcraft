@@ -32,10 +32,8 @@ use crate::theme::Tokens;
 
 type Pending = Vec<(&'static str, Value)>;
 
-/// Most recent documents kept.
-pub const MAX_RECENT: usize = 10;
-/// Longest path kept in the list or accepted by the commands, in bytes.
-pub const MAX_PATH_BYTES: usize = 4096;
+/// Longest path accepted by the commands, in bytes.
+pub const MAX_PATH_BYTES: usize = fontcraft_engine::settings::MAX_RECENT_PATH_BYTES;
 /// The setting behind Show window on startup.
 pub const SHOW_AT_LAUNCH: &str = "start.showAtLaunch";
 /// The command Create Document runs.
@@ -138,34 +136,9 @@ pub struct LaidOut {
 
 // ── Recent documents ──
 
-/// The stored list, newest first, without entries no command would have written.
-fn stored_recent(session: &Session) -> Vec<String> {
-    let list = session.settings().reserved::<Vec<String>>(Reserved::RecentDocuments).ok().flatten().unwrap_or_default();
-    list.into_iter().filter(|p| !p.is_empty() && p.len() <= MAX_PATH_BYTES).take(MAX_RECENT).collect()
-}
-
-/// The recent documents whose files still exist, newest first.
+/// The recent documents whose files still exist, newest first (the engine keeps the list).
 pub fn recent_documents(session: &Session) -> Vec<String> {
-    stored_recent(session).into_iter().filter(|p| Path::new(p).exists()).collect()
-}
-
-/// Puts `path` first in the recent documents, as an absolute path, once, keeping at most
-/// [`MAX_RECENT`].
-pub fn remember(session: &mut Session, path: &str) -> Result<(), String> {
-    if path.is_empty() || path.len() > MAX_PATH_BYTES {
-        return Err(format!("a path of {} bytes is not kept in the recent documents", path.len()));
-    }
-    let p = Path::new(path);
-    let full = if p.is_absolute() {
-        path.to_string()
-    } else {
-        std::env::current_dir().map_or_else(|_| path.to_string(), |d| d.join(p).to_string_lossy().into_owned())
-    };
-    let mut list = stored_recent(session);
-    list.retain(|p| *p != full);
-    list.insert(0, full);
-    list.truncate(MAX_RECENT);
-    session.settings_mut().set_reserved(Reserved::RecentDocuments, &list).map_err(|e| e.to_string())
+    session.settings().recent_documents()
 }
 
 // ── The chooser's picks ──
@@ -295,7 +268,7 @@ fn open_recent(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
         if index.is_some() || path.is_some() {
             return Err(args.err("give `clear` alone"));
         }
-        let cleared = stored_recent(&app.session).len();
+        let cleared = app.session.settings().stored_recent_documents().len();
         app.session.settings_mut().clear_reserved(Reserved::RecentDocuments);
         return Ok(json!({ "cleared": cleared }));
     }
@@ -331,17 +304,11 @@ fn show_in_finder(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> 
     Ok(json!({ "path": path }))
 }
 
-/// After every command: a document opened or saved goes first in the recent documents; a
-/// document opened or created closes the window; a failed Create Document says why in it.
+/// After every command: a document opened or created closes the window; a failed Create
+/// Document says why in it.
 pub fn after_run(app: &mut FontcraftApp, id: &str, result: &Result<Value, String>) {
     match result {
         Ok(r) => {
-            if matches!(id, "file.open" | "file.save" | "file.saveAs")
-                && let Some(path) = r.get("path").and_then(Value::as_str)
-                && let Err(e) = remember(&mut app.session, path)
-            {
-                log::warn!("recent documents: {e}");
-            }
             let opened = match id {
                 "file.open" | "file.new" | NEW_FROM_GLYPH_SETS => true,
                 "file.openRecent" => r.get("path").is_some(),

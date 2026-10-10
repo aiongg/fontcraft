@@ -11,7 +11,8 @@ use fontcraft_model::glyphdata::sets;
 use serde_json::{Value, json};
 
 use crate::FontcraftApp;
-use crate::shell::start_window::{self, MAX_RECENT, Reveal};
+use crate::shell::start_window::{self, Reveal};
+use fontcraft_engine::settings::MAX_RECENT_DOCUMENTS as MAX_RECENT;
 
 /// A headless window: one egui context kept across frames, so pointer state carries over.
 struct Window {
@@ -200,13 +201,13 @@ fn recent_documents_newest_first_capped_and_opened_from_the_window() {
     }
     let mut session = Session::new();
     for i in 0..12 {
-        start_window::remember(&mut session, &file(i)).unwrap();
+        session.settings_mut().remember_document(Path::new(&file(i))).unwrap();
     }
     let list = start_window::recent_documents(&session);
     assert_eq!(list.len(), MAX_RECENT);
     assert_eq!(list, (2..12).rev().map(file).collect::<Vec<_>>());
     // Remembered again: first, once.
-    start_window::remember(&mut session, &file(5)).unwrap();
+    session.settings_mut().remember_document(Path::new(&file(5))).unwrap();
     let list = start_window::recent_documents(&session);
     assert_eq!(list.len(), MAX_RECENT);
     assert_eq!(list[0], file(5));
@@ -266,7 +267,7 @@ fn show_window_on_startup_is_the_setting() {
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("a.fontcraft").to_string_lossy().into_owned();
     std::fs::write(&path, b"").unwrap();
-    start_window::remember(&mut app.session, &path).unwrap();
+    app.session.settings_mut().remember_document(Path::new(&path)).unwrap();
     let w = Window::new();
     w.frame(&mut app);
     w.frame(&mut app);

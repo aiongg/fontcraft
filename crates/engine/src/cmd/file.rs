@@ -114,6 +114,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     // A file that is already open is shown, not opened a second time (`file.openTwiceActivates`).
     if let Some(i) = super::session::find_open(s, &path) {
         s.set_active(i)?;
+        remember(s, &path);
         let doc = s.doc()?;
         return Ok(
             json!({ "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "alreadyOpen": true, "glyphs": doc.font.glyphs.len() }),
@@ -122,7 +123,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let (font, mut warnings) = crate::io::open(&path, face)?;
     let glyph_data = crate::glyph_data::source_files(&path, &mut warnings);
     // Every reader checks the font it returns.
-    s.push_document(font, Some(path));
+    s.push_document(font, Some(path.clone()));
     if !glyph_data.is_empty() {
         let files: Vec<(&str, &[u8])> = glyph_data.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
         warnings.extend(s.set_source_glyph_data(&files)?);
@@ -135,10 +136,21 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
         _ => save_format.map(|f| f.name()),
     };
     let version = doc.font.source.glyphs_version.or(doc.font.source.ufo_version);
-    Ok(json!({
+    let reply = json!({
         "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "format": format,
         "version": version, "glyphs": doc.font.glyphs.len(), "masters": doc.font.masters.len(), "viewOnly": save_format.is_none(), "warnings": warnings,
-    }))
+    });
+    remember(s, &path);
+    Ok(reply)
+}
+
+/// Puts a document just opened or saved first in the recent documents. The list is a
+/// convenience: a path it cannot keep leaves it as it was and does not fail the command.
+#[cfg(not(target_arch = "wasm32"))]
+fn remember(s: &mut Session, path: &std::path::Path) {
+    if let Err(e) = s.settings_mut().remember_document(path) {
+        log::warn!("recent documents: {e}");
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -204,6 +216,7 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     doc.saved = font;
     doc.path = Some(path.clone());
     doc.stamp = io::document_stamp(&path, &doc.font);
+    remember(s, &path);
     Ok(json!({
         "path": path.to_string_lossy(), "format": format.name(), "version": version, "bytes": saved.bytes,
         "filesWritten": saved.files_written, "filesRemoved": saved.files_removed, "losses": saved.losses,

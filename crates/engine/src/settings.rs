@@ -35,6 +35,10 @@ pub const MAX_DEPTH: usize = 64;
 pub const MAX_TEXT_BYTES: usize = 4096;
 /// The settings file's format version.
 pub const FILE_VERSION: u64 = 1;
+/// Most documents kept in [`Reserved::RecentDocuments`].
+pub const MAX_RECENT_DOCUMENTS: usize = 10;
+/// Longest path kept in the recent documents, in bytes.
+pub const MAX_RECENT_PATH_BYTES: usize = 4096;
 
 /// What values a live setting takes.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -294,6 +298,31 @@ impl UserSettings {
     /// Removes a reserved id's value.
     pub fn clear_reserved(&mut self, r: Reserved) {
         self.remove(r.id());
+    }
+
+    /// The stored recent documents, newest first, without entries no command would have written.
+    pub fn stored_recent_documents(&self) -> Vec<String> {
+        let list = self.reserved::<Vec<String>>(Reserved::RecentDocuments).ok().flatten().unwrap_or_default();
+        list.into_iter().filter(|p| !p.is_empty() && p.len() <= MAX_RECENT_PATH_BYTES).take(MAX_RECENT_DOCUMENTS).collect()
+    }
+
+    /// The recent documents whose files still exist, newest first.
+    pub fn recent_documents(&self) -> Vec<String> {
+        self.stored_recent_documents().into_iter().filter(|p| std::path::Path::new(p).exists()).collect()
+    }
+
+    /// Puts `path` first in the recent documents, as an absolute path, once, keeping at most
+    /// [`MAX_RECENT_DOCUMENTS`]. `file.open`, `file.save` and `file.saveAs` call it.
+    pub fn remember_document(&mut self, path: &std::path::Path) -> Result<(), SettingsError> {
+        let full = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().into_owned();
+        if full.is_empty() || full.len() > MAX_RECENT_PATH_BYTES {
+            return Err(SettingsError::TooLarge { what: "a recent document's path".into(), size: full.len(), limit: MAX_RECENT_PATH_BYTES });
+        }
+        let mut list = self.stored_recent_documents();
+        list.retain(|p| *p != full);
+        list.insert(0, full);
+        list.truncate(MAX_RECENT_DOCUMENTS);
+        self.set_reserved(Reserved::RecentDocuments, &list)
     }
 
     fn put(&mut self, id: &str, value: Value) -> Result<(), SettingsError> {

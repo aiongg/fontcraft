@@ -98,9 +98,6 @@ fn run() -> Result<(), String> {
     match file {
         Some(path) => {
             session.execute("file.open", &json!({"path": path})).map_err(|e| e.to_string())?;
-            if let Err(e) = start_window::remember(&mut session, &path) {
-                eprintln!("fontcraft: {e}");
-            }
         }
         None if show_start => {}
         None => session.execute("file.new", &json!({})).map(|_| ()).map_err(|e| e.to_string())?,
