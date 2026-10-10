@@ -16,6 +16,14 @@ features that own them).
 The buttons in the reference are icons without text, so most command labels in the inventory
 are ours.
 
+**How FontCraft builds it (M3.15).** The section settings are UI state, changed only by shell
+commands: `palette.toggleSection`, `fitCurve.setRange`, `transform.setOrigin`,
+`transform.setScaleLock`, `transform.setSettings` (the field values) and the two Layers filters.
+Every button passes the values it applies to its engine command, so the engine never reads the
+panel. Not built yet: Stroke (no `path.setStroke`), the Transformations booleans, `layers.select`
+and dragging layer rows, and the Dimensions letter diagram. The Transformations fields start at
+scale 110 % (lock closed), rotation 90° and slant 10°; the handbook gives no defaults.
+
 ## Dimensions (`palette.dimensions`)
 
 - A notepad of typical measurements (stems, bowls and the like) laid out on a letter diagram.

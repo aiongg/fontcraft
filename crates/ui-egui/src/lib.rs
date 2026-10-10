@@ -2,7 +2,8 @@
 //!
 //! - [`app::FontcraftApp`]: the session plus UI state; draws itself into any egui context.
 //! - [`shell`]: the menu bar (built from the command registry), keymap, tab strip, status bar,
-//!   Font View, Palette, and the shell commands, one list per module.
+//!   Font View, and the shell commands, one list per module.
+//! - [`panels`]: the Palette sections, the Info box and the Edit View bottom bar.
 //! - [`canvas`]: Edit View: the camera, metric lines, filled glyphs, outlines, nodes.
 //! - [`control`]: the JSON control protocol agents drive the running app with.
 //! - [`tools_glue`]: the pointer tools: canvas and control input in, interactions out.
@@ -19,6 +20,7 @@ pub mod app;
 pub mod canvas;
 pub mod control;
 pub mod dialogs;
+pub mod panels;
 pub mod shell;
 pub mod state;
 pub mod theme;
@@ -29,6 +31,8 @@ pub use shell::UI_COMMANDS;
 
 #[cfg(test)]
 mod dialog_tests;
+#[cfg(test)]
+mod panels_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

@@ -59,6 +59,18 @@ tab text and start editing it). Offset edits do nothing while the component is a
 - Escape leaves the field without moving to another;
 - Up/Down change the value by 1, with Shift by 10.
 
+**How FontCraft builds it (M3.15, our choices where the handbook is silent).**
+
+- The selection part sits at the foot of the canvas, centred, and shows only while something
+  is selected; the glyph part is M5.
+- The reference point starts at bottom left. The lock between width and height
+  (`infoBox.setSizeLock`) starts open.
+- Width and height edits run `transform.scale` about the reference point. A handle's dX, dY and
+  length place the handle relative to its node through `selection.setPosition`.
+- Every number field of the Palette, the Info box and the bottom bar follows the rules above.
+  Clicking a field selects its text. Up and Down commit at once. A field left with its text
+  unchanged commits nothing, so tabbing through fields adds no undo step.
+
 **Unicode browser.** The arrow next to the Unicode value opens the code point in an external
 app (UnicodeChecker in the reference). If the app is missing, the reference shows a download
 link; the first launch needs an OS permission. FontCraft must choose a portable equivalent.

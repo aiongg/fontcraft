@@ -63,7 +63,7 @@ milestone = "M3"
 summary = "Part of the Info box that reports the current selection: position and size of its bounding box, or exact coordinates when one node is selected, plus offset and length when the selected point is a handle. Every number is an editable field. Selecting two nodes shows their distance in the width or height field, which is the quick way to read a stem width."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:06–5:08: with a new rectangle selected the Info box shows X and Y, width and height (146 × 700) and, in Glyphs 3, a node count of 4. Not shown: single-node coordinates, handle offset and length, the reference-point grid."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:06–5:08: with a new rectangle selected the Info box shows X and Y, width and height (146 × 700) and, in Glyphs 3, a node count of 4. Not shown: single-node coordinates, handle offset and length, the reference-point grid. Built in M3.15: the box sits at the foot of the canvas, centred, while Show Info is on, and only while something is selected (the glyph part is M5). Editing X or Y runs `selection.setPosition`; width or height runs `transform.scale` about the reference point; dX, dY and length of a handle place it relative to its node."
 
 [[panel]]
 id = "infoBox.component"
@@ -155,6 +155,7 @@ milestone = "M3"
 summary = "Chooses which of the nine points of the selection bounding box the X and Y fields of the Info box report and edit. The chosen point is highlighted in blue; picking the centre makes X/Y the centre of the selection."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "Built in M3.15. Default bottom left (our choice, the default of `selection.getInfo`; the handbook gives none)."
 
 [[command]]
 id = "selection.getInfo"
@@ -244,7 +245,7 @@ milestone = "M3"
 summary = "Clicking a number in the Info box turns it into a text field. Return or leaving the field commits; Escape cancels the edit and leaves no field focused; Tab commits and moves to the next value, Shift+Tab to the previous one."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:36–6:40: typing a new width into the W field resizes the selected rectangle; X appears to stay the same (partly visible)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:36–6:40: typing a new width into the W field resizes the selected rectangle; X appears to stay the same (partly visible). Built in M3.15 for every panel field: clicking selects the text; a field left with its text unchanged commits nothing, so tabbing through adds no undo step."
 
 [[behavior]]
 id = "infoBox.arrowKeyStepping"
@@ -253,6 +254,7 @@ milestone = "M3"
 summary = "While an Info box field is focused, Up and Down raise or lower its value by 1, and by 10 with Shift held."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "Built in M3.15: each press commits at once, as one undo step."
 
 [[behavior]]
 id = "infoBox.followsSelection"
@@ -428,6 +430,7 @@ milestone = "M3"
 summary = "Row of controls along the lower edge of an Edit View tab: feature preview menu and preview toggle on the left, writing direction and zoom controls on the right. The exact order and the position of the kerning mode button are not described in this chapter."
 ref = "Edit View › Glyph Display › Zooming; Entering Text › Writing Direction; Previewing & Testing"
 status = "handbook"
+notes = "Built in M3.15: zoom out, the zoom field and zoom in, at the right. The features menu, preview, writing direction and kerning mode buttons wait for their commands."
 
 [[behavior]]
 id = "zoom.gestures"
@@ -671,6 +674,7 @@ milestone = "M3"
 summary = "Show Info governs two things at once: the Info box on the canvas and the contextual controls shown at the bottom of the Palette sidebar."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
+notes = "Built in M3.15: Show Info shows the Info box and the contextual area of the Palette. The area holds no section yet; Stroke goes there once `path.setStroke` exists."
 
 # ───────────────────────────── Glyph and layer colours ─────────────────────────────
 

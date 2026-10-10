@@ -40,6 +40,8 @@ pub struct UiState {
     pub next_tab_id: u64,
     /// The Transformations section's origin, fields and lock.
     pub transform: crate::shell::transform::TransformSettings,
+    /// The Palette's and the Info box's own settings.
+    pub panels: crate::panels::PanelState,
 }
 
 impl Default for UiState {
@@ -55,6 +57,7 @@ impl Default for UiState {
             status: String::new(),
             next_tab_id: 1,
             transform: Default::default(),
+            panels: crate::panels::PanelState::default(),
         }
     }
 }

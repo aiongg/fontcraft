@@ -21,7 +21,7 @@ use super::*;
 use crate::params::{Params, TargetKind as K, Targets};
 
 /// The range of the eight steps when the font does not set one (the handbook's example).
-const DEFAULT_RANGE: (f64, f64) = (48.0, 74.0);
+pub const DEFAULT_RANGE: (f64, f64) = (48.0, 74.0);
 /// The font parameter that sets the range: two numbers, as text ("52, 78") or a list.
 const RANGE_PARAMETER: &str = "Fit Curve Panel Settings";
 /// How far a percentage may be from a step and still count as on it, for plus and minus.
@@ -189,7 +189,9 @@ fn range(p: &Params, font: &Font) -> Result<(f64, f64)> {
     Ok(if min <= max { (min, max) } else { (max, min) })
 }
 
-fn font_range(font: &Font) -> Option<(f64, f64)> {
+/// The range the font's `Fit Curve Panel Settings` parameter sets, held to 1..100 and ordered;
+/// `None` when the font has no such parameter or it is not two numbers.
+pub fn font_range(font: &Font) -> Option<(f64, f64)> {
     use fontcraft_model::plist::Value as Plist;
     let v = font.info.params.get(RANGE_PARAMETER)?;
     let numbers: Vec<f64> = match v {

@@ -1033,6 +1033,7 @@ milestone = "M3"
 summary = "With several nodes selected the Info box shows X, Y, width and height of the selection; editing X/Y moves it and editing width/height scales it about the reference point chosen in the nine-point origin control beside the fields. A closed lock scales width and height together, an open lock independently."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
+notes = "Built in M3.15: the lock is `infoBox.setSizeLock`, open by default (our choice; the handbook gives no default)."
 
 [[behavior]]
 id = "infoBox.pointCounts"
@@ -1041,7 +1042,22 @@ milestone = "M3"
 summary = "With several points selected the Info box shows two counts: how many points are selected (beside a filled square) and how many points the active layer holds altogether (beside an outlined square)."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
+notes = "Built in M3.15."
 
+
+[[command]]
+id = "infoBox.setSizeLock"
+label = "Lock Info Box Proportions"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{locked?: bool}"
+area = "drawing"
+milestone = "M3"
+summary = "The lock between the width and height fields of the Info box. Closed, editing either scales the selection in both directions by the same factor; open, only in the edited one."
+ref = "Edit View › Scaling & Rotating"
+status = "inferred"
+notes = "The handbook describes the lock; the command id and label are ours. Open by default (our choice)."
 [[behavior]]
 id = "numberFields.arrowKeyStepping"
 area = "ui-chrome"
@@ -1049,6 +1065,7 @@ milestone = "M3"
 summary = "In every numeric text field of the app the Up and Down arrow keys raise or lower the value by 1, and by 10 with Shift."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
+notes = "Built in M3.15: every number field of the Palette, the Info box and the bottom bar; each press commits at once."
 
 # ───────────────────────────── Aligning ─────────────────────────────
 

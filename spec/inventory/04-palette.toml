@@ -23,7 +23,7 @@ milestone = "M3"
 summary = "Right-hand sidebar of the font window made of collapsible sections. Four sections are built in and plug-ins can add more."
 ref = "Palette"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:08: the Palette shows Alignment, Dimensions, Fit Curve, Layers and Transformations, plus Stroke while a path is selected. The Alignment section is not in this row's built-in list; it may come from a plug-in or be Glyphs 3 only. Not shown: collapsing sections, the sidebar button."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:08: the Palette shows Alignment, Dimensions, Fit Curve, Layers and Transformations, plus Stroke while a path is selected. The Alignment section is not in this row's built-in list; it may come from a plug-in or be Glyphs 3 only. Not shown: collapsing sections, the sidebar button. Built in M3.15: the four built-in sections in order, each collapsed or expanded with `palette.toggleSection`; the contextual area at the foot shows only while Show Info is on. Plug-in sections are M13."
 
 [[command]]
 id = "window.palette"
@@ -75,6 +75,7 @@ milestone = "M3"
 summary = "Notepad for recurring measurements of the design such as stem and bowl thicknesses. The numbers are stored per master and are reference only: they change nothing in the outlines or the exported font."
 ref = "Palette › Dimensions"
 status = "handbook"
+notes = "Built in M3.15: one labelled field per key of the script of the current glyph, without the letter diagram."
 
 [[command]]
 id = "dimensions.setValue"
@@ -148,7 +149,7 @@ milestone = "M3"
 summary = "Section for setting the handle lengths of curve segments as a percentage, to get evenly curved outlines. Every action treats both handles of a segment together even if only one is selected."
 ref = "Palette › Fit Curve"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31–10:35 and 26:01: two percentage fields, reading 50% and 70%, with eight round buttons between a minus and a plus button. Not shown: the grey marker, the balance button. The 50/70 values are 04 open question 10."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31–10:35 and 26:01: two percentage fields, reading 50% and 70%, with eight round buttons between a minus and a plus button. Not shown: the grey marker, the balance button. The 50/70 values are 04 open question 10. Built in M3.15: the balance button sits between the two range fields so the row of steps fits the sidebar."
 
 [[command]]
 id = "fitCurve.applyStep"
@@ -301,6 +302,7 @@ milestone = "M3"
 summary = "Lists every layer of the current glyph: one master layer per font master plus any backup and special layers beneath it. It is where layers are switched, shown, added, renamed, reordered and promoted."
 ref = "Palette › Layers"
 status = "handbook"
+notes = "Built in M3.15 without `layers.select` (the canvas always edits the layer of the first master) and without dragging to reorder or to use as master: a click picks the row the buttons act on."
 
 [[command]]
 id = "layers.select"
@@ -522,7 +524,7 @@ milestone = "M3"
 summary = "Section for numeric transformations of whatever is selected: points, segments, paths, components, anchors, guides and images in Edit View, or whole layers of the glyphs selected in Font View. The button on each side of a field performs the opposite operation with the same value."
 ref = "Palette › Transformations"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Glyphs 3 section shows a 3×3 origin picker, a crosshair, a metrics-origin picker, two mirror buttons, a scale percentage with a lock and a greyed second percentage, a rotate field with buttons on each side, two slant rows each with its own angle field, six align buttons and three boolean buttons. The two separate slant angle fields differ from this row's single slant field."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Glyphs 3 section shows a 3×3 origin picker, a crosshair, a metrics-origin picker, two mirror buttons, a scale percentage with a lock and a greyed second percentage, a rotate field with buttons on each side, two slant rows each with its own angle field, six align buttons and three boolean buttons. The two separate slant angle fields differ from this row's single slant field. Built in M3.15 without the boolean buttons (their commands are not built) and without the CJK layer origin control."
 
 [[command]]
 id = "transform.setOrigin"
@@ -816,8 +818,22 @@ milestone = "M3"
 summary = "Query returning the Transformations section's state: origin mode and point, scale percentages and lock, rotate angle and slant angle."
 ref = "Palette › Transformations"
 status = "inferred"
-notes = "Built in M3.5: {origin: {mode, boxPoint, metric, point}, scale: {x, y, locked}, rotateAngle, slantAngle}. The handbook gives no starting values; ours are the box centre, 100 % with the lock closed, 90° and 10°."
+notes = "Built in M3.5: {origin: {mode, boxPoint, metric, point}, scale: {x, y, locked}, rotateAngle, slantAngle}. The handbook gives no starting values; ours are the box centre, 110 % with the lock closed, 90° and 10°."
 
+
+[[command]]
+id = "transform.setSettings"
+label = "Set Transformation Values"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{scaleX?: percent, scaleY?: percent, rotate?: degrees, slant?: degrees}"
+area = "drawing"
+milestone = "M3"
+summary = "Sets the values of the Transformations fields: horizontal and vertical scale, rotation angle and slant angle. The buttons beside each field apply them."
+ref = "Palette › Transformations"
+status = "inferred"
+notes = "Defaults (our choice; the handbook gives none): scale 110 % with the lock closed, rotation 90°, slant 10°. The tutorial video named in `palette.transformations` shows the second scale field greyed, which suggests a closed lock. FontCraft (ours): a scale is non-zero and within ±1000000 %, a rotation within ±3600°, a slant strictly between -90° and 90°; the result is the settings, as transform.getSettings returns them. The values live in the same state as transform.setOrigin and transform.setScaleLock."
 [[behavior]]
 id = "transform.targetsBySelection"
 area = "drawing"

@@ -36,7 +36,18 @@ pub const COMMANDS: &[UiCommand] = &[
         "",
         "{} the Transformations section's settings → {origin: {mode, boxPoint, metric, point}, scale: {x, y, locked}, rotateAngle, slantAngle}",
     ),
+    (
+        "transform.setSettings",
+        "Set Transformation Values",
+        &[],
+        "",
+        "{scaleX?: percent (non-zero, within ±1000000), scaleY?: percent, rotate?: degrees (within ±3600), slant?: degrees (between -90 and 90)} the values of the Transformations fields → the settings, as transform.getSettings returns them",
+    ),
 ];
+
+/// Largest scale percentage and rotation angle the Transformations fields hold.
+const MAX_SCALE: f64 = 1_000_000.0;
+const MAX_ANGLE: f64 = 3_600.0;
 
 /// Which fixed point Palette transformations use.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -90,7 +101,7 @@ impl Default for TransformSettings {
             box_point: "center".into(),
             metric: "baseline".into(),
             point: None,
-            scale: [100.0, 100.0],
+            scale: [110.0, 110.0],
             scale_locked: true,
             rotate_angle: 90.0,
             slant_angle: 10.0,
@@ -179,6 +190,27 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             let locked = args.flag("locked")?.unwrap_or(!app.state.transform.scale_locked);
             app.state.transform.scale_locked = locked;
             Ok(json!({"locked": locked}))
+        }
+        "transform.setSettings" => {
+            let (sx, sy, rotate, slant) = (args.number("scaleX")?, args.number("scaleY")?, args.number("rotate")?, args.number("slant")?);
+            if [sx, sy, rotate, slant].iter().all(Option::is_none) {
+                return Err(args.err("give `scaleX`, `scaleY`, `rotate` or `slant`"));
+            }
+            if [sx, sy].iter().flatten().any(|s| *s == 0.0 || s.abs() > MAX_SCALE) {
+                return Err(args.err(format!("a scale must be non-zero and within ±{MAX_SCALE} percent")));
+            }
+            if rotate.is_some_and(|r| r.abs() > MAX_ANGLE) {
+                return Err(args.err(format!("`rotate` must be within ±{MAX_ANGLE} degrees")));
+            }
+            if slant.is_some_and(|s| s.abs() >= 90.0) {
+                return Err(args.err("`slant` must lie between -90 and 90 degrees"));
+            }
+            let t = &mut app.state.transform;
+            let [x, y] = t.scale;
+            t.scale = [sx.unwrap_or(x), sy.unwrap_or(y)];
+            t.rotate_angle = rotate.unwrap_or(t.rotate_angle);
+            t.slant_angle = slant.unwrap_or(t.slant_angle);
+            Ok(t.to_json())
         }
         "transform.getSettings" => Ok(app.state.transform.to_json()),
         other => Err(format!("unknown command `{other}`")),

@@ -17,7 +17,7 @@ mod dimensions;
 mod edit;
 mod file;
 pub mod filter;
-mod fit_curve;
+pub mod fit_curve;
 mod font;
 mod glyph;
 mod guide;

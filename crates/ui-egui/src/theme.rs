@@ -118,6 +118,17 @@ pub struct Tokens {
     /// The transformation origin: ring and crosshair under the Rotate and Scale tools.
     pub transform_origin: Color32,
     pub transform_origin_radius: f32,
+    /// Palette and Info box (`panels`): inner margin of the Palette, width of a number field,
+    /// one cell of the nine-point grid, one Fit Curve step button and the gap in its row, the indent of non-master
+    /// layer rows, the Info box's distance from the canvas's lower edge, the bottom bar's margin.
+    pub palette_margin: f32,
+    pub field_width: f32,
+    pub point_grid_cell: f32,
+    pub fit_curve_step: f32,
+    pub fit_curve_gap: f32,
+    pub layers_indent: f32,
+    pub info_box_margin: f32,
+    pub bottom_bar_margin: f32,
 }
 
 impl Tokens {
@@ -191,6 +202,14 @@ impl Tokens {
             knob_size: 6.0,
             transform_origin: Color32::from_rgb(0xe8, 0x40, 0x40),
             transform_origin_radius: 6.0,
+            palette_margin: 8.0,
+            field_width: 52.0,
+            point_grid_cell: 9.0,
+            fit_curve_step: 14.0,
+            fit_curve_gap: 2.0,
+            layers_indent: 12.0,
+            info_box_margin: 12.0,
+            bottom_bar_margin: 2.0,
         }
     }
 

@@ -138,9 +138,7 @@ impl FontcraftApp {
         self.menu_bar(ui, &mut pending);
         shell::tabs::strip(self, ui, &mut pending);
         shell::status_bar::show(self, ui);
-        if self.state.show_palette {
-            shell::palette::show(self, ui);
-        }
+        crate::panels::show(self, ui, &mut pending);
         if self.state.tab().is_some() {
             canvas::show(self, ui, &mut pending);
         } else {
