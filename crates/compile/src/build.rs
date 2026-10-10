@@ -49,12 +49,6 @@ fn table<E: std::fmt::Display>(table: &'static str) -> impl Fn(E) -> CompileErro
     move |e| CompileError::Table { table, message: e.to_string() }
 }
 
-/// May `name` be written to the `post` table as it is? (At most 63 bytes of letters, digits,
-/// period, underscore and hyphen, as glyph names are conventionally restricted.)
-fn is_post_name(name: &str) -> bool {
-    (1..=63).contains(&name.len()) && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-}
-
 struct Built {
     glyph: TtGlyph,
     /// Points and contours (simple glyphs), for `maxp`.
@@ -252,26 +246,6 @@ struct Boxes {
     loc_format: i16,
 }
 
-/// The glyph names written to the font: the glyph's own when it is a conventional one, else
-/// `glyphNNNNN` by glyph id, with a warning.
-fn glyph_names(order: &[ResolvedGlyph], warnings: &mut Vec<String>) -> Vec<String> {
-    order
-        .iter()
-        .enumerate()
-        .map(|(gid, g)| {
-            if is_post_name(&g.name) {
-                g.name.clone()
-            } else {
-                warnings.push(format!(
-                    "glyph `{}` is written to the font as `glyph{gid:05}`: its name is not a valid glyph name there",
-                    g.name.escape_debug()
-                ));
-                format!("glyph{gid:05}")
-            }
-        })
-        .collect()
-}
-
 /// `glyf` and `loca`, with the boxes and `maxp` that follow from them.
 fn truetype(order: &[ResolvedGlyph], outlines: &[Prepared], builder: &mut FontBuilder) -> Result<(Boxes, Maxp), CompileError> {
     let built = build_glyphs(order, outlines)?;
@@ -378,7 +352,7 @@ pub fn assemble(
     let m = info.metrics;
     let mut builder = FontBuilder::new();
     // Glyph names: in `post` for TrueType, unless there are too many; in the charset for CFF.
-    let names = if flavour == Flavour::Cff || order.len() <= MAX_POST_NAMES { glyph_names(order, warnings) } else { Vec::new() };
+    let names = if flavour == Flavour::Cff || order.len() <= MAX_POST_NAMES { crate::names::final_names(font, order, warnings) } else { Vec::new() };
     let (boxes, maxp) = match flavour {
         Flavour::TrueType => truetype(order, outlines, &mut builder)?,
         Flavour::Cff => {

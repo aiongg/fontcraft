@@ -2041,7 +2041,10 @@ milestone = "M4"
 summary = "For an underscore-joined name each part is resolved to its production name, or kept if it is already an AGLFN name; if any part is unknown, no production name is synthesised. If at least one part is a uniXXXX name and no part lies beyond the BMP, the parts collapse to uni followed by all the four-digit values; otherwise the parts are joined with underscores. The dot suffix is re-attached at the end."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). Built in crates/glyphdata (M4.1). A part whose production name has a dot (uni0C2D.half in bh_a-telugu) is joined as fontc joins it (uni0C2D.half0C05); glyphsLib uses the cleaned glyph name instead. The post-name comparison of M4.2 decides. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). Built in crates/glyphdata (M4.1). A part whose production name has a dot (uni0C2D.half in bh_a-telugu) is joined as fontc joins it (uni0C2D.half0C05); glyphsLib uses the cleaned glyph name instead. The post-name comparison of M4.2 (docs/plans/M4.md › M4.2 results) finds no such ligature in the corpus, so the oracles do not settle it there; FontCraft follows fontc, the oracle for the reference's format. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
+guesses = [
+  "A ligature part whose production name has a dot is joined as fontc joins it (bh_a-telugu → uni0C2D.half0C05), not replaced by the cleaned glyph name as glyphsLib does. Settled by exporting such a ligature from the reference app.",
+]
 
 [[behavior]]
 id = "export.productionNameForm"
@@ -2107,7 +2110,11 @@ milestone = "M4"
 summary = "A font with an invalid glyph name cannot be exported. The export results report an Illegal glyph name error that names the glyph and the position of the bad character, with a Show button that opens the glyph in a new tab; the same error can come from compiling feature code in Font Info."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the name check (font.validateGlyphNames) is M4. File › Export refuses a font with an invalid name, as the handbook says. font.compile and the CLI follow fontc instead and write a sanitised name with a warning (compile.productionNameSanitising): oracles decide compiler questions (the owner's decision, docs/plans/M4.md § 7 question 8)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the name check (font.validateGlyphNames) is M4. File › Export (file.exportStatic, file.exportAll) refuses a font with an invalid name, as the handbook says, with the error `glyph `NAME`: illegal glyph name: illegal character … at position N`; the Show button comes with the export dialog. font.compile and the CLI follow fontc instead and write a sanitised name with a warning (compile.productionNameSanitising): oracles decide compiler questions (the owner's decision, docs/plans/M4.md § 7 question 8). Documented, not yet observed."
+guesses = [
+  "Only glyphs that export are checked: a glyph that is not written to the font cannot block its export. Settled by exporting a font whose non-exporting glyph has an invalid name.",
+  "The glyph's name is checked, not a production name it stores; a stored production name with bad characters is cleaned at export like any other. Settled by exporting a font with such a production name.",
+]
 
 [[behavior]]
 id = "glyphName.underscorePrefix"
@@ -2883,7 +2890,7 @@ milestone = "M4"
 summary = "Without a custom order, glyphs are ordered by sort name, where a glyph's sort name is its own override, else the database value, else its glyph name. The same order is used in Font View and in exported fonts."
 ref = "Font View › Glyph Order; Sort Name; GlyphsSDK GlyphsFileFormatv3.md; tutorials \"Alter the glyph order in Font view\" and \"Roll your own glyph data\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below). The key is GlyphData::sort_key in crates/glyphdata; fontcraft_model::glyph_order gives the order and fontcraft_model::insertion_index a new glyph's place (glyph.newGlyph uses it)."
+notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below). The key is GlyphData::sort_key in crates/glyphdata; fontcraft_model::glyph_order gives the order and fontcraft_model::insertion_index a new glyph's place (glyph.newGlyph uses it). Export reads the same order (Font::resolve, M4.2)."
 guesses = [
   "An opened file keeps its stored glyph order, which is the order the oracles compile; only glyphs added later, renamed, or given a sort name move to the place the sort key gives. Settled by observing where the reference puts a new glyph (05 question 2).",
   "The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2).",

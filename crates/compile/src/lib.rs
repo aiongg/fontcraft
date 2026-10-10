@@ -7,9 +7,10 @@
 //! |---|---|---|
 //! | Resolve | [`drawing::resolve`] | one master, or an instance at a master, as the compiler reads it: glyphs, contours, components, metrics, names; strokes expanded and masks applied |
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
-//! | Glyph order | [`order`] | the font's order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
+//! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
+//! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
-//! | Table builders and assembly | `build`, [`cff`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post`, then the font file |
+//! | Table builders and assembly | `build`, [`cff`], [`names`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, then the font file |
 //!
 //! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
 //! as fontc builds it) or CFF outlines ([`Flavour::Cff`], as fontmake builds it: `maxp` 0.5, `post`
@@ -33,14 +34,17 @@ mod build;
 pub mod cff;
 pub mod drawing;
 pub mod info;
+pub mod names;
 pub mod order;
 pub mod outline;
 pub mod plan;
 pub mod preflight;
 mod ranges;
 
+use std::sync::Arc;
 use std::time::Duration;
 
+use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ModelError, Resolved, Target};
 
 pub use outline::Flavour;
@@ -126,6 +130,29 @@ pub struct Options {
     /// How long overlap removal may take for one glyph before the glyph keeps its overlaps, with
     /// a warning. Not used in the browser, where there are no worker threads.
     pub overlap_time_limit: Duration,
+    /// The glyph database that gives production names and categories. `None`: the built-in one.
+    pub glyph_data: DataRef,
+}
+
+/// The glyph database a compile reads ([`Options::glyph_data`]). Two are equal when they are the
+/// same database.
+#[derive(Clone, Default)]
+pub struct DataRef(pub Option<Arc<GlyphData>>);
+
+impl PartialEq for DataRef {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Debug for DataRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() { "DataRef(session)" } else { "DataRef(built-in)" })
+    }
 }
 
 impl Default for Options {
@@ -137,6 +164,7 @@ impl Default for Options {
             style_name: String::new(),
             remove_overlap: true,
             overlap_time_limit: fontcraft_pathops::TIME_LIMIT,
+            glyph_data: DataRef::default(),
         }
     }
 }
@@ -166,16 +194,7 @@ pub fn compile_ttf(font: &Font, options: &Options) -> Result<Compiled, CompileEr
 /// The stages after resolving, on a resolved font.
 pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
-    // Non-spacing marks have no advance in a compiled font (`compile.nonSpacingMarkWidth`), as
-    // fontc and glyphsLib write them for `.glyphs` sources; a UFO states its advances as they
-    // are. Only the categories glyphs state are known until the glyph database (M4).
-    if !fontcraft_model::is_ufo_family(resolved.format) {
-        for g in &mut resolved.glyphs {
-            if g.category.as_deref() == Some("Mark") && g.sub_category.as_deref() == Some("Nonspacing") {
-                g.width = 0.0;
-            }
-        }
-    }
+    fill_glyph_data(&mut resolved, options, &mut warnings);
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
@@ -194,6 +213,28 @@ pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Opti
     let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
     let bytes = build::assemble(&resolved, &glyphs, &outlines, flavour, synthesised_notdef, options, &mut warnings)?;
     Ok(Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings })
+}
+
+/// Fills what the glyphs do not store from the glyph database ([`Resolved::apply_glyph_data`])
+/// and gives non-spacing marks no advance (`compile.nonSpacingMarkWidth`), as fontc and glyphsLib
+/// write them for the reference's format; a UFO states its advances as they are. A built-in
+/// database that cannot be read leaves the stored values alone, with a warning.
+pub fn fill_glyph_data(resolved: &mut Resolved, options: &Options, warnings: &mut Vec<String>) {
+    if fontcraft_model::is_ufo_family(resolved.format) {
+        return;
+    }
+    match &options.glyph_data.0 {
+        Some(data) => resolved.apply_glyph_data(data),
+        None => match GlyphData::new() {
+            Ok(data) => resolved.apply_glyph_data(&data),
+            Err(e) => warnings.push(format!("production names and categories come only from the glyphs: {e}")),
+        },
+    }
+    for g in &mut resolved.glyphs {
+        if g.category.as_deref() == Some("Mark") && g.sub_category.as_deref() == Some("Nonspacing") {
+            g.width = 0.0;
+        }
+    }
 }
 
 /// OpenType rounding: half up (`floor(v + 0.5)`), not half away from zero. A value that is not

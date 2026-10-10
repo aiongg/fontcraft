@@ -473,7 +473,7 @@ effect = "export-filter"
 summary = "When checked, glyphs keep their source names in the exported font instead of being renamed to the production names from the glyph database. Same effect as Font Info > Other Settings > Use Custom Naming; some older environments expect AGL-style names."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6), with the production names it switches off."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6), with the production names it switches off. Built in M4.2: the font's, master's or instance's value (Resolved::production_names); a UFO's com.github.googlei18n.ufo2ft.useProductionNames reads as its negation. Documented, not yet observed."
 
 [[parameter]]
 name = "EditView Line Height"
@@ -782,7 +782,7 @@ effect = "other"
 summary = "List of glyph names, one per line, fixing the glyph order in the working file and in exports. Glyphs not listed are appended afterwards in the application's default order."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Moved from M7 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): Font View's order (glyphOrder.default, M4) reads it, and export uses the same order. Editing it in Font Info comes with M7's parameter commands. The tutorial \"Alter the glyph order in Font view\" (glyphsapp.com/learn) adds that a line written **Title** shows as a section header in Font View; such lines name no glyph and are ignored at export. Documented, not yet observed."
+notes = "Moved from M7 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): Font View's order (glyphOrder.default, M4) reads it, and export uses the same order. Editing it in Font Info comes with M7's parameter commands. The tutorial \"Alter the glyph order in Font view\" (glyphsapp.com/learn) adds that a line written **Title** shows as a section header in Font View; such lines name no glyph and are ignored at export. Exported fonts follow the order (Font::resolve, M4.2), as fontc and glyphsLib do. Documented, not yet observed."
 
 [[parameter]]
 name = "Grid Spacing"

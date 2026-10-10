@@ -13,9 +13,13 @@
 //! | loca | offsets: compared through `glyf` |
 //! | maxp, OS/2, post | field by field |
 //!
-//! Glyphs are matched by name. When the two fonts have different glyph sets or orders, that is
-//! reported once as a source-reading difference (the two compilers read the source differently),
-//! and the per-glyph tables compare the glyphs both fonts have.
+//! Glyphs are matched by name. When the two fonts have as many glyphs and a glyph's name is only in
+//! one of them, it is matched with the other font's glyph of the same id if that glyph's name is
+//! also only in its font: the two compilers named the glyph differently (production names), which
+//! `post` reports as `post glyphName <ours>`, and the per-glyph tables still compare it. Other
+//! differences in the glyph sets or orders are reported once as a source-reading difference (the
+//! two compilers read the source differently), and the per-glyph tables compare the glyphs both
+//! fonts have.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -121,6 +125,33 @@ fn tag_text(t: Tag) -> String {
 /// The glyphs both fonts have: name, our id, their id, in our order.
 type Common = Vec<(String, GlyphId, GlyphId)>;
 
+/// The glyphs the two fonts name differently: glyph id, our name, their name. Only when both
+/// fonts have as many glyphs, and only where neither name is in the other font and both glyphs
+/// have the same code points (a glyph the reference made in place of ours is not renamed).
+fn renamed(a: &Side, b: &Side) -> Vec<(u32, String, String)> {
+    if a.names.len() != b.names.len() {
+        return Vec::new();
+    }
+    let (cps_a, cps_b) = (code_points(a), code_points(b));
+    a.names
+        .iter()
+        .zip(&b.names)
+        .enumerate()
+        .filter(|(_, (x, y))| x != y && !b.by_name.contains_key(*x) && !a.by_name.contains_key(*y))
+        .filter_map(|(gid, (x, y))| Some((u32::try_from(gid).ok()?, x.clone(), y.clone())))
+        .filter(|(gid, _, _)| cps_a.get(gid) == cps_b.get(gid))
+        .collect()
+}
+
+/// Each glyph's code points, by glyph id, from the font's preferred Unicode subtable.
+fn code_points(s: &Side) -> HashMap<u32, Vec<u32>> {
+    let mut out: HashMap<u32, Vec<u32>> = HashMap::new();
+    for (cp, gid) in s.font.charmap().mappings().take(MAX_MAPPINGS) {
+        out.entry(gid.to_u32()).or_default().push(cp);
+    }
+    out
+}
+
 /// Compares `ours` with `theirs` (the reference compiler's font), outlines exactly.
 pub fn compare(ours: &[u8], theirs: &[u8]) -> Result<Comparison, String> {
     compare_with(ours, theirs, Outlines::Exact)
@@ -133,6 +164,17 @@ pub fn compare_with(ours: &[u8], theirs: &[u8], outlines: Outlines) -> Result<Co
     let mut out = Comparison::default();
     if b.font.fvar().is_ok() {
         out.notes.push("the reference is a variable font: its default location is compared".into());
+    }
+
+    // Glyphs named differently are compared under our names; `post` reports the names.
+    let renamed = renamed(&a, &b);
+    let mut b = b;
+    for (gid, ours, _) in &renamed {
+        if let Some(slot) = b.names.get_mut(*gid as usize) {
+            b.by_name.remove(slot.as_str());
+            slot.clone_from(ours);
+            b.by_name.insert(ours.clone(), GlyphId::new(*gid));
+        }
     }
 
     // Source reading: glyph set and order.
@@ -167,7 +209,7 @@ pub fn compare_with(ours: &[u8], theirs: &[u8], outlines: Outlines) -> Result<Co
     let mut order: Vec<String> = CORE.iter().map(|t| (*t).to_string()).filter(|t| tags_a.contains(t) || tags_b.contains(t)).collect();
     order.extend(tags_a.union(&tags_b).filter(|t| !CORE.contains(&t.as_str())).cloned());
     for tag in order {
-        out.tables.push(table(&a, &b, &common, &tag, tags_a.contains(&tag), tags_b.contains(&tag), outlines));
+        out.tables.push(table(&a, &b, &common, &renamed, &tag, tags_a.contains(&tag), tags_b.contains(&tag), outlines));
     }
     Ok(out)
 }
@@ -192,7 +234,17 @@ fn skipped(tag: &str, note: &str) -> TableResult {
     }
 }
 
-fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool, outlines: Outlines) -> TableResult {
+#[allow(clippy::too_many_arguments)]
+fn table(
+    a: &Side,
+    b: &Side,
+    common: &Common,
+    renamed: &[(u32, String, String)],
+    tag: &str,
+    in_a: bool,
+    in_b: bool,
+    outlines: Outlines,
+) -> TableResult {
     if LAYOUT.contains(&tag) {
         return skipped(tag, "layout table: compared from M8");
     }
@@ -222,7 +274,7 @@ fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool,
         "vmtx" => (vmtx(a, b, common), None),
         "maxp" => (maxp(a, b), None),
         "OS/2" => (os2(a, b), None),
-        "post" => (post(a, b), None),
+        "post" => (post(a, b, renamed), None),
         "name" => name(a, b),
         "cmap" => (cmap(a, b), None),
         "hmtx" => (hmtx(a, b, common), None),
@@ -453,7 +505,8 @@ fn os2(a: &Side, b: &Side) -> Vec<Difference> {
     fields("OS/2", f(a), f(b))
 }
 
-fn post(a: &Side, b: &Side) -> Vec<Difference> {
+/// The fields, then each glyph the two fonts name differently (`post glyphName <ours>`).
+fn post(a: &Side, b: &Side, renamed: &[(u32, String, String)]) -> Vec<Difference> {
     let f = |s: &Side| -> Option<Fields> {
         let p = s.font.post().ok()?;
         Some(vec![
@@ -469,7 +522,9 @@ fn post(a: &Side, b: &Side) -> Vec<Difference> {
             ("numGlyphs", opt(p.num_glyphs())),
         ])
     };
-    fields("post", f(a), f(b))
+    let mut out = fields("post", f(a), f(b));
+    out.extend(renamed.iter().map(|(_, x, y)| diff(format!("post glyphName {x}"), x.clone(), y.clone())));
+    out
 }
 
 /// A name record: platform, encoding, language, name id.

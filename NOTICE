@@ -56,7 +56,9 @@ bundled, the file says so in its header and the project is listed here with its 
   ranges and origin master it derives for a designspace, and its weight and width tables are
   ported from its axis builder (crates/model/src/axes.rs); the rules for designspace axis maps,
   instance attributes and instance lib keys, style-map names and instance file names from its
-  axis, instance and name builders (crates/io-ufo/src/designspace/axes.rs and instances.rs). The
+  axis, instance and name builders (crates/io-ufo/src/designspace/axes.rs and instances.rs).
+  The rules that give a UFO written from another format its public.openTypeCategories are
+  ported from its feature builder (crates/io-ufo/src/gdef.rs, from builder/features.py). The
   conversion between a glyph's colour label and the UFO mark colour, with its table of label
   colours, is ported from its glyph builder (crates/io-ufo/src/glif.rs), and the key order of a
   format 2 smart-glyph property from its format 2 writer (crates/io-glyphs/src/glyph.rs). The
@@ -142,8 +144,9 @@ bundled, the file says so in its header and the project is listed here with its 
   (crates/compile/src/info.rs, from glyphs2fontir/src/source.rs, ufo2fontir/src/source.rs,
   fontir/src/ir.rs and fontir/src/ir/static_metadata.rs); USE_MY_METRICS, hmtx, hhea, vhea,
   vmtx, head, OS/2 and post (crates/compile/src/build.rs, from fontbe/src/glyphs.rs,
-  metrics_and_limits.rs, vertical_metrics.rs, head.rs, os2.rs, post.rs); the OS/2 Unicode range
-  table and code page rules (crates/compile/src/ranges.rs, from fontbe/src/os2.rs, which takes
+  metrics_and_limits.rs, vertical_metrics.rs, head.rs, os2.rs, post.rs); the cleaning and
+  numbering of production names (crates/compile/src/names.rs, from fontbe/src/post.rs); the
+  OS/2 Unicode range table and code page rules (crates/compile/src/ranges.rs, from fontbe/src/os2.rs, which takes
   them from fontTools and ufo2ft, both MIT); the format defaults of master metrics and the
   `*origin` anchor (crates/model/src/resolve.rs, from glyphs2fontir/src/source.rs). The glyph
   database's synthesis rules (crates/glyphdata/src/data.rs: suffix and ligature splitting with the

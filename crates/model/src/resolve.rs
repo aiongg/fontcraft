@@ -23,10 +23,21 @@
 //!
 //! The master's alignment zones and stems come along for PostScript hinting values; the
 //! zones as blue values follow glyphsLib's `to_ufo_blue_values` (Apache-2.0, see `NOTICE`).
+//!
+//! Glyphs come in export order ([`crate::glyph_order`]: the `glyphOrder` parameter, then stored
+//! order). Each carries the production name and categories it stores; [`Resolved::apply_glyph_data`]
+//! fills the ones it does not store from the glyph database, as both reference compilers do for
+//! the reference's format. A UFO states its production names and categories in its own lib, so
+//! its glyphs get nothing from the database.
 
 use fontcraft_geom::{Affine, BezPath, Point};
 
-use crate::{AlignmentZone, Font, Glyph, Layer, Master, ModelError, Params, Properties, Shape, SourceFormat, metric};
+use fontcraft_glyphdata::GlyphData;
+
+use crate::{AlignmentZone, Font, Glyph, Layer, Master, ModelError, Params, Properties, Shape, SourceFormat, metric, param_flag};
+
+/// The parameter that keeps source glyph names in compiled fonts.
+pub const DONT_USE_PRODUCTION_NAMES: &str = "Don't use Production Names";
 
 /// What to resolve.
 #[derive(Clone, Debug, PartialEq)]
@@ -73,7 +84,10 @@ pub struct Resolved {
     pub date: Option<String>,
     /// Style linking of the instance (none for a master).
     pub style: Option<StyleLinking>,
-    /// Every glyph of the font, in the font's order, exported or not.
+    /// Glyphs are written under their production names: neither the *Don't use Production
+    /// Names* parameter nor the font's *Use Custom Naming* setting (`disablesNiceNames`) is on.
+    pub production_names: bool,
+    /// Every glyph of the font, in export order, exported or not.
     pub glyphs: Vec<ResolvedGlyph>,
     /// What resolving left out or chose, for the compile report.
     pub notes: Vec<String>,
@@ -138,10 +152,11 @@ pub struct ResolvedGlyph {
     pub unicodes: Vec<u32>,
     /// Written to compiled fonts?
     pub export: bool,
-    /// The production name the glyph states, if any.
+    /// The production name the glyph states, or the glyph database's after
+    /// [`Resolved::apply_glyph_data`].
     pub production_name: Option<String>,
-    /// The category and subcategory the glyph states (`Mark`, `Nonspacing`…), if any. Those the
-    /// glyph database would give are not looked up here.
+    /// The category and subcategory (`Mark`, `Nonspacing`…) the glyph states, or the glyph
+    /// database's after [`Resolved::apply_glyph_data`].
     pub category: Option<String>,
     pub sub_category: Option<String>,
     pub width: f64,
@@ -302,14 +317,15 @@ impl Font {
 
         let mut glyphs = Vec::with_capacity(self.glyphs.len());
         let (mut alternates, mut undrawable, mut missing) = (0usize, 0usize, Vec::new());
-        for g in self.glyphs.iter() {
+        for g in crate::glyph_order(self).into_iter().filter_map(|i| self.glyphs.as_arcs().get(i)) {
             let bad = |message: String| ModelError::BadOutline { glyph: g.name.clone(), message };
             let mut out = ResolvedGlyph::new(g.name.clone(), 0.0);
             out.unicodes.clone_from(&g.unicodes);
             out.export = g.export;
-            out.production_name.clone_from(&g.info.production);
-            out.category.clone_from(&g.info.category);
-            out.sub_category.clone_from(&g.info.sub_category);
+            let stated = |v: &Option<String>| v.clone().filter(|v| !v.is_empty());
+            out.production_name = stated(&g.info.production);
+            out.category = stated(&g.info.category);
+            out.sub_category = stated(&g.info.sub_category);
             if g.layers.iter().any(|l| l.master == master.id && !l.is_master_layer() && !l.info.attrs.axis_rules.is_empty()) {
                 alternates += 1;
             }
@@ -379,6 +395,8 @@ impl Font {
             ));
         }
 
+        let production_names =
+            !params.get(DONT_USE_PRODUCTION_NAMES).and_then(param_flag).unwrap_or(false) && self.info.settings.disables_nice_names != Some(true);
         Ok(Resolved {
             format: self.source.format,
             units_per_em: self.units_per_em,
@@ -397,9 +415,36 @@ impl Font {
             params,
             date: self.info.date.clone(),
             style: instance.map(|i| StyleLinking { is_bold: i.is_bold, is_italic: i.is_italic, link_style: i.link_style.clone() }),
+            production_names,
             glyphs,
             notes,
         })
+    }
+}
+
+impl Resolved {
+    /// Fills each glyph's production name, category and subcategory that the glyph does not
+    /// store from `data`, field by field (`compile.productionNames`). Nothing for a UFO or a
+    /// designspace: there the source's own maps are the only ones the compilers read.
+    pub fn apply_glyph_data(&mut self, data: &GlyphData) {
+        if is_ufo_family(self.format) {
+            return;
+        }
+        for g in &mut self.glyphs {
+            if g.production_name.is_some() && g.category.is_some() && g.sub_category.is_some() {
+                continue;
+            }
+            let info = data.lookup(&g.name, &g.unicodes);
+            if g.production_name.is_none() {
+                g.production_name = Some(info.production_name.value);
+            }
+            if g.category.is_none() {
+                g.category = info.category.map(|c| c.value.as_str().to_string());
+            }
+            if g.sub_category.is_none() {
+                g.sub_category = info.sub_category.map(|c| c.value.as_str().to_string());
+            }
+        }
     }
 }
 

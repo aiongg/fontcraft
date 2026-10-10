@@ -694,6 +694,19 @@ status = "inferred"
 # ── All formats ──
 
 [[behavior]]
+id = "ufo.openTypeCategories"
+area = "import-export"
+milestone = "M4"
+summary = "A UFO written from a font read from another format gets public.openTypeCategories from each glyph's category, subcategory and anchors: ligature for subcategory Ligature with an attaching anchor (a name without a leading underscore), mark for category Mark with subcategory Nonspacing or Spacing Combining, base for any other glyph with an attaching anchor, nothing otherwise. A class the glyph states wins. A UFO's own map is written back as it was read."
+ref = "glyphsLib 6.15.0 builder/features.py (_build_public_opentype_categories); docs/spec/30-source-formats.md › Glyph classification"
+status = "docs"
+notes = "Built in M4.2 (crates/io-ufo/src/gdef.rs). The category and subcategory a glyph does not state come from the built-in glyph database, as glyphsLib takes them."
+guesses = [
+  "glyphsLib classifies after propagating anchors into composites; a layer without anchors of its own counts its components' attaching anchors, which gives the same class for the usual accented composites. Settled by comparing with glyphsLib's UFOs of the corpus.",
+  "Custom glyph data files do not change the classes, as glyphsLib reads only its built-in data here. Settled by a reference export with a custom GlyphData file.",
+]
+
+[[behavior]]
 id = "roundtrip.unknownKeysPreserved"
 area = "import-export"
 milestone = "M1"

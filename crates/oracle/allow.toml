@@ -19,7 +19,7 @@ reason = "usMaxContext is the longest context of the GSUB and GPOS lookups. Font
 
 [[allow]]
 table = "glyf"
-key = "glyf manual-component structure"
+key = "glyf manualcomponent structure"
 oracle = "fontc"
 sources = ["/WghtVar.glyphs", "/WghtVar.glyphspackage", "/WghtVar_Avar", "/WghtVar_Instances", "/WghtVar_OS2", "/WghtVarWithStylisticSet", "/TheBestNames.glyphs"]
 reason = "The reference is a variable font: fontc decomposes a composite whose component offsets differ between masters (`compile.inconsistentComponentsDecompose`). A static build of one master keeps it, as fontmake's master build does. Compared again with variable builds (M9)."
@@ -95,14 +95,14 @@ reason = "Source reading: the glyphs the reference makes of alternate and colour
 table = "OS/2"
 key = "OS/2.xAvgCharWidth"
 sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BracketTestFontKerning", "/WorkSans-minimal-bracketlayer", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/bracket-rules-processed", "/glyph-with-bracket-component", "/manual_bracket_layer_and_component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-", "/COLRv1-"]
-reason = "Source reading: the average advance counts the glyphs the reference makes of alternate and colour layers (see maxp), and non-spacing marks the glyph database knows (see hmtx); M4, M8, M9, M11."
+reason = "Source reading: the average advance counts the glyphs the reference makes of alternate and colour layers (see maxp); M8, M9, M11."
 
 [[allow]]
 table = "hhea"
 key = "hhea.advanceWidthMax"
 keys = ["hhea.xMaxExtent", "hhea.minRightSideBearing", "hhea.minLeftSideBearing"]
 sources = ["/color-and-bracket-glyph-order", "glyphs2/AxisRules.glyphs", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "/BlankAlternateLayers", "/LibreFranklin-bracketlayer", "/bracket-glyph-order", "/glyph-with-bracket-component", "decreasing_axis/axis.glyphs", "/PropagateAnchorsTest", "/COLRv0-"]
-reason = "Source reading: the extremes over all glyphs include the glyphs the reference makes of alternate and colour layers (see maxp), and the zero advances of non-spacing marks (see hmtx); M4, M8, M9, M11."
+reason = "Source reading: the extremes over all glyphs include the glyphs the reference makes of alternate and colour layers (see maxp); M8, M9, M11."
 
 [[allow]]
 table = "head"
@@ -152,26 +152,33 @@ key = "OS/2.usLastCharIndex"
 sources = ["decreasing_axis/axis.designspace", "dspace_rules/", "/mapping.designspace", "/wght_var"]
 reason = "Source reading: the code point of `bonus_bar` (see maxp)."
 
-# --- Non-spacing marks (M4) -------------------------------------------------------------------
+# --- Glyph names and mark widths (M4) ---------------------------------------------------------
+
+[[allow]]
+table = "post"
+key = "post glyphName *"
+sources = ["glyphs3/CornerComponents.glyphs"]
+reason = "Decided difference: the source sets Use Custom Naming (`disablesNiceNames`), which keeps the source names in the font as the handbook says (`Don't use Production Names`); the reference compilers ignore that setting and write the glyphs' production names."
 
 [[allow]]
 table = "hmtx"
 key = "hmtx * advance"
-sources = ["/IntermediateLayer", "/WghtVar_Anchors", "/DontPropagateAnchors.glyphs", "/ComponentAnchor.glyphs", "/GposWithFeatureParamName.glyphs", "/Unicode-UnquotedDecSequence.glyphs", "/COLRv0-marks.glyphs", "/COLRv0-component-anchors.glyphs", "/PropagateAnchorsTest", "/Alexandria-bracketglyphs", "/AlumniSans-wononly", "oswald/sources/Oswald.glyphs"]
-reason = "Non-spacing marks have no advance in compiled fonts (`compile.nonSpacingMarkWidth`). FontCraft knows a mark only when the glyph states its category; the reference compilers also look the glyph up in the glyph database, which FontCraft gets in M4. A UFO that glyphsLib wrote keeps the mark's drawn width in a lib key, which the model reads as the width."
+ours = "*"
+theirs = "0"
+sources = ["designspace_from_glyphs/IntermediateLayer", "designspace_from_glyphs/WghtVar_Anchors"]
+reason = "Decided difference: a UFO that glyphsLib wrote stores a non-spacing mark's width as 0 in the GLIF and its drawn width in the `com.schriftgestaltung.Glyphs.originalWidth` lib key. The model reads the drawn width, so the UFO converts back to the reference's format unchanged; the reference compilers read the GLIF's 0, and the compiler takes a UFO's widths as the model holds them."
 
 [[allow]]
 table = "hhea"
 key = "hhea.minRightSideBearing"
-keys = ["hhea.advanceWidthMax"]
-sources = ["/IntermediateLayer", "/WghtVar_Anchors", "/DontPropagateAnchors.glyphs", "/ComponentAnchor.glyphs", "/GposWithFeatureParamName.glyphs", "oswald/sources/Oswald.glyphs"]
-reason = "Follows from the advances of non-spacing marks (see hmtx); M4."
+sources = ["designspace_from_glyphs/IntermediateLayer", "designspace_from_glyphs/WghtVar_Anchors"]
+reason = "Follows from the mark widths of a UFO glyphsLib wrote (see hmtx)."
 
 [[allow]]
 table = "OS/2"
 key = "OS/2.xAvgCharWidth"
-sources = ["/IntermediateLayer", "/WghtVar_Anchors", "/DontPropagateAnchors.glyphs", "/ComponentAnchor.glyphs", "/GposWithFeatureParamName.glyphs", "/Unicode-UnquotedDecSequence.glyphs"]
-reason = "Follows from the advances of non-spacing marks (see hmtx); M4."
+sources = ["designspace_from_glyphs/IntermediateLayer", "designspace_from_glyphs/WghtVar_Anchors"]
+reason = "Follows from the mark widths of a UFO glyphsLib wrote (see hmtx)."
 
 # --- Smart components, corner components, open corners (M6) -----------------------------------
 

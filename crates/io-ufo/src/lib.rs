@@ -29,6 +29,7 @@ mod design;
 pub mod designspace;
 pub mod features;
 mod fontinfo;
+mod gdef;
 pub mod glif;
 pub mod glyphkeys;
 pub mod kerning;

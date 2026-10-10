@@ -460,3 +460,25 @@ fn export_removes_overlaps_unless_asked_to_keep_them() {
     let built = run(&mut s, "font.compile", json!({"formats": ["otf"], "outlines": {"removeOverlaps": false}}));
     assert_eq!(built["warnings"], json!([]));
 }
+
+#[test]
+fn export_refuses_an_invalid_glyph_name_while_compile_writes_a_clean_one() {
+    let mut s = drawn();
+    s.set_source_glyph_data(&[("GlyphData.xml", br#"<glyphData><glyph name="zz" production="myzz" category="Symbol"/></glyphData>"#)]).unwrap();
+    s.edit("Add", |font| {
+        font.add_glyph("A-cy", vec![0x410], 500.0)?;
+        font.add_glyph("zz", vec![], 500.0)?;
+        font.add_glyph("bad name", vec![0xE000], 500.0)?;
+        Ok(())
+    })
+    .unwrap();
+    let err = s.execute("file.exportStatic", &json!({})).unwrap_err().to_string();
+    assert!(err.contains("glyph `bad name`: illegal glyph name") && err.contains("position 4"), "{err}");
+
+    let plan = run(&mut s, "font.compilePlan", json!({"sections": ["productionNames"]}));
+    // The document's own glyph data gives `zz` its production name.
+    assert_eq!(plan["productionNames"], json!({"A-cy": "uni0410", "zz": "myzz", "bad name": "badname"}));
+    let built = run(&mut s, "font.compile", json!({}));
+    let warnings = built["fonts"][0]["warnings"].to_string();
+    assert!(warnings.contains("`bad name` → `badname`"), "{warnings}");
+}

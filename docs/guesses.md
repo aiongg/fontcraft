@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**261 guesses on 200 rows (93 of them live commands).**
+**268 guesses on 205 rows (93 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -184,7 +184,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyphData.customFile` (behavior) | M4 | handbook | – | A custom record replaces the built-in record of the same name as a whole: fields it leaves out are empty, not taken from the built-in record. Settled by observation. |
 | `glyphData.customFile` (behavior) | M4 | handbook | – | A file over a limit (16 MB, 200,000 records, 1,024 bytes per attribute value, two levels of elements) or with an entity declaration or a malformed record is rejected as a whole; attributes the format does not define are skipped with a warning. |
 | `glyphData.customFile` (behavior) | M4 | handbook | – | Beside a source file and in the Info folder beside it, every file named GlyphData*.xml is read, in name order, those beside the file first; at most 32 files of the user's and 32 of a document's. Settled by observation. |
+| `export.productionNameLigature` (behavior) | M4 | docs | – | A ligature part whose production name has a dot is joined as fontc joins it (bh_a-telugu → uni0C2D.half0C05), not replaced by the cleaned glyph name as glyphsLib does. Settled by exporting such a ligature from the reference app. |
 | `glyphName.firstCharacter` (behavior) | M4 | handbook | – | .null is exempt like .notdef. |
+| `glyphName.invalidBlocksExport` (behavior) | M4 | handbook | – | Only glyphs that export are checked: a glyph that is not written to the font cannot block its export. Settled by exporting a font whose non-exporting glyph has an invalid name. |
+| `glyphName.invalidBlocksExport` (behavior) | M4 | handbook | – | The glyph's name is checked, not a production name it stores; a stored production name with bad characters is cleaned at export like any other. Settled by exporting a font with such a production name. |
 | `fontView.invertSelection` (behavior) | M4 | handbook | – | Invert Selection works among the visible glyphs, as Select All does. Settled by observation (05 question 12). |
 | `fontView.search.regex` (behavior) | M4 | handbook | – | With Regex on, the pattern must match a whole field (name, hex code point or note) among the fields the magnifier menu selects; the handbook's examples only show names. Settled by observation (05 question 13). |
 | `smartFilter.rule.glyphName` (behavior) | M4 | handbook | – | Text rules (Glyph Name, Tags, Script, Category & Subcategory) offer is, is not, contains, does not contain, begins with, ends with and matches (a regular expression); number rules offer =, ≠, <, ≤, >, ≥; yes-or-no rules offer is and is not. The reference's stored predicates use ==, !=, <, >, CONTAINS, IN, BEGINSWITH and ENDSWITH (tutorial "Custom sidebar entries in Font View"), which this set covers. Settled by observing the rule editor (05 question 10). |
@@ -328,9 +331,18 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `check.outlines.kinkedSmoothNode` (check) | M3 | inferred | – | The default `maxAngle` of 1° is a first guess to tune on real fonts (21-qa question 5). |
 | `check.outlines.unbalancedHandles` (check) | M3 | inferred | – | The default `maxRatio` of 4 is a first guess to tune on real fonts (21-qa question 5). |
 
+## `30-formats.toml`
+
+| Row | Milestone | Status | Live | Guess |
+|---|---|---|---|---|
+| `ufo.openTypeCategories` (behavior) | M4 | docs | – | glyphsLib classifies after propagating anchors into composites; a layer without anchors of its own counts its components' attaching anchors, which gives the same class for the usual accented composites. Settled by comparing with glyphsLib's UFOs of the corpus. |
+| `ufo.openTypeCategories` (behavior) | M4 | docs | – | Custom glyph data files do not change the classes, as glyphsLib reads only its built-in data here. Settled by a reference export with a custom GlyphData file. |
+
 ## `40-tables.toml`
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
 | `compile.removeOverlapsStatic` (behavior) | M2 | docs | – | A composite glyph keeps its components at export, so components that overlap each other keep their overlaps, following fontmake; how the reference app exports such a glyph is not documented. |
+| `compile.productionNames` (behavior) | M4 | docs | – | Use Custom Naming (disablesNiceNames) keeps the source names at export, as the handbook's Don't use Production Names entry says it has the same effect; the reference compilers ignore it. Settled by exporting a font with Use Custom Naming on from the reference app. |
+| `compile.productionNameSanitising` (behavior) | M4 | docs | – | A name that is empty after cleaning, or longer than the 255 bytes post can store, becomes glyphNNNNN (by glyph id) with a warning; fontc would write the empty or long name. Settled only by a reference that writes such a font. |
 

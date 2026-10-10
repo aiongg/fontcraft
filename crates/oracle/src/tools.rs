@@ -219,17 +219,12 @@ fn build_fontc(req: &Request, kind: SourceKind, source: &Path) -> Result<Built, 
     // them out of the reference build too, so a feature file only fontc rejects does not stop the
     // comparison of the other tables.
     let mut cmd = Command::new(req.tool);
-    cmd.arg("--no-production-names").arg("--skip-features").arg("-b").arg(req.work_dir.join("fontc-build")).arg("-o").arg(&out).arg(&input);
+    cmd.arg("--skip-features").arg("-b").arg(req.work_dir.join("fontc-build")).arg("-o").arg(&out).arg(&input);
     run(req, cmd)?;
     if !out.is_file() {
         return Err(format!("fontc finished but wrote no {}", out.display()));
     }
-    Ok(Built {
-        path: out,
-        command: format!("fontc --no-production-names --skip-features -o OUT {}", input.display()),
-        notes,
-        alternatives: Vec::new(),
-    })
+    Ok(Built { path: out, command: format!("fontc --skip-features -o OUT {}", input.display()), notes, alternatives: Vec::new() })
 }
 
 fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Built, String> {
@@ -255,8 +250,8 @@ fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Buil
         args.extend(["--optimize-cff".into(), "1".into()]);
     }
     // Overlaps are removed, by fontmake's default backend, as FontCraft removes them for static
-    // fonts; the outlines are compared by rendered coverage. Glyph names stay the source's.
-    args.push("--no-production-names".into());
+    // fonts; the outlines are compared by rendered coverage. Glyphs get their production names,
+    // as FontCraft's do.
     if req.flavour == Flavour::TrueType {
         // fontc and FontCraft leave out an on-curve point exactly between two off-curve points.
         args.push("--drop-implied-oncurves".into());

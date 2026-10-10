@@ -954,6 +954,7 @@ pub fn read(files: &Files) -> Result<Font> {
     };
     glyphkeys::read(&mut font, &master_id);
     libkeys::read(&mut font, false, &master_id);
+    crate::gdef::strip_derived(&mut font, &master_id);
     font.check()?;
     Ok(font)
 }
@@ -1338,7 +1339,22 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         patch(&mut lib, "public.glyphOrder", Some(value));
     }
     patch_glyph_map(&mut lib, POSTSCRIPT_NAMES, font, is_default, &default_lib, |g| g.info.production.as_deref());
-    patch_glyph_map(&mut lib, OPENTYPE_CATEGORIES, font, is_default, &default_lib, |g| g.info.opentype_category.as_deref());
+    // A font from another format gets classes from the glyphs' categories and anchors. A UFO's
+    // own map is written as read: its entries that equal those classes are not stored on the
+    // glyphs (`gdef::strip_derived`) and come back here.
+    let derived = crate::gdef::derived(font, &master.id);
+    let from_other = !fontcraft_model::is_ufo_family(font.source.format);
+    let kept_classes = |d: &Dict, g: &Glyph| {
+        d.get(OPENTYPE_CATEGORIES).and_then(Value::as_dict).and_then(|m| m.get(&g.name)).and_then(Value::as_str).map(str::to_string)
+    };
+    let (own_lib, default_lib_classes) = (lib.clone(), default_lib.clone());
+    patch_glyph_map(&mut lib, OPENTYPE_CATEGORIES, font, is_default, &default_lib, |g| {
+        g.info.opentype_category.as_deref().or_else(|| {
+            let class = derived.get(&g.name).copied()?;
+            let kept = |d: &Dict| kept_classes(d, g).as_deref() == Some(class);
+            (from_other || kept(&own_lib) || kept(&default_lib_classes)).then_some(class)
+        })
+    });
     if !lib.is_empty() {
         out.insert(LIB.into(), plist(LIB, &Value::Dict(lib)));
     }
@@ -2385,6 +2401,43 @@ mod tests {
         assert!(!back.glyph("C").unwrap().export);
         assert_eq!(back.outline("B", "m01").unwrap().elements().len(), font.outline("B", "m01").unwrap().elements().len());
         assert_eq!(write(&back).unwrap(), files, "a UFO we wrote comes back unchanged");
+    }
+
+    #[test]
+    fn a_font_from_another_format_gets_opentype_categories_and_a_ufo_keeps_its_own() {
+        use fontcraft_model::Anchor;
+        let mut font = Font::new("Classes");
+        let m = font.masters[0].id.clone();
+        font.add_glyph("acutecomb", vec![0x301], 0.0).unwrap();
+        font.add_glyph("f_f", vec![], 600.0).unwrap();
+        font.add_glyph("Aacute", vec![0xC1], 600.0).unwrap();
+        font.glyph_mut("A").unwrap().layers[0].anchors.push(Anchor::new("top", 300.0, 700.0));
+        font.glyph_mut("acutecomb").unwrap().layers[0].anchors.push(Anchor::new("_top", 0.0, 500.0));
+        font.glyph_mut("f_f").unwrap().layers[0].anchors.push(Anchor::new("top_1", 100.0, 700.0));
+        // A composite without anchors of its own takes its components'.
+        let mut aacute = font.glyph_mut("Aacute").unwrap();
+        aacute.layers[0].shapes.push(Shape::Component(Component::new("A", 0.0, 0.0)));
+        aacute.layers[0].shapes.push(Shape::Component(Component::new("acutecomb", 300.0, 200.0)));
+        drop(aacute);
+        // A stored class wins.
+        font.glyph_mut("B").unwrap().info.opentype_category = Some("component".into());
+        assert_eq!(font.glyph("A").unwrap().layer(&m).map(|l| l.anchors.len()), Some(1));
+        let lib = s(&write(&font).unwrap()["lib.plist"]).to_string();
+        let classes = "<key>public.openTypeCategories</key>\n    <dict>\n      <key>A</key>\n      <string>base</string>\n      <key>Aacute</key>\n      <string>base</string>\n      <key>B</key>\n      <string>component</string>\n      <key>acutecomb</key>\n      <string>mark</string>\n      <key>f_f</key>\n      <string>ligature</string>\n    </dict>";
+        assert!(lib.contains(classes), "{lib}");
+        // Read back, only the class the rules do not give is stored; written again, the map is
+        // the same.
+        let files = write(&font).unwrap();
+        let back = read(&files).unwrap();
+        let stored: Vec<(&str, &str)> = back.glyphs.iter().filter_map(|g| Some((g.name.as_str(), g.info.opentype_category.as_deref()?))).collect();
+        assert_eq!(stored, [("B", "component")]);
+        assert!(s(&write(&back).unwrap()["lib.plist"]).contains(classes));
+        font.source.format = SourceFormat::Ufo;
+        let lib = s(&write(&font).unwrap()["lib.plist"]).to_string();
+        assert!(
+            lib.contains("<key>public.openTypeCategories</key>\n    <dict>\n      <key>B</key>\n      <string>component</string>\n    </dict>"),
+            "{lib}"
+        );
     }
 
     #[test]

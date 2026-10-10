@@ -272,22 +272,126 @@ fn sidebearings_and_boxes_agree_with_the_glyph_header() {
     assert_eq!(font.hhea().unwrap().min_left_side_bearing().to_i16(), -100);
 }
 
+/// The `post` name of each glyph, by source name.
+fn post_names(out: &Compiled) -> std::collections::HashMap<String, String> {
+    let font = FontRef::new(&out.bytes).unwrap();
+    let post = font.post().unwrap();
+    out.glyph_order.iter().enumerate().map(|(gid, n)| (n.clone(), post.glyph_name(GlyphId16::new(gid as u16)).unwrap().to_string())).collect()
+}
+
 #[test]
-fn unusual_glyph_names_are_replaced_in_the_font_not_written_raw() {
+fn glyphs_are_written_under_their_production_names() {
     let mut f = sample();
+    f.add_glyph("A-cy", vec![0x410], 500.0).unwrap();
+    f.add_glyph("A-cy.sc", vec![], 500.0).unwrap();
+    f.add_glyph("lam_alef-ar", vec![], 500.0).unwrap();
+    f.add_glyph("adieresis", vec![0xE4], 500.0).unwrap();
+    f.add_glyph("foo", vec![], 500.0).unwrap();
+    f.add_glyph("stored", vec![], 500.0).unwrap();
+    f.glyph_mut("stored").unwrap().info.production = Some("myname".into());
+    // Made valid and unique as fontc makes them.
+    f.add_glyph("with space", vec![0xE001], 500.0).unwrap();
+    f.add_glyph("twin", vec![], 500.0).unwrap();
+    f.glyph_mut("twin").unwrap().info.production = Some("foo".into());
+    let out = compile_sample(&f);
+    let names = post_names(&out);
+    for (source, written) in [
+        ("A", "A"),
+        (".notdef", ".notdef"),
+        ("A-cy", "uni0410"),
+        ("A-cy.sc", "uni0410.sc"),
+        ("lam_alef-ar", "uni06440627"),
+        ("adieresis", "adieresis"),
+        ("foo", "foo"),
+        ("stored", "myname"),
+        ("with space", "withspace"),
+        ("twin", "foo.1"),
+    ] {
+        assert_eq!(names[source], written, "{source}");
+    }
+    assert!(out.warnings.iter().any(|w| w.contains("2 glyph names were changed")), "{:?}", out.warnings);
+    // The plan names the same.
+    let plan = plan::plan(&f, &f.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+    let planned: std::collections::HashMap<&String, &String> = plan.glyph_order.iter().zip(&plan.final_names).collect();
+    assert!(names.iter().all(|(s, w)| planned[s] == w));
+}
+
+#[test]
+fn source_names_are_kept_when_production_names_are_off() {
+    let mut f = sample();
+    f.add_glyph("A-cy", vec![0x410], 500.0).unwrap();
     f.add_glyph(&"n".repeat(200), vec![0xE000], 500.0).unwrap();
     f.add_glyph("with space", vec![0xE001], 500.0).unwrap();
     f.add_glyph("ça", vec![0xE002], 500.0).unwrap();
-    let out = compile_sample(&f);
-    assert_eq!(out.warnings.iter().filter(|w| w.contains("not a valid glyph name")).count(), 3);
-    let font = FontRef::new(&out.bytes).unwrap();
-    let post = font.post().unwrap();
-    for ch in ['\u{E000}', '\u{E001}', '\u{E002}'] {
-        let gid = font.charmap().map(ch).unwrap().to_u32();
-        assert_eq!(post.glyph_name(GlyphId16::new(gid as u16)), Some(format!("glyph{gid:05}").as_str()));
+    let mut by_param = f.clone();
+    param(&mut by_param, fontcraft_model::DONT_USE_PRODUCTION_NAMES, fontcraft_model::plist::Value::Bool(true));
+    let mut by_setting = f.clone();
+    Arc::make_mut(&mut by_setting.info).settings.disables_nice_names = Some(true);
+    for f in [by_param, by_setting] {
+        let out = compile_sample(&f);
+        assert_eq!(post_names(&out)["A-cy"], "A-cy");
+        // A name post cannot hold is replaced, not written raw.
+        assert_eq!(out.warnings.iter().filter(|w| w.contains("not a valid glyph name")).count(), 3);
+        let font = FontRef::new(&out.bytes).unwrap();
+        let post = font.post().unwrap();
+        for ch in ['\u{E000}', '\u{E001}', '\u{E002}'] {
+            let gid = font.charmap().map(ch).unwrap().to_u32();
+            assert_eq!(post.glyph_name(GlyphId16::new(gid as u16)), Some(format!("glyph{gid:05}").as_str()));
+        }
+        // The glyph after them still has its own name: the table is not shifted.
+        assert_eq!(post.glyph_name(GlyphId16::new(font.charmap().map('z').unwrap().to_u32() as u16)), Some("z"));
     }
-    // The glyph after them still has its own name: the table is not shifted.
-    assert_eq!(post.glyph_name(GlyphId16::new(font.charmap().map('z').unwrap().to_u32() as u16)), Some("z"));
+}
+
+#[test]
+fn a_ufo_is_renamed_only_through_its_own_map() {
+    let mut f = sample();
+    f.source.format = fontcraft_model::SourceFormat::Ufo;
+    f.add_glyph("A-cy", vec![0x410], 500.0).unwrap();
+    f.add_glyph("acutecomb", vec![0x301], 300.0).unwrap();
+    let out = compile_sample(&f);
+    let names = post_names(&out);
+    assert_eq!((names["A-cy"].as_str(), names["acutecomb"].as_str()), ("A-cy", "acutecomb"));
+    // A UFO states its advances.
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert_eq!(font.hmtx().unwrap().advance(gid_of(&out, "acutecomb")), Some(300));
+    f.glyph_mut("A").unwrap().info.production = Some("Aprod".into());
+    // With a map, every name is made valid, as fontc does.
+    let names = post_names(&compile_sample(&f));
+    assert_eq!((names["A"].as_str(), names["A-cy"].as_str()), ("Aprod", "Acy"));
+}
+
+#[test]
+fn a_mark_the_database_knows_has_no_advance() {
+    let mut f = sample();
+    f.add_glyph("acutecomb", vec![0x301], 300.0).unwrap();
+    // A stored category wins over the database's.
+    f.add_glyph("gravecomb", vec![0x300], 300.0).unwrap();
+    f.glyph_mut("gravecomb").unwrap().info.category = Some("Letter".into());
+    let out = compile_sample(&f);
+    let font = FontRef::new(&out.bytes).unwrap();
+    let hmtx = font.hmtx().unwrap();
+    assert_eq!(hmtx.advance(gid_of(&out, "acutecomb")), Some(0));
+    assert_eq!(hmtx.advance(gid_of(&out, "gravecomb")), Some(300));
+    assert_eq!(hmtx.advance(gid_of(&out, "A")), Some(620));
+}
+
+#[test]
+fn glyphs_are_exported_in_the_glyph_order_parameter_s_order() {
+    let mut f = sample();
+    let list = |names: &[&str]| {
+        fontcraft_model::plist::Value::Array(fontcraft_model::plist::Array {
+            items: names.iter().map(|n| fontcraft_model::plist::Value::String((*n).into())).collect(),
+            ..Default::default()
+        })
+    };
+    // A header, a blank line and a missing name are skipped; unnamed glyphs follow in stored order.
+    param(&mut f, fontcraft_model::GLYPH_ORDER_PARAM, list(&["**Caps**", "O", "", "missing", "B"]));
+    let out = compile_sample(&f);
+    let stored: Vec<&str> = f.glyphs.iter().map(|g| g.name.as_str()).filter(|n| !matches!(*n, "O" | "B" | ".notdef")).collect();
+    let mut want = vec![".notdef", "O", "B"];
+    want.extend(stored);
+    assert_eq!(out.glyph_order, want);
 }
 
 #[test]

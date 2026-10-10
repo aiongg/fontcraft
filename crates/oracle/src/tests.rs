@@ -99,6 +99,20 @@ fn glyph_set_and_order_differences_are_source_reading_findings() {
 }
 
 #[test]
+fn glyphs_named_differently_are_compared_by_id_and_reported_by_post() {
+    let mut ours = sample();
+    ours.glyph_mut("B").unwrap().info.production = Some("Bprod".into());
+    ours.glyph_mut("B").unwrap().layers[0].width = 640.0;
+    let c = compare::compare(&build(&ours, 0), &build(&sample(), 0)).unwrap();
+    assert!(c.source_reading.is_empty(), "{:?}", c.source_reading);
+    let post = table(&c, "post");
+    assert_eq!(post.differences, vec![Difference { key: "post glyphName Bprod".into(), ours: "Bprod".into(), theirs: "B".into() }]);
+    // The glyph is still compared, under our name, and its code point still maps to it.
+    assert_eq!(table(&c, "hmtx").differences, vec![Difference { key: "hmtx Bprod advance".into(), ours: "640".into(), theirs: "600".into() }]);
+    assert_eq!(table(&c, "cmap").status, Status::Identical);
+}
+
+#[test]
 fn a_changed_code_point_shows_in_cmap_as_a_mapping() {
     let mut f = sample();
     f.glyph_mut("B").unwrap().unicodes.push(0x00DF);

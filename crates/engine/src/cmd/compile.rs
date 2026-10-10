@@ -13,7 +13,10 @@
 use base64::Engine as _;
 use serde_json::{Map, Value, json};
 
-use fontcraft_compile::{Flavour, Options};
+use std::sync::Arc;
+
+use fontcraft_compile::{DataRef, Flavour, Options};
+use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ModelError, Resolved, Target};
 
 use super::*;
@@ -34,7 +37,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile Fonts",
             [],
             None,
-            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
+            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
             has_doc,
             compile
         ),
@@ -43,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Describe Compile Plan",
             [],
             None,
-            "{formats?, containers?, instances?, mastersAsInstances?, destination?, outlines?, sections?: [\"outputs\"|\"glyphOrder\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing: per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; the final glyph order of the first output; each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?}], glyphOrder?, instances?: [{instance, source, master, location}], skipped, warnings}",
+            "{formats?, containers?, instances?, mastersAsInstances?, destination?, outlines?, sections?: [\"outputs\"|\"glyphOrder\"|\"productionNames\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing: per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; the final glyph order of the first output, by source name; the name each glyph of it is written under where that differs from its source name (its production name, made valid); each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?}], glyphOrder?, productionNames?: {source name: written name}, instances?: [{instance, source, master, location}], skipped, warnings}",
             has_doc,
             compile_plan
         ),
@@ -445,9 +448,19 @@ impl Sink {
 }
 
 /// Builds `jobs` of `font` into `sink`, adding to `report`. `source` is the document's title (its
-/// file name without extension), which names the files of a font without a family name.
-pub(super) fn build(font: &Font, source: &str, jobs: &[Job], req: &Request, sink: &mut Sink, report: &mut Report) -> Result<()> {
+/// file name without extension), which names the files of a font without a family name. `data` is
+/// the document's glyph data, which gives production names and categories.
+pub(super) fn build(
+    font: &Font,
+    source: &str,
+    data: Arc<GlyphData>,
+    jobs: &[Job],
+    req: &Request,
+    sink: &mut Sink,
+    report: &mut Report,
+) -> Result<()> {
     font.check()?;
+    let options = Options { glyph_data: DataRef(Some(data)), ..req.options.clone() };
     for job in jobs {
         if req.first_only && !report.fonts.is_empty() {
             report.skipped.push(skip(job, "the destination is one file: give a folder to export every instance"));
@@ -460,15 +473,27 @@ pub(super) fn build(font: &Font, source: &str, jobs: &[Job], req: &Request, sink
             }
             other => other?,
         };
-        let stem = stem(&resolved, &req.options, source);
+        let stem = stem(&resolved, &options, source);
         for &flavour in &req.flavours {
-            let compiled = fontcraft_compile::compile_resolved(resolved.clone(), flavour, &req.options)?;
+            let compiled = fontcraft_compile::compile_resolved(resolved.clone(), flavour, &options)?;
             let mut files = Vec::with_capacity(req.containers.len());
             for &container in &req.containers {
                 let data = container.wrap(&compiled.bytes)?;
                 files.push(sink.put(req.file_name(&stem, flavour, container), container, data, &mut report.warnings)?);
             }
             report.fonts.push(FontOut { job: job.clone(), flavour, glyph_order: compiled.glyph_order, warnings: compiled.warnings, files });
+        }
+    }
+    Ok(())
+}
+
+/// Refuses a font with an exported glyph whose name breaks the naming rules, naming the glyph and
+/// the position of the bad character (`glyphName.invalidBlocksExport`). File › Export refuses
+/// such a font; `font.compile` writes a valid name with a warning instead.
+pub(super) fn check_glyph_names(font: &Font) -> Result<()> {
+    for g in font.glyphs.iter().filter(|g| g.export) {
+        if let Err(e) = fontcraft_model::glyphdata::validate(&g.name, true) {
+            return Err(fontcraft_compile::CompileError::Glyph { glyph: g.name.clone(), message: format!("illegal glyph name: {e}") }.into());
         }
     }
     Ok(())
@@ -764,7 +789,7 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     let flavours = formats(p)?;
     let dest = Dest::read(p)?;
     let containers = containers(p, "containers", &dest)?;
-    let mut options = Options::default();
+    let mut options = Options { glyph_data: DataRef(Some(s.glyph_data()?)), ..Options::default() };
     outline_options(p, &mut options)?;
     let pick = Pick::read(p, "instances")?;
     let jobs = jobs(font, &pick, p.bool_or("mastersAsInstances", false)?, p)?;
@@ -786,7 +811,7 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     let doc = s.doc()?;
     let mut report = Report::default();
     let mut sink = Sink::new(&req.dest, false)?;
-    build(&doc.font, &doc.title, &jobs, &req, &mut sink, &mut report)?;
+    build(&doc.font, &doc.title, s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
     if matches!(req.dest, Dest::File(_)) && report.file_count() > 1 {
         return Err(p.bad(format!("`destination` is one file, but {} fonts were built: give a folder", report.fonts.len())));
     }
@@ -810,14 +835,14 @@ pub(super) fn nothing_built(report: &Report) -> EngineError {
 fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compilePlan", p)?;
     let (jobs, req) = compile_request(s, &p)?;
-    const SECTIONS: [&str; 4] = ["outputs", "glyphOrder", "tables", "instances"];
+    const SECTIONS: [&str; 5] = ["outputs", "glyphOrder", "productionNames", "tables", "instances"];
     let sections: Vec<&str> = match p.opt_strings("sections")? {
         None => SECTIONS.to_vec(),
         Some(list) => {
             for name in &list {
                 match *name {
                     n if SECTIONS.contains(&n) => {}
-                    "productionNames" | "features" => return Err(EngineError::Unsupported(format!("the `{name}` section of a compile plan"))),
+                    "features" => return Err(EngineError::Unsupported(format!("the `{name}` section of a compile plan"))),
                     other => return Err(p.bad(format!("`sections` holds {}, got \"{other}\"", SECTIONS.join(", ")))),
                 }
             }
@@ -831,6 +856,7 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
     let mut warnings: Vec<String> = Vec::new();
     let mut glyph_order: Option<Vec<String>> = None;
+    let mut production_names: Option<Map<String, Value>> = None;
     for job in &jobs {
         let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
@@ -869,6 +895,14 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
             }
             outputs.push(out);
             if glyph_order.is_none() {
+                production_names = Some(
+                    plan.glyph_order
+                        .iter()
+                        .zip(&plan.final_names)
+                        .filter(|(source, written)| source != written)
+                        .map(|(source, written)| (source.clone(), json!(written)))
+                        .collect(),
+                );
                 glyph_order = Some(plan.glyph_order);
             }
         }
@@ -884,6 +918,9 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     }
     if want("glyphOrder") {
         result.insert("glyphOrder".into(), json!(glyph_order.unwrap_or_default()));
+    }
+    if want("productionNames") {
+        result.insert("productionNames".into(), Value::Object(production_names.unwrap_or_default()));
     }
     if want("instances") {
         result.insert("instances".into(), Value::Array(instances));

@@ -753,9 +753,10 @@ status = "observed"
 id = "compile.nonSpacingMarkWidth"
 area = "compile"
 milestone = "M2"
-summary = "A .glyphs source's non-spacing marks (category Mark, subcategory Nonspacing) are compiled with advance 0; a UFO's advances are written as they are. fontc and glyphsLib also take the category from the glyph database when the glyph states none; FontCraft does from M4."
+summary = "A .glyphs source's non-spacing marks (category Mark, subcategory Nonspacing) are compiled with advance 0; a UFO's advances are written as they are. The category and subcategory a glyph does not state come from the glyph database, as fontc and glyphsLib take them."
 ref = "fontc glyphs2fontir/src/source.rs (process_layer), glyphs-reader font.rs (is_nonspacing_mark); runs of fontc 1.0.0 on the corpus (M2.2)"
 status = "observed"
+notes = "The glyph database part is built in M4.2 (compile::fill_glyph_data). A UFO that glyphsLib wrote stores a mark's width as 0 in the GLIF and the drawn width in the originalWidth lib key; the model reads the drawn width and compiles it, the oracles compile 0 (allow-listed for the two designspace_from_glyphs sources)."
 
 [[behavior]]
 id = "compile.compositeBounds"
@@ -900,7 +901,10 @@ milestone = "M4"
 summary = "By default glyphs are renamed to production names in the binary. fontmake: use the source's name map (public.postscriptNames); encoded glyphs without an entry become uniXXXX, unencoded ligatures are named from their components' production names, other unencoded glyphs keep their name; --no-production-names disables all renaming. fontc applies only the source's map (glyphs without an entry keep their name) and has the same flag."
 ref = "fontmake USAGE.md (--no-production-names); fontc fontc/src/args.rs, fontbe/src/post.rs, ufo2fontir/src/source.rs"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). The oracle harness then builds with production names on and compares the post table's glyph names."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6). Built in M4.2 (crates/compile/src/names.rs): a glyph's production name is the one it stores, else the glyph database's (Resolved::apply_glyph_data, for the reference's format only); a UFO is renamed only through its public.postscriptNames, and one that maps no glyph is not renamed, as both oracles do. The Don't use Production Names parameter and Use Custom Naming (disablesNiceNames) keep the source names: the handbook gives them the same effect, while fontc and glyphsLib ignore disablesNiceNames (an allow-list entry for CornerComponents.glyphs). The oracle harness builds with production names on and compares the post table's names (post glyphName); every name FontCraft writes for the corpus's .glyphs and .glyphspackage sources equals fontc's (docs/plans/M4.md › M4.2 results)."
+guesses = [
+  "Use Custom Naming (disablesNiceNames) keeps the source names at export, as the handbook's Don't use Production Names entry says it has the same effect; the reference compilers ignore it. Settled by exporting a font with Use Custom Naming on from the reference app.",
+]
 
 [[behavior]]
 id = "compile.productionNameSanitising"
@@ -909,7 +913,10 @@ milestone = "M4"
 summary = "Final names are stripped of every character outside A-Z, a-z, 0-9, period and underscore; a name that collides with an earlier one gets .1, .2 and so on appended. The stricter Adobe Glyph List rules (no leading digit or period, at most 63 characters) are not enforced by fontc; we enforce them as warnings."
 ref = "fontc fontbe/src/post.rs"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6). The M2 compiler writes `glyphNNNNN` with a warning for a name post cannot hold; M4 follows this row with the production names. The app's File › Export refuses an invalid name instead (glyphName.invalidBlocksExport); the owner's decision (docs/plans/M4.md § 7 question 8)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6). Built in M4.2 (crates/compile/src/names.rs, ported from fontc fontbe/src/post.rs): font.compile and the CLI write the cleaned name and one warning that lists the changed names; a name that breaks the stricter rules is written with a warning. With production names off, a name post cannot hold becomes glyphNNNNN with a warning, as in M2. The app's File › Export refuses an invalid name instead (glyphName.invalidBlocksExport); the owner's decision (docs/plans/M4.md § 7 question 8)."
+guesses = [
+  "A name that is empty after cleaning, or longer than the 255 bytes post can store, becomes glyphNNNNN (by glyph id) with a warning; fontc would write the empty or long name. Settled only by a reference that writes such a font.",
+]
 
 [[behavior]]
 id = "compile.goadbRenaming"

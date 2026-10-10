@@ -418,8 +418,9 @@ fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
     let req = Request { flavours: vec![flavour], containers, options, dest, first_only };
     compile::check_size(&req, jobs.len())?;
     let mut report = Report::default();
+    compile::check_glyph_names(font)?;
     let mut sink = Sink::new(&req.dest, true)?;
-    compile::build(font, &s.doc()?.title, &jobs, &req, &mut sink, &mut report)?;
+    compile::build(font, &s.doc()?.title, s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
     if report.fonts.is_empty() {
         return Err(compile::nothing_built(&report));
     }
@@ -486,6 +487,7 @@ fn export_all(s: &mut Session, p: &Value) -> Result<Value> {
     let mut jobs = Vec::with_capacity(chosen.len());
     for &i in &chosen {
         let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
+        compile::check_glyph_names(&doc.font)?;
         jobs.push(compile::jobs(&doc.font, &Pick::Exportable, false, &p)?);
     }
     compile::check_size(&req, jobs.iter().map(Vec::len).sum())?;
@@ -495,7 +497,7 @@ fn export_all(s: &mut Session, p: &Value) -> Result<Value> {
     for (&i, jobs) in chosen.iter().zip(&jobs) {
         let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
         let mut report = Report::default();
-        compile::build(&doc.font, &doc.title, jobs, &req, &mut sink, &mut report)?;
+        compile::build(&doc.font, &doc.title, s.glyph_data_of(doc)?, jobs, &req, &mut sink, &mut report)?;
         warnings.append(&mut report.warnings);
         reports.push((doc.title.clone(), report));
     }

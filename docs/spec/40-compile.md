@@ -83,13 +83,17 @@ convert curves.
 
 ### 1.4 Glyph order and names
 
-- Source order, then leftovers sorted, `.notdef` forced to id 0 and generated if absent
+- The `glyphOrder` parameter's glyphs, then the rest in stored order (`fontcraft_model::glyph_order`,
+  the order Font View shows), `.notdef` forced to id 0 and generated if absent
   (`compile.glyphOrder`, `compile.notdefFirst`, `compile.notdefSynthesis`). AFDKO-style ordering is
   an alternative mode (`compile.glyphOrderMakeotf`); CID-keyed fonts use CID order
   (`compile.cidKeyedFonts`).
 - Compiler-made glyphs (bracket layers, colour layers) are appended (`compile.bracketLayerGlyphs`).
 - Production renaming and sanitising (`compile.productionNames`,
-  `compile.productionNameSanitising`); GOADB renaming for AFDKO projects (`compile.goadbRenaming`,
+  `compile.productionNameSanitising`, `crates/compile/src/names.rs`): a glyph's stored production
+  name, else the glyph database's; for a UFO only its `public.postscriptNames`. Names are cleaned to
+  `A-Z a-z 0-9 . _` and made unique with `.1`, `.2`… as fontc does. *Don't use Production Names* and
+  *Use Custom Naming* keep the source names. GOADB renaming for AFDKO projects (`compile.goadbRenaming`,
   `compile.unicodeFromGlyphNames`).
 
 The glyph order is final after this stage. Everything later indexes by glyph id.
@@ -508,7 +512,8 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | Composites whose components differ between masters; curves | decomposed; converted across all masters | kept; converted per master | static build of one master until M9 |
 | Names and panose of the variable font's export settings | merged into the font's | not used | they belong to the variable font (M9) and instances (M2.5) |
 | `openTypeNameRecords` of a UFO | written as English records whatever their language | each in its own language | the records state their language |
-| Non-spacing marks the glyph database knows | advance 0 | advance 0 only when the glyph states its category | the glyph database is M4 |
+| *Use Custom Naming* (`disablesNiceNames`) | ignored: production names are written | the source names are written | the handbook gives it the effect of *Don't use Production Names*; glyphsLib also ignores it (allow-listed for `CornerComponents.glyphs`) |
+| A UFO that glyphsLib wrote, with a non-spacing mark's width as 0 in the GLIF and the drawn width in `com.schriftgestaltung.Glyphs.originalWidth` | advance 0 | the drawn width | the model reads the drawn width so the UFO converts back to the reference's format unchanged, and the compiler takes a UFO's widths as they are (allow-listed for the two `designspace_from_glyphs` sources) |
 | Yes-or-no custom parameters of a `.glyphs` source (`Use Typo Metrics`, `Has WWS Names`, `isFixedPitch`, `postscriptForceBold`) | on only when the value is exactly 1 | on for any number, or text that reads as a number, other than 0 (`fontcraft_model::param_flag`) | glyphsLib applies `bool(value)`, so fontmake builds a hand-written 2 as on; the reference app writes only 0 and 1. No corpus source has another value, so this row has no allow-list entry |
 
 The readers follow fontc where a source leaves a value out (`docs/spec/30-source-formats.md` ›

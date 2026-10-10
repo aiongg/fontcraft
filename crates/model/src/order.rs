@@ -18,13 +18,35 @@ pub const GLYPH_ORDER_PARAM: &str = "glyphOrder";
 /// The names of the `glyphOrder` parameter, in order, without section-header lines (`**Title**`)
 /// and empty lines. A text value counts as one name per line.
 pub fn glyph_order_names(font: &Font) -> Vec<&str> {
+    order_lines(font).into_iter().filter(|n| !is_section_header(n)).collect()
+}
+
+/// The non-empty lines of the `glyphOrder` parameter, trimmed, headers included.
+fn order_lines(font: &Font) -> Vec<&str> {
     let Some(value) = font.info.params.get(GLYPH_ORDER_PARAM) else { return Vec::new() };
-    let names: Vec<&str> = match value {
+    let lines: Vec<&str> = match value {
         Value::Array(a) => a.items.iter().filter_map(Value::as_str).collect(),
         Value::String(_) => value.as_str().map(|s| s.lines().collect()).unwrap_or_default(),
         _ => Vec::new(),
     };
-    names.into_iter().map(str::trim).filter(|n| !n.is_empty() && !is_section_header(n)).collect()
+    lines.into_iter().map(str::trim).filter(|n| !n.is_empty()).collect()
+}
+
+/// The section headers of the `glyphOrder` parameter, each as its title (the text between the
+/// asterisks) and the position in [`glyph_order`] of the first glyph listed after it. A header
+/// with no existing glyph after it starts where the next one would, or after the listed glyphs.
+pub fn glyph_order_sections(font: &Font) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut placed = HashSet::new();
+    for line in order_lines(font) {
+        if is_section_header(line) {
+            let title = line.trim_start_matches('*').trim_end_matches('*').trim();
+            out.push((placed.len(), title.to_string()));
+        } else if let Some(i) = font.glyphs.position(line) {
+            placed.insert(i);
+        }
+    }
+    out
 }
 
 /// A `glyphOrder` line that titles a section of Font View instead of naming a glyph.
@@ -120,6 +142,10 @@ mod tests {
         let list = ["**Lower**", "c", "missing", "a", "c", ""].iter().map(|s| Value::String(Str::new(*s))).collect();
         std::sync::Arc::make_mut(&mut f.info).params.set(GLYPH_ORDER_PARAM, Value::Array(Array { items: list, ..Default::default() }));
         assert_eq!(names(&f, &glyph_order(&f)), ["c", "a", "b", "d"]);
+        assert_eq!(glyph_order_sections(&f), [(0, "Lower".to_string())]);
+        let list = ["a", "**Gone**", "missing", "**Last**", "b", "**End**"].iter().map(|s| Value::String(Str::new(*s))).collect();
+        std::sync::Arc::make_mut(&mut f.info).params.set(GLYPH_ORDER_PARAM, Value::Array(Array { items: list, ..Default::default() }));
+        assert_eq!(glyph_order_sections(&f), [(1, "Gone".to_string()), (1, "Last".to_string()), (2, "End".to_string())]);
         std::sync::Arc::make_mut(&mut f.info).params.set(GLYPH_ORDER_PARAM, Value::String(Str::new("d\nb\n")));
         assert_eq!(names(&f, &glyph_order(&f)), ["d", "b", "a", "c"]);
     }

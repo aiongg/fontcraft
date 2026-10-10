@@ -44,9 +44,14 @@ pub use glyph_props::{GlyphProps, Prop, PropSource, data_props, glyph_props};
 pub use info::{DEFAULT_LANGUAGE, LANGUAGES, Localized, Param, Params, Properties, Property, PropertyValue, UserData, language_id, param_flag};
 pub use kerning::{KernContext, KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
-pub use order::{GLYPH_ORDER_PARAM, Placement, glyph_order, glyph_order_names, insertion_index, is_section_header, keeps_alternates, sort_key};
+pub use order::{
+    GLYPH_ORDER_PARAM, Placement, glyph_order, glyph_order_names, glyph_order_sections, insertion_index, is_section_header, keeps_alternates,
+    sort_key,
+};
 pub use rare::{Rare, RareDefault};
-pub use resolve::{Metrics, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, blue_values, is_ufo_family};
+pub use resolve::{
+    DONT_USE_PRODUCTION_NAMES, Metrics, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, blue_values, is_ufo_family,
+};
 pub use shape_info::{
     Alignment, AnchorInfo, AnchorInfoBox, ComponentInfo, ComponentInfoBox, Dimension, NodeInfo, NodeInfoBox, Orientation, PathInfo, PathInfoBox,
     ShapeAttrs, SmartValue,
