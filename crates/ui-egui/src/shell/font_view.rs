@@ -75,7 +75,7 @@ pub fn show(app: &FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static s
         });
         return;
     };
-    let master = font.masters.first().map(|m| m.id.clone()).unwrap_or_default();
+    let master = app.render_master().unwrap_or_default();
     egui::CentralPanel::default().frame(frame).show(ui, |ui| {
         let step = tokens.cell_size + tokens.cell_gap;
         let columns = (((ui.available_width() + tokens.cell_gap) / step).floor() as usize).max(1);

@@ -128,6 +128,16 @@ impl FontcraftApp {
         state.active_tab = active.and_then(|id| state.tab_index(id));
     }
 
+    /// The master `ui.render` draws in by default: the showing tab's master; in Font View, which
+    /// has no master of its own, the first.
+    pub fn render_master(&self) -> Option<String> {
+        let font = self.session.font().ok()?;
+        match self.state.tab() {
+            Some(tab) => crate::canvas::view::tab_master(font, tab).map(|m| m.id.clone()),
+            None => font.masters.first().map(|m| m.id.clone()),
+        }
+    }
+
     /// The glyphs `ui.render` draws when none are named: the showing tab's line, else the Font
     /// View selection.
     pub fn default_render_glyphs(&self) -> Vec<String> {

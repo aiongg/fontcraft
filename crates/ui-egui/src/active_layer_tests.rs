@@ -145,6 +145,13 @@ fn the_canvas_and_the_metric_lines_follow_the_active_master() {
     assert!(tools_glue::scene(font, tab).unwrap().metric_lines.contains(&560.0), "snapping uses the second master's x-height");
     let (lines, _) = crate::canvas::metrics::of(font, view::active_master(font, tab).unwrap());
     assert!(lines.iter().any(|(kind, pos)| kind == metric::X_HEIGHT && *pos == 560.0), "the metric lines are the second master's: {lines:?}");
+    // `ui.render` draws the tab's master, unless it names one.
+    let render =
+        |app: &mut FontcraftApp, params: Value| control::handle(app, &json!({"id": 1, "method": "ui.render", "params": params}))["result"].clone();
+    let bold = render(&mut app, json!({"scale": 0.1}));
+    let regular = render(&mut app, json!({"scale": 0.1, "master": "m01"}));
+    assert_eq!((bold["master"].as_str(), regular["master"].as_str()), (Some("m02"), Some("m01")));
+    assert_ne!(bold["png"], regular["png"]);
 
     // Picking the first master's layer in the Layers section switches back for this glyph only.
     app.run("layers.select", &json!({"layer": "m01"})).unwrap();

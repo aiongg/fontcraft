@@ -35,7 +35,7 @@ pub const METHODS: &[(&str, &str)] = &[
     ("ui.screenshot", "{path?} capture the window as PNG: written to `path`, else returned as base64 `png`; returns {width, height, pixelsPerPoint}"),
     (
         "ui.render",
-        "{path?, glyphs?, text?, layer?, size?, scale?} draw glyphs filled, black on white: written to `path` as PNG, else returned as base64 `png`; returns {width, height, glyphs}",
+        "{path?, glyphs?, text?, master?: id (default: the showing tab's master, else the first), layer?, size?, scale?} draw glyphs filled, black on white: written to `path` as PNG, else returned as base64 `png`; returns {width, height, glyphs, master}",
     ),
     ("ui.tool.select", "{tool} make a pointer tool active (the command tool.select); returns {tool, previous}"),
     ("ui.tool.list", "{} the pointer tools and the active one (the command tool.list)"),
@@ -199,7 +199,13 @@ fn render(app: &FontcraftApp, params: &Value) -> Result<Value, String> {
     if glyphs.is_empty() {
         return Err(format!("{M}: no glyphs: give `glyphs` or `text`, open a glyph or select one in Font View"));
     }
-    let options = LineOptions { size: number("size")?, scale: number("scale")?, ..Default::default() };
+    let master = match get("master") {
+        None => app.render_master(),
+        Some(Value::String(id)) if font.master(id).is_ok() => Some(id.clone()),
+        Some(Value::String(id)) => return Err(format!("{M}: no master has id `{id}`")),
+        Some(_) => return Err(format!("{M}: `master` must be a master id")),
+    };
+    let options = LineOptions { master: master.clone(), size: number("size")?, scale: number("scale")?, ..Default::default() };
     let image = match get("layer") {
         None => {
             let names: Vec<&str> = glyphs.iter().map(String::as_str).collect();
@@ -215,6 +221,9 @@ fn render(app: &FontcraftApp, params: &Value) -> Result<Value, String> {
     .map_err(|e| format!("{M}: {e}"))?;
     let mut result = deliver(M, &image, path)?;
     set(&mut result, "glyphs", json!(glyphs));
+    if get("layer").is_none() {
+        set(&mut result, "master", json!(master.or_else(|| font.masters.first().map(|m| m.id.clone()))));
+    }
     Ok(result)
 }
 
