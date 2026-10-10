@@ -3,6 +3,8 @@
 //! A field edits one parameter of the dialog's command and is named after it: its `key` is the
 //! parameter's key, the field's id for `ui.dialog.set` and `ui.click`.
 
+use std::collections::HashSet;
+
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
@@ -21,6 +23,10 @@ pub const MAX_FIELD_TEXT: usize = 64;
 pub const MAX_PATH_TEXT: usize = 4096;
 /// Most rows an order field may list.
 pub const MAX_ORDER_ROWS: usize = 4096;
+/// Most rows a list field may hold.
+pub const MAX_LIST_ROWS: usize = 65_536;
+/// Most lines a text field shows at once.
+pub const MAX_TEXT_LINES: usize = 32;
 /// A folder field is this many number fields wide.
 const PATH_WIDTH_FIELDS: f32 = 4.0;
 /// A text field is this many number fields wide: room for a name or a short list of names.
@@ -42,8 +48,9 @@ pub enum Kind {
     Bool,
     /// On or off, as a lock button.
     Lock,
-    /// A line of text of at most `max` characters; empty is allowed.
-    Text { max: usize },
+    /// Text of at most `max` characters; empty is allowed. `lines` above 1 makes a box of that
+    /// many lines in which Return starts a new line.
+    Text { max: usize, lines: usize },
     /// One word of a list, as a pop-up menu. `labels`, when given, holds the text the menu shows
     /// for each word, in the same order.
     Choice {
@@ -64,6 +71,13 @@ pub enum Kind {
     /// An order of the rows `labels`: the value lists every row index once, the first row on top
     /// of the list. Rows are dragged into place.
     Order { labels: Vec<String> },
+    /// A scrolling list of `rows`. With `select`, the value lists the selected rows in the list's
+    /// order (click, Shift+click, Cmd+click, Cmd+A); without, the list only shows the rows and
+    /// its value is all of them.
+    List { rows: Vec<String>, select: bool },
+    /// A smart filter's rule tree, `{all | any | none: [rule or group]}`, edited as rows (see
+    /// [`super::rule_tree`]).
+    Rules,
 }
 
 /// One field: a parameter of the dialog's command.
@@ -106,7 +120,37 @@ impl Field {
 
     /// A text field of at most `max` characters.
     pub fn text(key: &str, label: &str, max: usize, doc: &str) -> Self {
-        Self { key: key.into(), label: label.into(), kind: Kind::Text { max }, default: json!(""), doc: doc.into(), group: None }
+        Self { key: key.into(), label: label.into(), kind: Kind::Text { max, lines: 1 }, default: json!(""), doc: doc.into(), group: None }
+    }
+
+    /// A box of `lines` lines of text of at most `max` characters.
+    pub fn text_area(key: &str, label: &str, max: usize, lines: usize, doc: &str) -> Self {
+        let lines = lines.clamp(1, MAX_TEXT_LINES);
+        Self { kind: Kind::Text { max, lines }, ..Self::text(key, label, max, doc) }
+    }
+
+    /// A list that shows `rows` and is not edited; its value is all of them.
+    pub fn rows(key: &str, label: &str, rows: Vec<String>, doc: &str) -> Self {
+        let rows: Vec<String> = rows.into_iter().take(MAX_LIST_ROWS).collect();
+        Self { key: key.into(), label: label.into(), default: json!(rows), kind: Kind::List { rows, select: false }, doc: doc.into(), group: None }
+    }
+
+    /// A list of `rows` to select from, the rows in `selected` selected at first.
+    pub fn select_list(key: &str, label: &str, rows: Vec<String>, selected: &[String], doc: &str) -> Self {
+        let rows: Vec<String> = rows.into_iter().take(MAX_LIST_ROWS).collect();
+        let chosen: HashSet<&str> = selected.iter().map(String::as_str).collect();
+        let default = json!(rows.iter().filter(|r| chosen.contains(r.as_str())).collect::<Vec<_>>());
+        Self { key: key.into(), label: label.into(), default, kind: Kind::List { rows, select: true }, doc: doc.into(), group: None }
+    }
+
+    /// A rule tree, starting as `default`.
+    pub fn rules(key: &str, label: &str, default: Value, doc: &str) -> Self {
+        Self { key: key.into(), label: label.into(), kind: Kind::Rules, default, doc: doc.into(), group: None }
+    }
+
+    /// A text field of more than one line, where Return starts a new line.
+    pub fn is_multiline(&self) -> bool {
+        matches!(self.kind, Kind::Text { lines, .. } if lines > 1)
     }
 
     /// A pop-up menu of `(word, label)` pairs: the value is the word, the menu shows the label.
@@ -159,7 +203,7 @@ impl Field {
     pub fn max_text(&self) -> usize {
         match self.kind {
             Kind::Folder => MAX_PATH_TEXT,
-            Kind::Text { max } => max,
+            Kind::Text { max, .. } => max,
             _ => MAX_FIELD_TEXT,
         }
     }
@@ -192,7 +236,7 @@ impl Field {
                 Ok(if whole { json!(n as i64) } else { json!(n) })
             }
             Kind::Bool | Kind::Lock => value.as_bool().map(Value::Bool).ok_or_else(|| format!("`{key}` must be true or false")),
-            Kind::Text { max } => match value.as_str() {
+            Kind::Text { max, .. } => match value.as_str() {
                 Some(text) if text.chars().count() <= *max => Ok(json!(text)),
                 Some(_) => Err(format!("`{key}` must be at most {max} characters")),
                 None => Err(format!("`{key}` must be text")),
@@ -228,6 +272,24 @@ impl Field {
                 }
                 Ok(json!(order))
             }
+            Kind::List { rows, select: false } => {
+                if value.as_array().is_some_and(|l| l.len() == rows.len() && l.iter().zip(rows).all(|(v, r)| v.as_str() == Some(r.as_str()))) {
+                    Ok(json!(rows))
+                } else {
+                    Err(format!("`{key}` is a list that only shows its rows"))
+                }
+            }
+            Kind::List { rows, select: true } => {
+                let bad = || format!("`{key}` must be a list of rows of the list");
+                let list = value.as_array().filter(|l| l.len() <= rows.len()).ok_or_else(bad)?;
+                let known: HashSet<&str> = rows.iter().map(String::as_str).collect();
+                let mut chosen = HashSet::with_capacity(list.len());
+                for v in list {
+                    chosen.insert(v.as_str().filter(|r| known.contains(r)).ok_or_else(bad)?);
+                }
+                Ok(json!(rows.iter().filter(|r| chosen.contains(r.as_str())).collect::<Vec<_>>()))
+            }
+            Kind::Rules => super::rule_tree::check(key, value),
         }
     }
 
@@ -312,7 +374,16 @@ pub fn widget_id(key: &str) -> egui::Id {
 pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose: bool, events: &mut Vec<Event>) {
     egui::Grid::new("fontcraft-dialog-fields").num_columns(2).spacing([tokens.dialog_spacing, tokens.dialog_spacing]).show(ui, |ui| {
         let mut group: Option<&str> = None;
+        let answered = dialog.third().map(|t| t.key);
         for field in &dialog.fields {
+            // The buttons answer this field: its label, if any, says what they answer.
+            if Some(field.key.as_str()) == answered {
+                if !field.label.is_empty() {
+                    ui.label(&field.label);
+                    ui.end_row();
+                }
+                continue;
+            }
             if field.group.as_deref() != group {
                 group = field.group.as_deref();
                 // A field outside any group follows the last group without a row of its own.
@@ -333,6 +404,8 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose:
             let response = match &field.kind {
                 Kind::Number { .. } | Kind::Integer { .. } => text_field(ui, dialog, field, &value, tokens.dialog_field_width, events),
                 Kind::Text { .. } => text_field(ui, dialog, field, &value, tokens.dialog_field_width * TEXT_WIDTH_FIELDS, events),
+                Kind::List { rows, select } => list(ui, field, rows, *select, &value, tokens, events),
+                Kind::Rules => super::rule_tree::draw(ui, field, &value, tokens, events),
                 Kind::Bool => {
                     let mut on = value.as_bool().unwrap_or(false);
                     let r = ui.add(egui::Checkbox::without_text(&mut on)).on_hover_text(&field.doc);
@@ -413,6 +486,72 @@ fn choice_label<'a>(choices: &[String], labels: &'a [String], word: &'a str) -> 
     choices.iter().position(|c| c == word).and_then(|i| labels.get(i)).map_or(word, String::as_str)
 }
 
+/// A list field: rows in a scrolling box, only the rows in view laid out. A selectable list
+/// selects a row on click, the rows from the last clicked one with Shift, and adds or takes out
+/// one with Cmd; Cmd+A is the dialog's ([`super::frame_keys`]).
+fn list(ui: &mut egui::Ui, field: &Field, rows: &[String], select: bool, value: &Value, tokens: &Tokens, events: &mut Vec<Event>) -> egui::Response {
+    let selected: HashSet<&str> =
+        if select { value.as_array().map(|l| l.iter().filter_map(Value::as_str).collect()).unwrap_or_default() } else { HashSet::new() };
+    let frame = egui::Frame::NONE.stroke(egui::Stroke::new(1.0, tokens.text_dim)).inner_margin(egui::Margin::same(2));
+    // One row under another: the grid's cell lays out left to right.
+    let column = egui::Layout::top_down(egui::Align::Min);
+    let response = frame.show(ui, |ui| ui.with_layout(column, |ui| list_rows(ui, field, rows, select, &selected, tokens)).inner).response;
+    if let Some(at) = ui.ctx().data_mut(|d| d.remove_temp::<Vec<usize>>(widget_id(&field.key).with("picked"))) {
+        let next: Vec<&String> = at.iter().filter_map(|i| rows.get(*i)).collect();
+        events.push(Event::Set(field.key.clone(), json!(next)));
+    }
+    response.on_hover_text(&field.doc)
+}
+
+/// The rows of a list field; a click's new selection is left in the context's data as row
+/// indexes, for [`list`] to send.
+fn list_rows(ui: &mut egui::Ui, field: &Field, rows: &[String], select: bool, selected: &HashSet<&str>, tokens: &Tokens) {
+    let id = widget_id(&field.key);
+    let anchor_id = id.with("anchor");
+    let row_height = tokens.list_row_height;
+    let shown = if select { MULTI_ROWS } else { MULTI_ROWS / 2.0 };
+    let height = row_height * shown.min(rows.len().max(1) as f32);
+    ui.set_width(tokens.dialog_field_width * MULTI_WIDTH_FIELDS);
+    let scroll = egui::ScrollArea::vertical().id_salt(id).max_height(height).min_scrolled_height(height).auto_shrink([false, true]);
+    scroll.show_rows(ui, row_height, rows.len(), |ui, range| {
+        for at in range {
+            let Some(row) = rows.get(at) else { continue };
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_height), egui::Sense::hover());
+            let response = ui.interact(rect, row_id(&field.key, at), if select { egui::Sense::click() } else { egui::Sense::hover() });
+            let on = selected.contains(row.as_str());
+            if on {
+                ui.painter().rect_filled(rect, 0.0, tokens.row_selected);
+            }
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            let text = rect.left_center() + egui::vec2(tokens.dialog_spacing / 2.0, 0.0);
+            ui.painter().with_clip_rect(rect).text(text, egui::Align2::LEFT_CENTER, row, font, tokens.text);
+            if !select || !response.clicked() {
+                continue;
+            }
+            let mods = ui.input(|i| i.modifiers);
+            let anchor = ui.ctx().data(|d| d.get_temp::<usize>(anchor_id)).filter(|a| *a < rows.len());
+            let next: Vec<usize> = match anchor {
+                Some(a) if mods.shift => (a.min(at)..=a.max(at)).collect(),
+                _ if mods.command => {
+                    (0..rows.len()).filter(|i| if *i == at { !on } else { rows.get(*i).is_some_and(|r| selected.contains(r.as_str())) }).collect()
+                }
+                _ => vec![at],
+            };
+            ui.ctx().data_mut(|d| {
+                if !mods.shift {
+                    d.insert_temp(anchor_id, at);
+                }
+                d.insert_temp(id.with("picked"), next);
+            });
+        }
+    });
+}
+
+/// The id of row `at` of the list field `key`.
+pub fn row_id(key: &str, at: usize) -> egui::Id {
+    widget_id(key).with(("row", at))
+}
+
 /// The rows of an order field, the first on top; a row dropped on another takes its place.
 fn order_list(ui: &mut egui::Ui, field: &Field, labels: &[String], value: &Value, events: &mut Vec<Event>) -> egui::Response {
     let order: Vec<usize> =
@@ -451,8 +590,14 @@ fn text_field(ui: &mut egui::Ui, dialog: &OpenDialog, field: &Field, value: &Val
     let mut text = editing.map_or_else(|| format_value(value), |e| e.text.clone());
     // Sized, not just a desired width: the dialog's area takes its width from its widest row,
     // and a text field alone never widens it.
-    let size = egui::vec2(width, ui.spacing().interact_size.y);
-    let response = ui.add_sized(size, egui::TextEdit::singleline(&mut text).id(id).char_limit(field.max_text()).desired_width(width));
+    let lines = match field.kind {
+        Kind::Text { lines, .. } => lines.clamp(1, MAX_TEXT_LINES),
+        _ => 1,
+    };
+    let edit = if lines > 1 { egui::TextEdit::multiline(&mut text).desired_rows(lines) } else { egui::TextEdit::singleline(&mut text) };
+    let row = ui.text_style_height(&egui::TextStyle::Body).max(ui.spacing().interact_size.y);
+    let height = if lines > 1 { row * lines as f32 } else { ui.spacing().interact_size.y };
+    let response = ui.add_sized(egui::vec2(width, height), edit.id(id).char_limit(field.max_text()).desired_width(width));
     let response = response.on_hover_text(&field.doc);
     if response.has_focus() {
         if dialog.blur {

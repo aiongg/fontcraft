@@ -114,10 +114,11 @@ fn add_glyphs_generates_and_asks_about_names_the_font_has() {
     assert_eq!(r["result"]["added"], json!([]), "Generate added nothing: {r}");
     let asked = inspect(&mut app);
     assert_eq!(asked["dialog"], "dialog.addGlyphsExisting", "{asked}");
-    assert_eq!(asked["fields"][0]["value"], "keep");
-    assert!(asked["fields"][0]["label"].as_str().unwrap().contains('A'), "{asked}");
-    call(&mut app, "ui.dialog.set", json!({"field": "onExisting", "value": "replace"}));
-    call(&mut app, "ui.dialog.confirm", json!({}));
+    assert_eq!(asked["fields"][0]["value"], json!(["A"]), "the names in the font are listed: {asked}");
+    assert_eq!(asked["fields"][1]["value"], "keep");
+    assert_eq!(asked["buttons"], json!(["ok", "replace", "cancel"]));
+    assert_eq!(asked["captions"], json!({"ok": "Keep Existing", "replace": "Replace", "cancel": "Cancel"}));
+    call(&mut app, "ui.click", json!({"id": "replace"}));
     let mut direct = square_app();
     direct.run("glyph.addGlyphs", &json!({"text": "A two", "onExisting": "replace"})).unwrap();
     assert_eq!(shapes(&app, "A"), 0, "Replace made A a new empty glyph");
@@ -127,7 +128,7 @@ fn add_glyphs_generates_and_asks_about_names_the_font_has() {
     let mut app = square_app();
     open(&mut app, "dialog.addGlyphs", json!({"text": "A two"}));
     call(&mut app, "ui.dialog.confirm", json!({}));
-    call(&mut app, "ui.dialog.confirm", json!({}));
+    call(&mut app, "ui.click", json!({"id": "ok"}));
     let mut direct = square_app();
     direct.run("glyph.addGlyphs", &json!({"text": "A two", "onExisting": "keep"})).unwrap();
     assert_eq!(shapes(&app, "A"), 1, "Keep Existing left A as it was");
@@ -159,18 +160,25 @@ fn remove_glyph_confirms_and_asks_about_components_and_metrics_keys() {
     frame(&ctx, &mut app, vec![key(Key::Delete, Modifiers::COMMAND)], Modifiers::NONE);
     let asked = inspect(&mut app);
     assert_eq!(asked["dialog"], "dialog.removeGlyph", "Cmd+Delete: {asked}");
-    assert_eq!(asked["captions"], json!({"ok": "Remove", "cancel": "Cancel"}));
-    assert_eq!(asked["params"], json!({"glyphs": ["A"], "components": "decompose", "metricsKeys": "dissolve"}));
+    assert_eq!(asked["captions"], json!({"ok": "Remove", "decompose": "Decompose", "cancel": "Cancel"}));
+    assert_eq!(asked["params"], json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "dissolve"}));
     assert!(asked["fields"][0]["label"].as_str().unwrap().contains('B'), "{asked}");
     assert!(asked["fields"][1]["label"].as_str().unwrap().contains('C'), "{asked}");
     assert!(Arc::ptr_eq(&font(&app), &before), "asking changed nothing");
-    call(&mut app, "ui.dialog.set", json!({"field": "components", "value": "remove"}));
-    call(&mut app, "ui.dialog.confirm", json!({}));
+    call(&mut app, "ui.click", json!({"id": "ok"}));
     let mut direct = referenced_app();
     direct.run("glyph.removeGlyph", &json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "dissolve"})).unwrap();
     assert!(font(&app).glyph("A").is_none());
     assert!(font(&app).same_as(&font(&direct)), "the dialog and the command give the same font");
     assert!(app.state.selected_glyphs.is_empty(), "the removed glyph left the selection");
+
+    // Decompose turns the components into outlines first.
+    let mut app = referenced_app();
+    open(&mut app, "dialog.removeGlyph", json!({"glyphs": ["A"]}));
+    call(&mut app, "ui.click", json!({"id": "decompose"}));
+    let mut direct = referenced_app();
+    direct.run("glyph.removeGlyph", &json!({"glyphs": ["A"], "components": "decompose", "metricsKeys": "dissolve"})).unwrap();
+    assert!(font(&app).same_as(&font(&direct)), "Decompose gives the font the command gives");
 
     let mut app = referenced_app();
     let before = font(&app);
@@ -182,6 +190,7 @@ fn remove_glyph_confirms_and_asks_about_components_and_metrics_keys() {
     let mut app = referenced_app();
     let opened = open(&mut app, "dialog.removeGlyph", json!({"glyphs": ["Z"]}));
     assert_eq!(opened["fields"], json!([]));
+    assert_eq!(opened["buttons"], json!(["ok", "cancel"]), "no Decompose without components to decompose");
     call(&mut app, "ui.dialog.confirm", json!({}));
     assert!(font(&app).glyph("Z").is_none());
 }
@@ -312,4 +321,31 @@ fn glyphs_copied_in_font_view_paste_into_another_document() {
     let before = font(&app);
     frame(&ctx, &mut app, vec![Event::Paste("hello".into())], Modifiers::NONE);
     assert!(Arc::ptr_eq(&font(&app), &before));
+}
+
+#[test]
+fn return_in_the_add_glyphs_box_starts_a_line_and_cmd_return_generates() {
+    let mut app = square_app();
+    let ctx = egui::Context::default();
+    open(&mut app, "dialog.addGlyphs", json!({}));
+    for _ in 0..3 {
+        frame(&ctx, &mut app, Vec::new(), Modifiers::NONE);
+    }
+    let field = crate::dialogs::form::widget_id("text");
+    let at = ctx.read_response(field).unwrap().rect.center();
+    let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame(&ctx, &mut app, vec![Event::PointerMoved(at), press(true)], Modifiers::NONE);
+    frame(&ctx, &mut app, vec![press(false)], Modifiers::NONE);
+    frame(&ctx, &mut app, vec![Event::Text("zero".into())], Modifiers::NONE);
+    frame(&ctx, &mut app, vec![key(Key::Enter, Modifiers::NONE)], Modifiers::NONE);
+    frame(&ctx, &mut app, vec![Event::Text("one".into())], Modifiers::NONE);
+    let shown = inspect(&mut app);
+    assert_eq!(shown["open"], true, "Return does not generate: {shown}");
+    assert_eq!(shown["editing"]["text"], "zero\none", "{shown}");
+    frame(&ctx, &mut app, vec![key(Key::Enter, Modifiers::COMMAND)], Modifiers::COMMAND);
+    assert_eq!(inspect(&mut app)["open"], false, "Cmd+Return generates");
+    let mut direct = square_app();
+    direct.run("glyph.addGlyphs", &json!({"text": "zero\none", "onExisting": "ask"})).unwrap();
+    assert!(font(&app).glyph("one").is_some());
+    assert!(font(&app).same_as(&font(&direct)));
 }

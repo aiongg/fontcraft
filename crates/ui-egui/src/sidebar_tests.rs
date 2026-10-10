@@ -224,13 +224,18 @@ fn the_smart_filter_editor_gives_the_settings_its_commands_give() {
     let opened = open(&mut app, json!({"command": "fontView.addSmartFilter"}));
     assert_eq!(opened["dialog"], "dialog.smartFilterEditor");
     assert_eq!(field(&opened, "name")["value"], "New Filter");
-    assert_eq!(field(&opened, "rule1Property")["value"], "glyphName", "a new filter starts with one rule");
+    let starter = json!({"all": [{"property": "glyphName", "op": "contains", "value": ""}]});
+    assert_eq!(field(&opened, "rules")["value"], starter, "a new filter starts with one rule");
     set(&mut app, "name", json!("Vowels"));
-    set(&mut app, "rule1Op", json!("matches"));
-    set(&mut app, "rule1Value", json!("[AEIOU]"));
-    let shown = set(&mut app, "rule2Property", json!("countOfPaths"));
-    assert_eq!(field(&shown, "rule2Op")["value"], "==", "a number rule takes a number comparison");
-    set(&mut app, "rule2Value", json!("0"));
+    // A count typed as text becomes a number, as the rows send it.
+    set(
+        &mut app,
+        "rules",
+        json!({"all": [
+            {"property": "glyphName", "op": "matches", "value": "[AEIOU]"},
+            {"property": "countOfPaths", "op": "==", "value": "0"},
+        ]}),
+    );
     call(&mut app, "ui.dialog.confirm", json!({}));
 
     let mut direct = FontcraftApp::default();
@@ -241,7 +246,7 @@ fn the_smart_filter_editor_gives_the_settings_its_commands_give() {
     direct.run("fontView.addSmartFilter", &json!({"name": "Vowels", "rules": rules})).unwrap();
     assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
 
-    // A double-click on the filter opens its editor with the stored name and rules.
+    // A double-click on the filter opens its editor, which reads the stored name and rules.
     let w = Window::new();
     w.frame(&mut app);
     let at = row(&app, "filters/Vowels").rect.center();
@@ -249,10 +254,8 @@ fn the_smart_filter_editor_gives_the_settings_its_commands_give() {
     let shown = call(&mut app, "ui.dialog.inspect", json!({}));
     assert_eq!((shown["open"].as_bool(), shown["command"].as_str()), (Some(true), Some("fontView.editFilter")));
     assert_eq!(field(&shown, "name")["value"], "Vowels");
-    assert_eq!(field(&shown, "rule1Value")["value"], "[AEIOU]");
-    assert_eq!(field(&shown, "rule2Value")["value"], "0");
-    set(&mut app, "match", json!("any"));
-    set(&mut app, "rule2Property", json!(""));
+    assert_eq!(field(&shown, "rules")["value"], rules);
+    set(&mut app, "rules", json!({"any": [{"property": "glyphName", "op": "matches", "value": "[AEIOU]"}]}));
     call(&mut app, "ui.dialog.confirm", json!({}));
     let rules = json!({"any": [{"property": "glyphName", "op": "matches", "value": "[AEIOU]"}]});
     direct.run("fontView.editFilter", &json!({"filter": "filters/Vowels", "name": "Vowels", "rules": rules})).unwrap();
@@ -260,14 +263,53 @@ fn the_smart_filter_editor_gives_the_settings_its_commands_give() {
 
     // Cancel changes nothing.
     let (before, revision) = (setting(&app, "fontView.filters"), app.session.settings().revision());
-    let stored = before[0].clone();
-    open(
-        &mut app,
-        json!({"dialog": "dialog.smartFilterEditor", "params": {"filter": "filters/Vowels", "name": stored["name"], "rules": stored["rules"]}}),
-    );
+    let opened = open(&mut app, json!({"dialog": "dialog.smartFilterEditor", "params": {"filter": "filters/Vowels"}}));
+    assert_eq!(field(&opened, "rules")["value"], rules);
     set(&mut app, "name", json!("Consonants"));
     call(&mut app, "ui.dialog.cancel", json!({}));
     assert_eq!((setting(&app, "fontView.filters"), app.session.settings().revision()), (before, revision));
+    let r = control::handle(
+        &mut app,
+        &json!({"id": 1, "method": "engine.execute", "params": {"command": "dialog.open", "params": {"dialog": "dialog.smartFilterEditor", "params": {"filter": "filters/Gone"}}}}),
+    );
+    assert_eq!(r["ok"], false, "{r}");
+}
+
+#[test]
+fn the_rule_rows_build_a_nested_group_as_the_command_takes_it() {
+    use crate::dialogs::rule_tree::control_id;
+    let mut app = FontcraftApp::default();
+    open(&mut app, json!({"command": "fontView.addSmartFilter"}));
+    set(&mut app, "name", json!("Nested"));
+    let w = Window::new();
+    w.frame(&mut app);
+    w.frame(&mut app);
+    let press = |app: &mut FontcraftApp, path: &[usize], part: &str| {
+        let id = control_id("rules", path, part);
+        // The dialog centres itself again when a row makes it wider.
+        for _ in 0..3 {
+            w.frame(app);
+        }
+        let at = w.ctx.read_response(id).unwrap_or_else(|| panic!("{path:?} {part} was not drawn")).rect.center();
+        w.click(app, at, Modifiers::NONE);
+    };
+    // … on the top group adds a nested Any group with one rule; + on that group adds a second.
+    press(&mut app, &[], "addGroup");
+    press(&mut app, &[1], "add");
+    // Typing into the nested group's first rule sets its value.
+    press(&mut app, &[1, 0], "value");
+    w.frame_with(&mut app, vec![Event::Text("a.sc".into())], Modifiers::NONE);
+    w.frame(&mut app);
+    // − on the top group's first rule removes it.
+    press(&mut app, &[0], "remove");
+    let rule = |value: &str| json!({"property": "glyphName", "op": "contains", "value": value});
+    let expected = json!({"all": [{"any": [rule("a.sc"), rule("")]}]});
+    let shown = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(field(&shown, "rules")["value"], expected);
+    call(&mut app, "ui.dialog.confirm", json!({}));
+    let mut direct = FontcraftApp::default();
+    direct.run("fontView.addSmartFilter", &json!({"name": "Nested", "rules": expected})).unwrap();
+    assert_eq!(setting(&app, "fontView.filters"), setting(&direct, "fontView.filters"));
 }
 
 #[test]
@@ -345,8 +387,21 @@ fn missing_glyphs_shows_the_badge_and_generate_gives_the_font_its_command_gives(
 
     let before = font(&app);
     let opened = open(&mut app, json!({"dialog": "dialog.missingGlyphs", "params": {"entry": "filters/Wanted"}}));
-    assert_eq!(field(&opened, "glyphs")["value"], json!(["Q.ss01", "Z.alt"]), "every missing glyph starts ticked");
-    set(&mut app, "glyphs", json!(["Z.alt"]));
+    assert_eq!(field(&opened, "glyphs")["value"], json!(["Q.ss01", "Z.alt"]), "every missing glyph starts selected");
+    // A click selects one row, Cmd+A every row, Cmd+click takes one out.
+    let selected = |app: &mut FontcraftApp| field(&call(app, "ui.dialog.inspect", json!({})), "glyphs")["value"].clone();
+    for _ in 0..3 {
+        w.frame(&mut app);
+    }
+    let row_at = |at: usize| w.ctx.read_response(crate::dialogs::form::row_id("glyphs", at)).unwrap().rect.center();
+    w.click(&mut app, row_at(1), Modifiers::NONE);
+    assert_eq!(selected(&mut app), json!(["Z.alt"]));
+    let cmd_a = |pressed| Event::Key { key: Key::A, physical_key: None, pressed, repeat: false, modifiers: Modifiers::COMMAND };
+    w.frame_with(&mut app, vec![cmd_a(true), cmd_a(false)], Modifiers::COMMAND);
+    w.frame(&mut app);
+    assert_eq!(selected(&mut app), json!(["Q.ss01", "Z.alt"]));
+    w.click(&mut app, row_at(0), Modifiers::COMMAND);
+    assert_eq!(selected(&mut app), json!(["Z.alt"]));
     call(&mut app, "ui.dialog.cancel", json!({}));
     assert!(Arc::ptr_eq(&before, &font(&app)), "Cancel puts back the very font");
 

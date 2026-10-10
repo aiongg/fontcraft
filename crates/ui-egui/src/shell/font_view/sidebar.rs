@@ -384,7 +384,6 @@ struct Cx<'a> {
     tokens: &'a Tokens,
     selected: &'a [Vec<String>],
     mods: egui::Modifiers,
-    settings: &'a fontcraft_engine::settings::UserSettings,
     pending: &'a mut Pending,
     laid_out: &'a mut Vec<Row>,
 }
@@ -413,8 +412,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                     ui.colored_label(app.tokens.error_text, e);
                 }
                 let mods = ui.input(|i| i.modifiers);
-                let mut cx =
-                    Cx { tokens: &app.tokens, selected: &selected, mods, settings: app.session.settings(), pending, laid_out: &mut laid_out };
+                let mut cx = Cx { tokens: &app.tokens, selected: &selected, mods, pending, laid_out: &mut laid_out };
                 egui::ScrollArea::vertical().id_salt("fontView.sidebar.rows").auto_shrink([false, false]).show(ui, |ui| {
                     for item in &items {
                         row(ui, &mut cx, item, 0);
@@ -511,7 +509,7 @@ fn row(ui: &mut egui::Ui, cx: &mut Cx, item: &Item, depth: usize) {
     }
     if response.double_clicked()
         && !section
-        && let Some(open_editor) = editor(cx.settings, item)
+        && let Some(open_editor) = editor(item)
     {
         cx.pending.push(open_editor);
     }
@@ -587,19 +585,16 @@ fn badge(painter: &egui::Painter, tokens: &Tokens, item: &Item, rect: Rect, sect
     }
 }
 
-/// The `dialog.open` that edits a smart or list filter: the smart filter's editor opens with its
-/// stored name and rules, the list filter's reads them itself.
-fn editor(settings: &fontcraft_engine::settings::UserSettings, item: &Item) -> Option<(&'static str, Value)> {
+/// The `dialog.open` that edits a smart or list filter; each editor reads the stored filter by
+/// its path.
+fn editor(item: &Item) -> Option<(&'static str, Value)> {
     let path = path_value(&item.path);
-    match item.kind.as_str() {
-        "smart" => {
-            let stored = stored_filter(settings, &item.path)?;
-            let params = json!({"filter": path, "name": stored.get("name"), "rules": stored.get("rules")});
-            Some(("dialog.open", json!({"dialog": "dialog.smartFilterEditor", "params": params})))
-        }
-        "list" => Some(("dialog.open", json!({"dialog": "dialog.listFilterEditor", "params": {"filter": path}}))),
-        _ => None,
-    }
+    let dialog = match item.kind.as_str() {
+        "smart" => "dialog.smartFilterEditor",
+        "list" => "dialog.listFilterEditor",
+        _ => return None,
+    };
+    Some(("dialog.open", json!({"dialog": dialog, "params": {"filter": path}})))
 }
 
 fn context_menu(ui: &mut egui::Ui, cx: &mut Cx, item: &Item) {
@@ -612,7 +607,7 @@ fn context_menu(ui: &mut egui::Ui, cx: &mut Cx, item: &Item) {
         return;
     }
     ui.separator();
-    if let Some(open_editor) = editor(cx.settings, item)
+    if let Some(open_editor) = editor(item)
         && ui.button("Edit Filter…").clicked()
     {
         cx.pending.push(open_editor);
@@ -655,7 +650,7 @@ fn actions(app: &FontcraftApp, ui: &mut egui::Ui, items: &[Item], selected: &[Ve
             ui.close();
         }
         ui.separator();
-        let edit = chosen.and_then(|item| editor(settings, item));
+        let edit = chosen.and_then(editor);
         if ui.add_enabled(edit.is_some(), egui::Button::new("Edit Filter…")).clicked()
             && let Some(open_editor) = edit
         {

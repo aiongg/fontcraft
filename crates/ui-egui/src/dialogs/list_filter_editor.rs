@@ -3,7 +3,7 @@
 //! until OK, which runs the command once; filters live in the user settings, so Cancel leaves
 //! them as they were.
 //!
-//! The names are one text, separated by spaces or line breaks, as the commands take them. A new
+//! The names are one box of text, separated by spaces or line breaks, as the commands take them. A new
 //! list filter opens with the glyphs selected in Font View; the editor of a stored one opens
 //! with its name and names, read from the settings by its `filter` path.
 
@@ -19,6 +19,8 @@ pub const ID: &str = "dialog.listFilterEditor";
 const NAME_CHARS: usize = 256;
 /// Longest text of names the field takes, in characters.
 const NAMES_CHARS: usize = 1 << 20;
+/// Lines the names box shows.
+const NAMES_LINES: usize = 10;
 
 /// The editor of a stored list filter (`fontView.editFilter`).
 pub const DIALOG: Dialog = Dialog { mode: Mode::RunOnOk, ..Dialog::new(ID, "List Filter", "fontView.editFilter", Fields::Targeted(edit_fields)) };
@@ -31,10 +33,11 @@ fn fields(name: &str, names: &str) -> Vec<Field> {
         Field { default: json!(name), ..Field::text("name", "Name", NAME_CHARS, "The filter's name in the sidebar; unique within its folder") },
         Field {
             default: json!(names),
-            ..Field::text(
+            ..Field::text_area(
                 "glyphs",
                 "Glyph Names",
                 NAMES_CHARS,
+                NAMES_LINES,
                 "The glyphs the filter shows, in this order, separated by spaces or line breaks; names the font lacks are allowed",
             )
         },

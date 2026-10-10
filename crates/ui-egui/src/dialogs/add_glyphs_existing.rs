@@ -1,41 +1,41 @@
 //! Glyphs already in the font. Asked after `glyph.addGlyphs` with `onExisting: "ask"` found
-//! names the font has (`existing`) and so added nothing: OK runs it again with the choice, Keep
-//! Existing (only the new names are added) or Replace (those glyphs become new empty ones), with
-//! a live preview; Cancel adds nothing at all. [`follow_up`] gives the parameters to open it with
+//! names the font has (`existing`) and so added nothing. The dialog lists those names; Keep
+//! Existing runs the command again adding only the new names, Replace runs it making each of
+//! those glyphs a new empty one, and Cancel adds nothing at all. The answer previews live
+//! (Keep Existing until Replace is pressed). [`follow_up`] gives the parameters to open it with
 //! from the request and the result.
 
 use serde_json::{Map, Value, json};
 
 use super::form::Field;
-use super::{After, Dialog, Fields};
-
-/// Most existing names the question names before "and N more".
-const NAMED: usize = 8;
+use super::{After, Dialog, Fields, Third};
 
 pub const DIALOG: Dialog = Dialog {
     follow_up: true,
     after: Some(After { command: "glyph.addGlyphs", params: follow_up }),
-    buttons: ["Add Glyphs", "Cancel"],
+    buttons: ["Keep Existing", "Cancel"],
+    third: Some(Third { id: "replace", caption: "Replace", key: "onExisting", ok: "keep", value: "replace" }),
     message: "Some of these glyphs are in the font already.",
     ..Dialog::new("dialog.addGlyphsExisting", "Glyphs Already in Font", "glyph.addGlyphs", Fields::Targeted(fields))
 };
 
-/// One pop-up menu whose label names the glyphs the font has (the `existing` target).
+/// The names the font has (the `existing` target) as a list, and the answer the buttons give.
 fn fields(_: &mut fontcraft_engine::Session, targets: &Map<String, Value>) -> Result<Vec<Field>, String> {
-    let names: Vec<&str> =
-        targets.get("existing").and_then(Value::as_array).map(|l| l.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
-    let mut label = names.iter().take(NAMED).copied().collect::<Vec<_>>().join(", ");
-    if names.len() > NAMED {
-        label.push_str(&format!(" and {} more", names.len() - NAMED));
-    }
-    let label = if label.is_empty() { "Glyphs in the font".to_string() } else { format!("In the font: {label}") };
-    Ok(vec![Field::choice(
-        "onExisting",
-        &label,
-        &[("keep", "Keep Existing"), ("replace", "Replace")],
-        "keep",
-        "keep adds only the names the font lacks; replace also makes each glyph the font has a new empty glyph in its place",
-    )])
+    let names: Vec<String> = targets
+        .get("existing")
+        .and_then(Value::as_array)
+        .map(|l| l.iter().filter_map(Value::as_str).map(str::to_string).collect())
+        .unwrap_or_default();
+    Ok(vec![
+        Field::rows("existing", "In the font", names, "The requested glyphs the font has already"),
+        Field::choice(
+            "onExisting",
+            "",
+            &[("keep", "Keep Existing"), ("replace", "Replace")],
+            "keep",
+            "keep adds only the names the font lacks; replace also makes each glyph the font has a new empty glyph in its place",
+        ),
+    ])
 }
 
 /// The parameters to open the question with after `glyph.addGlyphs` ran with `request` and

@@ -1,10 +1,10 @@
 //! Glyph › Remove Glyph: the confirmation before `glyph.removeGlyph`. Remove runs the command
 //! once; Cancel removes nothing.
 //!
-//! The dialog asks the command first (`confirm: false`, which changes nothing) and adds a
-//! pop-up menu for each answer it needs: what happens to components that use a removed glyph
-//! (remove them, or decompose them into outlines), and to metrics keys that point at one
-//! (dissolve or keep them).
+//! The dialog asks the command first (`confirm: false`, which changes nothing) for the answers
+//! it needs. When a removed glyph is used as a component, Remove deletes those components and
+//! Decompose, a third button, turns them into outlines first. When metrics keys point at a
+//! removed glyph, a pop-up menu asks whether to dissolve or keep them.
 
 use std::collections::HashSet;
 
@@ -12,7 +12,7 @@ use fontcraft_engine::Session;
 use serde_json::{Map, Value, json};
 
 use super::form::Field;
-use super::{Dialog, Fields, Mode};
+use super::{Dialog, Fields, Mode, Third};
 
 /// Most glyph names a field's label names before "and N more".
 const NAMED: usize = 5;
@@ -20,6 +20,7 @@ const NAMED: usize = 5;
 pub const DIALOG: Dialog = Dialog {
     mode: Mode::RunOnOk,
     buttons: ["Remove", "Cancel"],
+    third: Some(Third { id: "decompose", caption: "Decompose", key: "components", ok: "remove", value: "decompose" }),
     message: "The selected glyphs are removed from the font.",
     ..Dialog::new("dialog.removeGlyph", "Remove Glyphs", "glyph.removeGlyph", Fields::Targeted(fields))
 };
@@ -39,7 +40,7 @@ fn fields(session: &mut Session, targets: &Map<String, Value>) -> Result<Vec<Fie
             "components",
             &format!("Used as a component in {users}"),
             &[("remove", "Remove those components"), ("decompose", "Decompose them")],
-            "decompose",
+            "remove",
             "remove deletes every component that uses a removed glyph; decompose first turns those components into outlines",
         ));
     }
@@ -56,8 +57,8 @@ fn fields(session: &mut Session, targets: &Map<String, Value>) -> Result<Vec<Fie
     Ok(fields)
 }
 
-/// The distinct `glyph` values of the report's list `key`, in order, as a short phrase.
-fn glyph_names(report: &Value, key: &str) -> String {
+/// The distinct `glyph` values of the report's list `key`, in order.
+fn distinct_glyphs<'a>(report: &'a Value, key: &str) -> Vec<&'a str> {
     let mut seen = HashSet::new();
     let mut names: Vec<&str> = Vec::new();
     for entry in report.get(key).and_then(Value::as_array).into_iter().flatten() {
@@ -67,6 +68,12 @@ fn glyph_names(report: &Value, key: &str) -> String {
             names.push(name);
         }
     }
+    names
+}
+
+/// The distinct `glyph` values of the report's list `key`, in order, as a short phrase.
+fn glyph_names(report: &Value, key: &str) -> String {
+    let names = distinct_glyphs(report, key);
     let shown = names.iter().take(NAMED).copied().collect::<Vec<_>>().join(", ");
     if names.len() > NAMED { format!("{shown} and {} more", names.len() - NAMED) } else { shown }
 }

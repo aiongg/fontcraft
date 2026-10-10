@@ -42,8 +42,8 @@ fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
     ]
 }
 
-fn given(p: &Map<String, Value>) -> Map<String, Value> {
-    p.clone()
+fn given(_: &fontcraft_engine::Session, p: &Map<String, Value>) -> Result<Map<String, Value>, String> {
+    Ok(p.clone())
 }
 
 /// The parts go to the first two modes and All Masters to As Components only.

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**390 guesses on 267 rows (132 of them live commands).**
+**391 guesses on 267 rows (132 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -335,13 +335,14 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | Every CLDR locale with its own main exemplar set is a language entry, regional and script variants included (de-CH, sr-Latn); those that inherit their parent's set are left out. Settled by observing which entries the reference lists under one script. |
 | `fontView.searchField` (panel) | M4 | handbook | – | The magnifier menu offers All Fields, Name Only, Unicode Value Only and Note Only as one choice, then Match Case and Regex. Settled by opening the reference's magnifier menu. |
 | `fontView.statusBar` (panel) | M4 | handbook | – | The counts read "N selected · N shown · N in font". Settled by observation. |
-| `dialog.addGlyphsExisting` (panel) | M4 | handbook | – | The three answers are a pop-up menu (Keep Existing first) with Add Glyphs and Cancel, as dialogs have two buttons; the handbook shows three buttons. Settled by observation. |
+| `dialog.addGlyphsExisting` (panel) | M4 | handbook | – | The buttons sit Cancel, Replace, Keep Existing from left to right, Keep Existing the default (Return). Settled by observation. |
 | `dialog.missingGlyphs` (panel) | M4 | handbook | – | Every missing glyph starts chosen, so Generate right away adds them all. Settled by opening the reference's list and pressing Generate. |
 | `dialog.pasteSpecial` (panel) | M4 | handbook | – | The dialog opens on Glyphs With Same Name with All Data ticked. Settled by observation. |
-| `dialog.removeGlyph` (panel) | M4 | handbook | – | Remove or Decompose is a pop-up menu, Decompose first, beside Remove and Cancel, as dialogs have two buttons; the handbook shows a Decompose button. Settled by observation. |
+| `dialog.removeGlyph` (panel) | M4 | handbook | – | The buttons sit Cancel, Decompose, Remove from left to right, Remove the default (Return). Settled by observation. |
 | `dialog.removeGlyph` (panel) | M4 | handbook | – | The metrics-key question is a second pop-up menu in the same dialog (Dissolve first) instead of a second dialog. Settled by observation. |
 | `dialog.findAndReplaceGlyphNames` (panel) | M4 | handbook | – | A Match Case checkbox, on by default, as names are case-sensitive; the handbook names only Find, Replace and Regex. Settled by observation. |
 | `dialog.findAndReplaceGlyphNames` (panel) | M4 | handbook | – | Nothing is renamed until Replace; there is no live preview. Settled by observation. |
+| `dialog.smartFilterEditor` (panel) | M4 | handbook | – | Adding a nested group is a `…` button on each row, standing in for Option-click on plus. Settled by observing the reference's editor. |
 | `dialog.smartFilterEditor` (panel) | M4 | handbook | – | A new smart filter is named New Filter, or New Filter 2 and so on when the name is taken. Settled by adding a smart filter in the reference. |
 | `dialog.listFilterEditor` (panel) | M4 | handbook | – | A new list filter is named New List, or New List 2 and so on when the name is taken. Settled by adding a list filter in the reference. |
 | `dialog.languagesList` (panel) | M4 | handbook | – | The checklist offers every script the language data lists and the default ones, alphabetically. Settled by opening the reference's list. |

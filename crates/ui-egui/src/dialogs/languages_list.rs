@@ -50,8 +50,8 @@ fn fields(s: &fontcraft_engine::Session) -> Vec<Field> {
 }
 
 /// The ticked scripts, given as `scripts`.
-fn given(p: &Map<String, Value>) -> Map<String, Value> {
-    p.clone()
+fn given(_: &fontcraft_engine::Session, p: &Map<String, Value>) -> Result<Map<String, Value>, String> {
+    Ok(p.clone())
 }
 
 /// `{show, hide}`: the ticked scripts and the other scripts offered.

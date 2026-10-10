@@ -1223,16 +1223,16 @@ milestone = "M4"
 summary = "Dialog of Glyph → Add Glyphs… taking a free-text list of glyphs to create. Button labels are not given in the chapter."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs"
 status = "handbook"
-notes = "Generate (the tutorial's label) runs glyph.addGlyphs with the text and `onExisting: \"ask\"`; when a name is in the font already nothing is added and dialog.addGlyphsExisting follows. Nothing runs before Generate. The field is one line of text: the dialog framework has no multi-line text field yet, and spaces separate items as line breaks do. Documented, not yet observed."
+notes = "Generate (the tutorial's label) runs glyph.addGlyphs with the text and `onExisting: \"ask\"`; when a name is in the font already nothing is added and dialog.addGlyphsExisting follows. Nothing runs before Generate. The field is a box of eight lines; spaces and line breaks both separate items. Return starts a new line and Cmd+Return generates. Documented, not yet observed."
 
 [[panel]]
 id = "dialog.addGlyphsExisting"
 label = "Glyphs Already in Font"
 location = "dialog"
 controls = [
-  "list of requested glyphs that already exist (the label of the pop-up menu)",
-  "pop-up menu: Keep Existing (default) or Replace (`onExisting`)",
-  "Add Glyphs: run glyph.addGlyphs again with that choice",
+  "list of requested glyphs that already exist",
+  "Keep Existing: run glyph.addGlyphs again adding only the new names (`onExisting: \"keep\"`)",
+  "Replace: run it again making those glyphs new empty ones (`onExisting: \"replace\"`)",
   "Cancel: add nothing",
 ]
 area = "font-view"
@@ -1240,9 +1240,9 @@ milestone = "M4"
 summary = "Shown when Add Glyphs is asked for names the font already has. Replace swaps those glyphs for new empty ones, Keep Existing adds only the new names, Cancel adds nothing at all."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs"
 status = "handbook"
-notes = "Opens after the person's run of glyph.addGlyphs with `onExisting: \"ask\"` (Generate in dialog.addGlyphs, the menu, `ui.menu.invoke`) returns `existing` names; never after a control-channel or MCP run. The choice previews live; Cancel leaves the font as it was before Add Glyphs. Documented, not yet observed."
+notes = "Opens after the person's run of glyph.addGlyphs with `onExisting: \"ask\"` (Generate in dialog.addGlyphs, the menu, `ui.menu.invoke`) returns `existing` names; never after a control-channel or MCP run. Keep Existing previews live until a button is pressed; Cancel leaves the font as it was before Add Glyphs. Over the control channel the answer is the `onExisting` field, or `ui.click` with `ok` or `replace`. Documented, not yet observed."
 guesses = [
-  "The three answers are a pop-up menu (Keep Existing first) with Add Glyphs and Cancel, as dialogs have two buttons; the handbook shows three buttons. Settled by observation.",
+  "The buttons sit Cancel, Replace, Keep Existing from left to right, Keep Existing the default (Return). Settled by observation.",
 ]
 
 [[panel]]
@@ -1258,7 +1258,7 @@ milestone = "M4"
 summary = "List opened from the context menu of a sidebar entry that has a known total; the chosen names are created as new glyphs."
 ref = "Font View › Adding New Glyphs › Adding From the Sidebar"
 status = "handbook"
-notes = "FontCraft lists at most 256 names, each with a checkbox (the dialog framework has no scrolling list yet); fontView.generateMissingGlyphs without `glyphs` adds every missing glyph. Each change previews the new glyphs; Generate is one undo step."
+notes = "A scrolling list: a click selects one name, Shift+click the names from the last clicked one, Cmd+click adds or takes out one, Cmd+A selects them all. fontView.generateMissingGlyphs without `glyphs` adds every missing glyph. Each change previews the new glyphs; Generate is one undo step."
 guesses = [
   "Every missing glyph starts chosen, so Generate right away adds them all. Settled by opening the reference's list and pressing Generate.",
 ]
@@ -1301,9 +1301,9 @@ milestone = "M4"
 summary = "Confirmation shown before glyphs are deleted. When other glyphs reference them, Remove also deletes those components while Decompose first turns them into outlines."
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
-notes = "Cmd+Delete and Glyph › Remove Glyph open it on the selected glyphs. It asks glyph.removeGlyph with `confirm: false` and adds a pop-up menu for each answer the command needs: `components` (Remove those components or Decompose them) and `metricsKeys` (the question of dialog.removeGlyphMetricsKeys). Remove runs the command once; Cancel changes nothing. Documented, not yet observed."
+notes = "Cmd+Delete and Glyph › Remove Glyph open it on the selected glyphs. It asks glyph.removeGlyph with `confirm: false` for the answers the command needs. With `components` needed, a line names the glyphs that use a removed glyph, Remove runs the command with `components: \"remove\"` and the Decompose button with `components: \"decompose\"`. With `metricsKeys` needed, a pop-up menu asks the question of dialog.removeGlyphMetricsKeys. Each button runs the command once; Cancel changes nothing. Documented, not yet observed."
 guesses = [
-  "Remove or Decompose is a pop-up menu, Decompose first, beside Remove and Cancel, as dialogs have two buttons; the handbook shows a Decompose button. Settled by observation.",
+  "The buttons sit Cancel, Decompose, Remove from left to right, Remove the default (Return). Settled by observation.",
   "The metrics-key question is a second pop-up menu in the same dialog (Dissolve first) instead of a second dialog. Settled by observation.",
 ]
 
@@ -1359,8 +1359,9 @@ milestone = "M4"
 summary = "Window editing the name and the rule tree of a smart filter. A new filter starts with one rule."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
-notes = "FontCraft shows six rule rows (property, comparison, value) under one Match choice of all, any or none. A nested group is a row whose property is Nested Group and whose value is the group as rule-tree JSON; a filter with more top-level rules opens with the rest in its last row as a nested group, which matches the same glyphs. The dialog framework has no rule-tree control yet. The editor of a stored filter opens with {filter, name, rules}, as the sidebar passes them."
+notes = "The rules show as rows: a Match row per group (all, any or none of the rows under it), a row per rule with its property, comparison and value, and nested groups indented under their own Match row. `+` adds a rule, `…` adds a nested group (an Any group with one rule), `−` removes a rule or a nested group. Yes/no, case and colour rules take their value from a pop-up menu; the others from a text field. The editor of a stored filter opens with its `filter` path and reads the stored name and rules itself. Over the control channel the rules are one field, `rules`, in the shape fontView.addSmartFilter takes. Documented, not yet observed."
 guesses = [
+  "Adding a nested group is a `…` button on each row, standing in for Option-click on plus. Settled by observing the reference's editor.",
   "A new smart filter is named New Filter, or New Filter 2 and so on when the name is taken. Settled by adding a smart filter in the reference.",
 ]
 
@@ -1379,7 +1380,7 @@ milestone = "M4"
 summary = "Window editing the name and the ordered glyph-name list of a list filter."
 ref = "Font View › Filtering Font View › List Filters"
 status = "handbook"
-notes = "The names are one line of text in FontCraft's dialog: the dialog framework has no multi-line field yet. The editor of a stored filter reads its name and names by its `filter` path."
+notes = "The names are a box of ten lines, separated by spaces or line breaks; Return starts a new line and Cmd+Return is OK. The editor of a stored filter reads its name and names by its `filter` path."
 guesses = [
   "A new list filter is named New List, or New List 2 and so on when the name is taken. Settled by adding a list filter in the reference.",
 ]

@@ -70,7 +70,7 @@ fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
 
 /// Field values from `dialog.open`'s parameters in the command's shape: `translate: {x, y}`,
 /// `scale: {x, y?}` (a missing or equal `y` keeps the lock on), `cursivy: bool`.
-fn given(p: &Map<String, Value>) -> Map<String, Value> {
+fn given(_: &fontcraft_engine::Session, p: &Map<String, Value>) -> Result<Map<String, Value>, String> {
     let mut out = Map::new();
     for (key, value) in p {
         match (key.as_str(), value) {
@@ -93,7 +93,7 @@ fn given(p: &Map<String, Value>) -> Map<String, Value> {
             }
         }
     }
-    out
+    Ok(out)
 }
 
 /// The command's parameters from the field values.

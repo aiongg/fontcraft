@@ -56,6 +56,7 @@ pub mod pasted_outline_bounds;
 pub mod primitive_measurements;
 mod remove_glyph;
 mod round_corners;
+pub mod rule_tree;
 mod shape_order;
 mod smart_filter_editor;
 mod transformations;
@@ -85,6 +86,8 @@ pub struct Dialog {
     pub after: Option<After>,
     /// The captions of the confirm and cancel buttons.
     pub buttons: [&'static str; 2],
+    /// A third button that answers the dialog's question another way.
+    pub third: Option<Third>,
     /// A line above the fields; empty for none.
     pub message: &'static str,
     /// The items of the round "…" menu at the bottom left.
@@ -94,8 +97,33 @@ pub struct Dialog {
 impl Dialog {
     /// A previewing dialog with OK and Cancel, no message and no actions.
     pub const fn new(id: &'static str, title: &'static str, command: &'static str, fields: Fields) -> Self {
-        Self { id, title, command, fields, mode: Mode::Preview, follow_up: false, after: None, buttons: ["OK", "Cancel"], message: "", actions: &[] }
+        Self {
+            id,
+            title,
+            command,
+            fields,
+            mode: Mode::Preview,
+            follow_up: false,
+            after: None,
+            buttons: ["OK", "Cancel"],
+            third: None,
+            message: "",
+            actions: &[],
+        }
     }
+}
+
+/// A third button beside OK and Cancel, for a question with two answers that both go ahead
+/// (Keep Existing or Replace; Remove or Decompose). It shows while the dialog has the field
+/// `key`, which the buttons answer instead of a control of its own: OK gives it `ok`, the third
+/// button gives it `value`, and either then confirms. `ui.click {id}` presses it.
+#[derive(Clone, Copy, Debug, Serialize)]
+pub struct Third {
+    pub id: &'static str,
+    pub caption: &'static str,
+    pub key: &'static str,
+    pub ok: &'static str,
+    pub value: &'static str,
 }
 
 /// An item of a dialog's "…" menu: a query run with the dialog's parameters whose `text` goes
@@ -115,13 +143,17 @@ pub struct Tab {
     pub dialog: Dialog,
 }
 
+/// Field values from the parameters of `dialog.open`, read with the session (see [`Shaped::given`]).
+pub type Given = fn(&fontcraft_engine::Session, &Map<String, Value>) -> Result<Map<String, Value>, String>;
+
 /// Fields that are not the command's parameters one to one.
 #[derive(Clone, Copy, Debug)]
 pub struct Shaped {
     pub fields: fn(&fontcraft_engine::Session) -> Vec<Field>,
     /// Field values from parameters in the command's shape (`dialog.open`'s `params`); keys that
-    /// are no field's pass through (the targets).
-    pub given: fn(&Map<String, Value>) -> Map<String, Value>,
+    /// are no field's pass through (the targets). The session answers what the parameters name
+    /// (a stored filter); an error keeps the dialog closed.
+    pub given: Given,
     /// The command's parameters from the field values.
     pub params: fn(&Map<String, Value>) -> Map<String, Value>,
     /// Brings linked fields in step after the field named by the `&str` took a value (an
@@ -256,6 +288,7 @@ pub struct OpenDialog {
     pub command: String,
     pub mode: Mode,
     pub buttons: [&'static str; 2],
+    pub third: Option<Third>,
     pub message: &'static str,
     pub fields: Vec<Field>,
     /// Each field's value, by key.
@@ -315,6 +348,8 @@ pub enum Event {
     /// A tab, by its index.
     Tab(usize),
     Confirm,
+    /// The third button.
+    Third,
     Cancel,
 }
 
@@ -365,6 +400,11 @@ impl OpenDialog {
         if let Some(s) = &self.shaped {
             (s.link)(&mut self.values, key);
         }
+    }
+
+    /// The third button, while the dialog has the field it answers.
+    pub fn third(&self) -> Option<Third> {
+        self.third.filter(|t| self.fields.iter().any(|f| f.key == t.key))
     }
 
     fn field(&self, key: &str) -> Result<&Field, String> {
@@ -495,7 +535,7 @@ fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>,
         }
         Fields::Shaped(s) => {
             shaped = Some(s);
-            given = (s.given)(&given);
+            given = (s.given)(&app.session, &given)?;
             (s.fields)(&app.session)
         }
         Fields::Tabs(_) => return Err(format!("`{}` has tabs: open one of them", dialog.title)),
@@ -542,6 +582,7 @@ fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>,
         command: dialog.command.to_string(),
         mode: dialog.mode,
         buttons: dialog.buttons,
+        third: dialog.third,
         message: dialog.message,
         fields,
         values,
@@ -658,6 +699,15 @@ fn commit_edit(app: &mut FontcraftApp) -> Result<(), String> {
     d.put(&editing.field, value);
     preview(app);
     Ok(())
+}
+
+/// A button that answers the third button's question: gives its field `value`, then confirms.
+fn answer(app: &mut FontcraftApp, value: Option<&'static str>, person: bool) -> Result<Value, String> {
+    if let Some((key, value)) = app.dialog.as_ref().and_then(OpenDialog::third).zip(value).map(|(t, v)| (t.key, v)) {
+        commit_edit(app)?;
+        set(app, key, &json!(value))?;
+    }
+    confirm_by(app, person)
 }
 
 /// `ui.dialog.confirm`: OK over the control channel (see [`confirm_by`]).
@@ -808,8 +858,14 @@ pub fn inspect(app: &FontcraftApp) -> Value {
         "params": d.params(),
         "error": d.error,
         "actions": if d.actions.is_empty() { Value::Null } else { json!(d.actions) },
-        "buttons": ["ok", "cancel"],
-        "captions": {"ok": d.buttons[0], "cancel": d.buttons[1]},
+        "buttons": match d.third() {
+            Some(t) => json!(["ok", t.id, "cancel"]),
+            None => json!(["ok", "cancel"]),
+        },
+        "captions": match d.third() {
+            Some(t) => json!({"ok": d.buttons[0], t.id: t.caption, "cancel": d.buttons[1]}),
+            None => json!({"ok": d.buttons[0], "cancel": d.buttons[1]}),
+        },
         "canChooseFolder": app.picker.is_some(),
     })
 }
@@ -819,9 +875,11 @@ pub fn inspect(app: &FontcraftApp) -> Value {
 /// selected; a folder field opens the folder chooser, or without one takes the keyboard).
 pub fn click(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
     let d = app.dialog.as_ref().ok_or_else(|| format!("no control `{id}`: no dialog is open"))?;
+    let third = d.third();
     match id {
-        "ok" => return confirm(app),
+        "ok" => return answer(app, third.map(|t| t.ok), false),
         "cancel" => return cancel(app),
+        _ if third.is_some_and(|t| t.id == id) => return answer(app, third.map(|t| t.value), false),
         _ => {}
     }
     if let Some(index) = d.tabs.as_ref().and_then(|t| t.list.iter().position(|tab| tab.dialog.id == id)) {
@@ -850,6 +908,9 @@ pub fn click(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
         Kind::Choice { .. } => Err(format!("`{id}` is a pop-up menu: choose with ui.dialog.set")),
         Kind::Multi { .. } => Err(format!("`{id}` is a row of checkboxes: give the ticked words with ui.dialog.set")),
         Kind::Order { .. } => Err(format!("`{id}` is a list whose rows are dragged: give the order with ui.dialog.set")),
+        Kind::List { select: true, .. } => Err(format!("`{id}` is a list: give the selected rows with ui.dialog.set")),
+        Kind::List { select: false, .. } => Err(format!("`{id}` only shows its rows")),
+        Kind::Rules => Err(format!("`{id}` is a rule tree: give the rules with ui.dialog.set")),
     }
 }
 
@@ -936,8 +997,20 @@ pub fn type_text(app: &mut FontcraftApp, text: &str) -> bool {
 /// The dialog's keys among this frame's events, taken before anything else sees them. `Tab`
 /// stays: egui moves the keyboard between the fields itself.
 pub fn frame_keys(app: &mut FontcraftApp, ctx: &egui::Context) {
-    if app.dialog.is_none() {
-        return;
+    let Some(d) = &app.dialog else { return };
+    // Cmd+A selects every row of the dialog's list while no text field takes the keyboard,
+    // before the menu shortcuts see it.
+    let list = d.fields.iter().find_map(|f| match &f.kind {
+        Kind::List { rows, select: true } => Some((f.key.clone(), json!(rows))),
+        _ => None,
+    });
+    if let Some((key, all)) = list
+        && d.editing.is_none()
+        && !ctx.egui_wants_keyboard_input()
+        && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::A))
+        && let Err(e) = set(app, &key, &all)
+    {
+        app.state.status = e;
     }
     let events = ctx.input(|i| i.events.clone());
     let mut used = Vec::new();
@@ -953,6 +1026,19 @@ pub fn frame_keys(app: &mut FontcraftApp, ctx: &egui::Context) {
         // Up and Down only matter in a number field; elsewhere they belong to the pop-up menus.
         let editing = app.dialog.as_ref().is_some_and(|d| d.editing.is_some());
         if matches!(k, DialogKey::Up | DialogKey::Down) && !editing {
+            continue;
+        }
+        // In a box of several lines Return and the arrows belong to the text; Cmd+Return is OK.
+        let multiline =
+            app.dialog.as_ref().is_some_and(|d| d.editing.as_ref().is_some_and(|e| d.fields.iter().any(|f| f.key == e.field && f.is_multiline())));
+        if multiline && k != DialogKey::Escape {
+            if k == DialogKey::Return && modifiers.command {
+                let result = commit_edit(app).and_then(|()| answer(app, app.dialog.as_ref().and_then(OpenDialog::third).map(|t| t.ok), true));
+                if let Err(e) = result {
+                    app.state.status = e;
+                }
+                used.push(index);
+            }
             continue;
         }
         if let Some(Err(e)) = key_by(app, k, modifiers.shift, true) {
@@ -1045,10 +1131,16 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
                     }
                 },
                 |ui| {
+                    // Right to left: OK on the right, then the third button, then Cancel.
                     let [ok, cancel] = d.buttons;
                     let can_confirm = d.error.is_none() || d.mode == Mode::RunOnOk;
                     if ui.add_enabled(can_confirm, egui::Button::new(ok)).clicked() {
                         events.push(Event::Confirm);
+                    }
+                    if let Some(t) = d.third()
+                        && ui.add_enabled(can_confirm, egui::Button::new(t.caption)).clicked()
+                    {
+                        events.push(Event::Third);
                     }
                     if ui.button(cancel).clicked() {
                         events.push(Event::Cancel);
@@ -1078,7 +1170,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
             Event::Choose(key) => commit_edit(app).and_then(|()| choose(app, &key)).map(drop),
             Event::Action(id) => run_action(app, &id).map(drop),
             Event::Tab(index) => switch_tab(app, index).map(drop),
-            Event::Confirm => confirm_by(app, true).map(drop),
+            Event::Confirm => answer(app, app.dialog.as_ref().and_then(OpenDialog::third).map(|t| t.ok), true).map(drop),
+            Event::Third => answer(app, app.dialog.as_ref().and_then(OpenDialog::third).map(|t| t.value), true).map(drop),
             Event::Cancel => cancel(app).map(drop),
         };
         if let Err(e) = result {

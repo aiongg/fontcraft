@@ -44,11 +44,11 @@ for the next frame and replies when the frame arrives.
 | `ui.pointer` | `{events: [{kind, x, y, space?, mods?}]}` | drives the active tool like the mouse; see below |
 | `ui.key` | `{key, shift?, alt?, cmd?, ctrl?, action?}` | a key as the keyboard gives it; see below |
 | `ui.text` | `{text}` | types into the focused text field at the next frame (`{field: true}`); with none focused, each character is a `ui.key` tap (`{keys, handled}`) |
-| `ui.dialog.inspect` | | the open dialog: `{open, dialog, title, command, mode: "preview" \| "runOnOk", message, tabs, fields: [{id, label, kind, value, focused, min?, max?, choices?, labels?, default, doc}], editing, params, error, actions, buttons, captions: {ok, cancel}, canChooseFolder}`; `{open: false}` when none is. `tabs` (`[{id, tab, label, active}]`) and `actions` (`[{id, label, command}]`) are `null` when the dialog has none |
+| `ui.dialog.inspect` | | the open dialog: `{open, dialog, title, command, mode: "preview" \| "runOnOk", message, tabs, fields: [{id, label, kind, value, focused, min?, max?, choices?, labels?, default, doc}], editing, params, error, actions, buttons, captions: {ok, cancel}, canChooseFolder}`; a dialog with a third button lists its id in `buttons` (`["ok", "replace", "cancel"]`) and its caption in `captions`; `{open: false}` when none is. `tabs` (`[{id, tab, label, active}]`) and `actions` (`[{id, label, command}]`) are `null` when the dialog has none |
 | `ui.dialog.set` | `{field, value}` | gives a field of the open dialog a value and previews it; a number field also takes text. The `ui.dialog.inspect` reply |
 | `ui.dialog.confirm` | | OK: the preview becomes one undo step, `{confirmed, changed, command, params}`; in a `runOnOk` dialog the command runs once, `{confirmed, command, params, result}`, and a failure keeps the dialog open |
 | `ui.dialog.cancel` | | Cancel: the font as it was when the dialog opened; `{cancelled}` |
-| `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, a tab by its dialog id (shows that tab), an action by its id (runs it: `{action, command, text, result}`; `text` also goes to the system clipboard), or a field by its key (a checkbox or lock toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`; a folder field opens the folder chooser, or without one takes the keyboard) |
+| `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, a third button by its id (`replace`, `decompose`), a tab by its dialog id (shows that tab), an action by its id (runs it: `{action, command, text, result}`; `text` also goes to the system clipboard), or a field by its key (a checkbox or lock toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`; a folder field opens the folder chooser, or without one takes the keyboard) |
 | `control.methods` | | this table |
 
 `ui.inspect` also names the active pointer tool (`tool`), the running interaction
@@ -105,11 +105,13 @@ Field kinds and how to set them with `ui.dialog.set`:
 |---|---|
 | `number`, `integer` | a number, or its text |
 | `bool`, `lock` | `true` or `false` (a `lock` is a lock button, closed while `true`) |
-| `text` | a string of at most `max` characters; `""` is allowed |
+| `text` | a string of at most `max` characters; `""` is allowed. `lines` above 1 is a box in which Return starts a line and Cmd+Return is OK |
 | `choice` | one word of `choices`; `labels` is what the menu shows |
 | `multi` | a list of words of `choices` (any order; kept in the list's order) |
 | `folder` | a folder path; `""` is none, and the parameter is left out |
 | `order` | every row index of `labels` once, the first row on top (`dialog.shapeOrder`: the first is the bottom shape) |
+| `list` | with `select: true`, the selected rows of `rows` (any order; kept in the list's order). Without it the list only shows `rows` and cannot be set |
+| `rules` | a rule tree as `fontView.addSmartFilter` takes it, `{all \| any \| none: [rule or group]}` |
 
 A field with a `group` sits under that heading in the window; the heading does not change the
 parameters.
