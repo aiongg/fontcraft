@@ -13,6 +13,14 @@
 //! before a command that is not a query and restores it on any error or internal failure. A
 //! command that calls other commands and ignores an inner error keeps the inner successes: the
 //! outer command decides what its transaction is.
+//!
+//! A locked glyph refuses every edit of its drawing (decision 0004 item 7): [`Session::edit`]
+//! rejects a change to the layers or metrics keys of a glyph that was locked, whichever command
+//! makes it, and [`check_unlocked`] lets a command refuse early with the same message.
+//!
+//! A drag or a dialog preview is one *interaction* ([`Session::begin`], [`Session::preview`],
+//! [`Session::commit`], [`Session::cancel`]): previews run on the snapshot taken at the start
+//! without history, and the commit makes one undo step and one journal entry.
 #![forbid(unsafe_code)]
 
 pub mod cmd;
@@ -29,7 +37,7 @@ pub use fontcraft_compile as compile;
 pub use fontcraft_container as container;
 pub use fontcraft_format as format;
 pub use fontcraft_model as model;
-use fontcraft_model::Font;
+use fontcraft_model::{Font, Glyph};
 use serde_json::{Value, json};
 
 #[derive(Debug, thiserror::Error)]
@@ -40,6 +48,10 @@ pub enum EngineError {
     Disabled(String, String),
     #[error("{command}: {message}")]
     BadParams { command: String, message: String },
+    #[error("glyph `{0}` is locked: unlock it to change it")]
+    Locked(String),
+    #[error("{0}")]
+    Interaction(String),
     #[error("no document open")]
     NoDocument,
     #[error(transparent)]
@@ -80,6 +92,38 @@ pub(crate) fn push_undo(doc: &mut DocState, label: Arc<str>, before: Arc<Font>) 
         doc.history.undo.drain(..extra);
     }
     doc.history.redo.clear();
+}
+
+/// Refuses a locked glyph (decision 0004 item 7). Every editing command goes through it, by way
+/// of [`params::Targets::edit_layer`] or directly; [`Session::edit`] enforces the same rule on
+/// whatever a command changes.
+pub fn check_unlocked(glyph: &Glyph) -> Result<()> {
+    if glyph.info.locked { Err(EngineError::Locked(glyph.name.clone())) } else { Ok(()) }
+}
+
+/// The first glyph that was locked in `before` and whose drawing (layers or metrics keys)
+/// differs in `next`. Unlocking, renaming, re-encoding or removing a locked glyph is allowed;
+/// kerning is font data. Only glyphs `next` no longer shares with `before` are looked into.
+fn locked_glyph_changed(next: &Font, before: &Font) -> Option<String> {
+    let (new, old) = (next.glyphs.as_arcs(), before.glyphs.as_arcs());
+    if std::ptr::eq(new, old) {
+        return None;
+    }
+    for (i, g) in new.iter().enumerate() {
+        let was = match old.get(i) {
+            Some(b) if Arc::ptr_eq(b, g) => continue,
+            Some(b) if b.name == g.name => b,
+            _ => match before.glyph(&g.name) {
+                Some(b) if Arc::ptr_eq(b, g) => continue,
+                Some(b) => b,
+                None => continue,
+            },
+        };
+        if was.info.locked && (was.layers != g.layers || was.info.metrics_keys != g.info.metrics_keys) {
+            return Some(was.name.clone());
+        }
+    }
+    None
 }
 
 /// One undo step: the font as it was before the change.
@@ -134,6 +178,18 @@ pub struct Session {
     next_id: u64,
     /// While `command.batch` runs: the font of each document it changed, as it was before.
     pub(crate) batch: Option<Batch>,
+    interaction: Option<Interaction>,
+}
+
+/// A running interaction (see [`Session::begin`]).
+struct Interaction {
+    label: Arc<str>,
+    /// The document it edits.
+    doc: u64,
+    /// The font when it began; every preview starts from it.
+    before: Arc<Font>,
+    /// The last preview that succeeded: what the commit journals.
+    last: Option<(String, Value)>,
 }
 
 /// The state of a running `command.batch` (see [`Session::edit`]).
@@ -236,6 +292,9 @@ impl Session {
         if next.same_as(&doc.font) {
             return Ok(out);
         }
+        if let Some(name) = locked_glyph_changed(&next, &doc.font) {
+            return Err(EngineError::Locked(name));
+        }
         next.check_changed(&doc.font)?;
         let before = std::mem::replace(&mut doc.font, Arc::new(next));
         doc.revision += 1;
@@ -272,8 +331,18 @@ impl Session {
         Ok(())
     }
 
-    /// Runs the command `id`. See the crate docs for what every command guarantees.
+    /// Runs the command `id`. See the crate docs for what every command guarantees. While an
+    /// interaction runs, only queries run; editing commands wait for its commit or cancel.
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value> {
+        if self.depth == 0 && self.interaction.is_some() && find_command(id).is_some_and(|c| c.journal) {
+            return Err(EngineError::Disabled(id.to_string(), "an interaction is running: commit or cancel it first".into()));
+        }
+        self.run_command(id, params, true, |_| Ok(()))
+    }
+
+    /// [`Session::execute`] without the interaction rule. `record`: journal the command when it
+    /// succeeds. `accept` judges the outcome before it is kept; its error rolls the command back.
+    fn run_command(&mut self, id: &str, params: &Value, record: bool, accept: impl Fn(&Session) -> Result<()>) -> Result<Value> {
         let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
         if let Err(why) = (spec.enabled)(self) {
             return Err(EngineError::Disabled(id.to_string(), why));
@@ -295,12 +364,12 @@ impl Session {
         let outcome = guard::catch_panic(|| (spec.run)(self, params));
         self.depth = 0;
         let result = match outcome {
-            Ok(r) => r,
+            Ok(r) => r.and_then(|v| accept(self).map(|()| v)),
             Err(panic) => Err(EngineError::Internal(format!("`{id}` failed unexpectedly: {panic}"))),
         };
         match result {
             Ok(value) => {
-                if spec.journal {
+                if spec.journal && record {
                     self.journal.push((id.to_string(), params.clone()));
                     if self.journal.len() > JOURNAL_LIMIT {
                         let extra = self.journal.len() - JOURNAL_LIMIT;
@@ -314,6 +383,115 @@ impl Session {
                     (self.docs, self.active, self.untitled) = (docs, active, untitled);
                 }
                 Err(e)
+            }
+        }
+    }
+
+    /// Starts an interaction on the active document: a drag, or a dialog with a live preview.
+    /// The font as it is now is the snapshot every [`Session::preview`] starts from. One
+    /// interaction runs at a time, outside commands and batches.
+    pub fn begin(&mut self, label: &str) -> Result<()> {
+        if self.interaction.is_some() {
+            return Err(EngineError::Interaction("an interaction is already running: commit or cancel it first".into()));
+        }
+        if self.depth > 0 || self.batch.is_some() {
+            return Err(EngineError::Interaction("an interaction cannot begin inside a command".into()));
+        }
+        let doc = self.doc()?;
+        self.interaction = Some(Interaction { label: label.into(), doc: doc.id, before: doc.font.clone(), last: None });
+        Ok(())
+    }
+
+    /// The label of the running interaction, if one runs.
+    pub fn interaction(&self) -> Option<&str> {
+        self.interaction.as_ref().map(|i| i.label.as_ref())
+    }
+
+    /// Runs an editing command on the interaction's snapshot, replacing the previous preview,
+    /// without history or journal. A preview that fails changes nothing: the previous one stays
+    /// shown. Undo, redo and commands that open, close or switch documents cannot be previewed.
+    pub fn preview(&mut self, id: &str, params: &Value) -> Result<Value> {
+        let (doc_id, before) = match &self.interaction {
+            Some(i) => (i.doc, i.before.clone()),
+            None => return Err(EngineError::Interaction("no interaction is running: begin one first".into())),
+        };
+        let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        if !spec.journal || matches!(id, "edit.undo" | "edit.redo") {
+            return Err(EngineError::Interaction(format!("`{id}` cannot be previewed: only editing commands can")));
+        }
+        let i = self.interaction_doc(doc_id)?;
+        let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
+        let (shown, shown_revision) = (std::mem::replace(&mut doc.font, before), doc.revision);
+        let count = self.docs.len();
+        // The batch state keeps `edit` from recording undo steps; it is discarded afterwards.
+        self.batch = Some(Batch { label: "".into(), before: Vec::new() });
+        let result = self.run_command(id, params, false, |s| {
+            if s.docs.len() == count && s.active == Some(i) {
+                Ok(())
+            } else {
+                Err(EngineError::Interaction(format!("`{id}` cannot be previewed: it opens, closes or switches documents")))
+            }
+        });
+        self.batch = None;
+        let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
+        match result {
+            Ok(value) => {
+                doc.revision = if Arc::ptr_eq(&doc.font, &shown) { shown_revision } else { shown_revision + 1 };
+                if let Some(it) = &mut self.interaction {
+                    it.last = Some((id.to_string(), params.clone()));
+                }
+                Ok(value)
+            }
+            Err(e) => {
+                (doc.font, doc.revision) = (shown, shown_revision);
+                Err(e)
+            }
+        }
+    }
+
+    /// Ends the interaction, keeping the last preview as one undo step labelled with the
+    /// interaction's label, and journals the last previewed command. Returns whether the font
+    /// changed (an interaction that changed nothing leaves no undo step and no journal entry).
+    pub fn commit(&mut self) -> Result<bool> {
+        let it = self.interaction.take().ok_or_else(|| EngineError::Interaction("no interaction is running".into()))?;
+        let Some(i) = self.position_of(it.doc) else { return Ok(false) };
+        let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
+        if Arc::ptr_eq(&doc.font, &it.before) || doc.font.same_as(&it.before) {
+            doc.font = it.before;
+            return Ok(false);
+        }
+        push_undo(doc, it.label, it.before);
+        if let Some(entry) = it.last {
+            self.journal.push(entry);
+            if self.journal.len() > JOURNAL_LIMIT {
+                let extra = self.journal.len() - JOURNAL_LIMIT;
+                self.journal.drain(..extra);
+            }
+        }
+        Ok(true)
+    }
+
+    /// Ends the interaction and puts the snapshot back: the document's font is the very font it
+    /// was when the interaction began.
+    pub fn cancel(&mut self) -> Result<()> {
+        let it = self.interaction.take().ok_or_else(|| EngineError::Interaction("no interaction is running".into()))?;
+        if let Some(doc) = self.position_of(it.doc).and_then(|i| self.docs.get_mut(i))
+            && !Arc::ptr_eq(&doc.font, &it.before)
+        {
+            doc.font = it.before;
+            doc.revision += 1;
+        }
+        Ok(())
+    }
+
+    /// The position of the interaction's document; it must still be the active one.
+    fn interaction_doc(&mut self, id: u64) -> Result<usize> {
+        match self.position_of(id) {
+            Some(i) if self.active == Some(i) => Ok(i),
+            Some(_) => Err(EngineError::Interaction("the interaction's document is no longer the active one".into())),
+            None => {
+                self.interaction = None;
+                Err(EngineError::Interaction("the interaction's document was closed".into()))
             }
         }
     }

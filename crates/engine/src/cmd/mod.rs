@@ -14,6 +14,7 @@ mod file;
 mod font;
 mod glyph;
 mod inspect;
+mod layer;
 mod meta;
 mod path;
 mod session;
@@ -22,6 +23,7 @@ mod spacing;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::params::TargetKind;
 use crate::{Result, Session};
 
 pub type Run = fn(&mut Session, &Value) -> Result<Value>;
@@ -42,6 +44,15 @@ pub struct CommandSpec {
     /// Recorded in the journal and run inside a rollback snapshot. False only for queries:
     /// commands that read and change nothing, in the session or on disk.
     pub journal: bool,
+    /// The target parameters the shell fills from its selection; empty for a command that
+    /// takes none. The shell greys out the menu item when the selection has none of them.
+    pub targets: &'static [TargetKind],
+    /// Where the shortcut works (`editView`, `textMode`, `fontView`, `dialog`, `tool:<id>`,
+    /// `panel:<id>`); `None` is everywhere. Matches the inventory row's `when`.
+    pub when: Option<&'static str>,
+    /// The context menus that show the command (`canvas`, `canvas.node`…). Matches the
+    /// inventory row's `context`.
+    pub context: &'static [&'static str],
 }
 
 /// What `commands.list` and the control channel return for a command.
@@ -53,12 +64,36 @@ pub struct CommandInfo {
     pub shortcut: Option<&'static str>,
     pub params: &'static str,
     pub query: bool,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub targets: Vec<TargetKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub when: Option<&'static str>,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub context: Vec<&'static str>,
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
 }
 
 impl CommandSpec {
+    /// Sets [`CommandSpec::targets`].
+    pub const fn targets(mut self, targets: &'static [TargetKind]) -> Self {
+        self.targets = targets;
+        self
+    }
+
+    /// Sets [`CommandSpec::when`].
+    pub const fn when(mut self, when: &'static str) -> Self {
+        self.when = Some(when);
+        self
+    }
+
+    /// Sets [`CommandSpec::context`].
+    pub const fn context(mut self, context: &'static [&'static str]) -> Self {
+        self.context = context;
+        self
+    }
+
     pub fn info(&self, s: &Session) -> CommandInfo {
         let e = (self.enabled)(s);
         CommandInfo {
@@ -68,6 +103,9 @@ impl CommandSpec {
             shortcut: self.shortcut,
             params: self.params,
             query: !self.journal,
+            targets: self.targets.to_vec(),
+            when: self.when,
+            context: self.context.to_vec(),
             enabled: e.is_ok(),
             disabled_reason: e.err(),
         }
@@ -93,10 +131,10 @@ pub fn can_redo(s: &Session) -> std::result::Result<(), String> {
 /// only read.
 macro_rules! cmd {
     ($id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: true }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: true, targets: &[], when: None, context: &[] }
     };
     (query $id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: false }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: false, targets: &[], when: None, context: &[] }
     };
 }
 pub(crate) use cmd;
@@ -116,6 +154,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(meta::specs());
         v.extend(session::specs());
         v.extend(inspect::specs());
+        v.extend(layer::specs());
         v
     })
 }

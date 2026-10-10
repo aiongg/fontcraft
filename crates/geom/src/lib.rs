@@ -1,16 +1,19 @@
 //! FontCraft geometry (L0).
 //!
 //! A thin layer over [`kurbo`]: the rest of the workspace names geometry types through this crate
-//! so the curve library stays one decision in one place. Font-specific geometry (cubic → quadratic
-//! conversion, extremes, rounding to the grid) lands here as the milestones need it.
+//! so the curve library stays one decision in one place. Font-specific geometry lives here too:
+//! cubic → quadratic conversion, and in [`segment`] the segments of a node list with their
+//! addresses, nearest points, splits, extremes, inflections, bounds and grid rounding.
 #![forbid(unsafe_code)]
 
+pub mod segment;
 pub mod variation;
 
 pub use kurbo::{
-    Affine, BezPath, CubicBez, Line, ParamCurve, ParamCurveNearest, PathEl, Point, QuadBez, QuadSpline, Rect, Shape, Vec2,
+    Affine, BezPath, CubicBez, Line, ParamCurve, ParamCurveExtrema, ParamCurveNearest, PathEl, Point, QuadBez, QuadSpline, Rect, Shape, Vec2,
     cubics_to_quadratic_splines, flatten,
 };
+pub use segment::{Nearest, NodePoint, NodeType, Piece, Segment, bounds, grid_step, round_point, round_to_grid, segment_ending_at, segments};
 
 /// Default tolerance, in font units, when a cubic curve is approximated by quadratic ones for
 /// TrueType outlines. One unit matches what the reference compilers use for a 1000-unit em.

@@ -4,7 +4,7 @@ use fontcraft_model::{Layer, Node, NodeKind, Path, Shape};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::params::{Params, kind};
+use crate::params::{Params, TargetKind, Targets, kind};
 
 /// Most nodes one path may be given (a guard against hostile input).
 const MAX_NODES: usize = 100_000;
@@ -15,10 +15,11 @@ pub fn specs() -> Vec<CommandSpec> {
         "Add Path",
         [],
         None,
-        "{glyph: name, layer?: master id (default: the first master), closed?: bool = true, nodes: [{x, y, type?: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\" (default line), smooth?: bool}]} append a path, nodes in path direction: two offcurve nodes before each curve node, one or more before a qcurve node; coordinates within ±1,000,000, at most 100,000 nodes → {glyph, layer, shape: index, nodes: count}",
+        "{glyph: name, layer?: layer id (default: the first master's layer; a master's layer is added when the glyph has none), side?: \"foreground\" | \"background\", closed?: bool = true, nodes: [{x, y, type?: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\" (default line), smooth?: bool}]} append a path, nodes in path direction: two offcurve nodes before each curve node, one or more before a qcurve node; coordinates within ±1,000,000, at most 100,000 nodes. A locked glyph refuses it → {glyph, layer, shape: index, nodes: count, selection: {glyph, layer, shapes: [index]}}",
         has_doc,
         add_path
-    )]
+    )
+    .targets(&[TargetKind::Layer])]
 }
 
 fn node(p: &Params, v: &Value) -> Result<Node> {
@@ -53,18 +54,26 @@ fn add_path(s: &mut Session, p: &Value) -> Result<Value> {
     let path = Path::new(p.bool_or("closed", true)?, list.iter().map(|v| node(&p, v)).collect::<Result<Vec<_>>>()?);
     path.to_bez().map_err(|why| p.bad(why))?;
     let count = path.nodes.len();
-    let layer = match p.opt_str("layer")? {
-        Some(id) => s.font()?.master(id)?.id.clone(),
-        None => s.font()?.default_master()?.id.clone(),
-    };
+    let mut t = Targets::parse(&p)?;
+    if t.has_lists() {
+        return Err(p.bad("takes no target lists: it adds a path to the layer"));
+    }
+    let layer = t.layer_id(s.font()?)?;
+    t.layer = Some(layer.clone());
     let index = s.edit("Add Path", |font| {
+        let is_master = font.master(&layer).is_ok();
         let mut g = font.glyph_mut(&glyph)?;
-        if g.layer(&layer).is_none() {
+        if is_master && !g.layers.iter().any(|l| l.id == layer) {
+            crate::check_unlocked(&g)?;
             g.layers.push(Layer::new(&layer, 600.0));
         }
-        let Some(l) = g.layer_mut(&layer) else { return Err(fontcraft_model::ModelError::NoSuchMaster(layer.clone()).into()) };
-        l.shapes.push(Shape::Path(path));
-        Ok(l.shapes.len() - 1)
+        drop(g);
+        t.edit_layer(font, |l| {
+            let shapes = l.parts_mut(t.side).shapes;
+            shapes.push(Shape::Path(path));
+            Ok(shapes.len() - 1)
+        })
     })?;
-    Ok(json!({ "glyph": glyph, "layer": layer, "shape": index, "nodes": count }))
+    t.shapes = vec![index];
+    Ok(json!({ "glyph": glyph, "layer": layer, "shape": index, "nodes": count, "selection": t.to_json() }))
 }

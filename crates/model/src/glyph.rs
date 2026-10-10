@@ -401,7 +401,7 @@ impl Path {
 
     /// The contour as Bézier segments, or what is wrong with its node list.
     pub fn to_bez(&self) -> Result<BezPath, String> {
-        self.segments(false)
+        self.bez_segments(false)
     }
 
     /// [`Path::to_bez`] in the form compilers read: a closed contour that starts with a line
@@ -410,10 +410,10 @@ impl Path {
     /// from it then keep a closing point that sits on the start, as the reference compilers'
     /// do.
     pub fn to_contour(&self) -> Result<BezPath, String> {
-        self.segments(true)
+        self.bez_segments(true)
     }
 
-    fn segments(&self, closing_line: bool) -> Result<BezPath, String> {
+    fn bez_segments(&self, closing_line: bool) -> Result<BezPath, String> {
         let mut out = BezPath::new();
         if self.nodes.is_empty() {
             return Ok(out);

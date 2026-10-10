@@ -12,6 +12,7 @@
 //! into; `docs/plans/M1.md` says in which order.
 #![forbid(unsafe_code)]
 
+mod address;
 pub mod axes;
 mod extra;
 mod features;
@@ -26,6 +27,7 @@ mod resolve;
 mod shape_info;
 pub mod smart;
 
+pub use address::{LayerParts, LayerPartsMut, LayerSide};
 pub use extra::{Extra, ExtraEntry, Family};
 pub use features::{Features, Group, Snippet};
 pub use font::{

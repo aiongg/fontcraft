@@ -111,11 +111,17 @@ are in decision 0004 › How commands name their targets. In short:
 - `points: [[shape, node]]` are indices in the layer's shape list and the path's node list, off-curve
   points included. A segment is named by the on-curve node that ends it. `shapes`, `anchors` (by
   name), `guides` (`{scope, index}`) and `annotations` complete the target object.
+- `segment: [shape, node]` is a list of one. Each list holds at most 100,000 entries; repeated
+  entries count once. Target lists need `glyph`; with `glyphs` they are an error.
 - An address that does not resolve is an error and changes nothing. Commands that change a
   layer's structure return the new `selection`. Created or moved points are rounded to the grid.
 - `layer.inspect` returns a layer with every address, so an agent can read before it edits.
-- A glyph lock (`glyph.toggleLocked`) refuses every command that changes the glyph, with a
-  message naming it.
+- A glyph lock (`glyph.toggleLocked`) refuses every command that changes the glyph's drawing
+  (its layers, with their outlines, anchors, guides and width, and its metrics keys), with a
+  message naming it. Unlocking, renaming, re-encoding and removing the glyph stay allowed.
+- A drag or a dialog preview is one interaction: begin, any number of previews, then commit or
+  cancel. While it runs, other editing commands are refused until it ends; queries still run. A
+  preview that fails leaves the previous preview in place.
 
 ## 5. Drawing tools
 
@@ -354,7 +360,8 @@ Definitions in `extremes.definitions`.
 | Glyph lock | `glyph.toggleLocked` ("Locked" in the glyph context menu) | Stored on the glyph: **nothing** may modify it, including filters, plug-ins and scripts. Lock icon top-right in Edit View and Font View. |
 
 Engine consequence: every engine command must check the glyph lock and refuse; the path lock is
-enforced only by the interactive tools.
+enforced only by the interactive tools. The engine checks the lock on every edit, whichever
+command makes it, so a command that forgets the check still cannot change a locked glyph.
 
 ## 17. Strokes
 
