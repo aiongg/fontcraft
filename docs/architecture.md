@@ -20,7 +20,7 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
               │
    L4   tools: pointer and key events → commands (begin / preview / commit)        (4 tools today)
    L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (8 of 9 today)
-   L2   pathops · interp · spacing · components · features · hinting · audit · glyphquery · plugins   (pathops, audit today)
+   L2   pathops · interp · spacing · components · features · hinting · audit · glyphquery · plugins   (pathops, audit, glyphquery today)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
    L0   geom (kurbo)  ·  standalone crates: plist, cff, ttinstr, container, glyphdata  (all but ttinstr today)
 ```
@@ -49,7 +49,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L2 | `components` | M6 | automatic alignment, anchor propagation, smart, corner, cap and segment components |
 | L2 | `features` | M8 | feature-code preprocessing (tokens), automatic features, compiling (on fea-rs), kern and mark writers |
 | L2 | `hinting` | M10 | PostScript and TrueType hinting models and autohinters |
-| L2 | `glyphquery` | M4.5 | the glyph predicate language: smart-filter rule trees, the Custom rule, global-guide filters and, in M8, the feature-code glyph tokens |
+| L2 | `glyphquery` | today (M4.5) | which glyphs Font View shows: the search matcher, smart-filter rule trees compiled to the glyph predicate language (the Custom rule, global-guide filters and, in M8, the feature-code glyph tokens), list filters and folders, sidebar entries (categories, scripts and languages, `Groups*.plist` entries) and how a selection of them combines, and the glyphs an entry expects that the font lacks. Rule trees, predicates and patterns are read within depth, length and regex size limits |
 | L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them |
 | L2 | `plugins` | M13 | sandboxed WebAssembly plug-ins (same manifest as the sibling apps) |
 | L3 | `format` | today | the native `.fontcraft` format, atomic writes |

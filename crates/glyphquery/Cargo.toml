@@ -1,0 +1,19 @@
+[package]
+name = "fontcraft-glyphquery"
+description = "FontCraft glyph queries: search, smart-filter rules, glyph predicates, sidebar entries and filters (L2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-model.workspace = true
+fontcraft-glyphdata.workspace = true
+fontcraft-plist.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true

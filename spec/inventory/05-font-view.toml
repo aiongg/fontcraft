@@ -295,6 +295,10 @@ milestone = "M4"
 summary = "For a sidebar entry that knows its full glyph set (a subcategory, language, script or list filter), returns the glyph names it expects that the font does not contain. In the UI this is the list opened by Ctrl-click or right-click on the entry."
 ref = "Font View › Adding New Glyphs › Adding From the Sidebar"
 status = "handbook"
+notes = "List filters and Groups*.plist `list` entries know their set now; scripts, languages and categories know theirs once language data is given to the evaluator. An entry without a known set is refused with a message."
+guesses = [
+  "A Categories entry expects the glyphs that the languages of the listed scripts need and that the glyph data puts in that category, subcategory or case group; without language data it has no expected set. Settled by observing the badge of a category in a font with one language list shown.",
+]
 
 [[command]]
 id = "fontView.generateMissingGlyphs"
@@ -308,6 +312,9 @@ milestone = "M4"
 summary = "Adds the glyphs chosen in the missing-glyphs list of a sidebar entry to the font (the Generate button). Without `glyphs`, adds every missing glyph of the entry, matching Cmd+A followed by Generate."
 ref = "Font View › Adding New Glyphs › Adding From the Sidebar"
 status = "handbook"
+guesses = [
+  "Generated glyphs are empty, 600 units wide (as New Glyph), take the code point the entry gives or the glyph data gives their name, and are placed by the default sort key; all of them are one undo step. Settled by observing Generate on a list filter.",
+]
 
 [[command]]
 id = "edit.pasteSpecial"
@@ -736,6 +743,7 @@ milestone = "M4"
 summary = "Sets the search query that narrows the visible glyphs. By default the text is matched against glyph name, Unicode value, the literal character and the glyph note; the magnifier menu restricts the fields and toggles Match Case and Regex. An empty query removes the restriction."
 ref = "Font View › Filtering Font View › Search Field"
 status = "handbook"
+notes = "The matching is crates/glyphquery (Matcher), reachable headless through fontView.queryGlyphs `search`; the search field and this command, which hold UI state, come with the sidebar and search UI (M4.9)."
 
 [[command]]
 id = "fontView.selectSidebarEntries"
@@ -756,7 +764,7 @@ label = "Query Glyphs"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{entries?: [path], rules?: ruleTree, search?: {query, fields?, matchCase?, regex?}}"
+params = "{entries?: [path], rules?: ruleTree, search?: {query, fields?, matchCase?, regex?} | string, master?: id, sidebar?: bool}"
 area = "font-view"
 milestone = "M4"
 summary = "Our headless filter evaluation: returns the glyph names matching the given sidebar entries, an ad-hoc smart-filter rule tree and/or a search query, without touching the window state."
@@ -765,6 +773,7 @@ status = "inferred"
 guesses = [
   "Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text.",
 ]
+notes = "Paths name the section first (all, categories/Letter/Uppercase, languages/latin/<language>, filters/<folder>/<filter>), as text or as a list of names. `master` picks the layer the layer rules read (default the first master). `sidebar: true` adds every entry with its count and, for entries that know their full set, how many of the expected glyphs the font has. The evaluator is crates/glyphquery. Language entries and Groups*.plist entries are not given to it by the engine yet (no language data or groups files are loaded)."
 
 [[command]]
 id = "fontView.setVisibleScripts"
@@ -786,13 +795,16 @@ label = "Add Smart Filter"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{name: string, rules: ruleTree, folder?: path}"
+params = "{name: string, rules?: ruleTree, folder?: path}"
 area = "font-view"
 milestone = "M4"
 summary = "Creates a rule-based filter in the Filters section and opens the Smart Filter editor with a single empty rule. Chosen from the actions menu in the font window's bottom-left corner."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
 notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+guesses = [
+  "Headless, a filter added without rules gets one rule every glyph matches (Glyph Name contains an empty text), standing for the editor's single empty rule. Settled by observing what an untouched new smart filter shows.",
+]
 
 [[command]]
 id = "fontView.addListFilter"
@@ -1729,6 +1741,9 @@ milestone = "M4"
 summary = "A sidebar entry with a known full set shows a grey badge with glyphs present and glyphs expected when some are missing, a checkmark when all are present, and a plain count when no expected total is known."
 ref = "Font View › Filtering Font View › Categories; Adding From the Sidebar"
 status = "handbook"
+guesses = [
+  "The badge counts expected glyphs present by name or by code point (a glyph with the character counts even under another name). Settled by observing a badge for a font that names a glyph differently.",
+]
 
 # ── Copy and paste of glyphs ──
 
@@ -2547,6 +2562,9 @@ milestone = "M4"
 summary = "A search term matches a glyph by name (thorn), by hexadecimal code point (00FE), by the character itself, or by text in its note. The magnifier menu can restrict matching to name, Unicode value or note alone."
 ref = "Font View › Filtering Font View › Search Field"
 status = "handbook"
+guesses = [
+  "A plain term matches names and notes by substring; it matches a code point when it is four to six hexadecimal digits (optionally after U+ or 0x) equal to it, and a character when it is that one character. Shorter hexadecimal terms such as FE only match names, so a term like a does not also find every code point containing A. Settled by observing a search for 00FE and for FE.",
+]
 
 [[behavior]]
 id = "fontView.search.matchCase"
@@ -2584,6 +2602,9 @@ milestone = "M4"
 summary = "Selecting a category shows only glyphs of that category; expanding it reveals subcategories, each selectable on its own and labelled with its glyph count."
 ref = "Font View › Filtering Font View › Categories"
 status = "handbook"
+guesses = [
+  "A category lists case groups (Uppercase, Lowercase, Smallcaps, Minor: the glyphs with that case, or with the subcategory older files store under the same name) and then its subcategories, each only when the font has such glyphs or the shown languages expect some. Settled by observing the expanded Letter entry.",
+]
 
 [[behavior]]
 id = "fontView.sidebar.multiSelectSameSection"
@@ -2633,6 +2654,9 @@ milestone = "M4"
 summary = "Only a short default list of scripts is shown. A script is added to the sidebar automatically as soon as the font contains a glyph of that script."
 ref = "Font View › Filtering Font View › Languages"
 status = "handbook"
+guesses = [
+  "The default short list is latin, greek and cyrillic. Settled by observing the Languages section of a new user.",
+]
 
 [[behavior]]
 id = "fontView.sidebar.customGroups"
@@ -2660,7 +2684,7 @@ summary = "Rule Glyph Name tests the glyph's nice name as text. The comparison o
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
 guesses = [
-  "Text rules (Glyph Name, Tags, Script, Category & Subcategory) offer is, is not, contains, does not contain, begins with, ends with and matches (a regular expression); number rules offer =, ≠, <, ≤, >, ≥; yes-or-no rules offer is and is not. The reference's stored predicates use ==, !=, <, >, CONTAINS, IN, BEGINSWITH and ENDSWITH (tutorial \"Custom sidebar entries in Font View\"), which this set covers. Settled by observing the rule editor (05 question 10).",
+  "Text rules (Glyph Name, Tags, Script) offer is, is not, contains, does not contain, begins with, ends with and matches (a regular expression); number rules offer =, ≠, <, ≤, >, ≥; yes-or-no and choice rules (Case, Category & Subcategory, the colour labels, Custom) offer is and is not. The reference's stored predicates use ==, !=, <, >, CONTAINS, IN, BEGINSWITH and ENDSWITH (tutorial \"Custom sidebar entries in Font View\"), which this set covers. Settled by observing the rule editor (05 question 10).",
 ]
 
 [[behavior]]
@@ -2702,6 +2726,9 @@ milestone = "M4"
 summary = "Rule Category & Subcategory tests the glyph's category and subcategory."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+guesses = [
+  "The rule is a choice (is, is not) of a category or a category and subcategory, written Letter/Uppercase; the case groups Uppercase, Lowercase, Smallcaps and Minor also match glyphs by case, as data that stores case instead of those subcategories does. Settled by observing the rule's value menu.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.case"
@@ -2857,6 +2884,9 @@ milestone = "M4"
 summary = "Rule Color Label compares the glyph colour label with one of the twelve colours, or with Not Set to find unlabelled glyphs."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+guesses = [
+  "A glyph whose label is an RGBA colour, not one of the twelve, counts as set but equals none of the twelve. Settled by observing a file with an RGBA label.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.layerColorLabel"
@@ -2881,6 +2911,10 @@ milestone = "M8"
 summary = "Rule Custom holds a free-form glyph predicate written in the same expression language as glyph predicate tokens in feature code."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "Evaluated in M4 by crates/glyphquery, the same evaluator that smart-filter rules compile to. Attributes: name, productionName, category, subCategory, script, note, case, direction, tags, colorIndex, export, hasUnicode, hasCustomGlyphInfo, countOfUnicodes, countOfLayers, countOfPaths and countOfComponents (first master), and layer.colorIndex, layer.hasAnnotations, layer.countOfPaths, layer.countOfComponents, layer.countOfAnchors, layer.width, layer.anchors.<name>.x/.y (the shown master). isAligned, hasHints, isColorGlyph and layer bounds are refused as not supported yet. Nesting is limited to 64 levels and the text to 16 KB."
+guesses = [
+  "The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.",
+]
 
 [[behavior]]
 id = "smartFilter.groups"
@@ -2926,6 +2960,9 @@ milestone = "M4"
 summary = "While a list filter is selected, glyphs appear in the order of the list instead of glyph order, and sort names are ignored."
 ref = "Font View › Filtering Font View › List Filters; Sort Name"
 status = "handbook"
+guesses = [
+  "When several filters are selected and one is a list filter, the result follows the first selected list filter; a folder shows glyph order even when it holds list filters. Settled by observing a list filter combined with a smart filter and with a folder.",
+]
 
 [[behavior]]
 id = "listFilter.defaultFromSelection"

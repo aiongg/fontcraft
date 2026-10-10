@@ -20,6 +20,7 @@ mod file;
 pub mod filter;
 pub mod fit_curve;
 mod font;
+mod font_view;
 mod glyph;
 mod glyph_info;
 mod glyph_set;
@@ -190,6 +191,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(audit::specs());
         v.extend(settings::specs());
         v.extend(glyph_info::specs());
+        v.extend(font_view::specs());
         v
     })
 }

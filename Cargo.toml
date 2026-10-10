@@ -33,6 +33,7 @@ fontcraft-testkit = { path = "crates/testkit" }
 fontcraft-pathops = { path = "crates/pathops" }
 fontcraft-render = { path = "crates/render" }
 fontcraft-glyphdata = { path = "crates/glyphdata" }
+fontcraft-glyphquery = { path = "crates/glyphquery" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }
@@ -45,6 +46,9 @@ base64 = "0.22"
 linesweeper = "0.5"
 # Unicode compatibility decomposition (NFKD) for PostScript strings in CFF (MIT OR Apache-2.0).
 unicode-normalization = "0.1"
+# Regular expressions for glyph search and smart filters (MIT OR Apache-2.0), with size limits.
+# Without default features: no extra performance tables. Builds for wasm32.
+regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 
 # fonts: the fontations crates (MIT OR Apache-2.0). See docs/decisions/0002-compile-pipeline.md.
 write-fonts = "0.54"
