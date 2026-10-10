@@ -1,7 +1,7 @@
 //! Engine foundations for editing (M3.1): target objects, interactions (begin, preview, commit,
 //! cancel), `layer.inspect` and the glyph lock.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 
@@ -297,5 +297,37 @@ fn a_preview_step_on_a_corpus_font_is_fast() {
     eprintln!("preview step on Oswald ({glyphs} glyphs): {per_step:?}");
     if !cfg!(debug_assertions) {
         assert!(per_step < std::time::Duration::from_millis(16), "a preview step took {per_step:?}");
+    }
+}
+
+/// Points a command creates or moves land on the font's grid (spacing ÷ subdivision); an unset
+/// spacing counts as 1 and spacing 0 turns rounding off.
+#[test]
+fn created_and_moved_points_land_on_the_grid() {
+    let cases = [
+        (None, [(0.0, 0.0), (104.0, 0.0), (104.0, 96.0)], (12.0, -7.0)),
+        (Some(10.0), [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0)], (10.0, -10.0)),
+        (Some(0.0), [(0.4, 0.4), (103.7, 0.4), (103.7, 96.2)], (12.7, -6.2)),
+    ];
+    for (spacing, created, moved) in cases {
+        let mut s = Session::with_document();
+        s.edit("grid", |font| {
+            Arc::make_mut(&mut font.info).settings.grid_length = spacing;
+            Ok(())
+        })
+        .unwrap();
+        run(&mut s, "glyph.newGlyph", json!({"name": "gridTest"}));
+        let nodes = json!([{"x": 0.4, "y": 0.4}, {"x": 103.7, "y": 0.4}, {"x": 103.7, "y": 96.2}]);
+        run(&mut s, "path.addPath", json!({"glyph": "gridTest", "nodes": nodes}));
+        let points = |s: &mut Session| -> Vec<(f64, f64)> {
+            let v = run(s, "layer.inspect", json!({"glyph": "gridTest"}));
+            v["shapes"][0]["nodes"].as_array().unwrap().iter().map(|n| (n["x"].as_f64().unwrap(), n["y"].as_f64().unwrap())).collect()
+        };
+        let close = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+        let at = points(&mut s);
+        assert!(at.iter().zip(created).all(|(a, b)| close(*a, b)), "spacing {spacing:?}: created {at:?}");
+        run(&mut s, "selection.move", json!({"glyph": "gridTest", "points": [[0, 0]], "dx": 12.3, "dy": -6.6}));
+        let at = points(&mut s);
+        assert!(close(at[0], moved), "spacing {spacing:?}: moved {at:?}");
     }
 }

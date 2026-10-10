@@ -1,5 +1,6 @@
 //! Path menu and the headless forms of the drawing tools.
 
+use fontcraft_geom::round_point;
 use fontcraft_model::{Layer, Node, NodeKind, Path, Shape};
 use serde_json::{Value, json};
 
@@ -15,7 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Add Path",
         [],
         None,
-        "{glyph: name, layer?: layer id (default: the first master's layer; a master's layer is added when the glyph has none), side?: \"foreground\" | \"background\", closed?: bool = true, nodes: [{x, y, type?: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\" (default line), smooth?: bool}]} append a path, nodes in path direction: two offcurve nodes before each curve node, one or more before a qcurve node; coordinates within ±1,000,000, at most 100,000 nodes. A locked glyph refuses it → {glyph, layer, shape: index, nodes: count, selection: {glyph, layer, shapes: [index]}}",
+        "{glyph: name, layer?: layer id (default: the first master's layer; a master's layer is added when the glyph has none), side?: \"foreground\" | \"background\", closed?: bool = true, nodes: [{x, y, type?: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\" (default line), smooth?: bool}]} append a path, nodes in path direction: two offcurve nodes before each curve node, one or more before a qcurve node; coordinates within ±1,000,000, rounded to the grid, at most 100,000 nodes. A locked glyph refuses it → {glyph, layer, shape: index, nodes: count, selection: {glyph, layer, shapes: [index]}}",
         has_doc,
         add_path
     )
@@ -51,7 +52,13 @@ fn add_path(s: &mut Session, p: &Value) -> Result<Value> {
     if list.len() > MAX_NODES {
         return Err(p.bad(format!("`nodes` holds {} nodes; at most {MAX_NODES} are allowed", list.len())));
     }
-    let path = Path::new(p.bool_or("closed", true)?, list.iter().map(|v| node(&p, v)).collect::<Result<Vec<_>>>()?);
+    let step = super::node::grid(s.font()?);
+    let mut nodes = list.iter().map(|v| node(&p, v)).collect::<Result<Vec<_>>>()?;
+    for n in &mut nodes {
+        let at = round_point(n.point(), step);
+        (n.x, n.y) = (at.x, at.y);
+    }
+    let path = Path::new(p.bool_or("closed", true)?, nodes);
     path.to_bez().map_err(|why| p.bad(why))?;
     let count = path.nodes.len();
     let mut t = Targets::parse(&p)?;

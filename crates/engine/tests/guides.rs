@@ -193,6 +193,8 @@ fn coordinates_give_deltas_relative_to_the_italic_angle() {
     s.edit("italic", |font| {
         let master = font.default_master()?.id.clone();
         font.set_metric_pos(&master, metric::ITALIC_ANGLE, 10.0)?;
+        // No grid, so the slanted point keeps its exact position.
+        Arc::make_mut(&mut font.info).settings.grid_length = Some(0.0);
         Ok(())
     })
     .unwrap();

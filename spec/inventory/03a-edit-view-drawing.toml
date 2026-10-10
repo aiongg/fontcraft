@@ -470,7 +470,7 @@ kind = "engine"
 params = "{glyph: name, layer?: id, side?: foreground|background, closed?: bool, nodes: [{x, y, type?: line|curve|qcurve|offcurve, smooth?: bool}]} → {glyph, layer, shape: index, nodes: count, selection: {glyph, layer, shapes: [index]}}"
 area = "drawing"
 milestone = "M3"
-summary = "Headless equivalent of drawing with the Draw tool: appends a path given as an ordered point list in path direction. Our own command."
+summary = "Headless equivalent of drawing with the Draw tool: appends a path given as an ordered point list in path direction. Its nodes are rounded to the font's grid, like every point a command creates (Addressing, decision 0004). Our own command."
 ref = "Edit View › Draw Tool"
 status = "inferred"
 
