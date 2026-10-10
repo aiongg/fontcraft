@@ -458,31 +458,22 @@ fn draw(pen: &mut Pen, icon: Icon) {
             pen.closed(&[(0.38, 0.38), (0.86, 0.38), (0.86, 0.86), (0.38, 0.86)]);
             pen.rect_fill((0.38, 0.38), (0.62, 0.62), 0.0);
         }
-        // Joins: a wide band turning a corner, filled. Outer edge at 0.1, inner edge at 0.54, the
-        // path along 0.32; the corner shape is the only difference between them.
-        Icon::JoinMiter => {
-            pen.rect_fill((0.1, 0.1), (0.54, 0.92), 0.0);
-            pen.rect_fill((0.1, 0.1), (0.92, 0.54), 0.0);
-        }
-        Icon::JoinBevel => {
-            pen.rect_fill((0.1, 0.32), (0.54, 0.92), 0.0);
-            pen.rect_fill((0.32, 0.1), (0.92, 0.54), 0.0);
-            pen.fill(&[(0.1, 0.32), (0.32, 0.1), (0.54, 0.1), (0.54, 0.54), (0.1, 0.54)]);
-        }
-        Icon::JoinRound | Icon::JoinRoundFull => {
-            pen.rect_fill((0.1, 0.32), (0.54, 0.92), 0.0);
-            pen.rect_fill((0.32, 0.1), (0.92, 0.54), 0.0);
-            pen.dot((0.32, 0.32), 0.22);
-            if icon == Icon::JoinRoundFull {
-                // The inner corner filled with a quarter-round fillet of the same radius.
-                let (c, r) = ((0.76, 0.76), 0.22);
-                let arc: Vec<P> = (0..=8).map(|i| PI + PI / 2.0 * i as f32 / 8.0).map(|a| (c.0 + r * a.cos(), c.1 + r * a.sin())).collect();
-                for pair in arc.windows(2) {
-                    if let [a, b] = pair {
-                        pen.fill(&[(0.54, 0.54), *a, *b]);
-                    }
-                }
-            }
+        // Joins: the outline of a wide band turning a corner, and the corner node, as the caps
+        // draw a band's end. Outer edge at 0.12, inner edge at 0.52, the path along 0.32.
+        Icon::JoinMiter | Icon::JoinBevel | Icon::JoinRound | Icon::JoinRoundFull => {
+            let outer: Vec<P> = match icon {
+                Icon::JoinMiter => vec![(0.12, 0.92), (0.12, 0.12), (0.92, 0.12)],
+                Icon::JoinBevel => vec![(0.12, 0.92), (0.12, 0.32), (0.32, 0.12), (0.92, 0.12)],
+                _ => [(0.12, 0.92)].into_iter().chain(quarter_arc((0.32, 0.32), 0.2)).chain([(0.92, 0.12)]).collect(),
+            };
+            let inner: Vec<P> = match icon {
+                Icon::JoinRoundFull => [(0.52, 0.92)].into_iter().chain(quarter_arc((0.72, 0.72), 0.2)).chain([(0.92, 0.52)]).collect(),
+                _ => vec![(0.52, 0.92), (0.52, 0.52), (0.92, 0.52)],
+            };
+            let mut outline = outer;
+            outline.extend(inner.into_iter().rev());
+            pen.closed(&outline);
+            pen.dot((0.32, 0.32), 0.06);
         }
         // Caps: the outline of a band's end, with its end node.
         Icon::CapButt => pen.cap(&[(0.6, 0.36), (0.6, 0.64)]),
@@ -494,6 +485,11 @@ fn draw(pen: &mut Pen, icon: Icon) {
             pen.dot((0.62, 0.38), 0.06);
         }
     }
+}
+
+/// The upper-left quarter of a circle around `c`, from its left point to its top point.
+fn quarter_arc((cx, cy): P, r: f32) -> Vec<P> {
+    (0..=8).map(|i| PI + PI / 2.0 * i as f32 / 8.0).map(|a| (cx + r * a.cos(), cy + r * a.sin())).collect()
 }
 
 /// The right half of a circle around `c`, from top to bottom.
