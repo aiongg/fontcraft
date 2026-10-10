@@ -81,6 +81,11 @@ link; the first launch needs an OS permission. FontCraft must choose a portable 
 The zoom value is the size in display points at which 1000 units are drawn (300 means a
 500-unit path is 150 points long; actual size is 1000). A display point is density independent.
 
+FontCraft's view commands take positions in the edited glyph's font units. `view.scrollTo`
+`{x, y}` names the point shown at the window's centre and `{dx, dy}` moves the content by screen
+points; `view.zoomToRect` fits a rectangle with 8% of the window free on each side, as
+`view.zoomToActiveLayer` does. The wheel and gestures run the same commands.
+
 In text mode Space types a space. To pan there, press Cmd+Space and release Cmd. If the system
 grabs Cmd+Space, pressing Space first and then Cmd still gives the zoom tool.
 
@@ -107,6 +112,8 @@ All are View-menu toggles and `ui` commands taking `{on?: bool}`; omitted `on` f
 
 Edge cases:
 
+- Fill Preview fills closed contours only. With it off, the tab's other glyphs are drawn as thin
+  outlines (our decision).
 - Fill Preview fills the glyph being edited only while one of the Text, Hand and Zoom tools
   is active. The fill colour is an Appearance setting.
 - Images of glyphs without paths and components are shown even with Show Image off.

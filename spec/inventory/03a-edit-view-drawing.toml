@@ -176,6 +176,7 @@ milestone = "M4"
 summary = "In Font View, opens the selected glyphs for editing in Edit View; double-clicking a glyph or a selection does the same. The reference gives the key but no menu label for it."
 ref = "Edit View"
 status = "handbook"
+notes = "Built in M3.2 (our decision): shows the tab that holds exactly these glyphs if one is open, else opens a new tab."
 
 [[command]]
 id = "view.showTab"
@@ -202,6 +203,7 @@ milestone = "M3"
 summary = "Activates the tab to the right of the current one."
 ref = "Edit View"
 status = "handbook"
+notes = "Built in M3.2 (our decision): after the last tab comes Font View, and before Font View the last tab."
 
 [[command]]
 id = "view.showPreviousTab"
@@ -228,6 +230,7 @@ milestone = "M3"
 summary = "Closes the current Edit View tab. The close button that appears when the pointer is over a tab title does the same for that tab."
 ref = "Edit View"
 status = "handbook"
+notes = "Built in M3.2 (our decision): `index` is a strip position (1 is Font View, which cannot be closed); the tab to the left of a closed showing tab shows next. Closed tabs are kept, the last 32, for Reopen Last Closed Tab."
 
 [[command]]
 id = "view.closeOtherTabs"
@@ -241,6 +244,7 @@ milestone = "M3"
 summary = "Closes every tab except one. The reference offers this only as Option-click on a tab's close button, which keeps the current tab; it names no menu item."
 ref = "Edit View"
 status = "handbook"
+notes = "Built in M3.2: `keep` is a strip position; with Font View showing and no `keep`, every Edit View tab closes."
 
 [[command]]
 id = "view.reopenLastClosedTab"
@@ -254,6 +258,7 @@ milestone = "M3"
 summary = "Brings back the most recently closed tab. In the reference it is an alternate menu item that shows while Option is held."
 ref = "Edit View"
 status = "handbook"
+notes = "Built in M3.2: the tab comes back at its old position with its camera and selection."
 
 [[behavior]]
 id = "tabs.windowHoldsFontViewPlusEditTabs"
@@ -514,6 +519,7 @@ milestone = "M3"
 summary = "Handles are drawn as small circles joined to their node by a thin grey line; they set the curvature of the segment they belong to."
 ref = "Edit View › Draw Tool"
 status = "handbook"
+notes = "Built in M3.2: a cubic segment's first handle is joined to its start node and the second to its end node; a quadratic segment's handles are joined in order, as its control polygon."
 
 [[behavior]]
 id = "paths.openEndMarkers"
@@ -522,6 +528,7 @@ milestone = "M3"
 summary = "An open path shows a short blue stroke, at right angles to the path, at each of its two end nodes; the first node additionally carries a (light) blue triangle pointing in path direction."
 ref = "Edit View › Draw Tool"
 status = "handbook"
+notes = "Built in M3.2: the stroke crosses the path at each end node, at right angles to the direction to its neighbouring point; the triangle sits just past the first node, pointing along the path."
 
 [[behavior]]
 id = "paths.pointsStoredInDirectionOrder"
@@ -937,6 +944,7 @@ milestone = "M3"
 summary = "A beige diamond is drawn behind any node that sits precisely on one of the vertical metric lines, and a node inside an alignment zone with a beige circle, so their placement can be judged even when zoomed far out."
 ref = "Edit View › Nodes in Alignment Zones"
 status = "handbook"
+notes = "Built in M3.2 (our reading): \"vertical metric lines\" are the master's horizontal lines that measure height (ascender, cap height, x-height, baseline, descender, and any other metric but the italic angle). A node on one, within 1e-6 units, gets the diamond; otherwise a node inside an alignment zone gets the circle."
 
 [[behavior]]
 id = "nodes.duplicateHighlight"
@@ -945,6 +953,7 @@ milestone = "M3"
 summary = "Two neighbouring on-curve nodes with identical coordinates are flagged with a red circle; Tidy up Paths merges them."
 ref = "Edit View › Duplicate Nodes"
 status = "handbook"
+notes = "Built in M3.2: neighbours are consecutive on-curve nodes in path order, the last and the first included on a closed path; coordinates must be equal."
 
 # ───────────────────────────── Scaling and rotating ─────────────────────────────
 
@@ -1320,6 +1329,7 @@ milestone = "M3"
 summary = "On a closed path the start node is drawn as an arrowhead pointing in path direction (green when the node is smooth) instead of the usual node shape."
 ref = "Edit View › Controlling Path Direction"
 status = "handbook"
+notes = "Built in M3.2: the start node is the first on-curve node of the path's node list; the arrow points to the next point at a different place."
 
 [[behavior]]
 id = "paths.directionConvention"

@@ -19,7 +19,7 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
    L5   engine: Session ── execute(id, params) ── command registry ── history, journal, guard
               │
    L4   tools: pointer and key events → commands (begin / preview / commit)        (4 tools today)
-   L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (7 of 9 today)
+   L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (8 of 9 today)
    L2   pathops · interp · spacing · components · features · hinting · audit · plugins   (pathops, audit today)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
    L0   geom (kurbo)  ·  standalone format crates: plist, cff, ttinstr, container, glyphdata  (geom, plist, cff, container today)
@@ -59,7 +59,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L3 | `io-svg` | today (M3.8) | SVG outlines in and out, and the clipboard fragment format. Reading runs on usvg, after a first pass that checks the limits and rewrites the document as geometry only |
 | L3 | `oracle` | M2 | compiled fonts compared table by table with a reference compiler's build (the oracle harness behind `fontcraft-cli oracle`); runs the reference tools as subprocesses |
 | L3 | `tables` | M1/M12 | dump, table edit, subset, merge, instance: the engine behind the CLI tools |
-| L3 | `render` | M3 | glyph and text rasterising for the canvas, previews, proofs, headless screenshots |
+| L3 | `render` | today (M3.2) | glyph layers and lines of glyphs to RGBA images and PNG (tiny-skia, nonzero fill): `ui.render`, Edit View's filled glyphs, coverage measures |
 | L4 | `tools` | today (M3.3: Select, Lasso Select, Hand, Zoom) | pointer tools: events in, commands and overlays out; hit testing, snapping, the selection and the Edit View keys |
 | L5 | `engine` | today | sessions, history, the command registry |
 | L6 | `ui-egui` | today (shell) | the UI |
@@ -139,8 +139,8 @@ Rules for writing one ([decision 0004](decisions/0004-commands.md)):
   merged: [`spec/00-open-decisions.md`](spec/00-open-decisions.md), D2.)
 - **Dialogs are parameter editors.** A menu item with "…" opens a dialog that fills the command's
   parameters and previews by running it inside an interaction that is rolled back on Cancel.
-- **Shell commands** (`UI_COMMANDS` in `ui-egui`) change only view and window state: zoom, panels,
-  selection, which tab shows. They are reachable from the control channel and MCP like any other.
+- **Shell commands** (`UI_COMMANDS` in `ui-egui`, gathered from one list per module in `shell/`)
+  change only view and window state: zoom, panels, selection, which tab shows. They are reachable from the control channel and MCP like any other.
 - Nested commands share the outer command's transaction. `command.batch` runs a list of commands
   as one transaction and one undo step per document it changed; actions and scripts build on it.
 
@@ -237,7 +237,7 @@ command's result, so an agent can read them.
 | Surface | Transport | Where | Today |
 |---|---|---|---|
 | CLI | process, JSON on stdout | `apps/fontcraft-cli` | `commands`, `run`, `convert`, `info`, `mcp`. Planned set: `spec/inventory/20-cli.toml` (70 rows) |
-| Control channel | JSON lines, loopback TCP | `apps/fontcraft/src/control_server.rs`, `crates/ui-egui/src/control.rs` | `engine.execute`, `engine.commands`, `document.inspect`, `ui.inspect`, `ui.menu.list`, `ui.menu.invoke`, `control.methods`. Planned: pointer and key injection, dialogs, screenshots ([`control-protocol.md`](control-protocol.md)) |
+| Control channel | JSON lines, loopback TCP | `apps/fontcraft/src/control_server.rs`, `crates/ui-egui/src/control.rs` | `engine.execute`, `engine.commands`, `document.inspect`, `ui.inspect`, `ui.menu.list`, `ui.menu.invoke`, `ui.screenshot`, `ui.render`, `control.methods`. Planned: pointer and key injection, dialogs ([`control-protocol.md`](control-protocol.md)) |
 | MCP | stdio JSON-RPC | `crates/mcp` | three tools (`list_commands`, `run_command`, `inspect_document`), headless or attached to the app. Planned: resources, prompts, completions, renders ([`mcp.md`](mcp.md)) |
 
 The request and reply shapes are the sibling apps'. The conventional control port is 7985 (theirs
@@ -249,10 +249,17 @@ started with `--control PORT`.
 egui on wgpu through eframe; the web app is the same crate compiled to WebAssembly. `FontcraftApp`
 owns the `Session` and a serializable `UiState`, and draws into any egui context, which is how
 tests run frames without a window. The menu bar is generated from the registry: a command with a
-menu path appears by itself. Colours, radii and sizes come from `theme::Tokens` (a few node and
-stroke sizes in the M0 shell are still literals).
+menu path appears by itself; the tree is rebuilt only when the document or the selection changes.
+Colours, radii and sizes come from `theme::Tokens`.
 
-**Today:** menu bar, Font View grid, Edit View (outline, nodes, metric lines), a Palette stub, the
+The crate has two halves. `shell/` holds the chrome and the shell commands: menus, keymap (menu
+shortcuts with a modifier), tab strip, status bar, Font View, Palette. `canvas/` draws Edit View:
+the camera (`canvas/view.rs`, which hands the tools crate its `View` transform), metric lines and
+zones, filled glyphs (rasterised by `render` into a texture), the edited outline and the nodes
+with the display conventions of `docs/spec/03a` § 4.
+
+**Today:** menu bar, tab strip with Edit View tabs, Font View grid, Edit View (filled neighbours,
+outline, nodes, metric lines and zones, wheel and pinch zoom and scroll), a Palette stub, the
 status bar. **Planned:** the layout of [`ui-design.md`](ui-design.md).
 
 Planned: text in the UI stays English in code and is translated at draw time from per-language

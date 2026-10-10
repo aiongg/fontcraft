@@ -74,6 +74,12 @@ fn bad_sizes_and_paths_are_errors_not_crashes() {
     path.close_path();
     let image = render_path(&path, Affine::IDENTITY, 10, 10, &Style::default()).unwrap();
     assert_eq!(image.pixel(6, 2), Some([0, 0, 0, 255]));
+    // An open contour has no inside: it is not filled.
+    let mut open = BezPath::new();
+    open.move_to(Point::new(0.0, 0.0));
+    open.line_to(Point::new(8.0, 0.0));
+    open.line_to(Point::new(8.0, 8.0));
+    assert_eq!(render_path(&open, Affine::IDENTITY, 10, 10, &Style::default()).unwrap().pixel(6, 2), Some([255, 255, 255, 255]));
     assert_eq!(render_path(&path, Affine::IDENTITY, 0, 10, &Style::default()), Err(RenderError::Empty));
     assert!(matches!(render_path(&path, Affine::IDENTITY, 20_000, 10, &Style::default()), Err(RenderError::TooLarge { .. })));
     assert_eq!(Image::from_rgba_premultiplied(2, 2, vec![0; 15]), Err(RenderError::BadPixels));

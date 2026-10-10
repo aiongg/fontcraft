@@ -15,7 +15,7 @@ use fontcraft_render::{Image, LineOptions};
 use serde_json::{Value, json};
 
 use crate::app::FontcraftApp;
-use crate::menus;
+use crate::shell::menus;
 
 /// The methods [`handle`] answers.
 pub const METHODS: &[(&str, &str)] = &[
@@ -190,7 +190,11 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
         "engine.execute" => app.run(command()?, &inner()),
         "engine.commands" => Ok(app.commands()),
         "document.inspect" => Ok(app.session.inspect()),
-        "ui.inspect" => serde_json::to_value(&app.state).map_err(|e| e.to_string()),
+        "ui.inspect" => {
+            let mut state = serde_json::to_value(&app.state).map_err(|e| e.to_string())?;
+            set(&mut state, "editing", json!(app.state.editing()));
+            Ok(state)
+        }
         "ui.menu.list" => serde_json::to_value(menus::menu_tree(&app.session)).map_err(|e| e.to_string()),
         "ui.menu.invoke" => {
             let id = command()?;

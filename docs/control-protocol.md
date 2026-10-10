@@ -34,7 +34,7 @@ for the next frame and replies when the frame arrives.
 | `engine.execute` | `{command, params?}` | runs any engine or UI command; the command's own result |
 | `engine.commands` | | `{commands: [{id, label, menu, shortcut, params, query, enabled, disabled_reason?}]}`; UI commands carry `ui: true` |
 | `document.inspect` | | `{documents: [{index, active, title, path, modified, revision, familyName, glyphs, masters, undo, redo}], active}` |
-| `ui.inspect` | | the UI state: `selected_glyphs`, `editing`, `zoom`, `show_nodes`, `show_metrics`, `show_palette`, `status` |
+| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection}`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status` |
 | `ui.menu.list` | | the menu tree: `[{title, items: [{command, label, path, shortcut, enabled, disabled_reason?}]}]` |
 | `ui.menu.invoke` | `{command, params?}` | runs a menu item; an id that is in no menu is an error |
 | `ui.screenshot` | `{path?}` | captures the window as PNG, written to `path` or returned as base64 `png`; `{width, height, pixelsPerPoint, path?, png?}`. Sizes are in pixels. The reply comes after the next frame is drawn. Headless hosts (tests, MCP) answer with an error |

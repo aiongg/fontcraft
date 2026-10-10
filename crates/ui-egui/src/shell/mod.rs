@@ -1,0 +1,125 @@
+//! The shell: menus, keymap, tab strip, status bar, Font View, Palette, and the shell commands.
+//!
+//! Shell commands change view and window state only; everything else is an engine command. Each
+//! module lists its own commands ([`MODULES`]), so a package adds a module instead of editing a
+//! shared list.
+
+pub mod font_view;
+pub mod keymap;
+pub mod menus;
+pub mod palette;
+pub mod status_bar;
+pub mod tabs;
+pub mod view;
+
+use std::sync::LazyLock;
+
+use serde_json::{Map, Value};
+
+use crate::app::FontcraftApp;
+
+/// A shell command: `(id, label, menu path, shortcut, params doc)`.
+pub type UiCommand = (&'static str, &'static str, &'static [&'static str], &'static str, &'static str);
+
+/// Runs one of a module's commands.
+pub type Handler = fn(&mut FontcraftApp, &str, &Args) -> Result<Value, String>;
+
+/// Every shell module: its commands and the function that runs them.
+pub const MODULES: &[(&[UiCommand], Handler)] =
+    &[(font_view::COMMANDS, font_view::run), (tabs::COMMANDS, tabs::run), (view::COMMANDS, view::run), (palette::COMMANDS, palette::run)];
+
+/// Every shell command, in module order.
+pub static UI_COMMANDS: LazyLock<Vec<UiCommand>> = LazyLock::new(|| MODULES.iter().flat_map(|(c, _)| c.iter().copied()).collect());
+
+pub fn is_ui_command(id: &str) -> bool {
+    UI_COMMANDS.iter().any(|c| c.0 == id)
+}
+
+/// Runs a shell command. The caller catches panics.
+pub(crate) fn run(app: &mut FontcraftApp, id: &str, params: &Value) -> Result<Value, String> {
+    let args = Args::new(id, params)?;
+    let (_, handler) = MODULES.iter().find(|(c, _)| c.iter().any(|c| c.0 == id)).ok_or_else(|| format!("unknown command `{id}`"))?;
+    handler(app, id, &args)
+}
+
+/// A shell command's parameters, with typed readers whose errors name the command and the key.
+pub struct Args<'a> {
+    id: &'a str,
+    obj: Option<&'a Map<String, Value>>,
+}
+
+impl<'a> Args<'a> {
+    pub fn new(id: &'a str, params: &'a Value) -> Result<Self, String> {
+        match params {
+            Value::Null => Ok(Self { id, obj: None }),
+            Value::Object(m) => Ok(Self { id, obj: Some(m) }),
+            _ => Err(format!("{id}: params must be a JSON object")),
+        }
+    }
+
+    /// An error message about this command.
+    pub fn err(&self, message: impl std::fmt::Display) -> String {
+        format!("{}: {message}", self.id)
+    }
+
+    /// The value of `key`; `null` counts as absent.
+    pub fn get(&self, key: &str) -> Option<&'a Value> {
+        self.obj.and_then(|m| m.get(key)).filter(|v| !v.is_null())
+    }
+
+    /// `on` for a display toggle: the value given, or the opposite of `current` when absent.
+    pub fn toggle(&self, current: bool) -> Result<bool, String> {
+        match self.get("on") {
+            None => Ok(!current),
+            Some(Value::Bool(b)) => Ok(*b),
+            Some(_) => Err(self.err("`on` must be true or false")),
+        }
+    }
+
+    /// A finite number.
+    pub fn number(&self, key: &str) -> Result<Option<f64>, String> {
+        match self.get(key) {
+            None => Ok(None),
+            Some(v) => v.as_f64().filter(|n| n.is_finite()).map(Some).ok_or_else(|| self.err(format!("`{key}` must be a number"))),
+        }
+    }
+
+    /// A whole number of zero or more.
+    pub fn index(&self, key: &str) -> Result<Option<u64>, String> {
+        match self.get(key) {
+            None => Ok(None),
+            Some(v) => v.as_u64().map(Some).ok_or_else(|| self.err(format!("`{key}` must be a whole number"))),
+        }
+    }
+
+    /// A list of numbers of exactly `N` entries.
+    pub fn numbers<const N: usize>(&self, key: &str) -> Result<Option<[f64; N]>, String> {
+        let Some(v) = self.get(key) else { return Ok(None) };
+        let bad = || self.err(format!("`{key}` must be a list of {N} numbers"));
+        let list = v.as_array().filter(|a| a.len() == N).ok_or_else(bad)?;
+        let mut out = [0.0; N];
+        for (slot, item) in out.iter_mut().zip(list) {
+            *slot = item.as_f64().filter(|n| n.is_finite()).ok_or_else(bad)?;
+        }
+        Ok(Some(out))
+    }
+
+    /// A list of strings of at most `max` entries.
+    pub fn strings(&self, key: &str, max: usize) -> Result<Option<Vec<String>>, String> {
+        let Some(v) = self.get(key) else { return Ok(None) };
+        let bad = || self.err(format!("`{key}` must be a list of names"));
+        let list = v.as_array().ok_or_else(bad)?;
+        if list.len() > max {
+            return Err(self.err(format!("`{key}` holds at most {max} names")));
+        }
+        list.iter().map(|n| n.as_str().map(str::to_string).ok_or_else(bad)).collect::<Result<Vec<_>, _>>().map(Some)
+    }
+
+    /// A string.
+    pub fn string(&self, key: &str) -> Result<Option<&'a str>, String> {
+        match self.get(key) {
+            None => Ok(None),
+            Some(v) => v.as_str().map(Some).ok_or_else(|| self.err(format!("`{key}` must be a string"))),
+        }
+    }
+}

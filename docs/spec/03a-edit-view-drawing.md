@@ -62,6 +62,17 @@ A window is a tab strip: Font View is always tab 1, Edit View tabs follow
 | Close all other tabs | `view.closeOtherTabs` | `Alt`+click on close button |
 | Reopen last closed tab | `view.reopenLastClosedTab` | `Cmd+Alt+Shift+W` (Option alternate) |
 
+Our decisions for the tab commands (M3.2):
+
+- Tab commands name a tab by its position in the strip, counting Font View as 1. View commands
+  name a tab by its stable `id`, which `view.newTab` returns.
+- A tab holds a list of glyphs, the edited one, its camera and its selection. Until text mode
+  (M5) the first glyph of a new tab is the edited one.
+- `view.editSelectedGlyphs` shows the tab that holds exactly the given glyphs, else opens one.
+- Next and previous wrap around, Font View included. Closing the showing tab shows the tab to its
+  left. The last 32 closed tabs can be reopened, each at its old position.
+- A glyph that is removed leaves every tab; a tab left with no glyph closes.
+
 Edit View has two modes (`editView.textModeAndEditMode`, `editView.enteringEditMode`):
 
 - **Text mode**: active while the Text tool (`T`) is chosen. Typing inserts glyphs; spacing and
@@ -100,6 +111,18 @@ Display conventions:
 | Point of a locked path under the pointer | red | `paths.lockedPointsHoverRed` |
 
 `view.showNodesInForeground` (`Cmd+Shift+N`, View › Show Nodes › In Foreground) toggles node display.
+
+How FontCraft reads the conventions (M3.2, our decisions where the handbook is silent):
+
+- Each item has its own colour and size in `theme::Tokens`, so a headless test can count them.
+- The start node is the first on-curve node of the node list.
+- A cubic segment's handles are joined to their own end nodes; a quadratic segment's handles are
+  joined in order, as its control polygon.
+- "Vertical metric lines" are the master's height metrics (ascender to descender, every metric
+  but the italic angle). A node on one gets the diamond; a node inside a zone and on no line
+  gets the circle.
+- Coincident neighbours are consecutive on-curve nodes, the last and the first included on a
+  closed path, with equal coordinates.
 
 ### Addressing (our design)
 

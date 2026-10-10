@@ -1,36 +1,18 @@
 //! The menu bar, built from the command registry: a command with a menu path appears in the menu
 //! by itself. Commands that only change view and window state belong to the shell and are listed
 //! in [`UI_COMMANDS`]; everything else is an engine command.
+//!
+//! The tree is built when the document or the selection changes ([`MenuCache`]), not every frame.
 
 use fontcraft_engine::{Session, command_specs};
 use serde::Serialize;
 
+use super::UI_COMMANDS;
+use crate::state::UiState;
+
 /// Top-level menus, in bar order. A command whose first menu element is not listed here is
 /// appended after them.
 pub const MENU_ORDER: &[&str] = &["File", "Edit", "Glyph", "Path", "Filter", "View", "Script", "Window", "Help"];
-
-/// Shell-only commands: `(id, label, menu path, shortcut, params doc)`.
-pub const UI_COMMANDS: &[(&str, &str, &[&str], &str, &str)] = &[
-    ("fontView.show", "Show Font View", &[], "Cmd+Alt+1", "{} leave Edit View and show the glyph grid"),
-    ("fontView.setSelection", "Set Glyph Selection", &[], "", "{glyphs: [names]} select these glyphs in Font View (unknown names are an error)"),
-    (
-        "view.editSelectedGlyphs",
-        "Edit Selected Glyphs",
-        &[],
-        "Cmd+Down",
-        "{glyph?: name} open the glyph (default: the first selected one) in Edit View",
-    ),
-    ("view.zoomIn", "Zoom In", &["View"], "Cmd+Plus", "{} zoom Edit View in by one step"),
-    ("view.zoomOut", "Zoom Out", &["View"], "Cmd+Minus", "{} zoom Edit View out by one step"),
-    ("view.zoomToActualSize", "Zoom to Actual Size", &["View"], "Cmd+Alt+0", "{} one font unit per screen point"),
-    ("view.showNodes", "Show Nodes", &["View"], "", "{show?: bool} show or hide nodes and handles in Edit View (omitted: toggle)"),
-    ("view.showMetrics", "Show Metrics", &["View"], "Cmd+Shift+M", "{show?: bool} show or hide the metric lines in Edit View (omitted: toggle)"),
-    ("window.palette", "Palette", &["Window"], "Cmd+Alt+P", "{show?: bool} show or hide the Palette sidebar (omitted: toggle)"),
-];
-
-pub fn is_ui_command(id: &str) -> bool {
-    UI_COMMANDS.iter().any(|c| c.0 == id)
-}
 
 /// One entry of a menu.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -76,10 +58,61 @@ pub fn menu_tree(session: &Session) -> Vec<Menu> {
             },
         );
     }
-    for (id, label, menu, shortcut, _) in UI_COMMANDS {
+    for (id, label, menu, shortcut, _) in UI_COMMANDS.iter() {
         let path = menu.get(1..).unwrap_or_default().to_vec();
         add(menu, MenuItem { command: id, label, path, shortcut, enabled: true, disabled_reason: None });
     }
     menus.retain(|m| !m.items.is_empty());
     menus
+}
+
+/// The menu tree of the last frame, and what it was built from.
+#[derive(Default)]
+pub struct MenuCache {
+    key: Option<u64>,
+    tree: Vec<Menu>,
+}
+
+impl MenuCache {
+    /// The menu tree, rebuilt only when the document, the interaction or the selection changed.
+    pub fn tree(&mut self, session: &Session, state: &UiState) -> &[Menu] {
+        let key = cache_key(session, state);
+        if self.key != Some(key) {
+            self.tree = menu_tree(session);
+            self.key = Some(key);
+        }
+        &self.tree
+    }
+}
+
+/// What a menu item's enablement can depend on: the active document and its revision, the
+/// number of open documents, a running interaction, and the selections.
+fn cache_key(session: &Session, state: &UiState) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    session.active().map(|d| (d.id, d.revision)).hash(&mut h);
+    session.documents().len().hash(&mut h);
+    session.interaction().hash(&mut h);
+    session.batch_is_idle().hash(&mut h);
+    state.active_tab.hash(&mut h);
+    state.selected_glyphs.hash(&mut h);
+    if let Some(tab) = state.tab() {
+        tab.edited.hash(&mut h);
+        tab.glyphs.hash(&mut h);
+        serde_json::to_string(&tab.selection).unwrap_or_default().hash(&mut h);
+    }
+    h.finish()
+}
+
+/// The items of `menu` grouped into submenus by their `path`, for drawing.
+pub fn submenus(items: &[MenuItem]) -> Vec<(Option<&'static str>, Vec<&MenuItem>)> {
+    let mut groups: Vec<(Option<&'static str>, Vec<&MenuItem>)> = Vec::new();
+    for item in items {
+        let key = item.path.first().copied();
+        match groups.iter_mut().find(|(k, _)| *k == key && key.is_some()) {
+            Some((_, list)) => list.push(item),
+            None => groups.push((key, vec![item])),
+        }
+    }
+    groups
 }

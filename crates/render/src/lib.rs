@@ -1,7 +1,8 @@
 //! FontCraft rasterising (L3): glyph layers and lines of glyphs to RGBA images, and PNG.
 //!
-//! Shapes are filled by the nonzero rule with anti-aliasing (tiny-skia). The same input always
-//! gives the same bytes, so tests and agents can compare renders.
+//! Shapes are filled by the nonzero rule with anti-aliasing (tiny-skia). Only closed contours
+//! are filled: an open path has no inside, and compiled fonts leave it out. The same input
+//! always gives the same bytes, so tests and agents can compare renders.
 //!
 //! | Function | Draws |
 //! |---|---|
@@ -116,9 +117,26 @@ fn blank(width: u32, height: u32, style: &Style) -> Result<Pixmap, RenderError> 
     Ok(pixmap)
 }
 
-/// Fills `path` into `pixmap`. Elements with a coordinate that is not finite after the
-/// transform are skipped with the rest of their contour.
+/// The closed contours of `path`, in order; open ones are dropped.
+pub fn closed_contours(path: &BezPath) -> BezPath {
+    let mut out = BezPath::new();
+    let mut contour: Vec<PathEl> = Vec::new();
+    for el in path.elements() {
+        if matches!(el, PathEl::MoveTo(_)) {
+            contour.clear();
+        }
+        contour.push(*el);
+        if matches!(el, PathEl::ClosePath) {
+            out.extend(contour.drain(..));
+        }
+    }
+    out
+}
+
+/// Fills the closed contours of `path` into `pixmap`. Elements with a coordinate that is not
+/// finite after the transform are skipped with the rest of their contour.
 fn fill(pixmap: &mut Pixmap, path: &BezPath, transform: Affine, style: &Style) {
+    let path = closed_contours(path);
     let mut builder = PathBuilder::new();
     let mut broken = false;
     let f = |p: Point| {
@@ -166,7 +184,8 @@ fn fill(pixmap: &mut Pixmap, path: &BezPath, transform: Affine, style: &Style) {
     pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
 }
 
-/// Fills `path`, mapped to pixels by `transform`, into a new `width × height` image.
+/// Fills the closed contours of `path`, mapped to pixels by `transform`, into a new
+/// `width × height` image.
 pub fn render_path(path: &BezPath, transform: Affine, width: u32, height: u32, style: &Style) -> Result<Image, RenderError> {
     let mut pixmap = blank(width, height, style)?;
     fill(&mut pixmap, path, transform, style);

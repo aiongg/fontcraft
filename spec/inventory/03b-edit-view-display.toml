@@ -327,6 +327,7 @@ milestone = "M3"
 summary = "Increases the Edit View magnification by one step. The step size is not stated in the handbook."
 ref = "Edit View › Glyph Display › Zooming"
 status = "handbook"
+notes = "Built in M3.2 (our decision, 03b open question 8): one step multiplies the scale by √2; the zoom value stays between 50 and 64,000."
 
 [[command]]
 id = "view.zoomOut"
@@ -353,6 +354,7 @@ milestone = "M3"
 summary = "Sets the zoom so that the span from descender to ascender of the active layer fills the window as far as possible."
 ref = "Edit View › Glyph Display › Zooming"
 status = "handbook"
+notes = "Built in M3.2 (our decision): the descender-to-ascender span, or the advance width when that is the tighter limit, fills the window less 8% on each side; the glyph's centre goes to the window's centre."
 
 [[command]]
 id = "view.zoomToActualSize"
@@ -379,6 +381,7 @@ milestone = "M3"
 summary = "Sets the zoom numerically, as typing into the field between the zoom buttons at the bottom right of the window does. `size` is the number of display points that 1000 font units occupy, so 300 draws a 500-unit stem 150 points long."
 ref = "Edit View › Glyph Display › Zooming"
 status = "handbook"
+notes = "Built in M3.2: `center` is in the edited glyph's font units; without it the window's centre stays where it is."
 
 [[command]]
 id = "view.zoomToRect"
@@ -392,6 +395,7 @@ milestone = "M3"
 summary = "Zooms and scrolls so that a given canvas rectangle fills the window. Headless form of dragging a rectangle with the Zoom tool."
 ref = "Edit View › Glyph Display › Zooming"
 status = "inferred"
+notes = "Built in M3.2: `rect` is in the edited glyph's font units; the rectangle fills the window less 8% on each side."
 
 [[command]]
 id = "view.scrollTo"
@@ -405,6 +409,7 @@ milestone = "M3"
 summary = "Pans the Edit View canvas to an absolute position or by an offset. Headless form of dragging with the Hand tool, scrolling or dragging the scroll bars."
 ref = "Edit View › Glyph Display › Panning"
 status = "inferred"
+notes = "Built in M3.2: `x` and `y` name the font point (edited glyph's units) shown at the window's centre; `dx` and `dy` then move the content by that many screen points, right and down. The wheel scrolls through this command; Shift turns a vertical wheel horizontal. Scroll bars are not drawn yet."
 
 [[panel]]
 id = "editView.bottomBar"
@@ -431,6 +436,7 @@ milestone = "M3"
 summary = "Pinching on a trackpad zooms the canvas, and so does scrolling (wheel or gesture) with Alt held."
 ref = "Edit View › Glyph Display › Zooming"
 status = "handbook"
+notes = "Built in M3.2: pinch and Alt with the wheel zoom about the pointer, through `view.setZoom`."
 
 [[behavior]]
 id = "zoom.valueMeaning"
@@ -626,7 +632,7 @@ milestone = "M3"
 summary = "Toggles filling closed paths with the foreground colour. The glyph being edited is filled only while one of the Text, Hand and Zoom tools is active."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:48, 14:48 and 19:34: while the Hand tool pans, the edited glyph is drawn solid black without nodes, and its outline view returns afterwards. Not shown: the menu toggle, the Text and Zoom tools."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:48, 14:48 and 19:34: while the Hand tool pans, the edited glyph is drawn solid black without nodes, and its outline view returns afterwards. Not shown: the menu toggle, the Text and Zoom tools. Built in M3.2: only closed contours are filled. With Fill Preview off the other glyphs of the tab are drawn as thin outlines. The edited glyph is filled only while the tools glue reports the Text, Hand or Zoom tool (M3.3)."
 
 [[command]]
 id = "view.getDisplayOptions"
@@ -640,6 +646,7 @@ milestone = "M3"
 summary = "Query returning the state of every View-menu display toggle, the zoom value, the writing direction and the active preview features of an Edit View tab, so an agent can read the view state before changing it."
 ref = "Edit View › Glyph Display › View Options"
 status = "inferred"
+notes = "Built in M3.2: returns every toggle by its camelCase name (`nodes`, `metrics`, `fillPreview`…), `palette`, `zoom`, `center` (edited glyph's units), `tab`, `direction` (always `ltr` until text mode) and `previewFeatures` (empty until text mode)."
 
 [[behavior]]
 id = "view.reporterPluginsInViewMenu"
