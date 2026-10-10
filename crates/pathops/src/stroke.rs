@@ -605,14 +605,14 @@ impl Pen {
             }
         }
         if join == Join::RoundFull {
-            out.extend(self.fillet(p, t0, t1, turn, r_in, m0, m1));
+            out.extend(self.fillet(p, t0, turn, r_in, m0, m1));
         }
     }
 
     /// The fillet that rounds the inner corner of a turn by `turn` radians at `p`: the inner
     /// edges are `r_in` from the path on the side of the normals `m0` and `m1`.
     #[allow(clippy::too_many_arguments)]
-    fn fillet(&self, p: Point, t0: Vec2, t1: Vec2, turn: f64, r_in: f64, m0: Vec2, m1: Vec2) -> Option<BezPath> {
+    fn fillet(&self, p: Point, t0: Vec2, turn: f64, r_in: f64, m0: Vec2, m1: Vec2) -> Option<BezPath> {
         let rho = self.half();
         let tan = (turn.abs() / 2.0).tan();
         if !(rho > 0.0 && tan.is_finite() && tan <= MAX_FILLET_TAN) {

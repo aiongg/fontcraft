@@ -1,7 +1,7 @@
 //! Strokes, masks and shape order (M3.11): Set Stroke, Expand Outline (one layer and all
 //! masters), Mask, Shape Order, and the layer composite the canvas and export use.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 
