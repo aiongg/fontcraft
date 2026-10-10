@@ -132,13 +132,15 @@ Add Glyphs, Remove Glyphs, Paste Special and Find and Replace dialogs, and the S
 recent documents and a chooser that builds a new font from 28 open glyph sets. User settings
 persist between runs. A frame after the first takes under 1 ms on Inter's 3,017 glyphs. A second
 end-to-end test builds a font from glyph sets over the control channel, renames, filters,
-duplicates and exports it.
+duplicates and exports it. Removing a glyph removes the kerning pairs keyed by its name in the
+same undo step, and when other glyphs use it as a component the dialog's default answer is
+Decompose.
 
 **What is not.** Nothing in the editor has been compared with the running reference app. M3's
 and M4's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
 a detail is unconfirmed, the handbook decides (Remove Overlap, for example, deletes open paths).
 Where no source says, we choose, and each choice is listed in `docs/guesses.md` to revisit
-(391 guesses on 267 rows).
+(461 guesses on 327 rows).
 
 | Gap | Detail |
 |---|---|
@@ -186,10 +188,9 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 ### What to build next (in priority order)
 
-1. **The owner's review of M4**: the measures and their results (`docs/plans/M4.md` § 5), the
-   window, and the guesses M4 added (`docs/guesses.md`).
-2. **M5's planning pass, spacing, kerning and text mode**, as `docs/execution-plan.md` § 3
-   describes it, for the owner to accept.
+1. **The owner's acceptance of M5's plan** (`docs/plans/M5.md`, questions in § 7).
+2. **M5, spacing, kerning and text mode**, package by package as the plan orders them: the
+   builder packages first (M5.1 spacing keys, M5.2 kerning core), then the worktree waves.
 
 Then M5–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
 orders them. Left from M3 and M4 for later milestones: text mode (M5), the inspector's metric and kerning
@@ -427,7 +428,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 5 (5) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ✅ every measure met: every package M3.0 to M3.18 built; 184 of 184 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner`, which no source describes, moved to `fidelity` | 184 (184) |
 | M4 | Font View and glyph management | ✅ every measure met: every package M4.0 to M4.12 built; 62 of 62 commands live; the glyph database equal to fontc's on category, subcategory and production name for 200,504 names; `post` names equal both oracles' except one allow-listed source; every M4 dialog equals its command; an agent builds a font from glyph sets over the control channel; M1 to M3 baselines unchanged (`docs/plans/M4.md` § 5) | 62 (62) |
-| M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
+| M5 | Spacing, kerning and text mode | 📝 planned: 19 packages, M5.0 to M5.18 (`docs/plans/M5.md`); waits for the owner's acceptance | 97 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
 | M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) |
 | M8 | OpenType features | ⬜ | 40 (0) |
@@ -435,7 +436,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M10 | Hinting (PostScript and TrueType) | ⬜ | 57 (0) |
 | M11 | Colour fonts and images | ⬜ | 50 (0) |
 | M12 | Command-line tool suite (61 of the 70 subcommand rows) and quality checks (263 of 300) | ⬜ | 71 (0) |
-| M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 114 (0) |
+| M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 126 (0) |
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 28 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |

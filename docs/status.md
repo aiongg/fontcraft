@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M4 closed: every measure met; the owner's review of M4 next._
+_Updated: 2026-10-10, M5 planned (`docs/plans/M5.md`); the owner's acceptance next._
 
 ## State of the tree
 
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 269 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
-  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 391 guesses on 267
+  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 461 guesses on 327
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -19,10 +19,9 @@ _Updated: 2026-10-10, M4 closed: every measure met; the owner's review of M4 nex
 
 ## Where to start
 
-1. **The owner's review of M4.** The measures and results are in `docs/plans/M4.md` § 5; the
-   guesses M4 added are in `docs/guesses.md`. Wait for the owner before changing them.
-2. **M5's planning pass, spacing, kerning and text mode** (`docs/execution-plan.md` § 3), for
-   the owner to accept.
+1. **The owner's acceptance of M5's plan** (`docs/plans/M5.md` § 7). Build nothing of M5
+   before it.
+2. **M5**, in the order of the plan's § 6: builder packages M5.1 and M5.2 first.
 
 M4, Font View and glyph management (`docs/plans/M4.md`), as built:
 
@@ -347,3 +346,9 @@ Append one terse entry per session: what landed, numbers, what is still open.
   except one allow-listed source; dialogs equal commands; the glyph-set end-to-end test; on Inter
   a Font View frame under 1 ms). 1,076 tests; 269 of 933 commands live; about 138,000 lines of
   Rust. Next: the owner's review of M4, then M5's planning pass.
+- **2026-10-10, M4 review and M5 planning.** The owner's answers to M4's guesses: hidden selected
+  glyphs are deselected; a rename takes the database's Unicode value; generated glyphs are 600
+  units wide. M4.13: Remove Glyph removes the kerning pairs keyed by a removed glyph's name, in
+  every master and direction and in one undo step; group pairs stay until Clean Up. M4.14: Remove
+  Glyph's dialog defaults to Decompose. M5.0: the planning pass (222 rows, 97 commands; 27 rows
+  moved; 19 packages; 461 guesses on 327 rows). Next: the owner's acceptance of the M5 plan.
