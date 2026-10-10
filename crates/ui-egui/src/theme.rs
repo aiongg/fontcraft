@@ -162,6 +162,15 @@ pub struct Tokens {
     pub visible_layer_outline_width: f32,
     /// Laid over the canvas while the background is the side being edited (`background.darkenedCanvas`).
     pub background_tint: Color32,
+    /// Arrows, circles, plus and minus signs, and the edges of notes.
+    pub annotation: Color32,
+    pub annotation_width: f32,
+    /// Inside a text note.
+    pub annotation_note_fill: Color32,
+    pub annotation_text: Color32,
+    pub annotation_text_size: f32,
+    /// The handle of a selected annotation.
+    pub annotation_handle_radius: f32,
 }
 
 impl Tokens {
@@ -262,6 +271,12 @@ impl Tokens {
             visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),
             visible_layer_outline_width: 0.75,
             background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
+            annotation: Color32::from_rgb(0xe0, 0x30, 0x30),
+            annotation_width: 2.0,
+            annotation_note_fill: Color32::from_rgba_unmultiplied(0xff, 0xf4, 0xb0, 0xe0),
+            annotation_text: Color32::from_rgb(0x30, 0x30, 0x30),
+            annotation_text_size: 12.0,
+            annotation_handle_radius: 4.0,
         }
     }
 

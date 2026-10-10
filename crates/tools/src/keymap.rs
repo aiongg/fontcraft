@@ -29,6 +29,7 @@ pub const KEYMAP: &[KeyBinding] = &[
     KeyBinding { keys: "H", when: "editView", command: "tool.select", note: "Hand" },
     KeyBinding { keys: "Z", when: "editView", command: "tool.select", note: "Zoom" },
     KeyBinding { keys: "L", when: "editView", command: "tool.select", note: "Measurement" },
+    KeyBinding { keys: "A", when: "editView", command: "tool.select", note: "the annotation sub-tool in use, else Annotation Selection" },
     KeyBinding { keys: "Space (held)", when: "editView", command: "", note: "the Hand tool while held" },
     KeyBinding { keys: "Cmd+Space (held)", when: "editView", command: "", note: "the Zoom tool while held; Alt+click zooms out" },
     KeyBinding { keys: "Escape", when: "tool:*", command: "", note: "cancel the gesture in progress" },
@@ -45,6 +46,14 @@ pub const KEYMAP: &[KeyBinding] = &[
     KeyBinding { keys: "Alt+Delete", when: "editView", command: "edit.deleteInAllMasters", note: "the selected points and shapes" },
     KeyBinding { keys: "Tab", when: "editView", command: "selection.selectNext", note: "" },
     KeyBinding { keys: "Shift+Tab", when: "editView", command: "selection.selectPrevious", note: "" },
+    KeyBinding { keys: "Cmd+A", when: "tool:annotation", command: "annotation.selectAll", note: "every annotation of the edited layer" },
+    KeyBinding {
+        keys: "Left, Right, Up, Down",
+        when: "tool:annotation",
+        command: "annotation.move",
+        note: "the selected annotations; the font's increments",
+    },
+    KeyBinding { keys: "Delete", when: "tool:annotation", command: "annotation.delete", note: "the selected annotations" },
     KeyBinding { keys: "G", when: "tool:measurement", command: "command.batch", note: "while dragging the ruler: a measurement guide along it" },
 ];
 

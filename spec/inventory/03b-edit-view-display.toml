@@ -1519,6 +1519,7 @@ milestone = "M3"
 summary = "Tool for attaching notes and correction marks to a glyph layer. What a click does depends on the sub-tool chosen in the annotation palette. The shortcut is stated in the TrueType hinting chapter, where the same key does something else while the instructor tool is active."
 ref = "Edit View › Annotating"
 status = "handbook"
+notes = "Built in M3.16 (our design): each sub-tool is a tool of its own (`annotationSelect` … `annotationMinus`); A returns to the sub-tool in use, else Annotation Selection, and `tool.select` with `annotation` picks Annotation Selection. The tool takes Cmd+A, the arrow keys and Delete before the menu shortcuts. Handles show and work on selected annotations only."
 
 [[tool]]
 id = "annotationSelect"
@@ -1534,6 +1535,7 @@ milestone = "M3"
 summary = "First sub-tool of the annotation palette; selects existing annotations so they can be moved or deleted."
 ref = "Edit View › Annotating › Annotation Cursor"
 status = "handbook"
+notes = "Built in M3.16: a click on an annotation selects it with any sub-tool; dragging moves the selected annotations in one undo step (`annotation.move`)."
 
 [[tool]]
 id = "annotationText"
@@ -1550,6 +1552,7 @@ milestone = "M3"
 summary = "Sub-tool that places text notes on the layer. A note can hold several lines and wraps to the box width."
 ref = "Edit View › Annotating › Annotation Text"
 status = "handbook"
+notes = "Built in M3.16 (our geometry): the position is the box's top-left corner and the handle its top-right corner; the text wraps to the box width. Editing the text by double-click is not built yet; `annotation.update` with `text` does it."
 
 [[tool]]
 id = "annotationArrow"
@@ -1565,6 +1568,7 @@ milestone = "M3"
 summary = "Sub-tool that places red arrows pointing at a spot on the glyph."
 ref = "Edit View › Annotating › Annotation Arrow"
 status = "handbook"
+notes = "Built in M3.16 (our geometry): the position is the tip, the angle runs counter-clockwise from the x axis towards the tail, the tail is the handle; an arrow is 48 points long on screen at every zoom."
 
 [[tool]]
 id = "annotationCircle"
@@ -1580,6 +1584,7 @@ milestone = "M3"
 summary = "Sub-tool that places red circles around an area of the glyph."
 ref = "Edit View › Annotating › Annotation Circle"
 status = "handbook"
+notes = "Built in M3.16: the position is the centre; dragging the bottom handle sets the diameter to twice its distance from the centre."
 
 [[tool]]
 id = "annotationPlus"
@@ -1662,15 +1667,15 @@ status = "handbook"
 id = "annotation.selectAll"
 label = "Select All Annotations"
 menu = []
-shortcut = "Cmd+A"
-when = "tool:annotation"
+shortcut = ""
 kind = "ui"
-params = "{glyph: name, layer?: id}"
+params = "{glyph?: name (the edited glyph), layer?: id}"
 area = "drawing"
 milestone = "M3"
 summary = "With the Annotation tool active, Edit > Select All selects every annotation on the active layer instead of the outline. In FontCraft this is the context-specific behaviour of the Select All command."
 ref = "Edit View › Annotating"
 status = "handbook"
+notes = "Built in M3.16: Cmd+A is the Annotation tool's own key (decision 0004, D1: the active tool's keys come before the menu shortcuts), so the command carries no shortcut of its own and Edit > Select All keeps Cmd+A. The selection holds the annotations only."
 
 [[command]]
 id = "annotation.setTool"

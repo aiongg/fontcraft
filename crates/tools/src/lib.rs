@@ -16,12 +16,13 @@
 //! | [`selection`] | the selection and the commands' target object built from it |
 //! | [`snap`] | where a dragged point lands: nodes, then handles, guides, metric lines, alignment |
 //! | [`snap_guides`] | snapping to the background's points, guides and their crossings |
-//! | [`select`], [`lasso`], [`hand`], [`zoom`], [`rotate`], [`scale`], [`measure`] | the tools, as state machines |
+//! | [`select`], [`lasso`], [`hand`], [`zoom`], [`rotate`], [`scale`], [`measure`], [`annotate`] | the tools, as state machines |
 //! | [`bbox`] | the selection's bounding box, its knobs, and the freehand transform drags |
 //! | [`keymap`] | the Edit View keys these tools answer |
 //! | [`toolbox`] | the active tool, temporary tools (Space, Cmd+Space) and key routing |
 #![forbid(unsafe_code)]
 
+pub mod annotate;
 pub mod bbox;
 pub mod event;
 pub mod geometry;

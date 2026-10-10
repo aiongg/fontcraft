@@ -5,6 +5,7 @@
 //! module lists its own commands ([`MODULES`]), so a package adds a module instead of editing a
 //! shared list.
 
+pub mod annotation;
 pub mod font_view;
 pub mod keymap;
 pub mod menus;
@@ -37,6 +38,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::dialogs::COMMANDS, crate::dialogs::run),
     (transform::COMMANDS, transform::run),
     (crate::panels::COMMANDS, crate::panels::run),
+    (annotation::COMMANDS, annotation::run),
 ];
 
 /// Every shell command, in module order.

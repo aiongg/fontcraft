@@ -11,11 +11,13 @@
 //! | [`nodes`] | nodes and handles with the display conventions of `docs/spec/03a` § 4 |
 //! | [`selection`] | the selection, and the active tool's overlays (marquee, snapping lines…) |
 //! | [`bbox`] | the selection's bounding box and knobs, and the transformation origin |
+//! | [`annotations`] | notes and correction marks |
 //!
 //! Every colour and size comes from [`Tokens`]. Wheel and gestures act through `view.scrollTo`
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
 //! ([`crate::tools_glue`]) after the frame is drawn.
 
+pub mod annotations;
 pub mod background;
 pub mod bbox;
 pub mod fill;
@@ -99,6 +101,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             painter.extend(selection::point_shapes(layer, &tab.selection, v, tokens, focus));
         }
         painter.extend(bbox::shapes(font, &tab, tools.toolbox.active_id(), state.display.bounding_box, &state.transform, v, tokens));
+        annotations::draw(&c, layer, &tab.selection, &state.display);
         painter.extend(selection::overlay_shapes(&tools.toolbox.overlays(), v, tokens));
         guides::draw_measurement(&c, &extras);
     });

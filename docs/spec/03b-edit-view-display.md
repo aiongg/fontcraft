@@ -337,6 +337,27 @@ How FontCraft stores and edits them (our decisions where the handbook is silent)
 - The direction of a positive angle is open, as for every angle in the file format
   (`30-source-formats.md`, open question 1).
 
+How the Annotation tool draws and edits them (our decisions; the handbook shows the marks but
+gives no sizes):
+
+- Each sub-tool is a tool of its own (`annotationSelect` … `annotationMinus`); `A` returns to
+  the sub-tool in use, or picks Annotation Selection. `annotation` names Annotation Selection.
+- A note's position is the top-left corner of its box; its handle is the box's top-right
+  corner. The text wraps to the box width; the box grows with the text.
+- An arrow's position is its tip. Its angle runs counter-clockwise from the x axis and points
+  from the tip to the tail; the tail is its handle. An arrow is 48 points long on screen at
+  every zoom.
+- A circle's position is its centre; its handle is the bottom of the circle, and dragging it
+  sets the diameter to twice the handle's distance from the centre.
+- Plus and minus signs are 16 points across on screen. A type FontCraft does not know is drawn
+  as a dot with its name.
+- A click on empty canvas with a drawing sub-tool runs `annotation.add` with the command's
+  defaults. A click on an existing annotation selects it instead, with any sub-tool. Dragging an
+  annotation moves the selected ones (`annotation.move`); dragging the handle of a selected one
+  runs `annotation.update`. Each drag is one undo step.
+- Handles show and work on selected annotations only. Editing a note's text by double-click is
+  not built yet; `annotation.update` with `text` does it.
+
 ## Images
 
 **Adding.** `glyph.addImage` (Glyph > Add Image…), or drop a file on a Font View cell or on a

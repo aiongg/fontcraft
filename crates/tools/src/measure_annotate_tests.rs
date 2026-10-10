@@ -1,9 +1,11 @@
-//! The Measurement tool and snapping to guides and the background: gestures in, actions out.
+//! The Measurement tool, the annotation sub-tools and snapping to guides and the background:
+//! gestures in, actions out.
 
 use fontcraft_geom::Point;
-use fontcraft_model::{Background, Guide, Layer, Path, Shape};
-use serde_json::json;
+use fontcraft_model::{Annotation, Background, Extra, Guide, Layer, Path, Shape};
+use serde_json::{Value, json};
 
+use crate::annotate::{AnnotateTool, handle};
 use crate::event::PointerKind::{Down, Drag, Up};
 use crate::measure::MeasureTool;
 use crate::snap::{Moving, SnapKind, snap};
@@ -11,10 +13,18 @@ use crate::*;
 
 const NONE: Modifiers = Modifiers::NONE;
 
-/// A square (0,0)–(100,100).
+fn note(kind: &str, x: f64, y: f64, angle: f64, width: f64) -> Annotation {
+    Annotation { kind: kind.into(), x, y, angle, text: None, width, extra: Extra::new() }
+}
+
+/// A square (0,0)–(100,100), and three annotations: an arrow with its tip at (300,300) at 45°,
+/// a circle 100 across centred on (500,500), a text note at (600,100) 200 wide.
 fn layer() -> Layer {
     let mut layer = Layer::new("m01", 600.0);
     layer.shapes.push(Shape::Path(Path::rect(0.0, 0.0, 100.0, 100.0)));
+    layer.info.annotations.push(note("Arrow", 300.0, 300.0, 45.0, 0.0));
+    layer.info.annotations.push(note("Circle", 500.0, 500.0, 0.0, 100.0));
+    layer.info.annotations.push(note("Text", 600.0, 100.0, 0.0, 200.0));
     layer
 }
 
@@ -67,6 +77,13 @@ impl Shell {
                 _ => None,
             })
             .collect()
+    }
+
+    fn last_preview(&self) -> Option<&Invocation> {
+        self.actions.iter().rev().find_map(|a| match a {
+            Action::Preview { invocation } => Some(invocation),
+            _ => None,
+        })
     }
 }
 
@@ -138,4 +155,95 @@ fn snapping_reaches_the_background_and_guide_crossings() {
     let s = at(52.0, 250.0);
     assert_eq!(s.kind, Some(SnapKind::Guide), "the guide alone");
     assert!((s.point.x - 50.0).abs() < 1e-9 && (s.point.y - 250.0).abs() < 1e-9, "{:?}", s.point);
+}
+
+#[test]
+fn each_sub_tool_click_adds_its_type_with_the_command_defaults() {
+    for (name, kind) in [
+        ("annotationText", "text"),
+        ("annotationArrow", "arrow"),
+        ("annotationCircle", "circle"),
+        ("annotationPlus", "plus"),
+        ("annotationMinus", "minus"),
+    ] {
+        let mut shell = Shell::new(layer());
+        let mut tool = AnnotateTool::new(name).unwrap();
+        shell.click(&mut tool, 50.0, 700.0, NONE);
+        let runs = shell.runs();
+        let [add] = runs.as_slice() else { panic!("{name}: {runs:?}") };
+        assert_eq!(add.id, "annotation.add");
+        assert_eq!(add.params, json!({"glyph": "A", "layer": "m01", "type": kind, "position": [50.0, 700.0]}), "{name}");
+    }
+    // The Selection sub-tool adds nothing; `annotation` names it.
+    let mut shell = Shell::new(layer());
+    let mut tool = make_tool("annotation").unwrap();
+    assert_eq!(tool.id(), "annotationSelect");
+    shell.click(tool.as_mut(), 50.0, 700.0, NONE);
+    assert!(shell.runs().is_empty());
+}
+
+#[test]
+fn dragging_an_annotation_moves_the_selection_in_one_interaction() {
+    let mut shell = Shell::new(layer());
+    let mut tool = AnnotateTool::new("annotationArrow").unwrap();
+    // A press on an existing arrow selects it instead of adding one.
+    shell.drag(&mut tool, (301.0, 301.0), (331.0, 321.0), NONE);
+    assert_eq!(shell.selection, Selection::from_items([Item::Annotation(0)]));
+    assert!(matches!(shell.actions.iter().find(|a| matches!(a, Action::Begin { .. })), Some(Action::Begin { label }) if label == "Move Annotations"));
+    let preview = shell.last_preview().unwrap();
+    assert_eq!(
+        (preview.id.as_str(), &preview.params),
+        ("annotation.move", &json!({"glyph": "A", "layer": "m01", "annotations": [0], "dx": 30.0, "dy": 20.0}))
+    );
+    assert_eq!(shell.actions.last(), Some(&Action::Commit));
+    assert!(shell.runs().is_empty());
+}
+
+#[test]
+fn handle_drags_update_width_angle_and_diameter() {
+    let cases: [(usize, (f64, f64), Value); 3] =
+        [(1, (500.0, 420.0), json!({"diameter": 160.0})), (2, (900.0, 100.0), json!({"width": 300.0})), (0, (300.0, 400.0), json!({"angle": 90.0}))];
+    for (index, to, values) in cases {
+        let mut shell = Shell::new(layer());
+        shell.selection = Selection::from_items([Item::Annotation(index)]);
+        let start = handle(&shell.layer.info.annotations[index], &View::default()).unwrap();
+        let mut tool = AnnotateTool::new("annotationSelect").unwrap();
+        shell.drag(&mut tool, (start.x, start.y), to, NONE);
+        let preview = shell.last_preview().unwrap();
+        let mut want = json!({"glyph": "A", "layer": "m01", "annotation": index});
+        want.as_object_mut().unwrap().extend(values.as_object().unwrap().clone());
+        assert_eq!((preview.id.as_str(), &preview.params), ("annotation.update", &want), "annotation {index}");
+        assert_eq!(shell.actions.last(), Some(&Action::Commit));
+    }
+}
+
+#[test]
+fn annotation_keys_select_all_delete_and_move() {
+    let mut shell = Shell::new(layer());
+    let mut tools = Toolbox::new();
+    let key = |shell: &mut Shell, tools: &mut Toolbox, key: Key, mods: Modifiers| shell.run(|cx| tools.key(cx, &KeyEvent::press(key, mods)));
+    let out = key(&mut shell, &mut tools, Key::Char('a'), NONE);
+    assert_eq!(runs_of(&out), vec![("tool.select", json!({"tool": "annotation"}))]);
+    tools.select("annotationCircle").unwrap();
+    let out = key(&mut shell, &mut tools, Key::Char('a'), NONE);
+    assert_eq!(runs_of(&out), vec![("tool.select", json!({"tool": "annotationCircle"}))], "A keeps the sub-tool in use");
+    let out = key(&mut shell, &mut tools, Key::Char('a'), Modifiers::CMD);
+    assert_eq!(runs_of(&out), vec![("annotation.selectAll", json!({"glyph": "A", "layer": "m01"}))]);
+    shell.selection = Selection::from_items([Item::Annotation(0), Item::Annotation(2)]);
+    let out = key(&mut shell, &mut tools, Key::Right, Modifiers::SHIFT);
+    assert_eq!(runs_of(&out), vec![("annotation.move", json!({"glyph": "A", "layer": "m01", "annotations": [0, 2], "dx": 10.0, "dy": 0.0}))]);
+    let out = key(&mut shell, &mut tools, Key::Delete, NONE);
+    assert_eq!(runs_of(&out), vec![("annotation.delete", json!({"glyph": "A", "layer": "m01", "annotations": [0, 2]}))]);
+    let out = key(&mut shell, &mut tools, Key::Char('l'), NONE);
+    assert_eq!(runs_of(&out), vec![("tool.select", json!({"tool": "measurement"}))]);
+}
+
+fn runs_of(out: &Output) -> Vec<(&str, Value)> {
+    out.actions
+        .iter()
+        .filter_map(|a| match a {
+            Action::Run { invocation } => Some((invocation.id.as_str(), invocation.params.clone())),
+            _ => None,
+        })
+        .collect()
 }

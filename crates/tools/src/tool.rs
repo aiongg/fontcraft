@@ -9,7 +9,10 @@ use crate::output::{Output, Overlay};
 use crate::scene::Scene;
 use crate::selection::Selection;
 use crate::view::View;
-use crate::{hand::HandTool, lasso::LassoTool, measure::MeasureTool, rotate::RotateTool, scale::ScaleTool, select::SelectTool, zoom::ZoomTool};
+use crate::{
+    annotate::AnnotateTool, hand::HandTool, lasso::LassoTool, measure::MeasureTool, rotate::RotateTool, scale::ScaleTool, select::SelectTool,
+    zoom::ZoomTool,
+};
 
 /// Distances and steps the tools use. The shell fills the screen distances from `theme::Tokens`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -114,6 +117,12 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "rotate", label: "Rotate", shortcut: "R", group: "" },
     ToolInfo { id: "scale", label: "Scale", shortcut: "S", group: "" },
     ToolInfo { id: "measurement", label: "Measurement", shortcut: "L", group: "" },
+    ToolInfo { id: "annotationSelect", label: "Annotation Selection", shortcut: "A", group: "annotation" },
+    ToolInfo { id: "annotationText", label: "Text Annotation", shortcut: "A", group: "annotation" },
+    ToolInfo { id: "annotationArrow", label: "Arrow Annotation", shortcut: "A", group: "annotation" },
+    ToolInfo { id: "annotationCircle", label: "Circle Annotation", shortcut: "A", group: "annotation" },
+    ToolInfo { id: "annotationPlus", label: "Plus Annotation", shortcut: "A", group: "annotation" },
+    ToolInfo { id: "annotationMinus", label: "Minus Annotation", shortcut: "A", group: "annotation" },
 ];
 
 /// A new tool by id, or `None` for an unknown id.
@@ -127,6 +136,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "rotate" => Box::new(RotateTool::default()),
         "scale" => Box::new(ScaleTool::default()),
         "measurement" => Box::new(MeasureTool::default()),
+        _ if id.starts_with("annotation") => Box::new(AnnotateTool::new(id)?),
         _ => return None,
     };
     Some(tool)
