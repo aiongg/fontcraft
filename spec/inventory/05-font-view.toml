@@ -1454,6 +1454,7 @@ milestone = "M4"
 summary = "The Char column renders the glyph's character in the system font. A glyph with several code points shows only the first; a glyph with none shows nothing."
 ref = "Font View › Glyph Properties › Char"
 status = "handbook"
+guesses = ["A character the interface font lacks is drawn with the glyph's own outline from the document, at row height in the text colour, instead of a system font's. Settled by observing the reference with a code point that the system fonts lack."]
 
 [[behavior]]
 id = "fontView.column.name"

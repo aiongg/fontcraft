@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**334 guesses on 239 rows (124 of them live commands).**
+**335 guesses on 240 rows (124 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -245,6 +245,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.cell.badgeCustomInfo` (behavior) | M4 | handbook | – | A glyph counts as custom when it stores a category, subcategory, script, production name, case, direction or sort name that differs from the database's, or Unicode values that differ from the database's for its name. Settled by observation. |
 | `fontView.cell.badgeNonExporting` (behavior) | M4 | handbook | – | Drawn at the top centre of the cell; the handbook gives no position. Settled by observation (05 question 15). |
 | `fontView.cell.colorLayerOnly` (behavior) | M4 | handbook | – | The cut-out is a triangle over 30% of the side at the top-left corner. Settled by observation. |
+| `fontView.column.char` (behavior) | M4 | handbook | – | A character the interface font lacks is drawn with the glyph's own outline from the document, at row height in the text colour, instead of a system font's. Settled by observing the reference with a code point that the system fonts lack. |
 | `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Every column is shown by default, in this order: ID, Char, Name, Unicode, Production Name, Script, Category, Subcategory, Case, Direction, Exports, Color, Tags, Sort Name, Note, Components, Last Changed, LSB, RSB, Width, Left Group, Right Group. Settled by observation (05 question 14). |
 | `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation. |
 | `fontView.sidebar.missingBadge` (behavior) | M4 | handbook | – | The badge counts expected glyphs present by name or by code point (a glyph with the character counts even under another name). Settled by observing a badge for a font that names a glyph differently. |

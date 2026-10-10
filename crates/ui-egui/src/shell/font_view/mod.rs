@@ -176,6 +176,8 @@ impl FontViewState {
 pub struct FontViewUi {
     pub cache: cache::FontViewCache,
     pub images: images::CellImages,
+    /// List View's Char cells drawn from the glyph's outline, at row height.
+    pub list_images: images::CellImages,
     pub drag: Option<grid::Drag>,
     pub edit: Option<InlineEdit>,
     /// The grid cells or list rows laid out in the last frame, with their glyph and their

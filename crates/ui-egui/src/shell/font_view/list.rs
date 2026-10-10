@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 
 use super::cache::Row;
 use super::columns::{CellCx, Column, Editing};
+use super::images::{Cell, CellImages, Frame};
 use super::{FontViewState, InlineEdit};
 use crate::app::FontcraftApp;
 use crate::theme::Tokens;
@@ -54,6 +55,15 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let selected: HashSet<&str> = state.selected_glyphs.iter().map(String::as_str).collect();
     let mods = ui.input(|i| i.modifiers);
     let cx = CellCx { font: &font, master: &cache.master };
+    font_view.list_images.start_frame();
+    let mut outlines = Outlines {
+        ctx: ui.ctx().clone(),
+        images: &mut font_view.list_images,
+        doc: (doc.id, doc.revision),
+        frame: Frame::of(&font, &cache.master),
+        pixels_per_point: ui.ctx().pixels_per_point(),
+        deferred: false,
+    };
     let mut edit = font_view.edit.take();
     let mut edit_shown = false;
     let mut laid_out = Vec::new();
@@ -86,7 +96,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                             }
                             continue;
                         }
-                        paint_cell(&painter, tokens, &cx, row, column, cell, is_selected);
+                        paint_cell(&painter, tokens, &cx, &mut outlines, row, column, cell, is_selected);
                     }
                     let hit = response
                         .interact_pointer_pos()
@@ -97,8 +107,22 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             });
         });
     });
+    if outlines.deferred {
+        ui.ctx().request_repaint();
+    }
     font_view.edit = edit.filter(|e| !e.glyph.is_empty() && (edit_shown || e.fresh));
     font_view.laid_out = laid_out;
+}
+
+/// What a Char cell needs to draw a glyph's outline in place of a character.
+struct Outlines<'a> {
+    ctx: egui::Context,
+    images: &'a mut CellImages,
+    doc: (u64, u64),
+    frame: Frame,
+    pixels_per_point: f32,
+    /// An outline waits for the next frame.
+    deferred: bool,
 }
 
 /// The header: labels, the sort arrow, sorting, dragging and the show/hide menu.
@@ -239,7 +263,8 @@ fn cell_field(ui: &mut egui::Ui, edit: &mut InlineEdit, rect: Rect, row: &Row) -
 }
 
 /// Draws one cell.
-fn paint_cell(painter: &egui::Painter, t: &Tokens, cx: &CellCx, row: &Row, column: Column, cell: Rect, selected: bool) {
+#[allow(clippy::too_many_arguments)]
+fn paint_cell(painter: &egui::Painter, t: &Tokens, cx: &CellCx, outlines: &mut Outlines, row: &Row, column: Column, cell: Rect, selected: bool) {
     let inner = cell.shrink2(vec2(t.cell_inset, 0.0));
     let color = if selected {
         t.selected_text
@@ -277,11 +302,22 @@ fn paint_cell(painter: &egui::Painter, t: &Tokens, cx: &CellCx, row: &Row, colum
             }
         }
         Column::Char => {
-            // A character the interface font lacks would show as an empty box.
             let font = FontId::proportional(t.list_char_size);
             let value = column.text(cx, row);
             if value.chars().all(|c| painter.ctx().fonts_mut(|f| f.has_glyph(&font, c))) {
                 text(painter, inner, &value, font, color, inner.width(), false);
+            } else {
+                // The interface font would show an empty box: the glyph's own outline stands in.
+                let side = cell.height().min(inner.width()).max(1.0);
+                let square = Rect::from_min_size(pos2(inner.min.x, cell.center().y - side / 2.0), vec2(side, side));
+                let pixels = (side * outlines.pixels_per_point).round().max(1.0) as u32;
+                match outlines.images.get(&outlines.ctx, outlines.doc, cx.font, &row.glyph, cx.master, outlines.frame, pixels) {
+                    Cell::Ready(Some(texture)) => {
+                        painter.image(texture, square, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), color);
+                    }
+                    Cell::Ready(None) => {}
+                    Cell::Later => outlines.deferred = true,
+                }
             }
         }
         _ => {

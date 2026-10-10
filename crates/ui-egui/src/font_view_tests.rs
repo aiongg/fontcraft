@@ -362,6 +362,38 @@ fn list_view_sorts_shows_columns_and_edits_in_place() {
 }
 
 #[test]
+fn list_view_char_cells_draw_the_outline_when_the_interface_font_lacks_the_character() {
+    let mut app = FontcraftApp::default();
+    let window = Window::new();
+    for name in ["A", "B"] {
+        app.run("path.addRectangle", &json!({"glyph": name, "x": 100, "y": 0, "width": 300, "height": 600})).unwrap();
+    }
+    // U+1E00 is outside the interface font.
+    app.run("glyph.setUnicodes", &json!({"glyphs": ["A"], "unicodes": ["1E00"]})).unwrap();
+    app.run("fontView.setViewMode", &json!({"mode": "list"})).unwrap();
+    let shapes = window.frame(&mut app);
+    let columns = list::placed(&app.state.font_view.shown_columns(), &app.tokens);
+    let (_, x, w) = *columns.iter().find(|c| c.0 == Column::Char).unwrap();
+    let char_cell = |app: &FontcraftApp, glyph: &str| {
+        let row = cell(app, glyph);
+        Rect::from_min_size(egui::pos2(row.min.x + x, row.min.y), egui::vec2(w, row.height()))
+    };
+    let images_in = |rect: Rect| {
+        shapes
+            .iter()
+            .filter(|s| {
+                matches!(s, Shape::Mesh(m) if m.texture_id != egui::TextureId::default()) && rect.expand(1.0).contains_rect(s.visual_bounding_rect())
+            })
+            .count()
+    };
+    let (a, b) = (char_cell(&app, "A"), char_cell(&app, "B"));
+    assert_eq!(images_in(a), 1, "the outline of A stands in for U+1E00");
+    assert!(texts_in(&shapes, a).is_empty());
+    assert_eq!(texts_in(&shapes, b), ["B"]);
+    assert_eq!(images_in(b), 0);
+}
+
+#[test]
 fn ten_thousand_glyphs_lay_out_only_the_rows_in_view() {
     let mut app = FontcraftApp::default();
     app.session
