@@ -327,7 +327,7 @@ impl Tokens {
             audit_ring_radius: 9.0,
             audit_ring_width: 1.5,
             audit_badge_radius: 5.0,
-            audit_badge_offset: 14.0,
+            audit_badge_offset: 20.0,
             toolbar_button: 28.0,
             toolbar_icon: 18.0,
             toolbar_gap: 2.0,

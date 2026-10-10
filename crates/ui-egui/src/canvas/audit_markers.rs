@@ -298,7 +298,9 @@ pub fn draw(ui: &egui::Ui, c: &Painting, layer: &Layer, markers: &[Marker], inte
         }
         c.painter.extend(shapes);
         let Some((at, badge)) = spot else { continue };
-        c.painter.line_segment([at, badge], Stroke::new(t.audit_ring_width, color));
+        // The leader starts at the ring's edge, so ring and badge stay apart.
+        let from = if m.points.is_empty() { at } else { at + (badge - at).normalized() * t.audit_ring_radius };
+        c.painter.line_segment([from, badge], Stroke::new(t.audit_ring_width, color));
         c.painter.circle(badge, t.audit_badge_radius, color, Stroke::new(1.0, t.canvas));
         if !interactive || !c.rect.contains(badge) {
             continue;
