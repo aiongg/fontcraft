@@ -710,10 +710,12 @@ milestone = "M4"
 summary = "Renames the selected glyphs by replacing every occurrence of the Find text in their names with the Replace text. An empty Find appends the Replace text to each name; with Regex on, Find is a regular expression and Replace may use numbered group references such as \\1."
 ref = "Font View › Batch-Processing › Batch-Renaming Glyphs"
 status = "handbook"
-notes = "Regular expressions wait for the regex dependency of the engine; until then `regex: true` is refused with a message and plain text works."
+notes = "Regex mode and the `\\1` group references are documented in the handbook but not yet observed. The pattern is read within the same size and nesting limits as the search field's regular expressions; a pattern that cannot be compiled, or a reference to a group the pattern lacks, refuses the command and names the problem."
 guesses = [
   "A batch that would give two glyphs the same name, or any glyph an invalid name, is refused as a whole and the clashes are listed. Each rename follows glyph.rename. Settled by observation (05 question 9).",
   "The results are not converted to nice names: Find and Replace gives the names it computes. Settled by observation.",
+  "In Regex mode a group reference is a backslash and one digit (`\\0` is the whole match, `\\10` is group 1 followed by 0), `\\\\` is a backslash, and `$` is plain text. Settled by renaming with a two-digit group reference and a `$` in the reference app.",
+  "Regex mode is case-sensitive, and an empty Find appends Replace in Regex mode as in plain mode. Settled by observation.",
 ]
 
 # ───────────────────────────── Search and sidebar filters ─────────────────────────────

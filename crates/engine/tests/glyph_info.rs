@@ -139,12 +139,35 @@ fn find_and_replace_renames_all_or_nothing() {
     assert!(e.contains("taken"), "{e}");
     let e = refused(&mut s, "edit.findAndReplace", json!({"glyphs": ["a.ss02", "b.ss02"], "find": ".", "replace": " "}));
     assert!(e.contains("nothing was renamed"), "{e}");
-    let e = refused(&mut s, "edit.findAndReplace", json!({"glyphs": ["a.ss02"], "find": "\\.ss(\\d\\d)", "replace": ".cv\\1", "regex": true}));
-    assert!(e.contains("regular expressions are not available yet"), "{e}");
 
     // One undo step per batch.
     run(&mut s, "edit.undo", json!({}));
     assert!(s.font().unwrap().glyph("a.ss01").is_some() && s.font().unwrap().glyph("b.ss01").is_some());
+    check_session(&s).unwrap();
+}
+
+#[test]
+fn find_and_replace_with_a_regular_expression_uses_numbered_groups() {
+    let mut s = built("x.cv03");
+    run(&mut s, "glyph.newGlyph", json!({"name": "y.cv12"}));
+    let r = run(
+        &mut s,
+        "edit.findAndReplace",
+        json!({"glyphs": ["x.cv03", "y.cv12", "a"], "find": "\\.cv(\\d)(\\d)", "replace": ".ss\\2\\1", "regex": true}),
+    );
+    assert_eq!(r["renamed"], json!([{"from": "x.cv03", "to": "x.ss30"}, {"from": "y.cv12", "to": "y.ss21"}]));
+    let b = s.font().unwrap().glyph("B").unwrap().clone();
+    assert!(matches!(&b.layers[0].shapes[0], Shape::Component(c) if c.glyph == "x.ss30"), "references follow");
+    // Every match in a name is replaced; `\0` is the whole match.
+    let r = run(&mut s, "edit.findAndReplace", json!({"glyphs": ["x.ss30"], "find": "[0-9]", "replace": "\\0\\0", "regex": true}));
+    assert_eq!(r["renamed"], json!([{"from": "x.ss30", "to": "x.ss3300"}]));
+
+    for (find, replace, needle) in
+        [("(", "x", "`(`"), ("a(b)", "\\2", "group \\2"), ("(?:a{1000}){1000}", "x", "cannot be used"), ("^", ".", "nothing was renamed")]
+    {
+        let e = refused(&mut s, "edit.findAndReplace", json!({"glyphs": ["a", "b"], "find": find, "replace": replace, "regex": true}));
+        assert!(e.contains(needle), "{find} → {replace}: {e}");
+    }
     check_session(&s).unwrap();
 }
 

@@ -21,7 +21,8 @@ use std::fmt;
 use regex::{Regex, RegexBuilder};
 
 use crate::{
-    Env, MAX_PATTERN_BYTES, MAX_PREDICATE_BYTES, MAX_PREDICATE_DEPTH, MAX_PREDICATE_TOKENS, QueryError, REGEX_SIZE_LIMIT, Subject, fail, short,
+    Env, MAX_PATTERN_BYTES, MAX_PREDICATE_BYTES, MAX_PREDICATE_DEPTH, MAX_PREDICATE_TOKENS, MAX_REGEX_NESTING, QueryError, REGEX_SIZE_LIMIT, Subject,
+    fail, short,
 };
 
 /// A compiled glyph predicate.
@@ -84,18 +85,24 @@ impl PartialEq for Pattern {
     }
 }
 
+/// Compiles `compiled`, the regular expression `source` wrapped as the caller needs, within
+/// [`MAX_PATTERN_BYTES`], [`REGEX_SIZE_LIMIT`] and [`MAX_REGEX_NESTING`]. Errors name `source`.
+pub(crate) fn limited_regex(source: &str, compiled: &str, case_insensitive: bool) -> Result<Regex, QueryError> {
+    if source.len() > MAX_PATTERN_BYTES {
+        return fail(format!("the regular expression is {} bytes long; at most {MAX_PATTERN_BYTES} are allowed", source.len()));
+    }
+    RegexBuilder::new(compiled)
+        .case_insensitive(case_insensitive)
+        .size_limit(REGEX_SIZE_LIMIT)
+        .dfa_size_limit(REGEX_SIZE_LIMIT)
+        .nest_limit(MAX_REGEX_NESTING)
+        .build()
+        .map_err(|e| QueryError(format!("the regular expression `{}` cannot be used: {e}", short(source))))
+}
+
 impl Pattern {
     pub fn new(source: &str, case_insensitive: bool) -> Result<Pattern, QueryError> {
-        if source.len() > MAX_PATTERN_BYTES {
-            return fail(format!("the regular expression is {} bytes long; at most {MAX_PATTERN_BYTES} are allowed", source.len()));
-        }
-        let regex = RegexBuilder::new(&format!("^(?:{source})$"))
-            .case_insensitive(case_insensitive)
-            .size_limit(REGEX_SIZE_LIMIT)
-            .dfa_size_limit(REGEX_SIZE_LIMIT)
-            .nest_limit(64)
-            .build()
-            .map_err(|e| QueryError(format!("the regular expression `{}` cannot be used: {e}", short(source))))?;
+        let regex = limited_regex(source, &format!("^(?:{source})$"), case_insensitive)?;
         Ok(Pattern { source: source.to_string(), case_insensitive, regex })
     }
 

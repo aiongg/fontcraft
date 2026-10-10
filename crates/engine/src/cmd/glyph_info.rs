@@ -215,7 +215,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Find and Replace…",
             ["Edit", "Find"],
             Some("Cmd+Shift+F"),
-            "{glyphs: [names], find: string, replace: string, regex?: bool} renames the glyphs by replacing every occurrence of `find` in their names with `replace`; an empty `find` appends `replace` to every name. Names without `find` stay. Each rename follows glyph.rename (references follow; Unicode values follow a changed base name) without converting to nice names. If any result is taken, given twice or breaks the naming rules, nothing is renamed and the problems are listed. Regular expressions are not available yet → {renamed: [{from, to}], updated: [{name, place}], stillUsed: [{name, place}]}",
+            "{glyphs: [names], find: string, replace: string, regex?: bool} renames the glyphs by replacing every occurrence of `find` in their names with `replace`; an empty `find` appends `replace` to every name. Names without `find` stay. Each rename follows glyph.rename (references follow; Unicode values follow a changed base name) without converting to nice names. With `regex`, `find` is a regular expression and `replace` may name its groups as \\1 to \\9 (\\0: the whole match). If any result is taken, given twice or breaks the naming rules, nothing is renamed and the problems are listed → {renamed: [{from, to}], updated: [{name, place}], stillUsed: [{name, place}]}",
             has_doc,
             find_and_replace
         )
@@ -410,20 +410,25 @@ fn find_and_replace(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("edit.findAndReplace", v)?;
     let find = p.str("find")?;
     let replace = p.str("replace")?;
-    if p.bool_or("regex", false)? {
-        return Err(p.bad("regular expressions are not available yet; turn `regex` off to replace plain text"));
-    }
     for (key, text) in [("find", find), ("replace", replace)] {
         if text.len() > MAX_NAME_LEN {
             return Err(p.bad(format!("`{key}` is longer than {MAX_NAME_LEN} bytes")));
         }
     }
+    let pattern = match (p.bool_or("regex", false)?, find.is_empty()) {
+        (true, false) => Some(fontcraft_glyphquery::Replacement::new(find, replace).map_err(|e| p.bad(format!("`find`: {e}")))?),
+        _ => None,
+    };
     let data = s.glyph_data()?;
     let font = s.font()?;
     let names = targets(&p, font)?;
     let mut pairs = Vec::new();
     for name in &names {
-        let new = if find.is_empty() { format!("{name}{replace}") } else { name.replace(find, replace) };
+        let new = match &pattern {
+            _ if find.is_empty() => format!("{name}{replace}"),
+            Some(pattern) => pattern.apply(name),
+            None => name.replace(find, replace),
+        };
         if new != *name {
             pairs.push((name.clone(), new));
         }

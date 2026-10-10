@@ -10,6 +10,7 @@
 
 mod filters;
 mod predicate;
+mod replace;
 mod rules;
 mod search;
 mod sidebar;
@@ -27,6 +28,7 @@ pub use filters::{
     Filter, add_filter, check_filter_name, filter_at, list_names, move_filter, remove_filter, rename_filter, replace_filter, validate_filters,
 };
 pub use predicate::{Attr, Expr, LayerAttr, Literal, Op, Pattern, Test, parse_predicate};
+pub use replace::Replacement;
 pub use rules::{GroupKind, Property, Rule, RuleNode, RuleOp, RuleTree, RuleValue};
 pub use search::{Matcher, Search, SearchField};
 pub use sidebar::{
@@ -44,6 +46,8 @@ pub const MAX_PREDICATE_TOKENS: usize = 4096;
 pub const MAX_PATTERN_BYTES: usize = 1024;
 /// Largest compiled regular expression, in bytes (the `regex` crate's size limits).
 pub const REGEX_SIZE_LIMIT: usize = 1 << 20;
+/// Deepest nesting of groups and repetitions in a regular expression.
+pub const MAX_REGEX_NESTING: u32 = 64;
 /// Longest search term, in bytes.
 pub const MAX_SEARCH_BYTES: usize = 1024;
 /// Longest text value of a rule (a name, tag or script to compare with), in bytes.
