@@ -26,6 +26,7 @@ mod corner;
 mod cut;
 mod direction;
 mod extremes;
+pub mod filters;
 mod graph;
 mod tidy;
 

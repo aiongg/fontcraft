@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 fontcraft-geom.workspace = true
+fontcraft-pathops.workspace = true
 fontcraft-model.workspace = true
 fontcraft-format.workspace = true
 fontcraft-compile.workspace = true

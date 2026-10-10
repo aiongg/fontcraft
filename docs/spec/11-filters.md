@@ -30,6 +30,10 @@ and lists installed filter plug-ins next to them. Every filter can be run in two
 `filter.repeatLastFilter`, Cmd+R. Applies the last used filter again to the current target. The
 source gives the shortcut only.
 
+How FontCraft runs it (our design, unconfirmed): the last filter is the last `filter.*` command of
+the registry, or `filter.apply`, in the session journal. It runs again with the same settings, on
+the targets the repeat names, without a dialog. The command is disabled until a filter has run.
+
 ### Filter menu content
 
 Built-in filters plus all installed filter plug-ins (`filter.menu.contents`,
@@ -42,6 +46,20 @@ Background, Add Extremes and Remove Overlap (Path).
 - `filter.apply {filter, args, include?, exclude?, glyphs?, layers?}` runs any registered filter by
   filter name with export-string arguments.
 - `filter.list` returns the filter registry with parameter schemas.
+
+How FontCraft builds them:
+
+| Piece | Where | What it does |
+|---|---|---|
+| Filter trait and registry | `crates/pathops/src/filters/mod.rs` | Each filter has a command id, an export name, a label, a parameter schema (kind, range, default, required, place in the string) and the operation on one layer's contours |
+| Filter commands | `crates/engine/src/cmd/filter.rs` | One `filter.*` command per registry entry, generated from it: a new filter needs no engine change |
+| `filter.apply` | same | `filter` is the export name (case ignored) or the command id. `args` as a list holds export-string items; as an object, the command's parameters. `string` holds a whole export string. Without `glyph` or `glyphs` it runs on every glyph, as export does; `include` and `exclude` narrow the list |
+| Path menu filters | same | Transformations, AddExtremes and RemoveOverlap are listed under their export names and run their Path menu commands. Transformations reads its string with the parser of `path.transformations` |
+| Export | same | `parse_filter_string` and `run_filter_string` serve the `Filter` and `PreFilter` parameters (M7) |
+
+A filter changes paths only. Components and locked paths stay as they are. A surviving node keeps
+its name and user data; a path keeps its attributes. A run over many glyphs is one undo step, and
+the result of a filter command carries the export string of the settings it ran with (`string`).
 
 ## Built-in filters
 
@@ -104,6 +122,24 @@ Rounds corners with `radius`.
 - Nothing selected: only outward-pointing (convex) corners are rounded.
 - `visualCorrections`: the radius is reduced at acute corners and increased at obtuse ones so the
   rounding looks even.
+
+How FontCraft runs it (our design, documented behaviour not yet observed):
+
+- A rounded corner becomes two smooth nodes joined by a cubic close to a circular arc. Each node
+  is `radius / tan(a / 2)` units (straight-line distance) from a corner of inner angle `a`. A curved
+  neighbour is split on its own curve, so it keeps its shape.
+- That distance is at most half of either neighbouring segment, so the radius shrinks where it
+  does not fit. A segment between two roundings that meet disappears.
+- Selected corners are selected on-curve nodes and both end nodes of selected segments.
+- Outward-pointing means the outline turns toward the filled side. The filled side is read from
+  nesting, as Correct Path Direction does, so a glyph drawn in the wrong direction gets the same
+  corners. An open path has no filled side: with nothing selected, all its corners are rounded.
+- Visual corrections multiply the radius by `tan(a / 2)` (1 at a right angle), limited to a factor
+  between 1/4 and 4, so every rounding starts `radius` units from its corner.
+- Smooth nodes, nearly straight nodes (less than 1° of turn) and corners next to quadratic
+  segments stay. New points are rounded to the grid.
+- Export string `RoundCorner; radius; visualcorrection`. The dialog's first values are ours:
+  radius 20, visual corrections off.
 
 ### Rounded Font (`filter.roundedFont`)
 

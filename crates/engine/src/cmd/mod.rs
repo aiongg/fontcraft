@@ -16,6 +16,7 @@ mod compile;
 mod dimensions;
 mod edit;
 mod file;
+pub mod filter;
 mod fit_curve;
 mod font;
 mod glyph;
@@ -176,6 +177,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(dimensions::specs());
         v.extend(node::specs());
         v.extend(fit_curve::specs());
+        v.extend(filter::specs());
         v
     })
 }

@@ -881,6 +881,7 @@ dependencies = [
  "fontcraft-io-svg",
  "fontcraft-io-ufo",
  "fontcraft-model",
+ "fontcraft-pathops",
  "fontcraft-testkit",
  "log",
  "serde",

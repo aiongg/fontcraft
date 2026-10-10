@@ -16,12 +16,13 @@ label = "Repeat Last Filter"
 menu = []
 shortcut = "Cmd+R"
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids]}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], points?: [[shape, node]], segments?: [[shape, node]] (with one glyph)}"
 area = "path-ops"
 milestone = "M3"
 summary = "Runs the most recently used filter again on the current target. The source gives only the shortcut: the label is ours, a menu position is not confirmed, and whether the previous values are reused silently or the dialog reopens, are not stated."
 ref = "Filters › Applying Filters › Filter Menu"
 status = "handbook"
+notes = "FontCraft (our design, not observed): the last filter is the last filter.* command of the registry, or filter.apply, in the session journal; it runs again silently with the same settings, on the targets given. Disabled until a filter has run."
 
 [[command]]
 id = "filter.apply"
@@ -29,12 +30,13 @@ label = "Apply Filter"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids], filter: string, args?: [string] | {name: value}, include?: [names], exclude?: [names]}"
+params = "{glyph?: name | glyphs?: [names], layer?: id | layers?: [ids], points?, segments? (with glyph), filter: string, args?: [string] | {name: value}, string?: export string (in place of filter and args), include?: [names], exclude?: [names]}"
 area = "path-ops"
 milestone = "M3"
 summary = "Generic headless entry point: runs any registered filter (built-in or plug-in) by its filter name with the same arguments the export-time parameter string accepts. Not a reference menu item; proposed so agents and the CLI can run a filter without a dialog."
 ref = "Filters › Applying Filters; Appendix › Custom Parameters › Filter"
 status = "inferred"
+notes = "FontCraft: `filter` is the export name (case ignored) or the command id; `args` as a list holds export-string items, as an object the filter command's parameters; `string` holds a whole export string. Without glyph or glyphs it runs on every glyph of the font, as export does; include and exclude narrow the list. Transformations, AddExtremes and RemoveOverlap run their Path menu commands."
 
 [[command]]
 id = "filter.list"
@@ -104,6 +106,7 @@ milestone = "M3"
 summary = "Every filter command accepts explicit glyph names and layer ids so that it works without a UI selection; when both are omitted the UI targeting rules above apply. A layers list may name several masters, which removes the need to re-run per master."
 ref = "Filters › Applying Filters › Filter Menu"
 status = "inferred"
+notes = "FontCraft: a filter command takes one glyph or a glyphs list (the shell fills them from its selection) and the first master's layer unless layer or layers is given. With glyphs, a locked glyph or a missing layer is skipped and listed; with one glyph it is an error. filter.apply without glyph or glyphs runs on every glyph."
 
 # --- Extrude ---
 
@@ -371,12 +374,13 @@ label = "Round Corners"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids], points?: [[shape, node]] (with one glyph), radius: number, visualCorrections?: bool}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], points?: [[shape, node]], segments?: [[shape, node]] (with one glyph), radius: number, visualCorrections?: bool = false}"
 area = "path-ops"
 milestone = "M3"
 summary = "Replaces corner nodes with arcs of the given radius (font units). With a node selection it rounds exactly the selected corners; with none it rounds only convex (outward-pointing) corners of the layer."
 ref = "Filters › Built-in Filters › Round Corners"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft geometry (ours): a rounded corner becomes two smooth nodes joined by a cubic close to a circular arc, each radius / tan(a / 2) units from a corner of inner angle a; a curved neighbour is split on its own curve. That distance is at most half of either neighbouring segment, so the radius shrinks where it does not fit, and a segment between two roundings that meet disappears. Smooth nodes, nearly straight nodes and corners next to quadratic segments stay. Components and locked paths are not changed; new points are rounded to the grid."
 
 [[panel]]
 id = "dialog.filterRoundCorners"
@@ -388,6 +392,7 @@ milestone = "M3"
 summary = "Options dialog of the Round Corners filter. Defaults are not stated in the source."
 ref = "Filters › Built-in Filters › Round Corners"
 status = "handbook"
+notes = "FontCraft first values (ours): radius 20, visual corrections off (the `default` of each parameter in filter.list)."
 
 [[behavior]]
 id = "filter.roundCorners.selectionRule"
@@ -396,6 +401,7 @@ milestone = "M3"
 summary = "Selected corners are rounded whatever their direction, so inward corners can be rounded by selecting them; with no selection only outward-pointing corners are rounded."
 ref = "Filters › Built-in Filters › Round Corners"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: selected corners are selected on-curve nodes and both end nodes of selected segments. Outward-pointing means the outline turns toward the filled side, which is read from nesting (as Correct Path Direction does), so a glyph drawn in the wrong direction gets the same corners. An open path has no filled side: with no selection all its corners are rounded."
 
 [[behavior]]
 id = "filter.roundCorners.visualCorrections"
@@ -404,6 +410,7 @@ milestone = "M3"
 summary = "Visual corrections varies the effective radius by corner angle: sharp (acute) corners get a smaller radius and blunt (obtuse) corners a larger one, so all corners look equally rounded."
 ref = "Filters › Built-in Filters › Round Corners"
 status = "handbook"
+notes = "Documented, not yet observed; the formula is ours. The radius is multiplied by tan(a / 2) for a corner of inner angle a (1 at a right angle), limited to between a quarter and four times the radius, so every rounding starts `radius` units from its corner."
 
 # --- Rounded Font ---
 
