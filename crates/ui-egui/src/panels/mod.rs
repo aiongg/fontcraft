@@ -8,7 +8,7 @@
 //! | [`layers`] | Palette › Layers: the layers of the current glyph |
 //! | [`transformations`] | Palette › Transformations: origin, mirror, scale, rotate, slant, align, booleans |
 //! | [`stroke`] | Palette › Stroke: the stroke of the selected paths (contextual) |
-//! | [`info_box`] | the selection part of the Info box, over the canvas |
+//! | [`info_box`] | the Info box over the canvas: the selection part, or the annotation palette |
 //! | [`bottom_bar`] | the zoom controls along the lower edge of an Edit View tab |
 //! | [`widgets`] | fields with the Info box editing rules, buttons, the nine-point grid |
 //!

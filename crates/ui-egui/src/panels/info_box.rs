@@ -11,12 +11,19 @@
 //!
 //! With several points selected it adds the selected and the total point count; with two nodes,
 //! their distance.
+//!
+//! While one of the Annotation tools is the chosen tool, the box shows the annotation palette
+//! instead (`infoBox.annotations`): one button per sub-tool, in the order of
+//! `fontcraft_tools::annotate::SUB_TOOLS`, each running `annotation.setTool`.
 
 use fontcraft_model::Shape;
+use fontcraft_tools::TOOLS;
+use fontcraft_tools::annotate::SUB_TOOLS;
 use serde_json::{Map, Value, json};
 
 use super::{Pending, edit_targets, has_lists, widgets, with};
 use crate::app::FontcraftApp;
+use crate::icons;
 use crate::theme::Tokens;
 use crate::tools_glue;
 
@@ -53,16 +60,40 @@ fn num(v: &Value, key: &str) -> Option<f64> {
 }
 
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
-    let Some(info) = read(app) else { return };
     let tokens = app.tokens.clone();
+    // The chosen tool, so holding Space for the Hand tool keeps the palette.
+    let tool = app.tools.toolbox.base_id();
+    if SUB_TOOLS.iter().any(|(_, id, _)| *id == tool) {
+        frame(ui, &tokens, "infoBox.annotations", |ui| annotations(ui, tool, pending));
+        return;
+    }
+    let Some(info) = read(app) else { return };
+    frame(ui, &tokens, "infoBox", |ui| contents(ui, &tokens, &info, pending));
+}
+
+/// The box itself: centred at the foot of the canvas.
+fn frame(ui: &mut egui::Ui, tokens: &Tokens, salt: &str, add: impl FnOnce(&mut egui::Ui)) {
     let canvas = ui.available_rect_before_wrap();
     let pos = egui::pos2(canvas.center().x, canvas.bottom() - tokens.info_box_margin);
-    egui::Area::new(widgets::id("infoBox")).order(egui::Order::Middle).fixed_pos(pos).pivot(egui::Align2::CENTER_BOTTOM).constrain_to(canvas).show(
+    egui::Area::new(widgets::id(salt)).order(egui::Order::Middle).fixed_pos(pos).pivot(egui::Align2::CENTER_BOTTOM).constrain_to(canvas).show(
         ui.ctx(),
         |ui| {
-            egui::Frame::popup(ui.style()).fill(tokens.panel).show(ui, |ui| contents(ui, &tokens, &info, pending));
+            egui::Frame::popup(ui.style()).fill(tokens.panel).show(ui, add);
         },
     );
+}
+
+/// The annotation palette: the button of the active sub-tool is drawn selected.
+fn annotations(ui: &mut egui::Ui, active: &str, pending: &mut Pending) {
+    ui.horizontal(|ui| {
+        for &(name, id, _) in SUB_TOOLS {
+            let Some(icon) = icons::for_tool(id) else { continue };
+            let hover = TOOLS.iter().find(|t| t.id == id).map_or(name, |t| t.label);
+            if widgets::icon_button(ui, widgets::id(("infoBox.annotation", name)), icon, hover, true, id == active) {
+                pending.push(("annotation.setTool", json!({ "tool": name })));
+            }
+        }
+    });
 }
 
 fn contents(ui: &mut egui::Ui, tokens: &Tokens, s: &Info, pending: &mut Pending) {

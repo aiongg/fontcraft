@@ -129,6 +129,7 @@ milestone = "M3"
 summary = "While the Annotation tool is active the Info box is replaced by a small strip of sub-tool buttons for selecting annotations and for adding text, arrow, circle, plus and minus marks. It is only visible when View > Show Info is on."
 ref = "Edit View › Annotating"
 status = "handbook"
+notes = "Built in M3.15: while one of the six Annotation tools is the chosen tool and Show Info is on, the Info box shows one drawn-icon button per sub-tool instead of the selection fields; the active one is drawn selected and a click runs `annotation.setTool`. Holding Space for the Hand tool keeps the palette. Follows the handbook; not yet observed in the reference app."
 
 [[command]]
 id = "glyph.openInUnicodeBrowser"

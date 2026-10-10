@@ -122,7 +122,6 @@ a detail is unconfirmed, the handbook decides (Remove Overlap, for example, dele
 | Import Outlines | the missing-glyph question is asked once for all unmatched files, not once per file |
 | Hints | Shape Order and Expand Outline do not renumber hints that refer to a path by index |
 | Strokes in files | a UFO keeps no stroke attribute; cap code 4 and the forced cap axis are not confirmed against the reference's files |
-| Info box | no annotation palette; the Annotation tools are chosen from the toolbar |
 | Audit | 34 of the 36 outline checks; the other 264 checks are M12 |
 
 Beyond M3 there is no kerning editing, no component editing (components are exported as
@@ -358,7 +357,7 @@ on, so the engine track, where oracles prove correctness, goes first.
   with drawn icons. Context menus list the commands for the clicked object; menu bar and
   context items are greyed out by the selection. Copy, Cut and Paste use the system clipboard;
   system choosers pick the export folder and the files of File › Import › Outlines. Panels
-  (M3.15): the Info box's selection part with its reference point, the Palette with Dimensions,
+  (M3.15): the Info box's selection part with its reference point and its annotation palette while an Annotation tool is chosen, the Palette with Dimensions,
   Fit Curve, Layers, Transformations and Stroke sections that collapse, and the bottom bar's
   zoom controls; number fields follow the field rules (Return, Tab, Escape, arrows with
   Shift). Dialogs (M3.14): a form over one command's parameters with a live preview inside an
@@ -411,7 +410,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 45 | 22 | 16% | tabs, zoom and scroll work; the toolbar with shared buttons and their menus; tools chosen by their letters, shared letters cycle; context menus; menu items greyed out by the selection; bottom bar zoom controls. Missing: settings window, shortcut editor, workspaces, title bar, sidebars, the toolbar's master icons (M9); nothing compared with the reference |
 | Font View | 6 | 62 | 6 | 3% | list view, sidebar and filters, glyph data, Add Glyphs syntax, batch commands, inspector |
 | Edit View text mode | 4 | 25 | 1 | 0% | everything but the fill-preview toggle |
-| Drawing and editing outlines | 10 | 96 | 79 | 25% | node, segment, transform, clipboard and selection commands; in the window Select, Lasso, Hand, Zoom, Draw, Pencil, Rectangle, Ellipse, Rotate and Scale, the bounding box and its knobs, context menus, the Info box, the Palette's Transformations and Fit Curve sections, the Transformations and Primitive Measurements dialogs, editing in any master. Missing: `path.sharpenCorner` (no source), the Info box's annotation palette; nothing compared with the reference |
+| Drawing and editing outlines | 10 | 96 | 79 | 25% | node, segment, transform, clipboard and selection commands; in the window Select, Lasso, Hand, Zoom, Draw, Pencil, Rectangle, Ellipse, Rotate and Scale, the bounding box and its knobs, context menus, the Info box, the Palette's Transformations and Fit Curve sections, the Transformations and Primitive Measurements dialogs, editing in any master. Missing: `path.sharpenCorner` (no source); nothing compared with the reference |
 | Path operations and filters | 6 | 66 | 40 | 28% | Remove Overlap, the booleans, path direction, extremes and inflections, Tidy up, Open Corner, Reconnect, Cut with Line, curve conversion and rounding as commands; the Knife; the six filters with dialogs and export strings; strokes and masks drawn on the canvas and applied at export; the Stroke section and the Shape Order dialog. Missing: stroke attributes in UFO, hints renumbered after Shape Order and Expand Outline; nothing compared with the reference |
 | Reusing shapes | 7 | 77 | 0 | 0% | everything; components are only exported (as composites, decomposed where the format needs it) |
 | Layers | 3 | 21 | 19 | 35% | background and layer commands; Edit Background; the active layer and the tab's master; the background and other visible layers drawn on the canvas; the Palette's Layers section with its row context menu; the Interpolate with Background dialog. Missing: Font View's master choice (M4); nothing compared with the reference |

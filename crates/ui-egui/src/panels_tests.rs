@@ -253,3 +253,32 @@ fn panel_commands_check_their_parameters() {
     assert_eq!(settings["rotateAngle"].as_f64(), Some(45.0));
     assert_eq!(app.state.transform.origin_param(), json!({"mode": "metrics", "metric": "xHeight"}));
 }
+
+#[test]
+fn annotation_palette_replaces_the_info_box_and_chooses_the_sub_tool() {
+    let mut app = edit_app();
+    select_square(&mut app);
+    let w = Window::new();
+    w.settle(&mut app);
+    let button = |name: &str| widgets::id(("infoBox.annotation", name));
+    assert!(w.ctx.read_response(button("select")).is_none(), "no palette with the Select tool");
+    assert!(w.ctx.read_response(widgets::id("infoBox.x")).is_some());
+
+    app.run("tool.select", &json!({"tool": "annotation"})).unwrap();
+    w.settle(&mut app);
+    assert!(w.ctx.read_response(widgets::id("infoBox.x")).is_none(), "the palette replaces the selection fields");
+    let steps = journal_len(&app);
+    for (name, id) in [("circle", "annotationCircle"), ("text", "annotationText"), ("minus", "annotationMinus"), ("select", "annotationSelect")] {
+        w.click(&mut app, button(name));
+        assert_eq!(app.tools.toolbox.base_id(), id);
+    }
+    assert_eq!(journal_len(&app), steps, "a click on the palette adds no annotation to the canvas below");
+
+    app.run("view.showInfo", &json!({"on": false})).unwrap();
+    w.settle(&mut app);
+    assert!(w.ctx.read_response(button("select")).is_none(), "Show Info off hides the palette");
+    app.run("view.showInfo", &json!({"on": true})).unwrap();
+    app.run("tool.select", &json!({"tool": "draw"})).unwrap();
+    w.settle(&mut app);
+    assert!(w.ctx.read_response(button("select")).is_none(), "leaving the Annotation tools hides the palette");
+}

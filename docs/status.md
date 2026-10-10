@@ -98,7 +98,7 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   missing-glyph question is asked once for all unmatched files, not once per file; Shape Order
   and Expand Outline do not renumber hints that refer to a path by index; a UFO keeps no stroke
   attribute, and cap code 4 and the forced cap axis are unconfirmed against the reference's
-  files; the Info box has no annotation palette.
+  files.
 - **linesweeper can hang** on rare inputs (plan § M3.6 "Spike result"). The path-operation
   commands and export run each glyph on a worker thread under a time limit; a glyph that runs
   out of time stays as it was (at export, it keeps its overlaps, with a warning), and its worker
