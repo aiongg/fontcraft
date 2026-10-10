@@ -237,7 +237,8 @@ notes = "Checked against written sources in the M4 planning pass (it was a `memo
 guesses = [
   "Stored overrides of category, subcategory, script, production name, case and direction are dropped, so those properties follow the database again; the sort name, tags, colour labels, note and export flag stay. Settled by observing a glyph with a custom category before and after the command (05 question 5).",
   "With Use Custom Naming on, names are kept and only the other properties are updated. Settled by observation.",
-  "A rename the command makes goes through glyph.rename, so references follow it; a new name that is already taken leaves the glyph's name unchanged and is reported. Settled by observation.",
+  "A rename the command makes goes through glyph.rename, so references follow it; a new name that is already taken (by any glyph of the font before the command, or by an earlier glyph of the batch) leaves the glyph's name and Unicode values unchanged and is reported. Settled by observation.",
+  "The Unicode values follow the name whether or not it changed: the glyph data's code point for it, none for a name it knows without one (A.alt), and the stored values for a name it does not know. Settled by observation.",
 ]
 
 [[command]]
@@ -355,8 +356,11 @@ ref = "Font View › Names & Unicode › Renaming Glyphs; tutorial \"Getting you
 status = "handbook"
 notes = "The tutorial adds that a Private Use Area value set on a glyph stays when the glyph is renamed to a name the database does not know. Documented, not yet observed."
 guesses = [
-  "Unicode values are replaced only when the new base name has a database code point; otherwise the stored values stay. Settled by observation (05 question 4).",
-  "Rename updates the font's references by name: components, kerning pairs, the glyphOrder parameter and metrics keys. Feature code is not rewritten; the result lists where the old name is still used. Settled by observation (05 question 9).",
+  "When the base name changes, the Unicode values become the glyph data's for the new name whenever the data knows the name, directly or through the suffix, ligature or code-point rules, so renaming B to A.alt clears them; a name the data does not know keeps the stored values. Settled by observation (05 question 4).",
+  "Rename updates the font's references by name: components (also in backgrounds), kerning pairs, UFO groups, the glyphOrder parameter of the font and its instances, and metrics keys of the glyph and its layers. Feature code, kerning contexts, other custom parameters, hints and display strings are not rewritten; the result lists where the old name is still used. Settled by observation (05 question 9).",
+  "A typed production, alternative or code-point name becomes the nice name (as for a new glyph), unless the font uses custom naming. Settled by observation.",
+  "A name that breaks the naming rules is refused, as Find and Replace refuses one. Settled by observing whether the reference accepts an illegal name typed in Font View.",
+  "When a locked glyph uses the renamed glyph as a component, the rename is refused, because a locked glyph refuses changes to its layers. Settled by observation.",
 ]
 
 [[command]]
@@ -433,7 +437,7 @@ label = "Set Writing Direction"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs?: [names], direction: \"LTR\" | \"RTL\" | \"BIDI\" | null}"
+params = "{glyphs: [names], direction: \"LTR\" | \"RTL\" | \"BIDI\" | \"VTR\" | \"VTL\" | null}"
 area = "font-view"
 milestone = "M4"
 summary = "Overrides a glyph's writing direction; null returns to the database value. The chapter describes the three values but not where the property is edited."
@@ -441,6 +445,7 @@ ref = "Font View › Glyph Properties › Writing Direction"
 status = "inferred"
 guesses = [
   "Writing direction is edited in the Selection Info window and in List View's Direction column; the handbook names no control for it. Settled by observation (05 question 15).",
+  "The vertical directions VTR and VTL, which source files may store, are accepted too. Settled by observation.",
 ]
 
 [[command]]
@@ -468,6 +473,9 @@ milestone = "M4"
 summary = "Sets or clears the glyph-level colour label, chosen from twelve fixed colours in the glyph context menu; the cross button clears it. In Edit View the same command is in the canvas context menu of the active glyph. Labels are organisational only and never reach an exported font."
 ref = "Font View › Glyph Properties › Color Label"
 status = "handbook"
+guesses = [
+  "Label names are matched without case and spaces, and grey is accepted for gray (lightGreen, Light Green and lightgreen are the same).",
+]
 
 [[command]]
 id = "glyph.setLayerColorLabel"
@@ -481,6 +489,9 @@ milestone = "M4"
 summary = "Sets or clears the colour label of the current layer of each selected glyph. In the UI the context-menu colour swatches act on the layer instead of the glyph while Option is held."
 ref = "Font View › Glyph Properties › Color Label"
 status = "handbook"
+guesses = [
+  "Locked glyphs, and glyphs without the layer, are skipped and listed, because a locked glyph refuses changes to its layers. Settled by observation.",
+]
 
 [[command]]
 id = "glyph.setTags"
@@ -494,6 +505,10 @@ milestone = "M4"
 summary = "Replaces the tag list of the selected glyphs (the Tags field of the inspector). A tag may contain letters, digits, spaces and punctuation, but never a comma."
 ref = "Font View › Glyph Properties › Tags"
 status = "handbook"
+notes = "The tags are kept sorted, as the reference's files store them (05-font-view.md § 2)."
+guesses = [
+  "A tag is trimmed, and an empty tag or a repeated one is dropped. Settled by observation.",
+]
 
 [[command]]
 id = "glyph.addTag"
@@ -536,6 +551,10 @@ milestone = "M4"
 summary = "Sets the key a glyph is ordered by in Font View and in exported fonts; null (unchecked box, empty field) means the glyph name is the key. Edited in Selection Info after ticking the checkbox next to the field."
 ref = "Font View › Glyph Properties › Sort Name"
 status = "handbook"
+notes = "The glyph moves to its place in the default order at once (glyphOrder.default); a glyphOrder parameter still decides the order it names."
+guesses = [
+  "Null clears both stored sort names: the one used with Keep Alternates Next to Base Glyph on and the one used with it off. Settled by observation.",
+]
 
 [[command]]
 id = "glyph.setNote"
@@ -575,6 +594,10 @@ milestone = "M4"
 summary = "Writes the names (or code points) of the selected glyphs to the clipboard in one of six text formats. Reached from the Copy Glyph Names submenu of the glyph context menu; headless it returns the text."
 ref = "Font View › Names & Unicode › Copy Glyph Names"
 status = "handbook"
+guesses = [
+  "Names come in glyph order (the order Font View shows), not in the order they were selected. Settled by observation.",
+  "One per Line and Python List put no line break after the last line; code points are written in uppercase hex. Settled by pasting the reference's output into a text editor.",
+]
 
 # ───────────────────────────── Glyph data queries ─────────────────────────────
 
@@ -590,7 +613,7 @@ milestone = "M4"
 summary = "Our query: resolves a nice name, production name, alternative name, code point or character against the glyph database (custom entries first) and returns the full record, plus whether each field was found directly or synthesised from suffix, ligature or AGL rules."
 ref = "Font View › Names & Unicode › Glyph Info Database; GlyphsInfo GlyphData.xml"
 status = "inferred"
-notes = "The database behind it is crates/glyphdata (M4.1): GlyphData::lookup returns every field with its source (custom, database, synthesised, default). The command itself is not registered yet. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
+notes = "The database behind it is crates/glyphdata (M4.1): GlyphData::lookup returns every field with its source (custom, database, synthesised, default); the command returns them as JSON (M4.3). `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 guesses = [
   "Our own query for agents; its answers must equal what the reference shows in Glyph Info and the inspector for the same name, which the oracles' copies of the data (fontc, glyphsLib) check.",
   "A ligature without a record takes the script that all its known parts share, and no case. Settled by observation.",
@@ -608,7 +631,7 @@ milestone = "M4"
 summary = "Our query behind the Glyph Info window's search field: returns database entries matching the text, optionally sorted by one field."
 ref = "Font View › Names & Unicode › Glyph Info Database"
 status = "inferred"
-notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) says the Glyph Info search matches glyph names, Unicode values and characters, and that typing a script suffix such as -deva lists that script's glyphs. The search is GlyphData::search in crates/glyphdata (M4.1); the command itself is not registered yet."
+notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) says the Glyph Info search matches glyph names, Unicode values and characters, and that typing a script suffix such as -deva lists that script's glyphs. The search is GlyphData::search in crates/glyphdata (M4.1); the command is registered with M4.3."
 guesses = [
   "A query matches as a case-insensitive substring of the name, the description, the hex code point, or equals the character. Settled by observation.",
   "Results are sorted by name unless another field is asked for, and at most 10,000 are returned.",
@@ -626,7 +649,7 @@ milestone = "M4"
 summary = "Our query: returns the name each glyph will carry in an exported font, applying the per-glyph override, the database value, then the suffix and ligature rules, and falling back to the nice name."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "inferred"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4); the M2 compiler writes source names. The resolution without the glyph's own override is GlyphData::production_name in crates/glyphdata (M4.1); the override and the command come with M4.2."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4); the M2 compiler writes source names. The resolution without the glyph's own override is GlyphData::production_name in crates/glyphdata (M4.1); the command reads the effective property of fontcraft_model::glyph_props (M4.2), so the glyph's own override comes first (M4.3)."
 guesses = [
   "Our own query for agents; its answers must equal the names the oracles write (fontc and fontmake with production names on).",
 ]
@@ -644,7 +667,7 @@ summary = "Our query: reports every glyph whose name breaks the naming rules, wi
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "inferred"
 guesses = [
-  "Our own query for agents; it applies the handbook's naming rules. There is no reference behaviour to settle.",
+  "Our own query for agents; it applies the handbook's naming rules and also lists names used by more than one glyph. There is no reference behaviour to settle.",
 ]
 
 # ───────────────────────────── Batch renaming ─────────────────────────────
@@ -661,8 +684,10 @@ milestone = "M4"
 summary = "Renames the selected glyphs by replacing every occurrence of the Find text in their names with the Replace text. An empty Find appends the Replace text to each name; with Regex on, Find is a regular expression and Replace may use numbered group references such as \\1."
 ref = "Font View › Batch-Processing › Batch-Renaming Glyphs"
 status = "handbook"
+notes = "Regular expressions wait for the regex dependency of the engine; until then `regex: true` is refused with a message and plain text works."
 guesses = [
   "A batch that would give two glyphs the same name, or any glyph an invalid name, is refused as a whole and the clashes are listed. Each rename follows glyph.rename. Settled by observation (05 question 9).",
+  "The results are not converted to nice names: Find and Replace gives the names it computes. Settled by observation.",
 ]
 
 # ───────────────────────────── Search and sidebar filters ─────────────────────────────
@@ -2089,7 +2114,7 @@ milestone = "M4"
 summary = "A valid glyph name contains only A to Z, a to z, 0 to 9, underscore, hyphen and period. White space and any non-ASCII character are invalid."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
-notes = "crates/glyphdata's validate gives the offending character and its position (M4.1); font.validateGlyphNames comes with M4.2."
+notes = "crates/glyphdata's validate gives the offending character and its position (M4.1); font.validateGlyphNames reports it for every glyph, and glyph.rename and edit.findAndReplace refuse such a name (M4.3)."
 
 [[behavior]]
 id = "glyphName.firstCharacter"
@@ -2171,6 +2196,7 @@ milestone = "M4"
 summary = "Renaming a glyph re-derives its database properties only when the base name changes: eacute to plus changes Unicode and category, while eacute.sc to eacute.pc changes nothing else."
 ref = "Font View › Names & Unicode › Renaming Glyphs"
 status = "handbook"
+notes = "Category and the other database properties are resolved live unless stored, so they follow any rename; glyph.rename sets the stored Unicode values when the base name changes (its row's guesses). Documented, not yet observed."
 
 [[behavior]]
 id = "glyphName.useCustomNaming"
@@ -2179,6 +2205,7 @@ milestone = "M4"
 summary = "The per-font option Use Custom Naming (Font Info → Other) turns off the automatic conversion of typed names to nice names. With custom names, automatic feature generation and automatic category assignment stop working unless a custom glyph database describes those names."
 ref = "Font View › Names & Unicode › Naming Glyphs"
 status = "handbook"
+notes = "The option is the font setting disablesNiceNames. With it on, glyph.rename and glyph.updateGlyphInfo keep names as given; with it off they turn a production, alternative or code-point name into the nice name."
 
 # ── Copy Glyph Names formats ──
 
@@ -2475,6 +2502,7 @@ milestone = "M4"
 summary = "With Regex on, Find is a regular expression and Replace can refer to captured groups by backslash and number. Example: finding a literal dot, cv and two captured digits and replacing with .ss plus the first group turns someGlyph.cv03 into someGlyph.ss03 and otherglyph.cv15.alt into otherglyph.ss15.alt."
 ref = "Font View › Batch-Processing › Batch-Renaming Glyphs"
 status = "handbook"
+notes = "Not built yet: edit.findAndReplace refuses `regex: true` until the engine depends on the regex crate (regex.engine)."
 
 # ── Search ──
 

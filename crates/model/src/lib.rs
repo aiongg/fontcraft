@@ -25,6 +25,7 @@ mod kerning;
 mod layer_info;
 mod order;
 mod rare;
+mod rename;
 mod resolve;
 mod shape_info;
 pub mod smart;
@@ -49,6 +50,7 @@ pub use order::{
     sort_key,
 };
 pub use rare::{Rare, RareDefault};
+pub use rename::{GlyphReference, RenameReport, Renamed, place_by_sort_key, rename_glyphs};
 pub use resolve::{
     DONT_USE_PRODUCTION_NAMES, Metrics, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, blue_values, is_ufo_family,
 };

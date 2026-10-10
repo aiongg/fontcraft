@@ -21,6 +21,7 @@ pub mod filter;
 pub mod fit_curve;
 mod font;
 mod glyph;
+mod glyph_info;
 mod guide;
 mod inspect;
 mod layer;
@@ -186,6 +187,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(pathops::specs());
         v.extend(audit::specs());
         v.extend(settings::specs());
+        v.extend(glyph_info::specs());
         v
     })
 }
