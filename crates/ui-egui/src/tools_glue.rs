@@ -524,6 +524,7 @@ pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
 /// `layer`, and each list the command takes that the selection fills. `None` when no glyph is
 /// being edited.
 ///
+/// A command whose targets include `glyphs` but not `layer` gets the edited glyph as `glyphs`.
 /// A command that takes `segments` but not `points` gets the selected segments
 /// ([`selected_segments`]); one that takes `shapes` but not `points` also gets the paths whose
 /// on-curve nodes are all selected, which is what a selected path is.
@@ -570,10 +571,6 @@ pub fn selection_targets(session: &Session, state: &UiState, spec: &CommandSpec)
     }
     if spec.targets.contains(&TargetKind::Glyphs) && !m.contains_key("glyph") {
         m.insert("glyphs".into(), json!([scene.glyph]));
-        // A whole-glyph command that also takes a layer acts on the active one.
-        if spec.params.split('→').next().is_some_and(|input| input.contains("layer?")) {
-            m.insert("layer".into(), json!(scene.layer_id));
-        }
     }
     Some(m)
 }

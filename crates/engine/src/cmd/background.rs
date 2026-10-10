@@ -54,7 +54,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             swap_with_background
         )
-        .targets(&[TargetKind::Glyphs]),
+        .targets(&[TargetKind::Glyphs, TargetKind::Layer]),
         cmd!(
             "path.clearBackground",
             "Clear Background",
@@ -64,7 +64,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             clear_background
         )
-        .targets(&[TargetKind::Glyphs]),
+        .targets(&[TargetKind::Glyphs, TargetKind::Layer]),
         cmd!(
             "path.assignBackground",
             "Assign Background",
@@ -84,7 +84,7 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             interpolate_with_background
         )
-        .targets(&[TargetKind::Glyphs]),
+        .targets(&[TargetKind::Glyphs, TargetKind::Layer]),
     ]
 }
 

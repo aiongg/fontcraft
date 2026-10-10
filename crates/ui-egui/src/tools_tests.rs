@@ -394,6 +394,11 @@ fn menu_commands_take_their_targets_from_the_selection() {
     assert_eq!(params, json!({"glyph": "A", "layer": app.session.font().unwrap().masters[0].id, "points": [[2, 0], [2, 1]]}));
     let given = json!({"glyph": "A", "points": [[0, 0]]});
     assert_eq!(tools_glue::with_targets(&app, "edit.delete", given.clone()), given, "given parameters are kept");
+    // A whole-glyph command acts on the edited glyph; one that declares the layer target also on
+    // the edited layer.
+    let master = app.session.font().unwrap().masters[0].id.clone();
+    assert_eq!(tools_glue::with_targets(&app, "glyph.toggleLocked", json!({})), json!({"glyphs": ["A"]}));
+    assert_eq!(tools_glue::with_targets(&app, "path.clearBackground", json!({})), json!({"glyph": "A", "layer": master}));
 }
 
 #[test]
