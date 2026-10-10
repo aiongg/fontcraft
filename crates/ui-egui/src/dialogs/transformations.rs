@@ -1,8 +1,8 @@
 //! Path › Transformations: translate, scale, slant and Cursivy of `path.transformations` about
 //! an origin, previewed on the selected points or, with none selected, on the whole layer.
 //!
-//! The fields sit under the headings Translate (X, Y), Origin, Scale (horizontal, vertical, and
-//! a lock button) and Slant (kind, angle), in the reference's order. The dialog shapes them into
+//! The fields come in the reference's order: Translate (X, Y), Origin, Scale (horizontal,
+//! vertical, and a lock button) and Slant (kind, angle), each but Origin under its heading. The dialog shapes them into
 //! the command's `translate`, `scale`, `slant` and `cursivy`, leaving out a translation of 0 and
 //! a scale of 100 %. While the lock is on, the two scale fields hold the same value. The "…"
 //! menu copies the values as a Filter or PreFilter custom parameter.
@@ -51,7 +51,7 @@ fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
             "baseline",
             "The fixed point of the scale and slant: a metric height of the master, at half the advance width",
         )
-        .in_group("Origin"),
+        ,
         Field::number("scaleX", "Horizontal", -MAX_PERCENT, MAX_PERCENT, 100.0, "Horizontal scale in percent").in_group("Scale"),
         Field::number("scaleY", "Vertical", -MAX_PERCENT, MAX_PERCENT, 100.0, "Vertical scale in percent; follows the horizontal scale while the lock is on")
             .in_group("Scale"),

@@ -346,7 +346,7 @@ fn transformations_groups_its_fields_and_locks_the_scale_with_a_button() {
     let groups: Vec<&str> = opened["fields"].as_array().unwrap().iter().filter_map(|f| f["group"].as_str()).collect();
     let mut headings = groups.clone();
     headings.dedup();
-    assert_eq!(headings, ["Translate", "Origin", "Scale", "Slant"], "{groups:?}");
+    assert_eq!(headings, ["Translate", "Scale", "Slant"], "{groups:?}");
     let lock = opened["fields"].as_array().unwrap().iter().find(|f| f["id"] == "scaleLocked").unwrap();
     assert_eq!((lock["kind"].as_str(), lock["value"].as_bool()), (Some("lock"), Some(true)));
 

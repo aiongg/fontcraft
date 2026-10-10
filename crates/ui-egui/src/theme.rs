@@ -101,6 +101,8 @@ pub struct Tokens {
     pub palette_width: f32,
     /// Distance from the window's top edge to a dialog.
     pub dialog_top: f32,
+    /// Text size of a dialog's title.
+    pub dialog_title_size: f32,
     /// Laid over the window behind an open dialog; light, so the dialog's preview stays readable.
     pub dialog_backdrop: Color32,
     /// Width of a number field in a dialog.
@@ -263,6 +265,7 @@ impl Tokens {
             tab_min_width: 72.0,
             palette_width: 220.0,
             dialog_top: 48.0,
+            dialog_title_size: 16.0,
             dialog_backdrop: Color32::from_black_alpha(40),
             dialog_field_width: 72.0,
             dialog_spacing: 8.0,

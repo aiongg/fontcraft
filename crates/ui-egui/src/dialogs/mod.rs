@@ -963,7 +963,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
         .backdrop_color(tokens.dialog_backdrop)
         .frame(egui::Frame::window(ui.style()))
         .show(ui.ctx(), |ui| {
-            ui.label(egui::RichText::new(d.title.as_str()).strong());
+            ui.label(egui::RichText::new(d.title.as_str()).strong().size(tokens.dialog_title_size));
             ui.add_space(tokens.dialog_spacing);
             if let Some(tabs) = &d.tabs {
                 ui.horizontal(|ui| {
