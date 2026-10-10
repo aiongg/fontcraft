@@ -3641,6 +3641,7 @@ milestone = "M3"
 summary = "Turns on or off the automatic re-run of the outlines profile on the glyph being edited."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M3.17. Off when the app starts. While on, every change to the document re-runs the outlines profile on the edited layer (audit.liveAudit)."
 
 [[command]]
 id = "audit.toggleMarkers"
@@ -3654,6 +3655,7 @@ milestone = "M3"
 summary = "Shows or hides the on-canvas markers that flag the nodes, segments and components of current audit results in Edit View."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M3.17. On when the app starts. Turning it on also reads the last audit.run again, so a run made while the glyph stayed unchanged shows."
 
 [[command]]
 id = "audit.filterResults"
@@ -3876,14 +3878,16 @@ milestone = "M3"
 summary = "With live audit on, the outlines profile is re-run on a glyph shortly after each edit to it, and its markers and the panel rows for that glyph update in place; all other checks run only on request."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M3.17: one audit.run per document revision on the edited layer of the active master, at the next frame, never per frame and not while a drag or a dialog preview runs. The run replaces the document's kept run, as any audit.run does. The panel rows wait for the Font Audit panel (M12)."
 
 [[behavior]]
 id = "audit.canvasMarkers"
 area = "qa"
 milestone = "M3"
-summary = "In Edit View each current result with a point, segment, component or anchor location draws a marker coloured by severity at that location; hovering shows the message and clicking selects the result in the Font Audit panel."
+summary = "In Edit View each current result with a point, segment, component or anchor location draws a marker coloured by severity at that location; hovering shows the message and clicking selects what the result reports in Edit View (its nodes, both ends of its segments, its components) and the result in the Font Audit panel."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M3.17 without the panel (M12). A reported node gets a ring, a segment or a whole path is drawn over the outline, and each result has a round badge up and to the right of the spot it names, so badges never cover a node. With live audit off the markers show the last audit.run's results for the edited layer, except stale ones."
 
 [[behavior]]
 id = "audit.ignoreListStorage"

@@ -42,6 +42,8 @@ pub struct UiState {
     pub transform: crate::shell::transform::TransformSettings,
     /// The Palette's and the Info box's own settings.
     pub panels: crate::panels::PanelState,
+    /// Live audit, the audit markers, and the results they show.
+    pub audit: crate::shell::audit::AuditState,
 }
 
 impl Default for UiState {
@@ -58,6 +60,7 @@ impl Default for UiState {
             next_tab_id: 1,
             transform: Default::default(),
             panels: crate::panels::PanelState::default(),
+            audit: Default::default(),
         }
     }
 }

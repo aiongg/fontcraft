@@ -178,6 +178,19 @@ pub struct Tokens {
     /// masks make the two differ (`stroke.display`, `mask.display`).
     pub source_outline: Color32,
     pub source_outline_width: f32,
+    /// Audit markers by severity (`audit.canvasMarkers`): badges, rings and leader lines.
+    pub audit_fail: Color32,
+    pub audit_warn: Color32,
+    pub audit_info: Color32,
+    /// Reported segments and paths: their width, and how much of the severity colour they keep.
+    pub audit_highlight_width: f32,
+    pub audit_highlight_alpha: f32,
+    /// The ring around a reported node or handle, and the leader line to its badge.
+    pub audit_ring_radius: f32,
+    pub audit_ring_width: f32,
+    /// A result's badge, and how far up and right of the reported spot it sits.
+    pub audit_badge_radius: f32,
+    pub audit_badge_offset: f32,
 }
 
 impl Tokens {
@@ -288,6 +301,15 @@ impl Tokens {
             annotation_handle_radius: 4.0,
             source_outline: Color32::from_rgb(0xb4, 0xb4, 0xb4),
             source_outline_width: 1.0,
+            audit_fail: Color32::from_rgb(0xe5, 0x48, 0x4d),
+            audit_warn: Color32::from_rgb(0xf2, 0xa1, 0x1d),
+            audit_info: Color32::from_rgb(0x3b, 0x82, 0xf6),
+            audit_highlight_width: 4.0,
+            audit_highlight_alpha: 0.45,
+            audit_ring_radius: 9.0,
+            audit_ring_width: 1.5,
+            audit_badge_radius: 5.0,
+            audit_badge_offset: 14.0,
         }
     }
 

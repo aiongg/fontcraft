@@ -13,12 +13,14 @@
 //! | [`selection`] | the selection, and the active tool's overlays (marquee, snapping lines…) |
 //! | [`bbox`] | the selection's bounding box and knobs, and the transformation origin |
 //! | [`annotations`] | notes and correction marks |
+//! | [`audit_markers`] | audit results on the edited layer; also runs live audit |
 //!
 //! Every colour and size comes from [`Tokens`]. Wheel and gestures act through `view.scrollTo`
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
 //! ([`crate::tools_glue`]) after the frame is drawn.
 
 pub mod annotations;
+pub mod audit_markers;
 pub mod background;
 pub mod bbox;
 pub mod composite;
@@ -51,6 +53,7 @@ pub struct Painting<'a> {
 
 /// Draws Edit View for the showing tab, and queues the view commands its input asks for.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
+    audit_markers::refresh(app);
     let FontcraftApp { session, state, tokens, fill_cache, preview_tool, tools, .. } = app;
     let Some(tab) = state.tab().cloned() else { return };
     let frame = egui::Frame::NONE.fill(tokens.canvas);
@@ -111,6 +114,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         }
         painter.extend(bbox::shapes(font, &tab, tools.toolbox.active_id(), state.display.bounding_box, &state.transform, v, tokens));
         annotations::draw(&c, layer, &tab.selection, &state.display);
+        audit_markers::draw(ui, &c, layer, audit_markers::visible(&state.audit, session, &tab), !tools.toolbox.busy(), pending);
         painter.extend(selection::overlay_shapes(&tools.toolbox.overlays(), v, tokens));
         guides::draw_measurement(&c, &extras);
     });
