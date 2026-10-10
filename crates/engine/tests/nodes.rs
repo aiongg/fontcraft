@@ -2,7 +2,7 @@
 //! delete and break, inserting, connecting and closing, start nodes, direction, locks, the
 //! primitives, the Info box queries and Fit Curve. Fixtures are built in code.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 

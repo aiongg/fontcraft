@@ -222,17 +222,6 @@ pub fn specs() -> Vec<CommandSpec> {
         .targets(&[K::Layer, K::Shapes, K::Points])
         .context(&["canvas.node"]),
         cmd!(
-            "glyph.toggleLocked",
-            "Locked",
-            [],
-            None,
-            "{glyphs: [names] | glyph: name, locked?: bool (default: lock, unless every glyph is locked already)} locks or unlocks whole glyphs; a locked glyph refuses every change to its drawing → {glyphs, locked}",
-            has_doc,
-            toggle_locked
-        )
-        .targets(&[K::Glyphs])
-        .context(&["canvas"]),
-        cmd!(
             "path.addRectangle",
             "Add Rectangle",
             [],
@@ -1084,39 +1073,6 @@ fn set_lock(s: &mut Session, v: &Value, command: &'static str, locked: bool) -> 
     let mut sel = none_selected(&t);
     sel.shapes = shapes.into_iter().collect();
     Ok(json!({ "selection": sel.to_json() }))
-}
-
-fn toggle_locked(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("glyph.toggleLocked", v)?;
-    let font = s.font()?;
-    let names = match p.opt_glyphs("glyphs", font)? {
-        Some(names) => names,
-        None => {
-            let name = p.str("glyph")?;
-            if font.glyph(name).is_none() {
-                return Err(p.bad(format!("there is no glyph `{name}`")));
-            }
-            vec![name.to_string()]
-        }
-    };
-    if names.is_empty() {
-        return Err(p.bad("`glyphs` is empty"));
-    }
-    let locked = match p.get("locked") {
-        None => !names.iter().all(|n| font.glyph(n).is_some_and(|g| g.info.locked)),
-        Some(Value::Bool(b)) => *b,
-        Some(other) => return Err(p.bad(format!("`locked` must be true or false, got {}", crate::params::kind(other)))),
-    };
-    s.edit(if locked { "Lock Glyph" } else { "Unlock Glyph" }, |font| {
-        for name in &names {
-            let mut g = font.glyph_mut(name)?;
-            if g.info.locked != locked {
-                g.info.locked = locked;
-            }
-        }
-        Ok(())
-    })?;
-    Ok(json!({ "glyphs": names, "locked": locked }))
 }
 
 // ── Primitives ──────────────────────────────────────────────────────────────────────────────────
