@@ -282,6 +282,7 @@ offsets and anchors are rounded to the grid (spacing 1 when the font sets none).
 placements blend part by part when both are stored decomposed, else as matrices. Anchors blend
 when the background has one of the same name; the others stay. The amount is capped at
 ±100,000 %.
+Its dialog (`dialog.interpolateWithBackground`) has one Percentage field, opening at 50 %.
 
 ### Add Extremes (`path.addExtremes`, Path menu)
 

@@ -168,6 +168,8 @@ FontCraft's choices where the handbook is silent:
 - Imported paths are added after the layer's shapes and rounded to the grid, as a paste is.
 - A file that cannot be read is listed in `failed` and the others are imported. The command fails
   only when no file was imported and at least one failed.
+- The missing-glyph question is asked once for all the `unmatched` files, not once per file. Its
+  pop-up menu picks add or skip; OK runs the import of those files again with that choice.
 
 Raster images are not covered by this chapter.
 
@@ -229,7 +231,8 @@ FontCraft's clipboard (`edit.copy`, `edit.cut`, `edit.paste`):
   SVG y = 0 on the baseline, so our own SVG flavour pastes back at the copied coordinates.
 - "Far outside" means more than half an em outside the glyph box (advance width by descender to
   ascender). The suggested correction moves the pasted box's bottom left to the origin. Both
-  are our choices; the dialog (`dialog.pastedOutlineBounds`) offers that move.
+  are our choices; the dialog (`dialog.pastedOutlineBounds`) offers that move as `selection.move`
+  on the pasted things, with the move in two fields the person can change.
 - A pasted anchor replaces the layer's anchor of the same name. Global guides go to the master.
 
 ## 6. Projects

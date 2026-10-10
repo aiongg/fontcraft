@@ -175,7 +175,8 @@ items `tool.drawRectangle` / `tool.drawCircle` switch mode.
 
 - Drag: draw the shape. `Shift` = square/circle. `Alt` = draw from the centre.
 - Click without dragging: a dialog (`dialog.primitiveMeasurements`) takes typed measurements and
-  creates the shape at the click.
+  creates the shape at the click. Ours has Width and Height fields (opening at 100 units) and puts
+  the shape's bottom-left corner on the click; the handbook names neither.
 
 Headless: `path.addRectangle`, `path.addEllipse` (inferred).
 

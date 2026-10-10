@@ -673,12 +673,13 @@ notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader a
 id = "dialog.importOutlinesMissingGlyph"
 label = "Import Outlines: no matching glyph"
 location = "dialog"
-controls = ["OK: skip this file", "Add Glyph: create a glyph named after the file and import into it"]
+controls = ["Files with no glyph: pop-up menu, add (default) or skip (`onMissingGlyph`)", "OK: run the import of those files again with that choice", "Cancel: skip those files"]
 area = "import-export"
 milestone = "M3"
 summary = "Prompt shown once per imported file whose base name matches no glyph in the font."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
+notes = "The handbook asks once per file, with OK (skip) and Add Glyph. FontCraft asks once for all the files `file.importOutlines` lists as `unmatched`: OK runs it again on them with `onMissingGlyph` (add creates each glyph), with a live preview; Cancel skips them. Documented but not yet observed."
 
 [[behavior]]
 id = "import.outlinesBatchByFileName"
@@ -837,12 +838,13 @@ status = "handbook"
 id = "dialog.pastedOutlineBounds"
 label = "Pasted outline is outside the glyph"
 location = "dialog"
-controls = ["accept: move the pasted outline into the glyph box", "decline: keep the pasted position"]
+controls = ["Move X and Move Y fields: the correction, editable", "OK: move the pasted outline into the glyph box", "Cancel: keep the pasted position"]
 area = "drawing"
 milestone = "M3"
 summary = "Offer shown when pasted outlines land far outside the glyph box. The handbook shows the dialog only as a picture, so button captions and the exact correction (translate only, or also scale) are unknown."
 ref = "Import & Export › Vector Drawing Applications"
 status = "handbook"
+notes = "Opened after `edit.paste` returns `outOfBounds`. OK runs `selection.move` on the paste's `selection` by its `correction` (dx, dy: the pasted box's bottom left to the origin), with a live preview; the correction only translates. Our choices; documented but not yet observed."
 
 [[behavior]]
 id = "paste.outOfBoundsCorrection"

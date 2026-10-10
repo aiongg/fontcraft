@@ -668,12 +668,13 @@ status = "handbook"
 id = "dialog.interpolateWithBackground"
 label = "Interpolate with Background"
 location = "dialog"
-controls = ["percentage field (may be below 0 or above 100)"]
+controls = ["Percentage field (`amount`; may be below 0 or above 100, within ±100,000)", "OK / Cancel"]
 area = "layers"
 milestone = "M3"
 summary = "Dialog asking for the blend percentage between foreground and background."
 ref = "Filters › Built-in Filters › Transformations › Interpolate with Background"
 status = "handbook"
+notes = "A form over `path.interpolateWithBackground` with a live preview; Path › Interpolate with Background opens it. It opens at 50 %: our choice, the handbook gives no default. Documented but not yet observed."
 
 [[behavior]]
 id = "path.interpolateWithBackground.extrapolation"

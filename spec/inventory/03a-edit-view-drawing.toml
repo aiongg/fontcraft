@@ -429,12 +429,13 @@ status = "inferred"
 id = "dialog.primitiveMeasurements"
 label = "Primitive Measurements"
 location = "dialog"
-controls = ["numeric fields for the size of the shape (the reference does not list them; width and height assumed)", "confirm / cancel"]
+controls = ["Width field", "Height field", "OK / Cancel"]
 area = "drawing"
 milestone = "M3"
 summary = "Dialog shown after a single click with the Primitives tool; the typed measurements define the rectangle or ellipse that is then created at the clicked position. Field names, defaults and which point of the shape lands on the click are not documented."
 ref = "Edit View › Primitives"
 status = "handbook"
+notes = "A form over `path.addRectangle` (rectangle mode) or `path.addEllipse` (ellipse mode) with the click as `x`, `y` and a live preview. Our choices where the handbook is silent: width and height fields from 1 to 2,000,000 units, both opening at 100, and the click as the shape's bottom-left corner. Documented but not yet observed."
 
 [[command]]
 id = "path.addRectangle"

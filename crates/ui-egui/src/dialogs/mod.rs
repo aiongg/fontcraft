@@ -18,6 +18,10 @@
 //! is OK and `Escape` is Cancel. The rest of the app takes no input until the dialog closes.
 
 pub mod form;
+pub mod import_outlines_missing_glyph;
+mod interpolate_with_background;
+pub mod pasted_outline_bounds;
+pub mod primitive_measurements;
 mod round_corners;
 
 use serde::Serialize;
@@ -50,7 +54,14 @@ pub enum Fields {
 }
 
 /// Every dialog with its own file, one line each.
-pub const DIALOGS: &[Dialog] = &[round_corners::DIALOG];
+pub const DIALOGS: &[Dialog] = &[
+    round_corners::DIALOG,
+    interpolate_with_background::DIALOG,
+    primitive_measurements::RECTANGLE,
+    primitive_measurements::ELLIPSE,
+    import_outlines_missing_glyph::DIALOG,
+    pasted_outline_bounds::DIALOG,
+];
 
 /// The shell commands of this module.
 pub const COMMANDS: &[UiCommand] = &[(
