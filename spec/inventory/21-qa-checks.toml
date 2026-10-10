@@ -32,7 +32,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "After components are decomposed, the glyph's contours cross each other or themselves: a union of the shape changes its rounded point digest. The fix replaces the contours with their union, repeating the union until the result is stable, and then restores the earlier contour order and start points where it can."
+summary = "After components are decomposed, the glyph's contours cross each other or themselves, or a contour lies inside another contour that runs the same way. Curves are flattened into 24 line pieces each and only proper crossings count; the contours of one component are not compared with each other. Message codes: `crossing` and `nested-same-direction`. The fix replaces the contours with their union, repeating the union until the result is stable, and then restores the earlier contour order and start points where it can."
 ref = "checkoutlinesufo overlap removal (do_overlap_removal); fontTools ttLib.removeOverlaps"
 status = "docs"
 
@@ -65,7 +65,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "Two consecutive line segments lie on one straight line, so the node between them is redundant. Tested by distance from the line (`tolerance`, default 0 units) and, in the looser variant, by an angle difference under 0.1 rad; the looser variant is skipped for variable sources and stays silent above 100 hits. The fix removes the middle node."
+summary = "Two consecutive line segments lie on one straight line, so the node between them is redundant. Tested by distance from the line (`tolerance`, default 0 units) and, in the looser variant, by an angle difference under 0.1 rad; the looser variant is skipped for sources with more than one master and stays silent above 100 hits. The fix removes the middle node."
 ref = "checkoutlinesufo colinear line segments (remove_colinear_lines, --tolerance); fontbakery outline_colinear_vectors"
 status = "docs"
 
@@ -87,7 +87,7 @@ scope = "source"
 fixable = false
 area = "qa"
 milestone = "M3"
-summary = "A glyph has neither contours nor components although its name does not mark it as a space (space, or uni00A0, uni1680, uni180E, uni2000-200B, uni202F, uni205F, uni3000, uniFEFF)."
+summary = "A glyph layer has neither paths nor components, and the glyph is not a space. A glyph is a space when it is mapped to U+0020, U+00A0, U+1680, U+180E, U+2000-200B, U+202F, U+205F, U+3000 or U+FEFF, or when its name up to the first period is `space`, `nbspace` or `uniXXXX` for one of those code points."
 ref = "checkoutlinesufo 'has no contours' report"
 status = "docs"
 
@@ -98,7 +98,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "An outermost contour (one not enclosed by another contour's bounding box) winds the wrong way for the outline flavour, or a counter winds the same way as the shape around it. Sources use the PostScript convention (outer counter-clockwise); compiled TrueType outlines must have clockwise outer contours. The fix recomputes all directions from nesting."
+summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and every sampled on-curve point of the inner contour (up to 16) is inside the outer contour. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix recomputes all directions from nesting."
 ref = "fontbakery outline_direction"
 status = "docs"
 
@@ -120,7 +120,7 @@ scope = "source"
 fixable = false
 area = "qa"
 milestone = "M3"
-summary = "Two neighbouring segments meet at a very sharp angle (under 0.25 rad between the incoming and outgoing tangents, and not zero), which usually marks a spike or a folded-back node. Deep ink traps trigger it too, so it is advisory. The check is not run on variable sources."
+summary = "Two neighbouring segments meet at a very sharp angle (under 0.25 rad between the incoming and outgoing tangents, and not zero), which usually marks a spike or a folded-back node. Deep ink traps trigger it too, so it is advisory. The check is not run on sources with more than one master."
 ref = "fontbakery outline_jaggy_segments"
 status = "docs"
 
@@ -131,7 +131,7 @@ scope = "source"
 fixable = false
 area = "qa"
 milestone = "M3"
-summary = "A line segment is within 0.5 degrees of horizontal or vertical without being exactly so. Skipped for italic masters and for variable sources, where such lines are often intended."
+summary = "A line segment is within 0.5 degrees of horizontal or vertical without being exactly so. Skipped for italic masters and for sources with more than one master, where such lines are often intended."
 ref = "fontbakery outline_semi_vertical"
 status = "docs"
 
@@ -142,7 +142,7 @@ scope = "source"
 fixable = false
 area = "qa"
 milestone = "M3"
-summary = "A segment is shorter than 3 units or shorter than 0.6% of its contour's length; a short line that follows another line is not counted. The report is dropped above 100 hits and is not produced for variable sources."
+summary = "A segment is shorter than 3 units or shorter than 0.6% of its contour's length; a short line that follows another line is not counted. The report is dropped above 100 hits and is not produced for sources with more than one master."
 ref = "fontbakery outline_short_segments"
 status = "docs"
 
@@ -153,7 +153,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "Two segments in the same glyph share both end points (in either direction), so one edge is drawn twice; some rasterisers mishandle this. The fix removes the overlap."
+summary = "Two segments in the same glyph have the same end points and the same handles, compared exactly and in either direction, so one edge is drawn twice; some rasterisers mishandle this. The fix removes the overlap."
 ref = "fontbakery overlapping_path_segments"
 status = "docs"
 
@@ -186,7 +186,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "The source mixes cubic and quadratic curves, either inside one glyph or between glyphs of one font, which is normally accidental and can confuse the build. The fix converts everything to the font's main curve type."
+summary = "The source mixes cubic and quadratic curves, either inside one glyph layer (code `mixed-in-layer`) or in a layer whose curves are all of the type the font uses less (code `differs-from-font`), which is normally accidental and can confuse the build. The fix converts everything to the font's main curve type."
 ref = "fontbakery ufo_consistent_curve_type (not in any fontbakery profile)"
 status = "docs"
 
@@ -241,7 +241,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "A handle is within `maxAngle` degrees (default 2) of horizontal or vertical, or within `maxOffset` units (default 2) of being so, without being exact. The fix snaps the handle to the axis, keeping its length."
+summary = "A handle is within `maxAngle` degrees (default 2) of horizontal or vertical without being exact, or is less than `maxOffset` units (default 2) off the axis while within 10 degrees of it; the angle limit on the offset rule keeps short diagonal handles out. The fix snaps the handle to the axis, keeping its length."
 ref = "Editor audit convention (slightly slanted handles)"
 status = "inferred"
 
@@ -340,7 +340,7 @@ scope = "source"
 fixable = false
 area = "qa"
 milestone = "M3"
-summary = "A coordinate lies outside the range a compiled font can store (magnitude above 32766) or implausibly far from the em square (more than `maxEmMultiple` em, default 4)."
+summary = "A coordinate lies outside the range a compiled font can store (magnitude above 32766, code `beyond-storage`, fail) or implausibly far from the em square (more than `maxEmMultiple` em, default 4, code `far-from-em`, warn)."
 ref = "Editor audit convention; limit from fontbakery opentype/points_out_of_bounds"
 status = "inferred"
 
