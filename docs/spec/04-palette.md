@@ -20,8 +20,7 @@ are ours.
 commands: `palette.toggleSection`, `fitCurve.setRange`, `transform.setOrigin`,
 `transform.setScaleLock`, `transform.setSettings` (the field values) and the two Layers filters.
 Every button passes the values it applies to its engine command, so the engine never reads the
-panel. Not built yet: Stroke (no `path.setStroke`), the Transformations booleans, `layers.select`
-and dragging layer rows, and the Dimensions letter diagram. The Transformations fields start at
+panel. Not built yet: `layers.select` and dragging layer rows, and the Dimensions letter diagram. The Transformations fields start at
 scale 110 % (lock closed), rotation 90° and slant 10°; the handbook gives no defaults.
 
 ## Dimensions (`palette.dimensions`)
@@ -201,6 +200,10 @@ separate command that does respect the origin setting (see the path editing note
 
 Paths taking part in a subtraction are merged first so the outcome is stable. Union is the
 operation the Remove Overlap export option runs on every glyph.
+
+FontCraft's buttons pass the selected paths as `shapes`: a path counts as selected when it is
+selected whole or any of its nodes or handles is. With none selected they pass no `shapes`, so
+the command takes every path; in Font View they pass the selected glyphs.
 
 ## Open questions
 

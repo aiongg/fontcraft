@@ -1,4 +1,5 @@
-//! Strokes and masks on the canvas and the Palette's Stroke section, in headless frames.
+//! Strokes and masks on the canvas, the Palette's Stroke section and the Transformations boolean
+//! buttons, in headless frames.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -153,4 +154,30 @@ fn the_stroke_section_runs_set_stroke_on_the_selected_paths() {
     assert_eq!(id, "path.setStroke");
     assert_eq!(params["capEnd"], "round");
     assert!(params.get("width").is_none(), "a control sends only its own key");
+}
+
+#[test]
+fn the_boolean_buttons_run_their_commands() {
+    let mut app = FontcraftApp::default();
+    app.run("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+    app.run("path.addRectangle", &json!({"glyph": "A", "x": 200, "y": 200, "width": 200, "height": 200})).unwrap();
+    app.run("path.addRectangle", &json!({"glyph": "A", "x": 600, "y": 100, "width": 100, "height": 100})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+    collapse(&mut app, &["dimensions", "fitCurve", "layers"]);
+    let mut w = Window::default();
+    w.settle(&mut app);
+
+    app.run("selection.set", &json!({"points": [[1, 0]]})).unwrap();
+    w.settle(&mut app);
+    w.click(&mut app, widgets::id("transform.booleanSubtract"));
+    let (id, params) = last(&app);
+    assert_eq!(id, "transform.booleanSubtract");
+    assert_eq!(params["shapes"], json!([1]), "the path with a selected node is the one subtracted");
+
+    app.run("edit.deselectAll", &json!({})).unwrap();
+    w.settle(&mut app);
+    w.click(&mut app, widgets::id("transform.booleanUnion"));
+    let (id, params) = last(&app);
+    assert_eq!(id, "transform.booleanUnion");
+    assert!(params.get("shapes").is_none(), "with nothing selected the union takes every path");
 }

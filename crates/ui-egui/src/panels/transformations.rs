@@ -1,12 +1,14 @@
 //! Palette › Transformations: the origin row (`transform.setOrigin`), mirror, scale with its lock
-//! (`transform.setScaleLock`), rotate, slant and align. The buttons act on the Edit View
-//! selection, or on the whole layer when nothing is selected; in Font View on the selected
-//! glyphs. The two buttons beside a field apply its value in opposite directions. Field values
-//! go through `transform.setSettings`; each button passes them, and the origin, to its command.
+//! (`transform.setScaleLock`), rotate, slant, align, and the booleans union, subtract and
+//! intersect. The buttons act on the Edit View selection, or on the whole layer when nothing is
+//! selected; in Font View on the selected glyphs. The booleans take the selected paths, a path
+//! counting as selected when any of its nodes is. The two buttons beside a field apply its value
+//! in opposite directions. Field values go through `transform.setSettings`; each button passes
+//! them, and the origin, to its command.
 
 use serde_json::{Map, Value, json};
 
-use super::{METRICS, Pending, edit_targets, palette, widgets, with};
+use super::{METRICS, Pending, edit_targets, palette, stroke, widgets, with};
 use crate::app::FontcraftApp;
 use crate::shell::transform::OriginMode;
 
@@ -22,6 +24,20 @@ fn targets(app: &FontcraftApp, id: &str) -> Option<Map<String, Value>> {
     let mut m = Map::new();
     m.insert("glyphs".into(), json!(app.state.selected_glyphs));
     Some(m)
+}
+
+/// The targets of boolean command `id`: in Edit View the selected paths (none: every path of the
+/// layer), else the glyphs selected in Font View.
+fn boolean_targets(app: &FontcraftApp, id: &str) -> Option<Map<String, Value>> {
+    let mut t = targets(app, id)?;
+    if app.state.tab().is_some() {
+        t.remove("shapes");
+        let paths = stroke::selected_paths(app);
+        if !paths.is_empty() {
+            t.insert("shapes".into(), json!(paths));
+        }
+    }
+    Some(t)
 }
 
 fn metric_label(metric: &str) -> &'static str {
@@ -154,6 +170,20 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         ] {
             if widgets::button(ui, widgets::id(id), label, hover, align, false) {
                 press(pending, id, json!({}));
+            }
+        }
+    });
+
+    ui.horizontal(|ui| {
+        for (id, label, hover) in [
+            ("transform.booleanUnion", "Union", "Union: merge the closed paths"),
+            ("transform.booleanSubtract", "Subtract", "Subtract the selected paths from the others"),
+            ("transform.booleanIntersect", "Intersect", "Intersect: keep where the selected paths overlap the others"),
+        ] {
+            if widgets::button(ui, widgets::id(id), label, hover, enabled, false)
+                && let Some(t) = boolean_targets(app, id)
+            {
+                pending.push((id, Value::Object(t)));
             }
         }
     });
