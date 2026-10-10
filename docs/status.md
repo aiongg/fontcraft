@@ -8,7 +8,7 @@ _Updated: 2026-10-10, M3 waves 3 and 4 and the dialog framework integrated._
 
 - `cargo xtask ci` passes all nine steps (854 tests; about 102,600 lines of Rust in 20 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
-- 200 of the 932 inventory commands exist (`docs/parity.md`); M3 has 184 commands, 172 of them
+- 207 of the 932 inventory commands exist (`docs/parity.md`); M3 has 184 commands, 178 of them
   live. Feature parity is about 10% (ROADMAP.md › Parity estimate).
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -31,9 +31,11 @@ _Updated: 2026-10-10, M3 waves 3 and 4 and the dialog framework integrated._
 | M3.14 framework | a dialog is a form over a command's parameters with a live preview: OK is one undo step, Cancel restores the font; filter dialogs from their schemas; `dialog.open`, `ui.dialog.*`, `ui.click` |
 | Wave 4 | M3.13 Draw, Pencil, Rectangle, Ellipse and shared tool letters; M3.5 Rotate and Scale tools and the bounding box; M3.9, M3.10, M3.16 on the canvas: guides, grid, measurement, the Measurement tool, background, annotations and the Annotation tools; M3.15 Info box, Palette (Dimensions, Fit Curve, Layers, Transformations), bottom bar |
 
-In progress on branches when this was written: the audit commands and fixes (M3.17); the
-Transformations, Interpolate with Background, Primitive Measurements, missing-glyph,
-pasted-outline and Export dialogs, with the framework extensions they need (M3.14).
+| Wave 5, part 1 | M3.17 audit commands (`audit.run`, `list`, `describe`, `results`, `fix`, `profile.list`; seven fixes through path commands, one undo step, a backup layer); M3.14 dialogs for Transformations (Origin, Slant), Interpolate with Background, Primitive Measurements, the missing-glyph and pasted-outline questions, Export (OTF tab, runs on OK); framework: run-on-OK mode, follow-up questions, button captions, choice labels; File › Export (Cmd+E) |
+
+Still to build in the dialog framework: shaped fields and the "…" actions (Transformations
+Translate, Scale, copy filter string), a reorderable list (Shape Order), multi-choice and folder
+fields (Export containers and destination), tabs (Export).
 
 Next, in this order:
 

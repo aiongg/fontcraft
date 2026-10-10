@@ -14,7 +14,7 @@ _Last updated: 2026-10-10 (M3 waves 3 and 4: path-operation commands and the Kni
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,643 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, pointer and key injection, dialogs, panels, tests | **~55%** of what the siblings' "infrastructure" row covers; missing: context menus, menu items enabled by the selection, a toolbar, the settings window, MCP resources and prompts, a performance suite |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~10%** |
-| Commands that exist (not: that behave like the reference) | **200 of 932** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **207 of 932** (`docs/parity.md`) |
 | Observed against the running reference | **52 rows**: 47 compiled-output rows checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
 ## Honest assessment (2026-10-10)
@@ -47,7 +47,7 @@ whose outlines FontCraft's match in 322 (the other 9 are source reading, allow-l
 `crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
 transforms; fontTools reads all of its output back.
 
-**What is real: editing by command (M3).** 200 of the 932 commands exist, 172 of them from M3.
+**What is real: editing by command (M3).** 207 of the 932 commands exist, 178 of them from M3.
 Every editing command takes explicit targets (shapes, nodes, segments, the foreground or the
 background) and runs the same from the window, `fontcraft-cli run`, MCP and the control channel:
 
@@ -97,7 +97,7 @@ unconfirmed, it follows the handbook (Remove Overlap, for example, deletes open 
 | Strokes and masks | commands only: the canvas does not draw them and export does not expand them |
 | Audit | no `audit.*` command, live audit or markers |
 | Window | no context menus and no toolbar; menu items are not greyed out by the selection; every tab edits the first master's layer (no master switching) |
-| Panels | the Palette's Transformations buttons draw as empty boxes, because the UI font has no glyphs for their symbols; there is no Stroke section; of the M3 dialogs only the filter dialogs exist |
+| Panels | the Palette's Transformations buttons draw as empty boxes, because the UI font has no glyphs for their symbols; there is no Stroke section; the Transformations dialog lacks Translate, Scale and its "…" menu; Shape Order has no dialog; Export has only its OTF tab |
 
 Beyond M3 there is no kerning editing, no component editing (components are exported as
 composites), no feature compilation, no variable fonts and no instances between masters (M9),
@@ -122,7 +122,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~11% | 200 of 932 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); 13 of 170 panels, most of them partial (the Font View grid, the Info box, the Palette and four of its sections, the bottom bar, five filter dialogs) |
+| **Breadth:** commands, tools and panels exist | ~11% | 207 of 932 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); 13 of 170 panels, most of them partial (the Font View grid, the Info box, the Palette and four of its sections, the bottom bar, five filter dialogs) |
 | **Depth:** features behave like the reference | ~4% | the M3 commands, tools, panels and dialogs behave as the handbook describes them, and none has been compared with the reference app. Exported fonts keep overlaps; strokes and masks are not drawn or exported; no context menus |
 | **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands and the CLI. Missing: variable fonts, instances between masters, version conversion, a glyph database for production names |
 | **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). No variable font, no features, no hinting, no subroutines |
@@ -136,9 +136,8 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 The rest of **M3, Edit View drawing**, in the order of `docs/plans/M3.md` § 6:
 
-1. **In progress:** the audit commands and fixes (M3.17); the Transformations, Interpolate
-   with Background, Primitive Measurements, missing-glyph, pasted-outline and Export dialogs,
-   and the dialog framework's extensions for them (M3.14).
+1. **The rest of the dialog framework:** shaped fields and "…" actions (Transformations),
+   a reorderable list (Shape Order), multi-choice and folder fields and tabs (Export).
 2. **M3.7, overlap removal at export**, with the per-layer time limit of the path-operation
    commands; the M2 warning goes away.
 3. **The canvas and compile parts of M3.11:** strokes and masks drawn on the canvas, expanded
@@ -343,7 +342,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 6 (4) |
-| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 🟡 plan accepted (`docs/plans/M3.md`). Done: M3.0 spec pass; M3.1 engine foundations (targets, interactions, `layer.inspect`, the glyph lock, segment geometry, grid rounding); M3.2 canvas, `render`, `ui.screenshot`, `ui.render`, tabs, View toggles; M3.3 pointer editing (Select, Lasso, Hand, Zoom, snapping, keymap, `ui.pointer`, `ui.key`); M3.4 nodes and Fit Curve; M3.5 transformations, the Rotate and Scale tools and the bounding box; M3.6 path-operation commands and the Knife; M3.8 clipboard and SVG import; M3.9 guides, grid, measuring, Dimensions and the Measurement tool; M3.10 background and layers, drawn on the canvas; M3.11 strokes, masks and shape order in the engine; M3.12 the filter framework and six filters; M3.13 Draw, Pencil, Rectangle, Ellipse; M3.14 the dialog framework and filter dialogs; M3.15 Info box, four Palette sections, bottom bar; M3.16 annotations and the Annotation tools. In progress: audit commands (M3.17), the other M3 dialogs. Left: M3.7 overlap removal at export, strokes and masks on the canvas and at compile, live audit and markers, context menus, M3.18 | 184 (172) |
+| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 🟡 plan accepted (`docs/plans/M3.md`). Done: M3.0 spec pass; M3.1 engine foundations (targets, interactions, `layer.inspect`, the glyph lock, segment geometry, grid rounding); M3.2 canvas, `render`, `ui.screenshot`, `ui.render`, tabs, View toggles; M3.3 pointer editing (Select, Lasso, Hand, Zoom, snapping, keymap, `ui.pointer`, `ui.key`); M3.4 nodes and Fit Curve; M3.5 transformations, the Rotate and Scale tools and the bounding box; M3.6 path-operation commands and the Knife; M3.8 clipboard and SVG import; M3.9 guides, grid, measuring, Dimensions and the Measurement tool; M3.10 background and layers, drawn on the canvas; M3.11 strokes, masks and shape order in the engine; M3.12 the filter framework and six filters; M3.13 Draw, Pencil, Rectangle, Ellipse; M3.14 the dialog framework and filter dialogs; M3.15 Info box, four Palette sections, bottom bar; M3.16 annotations and the Annotation tools. In progress: audit commands (M3.17), the other M3 dialogs. Left: M3.7 overlap removal at export, strokes and masks on the canvas and at compile, live audit and markers, context menus, M3.18 | 184 (178) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
@@ -357,7 +356,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 932 (200) |
+| | **Total** | | 932 (207) |
 
 ## Parity estimate
 
@@ -388,10 +387,10 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Compiling | 9 | 11 | 4 | 10% | static TTF and OTF, plain, WOFF and WOFF2, from the commands; core tables identical, equivalent or allow-listed against fontc and fontmake in every corpus source. Missing: variable fonts and instances between masters (M9), features (M8), hinting (M10), overlap removal (M3.7), strokes and masks (M3.11), CFF subroutines, production names (M4), 37 of 50 tables |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
 | Command-line tools | 8 | 42 | 4 | 3% | `commands`, `run`, `convert`, `compile` (static fonts; most of the reference compilers' options not yet), `info`, `tables list`, `glyphs list`, `oracle`; no dump, subset, instance, merge |
-| Quality checks | 3 | 33 | 0 | 2% | `audit` holds 34 of the 36 outline checks with their fixes named, but no `audit.*` command, live audit or markers exist; the other 264 checks |
+| Quality checks | 3 | 33 | 6 | 6% | 34 of the 36 outline checks run through `audit.run`; `audit.fix` applies seven fixes through path commands; no live audit or canvas markers; the other 264 checks |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
 | Agent surfaces | 4 | 11 | 3 | 40% | execute, list, inspect and batch over three surfaces; `ui.screenshot` and `ui.render`; tools, pointer, key, text and dialog control over the control channel. Missing: `ui.click` beyond dialogs, `ui.set`, MCP resources and prompts |
-| **Feature parity** | **117** | **932** | **200** | **~10%** | |
+| **Feature parity** | **117** | **932** | **207** | **~10%** | |
 
 ## Out of scope (by design or by law)
 
