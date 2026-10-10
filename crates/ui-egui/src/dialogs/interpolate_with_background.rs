@@ -56,7 +56,8 @@ mod tests {
         let opened = call(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"dialog": "dialog.interpolateWithBackground"}}));
         assert_eq!(opened["fields"][0]["id"], "amount");
         assert_eq!(opened["fields"][0]["value"], 50.0);
-        assert_eq!(opened["params"]["glyphs"], json!(["A"]), "the glyph in the tab");
+        assert_eq!(opened["params"]["glyph"], "A", "the glyph in the tab");
+        assert_eq!(opened["params"]["layer"], json!(original.masters[0].id), "its active layer");
         // Below 0 extrapolates away from the background.
         call(&mut app, "ui.dialog.set", json!({"field": "amount", "value": -50}));
         assert!(!font(&app).same_as(&original), "the preview moves the square");
