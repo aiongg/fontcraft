@@ -241,13 +241,13 @@ label = "Offset Curve"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], horizontal: number, vertical: number, makeStroke?: bool = false, autoStroke?: bool = false, position?: percent 0..100 = 50, keepCompatible?: bool = false, capStyle?: \"flat\"|\"square\"|\"round\"|\"roundInset\"|\"aligned\" = \"flat\"}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], horizontal: number, vertical?: number = horizontal, makeStroke?: bool = false, autoStroke?: bool = false, position?: percent 0..100 = 50, keepCompatible?: bool = false, capStyle?: \"flat\"|\"square\"|\"round\"|\"roundInset\"|\"aligned\" = \"flat\"}"
 area = "path-ops"
 milestone = "M3"
-summary = "Moves the outline outward (positive) or inward (negative) by separate horizontal and vertical distances, thickening or thinning stems. With Make Stroke it instead expands each path to both sides into a stroke outline, with a position split, optional vertical-dimension preservation (Auto Stroke) and a cap style for open paths."
+summary = "Moves the outline outward (positive) or inward (negative) by separate horizontal and vertical distances, thickening or thinning stems. With Make Stroke it instead expands each path to both sides into a stroke outline, with a position split, optional vertical-dimension preservation (Auto Stroke) and a cap style for open paths. vertical defaults to horizontal (the locked state)."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
-notes = "Documented, not yet observed; the geometry is ours. A point whose path runs in unit direction t moves by (−t.y · horizontal, t.x · vertical) to the outward side, so vertical edges move by horizontal and horizontal edges by vertical. Corners stay sharp (a mitre, bevelled beyond 4 times the offset). Curves are offset as cubics within 0.25 units of the true offset, split where needed; the outline is then united with (positive) or reduced by (negative) the stroke of its own paths, so overlaps, loops and stems thinner than the offset resolve; distances of opposite signs run as two passes, horizontal first. Quadratic curves come out cubic. An open path without Make Stroke moves to the right of its direction, as the outward side of a counter-clockwise outer path does. Make Stroke uses the absolute distances. The command always takes both distances; the lock button belongs to the dialog. Export string: OffsetCurve; horizontal; vertical; makestroke; position, the position as a fraction 0–1 or `auto` for Auto Stroke; Keep Compatible and Cap Style have no place in it. Components and locked paths are not changed; new points are rounded to the grid."
+notes = "Documented, not yet observed; the geometry is ours. A point whose path runs in unit direction t moves by (−t.y · horizontal, t.x · vertical) to the outward side, so vertical edges move by horizontal and horizontal edges by vertical. Corners stay sharp (a mitre, bevelled beyond 4 times the offset). Curves are offset as cubics within 0.25 units of the true offset, split where needed; the outline is then united with (positive) or reduced by (negative) the stroke of its own paths, so overlaps, loops and stems thinner than the offset resolve; distances of opposite signs run as two passes, horizontal first. Quadratic curves come out cubic. An open path without Make Stroke moves to the right of its direction, as the outward side of a counter-clockwise outer path does. Make Stroke uses the absolute distances. Vertical left out in the command or the export string is the horizontal distance (the schema's default for it is -1000000, outside the range, which stands for "same as horizontal"); the lock button is the dialog's. Export string: OffsetCurve; horizontal; vertical; makestroke; position, the position as a fraction 0–1 or `auto` for Auto Stroke; Keep Compatible and Cap Style have no place in it. Components and locked paths are not changed; new points are rounded to the grid."
 
 [[panel]]
 id = "dialog.filterOffsetCurve"
@@ -286,7 +286,7 @@ milestone = "M3"
 summary = "With the lock button engaged the Horizontal value is applied to both axes and the Vertical field is ignored."
 ref = "Filters › Built-in Filters › Offset Curve"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: the lock is the dialog's; the command always takes both distances."
+notes = "Documented, not yet observed. FontCraft: the lock is the dialog's; in the command and the export string a vertical distance left out is the horizontal one, and the string written by FontCraft always holds both values."
 
 [[behavior]]
 id = "filter.offsetCurve.makeStroke"

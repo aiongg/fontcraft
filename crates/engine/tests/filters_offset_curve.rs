@@ -146,3 +146,19 @@ fn hostile_strings_and_arguments_are_errors_that_change_nothing() {
         assert_eq!(font(&s), before, "{p} changed the font");
     }
 }
+
+#[test]
+fn a_vertical_distance_left_out_is_the_horizontal_one() {
+    let mut left_out = fixture();
+    let mut given = fixture();
+    let v = run(&mut left_out, "filter.offsetCurve", json!({"glyphs": ["B", "O", "S"], "horizontal": 12}));
+    assert_eq!(v["string"], "OffsetCurve;12;12;0;0.5;");
+    run(&mut given, "filter.offsetCurve", json!({"glyphs": ["B", "O", "S"], "horizontal": 12, "vertical": 12}));
+    assert_eq!(font(&left_out), font(&given));
+    assert_eq!(bounds(&mut left_out, "B"), (-12.0, -12.0, 112.0, 112.0));
+
+    // The export string with one value gives the same font.
+    let mut from_string = fixture();
+    run(&mut from_string, "filter.apply", json!({"glyphs": ["B", "O", "S"], "string": "OffsetCurve;12"}));
+    assert_eq!(font(&from_string), font(&given));
+}

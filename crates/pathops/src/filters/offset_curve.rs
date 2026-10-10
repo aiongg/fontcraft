@@ -30,6 +30,9 @@ use crate::{BoolOp, MAX_NODES, MAX_SEGMENTS, OpenPaths, OverlapOptions, PathOpEr
 
 /// Largest distance, in units, either way.
 pub const MAX_OFFSET: f64 = 10_000.0;
+/// The vertical distance's default: outside the accepted range, so no given value equals it. It
+/// stands for "the horizontal distance" (the handbook's locked state).
+const SAME_AS_HORIZONTAL: f64 = -1.0e6;
 /// Most distance, in units, between a fitted offset curve and the true offset before the curve is
 /// split.
 const TOLERANCE: f64 = 0.25;
@@ -65,10 +68,10 @@ const PARAMS: &[Param] = &[
         key: "vertical",
         label: "Vertical",
         kind: ParamKind::Number { min: -MAX_OFFSET, max: MAX_OFFSET },
-        default: Value::Number(10.0),
-        required: true,
+        default: Value::Number(SAME_AS_HORIZONTAL),
+        required: false,
         slot: Slot::Position(1),
-        doc: "how far horizontal edges move, in units; the dialog's lock button keeps it equal to horizontal",
+        doc: "how far horizontal edges move, in units; the horizontal distance when left out (the dialog's locked state)",
     },
     Param {
         key: "makeStroke",
@@ -117,7 +120,7 @@ const PARAMS: &[Param] = &[
     },
 ];
 
-const DOC: &str = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), horizontal: units (-10000 to 10000), vertical: units (-10000 to 10000), makeStroke?: bool (default false), autoStroke?: bool (default false), position?: percent (0 to 100, default 50), keepCompatible?: bool (default false), capStyle?: \"flat\" | \"square\" | \"round\" | \"roundInset\" | \"aligned\" (default \"flat\")} moves the outline sideways: vertical edges by horizontal units and horizontal edges by vertical units, outward for positive values and inward for negative ones, with sharp corners; an open path moves to the right of its direction. With makeStroke every path becomes a stroke outline, horizontal and vertical units wide on each side at position 50 (0: all on the left of the path direction, 100: all on the right), with capStyle at the ends of open paths; autoStroke makes a centred stroke that keeps the layer's height. Curves gain nodes where the offset needs them and overlaps are removed, unless keepCompatible: then every node and handle moves in place and only caps add nodes, so masters stay compatible. Components and locked paths are not changed; new points are rounded to the grid. Export string: OffsetCurve; horizontal; vertical; makestroke; position (a fraction from 0 to 1, or auto for autoStroke) → {glyphs: [names], skipped: [{glyph, layer?, reason}]}";
+const DOC: &str = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), horizontal: units (-10000 to 10000), vertical?: units (-10000 to 10000, default: horizontal), makeStroke?: bool (default false), autoStroke?: bool (default false), position?: percent (0 to 100, default 50), keepCompatible?: bool (default false), capStyle?: \"flat\" | \"square\" | \"round\" | \"roundInset\" | \"aligned\" (default \"flat\")} moves the outline sideways: vertical edges by horizontal units and horizontal edges by vertical units, outward for positive values and inward for negative ones, with sharp corners; an open path moves to the right of its direction. With makeStroke every path becomes a stroke outline, horizontal and vertical units wide on each side at position 50 (0: all on the left of the path direction, 100: all on the right), with capStyle at the ends of open paths; autoStroke makes a centred stroke that keeps the layer's height. Curves gain nodes where the offset needs them and overlaps are removed, unless keepCompatible: then every node and handle moves in place and only caps add nodes, so masters stay compatible. Components and locked paths are not changed; new points are rounded to the grid. Export string: OffsetCurve; horizontal; vertical; makestroke; position (a fraction from 0 to 1, or auto for autoStroke) → {glyphs: [names], skipped: [{glyph, layer?, reason}]}";
 
 impl Filter for OffsetCurve {
     fn id(&self) -> &'static str {
@@ -142,9 +145,10 @@ impl Filter for OffsetCurve {
 
     fn apply(&self, contours: &[Contour], args: &Args, cx: &Context) -> Result<Vec<Contour>, PathOpError> {
         let auto = args.flag("autoStroke");
+        let (horizontal, vertical) = distances(args);
         let options = OffsetOptions {
-            horizontal: args.number("horizontal"),
-            vertical: args.number("vertical"),
+            horizontal,
+            vertical,
             stroke: args.flag("makeStroke") || auto,
             auto,
             position: if auto { 50.0 } else { args.number("position") },
@@ -179,20 +183,35 @@ impl Filter for OffsetCurve {
                 _ => return Err(format!("this filter takes 4 values without a key; \"{value}\" is one too many")),
             }
         }
-        Args::new(PARAMS, given)
+        let args = Args::new(PARAMS, given.clone())?;
+        // A vertical distance equal to the horizontal one reads as left out, so that an Args
+        // always has one form and the string of the defaults reads back as the defaults.
+        if args.number("vertical") == args.number("horizontal") {
+            given.retain(|(key, _)| *key != "vertical");
+            return Args::new(PARAMS, given);
+        }
+        Ok(args)
     }
 
     fn write_items(&self, args: &Args) -> Vec<Item> {
-        let number = |key: &str| Value::Number(args.number(key)).to_string();
+        let (horizontal, vertical) = distances(args);
+        let number = |v: f64| Value::Number(v).to_string();
         let position =
             if args.flag("autoStroke") { "auto".to_string() } else { Value::Number((args.number("position") * 1e6).round() / 1e8).to_string() };
         vec![
-            Item::positional(number("horizontal")),
-            Item::positional(number("vertical")),
+            Item::positional(number(horizontal)),
+            Item::positional(number(vertical)),
             Item::positional(Value::Bool(args.flag("makeStroke")).to_string()),
             Item::positional(position),
         ]
     }
+}
+
+/// The horizontal and vertical distances of `args`; a vertical one left out is the horizontal one.
+fn distances(args: &Args) -> (f64, f64) {
+    let horizontal = args.number("horizontal");
+    let vertical = args.number("vertical");
+    (horizontal, if vertical == SAME_AS_HORIZONTAL { horizontal } else { vertical })
 }
 
 /// The ends of open paths in a stroke.
@@ -1200,14 +1219,12 @@ mod tests {
         assert_eq!(FilterString::write(&f, &auto, &[], &[]), "OffsetCurve;10;10;0;auto;");
         let short = read("OffsetCurve;-5;-5").unwrap();
         assert_eq!(FilterString::write(&f, &short, &[], &[]), "OffsetCurve;-5;-5;0;0.5;");
-        let odd =
-            Args::new(PARAMS, [("horizontal", Input::Number(1.0)), ("vertical", Input::Number(1.0)), ("position", Input::Number(33.3))]).unwrap();
+        let odd = Args::new(PARAMS, [("horizontal", Input::Number(1.0)), ("position", Input::Number(33.3))]).unwrap();
         let s = FilterString::write(&f, &odd, &[], &[]);
         assert_eq!(s, "OffsetCurve;1;1;0;0.333;");
         assert_eq!(read(&s).unwrap(), odd);
         for bad in [
             "OffsetCurve",
-            "OffsetCurve;10",
             "OffsetCurve;10;10;1;1.5",
             "OffsetCurve;10;10;1;-0.1",
             "OffsetCurve;10;10;1;NaN",
@@ -1219,6 +1236,35 @@ mod tests {
         ] {
             assert!(read(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_vertical_distance_left_out_is_the_horizontal_one() {
+        let f = OffsetCurve;
+        let shape = [rect(0.0, 0.0, 100.0, 60.0)];
+        let cx = Context::default();
+        let given = |pairs: &[(&'static str, f64)]| Args::new(PARAMS, pairs.iter().map(|&(k, v)| (k, Input::Number(v)))).unwrap();
+        let left_out = given(&[("horizontal", 12.0)]);
+        let same = given(&[("horizontal", 12.0), ("vertical", 12.0)]);
+        let other = given(&[("horizontal", 12.0), ("vertical", 5.0)]);
+        let grown = f.apply(&shape, &left_out, &cx).unwrap();
+        assert_eq!(grown, f.apply(&shape, &same, &cx).unwrap());
+        assert_ne!(grown, f.apply(&shape, &other, &cx).unwrap());
+        assert!(near(bounds(&grown), -12.0, -12.0, 112.0, 72.0));
+        // The string always holds both values; one with the vertical value left out reads the same.
+        assert_eq!(FilterString::write(&f, &left_out, &[], &[]), "OffsetCurve;12;12;0;0.5;");
+        let read = |s: &str| f.read_items(&FilterString::parse(s).unwrap().items).unwrap();
+        assert_eq!(read("OffsetCurve;12"), left_out);
+        assert_eq!(read("OffsetCurve;12;12"), left_out);
+        assert_eq!(read("OffsetCurve;12;5"), other);
+        assert_eq!(read(&FilterString::write(&f, &Args::defaults(PARAMS), &[], &[])), Args::defaults(PARAMS));
+        // Strokes follow too.
+        let stroke = |vertical: Option<f64>| {
+            let mut v = vec![("horizontal", Input::Number(8.0)), ("makeStroke", Input::Bool(true))];
+            v.extend(vertical.map(|n| ("vertical", Input::Number(n))));
+            f.apply(&shape, &Args::new(PARAMS, v).unwrap(), &cx).unwrap()
+        };
+        assert_eq!(stroke(None), stroke(Some(8.0)));
     }
 
     #[test]

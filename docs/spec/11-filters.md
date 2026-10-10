@@ -124,7 +124,7 @@ Changes stem thickness by moving the outline, or turns paths into strokes.
 | Param | Meaning |
 |---|---|
 | `horizontal`, `vertical` | offset per axis; positive expands, negative contracts |
-| lock button | when locked, `vertical` follows `horizontal`; a dialog control only, the command always takes both |
+| lock button | when locked, `vertical` follows `horizontal`; a dialog control only. The command and the export string give the same result by leaving `vertical` out |
 | `makeStroke` | offset to both sides and join into a stroke outline; the way to outline a closed shape |
 | `autoStroke` | like Make Stroke but vertical dimensions of the shape are preserved; implies position 50 % |
 | `position` | split of the stroke across the path: 0 % all left, 100 % all right, 50 % centred |
