@@ -2,28 +2,48 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M4 wave 1 done (M4.0 to M4.5); the Font View UI next._
+_Updated: 2026-10-10, M4 closed: every measure met; the owner's review of M4 next._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all ten steps (1,021 tests; about 127,000 lines of Rust in 22 crates,
+- `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
-- 252 of the 932 inventory commands exist (`docs/parity.md`); M3's 184 commands are all
-  live; M4 has 45 of 61. Feature parity is about 12% (ROADMAP.md › Parity estimate).
+- 269 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
+  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 391 guesses on 267
+  rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
-  Edit View were looked at, and the screenshots of each M3 UI package were reviewed. macOS and
+  Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
   Windows have **not** been built.
 - The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
   runs locally) and no release.
 
 ## Where to start
 
-1. **M4, Font View and glyph management** (`docs/plans/M4.md`, accepted with every
-   recommendation). Built: M4.0, M4.1 (`crates/glyphdata`), M4.2, M4.3, M4.4, M4.5
-   (`crates/glyphquery`), M4.6's settings store and app wiring. Next, per § 6: M4.6's language
-   and glyph-set data (CLDR exemplars; Google Fonts glyph sets, Apache-2.0) with session
-   accessors for language sets and `Groups*.plist` files; M4.7 grid and List View (builder);
-   then M4.8 to M4.11 in worktrees; M4.12 close.
+1. **The owner's review of M4.** The measures and results are in `docs/plans/M4.md` § 5; the
+   guesses M4 added are in `docs/guesses.md`. Wait for the owner before changing them.
+2. **M5's planning pass, spacing, kerning and text mode** (`docs/execution-plan.md` § 3), for
+   the owner to accept.
+
+M4, Font View and glyph management (`docs/plans/M4.md`), as built:
+
+| Done | What it gave |
+|---|---|
+| M4.0 | spec pass: the owner's answers in the rows; licence history of GlyphsInfo (MIT until 2024-11-22, BSD-3-Clause after) |
+| M4.1 | `crates/glyphdata`: the glyph database and `cargo xtask glyphdata`, cross-checked against fontc and glyphsLib |
+| M4.2 | effective properties, glyph order, sorted placement, Last Changed; production names and database mark widths at export; `post` names compared with both oracles |
+| M4.3 | 22 glyph property commands, renames that follow references, Find and Replace |
+| M4.4 | Add Glyphs, Duplicate, Remove with its answers, Add to Font, whole-glyph copy and paste, Paste Special |
+| M4.5 | `crates/glyphquery` and the search and filter commands |
+| M4.6 | the settings store and the app's settings file; CLDR language data and glyph sets (`cargo xtask glyphsets`, sources in git-ignored `data-sources/`); `file.newFromGlyphSets` |
+| M4.7 | Font View grid, List View, status area, batch targets |
+| M4.8 | inspector, Selection Info, glyph and canvas context menus, Info box colours |
+| M4.9 | sidebar, search field, filter dialogs, global guides drawn and hit only where their filter allows |
+| M4.10 | Add Glyphs, Remove Glyphs, Paste Special and Find and Replace dialogs; Font View clipboard |
+| M4.11 | Glyph Info window, Start Window, recent documents in the engine, `glyphData.glyphSets` |
+| M4.12 | the § 5 measures, all met; undo-step sweep; the glyph-set end-to-end test |
+
+Left for later milestones: the inspector's metric and kerning fields (M5), Add Glyphs recipes
+(M6), images in cells (M11), renaming and dragging filters in the sidebar.
 
 M3, Edit View drawing (`docs/plans/M3.md`), as built:
 
@@ -47,7 +67,7 @@ M3, Edit View drawing (`docs/plans/M3.md`), as built:
 | M3.18 | the § 5 measures, all met (184 of 184 commands live); the end-to-end test (an agent draws H, O and n over the control channel and exports them) |
 
 Moved to `fidelity`: `path.sharpenCorner` (no source). Left for later milestones: text mode
-(M5), Font View's master choice (M4), the toolbar's master icons (M9), the Export dialog's
+(M5), the toolbar's master icons (M9), the Export dialog's
 Variable (M9) and Metrics (M5) tabs.
 
 Decisions that hold:
@@ -61,8 +81,7 @@ Decisions that hold:
 - Points a command creates or moves round to the font's grid (`path.addPath` included).
 
 M1 and M2 are done (`docs/plans/M1.md`, `docs/plans/M2.md`). M2 left on purpose: instances
-between masters (M9), CFF subroutines (before M12), production names (M4), the compile plan's
-`productionNames` and `features` sections, the CLI's `--name-by`, `--output-layout` and pattern
+between masters (M9), CFF subroutines (before M12), the compile plan's `features` section, the CLI's `--name-by`, `--output-layout` and pattern
 instance selection, and one reader case (a designspace master missing a metric before one it
 states reads it as 0). `fontcraft-cli oracle --corpus` (fontc, or fontmake with `--format otf`)
 measures the compiler; `crates/oracle/allow.toml` holds every accepted difference with its reason.
@@ -320,3 +339,11 @@ Append one terse entry per session: what landed, numbers, what is still open.
   copy and paste, Paste Special. M4.5: `crates/glyphquery` (search, smart and list filters,
   predicates, sidebar entries, missing glyphs) and 11 commands. M4.6: settings store and the
   app's settings file. 1,021 tests; 252 of 932 commands live (M4 45 of 61).
+- **2026-10-10, M4 close.** Wave 2 (M4.8 to M4.11) built in worktrees and integrated; the dialog
+  framework gained multi-line text, a third button, scrolling lists and a rule-tree control;
+  engine follow-ups: Match Case, several tags in one step, recent documents in the engine, an
+  empty glyph data search, `glyphData.glyphSets`, readable script names. M4.12: every § 5 measure
+  met (62 of 62 commands; glyph database equal to fontc's; `post` names equal both oracles'
+  except one allow-listed source; dialogs equal commands; the glyph-set end-to-end test; on Inter
+  a Font View frame under 1 ms). 1,076 tests; 269 of 933 commands live; about 138,000 lines of
+  Rust. Next: the owner's review of M4, then M5's planning pass.
