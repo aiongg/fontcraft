@@ -116,11 +116,19 @@ pub struct Tab {
     pub layer_selection: Vec<String>,
     /// The layer `selection` and `focus` belong to. Both are cleared when another layer is edited.
     pub selection_layer: Option<String>,
+    /// The tab edits the background of the active layer (`path.editBackground`). It stays set
+    /// when another glyph, layer or master is edited.
+    pub edit_background: bool,
 }
 
 impl Tab {
     pub fn edited_glyph(&self) -> Option<&str> {
         self.glyphs.get(self.edited).map(String::as_str)
+    }
+
+    /// The side of the active layer the tab edits.
+    pub fn side(&self) -> fontcraft_model::LayerSide {
+        if self.edit_background { fontcraft_model::LayerSide::Background } else { fontcraft_model::LayerSide::Foreground }
     }
 
     /// Clears the selection and the path focus when they belong to another glyph or layer than

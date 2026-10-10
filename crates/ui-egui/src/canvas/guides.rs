@@ -174,7 +174,7 @@ impl Extras {
         let Some(glyph) = tab.edited_glyph() else { return out };
         let (layer, measured) = {
             let Ok(font) = session.font() else { return out };
-            let Some(layer) = super::view::active_layer(font, tab) else { return out };
+            let Some(layer) = super::view::edited_layer(font, tab) else { return out };
             let Some(master) = font.masters.iter().find(|m| m.id == layer.master) else { return out };
             let mut measured = Vec::new();
             if display.guides {
@@ -192,6 +192,9 @@ impl Extras {
         let mut target = Map::new();
         target.insert("glyph".into(), json!(glyph));
         target.insert("layer".into(), json!(layer));
+        if tab.edit_background {
+            target.insert("side".into(), json!("background"));
+        }
         out.lines = query_as(session, "guide.displayLines", Value::Object(target.clone()));
         for g in measured {
             let params = with(&target, "guide", json!({"scope": g.scope.as_str(), "index": g.index}));

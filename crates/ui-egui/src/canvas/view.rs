@@ -34,6 +34,12 @@ pub fn active_layer<'f>(font: &'f Font, tab: &Tab) -> Option<&'f Layer> {
     shown_layer(font, tab, tab.edited_glyph()?)
 }
 
+/// The side of the active layer the tab edits, as a layer (`fontcraft_tools::side_view`): the
+/// canvas draws it as the edited outline and its other side behind it.
+pub fn edited_layer<'f>(font: &'f Font, tab: &Tab) -> Option<std::borrow::Cow<'f, Layer>> {
+    active_layer(font, tab).map(|l| fontcraft_tools::side_view(l, tab.side()))
+}
+
 /// The active master: the master of the active layer, else the tab's master. The metric lines,
 /// zones and fitting follow it.
 pub fn active_master<'f>(font: &'f Font, tab: &Tab) -> Option<&'f Master> {

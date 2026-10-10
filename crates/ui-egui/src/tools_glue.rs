@@ -20,7 +20,7 @@ use egui::{Event, PointerButton, Pos2, Rect};
 use fontcraft_engine::params::TargetKind;
 use fontcraft_engine::{CommandSpec, Session};
 use fontcraft_geom::Point;
-use fontcraft_model::Font;
+use fontcraft_model::{Font, LayerSide};
 use fontcraft_tools::{
     Action, Context, HitResult, Key, KeyEvent, Modifiers, Output, PointerEvent, PointerKind, Scene, Selection, ToolSettings, Toolbox, View,
     ViewChange, hit_test,
@@ -70,14 +70,14 @@ struct Running {
     before: Selection,
 }
 
-/// What the tools work on: a tab, its edited glyph and the active layer's id.
-type Target = (u64, String, String);
+/// What the tools work on: a tab, its edited glyph, the active layer's id and the edited side.
+type Target = (u64, String, String, LayerSide);
 
 /// The showing tab's [`Target`].
 fn target(app: &FontcraftApp) -> Option<Target> {
     let tab = app.state.tab()?;
     let layer = app.session.font().ok().and_then(|f| view::active_layer(f, tab)).map(|l| l.id.clone()).unwrap_or_default();
-    Some((tab.id, tab.edited_glyph()?.to_string(), layer))
+    Some((tab.id, tab.edited_glyph()?.to_string(), layer, tab.side()))
 }
 
 /// The tools' side of the shell. Not part of [`crate::state::UiState`]: tools are state
@@ -130,11 +130,12 @@ pub fn settings(tokens: &Tokens, font: &Font) -> ToolSettings {
     .with_font(font)
 }
 
-/// The scene of a tab's edited glyph: its active layer, with the tab's path focus.
+/// The scene of a tab's edited glyph: the edited side of its active layer, with the tab's path
+/// focus.
 pub fn scene<'a>(font: &'a Font, tab: &Tab) -> Option<Scene<'a>> {
     let glyph = tab.edited_glyph()?;
     let layer = view::active_layer(font, tab)?;
-    let mut scene = Scene::from_font(font, glyph, Some(&layer.id))?;
+    let mut scene = Scene::from_font_side(font, glyph, Some(&layer.id), tab.side())?;
     scene.focus = tab.focus.clone();
     Some(scene)
 }
@@ -169,7 +170,7 @@ pub fn sync(app: &mut FontcraftApp) {
         tab.sync_selection(target.as_ref().map(|t| t.2.as_str()));
     }
     if target != app.tools.target {
-        // Another tab, glyph or layer: a gesture in progress ends without touching the new one.
+        // Another tab, glyph, layer or side: a gesture in progress ends without touching the new one.
         let _ = app.tools.toolbox.cancel();
         app.tools.pressed = false;
         app.tools.target = target.clone();
@@ -322,11 +323,12 @@ fn cancel(app: &mut FontcraftApp) {
     }
 }
 
-/// Takes the `selection` a command returned, when it is one of the edited glyph's foreground.
+/// Takes the `selection` a command returned, when it is one of the edited glyph's edited side.
 fn adopt(app: &mut FontcraftApp, value: &Value) {
     let Some(sel) = value.get("selection") else { return };
     let Some(tab) = app.state.tab_mut() else { return };
-    if sel.get("glyph").and_then(Value::as_str) != tab.edited_glyph() || sel.get("side").is_some_and(|s| s != "foreground") {
+    let side = sel.get("side").and_then(Value::as_str).unwrap_or("foreground");
+    if sel.get("glyph").and_then(Value::as_str) != tab.edited_glyph() || side != tab.side().as_str() {
         return;
     }
     if let Ok(s) = Selection::from_value(sel) {
@@ -520,9 +522,9 @@ pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
     }
 }
 
-/// The target parameters of `spec` that the showing tab's selection supplies: `glyph` and
-/// `layer`, and each list the command takes that the selection fills. `None` when no glyph is
-/// being edited.
+/// The target parameters of `spec` that the showing tab's selection supplies: `glyph`, `layer`,
+/// `side` while the background is edited (when the command's params doc names `side`), and each
+/// list the command takes that the selection fills. `None` when no glyph is being edited.
 ///
 /// A command whose targets include `glyphs` but not `layer` gets the edited glyph as `glyphs`.
 /// A command that takes `segments` but not `points` gets the selected segments
@@ -546,6 +548,9 @@ pub fn selection_targets(session: &Session, state: &UiState, spec: &CommandSpec)
             TargetKind::Layer => {
                 copy(&mut m, "glyph");
                 copy(&mut m, "layer");
+                if spec.params.contains("side?") {
+                    copy(&mut m, "side");
+                }
             }
             TargetKind::Points => copy(&mut m, "points"),
             TargetKind::Segments if !takes_points => {

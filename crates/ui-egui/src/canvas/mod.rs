@@ -6,7 +6,7 @@
 //! | [`view`] | (no drawing) the camera: line layout, fitting, the tools' view transform |
 //! | [`metrics`] | metric lines, zones and their names |
 //! | [`guides`] | guides, the grid, parameter metric lines, CJK grids, measurement labels |
-//! | [`background`] | the background and the other visible layers, behind the outline |
+//! | [`background`] | the other side of the layer and the other visible layers, behind the outline; the darker canvas while the background is edited |
 //! | [`fill`] | filled glyphs, rasterised by the `render` crate into a texture |
 //! | [`composite`] | (no drawing) each glyph's outline with strokes expanded and masks applied, cached |
 //! | [`nodes`] | nodes and handles with the display conventions of `docs/spec/03a` § 4 |
@@ -74,28 +74,37 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         crate::tools_glue::collect(tools, ui, &response, rect);
         let painter = ui.painter_at(rect);
         let c = Painting { painter: &painter, rect, view: v, tokens };
+        if tab.edit_background {
+            background::tint(&c);
+        }
         let (lines, marks) = metrics::of(font, master);
         if state.display.metrics {
             metrics::draw(&c, &lines, &marks, width, view::vertical_span(font, master), state.display.metrics_names);
         }
         guides::draw_lines(&c, &extras, &state.display);
-        let active = view::active_layer(font, &tab);
+        // The edited side as a layer: while the background is edited, its background is the
+        // foreground, which `background::draw` shows as the reference outline.
+        let edited = view::edited_layer(font, &tab);
         if let Some(glyph) = tab.edited_glyph().and_then(|g| font.glyph(g))
-            && let Some(layer) = active
+            && let Some(layer) = edited.as_deref()
         {
             background::draw(&c, font, glyph, layer, &state.display);
         }
         let doc = session.active().map(|d| (d.id, d.revision)).unwrap_or_default();
         let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && *preview_tool };
         fill::draw(&c, fill_cache, font, &tab, &line, what);
-        let Some(layer) = active else { return };
-        // The composite in black; under it, when strokes or masks make it differ, the paths as
-        // drawn in light grey: centre lines of strokes and the parts masks cut away
-        // (`stroke.display`, `mask.display`).
-        if let Some(glyph) = tab.edited_glyph()
+        let Some(layer) = edited.as_deref() else { return };
+        let to_screen = Affine::translate(v.origin.to_vec2()) * Affine::scale_non_uniform(v.scale(), -v.scale());
+        if tab.edit_background {
+            for contour in flatten(&(to_screen * background::outline(font, &layer.shapes, &layer.master))) {
+                painter.add(egui::Shape::line(contour, Stroke::new(tokens.outline_width, tokens.outline)));
+            }
+        } else if let Some(glyph) = tab.edited_glyph()
             && let Some(composite) = fill_cache.outlines.get(doc, font, glyph, layer)
         {
-            let to_screen = Affine::translate(v.origin.to_vec2()) * Affine::scale_non_uniform(v.scale(), -v.scale());
+            // The composite in black; under it, when strokes or masks make it differ, the paths
+            // as drawn in light grey: centre lines of strokes and the parts masks cut away
+            // (`stroke.display`, `mask.display`).
             if composite.styled
                 && let Some(source) = composite::plain_outline(font, glyph, layer)
             {
@@ -116,7 +125,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         }
         painter.extend(bbox::shapes(font, &tab, tools.toolbox.active_id(), state.display.bounding_box, &state.transform, v, tokens));
         annotations::draw(&c, layer, &tab.selection, &state.display);
-        audit_markers::draw(ui, &c, layer, audit_markers::visible(&state.audit, session, &tab), !tools.toolbox.busy(), pending);
+        // Audit results describe the foreground.
+        if !tab.edit_background {
+            audit_markers::draw(ui, &c, layer, audit_markers::visible(&state.audit, session, &tab), !tools.toolbox.busy(), pending);
+        }
         painter.extend(selection::overlay_shapes(&tools.toolbox.overlays(), v, tokens));
         guides::draw_measurement(&c, &extras);
     });

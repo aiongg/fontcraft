@@ -56,13 +56,19 @@ fn guide_angle(from: Point, to: Point) -> f64 {
 /// `command.batch` parameters that add a local guide along the ruler and make it a measurement
 /// guide. The new guide's index is the number of local guides now, as `guide.add` appends.
 pub fn guide_params(cx: &Context<'_>, from: Point, to: Point) -> Value {
-    let (glyph, layer) = (cx.scene.glyph.as_str(), cx.scene.layer_id.as_str());
     let index = cx.scene.local_guides().len();
+    let mut add = cx.scene.target();
+    add.insert("x".into(), json!(from.x));
+    add.insert("y".into(), json!(from.y));
+    add.insert("angle".into(), json!(guide_angle(from, to)));
+    let mut toggle = cx.scene.target();
+    toggle.insert("guide".into(), json!({"scope": "local", "index": index}));
+    toggle.insert("on".into(), json!(true));
     json!({
         "label": "Add Measurement Guide",
         "steps": [
-            {"command": "guide.add", "params": {"glyph": glyph, "layer": layer, "x": from.x, "y": from.y, "angle": guide_angle(from, to)}},
-            {"command": "guide.toggleMeasurement", "params": {"glyph": glyph, "layer": layer, "guide": {"scope": "local", "index": index}, "on": true}},
+            {"command": "guide.add", "params": add},
+            {"command": "guide.toggleMeasurement", "params": toggle},
         ],
     })
 }

@@ -190,12 +190,10 @@ impl Selection {
         }
     }
 
-    /// The command target object for this selection in `scene`'s layer: `glyph`, `layer`, and
-    /// each non-empty list. Commands add their own parameters to it.
+    /// The command target object for this selection in `scene`'s layer: `glyph`, `layer`,
+    /// `side` for the background, and each non-empty list. Commands add their own parameters to it.
     pub fn targets(&self, scene: &Scene) -> Map<String, Value> {
-        let mut m = Map::new();
-        m.insert("glyph".into(), Value::from(scene.glyph.as_str()));
-        m.insert("layer".into(), Value::from(scene.layer_id.as_str()));
+        let mut m = scene.target();
         if !self.points.is_empty() {
             m.insert("points".into(), Value::Array(self.points.iter().map(|&(s, n)| json!([s, n])).collect()));
         }
@@ -216,7 +214,7 @@ impl Selection {
 
     /// Drops every entry that does not resolve in `scene` (after undo, redo or another edit).
     pub fn retain_valid(&mut self, scene: &Scene) {
-        let layer = scene.layer;
+        let layer = &scene.layer;
         self.points.retain(|&(s, n)| scene.node(s, n).is_some());
         self.shapes.retain(|&s| s < layer.shapes.len());
         self.anchors.retain(|name| layer.anchors.iter().any(|a| &a.name == name));

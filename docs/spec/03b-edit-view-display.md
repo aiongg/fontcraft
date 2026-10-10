@@ -183,8 +183,16 @@ How FontCraft draws the background and other layers (our decisions):
 - The background's nodes and handles are snap targets after the edited layer's own nodes and
   handles and before guides. They count whenever the layer has a background; the Show
   Background switch does not turn them off yet.
-- The darker canvas while the background is edited is drawn by the canvas's `tint` step; it
-  shows once `path.editBackground` exists.
+- Edit Background belongs to the tab: the side stays when another glyph, layer or master is
+  edited. Switching sides clears the selection.
+- While the background is edited, the canvas is a little darker, the background is drawn as the
+  outline with its nodes, and the foreground is drawn as Show Background's thin outline. Show
+  Nodes › In Background then shows the foreground's nodes, and the foreground's nodes are the
+  snap targets.
+- While the background is edited, the tools, the Palette and the Info box work on it, and every
+  command the shell runs that takes `side` gets `side: "background"`. Commands that act on
+  whole layers (Swap with Background, Clear Background) take no side and work as in the
+  foreground. Audit markers describe the foreground and are not drawn.
 
 ## Text mode
 

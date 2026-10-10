@@ -211,12 +211,9 @@ impl AnnotateTool {
     }
 }
 
-/// `glyph` and `layer` of the edited layer.
+/// `glyph`, `layer` and `side` of the edited layer.
 fn layer_params(cx: &Context<'_>) -> Map<String, Value> {
-    let mut m = Map::new();
-    m.insert("glyph".into(), json!(cx.scene.glyph));
-    m.insert("layer".into(), json!(cx.scene.layer_id));
-    m
+    cx.scene.target()
 }
 
 fn annotations_of(selection: &Selection) -> Value {

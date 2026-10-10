@@ -2,8 +2,8 @@
 //!
 //! | Item | Drawn as | Shown when |
 //! |---|---|---|
-//! | the layer's background | thin outline, `background_outline` (`background.outlineDisplay`) | Show Background |
-//! | its nodes and handles | as the foreground's nodes | Show Background and Show Nodes › In Background |
+//! | the other side of the layer | thin outline, `background_outline` (`background.outlineDisplay`) | Show Background |
+//! | its nodes and handles | as the edited side's nodes | Show Background and Show Nodes › In Background |
 //! | another layer of the glyph whose eye is on | thin outline, `visible_layer_outline` (`layers.visibleLayerOutline`) | always |
 //! | editing the background | the canvas a little darker, `background_tint` (`background.darkenedCanvas`) | [`tint`] |
 
@@ -49,7 +49,8 @@ fn stroke_outline(c: &Painting, path: BezPath, stroke: Stroke) {
     }
 }
 
-/// The background of `layer` and the other visible layers of `glyph`, behind the outline.
+/// The background of `layer` and the other visible layers of `glyph`, behind the outline. While
+/// the background is edited, `layer` is the side view whose background is the foreground.
 pub fn draw(c: &Painting, font: &Font, glyph: &Glyph, layer: &Layer, display: &DisplayOptions) {
     let tokens = c.tokens;
     for other in glyph.layers.iter().filter(|l| l.id != layer.id && l.info.visible) {

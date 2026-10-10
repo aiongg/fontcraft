@@ -1,10 +1,16 @@
-//! The active layer and the master a tab draws in: `layers.select` (a click on a row of the
-//! Layers section) and `view.selectMaster` (Cmd+1 to Cmd+9).
+//! The active layer, its edited side and the master a tab draws in: `layers.select` (a click on a
+//! row of the Layers section), `path.editBackground` (Cmd+B) and `view.selectMaster` (Cmd+1 to
+//! Cmd+9).
 //!
 //! A tab draws every glyph in its master; `layers.select` shows single glyphs in another layer
 //! (another master's, or a backup). The edited glyph's shown layer is the active layer: the
 //! canvas draws it, the tools edit it and every command the shell runs targets it. The metric
 //! lines and zones are those of its master.
+//!
+//! `path.editBackground` makes the active layer's background the edited side: the canvas draws
+//! it as the outline, the tools and the Palette work on it, and every command the shell runs
+//! gets `side: "background"`. The side belongs to the tab, so it stays when another glyph, layer
+//! or master is edited.
 
 use serde_json::{Value, json};
 
@@ -20,6 +26,13 @@ pub const COMMANDS: &[UiCommand] = &[
         &[],
         "",
         "{tab?: id, glyphs?: [names] (default: the edited glyph), layer: id, extend?: \"range\" | \"toggle\"} make the layer the one the tab shows for these glyphs; for the edited glyph it becomes the active layer, which the canvas draws and edits. A master layer switches only these glyphs to that master. `extend` changes the Layers section's row selection of the edited glyph instead, as Shift+click (range from the active layer) and Cmd+click (add or remove one row) do → {tab, glyphs, layer (the active layer), master, selection: [ids]}",
+    ),
+    (
+        "path.editBackground",
+        "Edit Background",
+        &["Path"],
+        "Cmd+B",
+        "{tab?: id, on?: bool} edit the background of the active layer (true) or its foreground (false); omitted: switch to the other side. The selection is cleared. While the background is edited the canvas is drawn a little darker → {tab, side: \"foreground\" | \"background\"}",
     ),
     (
         "view.selectMaster",
@@ -44,6 +57,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
     };
     match id {
         "layers.select" => select_layer(app, args, index),
+        "path.editBackground" => edit_background(app, args, index),
         "view.selectMaster" => select_master(app, args, index),
         other => Err(format!("unknown command `{other}`")),
     }
@@ -126,6 +140,17 @@ fn select_layer(app: &mut FontcraftApp, args: &Args, index: usize) -> Result<Val
         *tab = next;
     }
     Ok(reply)
+}
+
+fn edit_background(app: &mut FontcraftApp, args: &Args, index: usize) -> Result<Value, String> {
+    let tab = app.state.tabs.get_mut(index).ok_or_else(|| args.err("no such tab"))?;
+    let on = args.toggle(tab.edit_background)?;
+    if on != tab.edit_background {
+        tab.edit_background = on;
+        tab.selection.clear();
+        tab.focus = None;
+    }
+    Ok(json!({"tab": tab.id, "side": tab.side().as_str()}))
 }
 
 fn select_master(app: &mut FontcraftApp, args: &Args, index: usize) -> Result<Value, String> {

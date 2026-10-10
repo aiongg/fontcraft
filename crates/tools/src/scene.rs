@@ -1,7 +1,9 @@
 //! What a tool sees of the document: one layer and what is drawn around it.
 
+use std::borrow::Cow;
+
 use fontcraft_geom::{BezPath, CubicBez, ParamCurve, PathEl, Point, QuadBez};
-use fontcraft_model::{Font, Guide, Layer, Node, Path, Shape, metric};
+use fontcraft_model::{Font, Guide, Layer, LayerSide, Node, Path, Shape, metric};
 
 use crate::MAX_COMPONENT_POINTS;
 use crate::geometry::{bounds, usable, winding};
@@ -40,7 +42,10 @@ pub struct Scene<'a> {
     pub glyph: String,
     /// The layer's id, for the commands' `layer` parameter.
     pub layer_id: String,
-    pub layer: &'a Layer,
+    /// The side being edited, for the commands' `side` parameter.
+    pub side: LayerSide,
+    /// The edited side as a layer: for the background, [`side_view`] of the layer.
+    pub layer: Cow<'a, Layer>,
     /// The guides of the layer's master.
     pub global_guides: &'a [Guide],
     /// Horizontal metric lines (baseline, x-height, cap height, ascender, descender), in font units.
@@ -63,7 +68,8 @@ impl<'a> Scene<'a> {
         Self {
             glyph: glyph.into(),
             layer_id: layer_id.into(),
-            layer,
+            side: LayerSide::Foreground,
+            layer: Cow::Borrowed(layer),
             global_guides: &[],
             metric_lines: Vec::new(),
             locked: false,
@@ -78,12 +84,19 @@ impl<'a> Scene<'a> {
     /// The scene of a glyph's layer in `font`: the layer by id, or the first master's layer when
     /// `layer_id` is `None`. `None` when the glyph or the layer does not exist.
     pub fn from_font(font: &'a Font, glyph: &str, layer_id: Option<&str>) -> Option<Self> {
+        Self::from_font_side(font, glyph, layer_id, LayerSide::Foreground)
+    }
+
+    /// [`Scene::from_font`] for one side of the layer.
+    pub fn from_font_side(font: &'a Font, glyph: &str, layer_id: Option<&str>, side: LayerSide) -> Option<Self> {
         let g = font.glyph(glyph)?;
         let layer: &'a Layer = match layer_id {
             Some(id) => g.layers.iter().find(|l| l.id == id)?,
             None => g.layer(&font.masters.first()?.id)?,
         };
         let mut scene = Scene::new(g.name.clone(), layer.id.clone(), layer);
+        scene.side = side;
+        scene.layer = side_view(layer, side);
         scene.locked = g.info.locked;
         if let Ok(master) = font.master(&layer.master) {
             scene.global_guides = &master.guides;
@@ -97,11 +110,15 @@ impl<'a> Scene<'a> {
             }
             scene.metric_lines = lines;
         }
-        for (i, shape) in layer.shapes.iter().enumerate() {
+        let mut components = Vec::new();
+        for (i, shape) in scene.layer.shapes.iter().enumerate() {
             let Shape::Component(c) = shape else { continue };
             let Ok(mut outline) = font.outline(&c.glyph, &layer.master) else { continue };
             outline.apply_affine(c.affine());
-            scene.add_component(i, &outline, c.info.locked);
+            components.push((i, outline, c.info.locked));
+        }
+        for (i, outline, locked) in components {
+            scene.add_component(i, &outline, locked);
         }
         Some(scene)
     }
@@ -172,15 +189,26 @@ impl<'a> Scene<'a> {
         self.components.push(geom);
     }
 
+    /// The command target of the edited layer: `glyph`, `layer`, and `side` when it is the
+    /// background. Commands add their own parameters to it.
+    pub fn target(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut m = serde_json::Map::new();
+        m.insert("glyph".into(), self.glyph.as_str().into());
+        m.insert("layer".into(), self.layer_id.as_str().into());
+        if self.side == LayerSide::Background {
+            m.insert("side".into(), self.side.as_str().into());
+        }
+        m
+    }
+
     /// The resolved components, in the order they were added.
     pub fn components(&self) -> &[ComponentGeom] {
         &self.components
     }
 
     /// The layer's own guides.
-    pub fn local_guides(&self) -> &'a [Guide] {
-        let layer: &'a Layer = self.layer;
-        &layer.info.guides
+    pub fn local_guides(&self) -> &[Guide] {
+        &self.layer.info.guides
     }
 
     /// Whether the shape at `shape` can be hit and selected (path focus).
@@ -189,23 +217,21 @@ impl<'a> Scene<'a> {
     }
 
     /// The path at shape index `shape`.
-    pub fn path(&self, shape: usize) -> Option<&'a Path> {
-        let layer: &'a Layer = self.layer;
-        match layer.shapes.get(shape)? {
+    pub fn path(&self, shape: usize) -> Option<&Path> {
+        match self.layer.shapes.get(shape)? {
             Shape::Path(p) => Some(p),
             _ => None,
         }
     }
 
     /// The node `[shape, node]`.
-    pub fn node(&self, shape: usize, node: usize) -> Option<&'a Node> {
+    pub fn node(&self, shape: usize, node: usize) -> Option<&Node> {
         self.path(shape)?.nodes.get(node)
     }
 
     /// The paths that can be hit and selected, with their shape indices.
-    pub fn paths(&self) -> impl Iterator<Item = (usize, &'a Path)> + '_ {
-        let layer: &'a Layer = self.layer;
-        layer.shapes.iter().enumerate().filter_map(move |(i, s)| match s {
+    pub fn paths(&self) -> impl Iterator<Item = (usize, &Path)> + '_ {
+        self.layer.shapes.iter().enumerate().filter_map(move |(i, s)| match s {
             Shape::Path(p) if self.shape_editable(i) => Some((i, p)),
             _ => None,
         })
@@ -217,4 +243,24 @@ impl<'a> Scene<'a> {
         let last = path.nodes.len().saturating_sub(1);
         !path.closed && path.nodes.get(node).is_some_and(Node::on_curve) && (node == 0 || node == last)
     }
+}
+
+/// `layer` as seen from `side`: the layer itself for the foreground; for the background, a copy
+/// whose shapes, anchors, guides, hints and annotations are the background's and whose background
+/// holds the foreground's. Addresses into the copy are addresses into the background, and what
+/// the tools treat as "the background" (snapping) is the foreground.
+pub fn side_view(layer: &Layer, side: LayerSide) -> Cow<'_, Layer> {
+    if side == LayerSide::Foreground {
+        return Cow::Borrowed(layer);
+    }
+    let mut view = layer.clone();
+    let info = &mut *view.info;
+    let mut b = info.background.take().unwrap_or_default();
+    std::mem::swap(&mut view.shapes, &mut b.shapes);
+    std::mem::swap(&mut view.anchors, &mut b.anchors);
+    std::mem::swap(&mut info.guides, &mut b.guides);
+    std::mem::swap(&mut info.hints, &mut b.hints);
+    std::mem::swap(&mut info.annotations, &mut b.annotations);
+    info.background = (!b.is_empty()).then_some(b);
+    Cow::Owned(view)
 }

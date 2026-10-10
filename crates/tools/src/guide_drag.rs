@@ -34,8 +34,8 @@ const RELATIVE_KEY: &str = "alignment";
 const MIN_TURN_RADIUS: f64 = 1.0;
 
 /// The guide at `r` in `scene`.
-pub fn guide<'a>(scene: &Scene<'a>, r: GuideRef) -> Option<&'a Guide> {
-    let list: &'a [Guide] = match r.scope {
+pub fn guide<'s>(scene: &'s Scene<'_>, r: GuideRef) -> Option<&'s Guide> {
+    let list: &'s [Guide] = match r.scope {
         GuideScope::Local => scene.local_guides(),
         GuideScope::Global => scene.global_guides,
     };
@@ -70,9 +70,7 @@ fn heading(from: Point, to: Point) -> f64 {
 
 /// `{glyph, layer, guide}`: the address `guide.setProperties` takes.
 fn target(scene: &Scene, r: GuideRef) -> Map<String, Value> {
-    let mut m = Map::new();
-    m.insert("glyph".into(), json!(scene.glyph));
-    m.insert("layer".into(), json!(scene.layer_id));
+    let mut m = scene.target();
     m.insert("guide".into(), json!({"scope": r.scope.as_str(), "index": r.index}));
     m
 }
@@ -216,7 +214,7 @@ fn snap_apart(cx: &Context<'_>, r: GuideRef, p: Point) -> Snap {
     }
     match r.scope {
         GuideScope::Local => {
-            let mut layer: Layer = cx.scene.layer.clone();
+            let mut layer: Layer = (*cx.scene.layer).clone();
             if r.index < layer.info.guides.len() {
                 layer.info.guides.remove(r.index);
             }
@@ -227,7 +225,7 @@ fn snap_apart(cx: &Context<'_>, r: GuideRef, p: Point) -> Snap {
             if r.index < globals.len() {
                 globals.remove(r.index);
             }
-            snap(&with_parts(cx.scene, cx.scene.layer, &globals), &cx.view, p, &moving, distance)
+            snap(&with_parts(cx.scene, &cx.scene.layer, &globals), &cx.view, p, &moving, distance)
         }
     }
 }
@@ -235,7 +233,7 @@ fn snap_apart(cx: &Context<'_>, r: GuideRef, p: Point) -> Snap {
 /// `scene` with another layer and other global guides.
 fn with_parts<'b>(scene: &Scene<'b>, layer: &'b Layer, globals: &'b [Guide]) -> Scene<'b> {
     let mut s = scene.clone();
-    s.layer = layer;
+    s.layer = std::borrow::Cow::Borrowed(layer);
     s.global_guides = globals;
     s
 }

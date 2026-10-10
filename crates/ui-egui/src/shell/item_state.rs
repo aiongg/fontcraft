@@ -22,7 +22,7 @@ fn target_shapes(selection: &Selection) -> BTreeSet<usize> {
     selection.shapes.iter().copied().chain(selection.points.iter().map(|&(s, _)| s)).collect()
 }
 
-fn target_paths<'a>(scene: &Scene<'a>, selection: &Selection) -> Vec<&'a Path> {
+fn target_paths<'s>(scene: &'s Scene<'_>, selection: &Selection) -> Vec<&'s Path> {
     target_shapes(selection).into_iter().filter_map(|s| scene.path(s)).collect()
 }
 

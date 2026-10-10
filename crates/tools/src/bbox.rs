@@ -110,7 +110,7 @@ pub fn center(r: Rect) -> Point {
 
 /// The box of `selection` in `scene`; for an empty selection, the box of the whole layer.
 pub fn selection_box(scene: &Scene, selection: &Selection) -> Option<Rect> {
-    let layer = scene.layer;
+    let layer = &scene.layer;
     let anchors = |names: Option<&Selection>| {
         fontcraft_geom::bounds(layer.anchors.iter().filter(|a| names.is_none_or(|s| s.anchors.contains(&a.name))).map(|a| Point::new(a.x, a.y)))
     };

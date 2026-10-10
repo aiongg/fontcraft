@@ -8,7 +8,7 @@
 
 use fontcraft_geom::Point;
 use fontcraft_model::Shape;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::event::{Key, KeyEvent, PointerEvent, PointerKind};
 use crate::geometry::{dist, finite};
@@ -108,18 +108,13 @@ fn cut(cx: &Context<'_>, from: Point, to: Point) -> Option<Invocation> {
     if usable.is_empty() {
         return None;
     }
-    let mut params = json!({
-        "glyph": scene.glyph,
-        "layer": scene.layer_id,
-        "from": [from.x, from.y],
-        "to": [to.x, to.y],
-    });
-    if usable.len() < paths.len()
-        && let Some(o) = params.as_object_mut()
-    {
-        o.insert("shapes".into(), json!(usable));
+    let mut params = scene.target();
+    params.insert("from".into(), json!([from.x, from.y]));
+    params.insert("to".into(), json!([to.x, to.y]));
+    if usable.len() < paths.len() {
+        params.insert("shapes".into(), json!(usable));
     }
-    Some(Invocation::new("path.cutWithLine", params))
+    Some(Invocation::new("path.cutWithLine", Value::Object(params)))
 }
 
 #[cfg(test)]
