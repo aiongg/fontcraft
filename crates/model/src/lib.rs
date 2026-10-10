@@ -46,11 +46,11 @@ pub use info::{DEFAULT_LANGUAGE, LANGUAGES, Localized, Param, Params, Properties
 pub use kerning::{KernContext, KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
 pub use order::{
-    GLYPH_ORDER_PARAM, Placement, glyph_order, glyph_order_names, glyph_order_sections, insertion_index, is_section_header, keeps_alternates,
-    sort_key,
+    GLYPH_ORDER_PARAM, Placement, glyph_order, glyph_order_names, glyph_order_sections, insert_by_sort_key, insertion_index, is_section_header,
+    keeps_alternates, place_by_sort_key, sort_key,
 };
 pub use rare::{Rare, RareDefault};
-pub use rename::{GlyphReference, RenameReport, Renamed, place_by_sort_key, rename_glyphs};
+pub use rename::{GlyphReference, RenameReport, Renamed, rename_glyphs};
 pub use resolve::{
     DONT_USE_PRODUCTION_NAMES, Metrics, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, blue_values, is_ufo_family,
 };

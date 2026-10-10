@@ -8,9 +8,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fontcraft_geom::{Rect, Shape as _};
-use fontcraft_model::glyphdata::{GlyphData, SortKey, items, validate};
+use fontcraft_model::glyphdata::{items, validate};
 use fontcraft_model::{
-    Component, Font, Glyph, GlyphTable, Layer, MAX_COMPONENT_DEPTH, MAX_GLYPHS, MAX_NAME_LEN, ModelError, Shape, Transform, glyph_order, sort_key,
+    Component, Font, Glyph, GlyphTable, Layer, MAX_COMPONENT_DEPTH, MAX_GLYPHS, MAX_NAME_LEN, ModelError, Shape, Transform, glyph_order,
+    insert_by_sort_key,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -71,62 +72,6 @@ pub fn specs() -> Vec<CommandSpec> {
             paste_special
         ),
     ]
-}
-
-// ── Placing new glyphs ──────────────────────────────────────────────────────────────────────────
-
-/// Adds `glyphs` (names not in the font) where the default sort order puts each among the
-/// glyphs already there: after the last existing glyph whose key is not greater. New glyphs that
-/// land in the same gap are in key order. The existing glyphs keep their order, and the table is
-/// rebuilt once, so the work grows as (font + new) × log(font).
-pub(crate) fn add_sorted(font: &mut Font, data: &GlyphData, glyphs: Vec<Glyph>) -> Result<()> {
-    if glyphs.is_empty() {
-        return Ok(());
-    }
-    if font.glyphs.len().saturating_add(glyphs.len()) > MAX_GLYPHS {
-        return Err(ModelError::TooManyGlyphs.into());
-    }
-    let mut names = HashSet::new();
-    for g in &glyphs {
-        if g.name.is_empty() {
-            return Err(ModelError::EmptyGlyphName.into());
-        }
-        if font.glyph(&g.name).is_some() || !names.insert(g.name.as_str()) {
-            return Err(ModelError::DuplicateGlyph(g.name.clone()).into());
-        }
-    }
-    // The smallest key from each position to the end: it never decreases, so "the last glyph
-    // whose key is not greater" is a binary search on it.
-    let mut suffix_min: Vec<SortKey> = Vec::with_capacity(font.glyphs.len());
-    for g in font.glyphs.iter().rev() {
-        let key = sort_key(font, g, data);
-        let min = match suffix_min.last() {
-            Some(m) if *m < key => Clone::clone(m),
-            _ => key,
-        };
-        suffix_min.push(min);
-    }
-    suffix_min.reverse();
-    let mut placed: Vec<(usize, SortKey, usize, Glyph)> = glyphs
-        .into_iter()
-        .enumerate()
-        .map(|(seq, g)| {
-            let key = sort_key(font, &g, data);
-            (suffix_min.partition_point(|m| *m <= key), key, seq, g)
-        })
-        .collect();
-    placed.sort_by(|a, b| (a.0, &a.1, a.2).cmp(&(b.0, &b.1, b.2)));
-    let mut out = Vec::with_capacity(font.glyphs.len() + placed.len());
-    let mut new = placed.into_iter().peekable();
-    for (i, g) in font.glyphs.as_arcs().iter().enumerate() {
-        while let Some((_, _, _, n)) = new.next_if(|n| n.0 <= i) {
-            out.push(Arc::new(n));
-        }
-        out.push(Arc::clone(g));
-    }
-    out.extend(new.map(|(_, _, _, n)| Arc::new(n)));
-    font.glyphs = GlyphTable::from_glyphs(out);
-    Ok(())
 }
 
 /// An empty glyph with a layer for every master of `font`.
@@ -192,7 +137,7 @@ fn add_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
             let mut slot = font.glyph_mut(&name)?;
             *slot = g;
         }
-        add_sorted(font, &data, new_glyphs)
+        Ok(insert_by_sort_key(font, &data, new_glyphs)?)
     })?;
     Ok(json!({"added": added, "replaced": replaced, "existing": existing_names, "skipped": skipped}))
 }
@@ -290,7 +235,7 @@ fn add_to_font(s: &mut Session, v: &Value) -> Result<Value> {
         glyphs.push(fresh_glyph(font, name, &code_points));
         added.push(name.to_string());
     }
-    s.edit("Add to Font", |font| add_sorted(font, &data, glyphs))?;
+    s.edit("Add to Font", |font| Ok(insert_by_sort_key(font, &data, glyphs)?))?;
     Ok(json!({"added": added, "existing": existing}))
 }
 
@@ -494,7 +439,7 @@ pub(crate) fn paste_glyphs(s: &mut Session, p: &Params, text: &str) -> Result<Va
         glyphs.push(g);
     }
     let names: Vec<String> = glyphs.iter().map(|g| g.name.clone()).collect();
-    s.edit("Paste", |font| add_sorted(font, &data, glyphs))?;
+    s.edit("Paste", |font| Ok(insert_by_sort_key(font, &data, glyphs)?))?;
     Ok(json!({"pasted": names.len(), "flavour": "glyphs", "glyphs": names, "renamed": renamed}))
 }
 
@@ -800,7 +745,7 @@ fn paste_special(s: &mut Session, v: &Value) -> Result<Value> {
                 notes.push(json!({"glyph": o.target, "reason": reason}));
             }
         }
-        add_sorted(font, &data, new_glyphs)?;
+        insert_by_sort_key(font, &data, new_glyphs)?;
         Ok(notes)
     })?;
     skipped.extend(notes);

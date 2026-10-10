@@ -9,17 +9,16 @@
 //! name still occurs there.
 //!
 //! Every rename happens in one pass with one name map, so chains and swaps (`a` → `b` while
-//! `b` → `c`) work. [`place_by_sort_key`] moves renamed glyphs to the place the default sort key
+//! `b` → `c`) work. [`crate::place_by_sort_key`] moves renamed glyphs to the place the default sort key
 //! gives them (`glyphOrder.default`).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use fontcraft_glyphdata::{GlyphData, SortKey};
 use fontcraft_plist::{Str, Value};
 use serde::Serialize;
 
-use crate::{Font, GLYPH_ORDER_PARAM, Glyph, GlyphTable, KernTable, MetricsKeys, ModelError, Params, Shape, check_name, side_group, sort_key};
+use crate::{Font, GLYPH_ORDER_PARAM, Glyph, GlyphTable, KernTable, MetricsKeys, ModelError, Params, Shape, check_name, side_group};
 
 /// One glyph renamed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -103,53 +102,6 @@ pub fn rename_glyphs(font: &mut Font, renames: &[(String, String)]) -> Result<Re
     update_glyph_order(font, &map, &mut report.updated);
     font_text_using(font, &map, &mut report.still_used);
     Ok(report)
-}
-
-/// Moves the named glyphs to the place the default sort key gives them among the other glyphs,
-/// in stored order (`glyphOrder.default`): right after the last other glyph whose key is not
-/// greater. The other glyphs keep their order. Names that are not glyphs are ignored.
-pub fn place_by_sort_key(font: &mut Font, data: &GlyphData, names: &[String]) {
-    let moving: HashSet<&str> = names.iter().map(String::as_str).collect();
-    if moving.is_empty() || !font.glyphs.iter().any(|g| moving.contains(g.name.as_str())) {
-        return;
-    }
-    let mut rest: Vec<(Arc<Glyph>, SortKey)> = Vec::with_capacity(font.glyphs.len());
-    let mut moved: Vec<(usize, SortKey, Arc<Glyph>)> = Vec::new();
-    for g in font.glyphs.iter() {
-        let key = sort_key(font, g, data);
-        if moving.contains(g.name.as_str()) {
-            moved.push((0, key, Arc::clone(g)));
-        } else {
-            rest.push((Arc::clone(g), key));
-        }
-    }
-    // The smallest key from each position to the end. It never decreases, so the number of
-    // positions whose suffix holds a key not greater than `k` is one past the last such key:
-    // the place `Placement::index_for` gives, found by binary search.
-    let mut suffix_min: Vec<SortKey> = Vec::with_capacity(rest.len());
-    for (_, key) in rest.iter().rev() {
-        let smaller = match suffix_min.last() {
-            Some(m) if m < key => m.clone(),
-            _ => key.clone(),
-        };
-        suffix_min.push(smaller);
-    }
-    suffix_min.reverse();
-    for m in &mut moved {
-        m.0 = suffix_min.partition_point(|k| *k <= m.1);
-    }
-    moved.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
-
-    let mut out = Vec::with_capacity(font.glyphs.len());
-    let mut next = moved.into_iter().peekable();
-    for (i, (g, _)) in rest.into_iter().enumerate() {
-        while let Some((_, _, m)) = next.next_if(|m| m.0 <= i) {
-            out.push(m);
-        }
-        out.push(g);
-    }
-    out.extend(next.map(|(_, _, m)| m));
-    font.glyphs = GlyphTable::from_glyphs(out);
 }
 
 // ── Glyph names inside text ──
@@ -584,7 +536,7 @@ mod tests {
 
     #[test]
     fn placing_by_sort_key_matches_one_by_one_placement() {
-        let d = GlyphData::new().unwrap();
+        let d = fontcraft_glyphdata::GlyphData::new().unwrap();
         let mut f = font();
         for n in ["one", "C.alt", "zz"] {
             f.add_glyph(n, Vec::new(), 500.0).unwrap();
@@ -592,7 +544,7 @@ mod tests {
         let mut others = f.clone();
         others.remove_glyph("C.alt").unwrap();
         let expected = crate::insertion_index(&others, &d, &Glyph::new("C.alt"));
-        place_by_sort_key(&mut f, &d, &["C.alt".to_string()]);
+        crate::place_by_sort_key(&mut f, &d, &["C.alt".to_string()]);
         assert_eq!(f.glyphs.position("C.alt"), Some(expected));
         let rest: Vec<&str> = f.glyphs.iter().map(|g| g.name.as_str()).filter(|n| *n != "C.alt").collect();
         let before: Vec<&str> = others.glyphs.iter().map(|g| g.name.as_str()).collect();

@@ -7,7 +7,7 @@
 //! not given to it yet: the engine holds no language tables or groups files so far.
 
 use fontcraft_glyphquery::{self as gq, Catalog, Env, Expected, Filter, Matcher, RuleTree, Search, Selection};
-use fontcraft_model::{Glyph, MAX_GLYPHS, Placement, data_props, sort_key};
+use fontcraft_model::{Glyph, Layer, MAX_GLYPHS, data_props, insert_by_sort_key};
 use serde_json::{Map, Value, json};
 
 use super::*;
@@ -284,16 +284,16 @@ fn generate_missing_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
         })
         .collect();
     s.edit("Generate Missing Glyphs", |font| {
-        let mut place = Placement::new(font, &data);
-        for (name, codes) in &items {
-            let mut probe = Glyph::new(name.as_str());
-            probe.unicodes = codes.clone();
-            let key = sort_key(font, &probe, &data);
-            let at = place.index_for(&key);
-            font.add_glyph_at(at, name, codes.clone(), NEW_GLYPH_WIDTH)?;
-            place.insert(at, key);
-        }
-        Ok(())
+        let glyphs = items
+            .iter()
+            .map(|(name, codes)| {
+                let mut g = Glyph::new(name.as_str());
+                g.unicodes = codes.clone();
+                g.layers = font.masters.iter().map(|m| Layer::new(&m.id, NEW_GLYPH_WIDTH)).collect();
+                g
+            })
+            .collect();
+        Ok(insert_by_sort_key(font, &data, glyphs)?)
     })?;
     let added: Vec<&str> = items.iter().map(|(n, _)| n.as_str()).collect();
     Ok(json!({ "added": added }))
