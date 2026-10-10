@@ -172,10 +172,20 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             if master_row {
                 text = text.strong();
             }
-            if row.id == active_layer {
-                text = text.color(tokens.accent);
+            // A selected row is filled with the selection colour; the active layer's name is
+            // underlined on it, and in the accent colour elsewhere.
+            let is_selected = selected.contains(&row.id);
+            match (is_selected, row.id == active_layer) {
+                (true, active) => {
+                    text = text.color(tokens.selected_text);
+                    if active && selected.len() > 1 {
+                        text = text.underline();
+                    }
+                }
+                (false, true) => text = text.color(tokens.accent),
+                (false, false) => {}
             }
-            let label = ui.add(egui::Button::selectable(selected.contains(&row.id), text).frame(false));
+            let label = ui.add(egui::Button::selectable(is_selected, text));
             if !master_row && row.kind != "backup" {
                 ui.label(egui::RichText::new(&row.kind).strong().color(tokens.text_dim));
             }
