@@ -25,7 +25,11 @@ are ours.
   Edit > Info for Selection.
 - Purely informational: the chapter names nothing that consumes the values.
 
-Data: a per-master map from field key to number. The keys per script are not documented.
+Data: a per-master map from field key to number. The corpus `.glyphs` files keep it in the font's
+user data under `GSDimensionPlugin.Dimensions`, one dictionary per master id; some write the
+numbers as text. FontCraft reads and writes that key and keeps a field's text form when it has
+one. The keys per script are not documented; the corpus has `HH`, `HV`, `OH`, `OV`, `nV`, `nd`,
+`oH`, `oV`, `tH` (Latin) and `arAlef`, `arBar` (Arabic).
 
 ## Fit Curve (`palette.fitCurve`)
 
@@ -191,8 +195,8 @@ operation the Remove Overlap export option runs on every glyph.
 1. Dimensions: the field keys and diagram for each script, and whether any feature (autohinting,
    filters) reads them.
    **Answered for M3 (our decision, 2026-10-09):** read and write the key the corpus `.glyphs` files
-   use in master user data, if any carries one; otherwise our own key there. Nothing else reads the
-   values (`dimensions.noEffectOnFont`).
+   use: `GSDimensionPlugin.Dimensions` in the font's user data, one dictionary per master id.
+   Nothing else reads the values (`dimensions.noEffectOnFont`).
 2. Fit Curve: default values of the two fields; the increment of plus and minus; the exact rule
    of the balance button; the precise definition of the percentage (relative to the handle
    intersection point, and what happens when the handles are parallel); what the buttons do

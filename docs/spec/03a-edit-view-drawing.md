@@ -525,6 +525,34 @@ Info box fields for a selected guide (`guides.infoBoxFields`; headless `guide.se
 Global guide scope (`guides.globalScopeFilter`): Edit › Info for Selection (`Cmd+Alt+I`) on a
 selected global guide defines Smart-Filter-style rules for the glyphs that show it.
 
+### FontCraft's guide commands
+
+| Command | Does |
+|---|---|
+| `guide.add`, `guide.addGlobal` | Add a guide through `x, y` at `angle`, or (local) through two points |
+| `guide.makeGlobal`, `guide.makeLocal` | Move guides between the layer and its master, keeping every property |
+| `guide.lock`, `guide.unlock` | Lock or unlock guides |
+| `guide.setProperties` | Position, angle, angle lock, sidebearing reference, measurement, name, colour, filter |
+| `guide.toggleMeasurement` | Measurement guide on or off |
+| `guide.remove` | Remove guides |
+| `guide.list` | Every guide the layer shows, with all properties |
+| `guide.displayLines` | The grid, metrics, zones and CJK grids Edit View draws for the layer |
+
+Rules (our design where the handbook is silent):
+
+- Angles are degrees counter-clockwise from horizontal, kept from 0 to 360. Positions given as
+  numbers are rounded to the font's grid; a guide through two points keeps their positions.
+- A locked guide refuses every change but `guide.unlock`, since the reference keeps it from being
+  selected. A locked glyph refuses changes to its local guides; global guides belong to the
+  master, so a glyph lock does not block them.
+- An angle-locked guide refuses a new angle unless the same call sets `angleLocked: false`. A drag
+  that rotates goes through `guide.setProperties`, so the lock holds whatever tool calls it.
+- The sidebearing reference is the guide's `alignment` key in `.glyphs` data: absent for left,
+  `right`, or `center` for both. Commands that change a glyph's width do not yet move guides that
+  follow the right side or both sides.
+- A global guide's `filter` is kept as predicate text. Showing a global guide only on the glyphs
+  its filter selects waits for the Smart Filter rules (M4).
+
 ## 21. Undo (`undo.perGlyphHistory`)
 
 Each glyph has its own undo stack, in both Edit View and Font View. Edits to data outside a

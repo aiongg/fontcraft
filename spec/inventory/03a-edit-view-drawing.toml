@@ -2046,12 +2046,13 @@ menu = []
 context = ["canvas", "canvas.node"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, x?: number, y?: number, angle?: number, throughPoints?: [[shape, node], [shape, node]]} → {guide: {scope: local, index}}"
+params = "{glyph: name, layer?: id, side?: foreground|background, x?: number, y?: number, angle?: number, throughPoints?: [[shape, node], [shape, node]]} → {guide: {scope: local, index}, selection}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Canvas context-menu command that adds a local guide to the displayed layer: horizontal through the clicked position, or, when exactly two nodes are selected, running through those two nodes."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "The position given is rounded to the font's grid; a guide through two points keeps their exact positions. The angle is in degrees counter-clockwise from horizontal, kept from 0 to 360."
 
 [[command]]
 id = "guide.addGlobal"
@@ -2060,12 +2061,13 @@ menu = []
 context = ["canvas", "canvas.node"]
 shortcut = ""
 kind = "engine"
-params = "{master?: id, x?: number, y?: number, angle?: number} → {guide: {scope: global, index}}"
+params = "{master?: id, glyph?: name, layer?: id, x?: number, y?: number, angle?: number} → {master, guide: {scope: global, index}, selection?}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Alternate context-menu item, shown while Option is held, that adds the guide as a global (master-wide) guide instead of a local one."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "`glyph` and `layer` pick the master of that layer and add `selection` to the result. Global guides are undoable like every other edit (D4)."
 
 [[behavior]]
 id = "guides.fromMeasurementTool"
@@ -2127,7 +2129,7 @@ menu = []
 context = ["canvas.guide"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, guides: [{scope: local, index}]} → {selection}"
+params = "{glyph: name, layer?: id, side?: foreground|background, guides: [{scope: local, index}]} → {selection}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Context-menu command that moves the selected local guide from the layer to the master, turning it into a global guide."
@@ -2141,7 +2143,7 @@ menu = []
 context = ["canvas.guide"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, guides: [{scope: global, index}]} → {selection}"
+params = "{glyph: name, layer?: id, side?: foreground|background, guides: [{scope: global, index}]} → {selection}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Context-menu command that moves the selected global guide from the master to the current glyph layer, turning it into a local guide."
@@ -2155,12 +2157,13 @@ menu = []
 context = ["canvas.guide"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, guides: [{scope: local|global, index}]}"
+params = "{glyph: name, layer?: id, side?: foreground|background, guides: [{scope: local|global, index}]} → {guides: count}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Context-menu command that locks the selected guides. Once locked, a guide can no longer be selected, and a lock icon replaces its knob."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "Our rule for commands: a locked guide refuses every change (properties, removal, scope, measurement) until `guide.unlock`, as the reference keeps it from being selected. A locked glyph refuses changes to its local guides; global guides belong to the master and are not blocked by a glyph lock."
 
 [[command]]
 id = "guide.unlock"
@@ -2169,7 +2172,7 @@ menu = []
 context = ["canvas.guide"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, guides: [{scope: local|global, index}]}"
+params = "{glyph: name, layer?: id, side?: foreground|background, guides: [{scope: local|global, index}]} → {guides: count}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Context-menu command, reached by right-clicking or Ctrl-clicking a locked guide's lock icon, that makes the guide selectable again."
@@ -2182,12 +2185,13 @@ label = "Set Properties"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, guide: {scope: local|global, index}, x?: number, y?: number, angle?: number, angleLocked?: bool, relativeTo?: left|right|both, measurement?: bool, name?: string, filter?: object}"
+params = "{glyph: name, layer?: id, side?: foreground|background, guide: {scope: local|global, index}, x?: number, y?: number, angle?: number, angleLocked?: bool, relativeTo?: left|right|both, measurement?: bool, name?: string, filter?: string, color?: string} → {guide}"
 area = "guides-metrics"
 milestone = "M3"
-summary = "Writes the properties of a guide that the reference edits through the Info box and Info for Selection: position, angle, angle lock, sidebearing reference, measurement flag, name and, for global guides, the glyph filter. Our own command."
+summary = "Writes the properties of a guide that the reference edits through the Info box and Info for Selection: position, angle, angle lock, sidebearing reference, measurement flag, name, colour and, for global guides, the glyph filter (predicate text). Our own command."
 ref = "Edit View › Local & Global Guides"
 status = "inferred"
+notes = "An empty name, filter or colour clears it. An angle-locked guide refuses a new angle unless the same call sets `angleLocked: false`, so a rotating drag cannot turn it. The sidebearing reference is stored as the guide's `alignment` key in `.glyphs` data (`right`; `center` for both); left is the default and writes nothing. Which `alignment` value the reference writes for both sidebearings is our reading of the format, not confirmed."
 
 [[command]]
 id = "guide.remove"
@@ -2196,12 +2200,39 @@ menu = []
 context = ["canvas.guide"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, guides: [{scope: local|global, index}]} → {selection}"
+params = "{glyph: name, layer?: id, side?: foreground|background, guides: [{scope: local|global, index}]} → {removed: count, selection}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Removes guides. Our own command; the chapter does not say how a guide is deleted (presumably the Delete key on a selected guide)."
 ref = "Edit View › Local & Global Guides"
 status = "inferred"
+
+[[command]]
+id = "guide.list"
+label = "List Guides"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: foreground|background} → {glyph, layer, master, guides: [{scope, index, x, y, angle, locked, angleLocked, measurement, relativeTo, name?, filter?, color?}]}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Query returning every guide a layer shows, its own local guides and then its master's global guides, with all their properties. Our own command: what the canvas and the Info box read."
+ref = "Edit View › Local & Global Guides"
+status = "inferred"
+
+[[command]]
+id = "guide.displayLines"
+label = "Display Lines"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id} → {glyph, layer, master, width, grid, metrics, zones, cjk?, designGrid?}"
+area = "guides-metrics"
+milestone = "M3"
+summary = "Query returning the lines Edit View draws for a layer besides guides: the grid step, the master's metrics with the per-script ascender, cap height and descender parameters and the small-cap and shoulder heights applied, the alignment zones, and the CJK grid, CJK guide and design grid parameters. Our own command: the canvas draws what it returns."
+ref = "Font Info › Masters › Metrics & Alignment Zones; Appendix › Custom Parameters"
+status = "inferred"
+notes = "Script-prefixed parameters match the glyph's own script property; a parameter without a prefix applies to every glyph, since the glyph data that would say which glyphs are CJK is not built yet. The CJK grid divides the box from x 0 to the width and from the descender to the ascender."
 
 [[behavior]]
 id = "guides.infoBoxFields"

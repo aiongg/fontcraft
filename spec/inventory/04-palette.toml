@@ -82,12 +82,13 @@ label = "Set Dimension"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master?: id, key: string, value: number|null}"
+params = "{master?: id, key: string, value?: number|null} → {master, key, value}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Stores one measurement in the Dimensions notepad of a master, or clears it with null. The field keys per script are not listed in the handbook."
 ref = "Palette › Dimensions"
 status = "handbook"
+notes = "Stored in the font's user data under `GSDimensionPlugin.Dimensions`, one dictionary of field key to number per master id, as the corpus `.glyphs` files hold them. A field that held text keeps text."
 
 [[command]]
 id = "dimensions.getValues"
@@ -95,12 +96,13 @@ label = "Get Dimensions"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master?: id, script?: string}"
+params = "{master?: id, script?: string, glyph?: name} → {master, script?, fields?, values}"
 area = "guides-metrics"
 milestone = "M3"
 summary = "Query returning the Dimensions values noted for a master, optionally limited to the fields of one script."
 ref = "Palette › Dimensions"
 status = "inferred"
+notes = "The field keys per script come from the corpus files (Latin: HH, HV, OH, OV, nV, nd, oH, oV, tH; Arabic: arAlef, arBar); the reference does not document them. An unknown script given explicitly is an error; a glyph whose script has no known fields gets every value."
 
 [[behavior]]
 id = "dimensions.perMaster"

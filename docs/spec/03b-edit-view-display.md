@@ -240,6 +240,18 @@ paths and components whenever guides are shown, with any tool.
 **Overlaps.** Rulers and measurement guides measure the merged shape; stretches inside
 overlapping paths are skipped and drawn light grey.
 
+How `measure.ruler` finds crossings (our design):
+
+- Components are resolved and measured like paths. Paths that do not form a valid outline and
+  components of missing glyphs are left out.
+- The merged shape follows the non-zero winding rule: a crossing counts only where the line
+  passes between outside and inside the outline. Crossings of open paths are all kept.
+- A line that only touches a contour, at a node or along an edge, does not cross it.
+- Each gap between two crossings reports its distance, `dx`, `dy`, `italicDx` (`dx − dy·tan` of the
+  master's italic angle) and whether it lies inside the outline (a stem) or outside (a counter).
+- With `guide` instead of `from` and `to`, the whole line of the guide is measured; this is what a
+  measurement guide prints.
+
 **Measurement line** (`view.showMeasurementLine`, text mode):
 
 - one horizontal line across the text at an adjustable height (`view.setMeasurementLineHeight`;

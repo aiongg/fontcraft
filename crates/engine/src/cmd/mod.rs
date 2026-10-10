@@ -11,13 +11,16 @@
 mod annotation;
 mod background;
 mod compile;
+mod dimensions;
 mod edit;
 mod file;
 mod font;
 mod glyph;
+mod guide;
 mod inspect;
 mod layer;
 mod layers;
+mod measure;
 mod meta;
 mod path;
 mod session;
@@ -163,6 +166,9 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(background::specs());
         v.extend(layers::specs());
         v.extend(transform::specs());
+        v.extend(guide::specs());
+        v.extend(measure::specs());
+        v.extend(dimensions::specs());
         v
     })
 }
