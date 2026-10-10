@@ -1,14 +1,15 @@
 //! Helpers shared by several command modules: the grid step, the coordinate range check, a
-//! master's metrics, and the glyph-or-glyphs scope that whole-layer commands use.
+//! master's metrics, code-point lists, and the glyph-or-glyphs scope that whole-layer commands
+//! use.
 
 use std::collections::HashSet;
 
-use fontcraft_model::{Font, Layer, MAX_COORDINATE, Master, Metrics, metric};
+use fontcraft_model::{Font, Layer, MAX_COORDINATE, MAX_UNICODES, Master, Metrics, metric};
 use serde_json::{Value, json};
 
 use crate::EngineError;
 use crate::Result;
-use crate::params::Params;
+use crate::params::{Params, codepoint, kind};
 
 /// Most layer ids one `layers` list may hold.
 const MAX_LAYER_IDS: usize = 1024;
@@ -151,4 +152,21 @@ pub(crate) fn each_layer(
         }
     }
     Ok(out)
+}
+
+/// A list of code points (hex text or numbers), repeats dropped, at most [`MAX_UNICODES`];
+/// `None` when `key` is absent.
+pub(crate) fn code_points(p: &Params, key: &str) -> Result<Option<Vec<u32>>> {
+    let Some(list) = p.opt_array(key)? else { return Ok(None) };
+    if list.len() > MAX_UNICODES {
+        return Err(p.bad(format!("`{key}` holds {} values; at most {MAX_UNICODES} are allowed", list.len())));
+    }
+    let mut out = Vec::with_capacity(list.len());
+    for v in list {
+        let cp = codepoint(v).ok_or_else(|| p.bad(format!("`{key}` must hold code points as hex text or numbers, found {} ({v})", kind(v))))?;
+        if !out.contains(&cp) {
+            out.push(cp);
+        }
+    }
+    Ok(Some(out))
 }

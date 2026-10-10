@@ -3,9 +3,7 @@
 use serde_json::{Value, json};
 
 use super::*;
-use crate::params::{Params, TargetKind, codepoint, kind};
-
-use fontcraft_model::MAX_UNICODES;
+use crate::params::{Params, TargetKind, kind};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -50,28 +48,13 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-fn unicodes(p: &Params, key: &str) -> Result<Option<Vec<u32>>> {
-    let Some(list) = p.opt_array(key)? else { return Ok(None) };
-    if list.len() > MAX_UNICODES {
-        return Err(p.bad(format!("`{key}` holds {} values; at most {MAX_UNICODES} are allowed", list.len())));
-    }
-    let mut out = Vec::with_capacity(list.len());
-    for v in list {
-        let cp = codepoint(v).ok_or_else(|| p.bad(format!("`{key}` must hold code points as hex text or numbers, found {} ({v})", kind(v))))?;
-        if !out.contains(&cp) {
-            out.push(cp);
-        }
-    }
-    Ok(Some(out))
-}
-
 fn new_glyph(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("glyph.newGlyph", p)?;
     let width = p.opt_f64("width")?.unwrap_or(600.0);
     if !(0.0..=65_535.0).contains(&width) {
         return Err(p.bad(format!("`width` must be between 0 and 65535, got {width}")));
     }
-    let codes = unicodes(&p, "unicodes")?;
+    let codes = super::common::code_points(&p, "unicodes")?;
     let name = match p.opt_str("name")? {
         Some(name) => name.to_string(),
         None => {
@@ -135,7 +118,7 @@ fn set_unicodes(s: &mut Session, p: &Value) -> Result<Value> {
     if names.is_empty() {
         return Err(p.bad("`glyphs` is empty"));
     }
-    let codes = unicodes(&p, "unicodes")?.ok_or_else(|| p.bad("`unicodes` is required"))?;
+    let codes = super::common::code_points(&p, "unicodes")?.ok_or_else(|| p.bad("`unicodes` is required"))?;
     s.edit("Set Unicode Values", |font| {
         for name in &names {
             font.glyph_mut(name)?.unicodes = codes.clone();
