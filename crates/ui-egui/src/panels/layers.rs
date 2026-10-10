@@ -4,7 +4,8 @@
 //! double-clicking a non-master name renames it (`layers.rename`). Plus adds a backup of the
 //! active layer (`layers.addBackupLayer`), minus deletes the picked row (`layers.delete`), Use as
 //! Master restores a picked backup (`layers.useAsMaster`). The filter menu runs
-//! `layers.onlyShowLayersFromCurrentMaster` and `layers.hideBackupLayers`.
+//! `layers.onlyShowLayersFromCurrentMaster` and `layers.hideBackupLayers`. A right-click on a
+//! row opens its context menu: the commands whose row names `layers.row`, acting on that row.
 //!
 //! The active layer is the edited glyph's layer of the first master, as in the canvas.
 
@@ -13,6 +14,7 @@ use serde_json::{Value, json};
 use super::{Pending, current_glyph, palette, widgets};
 use crate::app::FontcraftApp;
 use crate::canvas::view;
+use crate::shell::context_menu;
 
 /// Most rows the section lists.
 const MAX_ROWS: usize = 500;
@@ -56,6 +58,32 @@ pub fn rename_field(layer: &str) -> egui::Id {
     widgets::id(("layers.rename", layer))
 }
 
+/// The `context` value of the Layers rows' context menu.
+pub const ROW_CONTEXT: &str = "layers.row";
+
+fn start_renaming(ctx: &egui::Context, layer: &str) {
+    ctx.data_mut(|d| d.insert_temp(renaming_id(), layer.to_string()));
+    ctx.memory_mut(|m| m.request_focus(rename_field(layer)));
+}
+
+/// Why command `id` of the row menu cannot act on `row`, if it cannot.
+fn row_refuses(id: &str, row: &Row) -> Option<String> {
+    match id {
+        "layers.delete" | "layers.rename" if row.kind == "master" => Some("a master layer goes with its master".into()),
+        "layers.useAsMaster" if row.kind != "backup" => Some("only a backup layer can become the master layer".into()),
+        _ => None,
+    }
+}
+
+/// The parameters command `id` of the row menu runs with on `layer`.
+fn row_params(id: &str, glyph: &str, layer: &str) -> Value {
+    match id {
+        "layers.delete" => json!({"glyphs": [glyph], "layers": [layer]}),
+        "layers.useAsMaster" => json!({"glyphs": [glyph], "layer": layer}),
+        _ => json!({"glyph": glyph, "layer": layer}),
+    }
+}
+
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let Some(glyph) = current_glyph(app) else {
         palette::note(app, ui, "No glyph selected");
@@ -83,6 +111,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let picked: Option<String> = ctx.data(|d| d.get_temp(picked_id()));
     let renaming: Option<String> = ctx.data(|d| d.get_temp(renaming_id()));
     let tokens = app.tokens.clone();
+    let row_menu = context_menu::sections(&app.session, &app.state, &[ROW_CONTEXT]);
     for row in &shown {
         ui.horizontal(|ui| {
             let eye = if row.visible { "👁" } else { " " };
@@ -120,9 +149,31 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 ctx.data_mut(|d| d.insert_temp(picked_id(), row.id.clone()));
             }
             if label.double_clicked() && !master_row {
-                ctx.data_mut(|d| d.insert_temp(renaming_id(), row.id.clone()));
-                ctx.memory_mut(|m| m.request_focus(rename_field(&row.id)));
+                start_renaming(&ctx, &row.id);
             }
+            label.context_menu(|ui| {
+                for (index, section) in row_menu.iter().enumerate() {
+                    if index > 0 {
+                        ui.separator();
+                    }
+                    for item in &section.items {
+                        let why = item.disabled_reason.clone().or_else(|| row_refuses(item.command, row));
+                        let response = ui.add_enabled(why.is_none(), egui::Button::new(item.label));
+                        let response = match &why {
+                            Some(why) => response.on_disabled_hover_text(why),
+                            None => response,
+                        };
+                        if response.clicked() {
+                            ctx.data_mut(|d| d.insert_temp(picked_id(), row.id.clone()));
+                            match item.command {
+                                "layers.rename" => start_renaming(&ctx, &row.id),
+                                id => pending.push((id, row_params(id, &glyph, &row.id))),
+                            }
+                            ui.close();
+                        }
+                    }
+                }
+            });
         });
     }
     let picked_row = picked.as_ref().and_then(|p| all.iter().find(|r| &r.id == p));

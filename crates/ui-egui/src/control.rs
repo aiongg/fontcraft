@@ -233,10 +233,10 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
             set(&mut state, "dialog", json!(app.dialog.as_ref().map(|d| d.id.as_str())));
             Ok(state)
         }
-        "ui.menu.list" => serde_json::to_value(menus::menu_tree(&app.session)).map_err(|e| e.to_string()),
+        "ui.menu.list" => serde_json::to_value(menus::menu_tree_for(&app.session, &app.state)).map_err(|e| e.to_string()),
         "ui.menu.invoke" => {
             let id = command()?;
-            if !menus::menu_tree(&app.session).iter().any(|m| m.items.iter().any(|i| i.command == id)) {
+            if !menus::menu_tree_for(&app.session, &app.state).iter().any(|m| m.items.iter().any(|i| i.command == id)) {
                 return Err(format!("{method}: `{id}` is not a menu item"));
             }
             app.run_from_shell(id, &inner())
