@@ -140,6 +140,21 @@ Two steps: split every segment into straight pieces of roughly `segmentLength`, 
 node by a random amount no larger than `horizontal` in x and `vertical` in y. We add an optional
 `seed` so headless runs are reproducible (not in the reference).
 
+How FontCraft runs it (our design, documented behaviour not yet observed):
+
+- A segment of length `L` is cut into `max(1, round(L / segmentLength))` equal pieces, measured
+  along the curve. Curves become polylines: the result has line nodes only. A layer that would
+  need more nodes than the node limit is an error and changes nothing.
+- Every node, original or new, moves by a vector drawn uniformly from the box of
+  ±`horizontal` by ±`vertical`. The draws come from a deterministic generator seeded with `seed`
+  (default 0), in node order, so one seed gives one result.
+- The export string's fourth value `angle` turns the box counter-clockwise by that many degrees
+  (default 0). The handbook names the value without describing it. The seed has no slot in the
+  string.
+- Moves that leave the coordinate range are an error. New and moved points are rounded to the
+  grid.
+- The dialog's first values are ours: segment length 50, horizontal 10, vertical 10, angle 0.
+
 ### Round Corners (`filter.roundCorners`)
 
 Rounds corners with `radius`.

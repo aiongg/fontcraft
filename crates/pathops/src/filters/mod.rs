@@ -16,6 +16,7 @@
 
 pub mod extrude;
 pub mod hatch_outline;
+pub mod roughen;
 pub mod round_corners;
 
 use std::fmt;
@@ -25,6 +26,7 @@ use crate::contour::Contour;
 
 pub use extrude::Extrude;
 pub use hatch_outline::HatchOutline;
+pub use roughen::Roughen;
 pub use round_corners::RoundCorners;
 
 /// Longest filter string read, in bytes.
@@ -40,6 +42,7 @@ pub fn registry() -> &'static [&'static dyn Filter] {
     #[rustfmt::skip]
     static FILTERS: &[&dyn Filter] = &[
         &Extrude,
+        &Roughen,
         &RoundCorners,
         &HatchOutline,
     ];

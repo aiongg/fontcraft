@@ -340,23 +340,25 @@ label = "Roughen"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids], segmentLength: number, horizontal: number, vertical: number, seed?: integer}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], segmentLength: number, horizontal: number, vertical: number, angle?: number = 0, seed?: integer = 0}"
 area = "path-ops"
 milestone = "M3"
 summary = "Flattens every outline into straight segments of about Segment Length and then displaces each resulting node by a random amount of at most Horizontal units in x and Vertical units in y. seed is our addition for reproducible headless runs; the reference does not mention one."
 ref = "Filters › Built-in Filters › Roughen"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (ours): segmentLength is 1 to 1000000 units, horizontal and vertical 0 to 1000000 units; first values 50, 10 and 10. A segment of length L is cut into max(1, round(L / segmentLength)) equal pieces measured along the curve, so the result has line nodes only; a layer that would need more than the node limit is an error and changes nothing. The move of each node is uniform in [-horizontal, horizontal] by [-vertical, vertical], drawn in node order from a small deterministic generator (SplitMix64) seeded with seed (0 to 2^53, default 0), so one seed gives one result. The export string is Roughenizer; segmentlength; x; y; angle and has no slot for the seed. The fourth value angle is read as the turn of the move box in degrees counter-clockwise (-360 to 360, default 0, 0 keeps x and y); the handbook names the value without describing it. Moves that leave the coordinate range are an error. New and moved points are rounded to the grid; with horizontal and vertical both 0 only the new points are. Components and locked paths are not changed."
 
 [[panel]]
 id = "dialog.filterRoughen"
 label = "Roughen"
 location = "dialog"
-controls = ["Segment Length field", "Horizontal field", "Vertical field"]
+controls = ["Segment Length field", "Horizontal field", "Vertical field", "Angle field"]
 area = "path-ops"
 milestone = "M3"
 summary = "Options dialog of the Roughen filter. No default values are stated in the source."
 ref = "Filters › Built-in Filters › Roughen"
 status = "handbook"
+notes = "FontCraft first values (ours): segment length 50, horizontal 10, vertical 10, angle 0 (the `default` of each parameter in filter.list). The Angle field is ours: the handbook's export string has an angle value but its dialog has no such field. The seed is a command parameter only and has no field."
 
 [[behavior]]
 id = "filter.roughen.segmentsThenJitter"
@@ -365,6 +367,7 @@ milestone = "M3"
 summary = "Roughen works in two steps: curves and lines are first cut into line segments of the chosen length, then all nodes (original and new) are moved randomly within the per-axis limits."
 ref = "Filters › Built-in Filters › Roughen"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft cuts each segment into equal pieces by length along the curve and moves the original nodes too; curves become polylines of line nodes."
 
 [[behavior]]
 id = "filter.roughen.maxOffsetPerAxis"
@@ -373,6 +376,7 @@ milestone = "M3"
 summary = "Horizontal and Vertical are upper bounds of the random displacement on each axis, not fixed distances."
 ref = "Filters › Built-in Filters › Roughen"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft draws each move uniformly from the box of plus or minus the bounds (turned by angle), so the bounds are reached but never exceeded."
 
 # --- Round Corners ---
 
@@ -841,6 +845,7 @@ milestone = "M7"
 summary = "Export string: Roughenizer; segmentlength; x; y; angle. The fourth value (angle) has no counterpart in the dialog description of the Filters chapter."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "FontCraft reads angle as the turn of the move box in degrees counter-clockwise (optional, default 0); the handbook does not say what it does. The seed has no slot, so an export string always uses the default seed 0."
 
 [[behavior]]
 id = "filter.customParameter.roundCorners"
