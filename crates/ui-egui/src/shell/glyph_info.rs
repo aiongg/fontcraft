@@ -90,7 +90,8 @@ impl Column {
             Column::Unicode => 2.0,
             Column::Category | Column::Script => 2.2,
             Column::SubCategory => 2.6,
-            Column::Description => 6.0,
+            // Room for the long Unicode names (`CYRILLIC CAPITAL LETTER ZHE WITH DESCENDER`).
+            Column::Description => 9.5,
         }
     }
 }
