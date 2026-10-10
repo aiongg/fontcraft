@@ -154,6 +154,14 @@ pub struct Tokens {
     pub measure_label_size: f32,
     /// Dots where a ruler or a measurement guide crosses the outline.
     pub measure_crossing_radius: f32,
+    /// The inactive side of the layer under Show Background (`background.outlineDisplay`).
+    pub background_outline: Color32,
+    pub background_outline_width: f32,
+    /// Other layers of the glyph whose eye is on (`layers.visibleLayerOutline`).
+    pub visible_layer_outline: Color32,
+    pub visible_layer_outline_width: f32,
+    /// Laid over the canvas while the background is the side being edited (`background.darkenedCanvas`).
+    pub background_tint: Color32,
 }
 
 impl Tokens {
@@ -249,6 +257,11 @@ impl Tokens {
             measure_ruler: Color32::from_rgb(0x00, 0x8c, 0x9c),
             measure_label_size: 10.0,
             measure_crossing_radius: 3.0,
+            background_outline: Color32::from_rgba_unmultiplied(0xe0, 0x40, 0x40, 0x90),
+            background_outline_width: 1.0,
+            visible_layer_outline: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0xb0),
+            visible_layer_outline_width: 0.75,
+            background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
         }
     }
 

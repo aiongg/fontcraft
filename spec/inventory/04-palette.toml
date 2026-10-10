@@ -468,6 +468,7 @@ milestone = "M3"
 summary = "A layer whose eye is on is drawn as a thin blue line whenever a different layer of that glyph is being edited. The colour is an appearance setting."
 ref = "Palette › Layers"
 status = "handbook"
+notes = "Built in M3.10: a thin outline in the theme's colour for each other layer of the glyph whose `visible` flag is set, whatever Show Background says."
 
 [[behavior]]
 id = "layers.rowStyling"

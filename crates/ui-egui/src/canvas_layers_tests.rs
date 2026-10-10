@@ -1,4 +1,4 @@
-//! Guides and the Measurement tool in Edit View: what headless frames draw.
+//! Guides, the background and the Measurement tool in Edit View: what headless frames draw.
 
 use egui::{Pos2, Shape};
 use serde_json::{Value, json};
@@ -51,6 +51,10 @@ fn texts(shapes: &[Shape]) -> Vec<String> {
         .collect()
 }
 
+fn has_path(shapes: &[Shape], color: egui::Color32) -> bool {
+    shapes.iter().any(|s| matches!(s, Shape::Path(p) if p.stroke.color == egui::epaint::ColorMode::Solid(color)))
+}
+
 fn has_segment(shapes: &[Shape], color: egui::Color32) -> bool {
     shapes.iter().any(|s| matches!(s, Shape::LineSegment { stroke, .. } if stroke.color == color))
 }
@@ -70,6 +74,29 @@ fn guides_and_measurement_guides_are_drawn() {
     let shapes = frame(&ctx, &mut app);
     assert!(!has_segment(&shapes, t.guide_local) && !has_segment(&shapes, t.guide_global));
     assert!(!texts(&shapes).iter().any(|s| s == "200"));
+}
+
+#[test]
+fn the_background_and_visible_layers_are_drawn_behind_the_outline() {
+    let mut app = edit_app();
+    let t = Tokens::dark();
+    let ctx = egui::Context::default();
+    app.run("path.addRectangle", &json!({"glyph": "A", "side": "background", "x": 400, "y": 400, "width": 100, "height": 100})).unwrap();
+    let shapes = frame(&ctx, &mut app);
+    assert!(has_path(&shapes, t.background_outline), "the background's outline");
+    let corners = |shapes: &[Shape]| shapes.iter().filter(|s| matches!(s, Shape::Rect(r) if r.fill == t.node_corner)).count();
+    let before = corners(&shapes);
+    app.run("view.showNodesInBackground", &json!({"on": true})).unwrap();
+    assert_eq!(corners(&frame(&ctx, &mut app)), before + 3, "the background's corners, its start node an arrow");
+    app.run("view.showBackground", &json!({"on": false})).unwrap();
+    let shapes = frame(&ctx, &mut app);
+    assert!(!has_path(&shapes, t.background_outline));
+    assert_eq!(corners(&shapes), before);
+
+    assert!(!has_path(&shapes, t.visible_layer_outline));
+    let backup = app.run("layers.addBackupLayer", &json!({"glyphs": ["A"]})).unwrap();
+    app.run("layers.toggleVisibility", &json!({"glyphs": ["A"], "layer": backup["layer"], "visible": true})).unwrap();
+    assert!(has_path(&frame(&ctx, &mut app), t.visible_layer_outline), "the backup layer, its eye on");
 }
 
 #[test]

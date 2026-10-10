@@ -173,6 +173,19 @@ FontCraft's rules where the handbook says nothing (our decisions):
 | Assign Background | Writes the master layers' backgrounds. Masters are matched by name, then by position; a source with fewer masters gives its first. Without `file` the source is the open font itself |
 | All of them | With one glyph, a locked glyph or a missing layer is an error. With a `glyphs` list (Font View) such glyphs are skipped and listed in `skipped` |
 
+How FontCraft draws the background and other layers (our decisions):
+
+- Show Background draws the background's paths and components as a thin red outline behind the
+  edited layer and the filled glyphs. Show Nodes › In Background adds its nodes and handles, drawn
+  like the foreground's.
+- A layer whose eye is on (`layers.toggleVisibility`) is drawn as a thin blue outline while
+  another layer of the glyph is edited, whatever Show Background says.
+- The background's nodes and handles are snap targets after the edited layer's own nodes and
+  handles and before guides. They count whenever the layer has a background; the Show
+  Background switch does not turn them off yet.
+- The darker canvas while the background is edited is drawn by the canvas's `tint` step; it
+  shows once `path.editBackground` exists.
+
 ## Text mode
 
 **Entering.** Tool `text` (T) puts a text cursor into the tab's string. Escape toggles between

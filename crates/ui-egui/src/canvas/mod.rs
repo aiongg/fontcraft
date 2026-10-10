@@ -6,6 +6,7 @@
 //! | [`view`] | (no drawing) the camera: line layout, fitting, the tools' view transform |
 //! | [`metrics`] | metric lines, zones and their names |
 //! | [`guides`] | guides, the grid, parameter metric lines, CJK grids, measurement labels |
+//! | [`background`] | the background and the other visible layers, behind the outline |
 //! | [`fill`] | filled glyphs, rasterised by the `render` crate into a texture |
 //! | [`nodes`] | nodes and handles with the display conventions of `docs/spec/03a` § 4 |
 //! | [`selection`] | the selection, and the active tool's overlays (marquee, snapping lines…) |
@@ -15,6 +16,7 @@
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
 //! ([`crate::tools_glue`]) after the frame is drawn.
 
+pub mod background;
 pub mod bbox;
 pub mod fill;
 pub mod guides;
@@ -69,6 +71,11 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             metrics::draw(&c, &lines, &marks, width, view::vertical_span(font, master), state.display.metrics_names);
         }
         guides::draw_lines(&c, &extras, &state.display);
+        if let Some(glyph) = tab.edited_glyph().and_then(|g| font.glyph(g))
+            && let Some(layer) = glyph.layer(&master.id)
+        {
+            background::draw(&c, font, glyph, layer, &state.display);
+        }
         let what = fill::Fill {
             doc: session.active().map(|d| (d.id, d.revision)).unwrap_or_default(),
             others: state.display.fill_preview,

@@ -492,6 +492,7 @@ milestone = "M3"
 summary = "The displayed background layer is drawn with its nodes and handles as well, not only as an outline."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "Built in M3.10: the background's nodes and handles drawn like the foreground's, while Show Background is on."
 
 [[command]]
 id = "view.showExtraNodes"
@@ -791,6 +792,7 @@ milestone = "M3"
 summary = "With Show Background on, the inactive side is drawn as a faint red outline behind the active side. The colour comes from the Appearance settings."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "Built in M3.10: a thin outline in the theme's background colour, behind the edited layer and the filled glyphs; components are resolved."
 
 [[behavior]]
 id = "background.snapping"
@@ -808,6 +810,7 @@ milestone = "M3"
 summary = "The Edit View canvas darkens a little while the background is the side being edited, as a mode indicator."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "M3.10: the canvas has the tint step (`canvas::background::tint`, colour `background_tint`); it shows once `path.editBackground` tracks the edited side."
 
 [[behavior]]
 id = "background.usedByFilters"
