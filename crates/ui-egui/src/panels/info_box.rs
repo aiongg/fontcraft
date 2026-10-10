@@ -10,13 +10,15 @@
 //! | anything else | X, Y of the box, width, height, lock | `selection.setPosition`; `transform.scale` about the reference point |
 //!
 //! With several points selected it adds the selected and the total point count; with two nodes,
-//! their distance.
+//! their distance. At its left a split square shows the edited glyph's colour label on its left
+//! half and the active layer's on its right half (`infoBox.showsColorLabels`), when either is
+//! set.
 //!
 //! While one of the Annotation tools is the chosen tool, the box shows the annotation palette
 //! instead (`infoBox.annotations`): one button per sub-tool, in the order of
 //! `fontcraft_tools::annotate::SUB_TOOLS`, each running `annotation.setTool`.
 
-use fontcraft_model::Shape;
+use fontcraft_model::{ColorLabel, Shape};
 use fontcraft_tools::TOOLS;
 use fontcraft_tools::annotate::SUB_TOOLS;
 use serde_json::{Map, Value, json};
@@ -37,6 +39,8 @@ struct Info {
     scale: Map<String, Value>,
     /// Selected points and points in the layer.
     counts: (usize, usize),
+    /// The colour labels of the edited glyph and of the active layer.
+    colors: (Option<ColorLabel>, Option<ColorLabel>),
 }
 
 fn read(app: &mut FontcraftApp) -> Option<Info> {
@@ -51,8 +55,15 @@ fn read(app: &mut FontcraftApp) -> Option<Info> {
             .map_or(0, |scene| scene.layer.shapes.iter().map(|s| if let Shape::Path(p) = s { p.nodes.len() } else { 0 }).sum()),
         _ => 0,
     };
+    let colors = match (app.session.font(), app.state.tab()) {
+        (Ok(font), Some(tab)) => (
+            tab.edited_glyph().and_then(|g| font.glyph(g)).and_then(|g| g.info.color),
+            crate::canvas::view::active_layer(font, tab).and_then(|l| l.info.color),
+        ),
+        _ => (None, None),
+    };
     let info = app.session.execute("selection.getInfo", &Value::Object(query)).ok()?;
-    Some(Info { info, reference, locked: app.state.panels.size_locked, place, scale, counts: (selected, total) })
+    Some(Info { info, reference, locked: app.state.panels.size_locked, place, scale, counts: (selected, total), colors })
 }
 
 fn num(v: &Value, key: &str) -> Option<f64> {
@@ -117,6 +128,7 @@ fn contents(ui: &mut egui::Ui, tokens: &Tokens, s: &Info, pending: &mut Pending)
         }
     };
     ui.horizontal(|ui| {
+        color_labels(ui, tokens, s.colors);
         if let Some(point) = widgets::point_grid(ui, tokens, "infoBox.reference", Some(&s.reference)) {
             pending.push(("infoBox.setReferencePoint", json!({ "point": point })));
         }
@@ -196,4 +208,26 @@ fn contents(ui: &mut egui::Ui, tokens: &Tokens, s: &Info, pending: &mut Pending)
             ui.label(format!("□ {total}")).on_hover_text("Points in the layer");
         }
     });
+}
+
+/// The glyph colour label on the left half of a square and the layer colour label on the right
+/// half; nothing when neither is set.
+fn color_labels(ui: &mut egui::Ui, tokens: &Tokens, (glyph, layer): (Option<ColorLabel>, Option<ColorLabel>)) {
+    if glyph.is_none() && layer.is_none() {
+        return;
+    }
+    let side = ui.spacing().interact_size.y;
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::hover());
+    let mid = rect.center().x;
+    let halves = [
+        (egui::Rect::from_min_max(rect.min, egui::pos2(mid, rect.max.y)), glyph),
+        (egui::Rect::from_min_max(egui::pos2(mid, rect.min.y), rect.max), layer),
+    ];
+    for (half, label) in halves {
+        if let Some(label) = label {
+            ui.painter().rect_filled(half, 0.0, crate::shell::context_menu::label_color(tokens, label));
+        }
+    }
+    ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(1.0, tokens.border), egui::StrokeKind::Inside);
+    response.on_hover_text("Glyph color (left) and layer color (right)");
 }

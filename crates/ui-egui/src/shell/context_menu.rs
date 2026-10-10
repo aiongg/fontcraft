@@ -16,19 +16,35 @@
 //! - An item runs through `run_from_shell` with its targets from the selection
 //!   (`tools_glue::with_targets`), plus what the click adds: the clicked segment, node or guide,
 //!   and the click position for the commands that place something.
+//! - The glyph section starts with the twelve colour label swatches and a cross
+//!   (`editView.contextMenu`): they set the edited glyph's colour, or with Alt held the active
+//!   layer's. It offers Exports, Locked and Show Glyph in Font View, and ends with the Copy
+//!   Glyph Names submenu.
+//!
+//! The Font View glyph menu (`fontView.glyphContextMenu`, [`font_view`]) opens on a right-click
+//! on a cell or a List View row. A glyph that is not selected becomes the selection first; on a
+//! selected glyph the menu acts on the whole selection. It holds the colour swatches (Alt: the
+//! layer colour in Font View's master), the Tags submenu (`fontView.contextMenu.tags`) and the
+//! Copy Glyph Names submenu, whose text goes to the system clipboard.
 
-use egui::{Align, Layout, Pos2};
+use std::collections::{BTreeSet, HashMap};
+
+use egui::{Align, Color32, Layout, Pos2, Sense, Stroke, vec2};
 use fontcraft_engine::params::TargetKind;
 use fontcraft_engine::{CommandSpec, Session, command_specs, find_command};
 use fontcraft_geom::Point;
+use fontcraft_model::ColorLabel;
 use fontcraft_tools::{Hit, HitResult, Scene, Selection};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::UI_COMMANDS;
+use super::font_view::columns::COLOR_LABEL_NAMES;
 use super::item_state::{self, GUIDE_PROPERTIES};
 use crate::app::FontcraftApp;
+use crate::panels::widgets;
 use crate::state::UiState;
+use crate::theme::Tokens;
 use crate::tools_glue::{self, Space};
 
 pub const CANVAS: &str = "canvas";
@@ -42,6 +58,13 @@ pub const GUIDE: &str = "canvas.guide";
 /// Shell commands that context menus show, with their rows' `context` (engine commands carry
 /// theirs in `CommandSpec::context`).
 const UI_CONTEXT: &[(&str, &[&str])] = &[("path.focusOnSelectedPath", &[NODE, PATH]), ("path.clearFocusOnPaths", &[CANVAS])];
+
+/// Engine commands the glyph section shows, whose registry entries list no context.
+const GLYPH_ITEMS: &[&str] = &["glyph.setExport"];
+
+/// The glyph section's Show Glyph in Font View: selects the edited glyph in Font View and shows
+/// Font View.
+pub const SHOW_IN_FONT_VIEW: &str = "contextMenu.showGlyphInFontView";
 
 /// The order of context menu items: the order of their inventory rows. A command missing here
 /// comes after these, in registry order.
@@ -60,7 +83,9 @@ const ORDER: &[&str] = &[
     "path.clearFocusOnPaths",
     "path.lockPath",
     "path.unlockPath",
+    "glyph.setExport",
     "glyph.toggleLocked",
+    SHOW_IN_FONT_VIEW,
     "path.expandOutline",
     "path.addPenPoint",
     "path.setMask",
@@ -194,6 +219,10 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
         }
     }
     all.push(Candidate { id: GUIDE_PROPERTIES, label: "Guide Properties…", context: &[GUIDE], spec: None });
+    for spec in GLYPH_ITEMS.iter().filter_map(|id| find_command(id)) {
+        all.push(Candidate { id: spec.id, label: spec.label, context: &[CANVAS], spec: Some(spec) });
+    }
+    all.push(Candidate { id: SHOW_IN_FONT_VIEW, label: "Show Glyph in Font View", context: &[CANVAS], spec: None });
     let rank = |id: &str| ORDER.iter().position(|o| *o == id).unwrap_or(ORDER.len());
     all.sort_by_key(|c| rank(c.id));
     let font = session.font().ok();
@@ -233,9 +262,18 @@ fn item(session: &Session, state: &UiState, at: Option<(&Scene, &Selection)>, c:
         label: c.label,
         enabled: check.is_ok(),
         disabled_reason: check.err(),
-        checked: at.and_then(|(scene, selection)| item_state::checked(scene, selection, c.id)),
+        checked: match c.id {
+            "glyph.setExport" => edited_exports(session, state),
+            _ => at.and_then(|(scene, selection)| item_state::checked(scene, selection, c.id)),
+        },
         alternate: ALTERNATES.contains(&c.id),
     }
+}
+
+/// Whether the edited glyph exports.
+fn edited_exports(session: &Session, state: &UiState) -> Option<bool> {
+    let font = session.font().ok()?;
+    font.glyph(state.tab()?.edited_glyph()?).map(|g| g.export)
 }
 
 /// Whether a shell command of [`UI_CONTEXT`] can run now.
@@ -305,6 +343,11 @@ pub fn params_for(app: &FontcraftApp, menu: &ContextMenu, id: &str) -> Value {
                 m.insert("guide".into(), json!({"scope": g.scope.as_str(), "index": g.index}));
             }
         }
+        "glyph.setExport" => {
+            let exports = edited_exports(&app.session, &app.state).unwrap_or(true);
+            m.insert("glyphs".into(), json!([menu.glyph]));
+            m.insert("export".into(), json!(!exports));
+        }
         "path.setMask" => {
             let shapes: Vec<usize> = m
                 .get("shapes")
@@ -336,6 +379,9 @@ pub fn steps_for(app: &FontcraftApp, menu: &ContextMenu, id: &'static str) -> Ve
     let params = params_for(app, menu, id);
     if id == GUIDE_PROPERTIES {
         return vec![("dialog.open", params)];
+    }
+    if id == SHOW_IN_FONT_VIEW {
+        return vec![("fontView.setSelection", json!({"glyphs": [menu.glyph]})), ("fontView.show", json!({}))];
     }
     let new_guide = match id {
         "guide.add" => with_scene(app, |scene, _| json!({"scope": "local", "index": scene.local_guides().len()})),
@@ -384,8 +430,10 @@ pub fn show(app: &mut FontcraftApp, ui: &egui::Ui, pending: &mut Vec<(&'static s
     }
     let mut open = true;
     let mut picked = None;
+    let mut action = None;
     let anchor = Pos2::new(menu.screen.x as f32, menu.screen.y as f32);
     let alt = ui.input(|i| i.modifiers.alt);
+    let tokens = app.tokens.clone();
     egui::Popup::new(egui::Id::new("fontcraft.canvas.contextMenu"), ui.ctx().clone(), anchor, ui.layer_id())
         .kind(egui::PopupKind::Menu)
         .layout(Layout::top_down_justified(Align::Min))
@@ -395,6 +443,11 @@ pub fn show(app: &mut FontcraftApp, ui: &egui::Ui, pending: &mut Vec<(&'static s
             for (index, section) in menu.sections.iter().enumerate() {
                 if index > 0 {
                     ui.separator();
+                }
+                if section.context == CANVAS
+                    && let Some(color) = swatches(ui, &tokens, CANVAS_SALT, alt)
+                {
+                    action = Some(if alt { GlyphAction::LayerColor(color) } else { GlyphAction::Color(color) });
                 }
                 for (at, item) in section.items.iter().enumerate() {
                     let replaced = section.items.get(at + 1).is_some_and(|next| next.alternate);
@@ -414,12 +467,287 @@ pub fn show(app: &mut FontcraftApp, ui: &egui::Ui, pending: &mut Vec<(&'static s
                     }
                 }
             }
+            if let Some(format) = copy_names_menu(ui) {
+                action = Some(GlyphAction::CopyNames(format));
+            }
         });
     if let Some(id) = picked {
         pending.extend(steps_for(app, &menu, id));
         open = false;
     }
+    if let Some(action) = action {
+        let layer =
+            app.session.font().ok().zip(app.state.tab()).and_then(|(font, tab)| crate::canvas::view::active_layer(font, tab)).map(|l| l.id.clone());
+        let target = GlyphMenu { glyphs: vec![menu.glyph.clone()], screen: [anchor.x, anchor.y], tags: Vec::new(), layer, pass: 0 };
+        run_glyph_action(app, &target, &action, pending);
+        open = false;
+    }
     if !open {
         app.tools.context_menu = None;
+    }
+}
+
+// ── Colour swatches and the Font View glyph menu ──
+
+/// The salt of the canvas menu's swatches (`widgets::id((CANVAS_SALT, "color", i))`).
+pub const CANVAS_SALT: &str = "canvas.contextMenu";
+/// The salt of the Font View glyph menu's swatches.
+pub const GLYPH_MENU_SALT: &str = "fontView.glyphMenu";
+/// Most tags the Tags submenu lists.
+pub const MAX_MENU_TAGS: usize = 512;
+
+/// The formats of Copy Glyph Names: the `glyph.copyGlyphNames` format and the item's label.
+pub const COPY_FORMATS: [(&str, &str); 6] = [
+    ("spaceSeparated", "Space Separated"),
+    ("onePerLine", "One per Line"),
+    ("commaSeparated", "Comma Separated"),
+    ("slashed", "Slashed"),
+    ("pythonList", "Python List"),
+    ("unicodes", "Unicodes"),
+];
+
+/// How many of the menu's glyphs carry a tag: a checkmark, a dash or nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TagMark {
+    All,
+    Some,
+    None,
+}
+
+/// An open Font View glyph context menu. It lives in egui's memory under [`glyph_menu_id`].
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct GlyphMenu {
+    /// The glyphs its items act on.
+    pub glyphs: Vec<String>,
+    /// Where it opens, in window points.
+    pub screen: [f32; 2],
+    /// Every tag the font uses, sorted, with how many of `glyphs` carry it. Empty: no Tags
+    /// submenu.
+    pub tags: Vec<(String, TagMark)>,
+    /// The layer the swatches colour while Alt is held: Font View's master.
+    pub layer: Option<String>,
+    /// The egui pass that last drew it: a menu Font View stopped drawing is dropped.
+    #[serde(skip)]
+    pub pass: u64,
+}
+
+/// What an item of a glyph menu does.
+#[derive(Clone, Debug, PartialEq)]
+pub enum GlyphAction {
+    /// A swatch (`Some(index)`) or the cross (`None`).
+    Color(Option<u8>),
+    /// A swatch or the cross with Alt held.
+    LayerColor(Option<u8>),
+    /// A tag of the Tags submenu: adds it to every glyph.
+    Tag(String),
+    /// A format of Copy Glyph Names.
+    CopyNames(&'static str),
+}
+
+pub fn glyph_menu_id() -> egui::Id {
+    egui::Id::new("fontcraft.fontView.glyphMenu")
+}
+
+/// The glyph menu for `glyphs`, opening at `screen`.
+pub fn glyph_menu(app: &FontcraftApp, glyphs: Vec<String>, screen: [f32; 2]) -> GlyphMenu {
+    let mut tags = Vec::new();
+    if let Ok(font) = app.session.font() {
+        let used: BTreeSet<&str> = font.glyphs.iter().flat_map(|g| g.info.tags.iter().map(String::as_str)).collect();
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for g in glyphs.iter().filter_map(|n| font.glyph(n)) {
+            for tag in &g.info.tags {
+                *counts.entry(tag.as_str()).or_insert(0) += 1;
+            }
+        }
+        let total = glyphs.iter().filter(|n| font.glyph(n).is_some()).count();
+        tags = used
+            .into_iter()
+            .take(MAX_MENU_TAGS)
+            .map(|tag| {
+                let mark = match counts.get(tag).copied().unwrap_or(0) {
+                    0 => TagMark::None,
+                    n if n == total => TagMark::All,
+                    _ => TagMark::Some,
+                };
+                (tag.to_string(), mark)
+            })
+            .collect();
+    }
+    GlyphMenu { glyphs, screen, tags, layer: super::font_view::master(app), pass: 0 }
+}
+
+/// The commands `action` runs on the menu's glyphs.
+pub fn glyph_steps(menu: &GlyphMenu, action: &GlyphAction) -> Vec<(&'static str, Value)> {
+    let color = |c: &Option<u8>| c.map_or(Value::Null, |i| json!(i));
+    match action {
+        GlyphAction::Color(c) => vec![("glyph.setColorLabel", json!({"glyphs": menu.glyphs, "color": color(c)}))],
+        GlyphAction::LayerColor(c) => {
+            let mut m = Map::new();
+            m.insert("glyphs".into(), json!(menu.glyphs));
+            if let Some(layer) = &menu.layer {
+                m.insert("layer".into(), json!(layer));
+            }
+            m.insert("color".into(), color(c));
+            vec![("glyph.setLayerColorLabel", Value::Object(m))]
+        }
+        GlyphAction::Tag(tag) => vec![("glyph.addTag", json!({"glyphs": menu.glyphs, "tag": tag}))],
+        GlyphAction::CopyNames(format) => vec![("glyph.copyGlyphNames", json!({"glyphs": menu.glyphs, "format": format}))],
+    }
+}
+
+/// Runs `action` as a click on its item does: Copy Glyph Names at once, its text to the system
+/// clipboard; the others as commands queued for the end of the frame.
+fn run_glyph_action(app: &mut FontcraftApp, menu: &GlyphMenu, action: &GlyphAction, pending: &mut Vec<(&'static str, Value)>) {
+    if matches!(action, GlyphAction::CopyNames(_)) {
+        if let Err(e) = invoke_glyph(app, menu, action) {
+            app.state.status = e;
+        }
+    } else {
+        pending.extend(glyph_steps(menu, action));
+    }
+}
+
+/// Runs `action` of `menu` now; Copy Glyph Names also puts its text on the system clipboard.
+pub fn invoke_glyph(app: &mut FontcraftApp, menu: &GlyphMenu, action: &GlyphAction) -> Result<Value, String> {
+    let mut result = Value::Null;
+    for (id, params) in glyph_steps(menu, action) {
+        result = app.run_from_shell(id, &params)?;
+    }
+    if matches!(action, GlyphAction::CopyNames(_))
+        && let Some(text) = result.get("text").and_then(Value::as_str)
+    {
+        app.clipboard_out = Some(text.to_string());
+    }
+    Ok(result)
+}
+
+/// The colour of a label as a swatch shows it.
+pub fn label_color(tokens: &Tokens, label: ColorLabel) -> Color32 {
+    match label {
+        ColorLabel::Index(i) => tokens.color_labels.get(usize::from(i)).copied().unwrap_or(tokens.text_dim),
+        ColorLabel::Rgba([r, g, b, _]) => {
+            let byte = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            Color32::from_rgb(byte(r), byte(g), byte(b))
+        }
+    }
+}
+
+/// The swatch row: a caption, the twelve label colours and a cross. Returns the colour picked
+/// (`Some(None)`: the cross).
+fn swatches(ui: &mut egui::Ui, tokens: &Tokens, salt: &str, alt: bool) -> Option<Option<u8>> {
+    let mut picked = None;
+    ui.label(egui::RichText::new(if alt { "Layer Color" } else { "Glyph Color" }).color(tokens.text_dim));
+    let side = ui.spacing().interact_size.y * 0.7;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = side * 0.25;
+        for (i, (color, name)) in tokens.color_labels.iter().zip(COLOR_LABEL_NAMES).enumerate() {
+            let (rect, _) = ui.allocate_exact_size(vec2(side, side), Sense::hover());
+            let response = ui.interact(rect, widgets::id((salt, "color", i)), Sense::click()).on_hover_text(name);
+            ui.painter().circle_filled(rect.center(), side / 2.0 - 1.0, *color);
+            if response.hovered() {
+                ui.painter().circle_stroke(rect.center(), side / 2.0, Stroke::new(1.0, tokens.text));
+            }
+            if response.clicked() {
+                picked = Some(u8::try_from(i).ok());
+            }
+        }
+        let (rect, _) = ui.allocate_exact_size(vec2(side, side), Sense::hover());
+        let response = ui.interact(rect, widgets::id((salt, "color", "none")), Sense::click()).on_hover_text("No Color");
+        let color = if response.hovered() { tokens.text } else { tokens.text_dim };
+        let r = rect.shrink(side * 0.2);
+        ui.painter().line_segment([r.left_top(), r.right_bottom()], Stroke::new(1.5, color));
+        ui.painter().line_segment([r.left_bottom(), r.right_top()], Stroke::new(1.5, color));
+        if response.clicked() {
+            picked = Some(None);
+        }
+    });
+    ui.separator();
+    picked
+}
+
+/// The Copy Glyph Names submenu. Returns the format picked.
+fn copy_names_menu(ui: &mut egui::Ui) -> Option<&'static str> {
+    let mut picked = None;
+    ui.menu_button("Copy Glyph Names", |ui| {
+        for (format, label) in COPY_FORMATS {
+            if ui.button(label).clicked() {
+                picked = Some(format);
+            }
+        }
+    });
+    picked
+}
+
+/// Opens the Font View glyph menu on a right-click on a laid-out cell or row, and draws the open
+/// one. Call before Font View's central area is placed: the click is tested against the cells
+/// of the last frame, inside the space left for them.
+pub fn font_view(app: &mut FontcraftApp, ui: &egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
+    let id = glyph_menu_id();
+    let area = ui.available_rect_before_wrap();
+    let click = ui.input(|i| if i.pointer.secondary_clicked() { i.pointer.interact_pos() } else { None });
+    if let Some(at) = click
+        && area.contains(at)
+        && app.dialog.is_none()
+        && ui.ctx().layer_id_at(at).is_none_or(|layer| layer == ui.layer_id())
+        && let Some(name) = app.font_view.laid_out.iter().find(|(_, r)| r.contains(at)).map(|(n, _)| n.clone())
+    {
+        let glyphs = if app.state.selected_glyphs.contains(&name) {
+            app.state.selected_glyphs.clone()
+        } else {
+            pending.push(("fontView.setSelection", json!({ "glyphs": [name] })));
+            vec![name]
+        };
+        let mut menu = glyph_menu(app, glyphs, [at.x, at.y]);
+        menu.pass = ui.ctx().cumulative_pass_nr();
+        ui.ctx().data_mut(|d| d.insert_temp(id, menu));
+        // The menu draws from the next frame on, so this click does not count as a click
+        // outside it.
+        return;
+    }
+    let Some(mut menu) = ui.ctx().data(|d| d.get_temp::<GlyphMenu>(id)) else { return };
+    let pass = ui.ctx().cumulative_pass_nr();
+    if app.dialog.is_some() || pass.saturating_sub(menu.pass) > 1 {
+        ui.ctx().data_mut(|d| d.remove::<GlyphMenu>(id));
+        return;
+    }
+    menu.pass = pass;
+    ui.ctx().data_mut(|d| d.insert_temp(id, menu.clone()));
+    let mut open = true;
+    let mut action = None;
+    let alt = ui.input(|i| i.modifiers.alt);
+    let tokens = app.tokens.clone();
+    let [x, y] = menu.screen;
+    let anchor = Pos2::new(x, y);
+    egui::Popup::new(id.with("popup"), ui.ctx().clone(), anchor, ui.layer_id())
+        .kind(egui::PopupKind::Menu)
+        .layout(Layout::top_down_justified(Align::Min))
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .open_bool(&mut open)
+        .show(|ui| {
+            if let Some(color) = swatches(ui, &tokens, GLYPH_MENU_SALT, alt) {
+                action = Some(if alt { GlyphAction::LayerColor(color) } else { GlyphAction::Color(color) });
+            }
+            if !menu.tags.is_empty() {
+                ui.menu_button("Tags", |ui| {
+                    for (tag, mark) in &menu.tags {
+                        let mut on = *mark == TagMark::All;
+                        let check = egui::Checkbox::new(&mut on, tag.as_str()).indeterminate(*mark == TagMark::Some);
+                        if ui.add(check).clicked() {
+                            action = Some(GlyphAction::Tag(tag.clone()));
+                        }
+                    }
+                });
+            }
+            if let Some(format) = copy_names_menu(ui) {
+                action = Some(GlyphAction::CopyNames(format));
+            }
+        });
+    if let Some(action) = action {
+        run_glyph_action(app, &menu, &action, pending);
+        open = false;
+    }
+    if !open {
+        ui.ctx().data_mut(|d| d.remove::<GlyphMenu>(id));
     }
 }

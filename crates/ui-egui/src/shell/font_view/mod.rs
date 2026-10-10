@@ -9,6 +9,7 @@
 //! | [`list`] | List View: header, sort, column order and visibility, inline edits |
 //! | [`status`] | the mode buttons and the status area: counts and the cell size slider |
 //! | [`images`] | cell outlines rasterised once per glyph and cell size |
+//! | [`inspector`] | the glyph inspector at the bottom left: the selected glyphs' properties |
 //!
 //! Everything here is view state (`UI_COMMANDS`). Font changes go through engine commands.
 
@@ -16,6 +17,7 @@ pub mod cache;
 pub mod columns;
 pub mod grid;
 pub mod images;
+pub mod inspector;
 pub mod list;
 pub mod status;
 
@@ -451,6 +453,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         });
         return;
     }
+    inspector::show(app, ui, pending);
+    super::context_menu::font_view(app, ui, pending);
     egui::CentralPanel::default().frame(frame).show(ui, |ui| match app.state.font_view.mode {
         ViewMode::Grid => grid::show(app, ui, pending),
         ViewMode::List => list::show(app, ui, pending),

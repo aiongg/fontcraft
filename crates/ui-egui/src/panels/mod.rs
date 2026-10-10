@@ -1,4 +1,4 @@
-//! The Palette, the Info box and the Edit View bottom bar.
+//! The Palette, the Info box, the Edit View bottom bar and the Selection Info window.
 //!
 //! | Module | Draws |
 //! |---|---|
@@ -11,6 +11,7 @@
 //! | [`info_box`] | the Info box over the canvas: the selection part, or the annotation palette |
 //! | [`bottom_bar`] | the zoom controls along the lower edge of an Edit View tab |
 //! | [`widgets`] | fields with the Info box editing rules, buttons, the nine-point grid |
+//! | [`selection_info`] | the Selection Info window: the selected glyphs' properties |
 //!
 //! Panels read engine state (the font and queries such as `selection.getInfo`) and act only by
 //! queueing commands with explicit targets; the app runs them after the frame. Their own
@@ -23,6 +24,7 @@ pub mod fit_curve;
 pub mod info_box;
 pub mod layers;
 pub mod palette;
+pub mod selection_info;
 pub mod stroke;
 pub mod transformations;
 pub mod widgets;
@@ -58,6 +60,13 @@ pub struct PanelState {
     /// Layers list filters.
     pub layers_current_master_only: bool,
     pub hide_backup_layers: bool,
+    /// The glyph inspector at the bottom left of Font View is hidden (`fontView.toggleInspector`).
+    pub inspector_hidden: bool,
+    /// The inspector shows production name, script, category and subcategory
+    /// (`fontView.toggleInspectorDetails`).
+    pub inspector_details: bool,
+    /// The Selection Info window is open (`edit.infoForSelection`).
+    pub selection_info: bool,
 }
 
 impl Default for PanelState {
@@ -69,13 +78,16 @@ impl Default for PanelState {
             fit_curve_range: None,
             layers_current_master_only: false,
             hide_backup_layers: false,
+            inspector_hidden: false,
+            inspector_details: false,
+            selection_info: false,
         }
     }
 }
 
 /// Draws the Palette (when shown), and for an Edit View tab its bottom bar and, while Show Info
-/// is on, the Info box over the canvas. Call before the canvas: the Info box sits on the space
-/// the panels leave.
+/// is on, the Info box over the canvas; then the Selection Info window while it is open. Call
+/// before the canvas: the Info box sits on the space the panels leave.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     if app.state.show_palette {
         palette::show(app, ui, pending);
@@ -86,6 +98,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             info_box::show(app, ui, pending);
         }
     }
+    selection_info::show(app, ui, pending);
 }
 
 /// The glyph the panels describe: the edited glyph, else the first glyph selected in Font View.

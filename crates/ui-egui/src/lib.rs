@@ -51,6 +51,8 @@ mod font_view_tests;
 #[cfg(test)]
 mod guide_edit_tests;
 #[cfg(test)]
+mod inspector_tests;
+#[cfg(test)]
 mod panels_tests;
 #[cfg(test)]
 mod stroke_tests;

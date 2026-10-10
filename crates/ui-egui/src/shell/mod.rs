@@ -50,6 +50,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (drawing::COMMANDS, drawing::run),
     (audit::COMMANDS, audit::run),
     (masters::COMMANDS, masters::run),
+    (font_view::inspector::COMMANDS, font_view::inspector::run),
 ];
 
 /// Every shell command, in module order.

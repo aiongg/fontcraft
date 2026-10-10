@@ -107,6 +107,9 @@ milestone = "M4"
 summary = "Opens or closes the glyph inspector at the bottom left of Font View (the disclosure button)."
 ref = "Font View › Glyph Properties"
 status = "handbook"
+guesses = [
+  "The inspector is shown when a document opens. Settled by observation.",
+]
 
 [[command]]
 id = "fontView.toggleInspectorDetails"
@@ -120,6 +123,9 @@ milestone = "M4"
 summary = "Expands or collapses the extra inspector rows for production name, script, category and subcategory (the chevron beside the Unicode field)."
 ref = "Font View › Glyph Properties"
 status = "handbook"
+guesses = [
+  "The extra rows start collapsed. Settled by observation.",
+]
 
 [[command]]
 id = "fontView.toggleMetricsOrientation"
@@ -358,12 +364,17 @@ label = "Info for Selection"
 menu = ["Edit"]
 shortcut = "Cmd+Alt+I"
 kind = "ui"
-params = "{}"
+params = "{open?: bool (default true)}"
 area = "font-view"
 milestone = "M4"
 summary = "Opens the Selection Info window for the selected glyphs, where name, Unicode values, production name, script, category, subcategory and sort name can be read and overridden."
 ref = "Font View › Glyph Properties"
 status = "handbook"
+notes = "Documented, not yet observed. The window describes the Font View selection, or in Edit View the edited glyph; its close button runs the command with `open: false`."
+guesses = [
+  "The menu item opens the window and does not toggle it; `open: false` closes it. Settled by observation.",
+  "In Edit View the window describes the edited glyph. Settled by observation.",
+]
 
 [[command]]
 id = "glyph.getInfo"
@@ -1000,6 +1011,13 @@ milestone = "M4"
 summary = "Shows and edits the properties of the selected glyphs at the bottom left of Font View. With several glyphs selected, differing values display as a mixed state and an edit applies to all of them."
 ref = "Font View › Glyph Properties"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M4.8: a column at Font View's left holds the inspector at its bottom; with a sidebar, the inspector sits at the bottom of the sidebar."
+guesses = [
+  "With several glyphs selected the Name field is read-only and shows Multiple Values, since glyph names are unique. Settled by observation.",
+  "The metric and kerning group fields are shown read-only until their commands exist (M5). Settled by M5.",
+  "A Unicode value typed with several glyphs selected goes to all of them, as for any other field. Settled by observation.",
+  "The orientation icon between the metric fields is left out until M5 (fontView.toggleMetricsOrientation). Settled by M5.",
+]
 
 [[panel]]
 id = "window.selectionInfo"
@@ -1018,6 +1036,11 @@ milestone = "M4"
 summary = "A separate window (Edit → Info for Selection) listing the properties of the selected glyphs, including the ones that can only be changed here such as the sort name. The exact field list beyond those named in the chapter is unconfirmed."
 ref = "Font View › Glyph Properties; Sort Name"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M4.8 with name, Unicode values, production name, script, category, subcategory, case, direction and sort name; case and direction are ours (05 question 15)."
+guesses = [
+  "Turning on the sort name check box only enables the field; the field's value is stored when it is committed. Turning it off removes the stored sort name (glyph.setSortName with null). Settled by observation.",
+  "The window is not modal and follows the selection while it is open. Settled by observation.",
+]
 
 [[panel]]
 id = "window.glyphInfo"
@@ -1048,6 +1071,12 @@ milestone = "M4"
 summary = "Menu shown by Ctrl-click or right-click on a glyph cell or on a multi-glyph selection, giving quick access to some glyph properties. Only the entries named in this chapter are listed; the menu has more."
 ref = "Font View › Glyph Properties; Copy Glyph Names"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation.",
+  "The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation.",
+  "With Alt held the swatches set the layer colour of Font View's master. Settled by observation.",
+]
 
 [[panel]]
 id = "fontView.sidebar"
@@ -1519,6 +1548,7 @@ milestone = "M4"
 summary = "When the selected glyphs differ in a text property, the field shows a grey Multiple Values placeholder. Typing a value replaces the property on every selected glyph."
 ref = "Font View › Glyph Properties"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontView.inspector.mixedExport"
@@ -1527,6 +1557,10 @@ milestone = "M4"
 summary = "When some selected glyphs export and others do not, the Exports checkbox shows a line (indeterminate) state."
 ref = "Font View › Glyph Properties"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A click on the mixed box makes every selected glyph export. Settled by observation.",
+]
 
 [[behavior]]
 id = "fontView.inspector.metricsFields"
@@ -1551,6 +1585,12 @@ milestone = "M4"
 summary = "In the Tags field, a comma or the Return key commits the typed text as a tag on all selected glyphs and draws it as a blue capsule. The field lists the tags only when every selected glyph has the same set; otherwise it shows Multiple Values."
 ref = "Font View › Glyph Properties › Tags"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Leaving the Tags field also commits the typed text as a tag; Escape drops it. Settled by observation.",
+  "Each capsule has a cross that removes the tag from every selected glyph (glyph.removeTag). Settled by observation.",
+  "Several tags pasted at once with commas are added one command each. Settled by observation.",
+]
 
 [[behavior]]
 id = "fontView.contextMenu.tags"
