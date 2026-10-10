@@ -6,7 +6,7 @@ _Updated: 2026-10-10, M3 waves 1 and 2, M3.1 and M3.2 integrated._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (679 tests; about 83,000 lines of Rust in 20 crates,
+- `cargo xtask ci` passes all nine steps (692 tests; about 84,700 lines of Rust in 20 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 142 of the 929 inventory commands exist (`docs/parity.md`); M3 has 181 commands, 114 of them
   live. Feature parity is about 7% (ROADMAP.md › Parity estimate).
@@ -25,19 +25,18 @@ _Updated: 2026-10-10, M3 waves 1 and 2, M3.1 and M3.2 integrated._
 | M3.1 | engine foundations: `params::Targets`, `Session::begin`/`preview`/`commit`/`cancel`, `layer.inspect`, the glyph lock, `geom` segments, grid rounding |
 | M3.2 | the canvas split (`shell/`, `canvas/`), display conventions, zoom and scroll, View toggles, tabs, keymap, cached menus; `crates/render`, `ui.screenshot`, `ui.render` |
 | Wave 1 | crates without commands: `tools` (M3.3 core), `audit` (M3.17, 34 of 36 outline checks), `io-svg` (M3.8), `pathops` (M3.6) |
+| M3.3 | pointer editing in the window: Select, Lasso, Hand, Zoom, snapping, keymap with `when`, selection commands, `ui.pointer`, `ui.key`, `ui.text`, `ui.tool.*` |
 | Wave 2 | engine commands: M3.4 nodes and Fit Curve, M3.5 transformations, M3.8 clipboard and SVG import, M3.9 guides, measuring and Dimensions, M3.10 background and layers, M3.16 annotations |
 
 Next, in this order:
 
-1. **M3.3 wiring: pointer editing.** Wire `crates/tools` into the canvas, with `ui.pointer`,
-   `ui.key`, `ui.text`, `ui.tool.select` and `ui.tool.list` (builder, main checkout).
-2. **Wave 3** (worktrees): the path-operation commands and the Knife tool on `pathops` (M3.6
+1. **Wave 3** (worktrees): the path-operation commands and the Knife tool on `pathops` (M3.6
    step 3), strokes and masks (M3.11), filters (M3.12, one worktree each).
-3. **M3.7, overlap removal at export** (builder). Static export keeps overlaps with a warning
+2. **M3.7, overlap removal at export** (builder). Static export keeps overlaps with a warning
    until then.
-4. **Wave 4**: drawing tools (M3.13), the tool files of M3.5, M3.9 and M3.16, Palette sections
+3. **Wave 4**: drawing tools (M3.13), the tool files of M3.5, M3.9 and M3.16, Palette sections
    and Info box (M3.15), audit commands and markers (M3.17).
-5. **Wave 5**: the dialog framework (builder), then one dialog per worktree (M3.14).
+4. **Wave 5**: the dialog framework (builder), then one dialog per worktree (M3.14).
 6. **M3.18**: the measures of `docs/plans/M3.md` § 5, then close the milestone.
 
 Decisions that hold for the rest of M3:
@@ -81,8 +80,9 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
 - **The reference app has not been run.** 52 rows are `observed`: 47 compiled-output rows
   checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos.
   About 450 open questions are listed at the ends of the notes.
-- **The M3 commands work only headless.** They run from the CLI, the control channel and MCP;
-  in the window a person can look at a glyph but not edit its outline until the M3.3 wiring lands.
+- **Most M3 commands work only headless.** They run from the CLI, the control channel and MCP;
+  in the window only the Select, Lasso, Hand and Zoom tools and the menu shortcuts reach them
+  (no drawing tools, panels, dialogs or context menus yet).
 - **linesweeper can hang** on rare inputs (plan § M3.6 "Spike result"); a thread cannot stop it,
   so the 10,000-case random-path test in `crates/pathops` is ignored in the gate.
 - **The compiler writes static fonts only.** TrueType and CFF, plain, WOFF and WOFF2; the core

@@ -14,7 +14,7 @@ _Last updated: 2026-10-10 (M3 waves 1 and 2: engine foundations, canvas and scre
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,638 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, tests | **~45%** of what the siblings' "infrastructure" row covers; missing: pointer and key injection, the dialog framework, panels |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~7%** |
-| Commands that exist (not: that behave like the reference) | **142 of 929** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **153 of 929** (`docs/parity.md`) |
 | Observed against the running reference | **52 rows**: 47 compiled-output rows checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
 ## Honest assessment (2026-10-10)
@@ -47,7 +47,7 @@ whose outlines FontCraft's match in 322 (the other 9 are source reading, allow-l
 `crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
 transforms; fontTools reads all of its output back.
 
-**What is real: editing by command (M3).** 142 of the 929 commands exist, 114 of them from M3.
+**What is real: editing by command (M3).** 153 of the 929 commands exist, 125 of them from M3.
 Every editing command takes explicit targets (shapes, nodes, segments, the foreground or the
 background) and runs the same from `fontcraft-cli run`, MCP and the control channel into the
 running window:
@@ -69,12 +69,13 @@ display conventions, metric lines and a fill preview; it zooms, scrolls and hold
 without a window, the same bytes every time. Three crates have no commands yet: `tools` (the
 Select, Lasso, Hand and Zoom tools, hit testing, snapping, the Edit View keymap), `pathops`
 (booleans, Remove Overlap, Correct Path Direction, extremes, Tidy up, Open Corner, Reconnect,
-Cut with Line, on linesweeper) and `audit` (34 of the 36 outline checks). 679 tests pass,
+Cut with Line, on linesweeper) and `audit` (34 of the 36 outline checks). 692 tests pass,
 including a sweep that runs every engine command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
-**What is not.** There is no editing with the pointer: the tools are not wired into the canvas
-(the M3.3 wiring), so a person at the window can look at a glyph but not edit its outline. From the
+**What is not.** In the window, the Select, Lasso, Hand and Zoom tools edit outlines with the
+pointer (M3.3), but there are no drawing tools, no context menus, and menu items are not greyed
+out by the selection. From the
 window's menus only the commands that need no parameters work: there are no dialogs, no Palette
 sections and no Info box. There are no path-operation commands (booleans, Remove Overlap,
 extremes, Tidy up…), no overlap removal on export (overlaps are kept with a warning until M3.7),
@@ -103,7 +104,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~8% | 142 of 929 commands; 4 of 33 tools written in `crates/tools` but none usable in the window; 2 of 170 panels as stubs |
+| **Breadth:** commands, tools and panels exist | ~8% | 153 of 929 commands; 4 of 33 tools usable in the window; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~3% | the M3 commands behave as the handbook describes them, but only through the CLI, the control channel and MCP, and none has been compared with the reference app |
 | **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands and the CLI. Missing: variable fonts, instances between masters, version conversion, a glyph database for production names |
 | **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). No variable font, no features, no hinting, no subroutines |
@@ -117,13 +118,10 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 The rest of **M3, Edit View drawing**, in the order of `docs/plans/M3.md` § 6:
 
-1. **M3.3 wiring: pointer editing.** The `tools` crate in the canvas: Select, Lasso, Hand and
-   Zoom with hit testing and snapping, the keymap, and the control methods `ui.pointer`,
-   `ui.key`, `ui.text`, `ui.tool.select` and `ui.tool.list`.
-2. **Wave 3**, in parallel: the path-operation commands and the Knife tool on `pathops`
+1. **Wave 3**, in parallel: the path-operation commands and the Knife tool on `pathops`
    (M3.6), strokes and masks (M3.11), and the filters, one each (M3.12).
-3. **M3.7, overlap removal at export**, with a per-glyph time limit; the M2 warning goes away.
-4. **Wave 4**: the drawing tools (M3.13), the tool files of transforms, guides and annotations,
+2. **M3.7, overlap removal at export**, with a per-glyph time limit; the M2 warning goes away.
+3. **Wave 4**: the drawing tools (M3.13), the tool files of transforms, guides and annotations,
    the Palette sections and Info box (M3.15), and the audit markers and commands (M3.17).
 5. **Wave 5**: the dialog framework, then one dialog each (M3.14).
 6. **M3.18, close**: the measures of `docs/plans/M3.md` § 5.
@@ -146,7 +144,7 @@ on, so the engine track, where oracles prove correctness, goes first.
   parameters, 1,751 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 23
   behaviour notes (about 150,000 words), all in our own words. Every M3 command's `params` name
   its targets; shortcuts carry a `when` (the context they apply in).
-- **Workspace:** 20 library crates in enforced layers, two apps, `xtask`; about 83,000 lines of Rust.
+- **Workspace:** 20 library crates in enforced layers, two apps, `xtask`; about 84,700 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry, atomic failure, the panic
@@ -302,7 +300,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 6 (4) |
-| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 🟡 plan accepted (`docs/plans/M3.md`). Done: M3.0 spec pass (targets in every command's params, `when` and `context` fields, D13 answered, 5 editor rows confirmed by tutorial videos); M3.1 engine foundations (one target resolver, interactions, `layer.inspect`, the glyph lock, segment geometry, grid rounding); M3.2 canvas, `render` crate, `ui.screenshot` and `ui.render`, zoom, scroll, tabs, View toggles; wave 2's engine commands: nodes and Fit Curve (M3.4), transformations (M3.5), clipboard and SVG import (M3.8), guides, measuring and Dimensions (M3.9), background and layers (M3.10), annotations (M3.16). Crates without commands yet: `tools` (M3.3 core), `pathops` (M3.6), `audit` (M3.17: 34 of 36 outline checks). Left: M3.3 wiring, path-op commands, M3.7, strokes, masks, filters, drawing tools, panels, dialogs, audit commands | 181 (114) |
+| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 🟡 plan accepted (`docs/plans/M3.md`). Done: M3.0 spec pass (targets in every command's params, `when` and `context` fields, D13 answered, 5 editor rows confirmed by tutorial videos); M3.1 engine foundations (one target resolver, interactions, `layer.inspect`, the glyph lock, segment geometry, grid rounding); M3.2 canvas, `render` crate, `ui.screenshot` and `ui.render`, zoom, scroll, tabs, View toggles; wave 2's engine commands: nodes and Fit Curve (M3.4), transformations (M3.5), clipboard and SVG import (M3.8), guides, measuring and Dimensions (M3.9), background and layers (M3.10), annotations (M3.16); M3.3 pointer editing in the window (Select, Lasso, Hand, Zoom, snapping, keymap, `ui.pointer`, `ui.key`). Crates without commands yet: `pathops` (M3.6), `audit` (M3.17: 34 of 36 outline checks). Left: path-op commands, M3.7, strokes, masks, filters, drawing tools, panels, dialogs, audit commands | 181 (125) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
@@ -316,7 +314,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 929 (142) |
+| | **Total** | | 929 (153) |
 
 ## Parity estimate
 
@@ -331,7 +329,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 44 | 20 | 10% | tabs, zoom and scroll work; missing: toolbar, settings window, shortcut editor, workspaces, title bar, sidebars |
 | Font View | 6 | 62 | 6 | 3% | list view, sidebar and filters, glyph data, Add Glyphs syntax, batch commands, inspector |
 | Edit View text mode | 4 | 25 | 1 | 0% | everything but the fill-preview toggle |
-| Drawing and editing outlines | 10 | 94 | 57 | 8% | node, segment, transform, clipboard and selection commands work headless; missing: every tool in the window (M3.3 wiring, M3.13), the Info box and Palette panels, bounding-box knobs, the Transformations dialog; nothing compared with the reference |
+| Drawing and editing outlines | 10 | 94 | 68 | 11% | node, segment, transform, clipboard and selection commands work headless; Select, Lasso, Hand and Zoom work in the window; missing: the drawing tools (M3.13), context menus, the Info box and Palette panels, bounding-box knobs, the Transformations dialog; nothing compared with the reference |
 | Path operations and filters | 6 | 66 | 7 | 3% | node-order commands (connect, close, make first, reverse, insert) work headless; the booleans, Remove Overlap, extremes, Tidy up, Open Corner and Cut with Line exist in `pathops` without commands; no filters, strokes or masks |
 | Reusing shapes | 7 | 77 | 0 | 0% | everything; components are only exported (as composites, decomposed where the format needs it) |
 | Layers | 3 | 21 | 15 | 15% | background and layer commands work headless; missing: the Layers panel, background drawing in the canvas, the Interpolate with Background dialog |
@@ -350,7 +348,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Quality checks | 3 | 33 | 0 | 2% | `audit` holds 34 of the 36 outline checks with their fixes named, but no `audit.*` command, live audit or markers exist; the other 264 checks |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
 | Agent surfaces | 4 | 11 | 3 | 30% | execute, list, inspect and batch over three surfaces; `ui.screenshot` and `ui.render`; no pointer or key injection, dialogs, MCP resources or prompts |
-| **Feature parity** | **117** | **929** | **142** | **~7%** | |
+| **Feature parity** | **117** | **929** | **153** | **~7%** | |
 
 ## Out of scope (by design or by law)
 
