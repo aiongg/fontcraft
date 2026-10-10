@@ -2,7 +2,7 @@
 //! guides, the ruler across contours and overlaps, point coordinates with italic deltas, the lines
 //! Edit View draws from font info, and Dimensions values per master.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 
