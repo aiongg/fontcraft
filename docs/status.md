@@ -2,11 +2,11 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-09, M2 done (every measure in `docs/plans/M2.md` § 5 met) and the M2.7 owner decisions built; M3's planning pass next._
+_Updated: 2026-10-10, M3 wave 1 integrated: the `tools`, `audit`, `io-svg` and `pathops` (spike) crates._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (516 tests; about 57,500 lines of Rust in 15 crates).
+- `cargo xtask ci` passes all nine steps (573 tests; about 67,000 lines of Rust in 19 crates).
   Built and run on Linux x86-64 with Rust 1.97.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
@@ -15,12 +15,12 @@ _Updated: 2026-10-09, M2 done (every measure in `docs/plans/M2.md` § 5 met) and
 
 ## Where to start
 
-**M3, Edit View drawing**, starting with its planning pass (`docs/execution-plan.md` § 3): list
-the M3 rows (`docs/parity.md` › By milestone: 210 commands), answer or keep the open questions in
-their notes, verify or drop the `memory` rows among them, group the rows into packages on
-disjoint crates, and write `docs/plans/M3.md` with measures for the owner to accept. M3 also owes
-static export its overlap removal (export keeps overlaps with a warning until then) and the
-export dialogs (`dialog.exportOtf`).
+**M3, Edit View drawing**, following `docs/plans/M3.md` § 6. Done: M3.0 (spec pass), the M3.6
+spike (linesweeper 0.5.0 chosen; its rare hang and failed assertion are in § M3.6 "Spike
+result"), and wave 1's crates without commands: `tools` (M3.3 core), `audit` (M3.17, 34 of 36
+outline checks), `io-svg` (M3.8). Next: the rest of the `pathops` crate (M3.6 step 2), M3.1
+engine foundations, then wave 2 (M3.4, M3.5 engine, M3.8 commands, M3.9 engine, M3.10, M3.16
+engine). Static export keeps overlaps with a warning until M3.7.
 
 M1 and M2 are done (`docs/plans/M1.md`, `docs/plans/M2.md`). M2 left on purpose: instances
 between masters (M9), CFF subroutines (before M12), production names (M4), the compile plan's

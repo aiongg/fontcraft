@@ -4,7 +4,7 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-09 (M2 done: static TrueType and CFF export in plain, WOFF and WOFF2 from the commands and the CLI, measured against fontc and fontmake; M3's planning pass next)._
+_Last updated: 2026-10-10 (M3 wave 1: the `tools`, `audit`, `io-svg` and `pathops` crates; linesweeper chosen for path operations)._
 
 ## Where we are
 
@@ -48,7 +48,7 @@ sources it measures the compiler: 332 compared with fontc, and every core table 
 equivalent or allow-listed with a reason in all of them; 331 compared with fontmake's CFF builds,
 whose outlines FontCraft's match in 322 (the other 9 are source reading, allow-listed).
 `crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
-transforms; fontTools reads all of its output back. 516 tests pass, including a sweep that runs every engine
+transforms; fontTools reads all of its output back. 573 tests pass, including a sweep that runs every engine
 command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
@@ -89,10 +89,9 @@ due a planning pass before they are built (`docs/execution-plan.md` § 3).
 
 1. **M3, Edit View drawing**: the `tools` crate, selection, the Draw tool, node editing,
    transforms, the renderer, `ui.pointer` and `ui.screenshot` on the control channel, path
-   operations (which also give static export its overlap removal). It starts with a planning
-   pass (`docs/execution-plan.md` § 3): list its rows, answer or keep its open questions, verify
-   its `memory` rows, and write `docs/plans/M3.md` with packages and measures for the owner to
-   accept.
+   operations (which also give static export its overlap removal), in the order of
+   `docs/plans/M3.md` § 6. Wave 1 is in; next are the rest of the `pathops` crate and M3.1
+   (engine foundations), then wave 2.
 2. Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
    orders them. Left from M2 for later milestones: instances between masters (M9), CFF
    subroutines (before M12), production names (M4), the compile plan's `productionNames` and
@@ -110,7 +109,7 @@ on, so the engine track, where oracles prove correctness, goes first.
 - **Specification:** 24 inventory files (919 commands, 33 tools, 170 panels, 45 settings, 241
   parameters, 1,741 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 22
   behaviour notes (about 127,000 words), all in our own words.
-- **Workspace:** 15 library crates in enforced layers, two apps, `xtask`; about 52,800 lines of Rust.
+- **Workspace:** 19 library crates in enforced layers, two apps, `xtask`; about 67,000 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry (26 engine commands), atomic
@@ -228,7 +227,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 6 (4) |
-| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ⬜ plan accepted (`docs/plans/M3.md`); M3.0 done: spec pass, targets in every command's params, `when` and `context` fields, D13 answered | 176 (7) |
+| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 🟡 plan accepted (`docs/plans/M3.md`); M3.0 done: spec pass, targets in every command's params, `when` and `context` fields, D13 answered. Crates without commands yet: `tools` (M3.3 core: Select, Lasso, Hand, Zoom, hit testing, snapping, selection, keymap), `audit` (M3.17: 34 of 36 outline checks), `io-svg` (M3.8: SVG and clipboard), `pathops` (M3.6 spike: union on linesweeper, equal to skia-pathops on 2,368 corpus layers) | 176 (7) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
