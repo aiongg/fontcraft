@@ -33,6 +33,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (view::COMMANDS, view::run),
     (palette::COMMANDS, palette::run),
     (selection::COMMANDS, selection::run),
+    (crate::dialogs::COMMANDS, crate::dialogs::run),
 ];
 
 /// Every shell command, in module order.

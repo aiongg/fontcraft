@@ -27,6 +27,8 @@ pub struct FontcraftApp {
     pub preview_tool: bool,
     /// The pointer tools and their input.
     pub tools: ToolsState,
+    /// The open dialog; while it is open the rest of the app takes no editing input.
+    pub dialog: Option<crate::dialogs::OpenDialog>,
     pub(crate) menu_cache: MenuCache,
     pub(crate) fill_cache: FillCache,
     themed: bool,
@@ -46,6 +48,7 @@ impl FontcraftApp {
             tokens: Tokens::dark(),
             preview_tool: false,
             tools: ToolsState::default(),
+            dialog: None,
             menu_cache: MenuCache::default(),
             fill_cache: FillCache::default(),
             themed: false,
@@ -127,6 +130,7 @@ impl FontcraftApp {
             self.themed = true;
         }
         tools_glue::sync(self);
+        crate::dialogs::frame_keys(self, ui.ctx());
         // The tools take their keys first (the Edit View keys have a `when`); the rest go to
         // the menu shortcuts.
         tools_glue::keys(self, ui.ctx());
@@ -142,8 +146,20 @@ impl FontcraftApp {
         } else {
             shell::font_view::show(self, ui, &mut pending);
         }
-        // Commands run after drawing, so a frame never sees a half-changed document.
+        crate::dialogs::show(self, ui);
+        // Commands run after drawing, so a frame never sees a half-changed document. While a
+        // dialog is open only view commands run. A menu item whose command has a dialog opens it.
         for (id, params) in pending {
+            if self.dialog.is_some() && !is_ui_command(id) {
+                continue;
+            }
+            let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
+            if empty && let Some(dialog) = crate::dialogs::for_command(id) {
+                if let Err(e) = crate::dialogs::open(self, &dialog, &serde_json::Map::new()) {
+                    self.state.status = e;
+                }
+                continue;
+            }
             let params = tools_glue::with_targets(self, id, params);
             let _ = self.run(id, &params);
         }

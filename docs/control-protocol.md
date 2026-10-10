@@ -44,10 +44,16 @@ for the next frame and replies when the frame arrives.
 | `ui.pointer` | `{events: [{kind, x, y, space?, mods?}]}` | drives the active tool like the mouse; see below |
 | `ui.key` | `{key, shift?, alt?, cmd?, ctrl?, action?}` | a key as the keyboard gives it; see below |
 | `ui.text` | `{text}` | types into the focused text field at the next frame (`{field: true}`); with none focused, each character is a `ui.key` tap (`{keys, handled}`) |
+| `ui.dialog.inspect` | | the open dialog: `{open, dialog, title, command, fields: [{id, label, kind, value, focused, min?, max?, choices?, default, doc}], editing, params, error, buttons}`; `{open: false}` when none is |
+| `ui.dialog.set` | `{field, value}` | gives a field of the open dialog a value and previews it; a number field also takes text. The `ui.dialog.inspect` reply |
+| `ui.dialog.confirm` | | OK: the preview becomes one undo step; `{confirmed, changed, command, params}` |
+| `ui.dialog.cancel` | | Cancel: the font as it was when the dialog opened; `{cancelled}` |
+| `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, or a field by its parameter's key (a checkbox toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`) |
 | `control.methods` | | this table |
 
-`ui.inspect` also names the active pointer tool (`tool`) and the running interaction
-(`interaction`, the label of a drag in progress, else `null`).
+`ui.inspect` also names the active pointer tool (`tool`), the running interaction
+(`interaction`, the label of a drag or an open dialog, else `null`) and the open dialog's id
+(`dialog`, else `null`).
 
 ### Pointer and keys
 
@@ -75,6 +81,18 @@ failed. Use `space: "screen"` with the Hand tool: it scrolls by the pointer's mo
 events, then `release`. The reply is the `ui.pointer` reply plus `handled` (whether anything
 took the key), and `command` and `result` (or `error`) when a menu shortcut ran.
 
+### Dialogs
+
+A dialog is a form over one command's parameters. Open it with the UI command `dialog.open`
+(`{dialog: "dialog.filterRoundCorners"}` or `{command: "filter.roundCorners"}`, with `params`
+for first values and targets). Each field's id is its parameter's key. Every change previews the
+command on the canvas inside an interaction (`ui.inspect` shows its label in `interaction`);
+`ui.dialog.confirm` keeps it as one undo step, `ui.dialog.cancel` puts the font back. `params`
+in `ui.dialog.inspect` is what OK runs: the same command with those parameters gives the same
+font. While a dialog is open, `ui.key` goes to it (`Return`, `Escape`, `Tab`, `ArrowUp`,
+`ArrowDown`, the rules of `dialog.fieldKeys`), `ui.text` types into its focused field, and
+editing commands fail with "an interaction is running".
+
 `revision` in `document.inspect` grows with every change to a document, whoever made it. Compare
 it to learn whether the font changed since you last looked.
 
@@ -84,8 +102,7 @@ The names and shapes follow the sibling apps so their agents' habits carry over.
 
 | Method | Params | Milestone |
 |---|---|---|
-| `ui.click` | `{id}` press the control with that stable id (`ui-design.md`) | M3 |
-| `ui.dialog.set` / `.confirm` / `.cancel` | `{field, value}` fill and submit the open dialog | M3 |
+| `ui.click` beyond dialogs | `{id}` press any control with a stable id (`ui-design.md`) | M3 |
 | `ui.set` | `{panel?, theme?, …}` | M3 |
 | `ui.resize` / `ui.focus` | | M3 |
 | `app.open` / `app.save` / `app.export` / `app.quit` | `{path}` … through the host (file dialogs, the browser's download) | M1 |

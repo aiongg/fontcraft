@@ -229,3 +229,33 @@ milestone = "M14"
 summary = "Shortcuts are stored in Mac notation. On Windows and Linux, Cmd maps to Ctrl and Alt stays Alt; a shortcut that already uses Ctrl together with Cmd gets a documented alternative, since the two would collide. The mapping table lives with the shortcut editor."
 ref = "FontCraft design, following the sibling apps"
 status = "inferred"
+
+[[command]]
+id = "dialog.open"
+label = "Open Dialog"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{dialog: id | command: id, params?: {…}} → the open dialog as ui.dialog.inspect shows it"
+area = "ui-chrome"
+milestone = "M3"
+summary = "Opens a command's dialog, by the dialog's id or by the command it runs. Parameters of its fields set their first values; the others (glyph, glyphs, layer, points…) say what it acts on, else the selection does. A menu item whose command has a dialog opens it the same way. Agents fill it with ui.dialog.set and close it with ui.dialog.confirm or ui.dialog.cancel."
+ref = "FontCraft design (decision 0004, item 6)"
+status = "inferred"
+
+[[behavior]]
+id = "dialog.livePreview"
+area = "ui-chrome"
+milestone = "M3"
+summary = "A dialog is a form over its command's parameters. Every change of a field shows the command's result on the canvas at once, computed from the font as it was when the dialog opened, without an undo step. OK keeps the last preview as one undo step labelled with the dialog's title; Cancel puts back the font the dialog opened on. Filling the dialog and pressing OK gives the same font as running the command with the same parameters. Every filter with parameters has a dialog generated from its filter.list schema. While a dialog is open the rest of the app takes no editing input."
+ref = "FontCraft design (decision 0004, item 6)"
+status = "inferred"
+
+[[behavior]]
+id = "dialog.fieldKeys"
+area = "ui-chrome"
+milestone = "M3"
+summary = "In a dialog's number field, Return takes the typed value, Escape drops it and leaves the field, Tab and Shift+Tab take it and move to the next or previous field, Up and Down change the value by 1 and by 10 with Shift, each change previewed. Text that is not a value in the field's range is refused and the field keeps its value. With no field taking the keyboard, Return is OK and Escape is Cancel."
+ref = "Edit View › Measuring › Measuring with the Info box (the field rules); platform convention (Return and Escape)"
+status = "inferred"
+notes = "The field rules follow the handbook's Info box rows infoBox.fieldEditing and infoBox.arrowKeyStepping; they are documented for the Info box, not for dialogs, and not yet observed in a dialog."

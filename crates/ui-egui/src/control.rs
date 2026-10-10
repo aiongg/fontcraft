@@ -17,6 +17,7 @@ use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerKind};
 use serde_json::{Value, json};
 
 use crate::app::FontcraftApp;
+use crate::dialogs::{self, DialogKey};
 use crate::shell::{keymap, menus};
 use crate::tools_glue::{self, MAX_POINTER_EVENTS, RawPointer, Space};
 
@@ -44,6 +45,20 @@ pub const METHODS: &[(&str, &str)] = &[
         "{key, shift?, alt?, cmd?, ctrl?, action?: tap | press | release (default tap)} a key as the keyboard gives it: the tools' keys first, then the menu shortcuts; returns {handled, command?, result?, tool, busy, interaction, selection, overlays, errors}",
     ),
     ("ui.text", "{text} type into the focused text field; with none focused, each character is a ui.key tap; returns {field} or {keys, handled}"),
+    (
+        "ui.dialog.inspect",
+        "{} the open dialog: {open, dialog, title, command, fields: [{id, label, kind, value, focused, min?, max?, choices?, default, doc}], editing, params (what OK runs), error, buttons}; {open: false} when none is",
+    ),
+    (
+        "ui.dialog.set",
+        "{field, value} give a field of the open dialog a value (a number field also takes text) and preview it; returns ui.dialog.inspect's reply",
+    ),
+    ("ui.dialog.confirm", "{} OK: keep the preview as one undo step; returns {confirmed, changed, command, params}"),
+    ("ui.dialog.cancel", "{} Cancel: the font as it was when the dialog opened; returns {cancelled}"),
+    (
+        "ui.click",
+        "{id} press a control of the open dialog: `ok`, `cancel`, or a field by its parameter's key (a checkbox toggles, a number field takes the keyboard for ui.text and ui.key)",
+    ),
     ("control.methods", "{} this list"),
 ];
 
@@ -212,6 +227,7 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
             set(&mut state, "editing", json!(app.state.editing()));
             set(&mut state, "tool", json!(app.tools.toolbox.active_id()));
             set(&mut state, "interaction", json!(app.session.interaction()));
+            set(&mut state, "dialog", json!(app.dialog.as_ref().map(|d| d.id.as_str())));
             Ok(state)
         }
         "ui.menu.list" => serde_json::to_value(menus::menu_tree(&app.session)).map_err(|e| e.to_string()),
@@ -251,6 +267,9 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
             if text.chars().count() > MAX_TEXT {
                 return Err(format!("ui.text: at most {MAX_TEXT} characters"));
             }
+            if dialogs::type_text(app, text) {
+                return Ok(json!({"field": true}));
+            }
             if tools_glue::queue_text(app, text) {
                 return Ok(json!({"field": true}));
             }
@@ -262,6 +281,18 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
                 }
             }
             Ok(json!({"keys": text.chars().count(), "handled": handled}))
+        }
+        "ui.dialog.inspect" => Ok(dialogs::inspect(app)),
+        "ui.dialog.set" => {
+            let field = params.get("field").and_then(Value::as_str).ok_or("ui.dialog.set: `field` (a field id) is required")?;
+            let value = params.get("value").ok_or("ui.dialog.set: `value` is required")?;
+            dialogs::set(app, field, value).map_err(|e| format!("ui.dialog.set: {e}"))
+        }
+        "ui.dialog.confirm" => dialogs::confirm(app).map_err(|e| format!("ui.dialog.confirm: {e}")),
+        "ui.dialog.cancel" => dialogs::cancel(app).map_err(|e| format!("ui.dialog.cancel: {e}")),
+        "ui.click" => {
+            let id = params.get("id").and_then(Value::as_str).ok_or("ui.click: `id` (a control id) is required")?;
+            dialogs::click(app, id).map_err(|e| format!("ui.click: {e}"))
         }
         "control.methods" => Ok(json!(METHODS.iter().map(|(m, doc)| json!({"method": m, "params": doc})).collect::<Vec<_>>())),
         other => Err(format!("unknown method `{other}` (see control.methods)")),
@@ -327,8 +358,21 @@ enum KeyAction {
     Release,
 }
 
-/// A key for `ui.key` and `ui.text`: the tools' keys first, then the menu shortcuts.
+/// A key for `ui.key` and `ui.text`: an open dialog's keys first, then the tools' keys, then
+/// the menu shortcuts. While a dialog is open nothing else takes a key.
 fn key(app: &mut FontcraftApp, name: &str, mods: Modifiers, action: KeyAction) -> Value {
+    if app.dialog.is_some() {
+        let result = match DialogKey::parse(name) {
+            Some(k) if action != KeyAction::Release && !mods.cmd && !mods.ctrl && !mods.alt => dialogs::key(app, k, mods.shift),
+            _ => None,
+        };
+        let mut reply = dialogs::inspect(app);
+        set(&mut reply, "handled", json!(result.is_some()));
+        if let Some(Err(e)) = result {
+            set(&mut reply, "error", json!(e));
+        }
+        return reply;
+    }
     let tool_key = Key::parse(name).filter(|_| app.state.tab().is_some());
     let mut errors = Vec::new();
     let mut handled = false;

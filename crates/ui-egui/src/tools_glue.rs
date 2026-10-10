@@ -387,6 +387,10 @@ pub fn collect(tools: &mut ToolsState, ui: &egui::Ui, response: &egui::Response,
 /// Hands the pointer input collected during the frame to the tools. `true` when there was any.
 pub fn dispatch_queued(app: &mut FontcraftApp) -> bool {
     let queued = std::mem::take(&mut app.tools.queued);
+    if app.dialog.is_some() {
+        // The canvas takes no pointer input while a dialog is open.
+        return false;
+    }
     let any = !queued.is_empty();
     for q in queued {
         match q {
@@ -409,7 +413,7 @@ pub fn keys(app: &mut FontcraftApp, ctx: &egui::Context) {
         let text = std::mem::take(&mut app.tools.pending_text);
         ctx.input_mut(|i| i.events.push(Event::Text(text)));
     }
-    if app.state.tab().is_none() || app.tools.text_focus {
+    if app.state.tab().is_none() || app.tools.text_focus || app.dialog.is_some() {
         return;
     }
     let events = ctx.input(|i| i.events.clone());

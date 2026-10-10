@@ -60,6 +60,8 @@ pub struct Tokens {
     pub locked_point: Color32,
     /// The Knife tool's cutting line while it is dragged.
     pub knife_line: Color32,
+    /// Messages that say what went wrong (a dialog's failed preview).
+    pub error_text: Color32,
     pub radius: u8,
     pub font_size: f32,
     /// Outline stroke width in Edit View, in points.
@@ -95,6 +97,12 @@ pub struct Tokens {
     pub fit_margin: f32,
     pub tab_min_width: f32,
     pub palette_width: f32,
+    /// Distance from the window's top edge to a dialog.
+    pub dialog_top: f32,
+    /// Width of a number field in a dialog.
+    pub dialog_field_width: f32,
+    /// Gap between a dialog's rows and columns.
+    pub dialog_spacing: f32,
     /// Side of a glyph cell in Font View, in points.
     pub cell_size: f32,
     /// Height of the name line under a glyph cell.
@@ -141,6 +149,7 @@ impl Tokens {
             hover_point: Color32::from_rgb(0x2d, 0x8c, 0xeb),
             locked_point: Color32::from_rgb(0xe0, 0x28, 0x28),
             knife_line: Color32::from_rgb(0xe0, 0x28, 0x28),
+            error_text: Color32::from_rgb(0xe0, 0x50, 0x50),
             radius: 3,
             font_size: 12.0,
             outline_width: 1.5,
@@ -164,6 +173,9 @@ impl Tokens {
             fit_margin: 0.08,
             tab_min_width: 72.0,
             palette_width: 220.0,
+            dialog_top: 48.0,
+            dialog_field_width: 72.0,
+            dialog_spacing: 8.0,
             cell_size: 64.0,
             cell_label_height: 16.0,
             cell_gap: 4.0,
@@ -197,6 +209,8 @@ impl Tokens {
         visuals.override_text_color = Some(self.text);
         visuals.selection.bg_fill = self.row_selected;
         visuals.widgets.hovered.bg_fill = self.hover;
+        // Checkboxes and other boxed widgets stand out from the panel they sit on.
+        visuals.widgets.inactive.bg_fill = self.panel_darker;
         visuals.widgets.noninteractive.bg_stroke.color = self.border;
         ctx.set_visuals(visuals);
     }
