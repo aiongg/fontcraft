@@ -54,6 +54,7 @@ pub struct Painting<'a> {
 /// Draws Edit View for the showing tab, and queues the view commands its input asks for.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
     audit_markers::refresh(app);
+    crate::shell::context_menu::show(app, ui, pending);
     let FontcraftApp { session, state, tokens, fill_cache, preview_tool, tools, .. } = app;
     let Some(tab) = state.tab().cloned() else { return };
     let frame = egui::Frame::NONE.fill(tokens.canvas);

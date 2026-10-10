@@ -1,5 +1,5 @@
-//! The shell: menus, keymap, tab strip, status bar, Font View, Palette, the tool and selection
-//! commands, and the shell commands.
+//! The shell: menus, context menus, keymap, tab strip, status bar, Font View, Palette, the tool
+//! and selection commands, and the shell commands.
 //!
 //! Shell commands change view and window state only; everything else is an engine command. Each
 //! module lists its own commands ([`MODULES`]), so a package adds a module instead of editing a
@@ -7,6 +7,7 @@
 
 pub mod annotation;
 pub mod audit;
+pub mod context_menu;
 pub mod drawing;
 pub mod font_view;
 pub mod keymap;

@@ -14,19 +14,24 @@
 //! Commands that return a `selection` for the edited glyph replace the tab's selection with it
 //! (decision 0004, "What is the selection after an edit?").
 
+use std::collections::BTreeSet;
+
 use egui::{Event, PointerButton, Pos2, Rect};
 use fontcraft_engine::params::TargetKind;
+use fontcraft_engine::{CommandSpec, Session};
 use fontcraft_geom::Point;
 use fontcraft_model::Font;
 use fontcraft_tools::{
-    Action, Context, Key, KeyEvent, Modifiers, Output, PointerEvent, PointerKind, Scene, Selection, ToolSettings, Toolbox, View, ViewChange,
+    Action, Context, HitResult, Key, KeyEvent, Modifiers, Output, PointerEvent, PointerKind, Scene, Selection, ToolSettings, Toolbox, View,
+    ViewChange, hit_test,
 };
 use serde_json::{Map, Value, json};
 
 use crate::app::FontcraftApp;
 use crate::canvas::view;
 use crate::dialogs;
-use crate::state::{Tab, TabView};
+use crate::shell::context_menu::{self, ContextMenu};
+use crate::state::{Tab, TabView, UiState};
 use crate::theme::Tokens;
 
 /// Most pointer events one `ui.pointer` request, or one frame, may carry.
@@ -54,6 +59,8 @@ pub struct RawPointer {
 enum Queued {
     Pointer(RawPointer),
     Modifiers(Modifiers),
+    /// A right-click (or a Mac Ctrl+click) at this window point: open the context menu.
+    Context(Point),
 }
 
 /// The interaction a tool began, and what to put back if it is cancelled.
@@ -85,6 +92,11 @@ pub struct ToolsState {
     pub(crate) text_focus: bool,
     /// Text from `ui.text` for the focused text field, typed at the next frame.
     pending_text: String,
+    /// A Mac Ctrl+press on the canvas, held back until it turns out to be a click (the context
+    /// menu) or a drag (the tools).
+    ctrl_press: Option<(Pos2, egui::Modifiers)>,
+    /// The open canvas context menu.
+    pub(crate) context_menu: Option<ContextMenu>,
 }
 
 impl ToolsState {
@@ -349,14 +361,16 @@ pub fn key_mods(m: egui::Modifiers) -> Modifiers {
 }
 
 /// Collects the canvas's pointer input of this frame. [`dispatch_queued`] hands it to the tools
-/// once the frame is drawn. Only the primary button: the middle button scrolls, the secondary
-/// one is for context menus.
+/// once the frame is drawn. The primary button goes to the tools, the middle button scrolls, and
+/// the secondary button opens the context menu. On the Mac a Ctrl+click opens it too, while a
+/// Ctrl+drag still reaches the tools.
 pub fn collect(tools: &mut ToolsState, ui: &egui::Ui, response: &egui::Response, rect: Rect) {
     tools.canvas = Some(rect);
     let over = response.hovered();
-    let (events, mods, double) = ui.input(|i| {
+    let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
+    let (events, mods, double, dragging) = ui.input(|i| {
         let double = i.pointer.button_double_clicked(PointerButton::Primary).then(|| i.pointer.interact_pos()).flatten();
-        (i.events.clone(), i.modifiers, double)
+        (i.events.clone(), i.modifiers, double, i.pointer.is_decidedly_dragging())
     });
     let to_point = |p: Pos2| Point::new(f64::from(p.x), f64::from(p.y));
     let queue = |tools: &mut ToolsState, kind: PointerKind, at: Pos2, m: egui::Modifiers| {
@@ -366,13 +380,36 @@ pub fn collect(tools: &mut ToolsState, ui: &egui::Ui, response: &egui::Response,
     };
     for event in events {
         match event {
+            Event::PointerMoved(at) if tools.ctrl_press.is_some() => {
+                if dragging && let Some((from, m)) = tools.ctrl_press.take() {
+                    tools.pressed = true;
+                    queue(tools, PointerKind::Down, from, m);
+                    queue(tools, PointerKind::Drag, at, mods);
+                }
+            }
             Event::PointerMoved(at) if tools.pressed => queue(tools, PointerKind::Drag, at, mods),
             Event::PointerMoved(at) if over && rect.contains(at) => queue(tools, PointerKind::Move, at, mods),
             Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers }
-                if over && rect.contains(pos) && !tools.pressed =>
+                if over && rect.contains(pos) && !tools.pressed && tools.ctrl_press.is_none() =>
             {
-                tools.pressed = true;
-                queue(tools, PointerKind::Down, pos, modifiers);
+                if mac && modifiers.ctrl && !modifiers.mac_cmd && !tools.toolbox.busy() {
+                    tools.ctrl_press = Some((pos, modifiers));
+                } else {
+                    tools.pressed = true;
+                    queue(tools, PointerKind::Down, pos, modifiers);
+                }
+            }
+            Event::PointerButton { button: PointerButton::Primary, pressed: false, .. } if tools.ctrl_press.is_some() => {
+                if let Some((from, _)) = tools.ctrl_press.take()
+                    && tools.queued.len() < MAX_POINTER_EVENTS
+                {
+                    tools.queued.push(Queued::Context(to_point(from)));
+                }
+            }
+            Event::PointerButton { pos, button: PointerButton::Secondary, pressed: false, .. } if over && rect.contains(pos) => {
+                if tools.queued.len() < MAX_POINTER_EVENTS {
+                    tools.queued.push(Queued::Context(to_point(pos)));
+                }
             }
             Event::PointerButton { pos, button: PointerButton::Primary, pressed: false, modifiers } if tools.pressed => {
                 tools.pressed = false;
@@ -408,6 +445,11 @@ pub fn dispatch_queued(app: &mut FontcraftApp) -> bool {
             }
             Queued::Modifiers(m) => {
                 modifiers(app, m);
+            }
+            Queued::Context(at) => {
+                if let Err(e) = context_menu::open(app, at, Space::Screen) {
+                    app.state.status = e;
+                }
             }
         }
     }
@@ -464,11 +506,28 @@ pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
     if !empty || spec.targets.is_empty() {
         return params;
     }
-    let (Ok(font), Some(tab)) = (app.session.font(), app.state.tab()) else { return params };
-    let Some(scene) = scene(font, tab) else { return params };
-    let all = tab.selection.targets(&scene);
+    match selection_targets(&app.session, &app.state, spec) {
+        Some(m) => Value::Object(m),
+        None => params,
+    }
+}
+
+/// The target parameters of `spec` that the showing tab's selection supplies: `glyph` and
+/// `layer`, and each list the command takes that the selection fills. `None` when no glyph is
+/// being edited.
+///
+/// A command that takes `segments` but not `points` gets the selected segments
+/// ([`selected_segments`]); one that takes `shapes` but not `points` also gets the paths whose
+/// on-curve nodes are all selected, which is what a selected path is.
+pub fn selection_targets(session: &Session, state: &UiState, spec: &CommandSpec) -> Option<Map<String, Value>> {
+    let font = session.font().ok()?;
+    let tab = state.tab()?;
+    let scene = scene(font, tab)?;
+    let selection = &tab.selection;
+    let all = selection.targets(&scene);
+    let takes_points = spec.targets.contains(&TargetKind::Points);
     let mut m = Map::new();
-    let mut copy = |key: &str| {
+    let copy = |m: &mut Map<String, Value>, key: &str| {
         if let Some(v) = all.get(key) {
             m.insert(key.into(), v.clone());
         }
@@ -476,19 +535,108 @@ pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
     for kind in spec.targets {
         match kind {
             TargetKind::Layer => {
-                copy("glyph");
-                copy("layer");
+                copy(&mut m, "glyph");
+                copy(&mut m, "layer");
             }
-            TargetKind::Points => copy("points"),
-            TargetKind::Shapes => copy("shapes"),
-            TargetKind::Anchors => copy("anchors"),
-            TargetKind::Guides => copy("guides"),
-            TargetKind::Annotations => copy("annotations"),
+            TargetKind::Points => copy(&mut m, "points"),
+            TargetKind::Segments if !takes_points => {
+                let segments = selected_segments(&scene, selection);
+                if !segments.is_empty() {
+                    m.insert("segments".into(), Value::Array(segments.iter().map(|&(s, n)| json!([s, n])).collect()));
+                }
+            }
+            TargetKind::Shapes => {
+                let mut shapes: BTreeSet<usize> = selection.shapes.clone();
+                if !takes_points {
+                    shapes.extend(selected_paths(&scene, selection));
+                }
+                if !shapes.is_empty() {
+                    m.insert("shapes".into(), Value::Array(shapes.iter().map(|&s| json!(s)).collect()));
+                }
+            }
+            TargetKind::Anchors => copy(&mut m, "anchors"),
+            TargetKind::Guides => copy(&mut m, "guides"),
+            TargetKind::Annotations => copy(&mut m, "annotations"),
             TargetKind::Glyphs | TargetKind::Segments => {}
         }
     }
     if spec.targets.contains(&TargetKind::Glyphs) && !m.contains_key("glyph") {
         m.insert("glyphs".into(), json!([scene.glyph]));
     }
-    Value::Object(m)
+    Some(m)
+}
+
+/// The paths of `scene` whose on-curve nodes are all in `selection`.
+pub fn selected_paths(scene: &Scene, selection: &Selection) -> Vec<usize> {
+    let touched: BTreeSet<usize> = selection.points.iter().map(|&(s, _)| s).collect();
+    touched
+        .into_iter()
+        .filter(|&shape| {
+            scene.path(shape).is_some_and(|path| {
+                let mut on_curve = path.nodes.iter().enumerate().filter(|(_, n)| n.on_curve()).peekable();
+                on_curve.peek().is_some() && on_curve.all(|(i, _)| selection.points.contains(&(shape, i)))
+            })
+        })
+        .collect()
+}
+
+/// The selected segments of `scene`, by the node that ends them: those whose two end nodes or
+/// one of whose handles are in `selection`.
+pub fn selected_segments(scene: &Scene, selection: &Selection) -> Vec<(usize, usize)> {
+    let touched: BTreeSet<usize> = selection.points.iter().map(|&(s, _)| s).collect();
+    let mut out = Vec::new();
+    for shape in touched {
+        let Some(path) = scene.path(shape) else { continue };
+        let has = |node: usize| selection.points.contains(&(shape, node));
+        for seg in fontcraft_tools::segment::segments(shape, path) {
+            if (has(seg.start) && has(seg.end)) || seg.handles.iter().any(|&h| has(h)) {
+                out.push((shape, seg.end));
+            }
+        }
+    }
+    out
+}
+
+/// Commands that take selection targets but act on the whole layer when given none (their
+/// params docs say so), so they stay enabled without a selection.
+const WHOLE_LAYER_WITHOUT_TARGETS: &[&str] = &["edit.copy", "edit.cut", "path.expandOutline", "path.expandOutlineForAllMasters"];
+
+/// The target lists a selection can fill, their parameter keys, and what to select for them.
+const OBJECT_TARGETS: &[(TargetKind, &str, &str)] = &[
+    (TargetKind::Points, "points", "nodes"),
+    (TargetKind::Segments, "segments", "segments"),
+    (TargetKind::Shapes, "shapes", "paths or components"),
+    (TargetKind::Anchors, "anchors", "anchors"),
+    (TargetKind::Guides, "guides", "guides"),
+    (TargetKind::Annotations, "annotations", "annotations"),
+];
+
+/// Whether the showing tab's selection gives `spec` what it acts on; the error says what to
+/// select. A command that takes no target lists, or that takes `glyphs` (it then acts on whole
+/// glyphs), needs no selection. Menus grey out an item for which this fails.
+pub fn selection_supplies(session: &Session, state: &UiState, spec: &CommandSpec) -> Result<(), String> {
+    let wanted: Vec<&(TargetKind, &str, &str)> = OBJECT_TARGETS.iter().filter(|(k, _, _)| spec.targets.contains(k)).collect();
+    if wanted.is_empty() || spec.targets.contains(&TargetKind::Glyphs) || WHOLE_LAYER_WITHOUT_TARGETS.contains(&spec.id) {
+        return Ok(());
+    }
+    let what = match wanted.as_slice() {
+        [one] => one.2.to_string(),
+        [a, b] => format!("{} or {}", a.2, b.2),
+        _ => "something".to_string(),
+    };
+    let Some(m) = selection_targets(session, state, spec) else {
+        return Err(format!("edit a glyph and select {what} first"));
+    };
+    if wanted.iter().any(|(_, key, _)| m.contains_key(*key)) { Ok(()) } else { Err(format!("select {what} first")) }
+}
+
+/// The edited glyph's point under the window or font point `at`, and the object there.
+pub(crate) fn hit_at(app: &mut FontcraftApp, at: Point, space: Space) -> Result<(Point, Option<HitResult>), String> {
+    with_tool(app, |_, cx| {
+        let pos = match space {
+            Space::Font => at,
+            Space::Screen => cx.view.to_font(at),
+        };
+        (pos, hit_test(cx.scene, &cx.view, pos, cx.settings.hit_tolerance))
+    })
 }

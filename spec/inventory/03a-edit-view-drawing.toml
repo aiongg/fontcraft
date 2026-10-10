@@ -593,6 +593,7 @@ milestone = "M3"
 summary = "Main pointer tool: selects, moves, converts, duplicates, scales and rotates nodes, handles, segments, paths, anchors, guides and components, and gives access to the canvas context menu."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
+notes = "Context menu: the handbook documents only that right-click or Ctrl+click opens it for the item under the pointer. What it selects first, its sections and its item targets are our design, documented in docs/spec/03a § 6 (Canvas context menu) but not yet observed."
 
 [[tool]]
 id = "lasso"

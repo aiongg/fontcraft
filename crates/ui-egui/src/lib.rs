@@ -34,6 +34,8 @@ mod audit_markers_tests;
 #[cfg(test)]
 mod canvas_layers_tests;
 #[cfg(test)]
+mod context_menu_tests;
+#[cfg(test)]
 mod dialog_tests;
 #[cfg(test)]
 mod draw_tests;

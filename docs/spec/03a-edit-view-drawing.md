@@ -249,6 +249,37 @@ Commands:
 | `selection.selectNext` / `selection.selectPrevious` | `Tab` / `Shift+Tab` | Needs exactly one node or handle selected; also steps through anchors and through guides |
 | `selection.set`, `selection.selectInRegion` | – | Inferred headless forms of click / marquee / lasso |
 
+### Canvas context menu
+
+The handbook says only that a right-click or `Ctrl`+click opens the context menu for the item
+under the pointer (`select` row). Tutorial videos show which items appear for a selected corner
+node, segment or path (rows `path.reconnectNodes`, `path.openCorner`, `path.sharpenCorner`,
+`path.makeNodeFirst`). The rest is our design, documented but not yet observed:
+
+- Any tool opens it, unless a drag is in progress. On the Mac, `Ctrl`+click opens it and
+  `Ctrl`+drag still reaches the tool.
+- The click is hit-tested like a tool click. An object that is not selected becomes the
+  selection; a selected one keeps the whole selection. A click on empty canvas keeps the
+  selection.
+- Sections, split by a separator: first the object's (`canvas.node` for a node or handle,
+  `canvas.segment`, `canvas.anchor`, `canvas.component`, `canvas.guide`; `canvas.path` when the
+  object's path has every on-curve node selected), then the glyph's (`canvas`). On empty canvas
+  the object section follows the selection: a whole path, else nodes, guides, anchors,
+  components. A command listed for both sections shows in the first.
+- Items keep the order of their inventory rows. They are greyed out as menu items are (below).
+- An item runs with targets from the selection, plus what the click adds: the clicked segment
+  (`segments`, and `near` for `path.insertNode`), the clicked node for `path.makeNodeFirst`, the
+  clicked guide for `guide.toggleMeasurement`, and the click position (a clicked node's position)
+  for `guide.add` and `guide.addGlobal`. `guide.add` with exactly two nodes selected goes through
+  them. `path.setMask` masks the selected paths, or unmasks them when all are masks.
+
+**Menu greying.** An item is enabled when its command's own check passes and the selection
+supplies its targets. A command that takes selection targets (`points`, `segments`, `shapes`,
+`anchors`, `guides`, `annotations`) needs at least one of them, unless it also takes `glyphs`
+(it then acts on whole glyphs) or acts on the whole layer without them (`edit.copy`, `edit.cut`,
+`path.expandOutline`). Segments come from § 6's rule; a command that takes `shapes` but not
+`points` also gets the paths with every on-curve node selected.
+
 ## 7. Moving
 
 Implemented by `selection.move {dx, dy, mode}`; arrow keys call it with ±1, `Shift` ±10,
