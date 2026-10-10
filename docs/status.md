@@ -9,7 +9,7 @@ _Updated: 2026-10-10, M5 planned (`docs/plans/M5.md`); the owner's acceptance ne
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 269 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
-  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 461 guesses on 327
+  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 462 guesses on 327
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -350,5 +350,6 @@ Append one terse entry per session: what landed, numbers, what is still open.
   glyphs are deselected; a rename takes the database's Unicode value; generated glyphs are 600
   units wide. M4.13: Remove Glyph removes the kerning pairs keyed by a removed glyph's name, in
   every master and direction and in one undo step; group pairs stay until Clean Up. M4.14: Remove
-  Glyph's dialog defaults to Decompose. M5.0: the planning pass (222 rows, 97 commands; 27 rows
-  moved; 19 packages; 461 guesses on 327 rows). Next: the owner's acceptance of the M5 plan.
+  Glyph's dialog defaults to Decompose. M4.15: that removal leaves contextual kerning and
+  unrelated empty entries alone. M5.0: the planning pass (222 rows, 97 commands; 27 rows
+  moved; 19 packages; 462 guesses on 327 rows). Next: the owner's acceptance of the M5 plan.
