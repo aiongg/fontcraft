@@ -8,16 +8,14 @@
 
 use std::collections::HashSet;
 
-use fontcraft_geom::{grid_step, round_to_grid};
+use fontcraft_geom::round_to_grid;
 use fontcraft_model::{Anchor, Background, Font, Layer, LayerSide, Shape, Transform};
 use serde_json::{Value, json};
 
+use super::common::{Outcome, Scope, each_layer, grid, scope};
 use super::*;
-use crate::EngineError;
 use crate::params::{Params, TargetKind, Targets};
 
-/// Most layer ids one `layers` list may hold.
-const MAX_LAYER_IDS: usize = 1024;
 /// Largest interpolation amount, in percent either way. Beyond it every outline leaves the
 /// coordinate range anyway.
 const MAX_AMOUNT: f64 = 100_000.0;
@@ -88,124 +86,6 @@ pub fn specs() -> Vec<CommandSpec> {
         )
         .targets(&[TargetKind::Glyphs]),
     ]
-}
-
-// ── Scope: one glyph or many ────────────────────────────────────────────────────────────────────
-
-/// The glyphs and layers a whole-layer command acts on.
-struct Scope {
-    glyphs: Vec<String>,
-    layers: Vec<String>,
-    /// One `glyph` was given: a locked glyph or a missing layer is an error, not a skip.
-    single: bool,
-}
-
-/// What a whole-layer command did.
-#[derive(Default)]
-struct Outcome {
-    glyphs: Vec<String>,
-    skipped: Vec<Value>,
-}
-
-impl Outcome {
-    fn skip(&mut self, glyph: &str, layer: Option<&str>, reason: impl Into<String>) {
-        let mut v = json!({"glyph": glyph, "reason": reason.into()});
-        if let (Some(layer), Some(o)) = (layer, v.as_object_mut()) {
-            o.insert("layer".into(), json!(layer));
-        }
-        self.skipped.push(v);
-    }
-
-    fn to_json(&self) -> Value {
-        json!({"glyphs": self.glyphs, "skipped": self.skipped})
-    }
-}
-
-/// Reads `glyph` or `glyphs`, and `layer` or `layers`.
-fn scope(p: &Params, font: &Font) -> Result<Scope> {
-    let (glyphs, single) = match (p.get("glyph"), p.get("glyphs")) {
-        (Some(_), Some(_)) => return Err(p.bad("give `glyph` or `glyphs`, not both")),
-        (Some(_), None) => {
-            let name = p.str("glyph")?;
-            if font.glyph(name).is_none() {
-                return Err(p.bad(format!("there is no glyph `{name}`")));
-            }
-            (vec![name.to_string()], true)
-        }
-        (None, _) => {
-            let glyphs = p.opt_glyphs("glyphs", font)?.ok_or_else(|| p.bad("`glyph` or `glyphs` is required"))?;
-            if glyphs.is_empty() {
-                return Err(p.bad("`glyphs` is empty"));
-            }
-            (glyphs, false)
-        }
-    };
-    Ok(Scope { glyphs, layers: layer_ids(p, font)?, single })
-}
-
-/// `layers` or `layer`; the first master's layer when neither is given.
-fn layer_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
-    match (p.get("layer"), p.get("layers")) {
-        (Some(_), Some(_)) => Err(p.bad("give `layer` or `layers`, not both")),
-        (Some(_), None) => Ok(vec![p.str("layer")?.to_string()]),
-        (None, Some(Value::Array(a))) if a.len() > MAX_LAYER_IDS => {
-            Err(p.bad(format!("`layers` holds {} ids; at most {MAX_LAYER_IDS} are allowed", a.len())))
-        }
-        (None, Some(_)) => {
-            let mut seen = HashSet::new();
-            let ids: Vec<String> = p.strings("layers")?.into_iter().filter(|id| seen.insert(*id)).map(str::to_string).collect();
-            if ids.is_empty() {
-                return Err(p.bad("`layers` is empty"));
-            }
-            Ok(ids)
-        }
-        (None, None) => Ok(vec![font.default_master()?.id.clone()]),
-    }
-}
-
-/// Runs `f` on every addressed layer of every glyph in `scope`. `f` returns `Some(reason)` when
-/// it leaves a layer as it is. Call inside [`Session::edit`].
-fn each_layer(
-    font: &mut Font,
-    scope: &Scope,
-    command: &'static str,
-    mut f: impl FnMut(&str, &mut Layer) -> Result<Option<String>>,
-) -> Result<Outcome> {
-    let bad = |message: String| EngineError::BadParams { command: command.into(), message };
-    let mut out = Outcome::default();
-    for name in &scope.glyphs {
-        let Some(glyph) = font.glyph(name) else {
-            return Err(bad(format!("there is no glyph `{name}`")));
-        };
-        if glyph.info.locked {
-            if scope.single {
-                return Err(EngineError::Locked(name.clone()));
-            }
-            out.skip(name, None, "the glyph is locked");
-            continue;
-        }
-        let missing: Vec<&String> = scope.layers.iter().filter(|id| !glyph.layers.iter().any(|l| l.id == **id)).collect();
-        if let Some(id) = missing.first()
-            && scope.single
-        {
-            return Err(bad(format!("glyph `{name}` has no layer `{id}`")));
-        }
-        for id in missing {
-            out.skip(name, Some(id.as_str()), "the glyph has no such layer");
-        }
-        let mut g = font.glyph_mut(name)?;
-        let mut changed = false;
-        for layer in g.layers.iter_mut().filter(|l| scope.layers.contains(&l.id)) {
-            match f(name, layer)? {
-                Some(reason) => out.skip(name, Some(layer.id.as_str()), reason),
-                None => changed = true,
-            }
-        }
-        if changed {
-            out.glyphs.push(name.clone());
-        }
-    }
-    Ok(out)
 }
 
 /// A layer that had no background keeps none when it is left empty.
@@ -439,7 +319,7 @@ fn open_file(path: &str) -> Result<Font> {
 
 #[cfg(target_arch = "wasm32")]
 fn open_file(_: &str) -> Result<Font> {
-    Err(EngineError::Unsupported("reading a file by path in the browser".into()))
+    Err(crate::EngineError::Unsupported("reading a file by path in the browser".into()))
 }
 
 // ── Interpolate with Background ─────────────────────────────────────────────────────────────────
@@ -453,7 +333,7 @@ fn interpolate_with_background(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let t = amount / 100.0;
     let font = s.font()?;
-    let step = grid_step(font.info.settings.grid_length.unwrap_or(1.0), font.info.settings.grid_sub_division.unwrap_or(1.0));
+    let step = grid(font);
     let scope = scope(&p, font)?;
     let out = s.edit("Interpolate with Background", |font| {
         each_layer(font, &scope, "path.interpolateWithBackground", |_, layer| {

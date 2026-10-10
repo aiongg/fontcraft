@@ -4,11 +4,18 @@
 //! `font.inspect` that cannot be read is reported as `{error}` inside that section instead of
 //! failing the query (`font.inspect` in `spec/inventory/20-cli.toml`).
 
-use serde_json::{Map, Value, json};
+#[cfg(not(target_arch = "wasm32"))]
+use serde_json::Map;
+use serde_json::{Value, json};
+#[cfg(not(target_arch = "wasm32"))]
 use skrifa::MetadataProvider;
+#[cfg(not(target_arch = "wasm32"))]
+use skrifa::raw::TableProvider;
+#[cfg(not(target_arch = "wasm32"))]
 use skrifa::raw::tables::cmap::CmapSubtable;
 use skrifa::raw::types::Tag;
-use skrifa::raw::{FileRef, FontRef, TableProvider};
+use skrifa::raw::{FileRef, FontRef};
+#[cfg(not(target_arch = "wasm32"))]
 use skrifa::string::StringId;
 
 use super::*;
@@ -196,6 +203,7 @@ fn inspect(_: &mut Session, p: &Value) -> Result<Value> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Puts `f()` under `key` when the section is wanted; an error becomes `{error}`.
 fn section(out: &mut Map<String, Value>, wanted: &[&str], key: &str, f: impl FnOnce() -> std::result::Result<Value, String>) {
     if wanted.contains(&key) {
@@ -203,6 +211,7 @@ fn section(out: &mut Map<String, Value>, wanted: &[&str], key: &str, f: impl FnO
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn inspect_binary(path: &str, kind: &str, bytes: &[u8], face: Option<u32>, wanted: &[&str], all_names: bool) -> Result<Value> {
     let unwrapped = fontcraft_decompile::to_sfnt(bytes)?;
     let sfnt = unwrapped.as_ref();
@@ -375,6 +384,7 @@ fn inspect_binary(path: &str, kind: &str, bytes: &[u8], face: Option<u32>, wante
     Ok(Value::Object(out))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn inspect_source(path: &str, font: &fontcraft_model::Font, wanted: &[&str]) -> Value {
     use fontcraft_model::{SourceFormat, metric};
     let mut out = Map::new();

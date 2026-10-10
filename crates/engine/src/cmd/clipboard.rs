@@ -7,12 +7,13 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
-use fontcraft_geom::{Point, Rect, Segment, bounds, grid_step, round_to_grid};
+use fontcraft_geom::{Point, Rect, Segment, bounds, round_to_grid};
 use fontcraft_io_svg::clipboard::{self, Fragment, FragmentGuide, FragmentShape, GuideScope as FragmentScope};
 use fontcraft_io_svg::{Placement, glyph_name_for_file, looks_like_svg, read_svg, shapes_to_svg};
 use fontcraft_model::{Font, MAX_COORDINATE, MAX_LAYER_GUIDES, MAX_NAME_LEN, NodeKind, Path, Shape, Transform, metric};
 use serde_json::{Value, json};
 
+use super::common::{grid, in_range};
 use super::*;
 use crate::EngineError;
 use crate::params::{GuideRef, GuideScope, Params, TargetKind, Targets};
@@ -284,16 +285,6 @@ fn opt_point(p: &Params, key: &str) -> Result<Option<Point>> {
         return Err(bad());
     }
     Ok(Some(Point::new(x, y)))
-}
-
-fn in_range(v: f64) -> bool {
-    v.is_finite() && v.abs() <= MAX_COORDINATE
-}
-
-/// The font's grid step (0: no rounding). A font without a grid setting has a grid of 1.
-fn grid(font: &Font) -> f64 {
-    let s = &font.info.settings;
-    grid_step(s.grid_length.unwrap_or(1.0), s.grid_sub_division.unwrap_or(1.0))
 }
 
 /// The box around what a fragment places: nodes, component origins and anchors, or the guides'

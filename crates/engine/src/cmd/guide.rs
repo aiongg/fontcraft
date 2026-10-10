@@ -12,6 +12,7 @@ use fontcraft_model::plist::Value as PValue;
 use fontcraft_model::{Family, Font, Guide, LayerParts, MAX_COORDINATE, MAX_LAYER_GUIDES, Master, metric};
 use serde_json::{Value, json};
 
+use super::common::grid;
 use super::*;
 use crate::EngineError;
 use crate::params::{GuideRef, GuideScope, Params, TargetKind, Targets, kind};
@@ -152,13 +153,6 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────────────────────────
-
-/// The font's grid step: spacing ÷ subdivision, spacing 1 when the font sets none, 0 for no
-/// rounding (`fontInfo.grid.*`).
-pub(crate) fn grid_step(font: &Font) -> f64 {
-    let s = &font.info.settings;
-    fontcraft_geom::grid_step(s.grid_length.unwrap_or(1.0), s.grid_sub_division.unwrap_or(1.0))
-}
 
 fn master_mut<'f>(font: &'f mut Font, id: &str, p: &Params) -> Result<&'f mut Master> {
     Arc::make_mut(&mut font.masters).iter_mut().find(|m| m.id == id).ok_or_else(|| p.bad(format!("there is no master `{id}`")))
@@ -402,7 +396,7 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(p.bad("takes no target lists: it adds a guide to the layer"));
     }
     let font = s.font()?;
-    let guide = new_guide(&p, Some(t.resolve(font)?.parts), grid_step(font))?;
+    let guide = new_guide(&p, Some(t.resolve(font)?.parts), grid(font))?;
     t.layer = Some(t.layer_id(font)?);
     let index = s.edit("Add Guide", |font| t.edit_layer(font, |l| append(&p, l.parts_mut(t.side).guides, vec![guide])))?;
     t.guides = vec![GuideRef { scope: GuideScope::Local, index }];
@@ -420,14 +414,14 @@ fn add_global(s: &mut Session, p: &Value) -> Result<Value> {
                 return Err(p.bad("takes no target lists: it adds a guide to a master"));
             }
             let r = t.resolve(font)?;
-            let guide = new_guide(&p, Some(r.parts), grid_step(font))?;
+            let guide = new_guide(&p, Some(r.parts), grid(font))?;
             let layer_master = r.master.id.clone();
             t.layer = Some(r.layer.id.clone());
             selection = Some(t);
             (Some(layer_master), guide)
         }
         None if p.get("layer").is_some() || p.get("side").is_some() => return Err(p.bad("`layer` and `side` need `glyph`")),
-        None => (None, new_guide(&p, None, grid_step(font))?),
+        None => (None, new_guide(&p, None, grid(font))?),
     };
     let master = match (p.opt_str("master")?, layer_master) {
         (Some(m), Some(lm)) if m != lm => {
@@ -526,7 +520,7 @@ fn set_properties(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(Some(c)) = &color {
         check_color(&p, c)?;
     }
-    let step = grid_step(s.font()?);
+    let step = grid(s.font()?);
     s.edit("Set Guide Properties", |font| {
         let master = t.resolve(font)?.master.id.clone();
         apply(font, &t, &master, &p, |g| {
@@ -717,8 +711,7 @@ fn display_lines(s: &mut Session, p: &Value) -> Result<Value> {
         metrics.push(json!({"kind": "shoulder height", "y": y, "overshoot": 0.0, "source": "parameter"}));
     }
     let settings = &font.info.settings;
-    let grid =
-        json!({"spacing": settings.grid_length.unwrap_or(1.0), "subdivision": settings.grid_sub_division.unwrap_or(1.0), "step": grid_step(font)});
+    let grid = json!({"spacing": settings.grid_length.unwrap_or(1.0), "subdivision": settings.grid_sub_division.unwrap_or(1.0), "step": grid(font)});
     let zones: Vec<Value> = master.zones.iter().map(|z| json!({"pos": z.pos, "size": z.size})).collect();
     let mut out = json!({
         "glyph": r.glyph.name,

@@ -5,6 +5,7 @@
 use fontcraft_model::{Annotation, Extra, MAX_ANNOTATIONS, MAX_COORDINATE};
 use serde_json::{Map, Value, json};
 
+use super::common::in_range;
 use super::*;
 use crate::params::{Params, TargetKind, Targets};
 
@@ -192,10 +193,6 @@ impl<'a> Values<'a> {
             a.angle = angle;
         }
     }
-}
-
-fn in_range(v: f64) -> bool {
-    v.is_finite() && v.abs() <= MAX_COORDINATE
 }
 
 /// An `[x, y]` position within the coordinate limit.

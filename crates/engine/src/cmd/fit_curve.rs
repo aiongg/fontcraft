@@ -15,7 +15,8 @@ use fontcraft_geom::{Point, Vec2, round_point};
 use fontcraft_model::{Font, LayerParts, NodeKind, Path};
 use serde_json::{Value, json};
 
-use super::node::{grid, group};
+use super::common::grid;
+use super::node::group;
 use super::*;
 use crate::params::{Params, TargetKind as K, Targets};
 

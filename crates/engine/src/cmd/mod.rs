@@ -11,6 +11,7 @@
 mod annotation;
 mod background;
 mod clipboard;
+mod common;
 mod compile;
 mod dimensions;
 mod edit;

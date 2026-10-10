@@ -7,6 +7,7 @@
 
 use base64::Engine as _;
 use fontcraft_compile::{Flavour, Options};
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
 
 use fontcraft_model::Font;

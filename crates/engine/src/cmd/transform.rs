@@ -10,10 +10,11 @@ use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use fontcraft_geom::{Affine, Point, Rect, Shape as _, Vec2, grid_step, round_point};
+use fontcraft_geom::{Affine, Point, Rect, Shape as _, Vec2, round_point};
 use fontcraft_model::{Font, Guide, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_GLYPHS, Master, Metrics, Node, Shape, Transform, metric};
 use serde_json::{Map, Value, json};
 
+use super::common::{grid, in_range, master_metrics};
 use super::*;
 use crate::EngineError;
 use crate::params::{GuideScope, Params, TargetKind, Targets, kind};
@@ -411,22 +412,6 @@ fn point(p: &Params, key: &str, v: &Value) -> Result<Point> {
     Err(p.bad(format!("`{key}` must be [x, y], two numbers within ±{MAX_COORDINATE}")))
 }
 
-fn in_range(v: f64) -> bool {
-    v.is_finite() && v.abs() <= MAX_COORDINATE
-}
-
-/// The master's metrics, with the format's values where the font has none.
-fn master_metrics(font: &Font, master: &Master) -> Metrics {
-    let d = Metrics::defaults(font.source.format, font.units_per_em);
-    Metrics {
-        ascender: font.metric_pos(master, metric::ASCENDER, d.ascender),
-        descender: font.metric_pos(master, metric::DESCENDER, d.descender),
-        x_height: font.metric_pos(master, metric::X_HEIGHT, d.x_height),
-        cap_height: font.metric_pos(master, metric::CAP_HEIGHT, d.cap_height),
-        italic_angle: font.metric_pos(master, metric::ITALIC_ANGLE, d.italic_angle),
-    }
-}
-
 /// Where `origin` is for one layer. `bounds` is the box of what is transformed (used by a box
 /// origin; with nothing to transform the origin does not matter).
 pub fn origin_point(origin: Origin, bounds: Option<Rect>, font: &Font, master: &Master, width: f64) -> Point {
@@ -439,12 +424,6 @@ pub fn origin_point(origin: Origin, bounds: Option<Rect>, font: &Font, master: &
             Point::new(width / 2.0, (m.ascender + m.descender) / 2.0)
         }
     }
-}
-
-/// The font's grid step (spacing ÷ subdivision; 0 means no rounding).
-fn grid(font: &Font) -> f64 {
-    let s = &font.info.settings;
-    grid_step(s.grid_length.unwrap_or(1.0), s.grid_sub_division.unwrap_or(1.0))
 }
 
 // ── What is transformed ────────────────────────────────────────────────────────────────────────

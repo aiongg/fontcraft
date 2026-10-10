@@ -52,7 +52,7 @@ fn add_path(s: &mut Session, p: &Value) -> Result<Value> {
     if list.len() > MAX_NODES {
         return Err(p.bad(format!("`nodes` holds {} nodes; at most {MAX_NODES} are allowed", list.len())));
     }
-    let step = super::node::grid(s.font()?);
+    let step = super::common::grid(s.font()?);
     let mut nodes = list.iter().map(|v| node(&p, v)).collect::<Result<Vec<_>>>()?;
     for n in &mut nodes {
         let at = round_point(n.point(), step);

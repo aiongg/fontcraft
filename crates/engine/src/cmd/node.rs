@@ -15,11 +15,12 @@ mod refit;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use fontcraft_geom::{Point, Rect, Shape as _, Vec2, grid_step, round_point};
+use fontcraft_geom::{Point, Rect, Shape as _, Vec2, round_point};
 use fontcraft_model::{Font, Layer, LayerParts, LayerPartsMut, LayerSide, MAX_COORDINATE, Node, NodeKind, Path, Shape};
 use serde_json::{Map, Value, json};
 
 use self::moving::Mode;
+use super::common::grid;
 use super::*;
 use crate::params::{GuideScope, Params, ResolvedTargets, TargetKind as K, Targets};
 
@@ -245,12 +246,6 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
-
-/// The font's grid step (spacing ÷ subdivision; spacing 1 when unset, 0 for no rounding).
-pub(super) fn grid(font: &Font) -> f64 {
-    let s = &font.info.settings;
-    grid_step(s.grid_length.unwrap_or(1.0), s.grid_sub_division.unwrap_or(1.0))
-}
 
 /// The addresses grouped by shape.
 pub(super) fn group(addresses: &[(usize, usize)]) -> BTreeMap<usize, BTreeSet<usize>> {
