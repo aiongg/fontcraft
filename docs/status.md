@@ -2,57 +2,59 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M3 waves 3 and 4 and the dialog framework integrated._
+_Updated: 2026-10-10, M3 at its close: every measure met except `path.sharpenCorner`._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (916 tests; about 109,000 lines of Rust in 20 crates,
+- `cargo xtask ci` passes all nine steps (TESTS tests; about 113,000 lines of Rust in 20 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
-- 209 of the 932 inventory commands exist (`docs/parity.md`); M3 has 184 commands, 178 of them
-  live. Feature parity is about 10% (ROADMAP.md › Parity estimate).
+- 213 of the 932 inventory commands exist (`docs/parity.md`); M3 has 185 commands, 184 of them
+  live. Feature parity is about 12% (ROADMAP.md › Parity estimate).
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
-  Edit View were looked at. macOS and Windows have **not** been built.
+  Edit View were looked at, and the screenshots of each M3 UI package were reviewed. macOS and
+  Windows have **not** been built.
 - The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
   runs locally) and no release.
 
 ## Where to start
 
-**M3, Edit View drawing**, following `docs/plans/M3.md` § 6.
+1. **The owner's review of M3.** The measures and their results are in `docs/plans/M3.md` § 5;
+   the open decision is § M3.18: move `path.sharpenCorner` to the `fidelity` milestone, since
+   no written source says what it does. Wait for the owner's answer before changing that row.
+2. **M4's planning pass, Font View and glyph management** (`docs/execution-plan.md` § 3): list
+   the milestone's rows (57 commands, 6 live), answer the open questions of its notes, verify or
+   drop its `memory` rows, and write `docs/plans/M4.md` for the owner to accept.
+
+M3, Edit View drawing (`docs/plans/M3.md`), as built:
 
 | Done | What it gave |
 |---|---|
 | M3.0, M3.0b | spec pass: targets in every M3 command's params, `when` and `context` fields, D13 answered; 5 editor rows confirmed by tutorial videos |
 | M3.1 | engine foundations: `params::Targets`, `Session::begin`/`preview`/`commit`/`cancel`, `layer.inspect`, the glyph lock, `geom` segments, grid rounding |
-| M3.2 | the canvas split (`shell/`, `canvas/`), display conventions, zoom and scroll, View toggles, tabs, keymap, cached menus; `crates/render`, `ui.screenshot`, `ui.render` |
+| M3.2 | the canvas split (`shell/`, `canvas/`), display conventions, zoom and scroll, View toggles, tabs, keymap, cached menus; `crates/render`, `ui.screenshot`, `ui.render`; the toolbar with drawn icons |
 | Wave 1 | crates without commands: `tools` (M3.3 core), `audit` (M3.17, 34 of 36 outline checks), `io-svg` (M3.8), `pathops` (M3.6) |
-| M3.3 | pointer editing in the window: Select, Lasso, Hand, Zoom, snapping, keymap with `when`, selection commands, `ui.pointer`, `ui.key`, `ui.text`, `ui.tool.*` |
+| M3.3 | pointer editing in the window: Select, Lasso, Hand, Zoom, snapping, keymap with `when`, selection commands, `ui.pointer`, `ui.key`, `ui.text`, `ui.tool.*`; context menus, menu items greyed out by the selection, `ui.menu.list`, `ui.menu.invoke` |
 | Wave 2 | engine commands: M3.4 nodes and Fit Curve, M3.5 transformations, M3.8 clipboard and SVG import, M3.9 guides, measuring and Dimensions, M3.10 background and layers, M3.16 annotations |
 | Wave 3 | M3.6 path-operation commands (each layer under a time limit) and the Knife; M3.11 strokes, masks and shape order in the engine; M3.12 the filter framework (`filter.apply`, `filter.list`, Repeat Last Filter) and the six filters |
-| M3.14 framework | a dialog is a form over a command's parameters with a live preview: OK is one undo step, Cancel restores the font; filter dialogs from their schemas; `dialog.open`, `ui.dialog.*`, `ui.click` |
 | Wave 4 | M3.13 Draw, Pencil, Rectangle, Ellipse and shared tool letters; M3.5 Rotate and Scale tools and the bounding box; M3.9, M3.10, M3.16 on the canvas: guides, grid, measurement, the Measurement tool, background, annotations and the Annotation tools; M3.15 Info box, Palette (Dimensions, Fit Curve, Layers, Transformations), bottom bar |
+| M3.14 | the dialog framework: a form over a command's parameters with a live preview, OK one undo step, Cancel restores the font; run-on-OK mode, follow-up questions, shaped fields, "…" actions, reorderable lists, multi-choice and folder fields, tabs. Dialogs: each filter, Transformations, Shape Order, Interpolate with Background, Primitive Measurements, Guide Properties, the missing-glyph and pasted-outline questions, Export (OTF and UFO tabs) |
+| M3.7 | overlap removal at export: the compiler's outline stage, each glyph under a time limit, the `removeOverlap` option, coverage-equal comparison in the oracle |
+| M3.8 (window) | the system clipboard in Edit View; system choosers for the export folder and File › Import › Outlines |
+| M3.9 (window) | guides dragged and edited on the canvas, guide context menu items |
+| M3.10 (window) | the active layer (`layers.select`), the tab's master (`view.selectMaster`, Cmd+1 to Cmd+9), Edit Background (Cmd+B) |
+| M3.11 (rest) | strokes and masks drawn on the canvas and applied at export; the Palette's Stroke section |
+| M3.17 | audit commands (`audit.run`, `list`, `describe`, `results`, `fix`, `profile.list`), eight fixes that each clear their check, `path.addInflections`, Tidy up Paths' `straighten`; live audit and canvas markers; `cargo xtask audit` |
+| M3.18 | the § 5 measures: all met but "commands live" (184 of 185); the end-to-end test (an agent draws H, O and n over the control channel and exports them) |
 
-| Wave 5, part 1 | M3.17 audit commands (`audit.run`, `list`, `describe`, `results`, `fix`, `profile.list`; seven fixes through path commands, one undo step, a backup layer); M3.14 dialogs for Transformations (Origin, Slant), Interpolate with Background, Primitive Measurements, the missing-glyph and pasted-outline questions, Export (OTF tab, runs on OK); framework: run-on-OK mode, follow-up questions, button captions, choice labels; File › Export (Cmd+E) |
+Not built: `path.sharpenCorner` (owner decision pending). Left for later milestones: text mode
+(M5), Font View's master choice (M4), the toolbar's master icons (M9), the Export dialog's
+Variable (M9) and Metrics (M5) tabs.
 
-Still to build in the dialog framework: shaped fields and the "…" actions (Transformations
-Translate, Scale, copy filter string), a reorderable list (Shape Order), multi-choice and folder
-fields (Export containers and destination), tabs (Export).
-
-Next, in this order:
-
-1. **M3.7, overlap removal at export** (builder), with the time limit the path-operation
-   commands use. Static export keeps overlaps with a warning until then.
-2. **The rest of M3.11**: strokes and masks drawn on the canvas, and expanded and applied in the
-   compiler's outline stage before overlap removal; the Stroke section; the Shape Order dialog.
-3. **Live audit and canvas markers** (M3.17, builder).
-4. **The window's gaps**: context menus built from the `context` field, menu items greyed out by
-   the selection (the `targets` field), symbols for the Transformations buttons.
-5. **M3.18**: the measures of `docs/plans/M3.md` § 5, then close the milestone.
-
-Decisions that hold for the rest of M3:
+Decisions that hold:
 
 - linesweeper 0.5.0 stays, from crates.io, and its rare hang and failed assertion are not
   reported upstream for now (owner's decision, plan § M3.6 "Spike result"). Callers that run
-  without a person waiting (export, batch commands) must run each glyph under a time limit.
+  without a person waiting (export, batch commands) run each glyph under a time limit.
 - Behaviour not yet seen in the reference app or a video follows the handbook and is the
   default; the row's `notes` say it is documented but not observed. Example: Remove Overlap
   deletes open paths and stray nodes.
@@ -68,7 +70,7 @@ measures the compiler; `crates/oracle/allow.toml` holds every accepted differenc
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
 `cargo xtask roundtrip` shows where the round trips stand; `cargo xtask overlap` measures
-overlap removal on the corpus.
+overlap removal on the corpus; `cargo xtask audit` runs the outline audit on it.
 
 ## What the planning session decided
 
@@ -90,19 +92,23 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos.
   About 450 open questions are listed at the ends of the notes.
 - **No M3 behaviour has been compared with the reference app.** Tools, panels and dialogs
-  follow the handbook.
-- **The window has gaps.** No context menus and no toolbar; menu items are not greyed out by
-  the selection; every tab edits the first master's layer (no master switching); the Palette's
-  Transformations buttons draw as empty boxes because the UI font has no glyphs for their
-  symbols. Strokes and masks are not drawn, and export does not expand them.
+  follow the handbook; 5 editor rows are confirmed by tutorial videos.
+- **M3 gaps** (ROADMAP.md › What is not): `path.sharpenCorner` is not built; Font View draws
+  the first master only (M4); the Export dialog has OTF and UFO tabs only; the Import Outlines
+  missing-glyph question is asked once for all unmatched files, not once per file; Shape Order
+  and Expand Outline do not renumber hints that refer to a path by index; a UFO keeps no stroke
+  attribute, and cap code 4 and the forced cap axis are unconfirmed against the reference's
+  files; the Info box has no annotation palette.
 - **linesweeper can hang** on rare inputs (plan § M3.6 "Spike result"). The path-operation
-  commands run each layer on a worker thread under a time limit; a layer that runs out of time
-  stays as it was, and its worker cannot be stopped and runs on detached. The 10,000-case
-  random-path test in `crates/pathops` is ignored in the gate.
+  commands and export run each glyph on a worker thread under a time limit; a glyph that runs
+  out of time stays as it was (at export, it keeps its overlaps, with a warning), and its worker
+  cannot be stopped and runs on detached. The 10,000-case random-path test in `crates/pathops`
+  is ignored in the gate.
 - **The compiler writes static fonts only.** TrueType and CFF, plain, WOFF and WOFF2; the core
   tables match fontc and fontmake over the corpus (with allow-listed causes: variable references,
-  bracket and colour glyphs, the glyph database, smart components); no features, variations,
-  hinting, overlap removal or CFF subroutines yet (`docs/plans/M2.md` § 5).
+  bracket and colour glyphs, the glyph database, smart components); overlaps are removed, strokes
+  expanded and masks applied at export; no features, variations, hinting or CFF subroutines yet
+  (`docs/plans/M2.md` § 5, `docs/plans/M3.md` § 5).
 - **`docs/spec/20-cli.md` is very long** (about 26,000 words). Read the section for the subcommand
   you are building, not the whole file.
 
@@ -279,3 +285,15 @@ Append one terse entry per session: what landed, numbers, what is still open.
   tests; 200 of 932 commands live (M3: 172 of 184); about 102,600 lines of Rust. Open: audit
   commands and the other dialogs (on branches), M3.7, strokes and masks on the canvas and at
   export, live audit, context menus, M3.18.
+- **2026-10-10, M3 close.** Since waves 3 and 4: M3.7 overlap removal at export, each glyph
+  under a time limit; strokes and masks drawn and exported, the Stroke section; the rest of the
+  dialog framework and the Transformations, Shape Order, Guide Properties and Export (OTF, UFO)
+  dialogs; the toolbar, context menus and menu greying; the active layer, master switching and
+  Edit Background; live audit, markers and the audit commands; the system clipboard. § 5
+  measures: all met but "commands live", 184 of 185 (`path.sharpenCorner`: no source; moving it
+  to `fidelity` awaits the owner). Overlap removal: 2,368 of 2,368 corpus layers within the
+  coverage rule, median 38 µs; against fontmake 99.58% (TrueType) and 99.87% (CFF) of glyphs
+  without an overlap-removal difference. Node-drag preview step on Oswald 142 µs. Audit over 348
+  corpus sources: 0 failures. Round trips and oracle equal the baselines. TESTS tests; 213 of
+  932 commands live; about 113,000 lines of Rust. Next: the owner's review of M3, then M4's
+  planning pass.
