@@ -55,6 +55,10 @@ Rules:
 
 Step formula implied by "even intervals": `percent(step) = min + (step - 1) * (max - min) / 7`.
 
+Targets (our design): a curve segment is named by one of its handles, by both its end nodes, or
+in `segments`. Only cubic segments have handles to set. The commands take the range as `min` and
+`max`, since the two fields are panel state. New handles are rounded to the grid.
+
 ## Layers (`palette.layers`)
 
 **Model.** A glyph has at least one layer per font master. Three kinds:

@@ -237,6 +237,20 @@ Segments (`move.dragSegment`):
 
 Dragging is subject to magnetic guides and snapping (section 20); `Ctrl` suspends both.
 
+Construction details where the handbook is silent (our design, `inferred`):
+
+- Nudge scales each unselected handle of a segment with one moved end, per axis, between the
+  fixed end and the moved one. Horizontal and vertical handles stay so. When the two ends line
+  up on an axis, the handle next to the moved node moves with it and the other one stays.
+- Moving a handle of a smooth node that stays turns the opposite handle onto the same line,
+  keeping its length. When the other side of the node is straight, the handle slides along that
+  line instead.
+- Moved points are rounded to the grid; points that do not move keep their coordinates.
+- `duplicate` with part of a path selected copies the segments whose two end nodes are selected,
+  as open paths. A copied anchor gets the first free name of the form `top.1`.
+- `selection.setPosition` and `selection.getInfo` measure a whole path (every point named) and a
+  component by their outlines, and anything else by its points.
+
 ## 8. Converting nodes and segments
 
 - `path.toggleNodeType` (`Return`, or double-click a node): smooth ↔ corner for the selected
@@ -327,12 +341,21 @@ carries a message. The anchor and component cases are M6.
   opening the path. With whole segments selected, only those segments go.
 - `path.deleteAndBreakInAllMasters` (`Alt+Shift+Delete`).
 
+Construction details (our design): `edit.delete` removes a path left with fewer than two on-curve
+nodes. `path.deleteAndBreak` removes only the segment between two neighbouring selected nodes (or
+a segment named in `segments`); a selected node with no selected neighbour goes with both its
+segments. What is left becomes open paths, in the place of the original.
+
 ## 12. Opening, closing and cutting paths
 
 - Open: Draw tool click on a node (section 5). Then pull the ends apart with Select.
 - Close by hand: drag one open end onto another with Select (`paths.closeByDraggingEnds`).
 - `path.connectNodes` (context menu, two open ends selected): adds a straight segment between them.
 - `path.closeOpenPaths` (context menu): closes each selected open path.
+- Ends within half a grid step of each other become one node when connected or closed; otherwise
+  a straight segment joins them (our design). Dragging an end onto another runs the move and
+  `path.connectNodes` as one step. Two joined paths become one at the lower shape index, keeping
+  that path's direction.
 - **Knife** (`knife`, `E` / `Shift+E`): draw a cutting line over a path with a drag; the path is
   split and each piece closed along the cut. Across several overlapping paths the cut pieces are
   rewired with one another. Headless: `path.cutWithLine` (inferred).
@@ -361,7 +384,7 @@ Rule (`paths.directionConvention`): outer contours counter-clockwise, enclosed o
 - `path.makeNodeFirst` (node context menu): choose the start node of a closed path.
 - `path.reverseContours` (Path menu; context menu "Reverse Selected Contours" / "Reverse All
   Contours"): reverse every selected path; with no selection, every path on the layer.
-  `Alt` → all masters (`path.reverseContoursForAllMasters`).
+  `Alt` → all masters (`path.reverseContoursForAllMasters`). A closed path keeps its start node.
 - `path.correctPathDirection` (`Cmd+Shift+R`): for the current layer or every selected glyph
   layer, derive directions from nesting. Side effects: shape order is rearranged and each start
   node moves to the path's bottom-left node. Pressing it on two overlapping paths is the quick
@@ -619,9 +642,14 @@ Question 31 stays open and blocks only `path.sharpenCorner`.
    `kinkedSmoothNode` threshold). A tutorial video showing it would confirm or correct this.
 10. **Delete with reconstruction**: fitting method and tolerance; behaviour when the selection
     includes handles only, or all nodes of a path.
-    **Answered for M3 (our decision, 2026-10-09):** the new segment is fitted to the removed
-    segments with curve fitting (kurbo), within 0.5 unit. With only handles selected, the segment
-    becomes a line. With every node of a path selected, the path is removed.
+    **Answered for M3 (our decision, 2026-10-09):** the new segment keeps its two end nodes and the
+    directions the old curve leaves and enters them in, so the neighbouring segments still meet it
+    as before. The two handle lengths are fitted by least squares over samples of the removed
+    segments (P. J. Schneider's method, Graphics Gems, 1990); when the removed segments are one
+    cubic split in two, the unsplit cubic is used. A node that was inserted into a curve and is
+    then deleted gives the curve back within 0.5 unit; one cubic cannot always follow several
+    segments that closely. With only handles selected, the segment becomes a line. With every node
+    of a path selected, the path is removed.
 11. **"All masters" variants**: how nodes are matched across masters (by index?) and what happens
     with incompatible masters; whether alternate and intermediate layers are included for
     commands other than Correct Path Direction.

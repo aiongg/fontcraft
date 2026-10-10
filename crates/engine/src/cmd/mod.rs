@@ -14,6 +14,7 @@ mod compile;
 mod dimensions;
 mod edit;
 mod file;
+mod fit_curve;
 mod font;
 mod glyph;
 mod guide;
@@ -22,6 +23,7 @@ mod layer;
 mod layers;
 mod measure;
 mod meta;
+mod node;
 mod path;
 mod session;
 mod spacing;
@@ -169,6 +171,8 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(guide::specs());
         v.extend(measure::specs());
         v.extend(dimensions::specs());
+        v.extend(node::specs());
+        v.extend(fit_curve::specs());
         v
     })
 }
