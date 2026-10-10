@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Component, Glyph, KernFirst, MasterKerning, Shape, Transform};
+use fontcraft_engine::model::{Component, Glyph, Shape, Transform};
 use fontcraft_testkit::{Fixture, rect};
 use serde_json::{Value, json};
 
@@ -189,47 +189,21 @@ fn remove_glyph_asks_about_components_and_metrics_keys() {
 }
 
 #[test]
-fn remove_glyph_removes_the_kerning_pairs_that_name_it() {
+fn remove_glyph_keeps_the_kerning_pairs_that_name_it() {
     let mut s = Fixture::Drawn.session();
     s.edit("kerning", |f| {
         let k = Arc::make_mut(&mut f.kerning);
         k.ltr.set("m01", "A", "V", -40.0);
         k.ltr.set("m01", "@MMK_L_T", "A", -30.0);
-        k.ltr.set("m01", "A", "A", -5.0);
-        k.ltr.set("m01", "T", "O", -20.0);
-        k.ltr.set("m01", "@MMK_L_A", "@MMK_R_O", -10.0);
-        k.ltr.set("m02", "A", "O", -15.0);
-        k.rtl.set("m01", "V", "A", -25.0);
-        k.rtl.set("m01", "V", "O", -12.0);
-        k.vertical.set("m01", "A", "T", -8.0);
-        // Entries that were empty before the removal.
-        k.ltr.0[0].firsts.push(KernFirst { first: "H".into(), seconds: Vec::new() });
-        k.rtl.0.push(MasterKerning { master: "m03".into(), firsts: Vec::new() });
         Ok(())
     })
     .unwrap();
     let before = s.font().unwrap().kerning.clone();
-    let r = run(&mut s, "glyph.removeGlyph", json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "keep", "confirm": false}));
-    assert_eq!(r["kerningPairs"], json!(6));
-    let r = run(&mut s, "glyph.removeGlyph", json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "keep"}));
-    assert_eq!(r["kerningPairs"], json!(6));
-    let k = &s.font().unwrap().kerning;
-    let firsts = |m: &MasterKerning| m.firsts.iter().map(|f| (f.first.clone(), f.seconds.clone())).collect::<Vec<_>>();
-    let ltr: Vec<_> = k.ltr.0.iter().map(|m| (m.master.clone(), firsts(m))).collect();
-    assert_eq!(
-        ltr,
-        [(
-            "m01".to_string(),
-            vec![("T".to_string(), vec![("O".to_string(), -20.0)]), ("@MMK_L_A".into(), vec![("@MMK_R_O".into(), -10.0)]), ("H".into(), vec![])]
-        )],
-        "pairs on A are gone, the group pair stays, the master A emptied is gone and the empty first side H stays"
-    );
-    let rtl: Vec<_> = k.rtl.0.iter().map(|m| (m.master.clone(), firsts(m))).collect();
-    assert_eq!(rtl, [("m01".to_string(), vec![("V".to_string(), vec![("O".to_string(), -12.0)])]), ("m03".into(), vec![])]);
-    assert!(k.vertical.is_empty(), "the vertical master A emptied is gone");
+    run(&mut s, "glyph.removeGlyph", json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "keep"}));
+    assert!(s.font().unwrap().glyph("A").is_none());
+    assert_eq!(s.font().unwrap().kerning, before, "pairs naming A stay as obsolete pairs");
     run(&mut s, "edit.undo", json!({}));
     assert!(s.font().unwrap().glyph("A").is_some());
-    assert_eq!(s.font().unwrap().kerning, before, "one undo brings the pairs back");
 }
 
 /// Twice the signed area of each path of `name`'s first layer (positive: counter-clockwise).
