@@ -4,22 +4,22 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-10 (M3 waves 1 and 2: engine foundations, canvas and screenshots, the node, transform, clipboard, guide, layer and annotation commands)._
+_Last updated: 2026-10-10 (M3 waves 3 and 4: path-operation commands and the Knife, strokes and masks in the engine, the six filters, the dialog framework, the drawing, transformation, measurement and annotation tools, the Info box and Palette sections, guides and the background on the canvas)._
 
 ## Where we are
 
 | Dimension | Status |
 |---|---|
 | Planning: charter, rules, references, decisions | **done** for this stage (`docs/`) |
-| Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,638 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
-| Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, tests | **~45%** of what the siblings' "infrastructure" row covers; missing: pointer and key injection, the dialog framework, panels |
-| Feature surface against the references (weighted, by behaviour, self-graded) | **~7%** |
+| Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,643 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
+| Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, pointer and key injection, dialogs, panels, tests | **~55%** of what the siblings' "infrastructure" row covers; missing: context menus, menu items enabled by the selection, a toolbar, the settings window, MCP resources and prompts, a performance suite |
+| Feature surface against the references (weighted, by behaviour, self-graded) | **~10%** |
 | Commands that exist (not: that behave like the reference) | **200 of 932** (`docs/parity.md`) |
 | Observed against the running reference | **52 rows**: 47 compiled-output rows checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
 ## Honest assessment (2026-10-10)
 
-**In one line:** the project reads and writes `.glyphs`, UFO and designspace sources without loss, opens compiled fonts and edits outlines through commands; nobody can draw in its window yet.
+**In one line:** the project reads and writes `.glyphs`, UFO and designspace sources without loss and compiles static fonts that match fontc and fontmake; in its window you can draw and edit outlines with 18 tools, the Info box, four Palette sections and the filter dialogs, but none of the editor has been compared with the reference app, and exported fonts keep their overlaps.
 
 **What is real: files and the compiler.** `.glyphs` files of versions 2, 3 and 4 and `.glyphspackage` folders open and
 save back byte for byte (every corpus source the reference app wrote, Inter and Oswald among
@@ -49,50 +49,68 @@ transforms; fontTools reads all of its output back.
 
 **What is real: editing by command (M3).** 200 of the 932 commands exist, 172 of them from M3.
 Every editing command takes explicit targets (shapes, nodes, segments, the foreground or the
-background) and runs the same from `fontcraft-cli run`, MCP and the control channel into the
-running window:
+background) and runs the same from the window, `fontcraft-cli run`, MCP and the control channel:
 
 | Family | Commands |
 |---|---|
 | Nodes and segments | move and position a selection, node types, convert a segment to a curve, delete with or without breaking the path (also in all masters), insert and connect nodes, close open paths, make a node first, reverse contours (also in all masters), lock paths and glyphs, rectangles and ellipses, Fit Curve |
-| Transformations | the Palette's mirror, scale, rotate, slant and align buttons, Align Selection, Path › Transformations and its export string |
+| Transformations | the Palette's mirror, scale, rotate, slant and align buttons, Align Selection, Path › Transformations and its export string, the transformation origin and settings |
+| Path operations | Remove Overlap, union, difference and intersection, Correct Path Direction, Add and Force Extremes, Tidy up Paths, Open Corner, Reconnect Nodes, Cut with Line, Convert to Cubic and to Quadratic, Round Coordinates; several also for all masters. Each layer runs under a time limit: a layer that runs out of time stays as it was and is listed as skipped |
+| Filters | `filter.apply` with the export-string syntax, `filter.list`, Repeat Last Filter, and the six built-in filters: Round Corners, Extrude, Hatch Outline, Offset Curve, Roughen, Rounded Font |
+| Strokes, masks, shape order | stroke attributes, Expand Outline, masks and shape order, in the engine only |
 | Clipboard and SVG | copy, cut and paste (our JSON fragment and SVG), SVG files imported into glyphs |
 | Guides and measuring | local and global guides, the ruler and coordinate measures, Dimensions |
 | Background and layers | the background commands, Interpolate with Background, backup layers, layer visibility, order and names |
-| Annotations | add, update, move, delete, list |
+| Annotations | add, update, move, delete, list, select all |
 
-An edit that a drag will drive is an interaction: any number of previews, then one commit and
-one undo step. Points a command creates or moves round to the font's grid. `layer.inspect`
-reads a layer's outline with addresses. Edit View draws nodes and handles by the reference's
-display conventions, metric lines and a fill preview; it zooms, scrolls and holds several tabs.
-`ui.screenshot` captures the window over the control channel; `ui.render` draws glyphs to PNG
-without a window, the same bytes every time. Three crates have no commands yet: `tools` (the
-Select, Lasso, Hand and Zoom tools, hit testing, snapping, the Edit View keymap), `pathops`
-(booleans, Remove Overlap, Correct Path Direction, extremes, Tidy up, Open Corner, Reconnect,
-Cut with Line, on linesweeper) and `audit` (34 of the 36 outline checks). 854 tests pass,
-including a sweep that runs every engine command with hostile parameters. The whole gate
-(`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
+**What is real: the window (M3).** Edit View has 18 tools. A tool is chosen by its letter
+(Shift and a shared letter step to the next tool on that letter) or over the control channel:
+Select, Lasso, Hand, Zoom, Draw, Pencil, Rectangle, Ellipse, Knife, Rotate, Scale, Measurement
+and the six Annotation tools. Tools edit through the commands above. A drag is an interaction:
+any number of previews, then one commit and one undo step. Points a command creates or moves
+round to the font's grid. The canvas draws:
 
-**What is not.** In the window, the Select, Lasso, Hand and Zoom tools edit outlines with the
-pointer (M3.3), but there are no drawing tools, no context menus, and menu items are not greyed
-out by the selection. From the
-window's menus only the commands that need no parameters work: there are no dialogs, no Palette
-sections and no Info box. There are no path-operation commands (booleans, Remove Overlap,
-extremes, Tidy up…), no overlap removal on export (overlaps are kept with a warning until M3.7),
-no strokes, masks or filters, and no audit commands. No M3 behaviour has been compared with the
-reference app; where a detail is unconfirmed, it follows the handbook (Remove Overlap, for
-example, deletes open paths). There is no kerning editing, no component editing (components are
-exported as composites), no feature compilation, no variable fonts and no instances between
-masters (M9), no CFF subroutines, no hinting, no web app, no packaging. Glyphs-only data travels
-in glyphsLib's UFO lib keys where glyphsLib has a key for it, and alternate and intermediate
-layers travel as designspace rules and sparse sources; the data no key holds (glyph tags, locks,
-sort names, layer colours, drawing attributes…) does not, and the loss report lists it.
+- nodes and handles by the reference's display conventions, metric lines and the fill preview;
+- the bounding box with its knobs and the transformation origin;
+- guides, the grid and CJK lines, and measurement guides;
+- the background, the outlines of other visible layers, and annotations.
+
+Snapping finds nodes, handles, the background's points, guides and their crossings, and metric
+lines, and lines a point up with other nodes. The Info box shows and edits
+the selected node, handle or box at a reference point. The Palette has Dimensions, Fit Curve,
+Layers and Transformations sections; the bottom bar has the zoom controls. A dialog is a form
+over one command's parameters with a live preview: OK keeps the result as one undo step, Cancel
+restores the font. Each filter opens a dialog built from its parameter schema. Agents drive the
+window with `ui.pointer`, `ui.key`, `ui.text`, `ui.tool.select` and the `ui.dialog.*` methods,
+and see it with `ui.screenshot`; `ui.render` draws glyphs to PNG without a window, the same
+bytes every time. `layer.inspect` reads a layer's outline with addresses. One crate has no
+commands yet: `audit` (34 of the 36 outline checks). 854 tests pass, including a sweep that
+runs every engine command with hostile parameters. The whole gate (`cargo xtask ci`: format,
+lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
+
+**What is not.** No M3 behaviour has been compared with the reference app; where a detail is
+unconfirmed, it follows the handbook (Remove Overlap, for example, deletes open paths).
+
+| Gap | Detail |
+|---|---|
+| Overlaps at export | exported fonts keep overlaps, with a warning, until M3.7 |
+| Strokes and masks | commands only: the canvas does not draw them and export does not expand them |
+| Audit | no `audit.*` command, live audit or markers |
+| Window | no context menus and no toolbar; menu items are not greyed out by the selection; every tab edits the first master's layer (no master switching) |
+| Panels | the Palette's Transformations buttons draw as empty boxes, because the UI font has no glyphs for their symbols; there is no Stroke section; of the M3 dialogs only the filter dialogs exist |
+
+Beyond M3 there is no kerning editing, no component editing (components are exported as
+composites), no feature compilation, no variable fonts and no instances between masters (M9),
+no CFF subroutines, no hinting, no web app, no packaging. Glyphs-only data travels in
+glyphsLib's UFO lib keys where glyphsLib has a key for it, and alternate and intermediate
+layers travel as designspace rules and sparse sources; the data no key holds (glyph tags,
+locks, sort names, layer colours, drawing attributes…) does not, and the loss report lists it.
 Production names and the widths of non-spacing marks need a glyph database (M4). Kerning,
 features and instances are read and written, not yet edited or compiled.
 
 **How much to trust the inventory.** It was compiled from public documentation in one day, each
-source read once. Of its 3,638 rows, 2,106 come from the primary reference's handbook, 1,055 from
-other public documentation or permissive source, 395 are our own design, 30 rest on
+source read once. Of its 3,643 rows, 2,106 come from the primary reference's handbook, 1,055 from
+other public documentation or permissive source, 400 are our own design, 30 rest on
 recollection, and 52 are observed: 47 compiled-output rows checked against fontc and fontmake,
 and 5 editor rows confirmed by public tutorial videos. **No other row has been checked against
 the running reference app.** An independent re-reading of 209 sampled handbook rows against the
@@ -104,26 +122,31 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~8% | 200 of 932 commands; 14 of 33 tools usable in the window; 2 of 170 panels as stubs |
-| **Depth:** features behave like the reference | ~3% | the M3 commands behave as the handbook describes them, but only through the CLI, the control channel and MCP, and none has been compared with the reference app |
+| **Breadth:** commands, tools and panels exist | ~11% | 200 of 932 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); 13 of 170 panels, most of them partial (the Font View grid, the Info box, the Palette and four of its sections, the bottom bar, five filter dialogs) |
+| **Depth:** features behave like the reference | ~4% | the M3 commands, tools, panels and dialogs behave as the handbook describes them, and none has been compared with the reference app. Exported fonts keep overlaps; strokes and masks are not drawn or exported; no context menus |
 | **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands and the CLI. Missing: variable fonts, instances between masters, version conversion, a glyph database for production names |
 | **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). No variable font, no features, no hinting, no subroutines |
-| **Agent automation** | ~45% | every existing command is reachable from CLI, control channel and MCP; `ui.screenshot` and `ui.render` show the result; no pointer or key injection, dialogs, MCP resources or prompts yet |
-| **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests, hostile SVG, a random-path test of every path operation); dependency failures found and fenced: the glyph writer's coordinate panic, the SVG parser's stack overflow on deep nesting, linesweeper's NaN panic. linesweeper also hangs on rare inputs (`docs/plans/M3.md` › M3.6); it is kept from crates.io, and overlap removal at export (M3.7) is to run each glyph under a time limit. One adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, and the known scaling limits in `docs/status.md` |
+| **Agent automation** | ~55% | every existing command is reachable from CLI, control channel and MCP; the control channel's 19 methods drive the window's tools, pointer, keys, text fields, dialogs and menus; `ui.screenshot` and `ui.render` show the result. Missing: `ui.click` beyond dialogs, `ui.set`, MCP resources and prompts |
+| **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests, hostile SVG, a random-path test of every path operation); dependency failures found and fenced: the glyph writer's coordinate panic, the SVG parser's stack overflow on deep nesting, linesweeper's NaN panic. linesweeper also hangs on rare inputs (`docs/plans/M3.md` › M3.6); it is kept from crates.io, and the path-operation commands run each layer on a worker thread under a time limit (a layer that runs out of time stays as it was; the worker cannot be stopped and runs on detached). Overlap removal at export (M3.7) is to use the same limit. One adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, and the known scaling limits in `docs/status.md` |
 | **Performance** | unmeasured | targets written down (`docs/architecture.md`); no budget suite |
 | **Platforms** | Linux run verified; others untested | built and run on Linux (virtual display). macOS and Windows have not been built. wasm: libraries check, no web app |
-| **Look and feel** | not started | a functional shell with the siblings' default dark tokens; Edit View follows the reference's node and handle display conventions as the handbook describes them; nothing measured against any reference |
+| **Look and feel** | barely started | a functional shell with the siblings' default dark tokens; panels, dialogs and canvas overlays take their colours and sizes from the tokens; Edit View follows the reference's node and handle display conventions as the handbook describes them; the Transformations buttons draw as empty boxes (the UI font lacks their symbols); no toolbar; nothing measured against any reference |
 
 ### What to build next (in priority order)
 
 The rest of **M3, Edit View drawing**, in the order of `docs/plans/M3.md` § 6:
 
-1. **Wave 3**, in parallel: the path-operation commands and the Knife tool on `pathops`
-   (M3.6), strokes and masks (M3.11), and the filters, one each (M3.12).
-2. **M3.7, overlap removal at export**, with a per-glyph time limit; the M2 warning goes away.
-3. **Wave 4**: the drawing tools (M3.13), the tool files of transforms, guides and annotations,
-   the Palette sections and Info box (M3.15), and the audit markers and commands (M3.17).
-5. **Wave 5**: the dialog framework, then one dialog each (M3.14).
+1. **In progress:** the audit commands and fixes (M3.17); the Transformations, Interpolate
+   with Background, Primitive Measurements, missing-glyph, pasted-outline and Export dialogs,
+   and the dialog framework's extensions for them (M3.14).
+2. **M3.7, overlap removal at export**, with the per-layer time limit of the path-operation
+   commands; the M2 warning goes away.
+3. **The canvas and compile parts of M3.11:** strokes and masks drawn on the canvas, expanded
+   and applied in the compiler's outline stage before overlap removal; the Stroke section and the
+   Shape Order dialog.
+4. **Live audit and canvas markers** (M3.17).
+5. **The window's gaps:** context menus from the commands' `context` field, menu items greyed
+   out by the selection, the Transformations buttons' symbols.
 6. **M3.18, close**: the measures of `docs/plans/M3.md` § 5.
 
 Then M4–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
@@ -140,8 +163,8 @@ on, so the engine track, where oracles prove correctness, goes first.
 
 - **Planning:** charter, clean-room policy, reference index with licences, six decision records,
   architecture, execution plan, testing plan, UI design frame, control-protocol and MCP documents.
-- **Specification:** 24 inventory files (929 commands, 33 tools, 170 panels, 45 settings, 241
-  parameters, 1,751 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 23
+- **Specification:** 24 inventory files (932 commands, 33 tools, 170 panels, 45 settings, 241
+  parameters, 1,753 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 23
   behaviour notes (about 150,000 words), all in our own words. Every M3 command's `params` name
   its targets; shortcuts carry a `when` (the context they apply in).
 - **Workspace:** 20 library crates in enforced layers, two apps, `xtask`; about 102,600 lines of Rust.
@@ -155,13 +178,19 @@ on, so the engine track, where oracles prove correctness, goes first.
   snapshot. The glyph lock refuses edits with a message. `layer.inspect` returns a layer's
   shapes, nodes, anchors, guides and annotations with their addresses. `geom` has segments with
   addresses, nearest points, splits, extremes, inflections and grid rounding.
-- **Editing commands (M3 waves 1 and 2):** node and segment commands and Fit Curve (M3.4);
-  the Palette transforms and alignments, Align Selection, and Path › Transformations with its
-  export string (M3.5); copy, cut, paste and SVG outline import (M3.8); local and global guides,
+- **Editing commands (M3):** node and segment commands and Fit Curve (M3.4); the Palette
+  transforms and alignments, Align Selection, Path › Transformations with its export string,
+  and the transformation origin and settings (M3.5); the path-operation commands on `pathops`
+  (M3.6); copy, cut, paste and SVG outline import (M3.8); local and global guides,
   `measure.ruler`, `measure.coordinates` and Dimensions (M3.9); the background commands,
-  Interpolate with Background and the layer commands (M3.10); annotations (M3.16). Points a
-  command creates or moves round to the font's grid. Each family has behaviour tests on
-  synthetic glyphs, and the command sweep covers every command.
+  Interpolate with Background and the layer commands (M3.10); stroke attributes, Expand
+  Outline, masks and shape order (M3.11, engine only); annotations (M3.16). Points a command
+  creates or moves round to the font's grid. Each family has behaviour tests on synthetic
+  glyphs, and the command sweep covers every command.
+- **Filters (M3.12):** `filter.apply` with the parser of the export-string syntax (M7 reuses it
+  at export), `filter.list` with each filter's parameter schema, Repeat Last Filter, and Round
+  Corners, Extrude, Hatch Outline, Offset Curve, Roughen (seeded, so the same seed gives the same
+  font) and Rounded Font in `crates/pathops/src/filters/`.
 - **Rendering:** `crates/render` (tiny-skia): a layer or a line of glyphs to RGBA and PNG,
   nonzero fill, anti-aliased, the same bytes for the same input.
 - **Path operations:** `crates/pathops`: union, difference and intersection on linesweeper,
@@ -171,11 +200,17 @@ on, so the engine track, where oracles prove correctness, goes first.
   Union matches skia-pathops' coverage on all 2,368 corpus layers with closed paths (`cargo
   xtask overlap`). linesweeper 0.5.0 is kept from crates.io and its rare hang is not reported
   upstream for now; the rule for callers that run without a person waiting (export, batch
-  commands) is a time limit per glyph (`docs/plans/M3.md` › M3.6, rule 8). No command calls the crate yet.
-- **Tools:** `crates/tools` (no egui): the Select, Lasso, Hand and Zoom tools as state machines
-  that emit interactions, hit testing of nodes, handles, segments, anchors, components and
-  guides, snapping, the selection and its target object, the Edit View keymap and temporary
-  tools. Not yet wired into the canvas.
+  commands) is a time limit per glyph (`docs/plans/M3.md` › M3.6, rule 8). The path-operation
+  commands run each layer on a worker thread under that limit and carry node names, identifiers,
+  locks and user data through each operation.
+- **Tools:** `crates/tools` (no egui): 18 tools as state machines that emit interactions:
+  Select, Lasso, Hand, Zoom, Draw, Pencil (freehand points fitted to curves), Rectangle,
+  Ellipse, Knife, Rotate, Scale, Measurement and six Annotation tools. Hit testing of nodes,
+  handles, segments, anchors, components and guides; snapping to nodes, handles, the
+  background, guides and their crossings, and metric lines; the selection and its target
+  object; the bounding box and its knobs; the Edit View keymap, temporary tools and tool
+  letters shared by several tools. The shell drives them from the pointer and from `ui.pointer`
+  and `ui.key`.
 - **Audit:** `crates/audit`: the check registry and 34 of the 36 outline checks, with
   severities, thresholds, fixes by command id and the result document of `docs/spec/21-qa.md`
   § 4. No `audit.*` command yet.
@@ -278,15 +313,23 @@ on, so the engine track, where oracles prove correctness, goes first.
   normalisation (identical, equivalent, allowed with a reason, different, skipped), with
   source-reading differences reported apart; `--corpus` over 354 sources; opt-in oracle tests.
 - **Agent surfaces:** CLI (`commands`, `run`, `convert`, `compile`, `info`, `oracle`, `mcp`), control channel
-  (9 methods, loopback, request-only, among them `ui.screenshot`, which captures the window as
-  PNG, and `ui.render`, which draws glyphs without a window), MCP server (3 tools, headless or
-  attached).
-- **UI:** egui shell split into `shell/` and `canvas/`, with a registry-built menu bar cached per
-  document revision, Font View grid, Palette stub and status line. Edit View draws the
-  reference's display conventions (smooth and corner nodes, handles, open ends, start nodes,
-  coincident nodes, metric lines, fill preview), zooms and scrolls, and holds tabs (new, show,
-  next, previous, close, close others, reopen). The View toggles and `view.getDisplayOptions`
-  hold the display state. Runs in a window and in headless test frames.
+  (19 methods, loopback, request-only: commands, menus, tools, pointer and key events, text,
+  dialogs, `ui.screenshot`, which captures the window as PNG, and `ui.render`, which draws
+  glyphs without a window), MCP server (3 tools, headless or attached).
+- **UI:** egui shell split into `shell/`, `canvas/`, `panels/` and `dialogs/`, with a
+  registry-built menu bar cached per document revision, Font View grid and status line. Edit
+  View draws the reference's display conventions (smooth and corner nodes, handles, open ends,
+  start nodes, coincident nodes, metric lines, fill preview), the bounding box and its knobs,
+  guides, the grid and CJK lines, measurement guides, the background, other visible layers'
+  outlines, annotations and each tool's overlay, all styled from the tokens. It zooms and
+  scrolls, and holds tabs (new, show, next, previous, close, close others, reopen). The View
+  toggles and `view.getDisplayOptions` hold the display state. Panels (M3.15): the Info box's
+  selection part with its reference point, the Palette with Dimensions, Fit Curve, Layers and
+  Transformations sections that collapse, and the bottom bar's zoom controls; number fields
+  follow the field rules (Return, Tab, Escape, arrows with Shift). Dialogs (M3.14): a form over
+  one command's parameters with a live preview inside an interaction, OK as one undo step and
+  Cancel back to the font the dialog opened on; every filter with parameters gets one from its
+  schema, and Round Corners has its own file. Runs in a window and in headless test frames.
 - **Gates:** `cargo xtask ci` with nine steps; parity report generated from the inventory;
   `cargo xtask roundtrip` over 527 corpus sources (outside the gate).
 
@@ -300,7 +343,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 6 (4) |
-| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 🟡 plan accepted (`docs/plans/M3.md`). Done: M3.0 spec pass (targets in every command's params, `when` and `context` fields, D13 answered, 5 editor rows confirmed by tutorial videos); M3.1 engine foundations (one target resolver, interactions, `layer.inspect`, the glyph lock, segment geometry, grid rounding); M3.2 canvas, `render` crate, `ui.screenshot` and `ui.render`, zoom, scroll, tabs, View toggles; wave 2's engine commands: nodes and Fit Curve (M3.4), transformations (M3.5), clipboard and SVG import (M3.8), guides, measuring and Dimensions (M3.9), background and layers (M3.10), annotations (M3.16); M3.3 pointer editing in the window (Select, Lasso, Hand, Zoom, snapping, keymap, `ui.pointer`, `ui.key`). Crates without commands yet: `pathops` (M3.6), `audit` (M3.17: 34 of 36 outline checks). Left: path-op commands, M3.7, strokes, masks, filters, drawing tools, panels, dialogs, audit commands | 181 (125) |
+| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 🟡 plan accepted (`docs/plans/M3.md`). Done: M3.0 spec pass; M3.1 engine foundations (targets, interactions, `layer.inspect`, the glyph lock, segment geometry, grid rounding); M3.2 canvas, `render`, `ui.screenshot`, `ui.render`, tabs, View toggles; M3.3 pointer editing (Select, Lasso, Hand, Zoom, snapping, keymap, `ui.pointer`, `ui.key`); M3.4 nodes and Fit Curve; M3.5 transformations, the Rotate and Scale tools and the bounding box; M3.6 path-operation commands and the Knife; M3.8 clipboard and SVG import; M3.9 guides, grid, measuring, Dimensions and the Measurement tool; M3.10 background and layers, drawn on the canvas; M3.11 strokes, masks and shape order in the engine; M3.12 the filter framework and six filters; M3.13 Draw, Pencil, Rectangle, Ellipse; M3.14 the dialog framework and filter dialogs; M3.15 Info box, four Palette sections, bottom bar; M3.16 annotations and the Annotation tools. In progress: audit commands (M3.17), the other M3 dialogs. Left: M3.7 overlap removal at export, strokes and masks on the canvas and at compile, live audit and markers, context menus, M3.18 | 184 (172) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
@@ -326,14 +369,14 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 
 | Area | Weight | Commands | Exist | Done (behaviour) | Missing (main items) |
 |---|---:|---:|---:|---:|---|
-| Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 44 | 20 | 10% | tabs, zoom and scroll work; missing: toolbar, settings window, shortcut editor, workspaces, title bar, sidebars |
+| Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 45 | 22 | 12% | tabs, zoom and scroll work; tools are chosen by their letters, shared letters cycle; bottom bar zoom controls; missing: toolbar, context menus, menu items greyed out by the selection, settings window, shortcut editor, workspaces, title bar, sidebars |
 | Font View | 6 | 62 | 6 | 3% | list view, sidebar and filters, glyph data, Add Glyphs syntax, batch commands, inspector |
 | Edit View text mode | 4 | 25 | 1 | 0% | everything but the fill-preview toggle |
-| Drawing and editing outlines | 10 | 94 | 68 | 11% | node, segment, transform, clipboard and selection commands work headless; Select, Lasso, Hand and Zoom work in the window; missing: the drawing tools (M3.13), context menus, the Info box and Palette panels, bounding-box knobs, the Transformations dialog; nothing compared with the reference |
-| Path operations and filters | 6 | 66 | 7 | 3% | node-order commands (connect, close, make first, reverse, insert) work headless; the booleans, Remove Overlap, extremes, Tidy up, Open Corner and Cut with Line exist in `pathops` without commands; no filters, strokes or masks |
+| Drawing and editing outlines | 10 | 96 | 79 | 20% | node, segment, transform, clipboard and selection commands; in the window Select, Lasso, Hand, Zoom, Draw, Pencil, Rectangle, Ellipse, Rotate and Scale, the bounding box and its knobs, the Info box and the Palette's Transformations and Fit Curve sections. Missing: context menus, the Transformations and Primitive Measurements dialogs, master switching in Edit View, symbols on the Transformations buttons; nothing compared with the reference |
+| Path operations and filters | 6 | 66 | 39 | 22% | Remove Overlap, the booleans, path direction, extremes, Tidy up, Open Corner, Reconnect, Cut with Line, curve conversion and rounding as commands; the Knife; the six filters with dialogs and export strings; strokes, masks and shape order in the engine. Missing: strokes and masks on the canvas and at export, the Stroke section, the Shape Order dialog; nothing compared with the reference |
 | Reusing shapes | 7 | 77 | 0 | 0% | everything; components are only exported (as composites, decomposed where the format needs it) |
-| Layers | 3 | 21 | 15 | 15% | background and layer commands work headless; missing: the Layers panel, background drawing in the canvas, the Interpolate with Background dialog |
-| Guides, metric lines, zones, grid | 3 | 36 | 16 | 10% | guide, ruler, coordinate and Dimensions commands work headless and metric lines are drawn; missing: guides and the grid on the canvas, guide dragging and snapping, the Measurement tool |
+| Layers | 3 | 21 | 17 | 25% | background and layer commands; the background and other visible layers drawn on the canvas; the Palette's Layers section. Missing: the Interpolate with Background dialog, layer context menus, master switching |
+| Guides, metric lines, zones, grid | 3 | 36 | 16 | 22% | guide, ruler, coordinate and Dimensions commands; metric lines, guides, the grid, CJK lines and measurement guides drawn; the Measurement tool; snapping to guides and their crossings; the Palette's Dimensions section. Missing: guide context menus, script-specific metric lines; nothing compared with the reference |
 | Spacing and kerning | 7 | 79 | 1 | 1% | set width only |
 | Font Info | 6 | 48 | 2 | 2% | four font-wide fields can be read and set |
 | Interpolation | 8 | 68 | 0 | 0% | everything |
@@ -342,13 +385,13 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
 | Source formats | 6 | 14 | 6 | 57% | Glyphs-only data glyphsLib has no UFO key for; alternate layers' order and ids through a designspace, and alternate layers in a single UFO; STAT labels derived from instances; production names and mark widths from a glyph database; UFO 1; shape groups, gradients and shadows kept as stored values; right-to-left, vertical and contextual kerning in UFO; version conversion |
-| Compiling | 9 | 11 | 4 | 10% | static TTF and OTF, plain, WOFF and WOFF2, from the commands; core tables identical, equivalent or allow-listed against fontc and fontmake in every corpus source. Missing: variable fonts and instances between masters (M9), features (M8), hinting (M10), overlap removal (M3.7), CFF subroutines, production names (M4), 37 of 50 tables |
+| Compiling | 9 | 11 | 4 | 10% | static TTF and OTF, plain, WOFF and WOFF2, from the commands; core tables identical, equivalent or allow-listed against fontc and fontmake in every corpus source. Missing: variable fonts and instances between masters (M9), features (M8), hinting (M10), overlap removal (M3.7), strokes and masks (M3.11), CFF subroutines, production names (M4), 37 of 50 tables |
 | Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
 | Command-line tools | 8 | 42 | 4 | 3% | `commands`, `run`, `convert`, `compile` (static fonts; most of the reference compilers' options not yet), `info`, `tables list`, `glyphs list`, `oracle`; no dump, subset, instance, merge |
 | Quality checks | 3 | 33 | 0 | 2% | `audit` holds 34 of the 36 outline checks with their fixes named, but no `audit.*` command, live audit or markers exist; the other 264 checks |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
-| Agent surfaces | 4 | 11 | 3 | 30% | execute, list, inspect and batch over three surfaces; `ui.screenshot` and `ui.render`; no pointer or key injection, dialogs, MCP resources or prompts |
-| **Feature parity** | **117** | **932** | **200** | **~7%** | |
+| Agent surfaces | 4 | 11 | 3 | 40% | execute, list, inspect and batch over three surfaces; `ui.screenshot` and `ui.render`; tools, pointer, key, text and dialog control over the control channel. Missing: `ui.click` beyond dialogs, `ui.set`, MCP resources and prompts |
+| **Feature parity** | **117** | **932** | **200** | **~10%** | |
 
 ## Out of scope (by design or by law)
 

@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M3 waves 1 and 2, M3.1 and M3.2 integrated._
+_Updated: 2026-10-10, M3 waves 3 and 4 and the dialog framework integrated._
 
 ## State of the tree
 
 - `cargo xtask ci` passes all nine steps (854 tests; about 102,600 lines of Rust in 20 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 200 of the 932 inventory commands exist (`docs/parity.md`); M3 has 184 commands, 172 of them
-  live. Feature parity is about 7% (ROADMAP.md › Parity estimate).
+  live. Feature parity is about 10% (ROADMAP.md › Parity estimate).
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
 - The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
@@ -27,17 +27,24 @@ _Updated: 2026-10-10, M3 waves 1 and 2, M3.1 and M3.2 integrated._
 | Wave 1 | crates without commands: `tools` (M3.3 core), `audit` (M3.17, 34 of 36 outline checks), `io-svg` (M3.8), `pathops` (M3.6) |
 | M3.3 | pointer editing in the window: Select, Lasso, Hand, Zoom, snapping, keymap with `when`, selection commands, `ui.pointer`, `ui.key`, `ui.text`, `ui.tool.*` |
 | Wave 2 | engine commands: M3.4 nodes and Fit Curve, M3.5 transformations, M3.8 clipboard and SVG import, M3.9 guides, measuring and Dimensions, M3.10 background and layers, M3.16 annotations |
+| Wave 3 | M3.6 path-operation commands (each layer under a time limit) and the Knife; M3.11 strokes, masks and shape order in the engine; M3.12 the filter framework (`filter.apply`, `filter.list`, Repeat Last Filter) and the six filters |
+| M3.14 framework | a dialog is a form over a command's parameters with a live preview: OK is one undo step, Cancel restores the font; filter dialogs from their schemas; `dialog.open`, `ui.dialog.*`, `ui.click` |
+| Wave 4 | M3.13 Draw, Pencil, Rectangle, Ellipse and shared tool letters; M3.5 Rotate and Scale tools and the bounding box; M3.9, M3.10, M3.16 on the canvas: guides, grid, measurement, the Measurement tool, background, annotations and the Annotation tools; M3.15 Info box, Palette (Dimensions, Fit Curve, Layers, Transformations), bottom bar |
+
+In progress on branches when this was written: the audit commands and fixes (M3.17); the
+Transformations, Interpolate with Background, Primitive Measurements, missing-glyph,
+pasted-outline and Export dialogs, with the framework extensions they need (M3.14).
 
 Next, in this order:
 
-1. **Wave 3** (worktrees): the path-operation commands and the Knife tool on `pathops` (M3.6
-   step 3), strokes and masks (M3.11), filters (M3.12, one worktree each).
-2. **M3.7, overlap removal at export** (builder). Static export keeps overlaps with a warning
-   until then.
-3. **Wave 4**: drawing tools (M3.13), the tool files of M3.5, M3.9 and M3.16, Palette sections
-   and Info box (M3.15), audit commands and markers (M3.17).
-4. **Wave 5**: the dialog framework (builder), then one dialog per worktree (M3.14).
-6. **M3.18**: the measures of `docs/plans/M3.md` § 5, then close the milestone.
+1. **M3.7, overlap removal at export** (builder), with the time limit the path-operation
+   commands use. Static export keeps overlaps with a warning until then.
+2. **The rest of M3.11**: strokes and masks drawn on the canvas, and expanded and applied in the
+   compiler's outline stage before overlap removal; the Stroke section; the Shape Order dialog.
+3. **Live audit and canvas markers** (M3.17, builder).
+4. **The window's gaps**: context menus built from the `context` field, menu items greyed out by
+   the selection (the `targets` field), symbols for the Transformations buttons.
+5. **M3.18**: the measures of `docs/plans/M3.md` § 5, then close the milestone.
 
 Decisions that hold for the rest of M3:
 
@@ -80,11 +87,16 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
 - **The reference app has not been run.** 52 rows are `observed`: 47 compiled-output rows
   checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos.
   About 450 open questions are listed at the ends of the notes.
-- **Most M3 commands work only headless.** They run from the CLI, the control channel and MCP;
-  in the window only the Select, Lasso, Hand and Zoom tools and the menu shortcuts reach them
-  (no drawing tools, panels, dialogs or context menus yet).
-- **linesweeper can hang** on rare inputs (plan § M3.6 "Spike result"); a thread cannot stop it,
-  so the 10,000-case random-path test in `crates/pathops` is ignored in the gate.
+- **No M3 behaviour has been compared with the reference app.** Tools, panels and dialogs
+  follow the handbook.
+- **The window has gaps.** No context menus and no toolbar; menu items are not greyed out by
+  the selection; every tab edits the first master's layer (no master switching); the Palette's
+  Transformations buttons draw as empty boxes because the UI font has no glyphs for their
+  symbols. Strokes and masks are not drawn, and export does not expand them.
+- **linesweeper can hang** on rare inputs (plan § M3.6 "Spike result"). The path-operation
+  commands run each layer on a worker thread under a time limit; a layer that runs out of time
+  stays as it was, and its worker cannot be stopped and runs on detached. The 10,000-case
+  random-path test in `crates/pathops` is ignored in the gate.
 - **The compiler writes static fonts only.** TrueType and CFF, plain, WOFF and WOFF2; the core
   tables match fontc and fontmake over the corpus (with allow-listed causes: variable references,
   bracket and colour glyphs, the glyph database, smart components); no features, variations,
@@ -256,3 +268,12 @@ Append one terse entry per session: what landed, numbers, what is still open.
   menus. Wave 2: node, transform, clipboard, guide, measure, Dimensions, background, layer and
   annotation commands. Remove Overlap deletes open paths and stray nodes, as the handbook says.
   679 tests; 142 of 929 commands live (M3: 114 of 181). Next: the M3.3 wiring.
+- **2026-10-10, M3 waves 3 and 4, the dialog framework.** Path-operation commands on `pathops`,
+  each layer under a time limit, and the Knife; strokes, masks and shape order in the engine;
+  the filter framework and all six filters; dialogs with live preview and Cancel, one per filter
+  from its schema; Draw, Pencil, Rectangle, Ellipse, Rotate, Scale, Measurement and the six
+  Annotation tools (18 tools in the window); the bounding box; guides, grid, measurement,
+  background and annotations on the canvas; Info box, four Palette sections, bottom bar. 854
+  tests; 200 of 932 commands live (M3: 172 of 184); about 102,600 lines of Rust. Open: audit
+  commands and the other dialogs (on branches), M3.7, strokes and masks on the canvas and at
+  export, live audit, context menus, M3.18.
