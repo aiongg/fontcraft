@@ -7,6 +7,7 @@
 
 pub mod annotation;
 pub mod audit;
+pub mod clipboard;
 pub mod context_menu;
 pub mod drawing;
 pub mod font_view;

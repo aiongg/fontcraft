@@ -52,9 +52,10 @@ kind = "engine"
 params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} → {json: string, svg: string, skipped?: count}"
 area = "drawing"
 milestone = "M3"
-summary = "Returns the targeted points, shapes, anchors and guides as our JSON fragment (clipboard format) and as an SVG path for other apps. A partly selected path is copied as open paths made of its selected segments; without targets the whole layer side is copied. The engine never touches the system clipboard; the desktop shell puts both flavours on it. The handbook names copy and paste as the alternative to Option-drag; the flavours are our design."
+summary = "Returns the targeted points, shapes, anchors and guides as our JSON fragment (clipboard format) and as an SVG path for other apps. A partly selected path is copied as open paths made of its selected segments; without targets the whole layer side is copied. The engine never touches the system clipboard. The handbook names copy and paste as the alternative to Option-drag; the flavours are our design."
 ref = "Edit View › Duplicating Paths; Import & Export › Vector Drawing Applications"
 status = "inferred"
+notes = "Shell (M3.8): Cmd+C and Edit › Copy in Edit View run this on the selection and put the `json` text on the system clipboard. egui hands the platform one text per copy, so the SVG flavour reaches other apps only through this command's result. Cmd+X and Edit › Cut do the same with edit.cut. Nothing is copied while a text field has the keyboard or a dialog is open."
 
 [[command]]
 id = "edit.paste"
@@ -68,6 +69,7 @@ milestone = "M3"
 summary = "Inserts a JSON fragment or SVG into the layer at the original coordinates (or at `at`), rounds them to the grid (paste.roundsToGrid) and reports when the result lies far outside the glyph box (paste.outOfBoundsCorrection): more than half an em outside it, with the move that brings the box's bottom left to the origin as the suggested correction (our choices; the handbook gives neither). Paste Special and Paste After are separate commands (edit.pasteSpecial, edit.pasteAfter). The handbook names Edit › Paste for outlines from vector apps (paste.vectorOutlines); the flavours are our design."
 ref = "Edit View › Duplicating Paths; Import & Export › Vector Drawing Applications"
 status = "inferred"
+notes = "Shell (M3.8): Cmd+V in Edit View runs this with the system clipboard's text as `text` on the edited layer, as the person's run, so dialog.pastedOutlineBounds can follow. Edit › Paste asks the platform for the clipboard text first. Clipboard text over 16 MiB is refused with a message."
 
 [[command]]
 id = "file.close"

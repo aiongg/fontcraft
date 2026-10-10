@@ -86,9 +86,11 @@ impl FontcraftApp {
     }
 
     /// Runs a command the person started (menu item, shortcut, tool) as [`Self::run`] does, then
-    /// opens the follow-up dialog its result asks for (`dialogs::after`).
+    /// opens the follow-up dialog its result asks for (`dialogs::after`). Copy and Cut also put
+    /// their text on the system clipboard.
     pub fn run_from_shell(&mut self, id: &str, params: &Value) -> Result<Value, String> {
         let result = self.run(id, params)?;
+        shell::clipboard::after_run(self, id, &result);
         if self.dialog.is_none()
             && let Some((dialog, given)) = crate::dialogs::after(id, params, &result)
             && let Err(e) = crate::dialogs::open(self, &dialog, &given)
@@ -157,6 +159,7 @@ impl FontcraftApp {
         // the menu shortcuts.
         tools_glue::keys(self, ui.ctx());
         let mut pending: Vec<(&'static str, Value)> = shell::keymap::pressed(ui.ctx());
+        pending.extend(shell::clipboard::events(self, ui.ctx()));
         self.menu_bar(ui, &mut pending);
         shell::tabs::strip(self, ui, &mut pending);
         shell::status_bar::show(self, ui);
@@ -171,6 +174,10 @@ impl FontcraftApp {
         // dialog is open only view commands run. A menu item whose command has a dialog opens it.
         for (id, params) in pending {
             if self.dialog.is_some() && !is_ui_command(id) {
+                continue;
+            }
+            if shell::clipboard::wants_text(id, &params) {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                 continue;
             }
             if shell::pickers::wants_files(id, &params) {
