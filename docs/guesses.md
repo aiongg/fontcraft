@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**310 guesses on 226 rows (118 of them live commands).**
+**326 guesses on 237 rows (123 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -164,6 +164,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `fontView.setViewMode` | M4 | handbook | yes | The selection, the sidebar entries, the search and the sort carry over when the mode changes. Settled by observation. |
+| `fontView.setCellSize` | M4 | handbook | yes | Cells run from 16 to 512 points on a logarithmic slider, 64 by default. Settled by observation. |
+| `fontView.sortByColumn` | M4 | handbook | yes | Glyphs without a value in the sort column go last in both directions, and ties keep glyph order. Settled by observation. |
+| `fontView.sortByColumn` | M4 | handbook | yes | The sort belongs to the Font View tab and is not saved with the document. Settled by observation. |
+| `fontView.setColumns` | M4 | handbook | yes | At least one column stays shown; the header's context menu lists every column with a check mark. Settled by observation. |
+| `fontView.getState` | M4 | inferred | yes | Our own query for agents; there is no reference behaviour to settle. |
 | `glyph.addGlyphs` | M4 | handbook | yes | A comma is not a separator: an item containing one is an invalid name and is reported. Settled by observation (05 question 7). |
 | `glyph.addGlyphs` | M4 | handbook | yes | A range covers every code point from the first endpoint's to the second's; code points Unicode does not assign, and surrogates, are skipped, and one range holds at most 65,536 code points. Settled by observation (05 question 7). |
 | `glyph.addGlyphs` | M4 | handbook | yes | An invalid item is reported in `skipped` and the valid items are still added. Settled by observation. |
@@ -226,13 +232,16 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `path.removeOverlapForAllMasters` | M3 | handbook | yes | The label "… for All Masters" is ours; the handbook describes the Option key but not the item's label (03a question 18). |
 | `path.convertToQuadratic` | M3 | handbook | yes | New off-curve points are rounded to the grid. |
 | `path.convertToQuadratic` | M3 | handbook | yes | With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible. |
+| `fontView.cell.followsMaster` (behavior) | M4 | handbook | – | Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation. |
 | `fontView.cell.contentBySize` (behavior) | M4 | handbook | – | Names and Unicode markers show from a cell size of 64 points up. Settled by observation. |
 | `fontView.cell.unicodeIndicator` (behavior) | M4 | handbook | – | CJK glyphs are those whose first code point is in the Han, Hiragana, Katakana, Hangul or Bopomofo script; the character is drawn with the interface font, and the marker is drawn when that font lacks it. Settled by observation. |
+| `fontView.cell.unicodeIndicator` (behavior) | M4 | handbook | – | The marker is a small grey square. Settled by observation. |
 | `fontView.cell.badgeAnnotation` (behavior) | M4 | handbook | – | Drawn in the top-left corner; the handbook gives no position. Settled by observation (05 question 15). |
 | `fontView.cell.badgeCustomInfo` (behavior) | M4 | handbook | – | Drawn in the bottom-left corner; the handbook gives no position. Settled by observation (05 question 15). |
 | `fontView.cell.badgeCustomInfo` (behavior) | M4 | handbook | – | A glyph counts as custom when it stores a category, subcategory, script, production name, case, direction or sort name that differs from the database's, or Unicode values that differ from the database's for its name. Settled by observation. |
 | `fontView.cell.badgeNonExporting` (behavior) | M4 | handbook | – | Drawn at the top centre of the cell; the handbook gives no position. Settled by observation (05 question 15). |
-| `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Every column is shown by default, in the order the Glyph Properties section lists the properties. Settled by observation (05 question 14). |
+| `fontView.cell.colorLayerOnly` (behavior) | M4 | handbook | – | The cut-out is a triangle over 30% of the side at the top-left corner. Settled by observation. |
+| `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Every column is shown by default, in this order: ID, Char, Name, Unicode, Production Name, Script, Category, Subcategory, Case, Direction, Exports, Color, Tags, Sort Name, Note, Components, Last Changed, LSB, RSB, Width, Left Group, Right Group. Settled by observation (05 question 14). |
 | `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation. |
 | `fontView.sidebar.missingBadge` (behavior) | M4 | handbook | – | The badge counts expected glyphs present by name or by code point (a glyph with the character counts even under another name). Settled by observing a badge for a font that names a glyph differently. |
 | `fontView.paste.glyphs` (behavior) | M4 | handbook | – | Pasted glyphs take their place in the default sort order, like added glyphs. Settled by observation. |
@@ -248,7 +257,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyphName.firstCharacter` (behavior) | M4 | handbook | – | .null is exempt like .notdef. |
 | `glyphName.invalidBlocksExport` (behavior) | M4 | handbook | – | Only glyphs that export are checked: a glyph that is not written to the font cannot block its export. Settled by exporting a font whose non-exporting glyph has an invalid name. |
 | `glyphName.invalidBlocksExport` (behavior) | M4 | handbook | – | The glyph's name is checked, not a production name it stores; a stored production name with bad characters is cleaned at export like any other. Settled by exporting a font with such a production name. |
+| `glyphName.clickToEdit` (behavior) | M4 | handbook | – | A click on the name of the glyph that is already the only one selected starts editing; a click on another glyph's name selects it. Return or a click elsewhere commits through glyph.rename, Escape cancels. Settled by observation. |
 | `fontView.invertSelection` (behavior) | M4 | handbook | – | Invert Selection works among the visible glyphs, as Select All does. Settled by observation (05 question 12). |
+| `fontView.batch.palette` (behavior) | M4 | handbook | – | Fit Curve applies each glyph's remembered node indices to its layer of Font View's master; glyphs never edited, or whose nodes are gone, are skipped; the run is one undo step. Settled by observation. |
 | `fontView.search.fields` (behavior) | M4 | handbook | – | A plain term matches names and notes by substring; it matches a code point when it is four to six hexadecimal digits (optionally after U+ or 0x) equal to it, and a character when it is that one character. Shorter hexadecimal terms such as FE only match names, so a term like a does not also find every code point containing A. Settled by observing a search for 00FE and for FE. |
 | `fontView.search.regex` (behavior) | M4 | handbook | – | With Regex on, the pattern must match a whole field (name, hex code point or note) among the fields the magnifier menu selects; the handbook's examples only show names. Settled by observation (05 question 13). |
 | `fontView.sidebar.categoryFilter` (behavior) | M4 | handbook | – | A category lists case groups (Uppercase, Lowercase, Smallcaps, Minor: the glyphs with that case, or with the subcategory older files store under the same name) and then its subcategories, each only when the font has such glyphs or the shown languages expect some. Settled by observing the expanded Letter entry. |
@@ -264,7 +275,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyphOrder.default` (behavior) | M4 | handbook | – | The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2). |
 | `glyphOrder.default` (behavior) | M4 | handbook | – | A sort name (from custom glyph data or the glyph itself) places the glyph after the others of its category, ordered by the sort name. |
 | `glyphOrder.default` (behavior) | M4 | handbook | – | In a stored order that is not sorted by the key, a new glyph goes right after the last glyph whose key is not greater than its own (first when there is none), so it follows the glyphs it would follow in a sorted font. Settled by observing where the reference puts a new glyph in a hand-ordered font. |
-| `fontView.getState` | M4 | inferred | no | Our own query for agents; there is no reference behaviour to settle. |
+| `fontView.grid` (panel) | M4 | handbook | – | Shift+click adds every visible glyph from the last clicked glyph to the clicked one; Cmd+click adds or removes one glyph; a click on empty space clears the selection. Settled by observation. |
+| `fontView.grid` (panel) | M4 | handbook | – | Dragging across the grid draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation. |
+| `fontView.grid` (panel) | M4 | handbook | – | Section headers of the glyphOrder parameter show only while the view lists every glyph in glyph order (no filter, search or sort). Settled by observation. |
+| `fontView.list` (panel) | M4 | handbook | – | A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. Settled by observation. |
+| `fontView.list` (panel) | M4 | handbook | – | Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation. |
+| `fontView.statusBar` (panel) | M4 | handbook | – | The counts read "N selected · N shown · N in font". Settled by observation. |
 
 ## `07-import-export.toml`
 

@@ -42,6 +42,9 @@ milestone = "M4"
 summary = "Switches Font View between the cell grid and the property table. Bound to the two buttons at the top left of the font window. Whether selection and filters carry over is not stated."
 ref = "Font View › Viewing Glyphs"
 status = "handbook"
+guesses = [
+  "The selection, the sidebar entries, the search and the sort carry over when the mode changes. Settled by observation.",
+]
 
 [[command]]
 id = "fontView.setCellSize"
@@ -55,6 +58,9 @@ milestone = "M4"
 summary = "Sets the grid cell size (the slider at the bottom right). Below a size threshold cells show the outline only; above it they also show the name and the Unicode marker."
 ref = "Font View › Grid View"
 status = "handbook"
+guesses = [
+  "Cells run from 16 to 512 points on a logarithmic slider, 64 by default. Settled by observation.",
+]
 
 [[command]]
 id = "fontView.sortByColumn"
@@ -68,6 +74,10 @@ milestone = "M4"
 summary = "Sorts the List View rows by one column. Clicking the same header a second time reverses the direction; sorting by the ID column restores glyph order."
 ref = "Font View › List View"
 status = "handbook"
+guesses = [
+  "Glyphs without a value in the sort column go last in both directions, and ties keep glyph order. Settled by observation.",
+  "The sort belongs to the Font View tab and is not saved with the document. Settled by observation.",
+]
 
 [[command]]
 id = "fontView.setColumns"
@@ -81,6 +91,9 @@ milestone = "M4"
 summary = "Chooses which List View columns are shown and in what order. In the UI, columns are reordered by dragging a header and toggled from the header context menu (Ctrl-click or right-click)."
 ref = "Font View › List View"
 status = "handbook"
+guesses = [
+  "At least one column stays shown; the header's context menu lists every column with a check mark. Settled by observation.",
+]
 
 [[command]]
 id = "fontView.toggleInspector"
@@ -939,6 +952,12 @@ milestone = "M4"
 summary = "Shows the visible glyphs as a wrapping grid of cells whose size is set by the slider. Large cells carry outline, name and Unicode information; small cells carry the outline alone."
 ref = "Font View › Grid View"
 status = "handbook"
+guesses = [
+  "Shift+click adds every visible glyph from the last clicked glyph to the clicked one; Cmd+click adds or removes one glyph; a click on empty space clears the selection. Settled by observation.",
+  "Dragging across the grid draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation.",
+  "Section headers of the glyphOrder parameter show only while the view lists every glyph in glyph order (no filter, search or sort). Settled by observation.",
+]
+notes = "Cells draw the filled closed contours of Font View's master; open paths are not drawn in cells. Only the lines in view are laid out."
 
 [[panel]]
 id = "fontView.list"
@@ -957,6 +976,10 @@ milestone = "M4"
 summary = "Shows the visible glyphs as a table of glyph properties that can be sorted, rearranged and partly edited in place."
 ref = "Font View › List View; Glyph Properties"
 status = "handbook"
+guesses = [
+  "A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. Settled by observation.",
+  "Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation.",
+]
 
 [[panel]]
 id = "fontView.inspector"
@@ -1120,6 +1143,9 @@ milestone = "M4"
 summary = "Bottom edge of Font View. The visible count reflects the sidebar selection combined with the search query; the total is the whole font."
 ref = "Font View › Filtering Font View; Grid View"
 status = "handbook"
+guesses = [
+  "The counts read \"N selected · N shown · N in font\". Settled by observation.",
+]
 
 [[panel]]
 id = "dialog.addGlyphs"
@@ -1285,6 +1311,9 @@ summary = "Every grid cell draws the glyph's layer for the master currently sele
 ref = "Font View › Grid View"
 status = "handbook"
 notes = "Font View's master is chosen with view.selectMaster while Font View shows (Cmd+1 to Cmd+9); the toolbar's master icons are M9 (`preview.masterIconsInToolbar`)."
+guesses = [
+  "Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation.",
+]
 
 [[behavior]]
 id = "fontView.cell.contentBySize"
@@ -1306,6 +1335,7 @@ ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
   "CJK glyphs are those whose first code point is in the Han, Hiragana, Katakana, Hangul or Bopomofo script; the character is drawn with the interface font, and the marker is drawn when that font lacks it. Settled by observation.",
+  "The marker is a small grey square. Settled by observation.",
 ]
 
 [[behavior]]
@@ -1381,6 +1411,9 @@ milestone = "M4"
 summary = "When only the layer of the current master has a colour label, the colour fills the whole cell except for a cut-out at the top left."
 ref = "Font View › Glyph Properties › Color Label"
 status = "handbook"
+guesses = [
+  "The cut-out is a triangle over 30% of the side at the top-left corner. Settled by observation.",
+]
 
 [[behavior]]
 id = "fontView.cell.colorGlyphAndLayer"
@@ -1466,7 +1499,7 @@ ref = "Font View › List View"
 status = "handbook"
 notes = "The handbook says each column is a glyph property and points at Glyph Properties for the list (05 question 14, checked in the M4 planning pass). Metric and kerning-group cells are read-only until M5. Documented, not yet observed."
 guesses = [
-  "Every column is shown by default, in the order the Glyph Properties section lists the properties. Settled by observation (05 question 14).",
+  "Every column is shown by default, in this order: ID, Char, Name, Unicode, Production Name, Script, Category, Subcategory, Case, Direction, Exports, Color, Tags, Sort Name, Note, Components, Last Changed, LSB, RSB, Width, Left Group, Right Group. Settled by observation (05 question 14).",
   "Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation.",
 ]
 
@@ -2240,6 +2273,9 @@ milestone = "M4"
 summary = "A single click on the name under a grid cell or in the Name column starts editing the name in place."
 ref = "Font View › Names & Unicode › Naming Glyphs; Renaming Glyphs"
 status = "handbook"
+guesses = [
+  "A click on the name of the glyph that is already the only one selected starts editing; a click on another glyph's name selects it. Return or a click elsewhere commits through glyph.rename, Escape cancels. Settled by observation.",
+]
 
 [[behavior]]
 id = "glyphName.renameUpdatesInfo"
@@ -2345,6 +2381,7 @@ milestone = "M4"
 summary = "Glyph-menu and Path-menu commands run from Font View act on every selected glyph, on the layer of the current master. Commands marked as master-wide act on all masters when Option is held."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "The shell fills `glyphs` from the Font View selection, and `layer` with Font View's master for commands that take one, for every command whose targets include glyphs. Option for all masters is not wired to the key yet; the ForAllMasters commands do it."
 
 [[behavior]]
 id = "fontView.batch.updateMetrics"
@@ -2522,6 +2559,9 @@ milestone = "M4"
 summary = "Palette (Cmd+Alt+P) sections work from Font View: Fit Curve and Transformations act on all selected glyphs, and plug-in sections may too. For node-level controls (Fit Curve, for one), each glyph contributes the node selection it last had in Edit View."
 ref = "Font View › Batch-Processing › Palette"
 status = "handbook"
+guesses = [
+  "Fit Curve applies each glyph's remembered node indices to its layer of Font View's master; glyphs never edited, or whose nodes are gone, are skipped; the run is one undo step. Settled by observation.",
+]
 
 [[behavior]]
 id = "fontView.batch.pluginsAndScripts"

@@ -1986,7 +1986,7 @@ milestone = "M3"
 summary = "Makes a master the one Edit View draws all glyphs in. Cmd+1 to Cmd+9 select the first nine masters; clicking a master's icon in the toolbar selects any of them."
 ref = "Edit View › Previewing & Testing › Previewing Masters"
 status = "handbook"
-notes = "Built in M3.10 without the toolbar icons (`preview.masterIconsInToolbar`, M9). The master belongs to the tab; a new tab takes the master of the tab it was opened from. `master` as an index counts from 0. Selecting a master drops the per-glyph layers `layers.select` chose. While Font View shows, the command picks Font View's master instead (M4): the master its cells, layer colours, smart-filter layer rules and Paste Special's Content of Active Layer use (`fontView.cell.followsMaster`)."
+notes = "Built in M3.10 without the toolbar icons (`preview.masterIconsInToolbar`, M9). The master belongs to the tab; a new tab takes the master of the tab it was opened from, or Font View's master when it was opened from Font View. `master` as an index counts from 0. Selecting a master drops the per-glyph layers `layers.select` chose. While Font View shows, the command picks Font View's master instead (M4): the master its cells, layer colours, smart-filter layer rules and Paste Special's Content of Active Layer use (`fontView.cell.followsMaster`)."
 
 [[behavior]]
 id = "preview.masterIconsInToolbar"
