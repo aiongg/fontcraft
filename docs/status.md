@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M3 closed; the M4 plan is proposed._
+_Updated: 2026-10-10, M4 wave 1 done (M4.0 to M4.5); the Font View UI next._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all ten steps (934 tests; about 113,000 lines of Rust in 20 crates,
+- `cargo xtask ci` passes all ten steps (1,021 tests; about 127,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
-- 213 of the 932 inventory commands exist (`docs/parity.md`); M3's 184 commands are all
-  live; `path.sharpenCorner` moved to `fidelity`. Feature parity is about 12% (ROADMAP.md › Parity estimate).
+- 252 of the 932 inventory commands exist (`docs/parity.md`); M3's 184 commands are all
+  live; M4 has 45 of 61. Feature parity is about 12% (ROADMAP.md › Parity estimate).
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 UI package were reviewed. macOS and
   Windows have **not** been built.
@@ -18,10 +18,12 @@ _Updated: 2026-10-10, M3 closed; the M4 plan is proposed._
 
 ## Where to start
 
-1. **M4, Font View and glyph management.** `docs/plans/M4.md` is proposed: 244 rows (61
-   commands, 6 live), 13 packages, 15 measures. Wait for the owner's acceptance and answers to
-   its § 7 before M4.0 (spec pass) and M4.1 (glyph database). GlyphsInfo's licence was MIT
-   until 2024-11-22 and is BSD-3-Clause since; the pinned commit decides the notice.
+1. **M4, Font View and glyph management** (`docs/plans/M4.md`, accepted with every
+   recommendation). Built: M4.0, M4.1 (`crates/glyphdata`), M4.2, M4.3, M4.4, M4.5
+   (`crates/glyphquery`), M4.6's settings store and app wiring. Next, per § 6: M4.6's language
+   and glyph-set data (CLDR exemplars; Google Fonts glyph sets, Apache-2.0) with session
+   accessors for language sets and `Groups*.plist` files; M4.7 grid and List View (builder);
+   then M4.8 to M4.11 in worktrees; M4.12 close.
 
 M3, Edit View drawing (`docs/plans/M3.md`), as built:
 
@@ -306,3 +308,15 @@ Append one terse entry per session: what landed, numbers, what is still open.
   live; 155 behaviours, 24 panels); 19 rows moved in (production names from M2, `glyphOrder`
   from M7, settings and recent documents from M14); no `memory` rows left; 16 of the Font View
   note's 20 open questions answered. Waits for the owner.
+- **2026-10-10, M4 wave 1.** Plan accepted. M4.1: `crates/glyphdata` (GlyphsInfo 1f126bd, AGL,
+  UCD 17.0; 538 KB blob; `cargo xtask glyphdata --fetch|--generate|--check`): equal to fontc's
+  glyphs-reader on category, subcategory and production name for 200,504 names; glyphsLib
+  differences allow-listed by cause. M4.2: effective properties, `glyph_order`, sorted placement
+  (`insert_by_sort_key`), Last Changed; production names at export (fontc's cleaning), database
+  marks at advance 0, File › Export refuses invalid names; `post` names equal fontc's and
+  fontmake's except CornerComponents (Use Custom Naming, allow-listed); the M4 marks allow-list
+  is gone. M4.3: 22 glyph property commands, renames that follow references, Find and Replace
+  with regex. M4.4: Add Glyphs, Duplicate, Remove with its answers, Add to Font, whole-glyph
+  copy and paste, Paste Special. M4.5: `crates/glyphquery` (search, smart and list filters,
+  predicates, sidebar entries, missing glyphs) and 11 commands. M4.6: settings store and the
+  app's settings file. 1,021 tests; 252 of 932 commands live (M4 45 of 61).

@@ -4,7 +4,7 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-10 (M3 closed: every measure of `docs/plans/M3.md` § 5 met; `path.sharpenCorner`, which no source describes, moved to `fidelity`)._
+_Last updated: 2026-10-10 (M4 in progress: the glyph database, production names at export, the glyph property, glyph set and filter commands; the Font View UI next)._
 
 ## Where we are
 
@@ -14,7 +14,7 @@ _Last updated: 2026-10-10 (M3 closed: every measure of `docs/plans/M3.md` § 5 m
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,645 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, pointer and key injection, toolbar, context menus, dialogs, panels, tests | **~60%** of what the siblings' "infrastructure" row covers; missing: the settings window, MCP resources and prompts, a performance budget suite |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~12%** |
-| Commands that exist (not: that behave like the reference) | **213 of 932** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **252 of 932** (`docs/parity.md`) |
 | Observed against the running reference | **52 rows**: 47 compiled-output rows checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
 ## Honest assessment (2026-10-10)
@@ -105,7 +105,7 @@ UFO tabs. Agents drive the window with `ui.pointer`, `ui.key`, `ui.text`, `ui.to
 `ui.render` draws glyphs to PNG without a window, the same bytes every time. `layer.inspect`
 reads a layer's outline with addresses. An end-to-end test draws "H", "O" and "n" on a new font
 over the control channel alone, edits them and exports a font that skrifa and fontTools read
-back. 934 tests pass, including a sweep that runs every engine command with hostile parameters.
+back. 1,021 tests pass, including a sweep that runs every engine command with hostile parameters.
 The whole gate (`cargo xtask ci`: format, lints, tests, spec, parity, guesses, assets, vendor
 names, layering, wasm) is green.
 
@@ -161,16 +161,16 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 ### What to build next (in priority order)
 
-1. **M4, Font View and glyph management**: the plan (`docs/plans/M4.md`) is proposed and waits
-   for the owner's acceptance and its § 7 questions. It starts with M4.0 (spec pass) and M4.1
-   (the glyph database).
+1. **M4, Font View and glyph management** (`docs/plans/M4.md`, accepted): M4.0 to M4.5 and
+   the settings store are built. Next: M4.6's language and glyph-set data, M4.7 (grid, List
+   View, status area), then M4.8 to M4.11 (inspector, sidebar and filter dialogs, glyph set
+   dialogs, Glyph Info and the Start Window) and M4.12's measures.
 
 Then M5–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
 orders them. Left from M3 for later milestones: text mode (M5), Font View's master choice
 (`fontView.cell.followsMaster`, M4), the toolbar's master icons (M9), the Export dialog's
 Variable (M9) and Metrics (M5) tabs. Left from M2: instances between masters (M9), CFF
-subroutines (before M12), production names (M4), the compile plan's `productionNames` and
-`features` sections, and the CLI's `--name-by`, `--output-layout` and pattern instance
+subroutines (before M12), the compile plan's `features` section, and the CLI's `--name-by`, `--output-layout` and pattern instance
 selection (`docs/plans/M2.md` › M2.5).
 
 **The primary reference cannot be observed directly** (open decision O1: no licence). Editor
@@ -382,7 +382,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 5 (5) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ✅ every measure met: every package M3.0 to M3.18 built; 184 of 184 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner`, which no source describes, moved to `fidelity` | 184 (184) |
-| M4 | Font View and glyph management | ⬜ plan proposed (`docs/plans/M4.md`) | 61 (6) |
+| M4 | Font View and glyph management | 🟡 M4.0 to M4.5 built: the glyph database (equal to fontc's on category, subcategory and production name for 200,504 names), production names and zero-width marks at export (`post` names equal both oracles' except one allow-listed source), glyph property, glyph set, search and filter commands, the settings store. The Font View UI (M4.7 to M4.11) is next | 61 (45) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
 | M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) |
@@ -395,7 +395,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 28 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 932 (213) |
+| | **Total** | | 932 (252) |
 
 ## Parity estimate
 
