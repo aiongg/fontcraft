@@ -385,16 +385,9 @@ pub fn label_width(ui: &egui::Ui, tokens: &Tokens, labels: &[&str]) -> f32 {
     labels.iter().map(|l| ui.painter().layout_no_wrap((*l).to_string(), font.clone(), tokens.text).size().x).fold(0.0, f32::max)
 }
 
-/// The inspector column's width, in Palette widths: room for a label and a field.
-const COLUMN_WIDTH: f32 = 1.25;
-
-/// Places the inspector in a column at Font View's left. When Font View has a sidebar, the
-/// sidebar calls [`show_in`] at its bottom instead.
-pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
-    let width = app.tokens.palette_width * COLUMN_WIDTH;
-    let frame = egui::Frame::NONE.fill(app.tokens.panel);
-    egui::Panel::left("fontView.inspectorColumn").resizable(false).exact_size(width).frame(frame).show(ui, |ui| show_in(app, ui, pending));
-}
+/// The width of the column the inspector sits in, in Palette widths: room for a label and a
+/// field.
+pub const COLUMN_WIDTH: f32 = 1.25;
 
 /// Draws the inspector at the bottom of `ui`: its title row, and its fields while shown.
 pub fn show_in(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {

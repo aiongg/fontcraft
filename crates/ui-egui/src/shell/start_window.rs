@@ -486,7 +486,7 @@ fn recent_ui(
                 }
             });
         });
-        ui.separator();
+        column_rule(ui, tokens);
         ui.vertical(|ui| {
             ui.label(egui::RichText::new("FontCraft").strong().size(tokens.dialog_title_size));
             ui.label(egui::RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(tokens.text_dim));
@@ -504,6 +504,13 @@ fn recent_ui(
             }
         });
     });
+}
+
+/// The line between the window's two columns, as high as a list. A plain separator in a row
+/// takes the window's whole height, and the window grows by it every frame.
+fn column_rule(ui: &mut egui::Ui, tokens: &Tokens) {
+    let height = tokens.list_row_height * LIST_ROWS;
+    ui.add_sized(vec2(ui.spacing().item_spacing.x, height), egui::Separator::default().vertical());
 }
 
 /// The chooser: the script list on the left, the clicked script's toggle and glyph sets on the
@@ -555,7 +562,7 @@ fn chooser_ui(ui: &mut egui::Ui, st: &StartState, tokens: &Tokens, has_recent: b
                 }
             });
         });
-        ui.separator();
+        column_rule(ui, tokens);
         ui.vertical(|ui| {
             let Some(pick) = st.script.as_deref().and_then(|s| st.picks.iter().find(|p| p.script == s)) else {
                 ui.label("Click a script to see its glyph sets");
@@ -593,12 +600,16 @@ fn chooser_ui(ui: &mut egui::Ui, st: &StartState, tokens: &Tokens, has_recent: b
     if let Some(e) = &st.error {
         ui.colored_label(tokens.error_text, e);
     }
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let any = st.picks.iter().any(|p| p.included && !p.glyph_sets.is_empty());
-        let create = ui.add_enabled(any, egui::Button::new("Create Document"));
-        laid.create = Some(create.rect);
-        if create.clicked() {
-            events.push(Event::Create);
-        }
+    // One row high: a right-to-left layout straight in the window would centre the button in
+    // the window's whole height and grow the window every frame.
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let any = st.picks.iter().any(|p| p.included && !p.glyph_sets.is_empty());
+            let create = ui.add_enabled(any, egui::Button::new("Create Document"));
+            laid.create = Some(create.rect);
+            if create.clicked() {
+                events.push(Event::Create);
+            }
+        });
     });
 }

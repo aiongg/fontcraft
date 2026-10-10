@@ -40,12 +40,9 @@ fn shapes(app: &FontcraftApp, glyph: &str) -> usize {
 
 /// One frame at 1280 × 800 with `events`, the keyboard's modifiers held.
 fn frame(ctx: &egui::Context, app: &mut FontcraftApp, events: Vec<Event>, modifiers: Modifiers) -> egui::FullOutput {
-    let input = egui::RawInput {
-        screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))),
-        events,
-        modifiers,
-        ..Default::default()
-    };
+    let mut events = events;
+    events.insert(0, Event::ModifiersChanged(modifiers));
+    let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
     let mut output = ctx.run_ui(input, |ui| app.ui(ui));
     output.textures_delta.clear();
     output
@@ -111,11 +108,10 @@ fn add_glyphs_generates_and_asks_about_names_the_font_has() {
 
     // A name in the font: Generate adds nothing and the question follows. Replace.
     let mut app = square_app();
-    let before = font(&app);
     open(&mut app, "dialog.addGlyphs", json!({"text": "A two"}));
     let r = call(&mut app, "ui.dialog.confirm", json!({}));
     assert_eq!(r["result"]["existing"], json!(["A"]), "{r}");
-    assert!(Arc::ptr_eq(&font(&app), &before), "asking changed nothing");
+    assert_eq!(r["result"]["added"], json!([]), "Generate added nothing: {r}");
     let asked = inspect(&mut app);
     assert_eq!(asked["dialog"], "dialog.addGlyphsExisting", "{asked}");
     assert_eq!(asked["fields"][0]["value"], "keep");

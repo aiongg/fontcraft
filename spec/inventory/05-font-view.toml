@@ -889,7 +889,7 @@ milestone = "M4"
 summary = "Opens the editor of the selected smart or list filter (also by double-clicking the filter's icon) and stores the new name, rules or name list on OK; Cancel discards the edits."
 ref = "Font View › Filtering Font View › Smart Filters; List Filters"
 status = "handbook"
-notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step. `filter` is a path inside the Filters section (`Work/Name`); the sidebar's form with the section first (`filters/Work/Name`) is taken too."
 
 [[command]]
 id = "fontView.renameFilter"

@@ -299,7 +299,8 @@ fn the_glyph_context_menu_colours_tags_and_copies_names() {
     let w = Window::new();
     w.settle(&mut app);
 
-    w.right_click(&mut app, cell(&app, "C"));
+    let at = cell(&app, "C");
+    w.right_click(&mut app, at);
     assert_eq!(app.state.selected_glyphs, ["C"], "a glyph that is not selected becomes the selection");
     let menu = w.glyph_menu().expect("the menu is open");
     assert_eq!(menu.glyphs, ["C"]);
@@ -313,7 +314,8 @@ fn the_glyph_context_menu_colours_tags_and_copies_names() {
     let three = names(&["A", "B", "C"]);
     app.run("fontView.setSelection", &json!({"glyphs": three})).unwrap();
     w.settle(&mut app);
-    w.right_click(&mut app, cell(&app, "B"));
+    let at = cell(&app, "B");
+    w.right_click(&mut app, at);
     assert_eq!(app.state.selected_glyphs, three, "on a selected glyph the selection stays");
     let menu = w.glyph_menu().expect("the menu is open");
     assert_eq!(menu.glyphs, three);
@@ -384,7 +386,10 @@ fn the_info_box_shows_the_glyph_and_layer_colours_side_by_side() {
     app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
     app.run("selection.set", &json!({"points": [[0, 0], [0, 1], [0, 2], [0, 3]]})).unwrap();
     let w = Window::new();
-    w.settle(&mut app);
+    // The Info box fades in over several frames; its colours are exact once it has.
+    for _ in 0..4 {
+        w.settle(&mut app);
+    }
     let shapes = w.frame(&mut app, Vec::new());
     let filled = |color| -> Vec<egui::Rect> {
         shapes

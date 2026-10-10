@@ -87,7 +87,9 @@ fn contents(ui: &mut egui::Ui, tokens: &Tokens, s: &Summary) -> Vec<Edit> {
             };
             if inspector::check_box(ui, tokens, sort_name_box(), state, any, "Use a custom sort name") {
                 match state {
-                    Some(false) => ui.ctx().data_mut(|d| d.insert_temp(sort_name_box(), true)),
+                    Some(false) => ui.ctx().data_mut(|d| {
+                        d.insert_temp(sort_name_box(), true);
+                    }),
                     _ => {
                         ui.ctx().data_mut(|d| d.remove::<bool>(sort_name_box()));
                         if s.sort_name_stored != Some(false) {

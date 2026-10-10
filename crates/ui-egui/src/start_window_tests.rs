@@ -138,6 +138,8 @@ fn create_document_gives_the_document_the_headless_command_gives() {
     assert_eq!(pick.glyph_sets, defaults("cyrillic"));
 
     let create = app.state.start.laid_out.create.unwrap();
+    w.frame(&mut app);
+    assert_eq!(app.state.start.laid_out.create, Some(create), "the window keeps its size");
     w.click(&mut app, create.center(), Modifiers::NONE);
     assert!(!app.state.start.open, "{:?}", app.state.start.error);
     let mut headless = Session::new();

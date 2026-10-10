@@ -37,7 +37,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Smart Filter",
             [],
             None,
-            "{name: string, rules?: ruleTree, folder?: path} add a smart filter to the Filters section (in `folder`, a path inside the section, else at the top). Without rules it has one rule every glyph matches. Kept in the user settings → {filter: path}",
+            "{name: string, rules?: ruleTree, folder?: path} add a smart filter to the Filters section (in `folder`, a path inside the section such as `Work`, or the sidebar's `filters/Work`; else at the top). Without rules it has one rule every glyph matches. Kept in the user settings → {filter: path}",
             always,
             add_smart_filter
         ),
@@ -141,6 +141,24 @@ fn opt_path(p: &Params, key: &str) -> Result<Option<Vec<String>>> {
 
 fn path(p: &Params, key: &str) -> Result<Vec<String>> {
     opt_path(p, key)?.ok_or_else(|| p.bad(format!("`{key}` is required")))
+}
+
+/// The section's name at the head of a sidebar path (`filters/Folder/Name`).
+const FILTERS_SECTION: &str = "filters";
+
+/// A path inside the Filters section. The sidebar's form, which names the section first, is
+/// taken too, so the paths `fontView.state` lists work here unchanged.
+fn opt_filter_path(p: &Params, key: &str) -> Result<Option<Vec<String>>> {
+    Ok(opt_path(p, key)?.map(|mut path| {
+        if path.len() > 1 && path.first().is_some_and(|s| s == FILTERS_SECTION) {
+            path.remove(0);
+        }
+        path
+    }))
+}
+
+fn filter_path(p: &Params, key: &str) -> Result<Vec<String>> {
+    opt_filter_path(p, key)?.ok_or_else(|| p.bad(format!("`{key}` is required")))
 }
 
 fn opt_rules(p: &Params) -> Result<Option<RuleTree>> {
@@ -335,7 +353,7 @@ fn generate_missing_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
 // ── The Filters section ─────────────────────────────────────────────────────────────────────────
 
 fn add(s: &mut Session, p: &Params, parent_key: &str, filter: Filter) -> Result<Value> {
-    let parent = opt_path(p, parent_key)?.unwrap_or_default();
+    let parent = opt_filter_path(p, parent_key)?.unwrap_or_default();
     let mut items = stored_filters(s)?;
     let path = gq::add_filter(&mut items, &parent, filter).map_err(|e| p.bad(e.to_string()))?;
     store_filters(s, p, &items)?;
@@ -364,7 +382,7 @@ fn add_filter_folder(s: &mut Session, v: &Value) -> Result<Value> {
 
 fn edit_filter(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("fontView.editFilter", v)?;
-    let at = path(&p, "filter")?;
+    let at = filter_path(&p, "filter")?;
     let name = match p.opt_str("name")? {
         Some(n) => Some(gq::check_filter_name(n).map_err(|e| bad(&p, "name", e))?),
         None => None,
@@ -404,7 +422,7 @@ fn edit_filter(s: &mut Session, v: &Value) -> Result<Value> {
 
 fn rename_filter(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("fontView.renameFilter", v)?;
-    let at = path(&p, "filter")?;
+    let at = filter_path(&p, "filter")?;
     let name = p.str("name")?;
     let mut items = stored_filters(s)?;
     let new_path = gq::rename_filter(&mut items, &at, name).map_err(|e| p.bad(e.to_string()))?;
@@ -414,7 +432,7 @@ fn rename_filter(s: &mut Session, v: &Value) -> Result<Value> {
 
 fn remove_filter(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("fontView.removeFilter", v)?;
-    let at = path(&p, "filter")?;
+    let at = filter_path(&p, "filter")?;
     let mut items = stored_filters(s)?;
     let removed = gq::remove_filter(&mut items, &at).map_err(|e| p.bad(e.to_string()))?;
     store_filters(s, &p, &items)?;
@@ -423,8 +441,8 @@ fn remove_filter(s: &mut Session, v: &Value) -> Result<Value> {
 
 fn move_filter(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("fontView.moveFilter", v)?;
-    let at = path(&p, "filter")?;
-    let parent = opt_path(&p, "parent")?.unwrap_or_default();
+    let at = filter_path(&p, "filter")?;
+    let parent = opt_filter_path(&p, "parent")?.unwrap_or_default();
     let index = p.opt_int("index", 0, gq::MAX_FILTERS as i64)?.ok_or_else(|| p.bad("`index` is required"))?;
     let index = usize::try_from(index).unwrap_or(0);
     let mut items = stored_filters(s)?;

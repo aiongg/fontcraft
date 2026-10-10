@@ -415,7 +415,7 @@ pub fn batch_targets(app: &FontcraftApp, spec: &fontcraft_engine::CommandSpec) -
     }
     let mut m = Map::new();
     m.insert("glyphs".into(), json!(app.state.selected_glyphs));
-    if spec.params.contains("layer?")
+    if crate::tools_glue::takes_param(spec, "layer?")
         && let Some(master) = master(app)
     {
         m.insert("layer".into(), json!(master));
@@ -459,7 +459,6 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         });
         return;
     }
-    inspector::show(app, ui, pending);
     super::context_menu::font_view(app, ui, pending);
     egui::CentralPanel::default().frame(frame).show(ui, |ui| match app.state.font_view.mode {
         ViewMode::Grid => grid::show(app, ui, pending),

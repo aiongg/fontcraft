@@ -92,7 +92,12 @@ fn filters_live_in_the_settings_and_change_no_document() {
     assert_eq!(q(&mut s, json!(["filters/Order", "filters/Work"])), vec!["C", "B"]);
     assert_eq!(q(&mut s, json!(["filters/Work"])), vec!["B", "C"]);
 
-    run(&mut s, "fontView.editFilter", json!({"filter": "Work/B or C", "rules": {"all": [{"property": "glyphName", "op": "is", "value": "D"}]}}));
+    // The sidebar's form of a path, with the section first, names the same filter.
+    run(
+        &mut s,
+        "fontView.editFilter",
+        json!({"filter": "filters/Work/B or C", "rules": {"all": [{"property": "glyphName", "op": "is", "value": "D"}]}}),
+    );
     assert_eq!(q(&mut s, json!(["filters/Work"])), vec!["D"]);
     assert_eq!(run(&mut s, "fontView.renameFilter", json!({"filter": "Work/B or C", "name": "Just D"}))["filter"], json!(["Work", "Just D"]));
     assert_eq!(run(&mut s, "fontView.moveFilter", json!({"filter": "Order", "parent": "Work", "index": 0}))["filter"], json!(["Work", "Order"]));

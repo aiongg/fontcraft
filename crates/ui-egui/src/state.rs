@@ -48,6 +48,10 @@ pub struct UiState {
     pub audit: crate::shell::audit::AuditState,
     /// Font View: view mode, cell size, master, List View columns and sort, the query.
     pub font_view: crate::shell::font_view::FontViewState,
+    /// The Glyph Info window: open, query, sort and selected rows.
+    pub glyph_info: crate::shell::glyph_info::GlyphInfoState,
+    /// The Start Window: open, the selected recent document and the script chooser.
+    pub start: crate::shell::start_window::StartState,
 }
 
 impl Default for UiState {
@@ -66,6 +70,8 @@ impl Default for UiState {
             panels: crate::panels::PanelState::default(),
             audit: Default::default(),
             font_view: Default::default(),
+            glyph_info: Default::default(),
+            start: Default::default(),
         }
     }
 }

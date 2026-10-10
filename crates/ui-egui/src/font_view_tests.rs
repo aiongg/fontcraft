@@ -341,7 +341,9 @@ fn list_view_sorts_shows_columns_and_edits_in_place() {
         assert!(b.contains(&value.to_string()), "{value} in {b:?}");
     }
 
-    // Clicking an Exports cell flips the flag.
+    // Clicking an Exports cell flips the flag. The column lies under the Palette at this width.
+    app.run("window.palette", &json!({"on": false})).unwrap();
+    window.frame(&mut app);
     let columns = list::placed(&app.state.font_view.shown_columns(), &app.tokens);
     let (_, x, w) = *columns.iter().find(|c| c.0 == Column::Export).unwrap();
     let row = cell(&app, "c");

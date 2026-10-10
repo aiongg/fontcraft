@@ -27,8 +27,7 @@ impl Window {
     fn frame_with(&self, app: &mut FontcraftApp, events: Vec<Event>, modifiers: Modifiers) -> Vec<Shape> {
         let mut events = events;
         events.insert(0, Event::ModifiersChanged(modifiers));
-        let input =
-            egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), modifiers, events, ..Default::default() };
+        let input = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
         let mut output = self.ctx.run_ui(input, |ui| app.ui(ui));
         output.textures_delta.clear();
         let mut out: Vec<Shape> = output.shapes.into_iter().map(|c| c.shape).collect();
@@ -131,32 +130,41 @@ fn sidebar_clicks_with_cmd_and_shift_combine_entries_as_documented() {
     assert_eq!(visible(&mut app).len(), 54, "All at first");
 
     // A click selects one entry; the chevron opens a category's subcategories.
-    w.click(&mut app, row(&app, "categories/Letter").chevron.unwrap().center(), Modifiers::NONE);
+    let at = row(&app, "categories/Letter").chevron.unwrap().center();
+    w.click(&mut app, at, Modifiers::NONE);
     assert!(entries(&mut app).is_empty(), "the chevron selects nothing");
-    w.click(&mut app, row(&app, "categories/Letter/Uppercase").rect.center(), Modifiers::NONE);
+    let at = row(&app, "categories/Letter/Uppercase").rect.center();
+    w.click(&mut app, at, Modifiers::NONE);
     assert_eq!(visible(&mut app).len(), 26);
     // Cmd-click: categories add up.
-    w.click(&mut app, row(&app, "categories/Letter/Lowercase").rect.center(), Modifiers::COMMAND);
+    let at = row(&app, "categories/Letter/Lowercase").rect.center();
+    w.click(&mut app, at, Modifiers::COMMAND);
     assert_eq!(visible(&mut app).len(), 52);
     // Sections narrow each other.
-    w.click(&mut app, row(&app, "filters/Vowels").rect.center(), Modifiers::COMMAND);
+    let at = row(&app, "filters/Vowels").rect.center();
+    w.click(&mut app, at, Modifiers::COMMAND);
     assert_eq!(visible(&mut app), ["A", "E", "I", "O", "U", "a", "e", "i", "o", "u"]);
     // Filters narrow each other.
-    w.click(&mut app, row(&app, "filters/Early").rect.center(), Modifiers::COMMAND);
+    let at = row(&app, "filters/Early").rect.center();
+    w.click(&mut app, at, Modifiers::COMMAND);
     assert_eq!(visible(&mut app), ["A", "E", "a", "e"]);
 
     // Shift-click: the filters from the last one selected to the one clicked.
-    w.click(&mut app, row(&app, "filters/Vowels").rect.center(), Modifiers::NONE);
+    let at = row(&app, "filters/Vowels").rect.center();
+    w.click(&mut app, at, Modifiers::NONE);
     assert_eq!(entries(&mut app), ["filters/Vowels"]);
-    w.click(&mut app, row(&app, "filters/Upper").rect.center(), Modifiers::SHIFT);
+    let at = row(&app, "filters/Upper").rect.center();
+    w.click(&mut app, at, Modifiers::SHIFT);
     assert_eq!(entries(&mut app), ["filters/Early", "filters/Upper", "filters/Vowels"]);
     assert_eq!(visible(&mut app), ["A", "E"]);
     // Cmd-click on a selected entry removes it.
-    w.click(&mut app, row(&app, "filters/Early").rect.center(), Modifiers::COMMAND);
+    let at = row(&app, "filters/Early").rect.center();
+    w.click(&mut app, at, Modifiers::COMMAND);
     assert_eq!(visible(&mut app), ["A", "E", "I", "O", "U"]);
 
     // All shows every glyph again.
-    w.click(&mut app, row(&app, "all").rect.center(), Modifiers::NONE);
+    let at = row(&app, "all").rect.center();
+    w.click(&mut app, at, Modifiers::NONE);
     let s = state(&mut app);
     assert_eq!((s["sidebarEntries"].clone(), s["counts"]["visible"].as_u64()), (json!([]), Some(54)));
 
@@ -236,7 +244,8 @@ fn the_smart_filter_editor_gives_the_settings_its_commands_give() {
     // A double-click on the filter opens its editor with the stored name and rules.
     let w = Window::new();
     w.frame(&mut app);
-    w.double_click(&mut app, row(&app, "filters/Vowels").rect.center());
+    let at = row(&app, "filters/Vowels").rect.center();
+    w.double_click(&mut app, at);
     let shown = call(&mut app, "ui.dialog.inspect", json!({}));
     assert_eq!((shown["open"].as_bool(), shown["command"].as_str()), (Some(true), Some("fontView.editFilter")));
     assert_eq!(field(&shown, "name")["value"], "Vowels");

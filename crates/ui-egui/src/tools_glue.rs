@@ -508,6 +508,11 @@ pub fn queue_text(app: &mut FontcraftApp, text: &str) -> bool {
     true
 }
 
+/// Whether `spec`'s params doc names `param` among its parameters (not in its result, after `→`).
+pub fn takes_param(spec: &CommandSpec, param: &str) -> bool {
+    spec.params.split('→').next().is_some_and(|given| given.contains(param))
+}
+
 /// The parameters for a command run from a menu or a shortcut: its targets filled from the Edit
 /// View selection when the command takes targets and was given no parameters.
 pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
@@ -551,7 +556,7 @@ pub fn selection_targets(session: &Session, state: &UiState, spec: &CommandSpec)
             TargetKind::Layer => {
                 copy(&mut m, "glyph");
                 copy(&mut m, "layer");
-                if spec.params.contains("side?") {
+                if takes_param(spec, "side?") {
                     copy(&mut m, "side");
                 }
             }

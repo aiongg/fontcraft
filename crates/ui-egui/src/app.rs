@@ -16,7 +16,7 @@ use crate::tools_glue::{self, ToolsState};
 
 /// Commands that report nothing in the status bar when they succeed: wheel and gesture input
 /// runs them many times a second.
-const QUIET: &[&str] = &["view.scrollTo", "view.setZoom"];
+const QUIET: &[&str] = &["view.scrollTo", "view.setZoom", "fontView.setSearch"];
 
 pub struct FontcraftApp {
     pub session: Session,
@@ -76,12 +76,13 @@ impl FontcraftApp {
         } else {
             self.session.execute(id, params).map_err(|e| e.to_string())
         };
-        if id == "glyph.rename"
-            && let Ok(r) = &result
-        {
-            self.follow_rename(params, r);
+        if let Ok(r) = &result {
+            for (old, new) in renames(id, params, r) {
+                self.follow_rename(&old, &new);
+            }
         }
         self.after_command();
+        shell::start_window::after_run(self, id, &result);
         shell::font_view::remember_node_selection(self);
         if result.is_ok() && matches!(id, "audit.run" | "audit.fix") {
             self.state.audit.reread = true;
@@ -111,8 +112,7 @@ impl FontcraftApp {
 
     /// Points the UI's references to a renamed glyph at its new name: the Font View selection,
     /// the tabs and the remembered node selections.
-    fn follow_rename(&mut self, params: &Value, result: &Value) {
-        let (Some(old), Some(new)) = (params.get("glyph").and_then(Value::as_str), result.get("glyph").and_then(Value::as_str)) else { return };
+    fn follow_rename(&mut self, old: &str, new: &str) {
         if old == new {
             return;
         }
@@ -215,6 +215,7 @@ impl FontcraftApp {
         } else {
             shell::font_view::show(self, ui, &mut pending);
         }
+        shell::windows(self, ui, &mut pending);
         crate::dialogs::show(self, ui);
         // Commands run after drawing, so a frame never sees a half-changed document. While a
         // dialog is open only view commands run. A menu item whose command has a dialog opens it.
@@ -223,11 +224,14 @@ impl FontcraftApp {
                 continue;
             }
             if shell::clipboard::wants_text(id, &params) {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                shell::clipboard::request_text(ui.ctx(), id);
                 continue;
             }
             if shell::pickers::wants_files(id, &params) {
                 shell::pickers::import_outlines(self);
+                continue;
+            }
+            if shell::start_window::opens_chooser(self, id, &params) {
                 continue;
             }
             let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
@@ -237,7 +241,7 @@ impl FontcraftApp {
                 }
                 continue;
             }
-            let params = tools_glue::with_targets(self, id, params);
+            let params = tools_glue::with_targets(self, id, shell::clipboard::font_view_params(self, id, params));
             let _ = self.run_from_shell(id, &params);
         }
         if tools_glue::dispatch_queued(self) {
@@ -269,6 +273,26 @@ impl FontcraftApp {
                 }
             });
         });
+    }
+}
+
+/// The glyph renames a successful run of `id` made, as (old, new) pairs.
+fn renames(id: &str, params: &Value, result: &Value) -> Vec<(String, String)> {
+    match id {
+        "glyph.rename" => {
+            let (Some(old), Some(new)) = (params.get("glyph").and_then(Value::as_str), result.get("glyph").and_then(Value::as_str)) else {
+                return Vec::new();
+            };
+            vec![(old.to_string(), new.to_string())]
+        }
+        "edit.findAndReplace" | "glyph.updateGlyphInfo" => result
+            .get("renamed")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|r| Some((r.get("from")?.as_str()?.to_string(), r.get("to")?.as_str()?.to_string())))
+            .collect(),
+        _ => Vec::new(),
     }
 }
 

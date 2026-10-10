@@ -396,8 +396,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     }
     refresh(app);
     let frame = egui::Frame::NONE.fill(app.tokens.panel).inner_margin(app.tokens.palette_margin);
-    let width = app.tokens.palette_width;
+    let width = app.tokens.palette_width * super::inspector::COLUMN_WIDTH;
     egui::Panel::left("fontView.sidebar").frame(frame).default_size(width).show(ui, |ui| {
+        // The inspector takes the column's bottom; the lists fill the rest.
+        super::inspector::show_in(app, ui, pending);
         search::field(app, ui, pending);
         ui.separator();
         let selected = current_entries(app);
