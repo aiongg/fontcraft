@@ -150,6 +150,17 @@ Rules:
 - Assigning the font to itself, or selecting all glyphs and running Selection to Background,
   snapshots the current outlines for later comparison.
 
+FontCraft's rules where the handbook says nothing (our decisions):
+
+| Command | Rule |
+|---|---|
+| Selection to Background | Copies shapes and anchors. A point or segment selects its whole path. The other side's shapes and anchors are replaced; its guides, hints, annotations and image stay. Without a selection the whole side is copied |
+| Add Selection to Background | Appends the copied shapes; a copied anchor replaces the anchor of the same name |
+| Swap with Background | Exchanges shapes, anchors, guides, hints and annotations. The placed image stays. A background the swap leaves empty is removed, so swapping twice restores a layer that had none |
+| Clear Background | Removes the whole background, image included |
+| Assign Background | Writes the master layers' backgrounds. Masters are matched by name, then by position; a source with fewer masters gives its first. Without `file` the source is the open font itself |
+| All of them | With one glyph, a locked glyph or a missing layer is an error. With a `glyphs` list (Font View) such glyphs are skipped and listed in `skipped` |
+
 ## Text mode
 
 **Entering.** Tool `text` (T) puts a text cursor into the tab's string. Escape toggles between

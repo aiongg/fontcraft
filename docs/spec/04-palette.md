@@ -86,6 +86,24 @@ Step formula implied by "even intervals": `percent(step) = min + (step - 1) * (m
 layer. (2) The chosen backup's content becomes the master layer's content. (3) The chosen
 backup layer is deleted. Dragging a backup row onto a master row does the same.
 
+**FontCraft's rules** (our decisions where the handbook is silent):
+
+- `layers.list` orders rows by master in master order: the master layer, then that master's other
+  layers in file order. Kinds: `master`, `backup` (no special attributes), `intermediate`,
+  `alternate`, `color`, `other`.
+- A new backup copies the master layer (or the layer named by `from`) and goes after that
+  master's other layers. Its default name is the date and time in UTC (`2026-10-10 14:05`). Its
+  id has the usual 8-4-4-4-12 hex form and is the same in every targeted glyph. The id depends
+  only on the glyphs and their layers, so replaying a journal gives the same id.
+- `layers.reorder` counts `toIndex` among the master's other layers; 0 is right under the master
+  layer. Master layers do not move.
+- `layers.delete` and `layers.rename` refuse master layers. Delete removes each id from every
+  targeted glyph that has it; an id no targeted glyph has is an error.
+- Use as Master takes backup layers only. The new backup takes the old master content and the
+  restored layer's place in the list. A glyph without a master layer for that master gets the
+  backup as its master layer and no new backup.
+- Visibility is stored with the layer and saved.
+
 ## Transformations (`palette.transformations`)
 
 Applies to points, paths, components, anchors, guides and images. Scope follows the selection:

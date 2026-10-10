@@ -148,6 +148,13 @@ selected.
 0–100 extrapolates. Requires compatible foreground and background; otherwise it does not work.
 Writes the foreground only.
 
+Compatible means: the same number of shapes, in the same order and of the same kind; paths with
+the same closedness, node count and node types; components of the same glyph. Nodes, component
+offsets and anchors are rounded to the grid (spacing 1 when the font sets none). Component
+placements blend part by part when both are stored decomposed, else as matrices. Anchors blend
+when the background has one of the same name; the others stay. The amount is capped at
+±100,000 %.
+
 ### Add Extremes (`path.addExtremes`, Path menu)
 
 Adds nodes at extremes that lack one. Export string `AddExtremes`, no arguments. The interactive
