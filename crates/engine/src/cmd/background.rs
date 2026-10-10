@@ -453,7 +453,7 @@ fn interpolate_with_background(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let t = amount / 100.0;
     let font = s.font()?;
-    let step = grid_step(font.info.grid_length.unwrap_or(1.0), font.info.grid_sub_division.unwrap_or(1.0));
+    let step = grid_step(font.info.settings.grid_length.unwrap_or(1.0), font.info.settings.grid_sub_division.unwrap_or(1.0));
     let scope = scope(&p, font)?;
     let out = s.edit("Interpolate with Background", |font| {
         each_layer(font, &scope, "path.interpolateWithBackground", |_, layer| {

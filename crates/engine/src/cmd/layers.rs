@@ -377,7 +377,8 @@ fn reorder(s: &mut Session, p: &Value) -> Result<Value> {
             (None, Some(&last)) => last + 1,
             (None, None) => from.min(g.layers.len()),
         };
-        g.layers.insert(at.min(g.layers.len()), layer);
+        let len = g.layers.len();
+        g.layers.insert(at.min(len), layer);
         Ok(())
     })?;
     Ok(json!({"glyph": glyph, "layer": id, "index": to}))
