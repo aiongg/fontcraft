@@ -116,7 +116,9 @@ pub fn show(app: &FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static s
                 if b.shared() && response.secondary_clicked() {
                     mem.open = Some(b.key);
                 }
-                if response.on_hover_text(hover(tool)).clicked() {
+                // No tooltip over the button's own open menu.
+                let response = if mem.open == Some(b.key) { response } else { response.on_hover_text(hover(tool)) };
+                if response.clicked() {
                     if mem.held {
                         mem.held = false;
                     } else {
