@@ -26,8 +26,10 @@ struct Window {
 
 impl Window {
     fn frame(&mut self, app: &mut FontcraftApp, events: Vec<Event>) {
-        let output = self.ctx.run_ui(input(events), |ui| app.ui(ui));
-        for (id, deltas) in output.textures_delta.set {
+        let mut output = self.ctx.run_ui(input(events), |ui| app.ui(ui));
+        let set = std::mem::take(&mut output.textures_delta.set);
+        output.textures_delta.clear();
+        for (id, deltas) in set {
             for delta in deltas {
                 let egui::ImageData::Color(image) = delta.image;
                 if delta.pos.is_none() {
