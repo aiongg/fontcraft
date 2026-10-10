@@ -30,6 +30,7 @@ pub mod guard;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
 pub mod params;
+pub mod settings;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -70,6 +71,8 @@ pub enum EngineError {
     Ufo(#[from] fontcraft_io_ufo::UfoError),
     #[error(transparent)]
     Decompile(#[from] fontcraft_decompile::DecompileError),
+    #[error(transparent)]
+    Settings(#[from] settings::SettingsError),
     #[error("{0}")]
     Io(String),
     #[error("not supported yet: {0}")]
@@ -187,6 +190,7 @@ pub struct Session {
     /// While `command.batch` runs: the font of each document it changed, as it was before.
     pub(crate) batch: Option<Batch>,
     interaction: Option<Interaction>,
+    settings: settings::UserSettings,
     /// The user's custom glyph data files.
     user_glyph_data: glyph_data::CustomData,
     /// What [`Session::edit`] stamps on changed glyphs; `None` stamps nothing.
@@ -340,6 +344,17 @@ impl Session {
         self.clock = clock;
     }
 
+    /// The user's settings (`settings.get`).
+    pub fn settings(&self) -> &settings::UserSettings {
+        &self.settings
+    }
+
+    /// The user's settings, for the app (loading) and for the commands that own reserved ids.
+    /// A command that fails after changing them is rolled back with the rest of the session.
+    pub fn settings_mut(&mut self) -> &mut settings::UserSettings {
+        &mut self.settings
+    }
+
     /// The glyph data the active document's commands read: the built-in database with the
     /// user's custom files and the files beside the source on top. Without a document, the
     /// built-in database with the user's files.
@@ -440,7 +455,7 @@ impl Session {
         }
         // Snapshot for rollback. It copies pointers and labels, no glyph data, but it does walk
         // each document's history, so queries (which change nothing) skip it.
-        let snapshot = spec.journal.then(|| (self.docs.clone(), self.active, self.untitled));
+        let snapshot = spec.journal.then(|| (self.docs.clone(), self.active, self.untitled, self.settings.clone()));
         self.depth = 1;
         let outcome = guard::catch_panic(|| (spec.run)(self, params));
         self.depth = 0;
@@ -460,8 +475,8 @@ impl Session {
                 Ok(value)
             }
             Err(e) => {
-                if let Some((docs, active, untitled)) = snapshot {
-                    (self.docs, self.active, self.untitled) = (docs, active, untitled);
+                if let Some((docs, active, untitled, settings)) = snapshot {
+                    (self.docs, self.active, self.untitled, self.settings) = (docs, active, untitled, settings);
                 }
                 Err(e)
             }

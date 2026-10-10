@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**259 guesses on 199 rows (91 of them live commands).**
+**261 guesses on 200 rows (93 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -95,6 +95,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.shapeOrder` (panel) | M3 | handbook | – | The first row is the bottom shape (shape 0, drawn first). |
 | `dialog.shapeOrder` (panel) | M3 | handbook | – | Rows read `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`; what the reference's rows show and which end is the top are not observed (03a open question 24). |
 | `dialog.guideProperties` (panel) | M3 | inferred | – | The dialog is our own form over guide.setProperties; the reference edits a guide in the Info box. |
+| `start.showAtLaunch` (setting) | M4 | handbook | – | On by default, since the Start Window is described as appearing at launch. Settled by observing a fresh install. |
 | `draw` (tool) | M3 | handbook | – | A click on a segment places the new node on the segment and leaves the clicked path alone (03a question 3). |
 | `draw` (tool) | M3 | handbook | – | Shift+click on a segment inserts at an extremum or inflection even while drawing. |
 | `draw` (tool) | M3 | handbook | – | A click on an open end continues that path, and while drawing joins the two paths. |
@@ -306,9 +307,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
-| `settings.get` | M4 | inferred | no | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
-| `settings.set` | M4 | inferred | no | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
+| `settings.get` | M4 | inferred | yes | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
+| `settings.set` | M4 | inferred | yes | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
 | `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | On shows the code point, off the small marker, as the handbook's wording implies. Settled by observation. |
+| `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | Off by default (the small marker), as the handbook gives no default. Settled by observing a fresh install. |
 
 ## `21-qa-checks.toml`
 

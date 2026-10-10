@@ -31,6 +31,7 @@ mod node;
 mod path;
 mod pathops;
 mod session;
+mod settings;
 mod spacing;
 pub mod stroke;
 pub mod transform;
@@ -184,6 +185,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(stroke::specs());
         v.extend(pathops::specs());
         v.extend(audit::specs());
+        v.extend(settings::specs());
         v
     })
 }

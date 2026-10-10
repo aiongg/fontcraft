@@ -68,6 +68,22 @@ summary = "The Start Window appears at launch when no document is open. Clearing
 ref = "Create"
 status = "handbook"
 
+[[setting]]
+id = "start.showAtLaunch"
+label = "Show window on startup"
+kind = "bool"
+section = "Start Window"
+values = ""
+area = "ui-chrome"
+milestone = "M4"
+summary = "The Start Window's checkbox: on, the window appears at launch when no document is open (start.shownAtLaunchWithoutDocuments). Kept in the user settings; settings.set writes it headless."
+ref = "Create"
+status = "handbook"
+notes = "The handbook names the checkbox, not a setting id; the id is ours."
+guesses = [
+  "On by default, since the Start Window is described as appearing at launch. Settled by observing a fresh install.",
+]
+
 [[behavior]]
 id = "start.recentDocumentsList"
 area = "ui-chrome"
