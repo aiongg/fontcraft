@@ -84,7 +84,7 @@ restores the font. Each filter opens a dialog built from its parameter schema. A
 window with `ui.pointer`, `ui.key`, `ui.text`, `ui.tool.select` and the `ui.dialog.*` methods,
 and see it with `ui.screenshot`; `ui.render` draws glyphs to PNG without a window, the same
 bytes every time. `layer.inspect` reads a layer's outline with addresses. One crate has no
-commands yet: `audit` (34 of the 36 outline checks). 899 tests pass, including a sweep that
+commands yet: `audit` (34 of the 36 outline checks). 916 tests pass, including a sweep that
 runs every engine command with hostile parameters. The whole gate (`cargo xtask ci`: format,
 lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 

@@ -6,7 +6,7 @@ _Updated: 2026-10-10, M3 waves 3 and 4 and the dialog framework integrated._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (899 tests; about 109,000 lines of Rust in 20 crates,
+- `cargo xtask ci` passes all nine steps (916 tests; about 109,000 lines of Rust in 20 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 209 of the 932 inventory commands exist (`docs/parity.md`); M3 has 184 commands, 178 of them
   live. Feature parity is about 10% (ROADMAP.md › Parity estimate).
