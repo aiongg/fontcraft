@@ -34,6 +34,8 @@ mod canvas_layers_tests;
 #[cfg(test)]
 mod dialog_tests;
 #[cfg(test)]
+mod draw_tests;
+#[cfg(test)]
 mod panels_tests;
 #[cfg(test)]
 mod tests;

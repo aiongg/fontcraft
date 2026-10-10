@@ -185,6 +185,44 @@ Tools sharing a button share a shortcut letter; `Shift`+letter switches to the o
 click-and-hold on the button lists them. Groups seen in this chapter: Select/Lasso (`V`), the two
 Primitives modes (`F`), Erase/Knife (`E`).
 
+### How FontCraft builds the drawing tools (M3.13)
+
+Our decisions where the handbook is silent. Gestures the handbook documents and no video shows
+follow the handbook.
+
+- **One step per node.** Each node the Draw tool places is one interaction of existing commands,
+  so one undo step: `path.addPath` for a path's first node; for the others a `command.batch` that
+  adds the new segment as a path of its own and joins it with `path.connectNodes`, then
+  `path.closeOpenPaths` to close. Continuing a path at its first node adds `path.reverseContours`
+  so the path keeps its direction.
+- **The path being drawn** is the open path the tool last added to. `Escape`, another tool, another
+  glyph, or any other change to that path (an edit, an undo) ends it.
+- **Handles.** The handle a drag pulls out of a node towards the next segment stays with the tool
+  until the next node uses it, and is drawn as an overlay with the segment the next click would
+  add. When a curved segment has a handle at one end only, the other handle lies a third of the
+  way from its node towards the first.
+- **Drag modifiers.** `Alt` held from the press gives a corner with an outgoing handle only.
+  `Alt` back on the node (a zero-length outgoing handle) keeps only the incoming handle. `Cmd`
+  keeps the direction the outgoing handle had when it went down. `Space` moves the node and both
+  handles.
+- **Clicks on objects.** A click on a segment places the node on the segment and leaves the clicked
+  path alone (question 3). A click on an open end continues that path; while drawing, it joins the
+  two paths. A click on a node of a path, while not drawing, opens a closed path there or splits
+  an open one (`path.deleteAndBreak` on the segment ending there, then the segment added back
+  and joined, so the outline does not change). `Shift`+click on a segment inserts at an extremum
+  or inflection even while drawing, and does nothing when the segment has neither.
+- **Closing on the start node by a drag** shapes the start node's handles as a drag shapes a new
+  node's: the closing segment's handle mirrors the pointer, the start node's existing outgoing
+  handle follows it.
+- **Pencil.** The stroke is fitted with cubic curves within one screen point (a quadratic spline
+  through the samples, simplified with kurbo), so the path stays node-heavy. A stroke that ends on
+  its start, within the hit tolerance, gives a closed path. One stroke is one undo step.
+- **Primitives.** The press and the pointer snap like dragged points (`Ctrl` suspends it). A click
+  asks for `dialog.primitiveMeasurements` with the click's position.
+- **Shared buttons.** The letter returns to the group's tool used last (the first one before any
+  was used); `Shift` with the letter steps to the next one. The tool table's shortcut letters
+  define the groups, so a new tool only needs its row.
+
 ## 6. Selecting
 
 Tools: `select` (`V`), `lasso` (`V` / `Shift+V`).
@@ -680,9 +718,10 @@ Question 31 stays open and blocks only `path.sharpenCorner`.
    arrow increments (1, 10, 100). A tutorial video showing it would confirm or correct this.
 3. **Draw tool on a segment** without Shift: does a plain click insert a node? What does a click
    on an open path's end do (continue the path)? How is an unfinished path ended?
-   **Answered for M3 (our decision, 2026-10-09):** a plain click on a segment inserts a node at the
-   click; a click on an open end node continues that path; `Escape` or another tool ends the path. A
-   tutorial video showing it would confirm or correct this.
+   **Answered for M3 (our decision, 2026-10-09):** a click on an open end node continues that path;
+   `Escape` or another tool ends the path. A plain click on a segment places the new node on the
+   segment (the handbook's "click adds a node") and leaves the clicked path alone. A tutorial video
+   showing it would confirm or correct this.
    **Video evidence (Glyphs 3):** "Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3
    and Type Design" (https://www.youtube.com/watch?v=VGe96Qjlvvc) shows at 22:56–23:04 that a
    click on the open end node of another path continues that path. At 22:57 a click on a segment

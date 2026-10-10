@@ -10,8 +10,8 @@ use crate::scene::Scene;
 use crate::selection::Selection;
 use crate::view::View;
 use crate::{
-    annotate::AnnotateTool, hand::HandTool, lasso::LassoTool, measure::MeasureTool, rotate::RotateTool, scale::ScaleTool, select::SelectTool,
-    zoom::ZoomTool,
+    annotate::AnnotateTool, draw::DrawTool, hand::HandTool, lasso::LassoTool, measure::MeasureTool, pencil::PencilTool, primitives::PrimitiveTool,
+    rotate::RotateTool, scale::ScaleTool, select::SelectTool, zoom::ZoomTool,
 };
 
 /// Distances and steps the tools use. The shell fills the screen distances from `theme::Tokens`.
@@ -111,6 +111,10 @@ pub struct ToolInfo {
 pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "select", label: "Select", shortcut: "V", group: "select" },
     ToolInfo { id: "lasso", label: "Lasso Select", shortcut: "V", group: "select" },
+    ToolInfo { id: "draw", label: "Draw", shortcut: "P", group: "" },
+    ToolInfo { id: "pencil", label: "Pencil", shortcut: "B", group: "pencil" },
+    ToolInfo { id: "rectangle", label: "Primitives (Rectangle)", shortcut: "F", group: "primitives" },
+    ToolInfo { id: "ellipse", label: "Primitives (Ellipse)", shortcut: "F", group: "primitives" },
     ToolInfo { id: "hand", label: "Hand", shortcut: "H", group: "" },
     ToolInfo { id: "zoom", label: "Zoom", shortcut: "Z", group: "" },
     ToolInfo { id: "knife", label: "Knife", shortcut: "E", group: "erase" },
@@ -132,6 +136,10 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "lasso" => Box::new(LassoTool::default()),
         "hand" => Box::new(HandTool::default()),
         "zoom" => Box::new(ZoomTool::default()),
+        "draw" => Box::new(DrawTool::default()),
+        "pencil" => Box::new(PencilTool::default()),
+        "rectangle" => Box::new(PrimitiveTool::rectangle()),
+        "ellipse" => Box::new(PrimitiveTool::ellipse()),
         "knife" => Box::new(crate::knife::KnifeTool::default()),
         "rotate" => Box::new(RotateTool::default()),
         "scale" => Box::new(ScaleTool::default()),

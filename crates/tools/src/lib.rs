@@ -16,14 +16,18 @@
 //! | [`selection`] | the selection and the commands' target object built from it |
 //! | [`snap`] | where a dragged point lands: nodes, then handles, guides, metric lines, alignment |
 //! | [`snap_guides`] | snapping to the background's points, guides and their crossings |
-//! | [`select`], [`lasso`], [`hand`], [`zoom`], [`rotate`], [`scale`], [`measure`], [`annotate`] | the tools, as state machines |
+//! | [`select`], [`lasso`], [`hand`], [`zoom`], [`knife`], [`rotate`], [`scale`], [`measure`], [`annotate`] | the tools, as state machines |
 //! | [`bbox`] | the selection's bounding box, its knobs, and the freehand transform drags |
+//! | [`draw`], [`pencil`], [`primitives`] | the drawing tools |
+//! | [`cycling`] | tool letters, and the tools that share a toolbar button |
 //! | [`keymap`] | the Edit View keys these tools answer |
 //! | [`toolbox`] | the active tool, temporary tools (Space, Cmd+Space) and key routing |
 #![forbid(unsafe_code)]
 
 pub mod annotate;
 pub mod bbox;
+pub mod cycling;
+pub mod draw;
 pub mod event;
 pub mod geometry;
 pub mod hand;
@@ -33,6 +37,8 @@ pub mod knife;
 pub mod lasso;
 pub mod measure;
 pub mod output;
+pub mod pencil;
+pub mod primitives;
 pub mod rotate;
 pub mod scale;
 pub mod scene;
@@ -64,6 +70,8 @@ pub const MAX_LASSO_POINTS: usize = 10_000;
 /// Most sampled points kept for the outlines of a scene's components.
 pub const MAX_COMPONENT_POINTS: usize = 200_000;
 
+#[cfg(test)]
+mod draw_tests;
 #[cfg(test)]
 mod measure_annotate_tests;
 #[cfg(test)]

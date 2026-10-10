@@ -4,6 +4,7 @@ use std::fmt;
 
 use serde_json::{Value, json};
 
+use crate::cycling::{remember, tool_for_letter};
 use crate::event::{Key, KeyEvent, Modifiers, PointerEvent};
 use crate::keymap::edit_view_key;
 use crate::output::{Action, Invocation, Output, Overlay};
@@ -22,9 +23,9 @@ pub struct Switch {
 /// The tools of one Edit View: the active one, and a temporary one while `Space` is held.
 pub struct Toolbox {
     active: Box<dyn Tool>,
-    /// The tool last chosen for each shortcut letter shared by several tools, which the plain
-    /// letter returns to: `(letter, tool id)`.
-    last_by_letter: Vec<(&'static str, &'static str)>,
+    /// The tools chosen so far, the latest last: a letter shared by several tools returns to the
+    /// one used last (`tools.sharedButtonCycling`).
+    recent: Vec<&'static str>,
     temporary: Option<Box<dyn Tool>>,
 }
 
@@ -43,7 +44,7 @@ impl Default for Toolbox {
 impl Toolbox {
     /// A toolbox with the Select tool active.
     pub fn new() -> Self {
-        Self { active: Box::new(SelectTool::default()), last_by_letter: Vec::new(), temporary: None }
+        Self { active: Box::new(SelectTool::default()), recent: vec!["select"], temporary: None }
     }
 
     /// The tool that receives events now: the temporary one while `Space` is held.
@@ -69,12 +70,7 @@ impl Toolbox {
             self.active = tool;
         }
         let now = self.active.id();
-        if let Some(info) = TOOLS.iter().find(|t| t.id == now) {
-            match self.last_by_letter.iter_mut().find(|(letter, _)| *letter == info.shortcut) {
-                Some(slot) => slot.1 = now,
-                None => self.last_by_letter.push((info.shortcut, now)),
-            }
-        }
+        remember(&mut self.recent, now);
         Ok(Switch { tool: now, previous, output })
     }
 
@@ -112,6 +108,12 @@ impl Toolbox {
     /// of [`crate::keymap`]. An output that is not `handled` goes on to the global shortcuts.
     pub fn key(&mut self, cx: &Context<'_>, ev: &KeyEvent) -> Output {
         if ev.key == Key::Space {
+            // During a drag the tool itself may use Space (the Draw tool moves the node).
+            if self.temporary.is_none() && self.active.busy() {
+                let mut out = self.active.key(cx, ev);
+                out.handled = true;
+                return out;
+            }
             if !ev.pressed {
                 let mut out = self.end_temporary();
                 out.handled = true;
@@ -135,36 +137,14 @@ impl Toolbox {
         edit_view_key(cx, ev).map_or_else(Output::default, Output::with)
     }
 
-    /// The tool letters of [`TOOLS`], as `tool.select` invocations. A letter shared by several
-    /// tools chooses the active one of them, else the one last chosen; with `Shift` it moves to
-    /// the next tool sharing the letter.
+    /// The tool letters of [`TOOLS`] (`Shift` steps through the tools sharing a letter), as
+    /// `tool.select` invocations.
     fn letter(&self, ev: &KeyEvent) -> Option<Action> {
         let Key::Char(c) = ev.key else { return None };
         if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
             return None;
         }
-        let is_letter = |t: &&crate::tool::ToolInfo| {
-            let mut chars = t.shortcut.chars();
-            chars.next().is_some_and(|s| s.eq_ignore_ascii_case(&c)) && chars.next().is_none()
-        };
-        let members: Vec<&'static str> = TOOLS.iter().filter(is_letter).map(|t| t.id).collect();
-        let first = *members.first()?;
-        if ev.mods.shift && members.len() < 2 {
-            return None;
-        }
-        let base = self.active.id();
-        let current = if members.contains(&base) {
-            base
-        } else {
-            let shortcut = TOOLS.iter().find(|t| t.id == first).map_or("", |t| t.shortcut);
-            self.last_by_letter.iter().find(|(letter, _)| *letter == shortcut).map_or(first, |(_, id)| *id)
-        };
-        let id = if ev.mods.shift {
-            let at = members.iter().position(|m| *m == current).unwrap_or(0);
-            members.get((at + 1) % members.len()).copied().unwrap_or(first)
-        } else {
-            current
-        };
+        let id = tool_for_letter(c, ev.mods.shift, self.active.id(), &self.recent)?;
         Some(Action::Run { invocation: Invocation::new("tool.select", json!({ "tool": id })) })
     }
 

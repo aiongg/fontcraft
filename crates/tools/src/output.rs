@@ -98,6 +98,10 @@ pub enum OverlayKind {
     KnifeLine,
     /// The Measurement tool's ruler; the canvas labels its crossings (`measure.ruler`).
     Ruler,
+    /// The segment the next click of a drawing tool would add, or a freehand stroke.
+    DrawPreview,
+    /// A handle a drawing tool is pulling out, with its line to the node.
+    DrawHandle,
 }
 
 /// Something a tool asks the canvas to draw, in font units.

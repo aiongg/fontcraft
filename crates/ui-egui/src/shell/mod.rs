@@ -6,6 +6,7 @@
 //! shared list.
 
 pub mod annotation;
+pub mod drawing;
 pub mod font_view;
 pub mod keymap;
 pub mod menus;
@@ -39,6 +40,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (transform::COMMANDS, transform::run),
     (crate::panels::COMMANDS, crate::panels::run),
     (annotation::COMMANDS, annotation::run),
+    (drawing::COMMANDS, drawing::run),
 ];
 
 /// Every shell command, in module order.

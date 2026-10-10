@@ -314,7 +314,7 @@ milestone = "M3"
 summary = "Pen tool for building Bézier outlines node by node. Clicks give straight joins, drags give curve handles whose length sets the curvature; it also opens paths at a node and inserts nodes at extremes and inflections."
 ref = "Edit View › Draw Tool"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 22:56–23:12 and 29:57–30:03: clicks place corner nodes joined by straight segments, a drag places a node with two handles and a curved segment, and a click on the first node closes the path, which then fills. Not shown: the Alt, Cmd and Space drag variants, opening a closed path at a node, Shift+click on a segment. At 22:57 a click on another path's segment starts the new line there; whether that also inserts a node into the clicked path is not visible (03a open question 3)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 22:56–23:12 and 29:57–30:03: clicks place corner nodes joined by straight segments, a drag places a node with two handles and a curved segment, and a click on the first node closes the path, which then fills. Not shown: the Alt, Cmd and Space drag variants, opening a closed path at a node, Shift+click on a segment. At 22:57 a click on another path's segment starts the new line there; whether that also inserts a node into the clicked path is not visible (03a open question 3). FontCraft follows the handbook for the gestures not shown (documented, not yet observed). Our decisions (03a § 5): a click on a segment places the node on the segment and leaves the clicked path alone; Shift+click on a segment inserts at an extremum or inflection even while drawing; a click on an open end continues that path, and while drawing joins the two paths; a missing handle of a curved segment lies a third of the way from its node to the other handle; Shift keeps nodes and handles to 45° steps; Escape or another tool ends the path."
 
 [[tool]]
 id = "pencil"
@@ -329,6 +329,7 @@ milestone = "M3"
 summary = "Freehand drawing tool aimed at tablets and styluses. The traced result follows the hand closely and therefore carries more nodes than a constructed path, so it normally needs cleaning up afterwards."
 ref = "Edit View › Pencil Tool"
 status = "handbook"
+notes = "Documented, not yet observed. Our decisions (03a § 5): the stroke is fitted with cubic curves within one screen point, so it stays node-heavy; a stroke that ends on its start, within the hit tolerance, gives a closed path."
 
 [[tool]]
 id = "rectangle"
@@ -348,7 +349,7 @@ milestone = "M3"
 summary = "Rectangle mode of the Primitives tool, which adds a closed rectangular path either by dragging or from typed measurements."
 ref = "Edit View › Primitives"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:06–5:08 and 6:22–6:28: a drag creates a closed four-node rectangle, selected afterwards; during the drag a grey badge near the pointer shows the live width × height. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:06–5:08 and 6:22–6:28: a drag creates a closed four-node rectangle, selected afterwards; during the drag a grey badge near the pointer shows the live width × height. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F (documented, not yet observed). FontCraft draws no size badge yet. A click asks for `dialog.primitiveMeasurements` with the click as its x and y."
 
 [[tool]]
 id = "ellipse"
@@ -368,7 +369,7 @@ milestone = "M3"
 summary = "Ellipse mode of the Primitives tool, which adds a closed elliptical path either by dragging or from typed measurements."
 ref = "Edit View › Primitives"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 9:06–9:11: a drag creates a closed ellipse with four smooth nodes at its extremes (top, bottom, left, right), with a size badge during the drag. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 9:06–9:11: a drag creates a closed ellipse with four smooth nodes at its extremes (top, bottom, left, right), with a size badge during the drag. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F (documented, not yet observed). FontCraft draws no size badge yet. A click asks for `dialog.primitiveMeasurements` with the click as its x and y."
 
 [[command]]
 id = "tool.drawRectangle"
@@ -494,7 +495,7 @@ milestone = "M3"
 summary = "Tools that share one toolbar button (Select/Lasso, the two Primitives modes, Erase/Knife) have one shortcut letter; pressing Shift plus that letter switches to the other tool of the group, and click-and-hold on the button opens a menu listing the group's tools."
 ref = "Edit View › Cutting Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. Not shown: Shift plus the letter."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. Not shown: Shift plus the letter (documented, not yet observed). FontCraft: the letter returns to the group's tool used last (the first one before any); Shift with the letter steps to the next tool of the group. The click-and-hold menu waits for the toolbar."
 
 [[behavior]]
 id = "points.terminology"
