@@ -188,6 +188,32 @@ fn remove_glyph_asks_about_components_and_metrics_keys() {
     assert!(s.font().unwrap().glyph("Z").is_none());
 }
 
+#[test]
+fn remove_glyph_removes_the_kerning_pairs_that_name_it() {
+    let mut s = Fixture::Drawn.session();
+    s.edit("kerning", |f| {
+        let k = Arc::make_mut(&mut f.kerning);
+        k.ltr.set("m01", "A", "V", -40.0);
+        k.ltr.set("m01", "@MMK_L_T", "A", -30.0);
+        k.ltr.set("m01", "T", "O", -20.0);
+        k.ltr.set("m01", "@MMK_L_A", "@MMK_R_O", -10.0);
+        Ok(())
+    })
+    .unwrap();
+    let before = s.font().unwrap().kerning.clone();
+    let r = run(&mut s, "glyph.removeGlyph", json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "keep", "confirm": false}));
+    assert_eq!(r["kerningPairs"], json!(2));
+    let r = run(&mut s, "glyph.removeGlyph", json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "keep"}));
+    assert_eq!(r["kerningPairs"], json!(2));
+    let ltr = &s.font().unwrap().kerning.ltr;
+    assert_eq!((ltr.get("m01", "A", "V"), ltr.get("m01", "@MMK_L_T", "A")), (None, None));
+    assert_eq!(ltr.get("m01", "T", "O"), Some(-20.0));
+    assert_eq!(ltr.get("m01", "@MMK_L_A", "@MMK_R_O"), Some(-10.0), "a group pair stays");
+    run(&mut s, "edit.undo", json!({}));
+    assert!(s.font().unwrap().glyph("A").is_some());
+    assert_eq!(s.font().unwrap().kerning, before, "one undo brings the pairs back");
+}
+
 /// Twice the signed area of each path of `name`'s first layer (positive: counter-clockwise).
 fn path_areas(s: &Session, name: &str) -> Vec<f64> {
     let g = glyph(s, name);

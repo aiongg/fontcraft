@@ -1,9 +1,10 @@
 //! Glyph menu: adding and removing glyphs, code points, locking.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use fontcraft_geom::{Affine, Point};
-use fontcraft_model::{Font, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, MetricsKeys, Shape, Transform};
+use fontcraft_model::{Font, KernTable, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, MetricsKeys, Shape, Transform, side_group};
 use serde_json::{Value, json};
 
 use super::*;
@@ -25,7 +26,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Glyph",
             ["Glyph"],
             Some("Cmd+Delete"),
-            "{glyphs: [names], components?: \"remove\" | \"decompose\", metricsKeys?: \"dissolve\" | \"keep\", confirm?: bool (default true)} removes glyphs from the font. When glyphs that stay use a removed glyph as a component, `components` must say what happens to those components: remove deletes them, decompose turns them into outlines first. When metrics keys of glyphs that stay point at a removed glyph, `metricsKeys` must say whether those keys are dissolved or kept. Without a needed answer the command refuses and names it. confirm: false changes nothing and reports what the answers would cover → {removed: [names], usedAsComponent: [{glyph, layer, component}], metricsKeys: [{glyph, layer?, key, value}], needs: [\"components\" | \"metricsKeys\"]}",
+            "{glyphs: [names], components?: \"remove\" | \"decompose\", metricsKeys?: \"dissolve\" | \"keep\", confirm?: bool (default true)} removes glyphs from the font. When glyphs that stay use a removed glyph as a component, `components` must say what happens to those components: remove deletes them, decompose turns them into outlines first. When metrics keys of glyphs that stay point at a removed glyph, `metricsKeys` must say whether those keys are dissolved or kept. Without a needed answer the command refuses and names it. Kerning pairs with a removed glyph on either side go with it, in every master; pairs on a kerning group stay. confirm: false changes nothing and reports what the answers would cover → {removed: [names], usedAsComponent: [{glyph, layer, component}], metricsKeys: [{glyph, layer?, key, value}], kerningPairs: number, needs: [\"components\" | \"metricsKeys\"]}",
             has_doc,
             remove_glyph
         )
@@ -300,8 +301,9 @@ fn remove_glyph(s: &mut Session, p: &Value) -> Result<Value> {
             None => json!({"glyph": k.glyph, "key": k.key, "value": k.value}),
         })
         .collect();
+    let pairs = [&font.kerning.ltr, &font.kerning.rtl, &font.kerning.vertical].iter().map(|t| pairs_naming(t, &doomed)).sum::<usize>();
     if !confirm {
-        return Ok(json!({"removed": [], "usedAsComponent": uses_json, "metricsKeys": keys_json, "needs": needs}));
+        return Ok(json!({"removed": [], "usedAsComponent": uses_json, "metricsKeys": keys_json, "kerningPairs": pairs, "needs": needs}));
     }
     if !needs.is_empty() {
         let mut why = Vec::new();
@@ -366,12 +368,43 @@ fn remove_glyph(s: &mut Session, p: &Value) -> Result<Value> {
                 }
             }
         }
+        if pairs > 0 {
+            let k = Arc::make_mut(&mut font.kerning);
+            for table in [&mut k.ltr, &mut k.rtl, &mut k.vertical] {
+                remove_pairs_naming(table, &doomed);
+            }
+        }
         for name in &names {
             font.remove_glyph(name)?;
         }
         Ok(())
     })?;
-    Ok(json!({"removed": names, "usedAsComponent": uses_json, "metricsKeys": keys_json, "needs": []}))
+    Ok(json!({"removed": names, "usedAsComponent": uses_json, "metricsKeys": keys_json, "kerningPairs": pairs, "needs": []}))
+}
+
+/// Whether a kerning side is one of the `doomed` glyphs; a group side never is.
+fn names_doomed(side: &str, doomed: &HashSet<&str>) -> bool {
+    side_group(side).is_none() && doomed.contains(side)
+}
+
+/// The pairs, over all masters, with a `doomed` glyph on either side.
+fn pairs_naming(table: &KernTable, doomed: &HashSet<&str>) -> usize {
+    let firsts = table.0.iter().flat_map(|m| &m.firsts);
+    firsts
+        .map(|f| if names_doomed(&f.first, doomed) { f.seconds.len() } else { f.seconds.iter().filter(|(s, _)| names_doomed(s, doomed)).count() })
+        .sum()
+}
+
+/// Removes the pairs with a `doomed` glyph on either side, with first sides and masters left empty.
+fn remove_pairs_naming(table: &mut KernTable, doomed: &HashSet<&str>) {
+    for m in &mut table.0 {
+        m.firsts.retain(|f| !names_doomed(&f.first, doomed));
+        for f in &mut m.firsts {
+            f.seconds.retain(|(s, _)| !names_doomed(s, doomed));
+        }
+        m.firsts.retain(|f| !f.seconds.is_empty());
+    }
+    table.0.retain(|m| !m.firsts.is_empty());
 }
 
 fn set_unicodes(s: &mut Session, p: &Value) -> Result<Value> {

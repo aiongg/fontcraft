@@ -239,17 +239,17 @@ label = "Remove Glyph"
 menu = ["Glyph"]
 shortcut = "Cmd+Delete"
 kind = "engine"
-params = "{glyphs: [names], components?: \"remove\" | \"decompose\", metricsKeys?: \"dissolve\" | \"keep\", confirm?: bool} → {removed, usedAsComponent, metricsKeys, needs}"
+params = "{glyphs: [names], components?: \"remove\" | \"decompose\", metricsKeys?: \"dissolve\" | \"keep\", confirm?: bool} → {removed, usedAsComponent, metricsKeys, kerningPairs, needs}"
 area = "font-view"
 milestone = "M4"
 summary = "Deletes the selected glyphs after a confirmation dialog (Remove / Cancel). Applies to glyphs selected in Font View, to the glyph being edited in Edit View and to a Text-tool selection; the minus button at the bottom left of Font View does the same. Follow-up choices cover glyphs used as components and metrics keys that point at a deleted glyph."
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
-notes = "The answers are parameters: without a needed `components` or `metricsKeys` answer the command refuses and names it; `confirm: false` changes nothing and returns what the dialog asks about (removeGlyph.confirm). Documented, not yet observed."
+notes = "The answers are parameters: without a needed `components` or `metricsKeys` answer the command refuses and names it; `confirm: false` changes nothing and returns what the dialog asks about (removeGlyph.confirm). Kerning pairs with a removed glyph on either side, exceptions included, are removed in every master in the same undo step; `kerningPairs` counts them. Group membership leaves with the glyph. Documented, not yet observed."
 guesses = [
   "Decompose replaces each component of a removed glyph with that glyph's shapes from the matching layer; components inside it that point at glyphs that stay remain components. Settled by observation.",
   "A metrics key points at a glyph when its formula starts with that glyph's name (=H, =|H, =O-4); the longest leading name that is a glyph wins, since names may contain hyphens. Settled by observation.",
-  "Kerning pairs and groups that name a removed glyph are left as they are. Settled by observation.",
+  "Pairs on a kerning group stay, even when the removed glyph was the group's last member. Settled by observation.",
 ]
 
 [[command]]
