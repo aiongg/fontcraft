@@ -95,6 +95,7 @@ fn lookup_order_and_provenance() {
     // Legacy code points are never found by code point, nor assigned.
     assert!(d.lookup("allahlong", &[0xFDFA]).found.is_none());
     assert_eq!(d.lookup("uniFDFA", &[]).unicode, None);
+    assert_eq!(d.by_legacy_code_point(0xFB04).map(|r| r.name), Some("f_f_l".into()));
     // Ideographs.
     let i = d.lookup("uni4E00", &[]);
     assert_eq!(i.script.map(|s| s.value).as_deref(), Some("han"));

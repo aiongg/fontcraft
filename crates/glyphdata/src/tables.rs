@@ -95,6 +95,8 @@ pub struct Tables {
     production_index: Vec<u32>,
     /// (code point, record) by code point.
     code_point_index: Vec<(u32, u32)>,
+    /// (legacy code point, record) by legacy code point.
+    legacy_index: Vec<(u32, u32)>,
     hanr: Range<usize>,
     scrv: Range<usize>,
     rtls: Range<usize>,
@@ -212,6 +214,7 @@ impl Tables {
             alt_index: Vec::new(),
             production_index: Vec::new(),
             code_point_index: Vec::new(),
+            legacy_index: Vec::new(),
             hanr: range(b"HANR"),
             scrv: range(b"SCRV"),
             rtls: range(b"RTLS"),
@@ -230,6 +233,9 @@ impl Tables {
         t.code_point_index = (0..count).filter_map(|i| Some((t.record_unicode(i)?, i as u32))).collect();
         t.code_point_index.sort_unstable();
         t.code_point_index.dedup_by_key(|(cp, _)| *cp);
+        t.legacy_index = (0..count).filter_map(|i| Some((t.record_legacy(i)?, i as u32))).collect();
+        t.legacy_index.sort_unstable();
+        t.legacy_index.dedup_by_key(|(cp, _)| *cp);
         let mut production_index: Vec<u32> =
             (0..count as u32).filter(|i| !t.has_code_point_production(*i as usize) && t.column_str(&t.prod, *i as usize).is_some()).collect();
         production_index.sort_by(|a, b| t.column_str(&t.prod, *a as usize).cmp(&t.column_str(&t.prod, *b as usize)).then(a.cmp(b)));
@@ -295,6 +301,10 @@ impl Tables {
         u24_at(self.bytes(&self.unic), i.checked_mul(3)?).filter(|v| *v != NONE_U24)
     }
 
+    fn record_legacy(&self, i: RecId) -> Option<u32> {
+        u24_at(self.bytes(&self.legc), i.checked_mul(3)?).filter(|v| *v != NONE_U24)
+    }
+
     fn has_code_point_production(&self, i: RecId) -> bool {
         u8_at(self.bytes(&self.flag), i).is_some_and(|f| f & FLAG_CODE_POINT_PRODUCTION != 0)
     }
@@ -317,7 +327,7 @@ impl Tables {
             production: self.record_production(i),
             description: self.record_description(i).map(str::to_string),
             unicode: self.record_unicode(i),
-            unicode_legacy: u24_at(self.bytes(&self.legc), i.checked_mul(3)?).filter(|v| *v != NONE_U24),
+            unicode_legacy: self.record_legacy(i),
             category: self.byte(&self.catg, i).and_then(Category::from_index),
             sub_category: self.byte(&self.subc, i).and_then(SubCategory::from_index),
             case: self.byte(&self.case, i).and_then(Case::from_index),
@@ -379,6 +389,12 @@ impl Tables {
     pub fn find_code_point(&self, cp: u32) -> Option<RecId> {
         let i = self.code_point_index.binary_search_by_key(&cp, |(c, _)| *c).ok()?;
         self.code_point_index.get(i).map(|(_, r)| *r as usize)
+    }
+
+    /// The record whose `unicodeLegacy` is `cp`.
+    pub fn find_legacy_code_point(&self, cp: u32) -> Option<RecId> {
+        let i = self.legacy_index.binary_search_by_key(&cp, |(c, _)| *c).ok()?;
+        self.legacy_index.get(i).map(|(_, r)| *r as usize)
     }
 
     // ── ideographs ──

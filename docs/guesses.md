@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**249 guesses on 195 rows (91 of them live commands).**
+**257 guesses on 199 rows (91 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -177,7 +177,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.cell.badgeNonExporting` (behavior) | M4 | handbook | – | Drawn at the top centre of the cell; the handbook gives no position. Settled by observation (05 question 15). |
 | `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Every column is shown by default, in the order the Glyph Properties section lists the properties. Settled by observation (05 question 14). |
 | `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation. |
+| `glyphData.caseAndDirectionEncoding` (behavior) | M4 | docs | – | A script is right to left when most of its letters with a code point are strong right-to-left characters in Unicode 17.0: adlam, arabic, avestan, chorasmian, elymaic, hebrew, mandaic, nko, rovas, samaritan, syriac, thaana and yezidi. A glyph with neither a stated direction nor a script is right to left when the character its name stands for is. Settled by observing the reference's directions. |
 | `glyphData.legacyUnicode` (behavior) | M4 | docs | – | Adding by a legacy character (typing U+FB04) finds the record through unicodeLegacy and creates f_f_l without a code point. Settled by observation. |
+| `glyphData.lookupOrder` (behavior) | M4 | docs | – | When two built-in records share a code point or a production name, the first by name wins; the pinned data has no such pair. Settled by observation. |
+| `glyphData.customFile` (behavior) | M4 | handbook | – | A custom record replaces the built-in record of the same name as a whole: fields it leaves out are empty, not taken from the built-in record. Settled by observation. |
+| `glyphData.customFile` (behavior) | M4 | handbook | – | A file over a limit (16 MB, 200,000 records, 1,024 bytes per attribute value, two levels of elements) or with an entity declaration or a malformed record is rejected as a whole; attributes the format does not define are skipped with a warning. |
+| `glyphName.firstCharacter` (behavior) | M4 | handbook | – | .null is exempt like .notdef. |
 | `fontView.invertSelection` (behavior) | M4 | handbook | – | Invert Selection works among the visible glyphs, as Select All does. Settled by observation (05 question 12). |
 | `fontView.search.regex` (behavior) | M4 | handbook | – | With Regex on, the pattern must match a whole field (name, hex code point or note) among the fields the magnifier menu selects; the handbook's examples only show names. Settled by observation (05 question 13). |
 | `smartFilter.rule.glyphName` (behavior) | M4 | handbook | – | Text rules (Glyph Name, Tags, Script, Category & Subcategory) offer is, is not, contains, does not contain, begins with, ends with and matches (a regular expression); number rules offer =, ≠, <, ≤, >, ≥; yes-or-no rules offer is and is not. The reference's stored predicates use ==, !=, <, >, CONTAINS, IN, BEGINSWITH and ENDSWITH (tutorial "Custom sidebar entries in Font View"), which this set covers. Settled by observing the rule editor (05 question 10). |
@@ -185,6 +190,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `smartFilter.live` (behavior) | M4 | inferred | – | Results are recomputed from the current font whenever the filter is shown and after every edit, for the master Font View shows. Settled by observation (05 question 11). |
 | `glyphOrder.default` (behavior) | M4 | handbook | – | An opened file keeps its stored glyph order, which is the order the oracles compile; only glyphs added later, renamed, or given a sort name move to the place the sort key gives. Settled by observing where the reference puts a new glyph (05 question 2). |
 | `glyphOrder.default` (behavior) | M4 | handbook | – | The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2). |
+| `glyphOrder.default` (behavior) | M4 | handbook | – | A sort name (from custom glyph data or the glyph itself) places the glyph after the others of its category, ordered by the sort name. |
 | `fontView.getState` | M4 | inferred | no | Our own query for agents; there is no reference behaviour to settle. |
 | `glyph.addGlyphs` | M4 | handbook | no | A comma is not a separator: an item containing one is an invalid name and is reported. Settled by observation (05 question 7). |
 | `glyph.addGlyphs` | M4 | handbook | no | A range covers every code point from the first endpoint's to the second's; code points Unicode does not assign, and surrogates, are skipped, and one range holds at most 65,536 code points. Settled by observation (05 question 7). |
@@ -204,7 +210,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyph.setDirection` | M4 | inferred | no | Writing direction is edited in the Selection Info window and in List View's Direction column; the handbook names no control for it. Settled by observation (05 question 15). |
 | `glyph.removeTag` | M4 | inferred | no | Deleting a capsule in the Tags field removes that tag from every selected glyph. Settled by observation. |
 | `glyphData.lookup` | M4 | inferred | no | Our own query for agents; its answers must equal what the reference shows in Glyph Info and the inspector for the same name, which the oracles' copies of the data (fontc, glyphsLib) check. |
+| `glyphData.lookup` | M4 | inferred | no | A ligature without a record takes the script that all its known parts share, and no case. Settled by observation. |
 | `glyphData.search` | M4 | inferred | no | A query matches as a case-insensitive substring of the name, the description, the hex code point, or equals the character. Settled by observation. |
+| `glyphData.search` | M4 | inferred | no | Results are sorted by name unless another field is asked for, and at most 10,000 are returned. |
 | `glyphData.productionName` | M4 | inferred | no | Our own query for agents; its answers must equal the names the oracles write (fontc and fontmake with production names on). |
 | `font.validateGlyphNames` | M4 | inferred | no | Our own query for agents; it applies the handbook's naming rules. There is no reference behaviour to settle. |
 | `edit.findAndReplace` | M4 | handbook | no | A batch that would give two glyphs the same name, or any glyph an invalid name, is refused as a whole and the clashes are listed. Each rename follows glyph.rename. Settled by observation (05 question 9). |

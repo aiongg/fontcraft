@@ -860,6 +860,7 @@ effect = "other"
 summary = "When set, a GlyphData.xml sitting next to the source file, or in an `Info` subfolder next to it, is not loaded."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "crates/glyphdata reads the files (M4.1); which files the session loads, and this parameter, come with M4.2."
 
 [[parameter]]
 name = "Ignore out of bounds instances"

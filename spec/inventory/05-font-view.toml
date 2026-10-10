@@ -590,8 +590,10 @@ milestone = "M4"
 summary = "Our query: resolves a nice name, production name, alternative name, code point or character against the glyph database (custom entries first) and returns the full record, plus whether each field was found directly or synthesised from suffix, ligature or AGL rules."
 ref = "Font View › Names & Unicode › Glyph Info Database; GlyphsInfo GlyphData.xml"
 status = "inferred"
+notes = "The database behind it is crates/glyphdata (M4.1): GlyphData::lookup returns every field with its source (custom, database, synthesised, default). The command itself is not registered yet. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 guesses = [
   "Our own query for agents; its answers must equal what the reference shows in Glyph Info and the inspector for the same name, which the oracles' copies of the data (fontc, glyphsLib) check.",
+  "A ligature without a record takes the script that all its known parts share, and no case. Settled by observation.",
 ]
 
 [[command]]
@@ -606,9 +608,10 @@ milestone = "M4"
 summary = "Our query behind the Glyph Info window's search field: returns database entries matching the text, optionally sorted by one field."
 ref = "Font View › Names & Unicode › Glyph Info Database"
 status = "inferred"
-notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) says the Glyph Info search matches glyph names, Unicode values and characters, and that typing a script suffix such as -deva lists that script's glyphs."
+notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) says the Glyph Info search matches glyph names, Unicode values and characters, and that typing a script suffix such as -deva lists that script's glyphs. The search is GlyphData::search in crates/glyphdata (M4.1); the command itself is not registered yet."
 guesses = [
   "A query matches as a case-insensitive substring of the name, the description, the hex code point, or equals the character. Settled by observation.",
+  "Results are sorted by name unless another field is asked for, and at most 10,000 are returned.",
 ]
 
 [[command]]
@@ -623,7 +626,7 @@ milestone = "M4"
 summary = "Our query: returns the name each glyph will carry in an exported font, applying the per-glyph override, the database value, then the suffix and ligature rules, and falling back to the nice name."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "inferred"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4); the M2 compiler writes source names."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4); the M2 compiler writes source names. The resolution without the glyph's own override is GlyphData::production_name in crates/glyphdata (M4.1); the override and the command come with M4.2."
 guesses = [
   "Our own query for agents; its answers must equal the names the oracles write (fontc and fontmake with production names on).",
 ]
@@ -1476,7 +1479,7 @@ milestone = "M4"
 summary = "Each glyph has a readable nice name used everywhere in the editor and a production name used only in exported font files. The swap happens automatically at export."
 ref = "Font View › Glyph Properties › Glyph Name; Production Name"
 status = "handbook"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). The production name of each name comes from crates/glyphdata (M4.1); the swap at export comes with M4.2."
 
 [[behavior]]
 id = "glyph.exportDefault"
@@ -1549,7 +1552,7 @@ milestone = "M4"
 summary = "Every glyph has a default production name following the Adobe Glyph List conventions, often of the uniXXXX or uXXXXX form. The user can override it per glyph in the expanded inspector or in Selection Info."
 ref = "Font View › Glyph Properties › Production Name"
 status = "handbook"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). The default comes from crates/glyphdata (M4.1); export writes it from M4.2."
 
 [[behavior]]
 id = "glyph.scriptProperty"
@@ -1823,7 +1826,7 @@ milestone = "M4"
 summary = "Each database record carries: nice name, production name, Unicode value, components of composites, default anchors, marks shown in the mark cloud, script, category and subcategory. The published GlyphData.xml adds case, direction, description, alternative names and a legacy Unicode value."
 ref = "Font View › Names & Unicode › Glyph Info Database; GlyphsInfo GlyphData.xml"
 status = "handbook"
-notes = "FontCraft's built-in database is GlyphsInfo's GlyphData.xml and GlyphData_Ideographs.xml at a pinned commit, with the Adobe Glyph List and the Unicode Character Database for names GlyphsInfo lacks. This is the owner's decision (docs/plans/M4.md § 7 question 2): it is the only open data with the reference's names, categories and production names, and fontc and glyphsLib read the same file. Components, anchors and mark-cloud marks are not in the published data and stay empty unless custom data gives them."
+notes = "FontCraft's built-in database is GlyphsInfo's GlyphData.xml and GlyphData_Ideographs.xml at a pinned commit, with the Adobe Glyph List and the Unicode Character Database for names GlyphsInfo lacks. This is the owner's decision (docs/plans/M4.md § 7 question 2): it is the only open data with the reference's names, categories and production names, and fontc and glyphsLib read the same file. Components, anchors and mark-cloud marks are not in the published data and stay empty unless custom data gives them. M4.1 bundles the data, with the AGL and Unicode 17.0 properties, as crates/glyphdata/data/glyphdata.bin (cargo xtask glyphdata --generate)."
 
 [[behavior]]
 id = "glyphData.xmlAttributes"
@@ -1832,6 +1835,7 @@ milestone = "M4"
 summary = "A GlyphData.xml file is a glyphData root holding empty glyph elements. name and category are required attributes; unicode, unicodeLegacy, subCategory, case, direction, script, description, production and altNames are optional. Code points are bare hexadecimal without a prefix and altNames is a comma-separated list."
 ref = "GlyphsInfo GlyphData.xml (DTD)"
 status = "docs"
+notes = "crates/glyphdata/src/xml.rs reads this form, for the bundled files and for custom ones (M4.1)."
 
 [[behavior]]
 id = "glyphData.tabularFields"
@@ -1840,6 +1844,7 @@ milestone = "M4"
 summary = "The tab-separated form of the database has these columns in order: unicode, name, sortName, sortNameKeep, decompose, category, subCategory, script, production, altNames, description, anchors, accents. The last-named extras (sort names, decomposition, anchors, accents) are absent from the published XML but may appear in custom data."
 ref = "GlyphsInfo Convert to tabbed file.py"
 status = "docs"
+notes = "A custom GlyphData.xml may carry sortName, sortNameKeep, decompose, anchors and marks (or accents); crates/glyphdata reads them into the record (M4.1)."
 
 [[behavior]]
 id = "glyphData.categoryVocabulary"
@@ -1848,6 +1853,7 @@ milestone = "M4"
 summary = "Categories used by the published data are Letter, Mark, Number, Punctuation, Separator and Symbol. Readers of the format also accept Space and Other."
 ref = "GlyphsInfo GlyphData.xml; fontc glyphs-reader glyphdata.rs"
 status = "docs"
+notes = "The Category type of crates/glyphdata holds these values (M4.1)."
 
 [[behavior]]
 id = "glyphData.subCategoryVocabulary"
@@ -1856,6 +1862,7 @@ milestone = "M4"
 summary = "Subcategories in the published data: Arrow, Compatibility, Currency, Dash, Decimal Digit, Emoji, Enclosing, Format, Fraction, Geometry, Halfform, Jamo, Letter, Ligature, Math, Matra, Modifier, Nonspacing, Parenthesis, Quote, Radical, Small, Space, Spacing, Spacing Combining, Superscript, Syllable. Readers also accept Composition, Conjunct, Lowercase, Number, Other, Smallcaps and Uppercase."
 ref = "GlyphsInfo GlyphData.xml; fontc glyphs-reader glyphdata.rs"
 status = "docs"
+notes = "The SubCategory type of crates/glyphdata holds these values (M4.1)."
 
 [[behavior]]
 id = "glyphData.caseAndDirectionEncoding"
@@ -1864,6 +1871,10 @@ milestone = "M4"
 summary = "In the data, case is upper, lower, minor or smallCaps and a missing attribute means no case; direction is RTL or BIDI and a missing attribute means left to right. Source files may additionally store noCase / other and LTR / VTR / VTL."
 ref = "GlyphsInfo GlyphData.xml; GlyphsSDK GlyphsFileFormatv3.md"
 status = "docs"
+notes = "Built in crates/glyphdata (M4.1). A record without a direction gets one from its script (the tutorial \"Roll your own glyph data\" mentions a list of directions per script)."
+guesses = [
+  "A script is right to left when most of its letters with a code point are strong right-to-left characters in Unicode 17.0: adlam, arabic, avestan, chorasmian, elymaic, hebrew, mandaic, nko, rovas, samaritan, syriac, thaana and yezidi. A glyph with neither a stated direction nor a script is right to left when the character its name stands for is. Settled by observing the reference's directions.",
+]
 
 [[behavior]]
 id = "glyphData.ideographsFile"
@@ -1872,6 +1883,7 @@ milestone = "M4"
 summary = "Han ideographs live in a second file, GlyphData_Ideographs.xml, with the same record shape. Their names are code-point names, their script is han, and they carry little more than category and subcategory (for example Radical or Compatibility)."
 ref = "GlyphsInfo README.md; GlyphData_Ideographs.xml"
 status = "docs"
+notes = "crates/glyphdata bundles these records as code-point ranges (1,641 ranges for 40,337 records) and builds each record on demand (M4.1)."
 
 [[behavior]]
 id = "glyphData.niceNameScheme"
@@ -1880,6 +1892,7 @@ milestone = "M4"
 summary = "Nice names start from the Adobe Glyph List with adjustments; glyphs outside it get a short invented name based on the Unicode description. A hyphen plus script tag separates scripts: short tags for common scripts (-ar, -cy), the full script name for most others."
 ref = "GlyphsInfo README.md"
 status = "docs"
+notes = "GlyphData::nice_name (code point to name) and GlyphData::canonical_name (legacy, production, alternative and code-point names to the nice name, suffixes kept) in crates/glyphdata (M4.1)."
 
 [[behavior]]
 id = "glyphData.implicitProductionName"
@@ -1888,7 +1901,7 @@ milestone = "M4"
 summary = "A database record without a production attribute uses its nice name as the production name (Aacute stays Aacute). Records that need a different export name state it, mostly as uniXXXX or uXXXXX and occasionally as a custom name such as two_fraction_seven."
 ref = "GlyphsInfo GlyphData.xml"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). Built in crates/glyphdata (M4.1). A record found by code point or alternative name that has no production attribute exports under the glyph's own name, as both oracles do. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "glyphData.legacyUnicode"
@@ -1897,7 +1910,7 @@ milestone = "M4"
 summary = "unicodeLegacy records a code point that is not written into a font, mostly a compatibility or presentation form (noon-ar.init has FEE7, f_f_l has FB04). It is never assigned to a glyph."
 ref = "GlyphsInfo GlyphData.xml; tutorial \"Roll your own glyph data\" (glyphsapp.com/learn)"
 status = "docs"
-notes = "Answers 05 question 3 from the tutorial, checked in the M4 planning pass. The tutorial names one exception, the Use Arabic Presentation Form Unicodes parameter, meant for testing only; it is not an M4 row. Documented, not yet observed."
+notes = "Answers 05 question 3 from the tutorial, checked in the M4 planning pass. The tutorial names one exception, the Use Arabic Presentation Form Unicodes parameter, meant for testing only; it is not an M4 row. Documented, not yet observed. Lookup never uses legacy code points, as in both oracles; GlyphData::by_legacy_code_point in crates/glyphdata finds the record for the guess below (M4.1)."
 guesses = [
   "Adding by a legacy character (typing U+FB04) finds the record through unicodeLegacy and creates f_f_l without a code point. Settled by observation.",
 ]
@@ -1909,6 +1922,7 @@ milestone = "M4"
 summary = "Alternative names are extra lookup keys for a record (A-cy also answers to Acyrillic and afii10017). They never displace a record's own name, and a match by alternative name yields category, script and production name but no code point."
 ref = "GlyphsInfo GlyphData.xml; fontc glyphs-reader glyphdata.rs"
 status = "docs"
+notes = "Built in crates/glyphdata (M4.1). Three alternative names in the pinned data are another record's own name (ustroke, compass, perpendicular); they resolve to that record. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "glyphData.lookupOrder"
@@ -1917,6 +1931,10 @@ milestone = "M4"
 summary = "A property is resolved in this order: the value stored on the glyph in the file, a custom glyph-data entry (by name, then by one of the glyph's code points), the built-in record (by nice name, then by production name, then by code point), and finally synthesis from the name."
 ref = "fontc glyphs-reader glyphdata.rs; GlyphsSDK GlyphsFileFormatv3.md"
 status = "docs"
+notes = "Built in crates/glyphdata (M4.1). The built-in order is nice name, alternative name, production name, then code point, as in both oracles. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
+guesses = [
+  "When two built-in records share a code point or a production name, the first by name wins; the pinned data has no such pair. Settled by observation.",
+]
 
 [[behavior]]
 id = "glyphData.suffixInheritance"
@@ -1925,6 +1943,7 @@ milestone = "M4"
 summary = "A name with a dot suffix takes the properties of the name before the dot: n.alt, n.ss05 and n.002 all behave like n. Names without the dot (nalt, nss05, n002) inherit nothing and need every property set by hand."
 ref = "Font View › Names & Unicode › Glyph Info Database"
 status = "handbook"
+notes = "Built in crates/glyphdata (M4.1). A suffixed name also takes its base's script and case, and a .sc, .smcp or .c2sc suffix gives small-caps case. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "glyphData.suffixSplit"
@@ -1933,6 +1952,7 @@ milestone = "M4"
 summary = "The base name is normally everything before the first dot. When a name has several dots, a longer prefix that is itself a known database name is preferred, so a record whose own name contains a dot is still found."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
+notes = "Built in crates/glyphdata (M4.1). `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "glyphData.ligatureCategory"
@@ -1941,6 +1961,7 @@ milestone = "M4"
 summary = "An unknown base name containing underscores is split into parts and judged by the first part: a Mark first part makes the whole glyph a Mark with that subcategory; a Letter followed only by marks, separators or unknown parts keeps the first part's category and subcategory; a Letter followed by anything else becomes Letter / Ligature."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
+notes = "Built in crates/glyphdata (M4.1). `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "glyphData.ligatureScriptSuffix"
@@ -1949,6 +1970,7 @@ milestone = "M4"
 summary = "When a ligature name ends in a script suffix, that suffix is applied to every part that has none before the parts are looked up (lam_alif-ar is read as lam-ar plus alif-ar). A part keeps its bare form when the bare name is known and the suffixed one is not."
 ref = "fontc glyphs-reader glyphdata.rs; Font View › Glyph Naming Rules"
 status = "docs"
+notes = "Built in crates/glyphdata (M4.1). `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "glyphData.aglFallbackCategory"
@@ -1957,6 +1979,7 @@ milestone = "M4"
 summary = "A base name unknown to the database is parsed by the Adobe Glyph List rules; the Unicode general category of its first character then picks the category and subcategory (for example Nonspacing Mark gives Mark / Nonspacing, Math Symbol gives Symbol / Math, Private Use gives Letter / Compatibility). An underscore in the name turns any non-mark result into subcategory Ligature."
 ref = "fontc glyphs-reader glyphdata.rs; agl-aglfn README.md"
 status = "docs"
+notes = "Built in crates/glyphdata (M4.1). The general categories are Unicode 17.0's, as in glyphs-reader 1.0.0. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "glyphData.underscorePrefixNoCategory"
@@ -1965,6 +1988,7 @@ milestone = "M4"
 summary = "A name starting with an underscore is never given a synthesised category, matching the rule that non-exporting helper glyphs have none."
 ref = "fontc glyphs-reader glyphdata.rs; Font View › Category & Subcategory"
 status = "docs"
+notes = "Built in crates/glyphdata (M4.1). Such names get no synthesised script or case either. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "glyphData.customFile"
@@ -1973,6 +1997,11 @@ milestone = "M4"
 summary = "A user-supplied GlyphData.xml changes glyph properties for all files on the machine and can teach the app custom names, so that Unicode values and categories are still assigned automatically for them. Per-file overrides on individual glyphs remain possible on top."
 ref = "Font View › Names & Unicode › Glyph Info Database; Naming Glyphs"
 status = "handbook"
+notes = "crates/glyphdata reads custom files (GlyphData::with_custom_files, M4.1): files later in the list win per record, and a malformed file fails with its line and the reason. Which files a session loads comes with M4.2."
+guesses = [
+  "A custom record replaces the built-in record of the same name as a whole: fields it leaves out are empty, not taken from the built-in record. Settled by observation.",
+  "A file over a limit (16 MB, 200,000 records, 1,024 bytes per attribute value, two levels of elements) or with an entity declaration or a malformed record is rejected as a whole; attributes the format does not define are skipped with a warning.",
+]
 
 [[behavior]]
 id = "glyphData.aglRecordFormats"
@@ -1981,7 +2010,7 @@ milestone = "M4"
 summary = "The Adobe Glyph List is a text file of name;codepoints records (one or more four-digit uppercase hex values separated by spaces). AGLFN, the subset recommended for new fonts, has codepoint;name;character-name records. Lines starting with # are comments and blank lines are skipped."
 ref = "agl-aglfn README.md; glyphlist.txt; aglfn.txt"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Adobe Glyph List arrives with the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Adobe Glyph List arrives with the glyph database (M4). Built in crates/glyphdata (M4.1). The generator reads both files (build::parse_agl, build::parse_aglfn)."
 
 # ── Production names at export ──
 
@@ -1992,7 +2021,7 @@ milestone = "M4"
 summary = "At export each glyph is written under, in order of preference: its own production-name override, the production name of its database record, a name synthesised from suffix and ligature rules, or its unchanged nice name."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). Built in crates/glyphdata (M4.1: GlyphData::lookup and production_name); export uses it from M4.2. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "export.productionNameSuffix"
@@ -2001,7 +2030,7 @@ milestone = "M4"
 summary = "For a suffixed name whose base has a database production name, the result is that production name followed by the same dot suffix (a small-cap Cyrillic A-cy.sc becomes uni0410.sc)."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). Built in crates/glyphdata (M4.1). `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "export.productionNameLigature"
@@ -2010,7 +2039,7 @@ milestone = "M4"
 summary = "For an underscore-joined name each part is resolved to its production name, or kept if it is already an AGLFN name; if any part is unknown, no production name is synthesised. If at least one part is a uniXXXX name and no part lies beyond the BMP, the parts collapse to uni followed by all the four-digit values; otherwise the parts are joined with underscores. The dot suffix is re-attached at the end."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). Built in crates/glyphdata (M4.1). A part whose production name has a dot (uni0C2D.half in bh_a-telugu) is joined as fontc joins it (uni0C2D.half0C05); glyphsLib uses the cleaned glyph name instead. The post-name comparison of M4.2 decides. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 
 [[behavior]]
 id = "export.productionNameForm"
@@ -2019,7 +2048,7 @@ milestone = "M4"
 summary = "A code-point production name is uni plus exactly four uppercase hexadecimal digits for the BMP, and u plus five or six uppercase hexadecimal digits above it."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "handbook"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4). Built in crates/glyphdata (M4.1: code_point_name, parse_code_point_name)."
 
 [[behavior]]
 id = "export.aglNameParsing"
@@ -2028,7 +2057,7 @@ milestone = "M4"
 summary = "Reading a production name back to text follows the Adobe Glyph List specification: drop everything from the first dot, split at underscores, and map each part through the glyph list, the uniXXXX form (groups of four hex digits) or the uXXXX to uXXXXXX form; parts that match nothing map to no character."
 ref = "agl-aglfn README.md (AGL Specification)"
 status = "docs"
-notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Adobe Glyph List arrives with the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Adobe Glyph List arrives with the glyph database (M4). crates/glyphdata/src/agl.rs (M4.1), ported from fontTools' agl.toUnicode; the specification's examples are its tests."
 
 [[behavior]]
 id = "export.cidMapping"
@@ -2055,6 +2084,7 @@ milestone = "M4"
 summary = "A valid glyph name contains only A to Z, a to z, 0 to 9, underscore, hyphen and period. White space and any non-ASCII character are invalid."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
+notes = "crates/glyphdata's validate gives the offending character and its position (M4.1); font.validateGlyphNames comes with M4.2."
 
 [[behavior]]
 id = "glyphName.firstCharacter"
@@ -2063,6 +2093,10 @@ milestone = "M4"
 summary = "A name must begin with a letter. The exceptions are non-exporting glyphs, which usually start with an underscore, and the special .notdef glyph."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
+notes = "crates/glyphdata's validate applies it (M4.1); whether a glyph exports is the caller's input."
+guesses = [
+  ".null is exempt like .notdef.",
+]
 
 [[behavior]]
 id = "glyphName.invalidBlocksExport"
@@ -2847,10 +2881,11 @@ milestone = "M4"
 summary = "Without a custom order, glyphs are ordered by sort name, where a glyph's sort name is its own override, else the database value, else its glyph name. The same order is used in Font View and in exported fonts."
 ref = "Font View › Glyph Order; Sort Name; GlyphsSDK GlyphsFileFormatv3.md; tutorials \"Alter the glyph order in Font view\" and \"Roll your own glyph data\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below)."
+notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below). The key is GlyphData::sort_key in crates/glyphdata (M4.1); the order function that uses it comes with M4.2."
 guesses = [
   "An opened file keeps its stored glyph order, which is the order the oracles compile; only glyphs added later, renamed, or given a sort name move to the place the sort key gives. Settled by observing where the reference puts a new glyph (05 question 2).",
   "The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2).",
+  "A sort name (from custom glyph data or the glyph itself) places the glyph after the others of its category, ordered by the sort name.",
 ]
 
 [[behavior]]

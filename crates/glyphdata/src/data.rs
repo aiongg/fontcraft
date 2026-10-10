@@ -292,6 +292,15 @@ impl GlyphData {
         }
     }
 
+    /// The record whose `unicodeLegacy` is `cp` (custom first). Lookup never uses legacy code
+    /// points; this is for adding a glyph by a legacy character (`glyphData.legacyUnicode`).
+    pub fn by_legacy_code_point(&self, cp: u32) -> Option<Record> {
+        if let Some(r) = self.custom.records.iter().find(|r| r.unicode_legacy == Some(cp)) {
+            return Some(r.clone());
+        }
+        self.tables.find_legacy_code_point(cp).and_then(|i| self.tables.record(i))
+    }
+
     // ── lookup with synthesis ──
 
     /// Everything the database says about a glyph with this name and these code points

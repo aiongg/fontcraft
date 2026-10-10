@@ -418,8 +418,10 @@ conventions so that text can be recovered from glyph names. For each exported gl
 (`glyphData.productionName`; behaviour rows `export.productionName*`):
 
 1. The glyph's own production-name override, if set.
-2. Else the record found by §4.2: its `production` attribute, or its `name` when the record has no
-   `production` (the nice name is already acceptable, e.g. `Aacute`).
+2. Else the record found by §4.2: its `production` attribute. A record without one exports under
+   the glyph's own name; for a record found by its nice name that is the nice name, which is
+   already acceptable (`Aacute`). Both oracles do the same for a record found by code point or
+   alternative name.
 3. Else synthesis:
    1. Split base and suffix as in §4.2.
    2. If there is a suffix and the base resolves to a record with a production name, the result is
@@ -429,10 +431,14 @@ conventions so that text can be recovered from glyph names. For each exported gl
       is an AGLFN name. If any part cannot be resolved, there is no synthesised name.
    4. If at least one part is a `uniXXXX` name and no part is a `u`-name above the BMP, write
       `uni` followed by the four-digit hex of every part in order (AGLFN-named parts contribute
-      their code point): `lam_alef-ar` style names become `uni06440627`.
+      their code point): `lam_alef-ar` style names become `uni06440627`. A part whose production
+      name is none of these (`i.loclTRK`) leaves the name unsynthesised. A `uniXXXX` part with a
+      suffix of its own (`uni0C2D.half` in `bh_a-telugu`) is joined as it is
+      (`uni0C2D.half0C05`), as fontc does; glyphsLib gives up on such a name and writes the glyph
+      name without the characters production names may not hold.
    5. Otherwise join the parts with `_`.
    6. Re-attach `.suffix`.
-4. Else the nice name unchanged.
+4. Else the glyph's own name unchanged.
 
 Form of code-point names: `uni` + exactly four uppercase hex digits in the BMP; `u` + five or six
 uppercase hex digits above it.
