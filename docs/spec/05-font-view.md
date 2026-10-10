@@ -203,15 +203,20 @@ For the first two modes a part selection limits what is transferred:
 glyph in Edit View, or the Text-tool selection. Sequence:
 
 1. Confirmation (`dialog.removeGlyph`): *Remove* or *Cancel*.
-2. If a doomed glyph is used as a component elsewhere, the same dialog adds *Decompose*.
-   *Remove* deletes the glyph and every component that points at it. *Decompose* first converts
-   those components to outlines, then deletes.
+2. If a doomed glyph is used as a component elsewhere, the same dialog adds *Decompose*, which
+   becomes the default button. *Remove* deletes the glyph and every component that points at it.
+   *Decompose* first converts those components to outlines, then deletes.
 3. If metrics keys in surviving glyphs point at a doomed glyph (`dialog.removeGlyphMetricsKeys`):
    *Remove* dissolves those keys; *Cancel* keeps them dangling. A dangling key is shown in
    turquoise and is repaired by re-pointing it, replacing it with a number, or recreating the glyph.
 
 Headless parameters `components` and `metricsKeys` pick the answers; without them the command
 refuses when either situation arises.
+
+Kerning pairs whose side is a doomed glyph's name are removed with it, in every master and
+direction, in the same undo step. Pairs on a kerning group stay. The handbook keeps both kinds as
+obsolete pairs until Clean Up (`kerning.obsoletePairs`); FontCraft departs from it for the
+glyph-keyed pairs by the owner's choice.
 
 ## 4. Glyph data
 
