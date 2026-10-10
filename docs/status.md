@@ -6,7 +6,7 @@ _Updated: 2026-10-10, M3 at its close: every measure met except `path.sharpenCor
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (931 tests; about 113,000 lines of Rust in 20 crates,
+- `cargo xtask ci` passes all nine steps (932 tests; about 113,000 lines of Rust in 20 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 213 of the 932 inventory commands exist (`docs/parity.md`); M3 has 185 commands, 184 of them
   live. Feature parity is about 12% (ROADMAP.md › Parity estimate).

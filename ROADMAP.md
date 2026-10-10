@@ -105,7 +105,7 @@ UFO tabs. Agents drive the window with `ui.pointer`, `ui.key`, `ui.text`, `ui.to
 `ui.render` draws glyphs to PNG without a window, the same bytes every time. `layer.inspect`
 reads a layer's outline with addresses. An end-to-end test draws "H", "O" and "n" on a new font
 over the control channel alone, edits them and exports a font that skrifa and fontTools read
-back. 931 tests pass, including a sweep that runs every engine command with hostile parameters.
+back. 932 tests pass, including a sweep that runs every engine command with hostile parameters.
 The whole gate (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names,
 layering, wasm) is green.
 
@@ -147,7 +147,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~12% | 213 of 932 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); 26 of 172 panels, many of them partial (the Font View grid, the toolbar, the Info box, the Palette and five of its sections, the bottom bar, 16 dialog rows) |
+| **Breadth:** commands, tools and panels exist | ~12% | 213 of 932 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); 27 of 172 panels, many of them partial (the Font View grid, the toolbar, the Info box, the Palette and five of its sections, the bottom bar, 16 dialog rows) |
 | **Depth:** features behave like the reference | ~5% | the M3 commands, tools, panels and dialogs behave as the handbook describes them, and none has been compared with the reference app. `path.sharpenCorner` has no source; the gaps are listed above |
 | **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands, the Export dialog and the CLI. Missing: variable fonts, instances between masters, version conversion, a glyph database for production names, stroke attributes in UFO |
 | **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers; strokes, masks and overlap removal in the outline stage. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). With overlaps removed, 99.58% (TrueType) and 99.87% (CFF) of glyphs have no overlap-removal difference from fontmake's (`docs/plans/M3.md` § 5). No variable font, no features, no hinting, no subroutines |
