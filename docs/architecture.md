@@ -18,9 +18,9 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
               │  app.run(id, params)                                         │
    L5   engine: Session ── execute(id, params) ── command registry ── history, journal, guard
               │
-   L4   tools: pointer and key events → commands (begin / preview / commit)        (planned)
-   L3   format · compile · decompile · io-glyphs · io-ufo · oracle · render · tables   (6 of 8 today)
-   L2   pathops · interp · spacing · components · features · hinting · audit · plugins   (planned)
+   L4   tools: pointer and key events → commands (begin / preview / commit)        (4 tools today)
+   L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (7 of 9 today)
+   L2   pathops · interp · spacing · components · features · hinting · audit · plugins   (pathops, audit today)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
    L0   geom (kurbo)  ·  standalone format crates: plist, cff, ttinstr, container, glyphdata  (geom, plist, cff, container today)
 ```
@@ -56,6 +56,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L3 | `decompile` | M1 | OpenType binary → model, for opening compiled fonts |
 | L3 | `io-glyphs` | M1 | `.glyphs` 2, 3, 4 and `.glyphspackage`, reading and writing, lossless |
 | L3 | `io-ufo` | M1 | UFO and designspace, reading and writing, lossless |
+| L3 | `io-svg` | today (M3.8) | SVG outlines in and out, and the clipboard fragment format. Reading runs on usvg, after a first pass that checks the limits and rewrites the document as geometry only |
 | L3 | `oracle` | M2 | compiled fonts compared table by table with a reference compiler's build (the oracle harness behind `fontcraft-cli oracle`); runs the reference tools as subprocesses |
 | L3 | `tables` | M1/M12 | dump, table edit, subset, merge, instance: the engine behind the CLI tools |
 | L3 | `render` | M3 | glyph and text rasterising for the canvas, previews, proofs, headless screenshots |
@@ -216,6 +217,10 @@ source model
   writes; norad reads our output in tests (decision 0003). Round trips are byte-exact for files
   ufoLib and designspaceLib wrote.
 - **Compiled fonts** open for editing through `decompile` and are written by `compile`.
+- **SVG** (`io-svg`): outlines are read through usvg and written as a compact document. Only
+  geometry is read; styling, text, images and effects are left out and reported. A first pass
+  checks the file against size, nesting and expansion limits and rewrites it as geometry only,
+  so usvg never loads files or decodes images.
 - Everything else (`spec/inventory/30-formats.toml`, 49 rows) is import or export around these.
 
 Saving in a foreign format reports what that format cannot hold as structured warnings in the

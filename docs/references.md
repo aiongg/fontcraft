@@ -71,7 +71,8 @@ reports.
 | fontc, fontir, fontbe, ufo2fontir, glyphs2fontir | 1.0.0 | MIT/Apache-2.0 | whole-font compiler, usable as a library on an in-memory source | oracle; dependency question in decision 0002 |
 | glyphs-reader | 1.0.0 | MIT/Apache-2.0 | reads `.glyphs` 2 and 3 | **not suitable as our reader**: read-only, rejects version 4, rewrites the document on load. Test oracle only |
 | harfrust | 0.14.0 | MIT | text shaping for previews | planned, M5 (an older version is already in the lockfile through the UI toolkit) |
-| linesweeper | 0.5.0 | MIT OR Apache-2.0 | curve booleans (overlap removal) | planned, M3 |
+| linesweeper | 0.5.0 | MIT OR Apache-2.0 | curve booleans (overlap removal) | yes, in `pathops` |
+| usvg | 0.47.0 | Apache-2.0 OR MIT | SVG parsing: resolves `use` references, transforms and basic shapes into paths; built without default features, so without text support | yes, in `io-svg` |
 | vello_cpu | 0.3.0 | Apache-2.0 OR MIT | CPU rasteriser for the canvas and headless renders | planned, M3 (an older version is already in the lockfile through the UI toolkit) |
 
 `glyphslib` and `babelfont` (crates that advertise `.glyphs` writing) were seen only on their
