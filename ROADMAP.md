@@ -14,7 +14,7 @@ _Last updated: 2026-10-10 (M3 waves 1 and 2: engine foundations, canvas and scre
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,638 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, tests | **~45%** of what the siblings' "infrastructure" row covers; missing: pointer and key injection, the dialog framework, panels |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~7%** |
-| Commands that exist (not: that behave like the reference) | **153 of 929** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **200 of 932** (`docs/parity.md`) |
 | Observed against the running reference | **52 rows**: 47 compiled-output rows checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
 ## Honest assessment (2026-10-10)
@@ -47,7 +47,7 @@ whose outlines FontCraft's match in 322 (the other 9 are source reading, allow-l
 `crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
 transforms; fontTools reads all of its output back.
 
-**What is real: editing by command (M3).** 153 of the 929 commands exist, 125 of them from M3.
+**What is real: editing by command (M3).** 200 of the 932 commands exist, 172 of them from M3.
 Every editing command takes explicit targets (shapes, nodes, segments, the foreground or the
 background) and runs the same from `fontcraft-cli run`, MCP and the control channel into the
 running window:
@@ -69,7 +69,7 @@ display conventions, metric lines and a fill preview; it zooms, scrolls and hold
 without a window, the same bytes every time. Three crates have no commands yet: `tools` (the
 Select, Lasso, Hand and Zoom tools, hit testing, snapping, the Edit View keymap), `pathops`
 (booleans, Remove Overlap, Correct Path Direction, extremes, Tidy up, Open Corner, Reconnect,
-Cut with Line, on linesweeper) and `audit` (34 of the 36 outline checks). 692 tests pass,
+Cut with Line, on linesweeper) and `audit` (34 of the 36 outline checks). 854 tests pass,
 including a sweep that runs every engine command with hostile parameters. The whole gate
 (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names, layering, wasm) is green.
 
@@ -104,7 +104,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~8% | 153 of 929 commands; 4 of 33 tools usable in the window; 2 of 170 panels as stubs |
+| **Breadth:** commands, tools and panels exist | ~8% | 200 of 932 commands; 14 of 33 tools usable in the window; 2 of 170 panels as stubs |
 | **Depth:** features behave like the reference | ~3% | the M3 commands behave as the handbook describes them, but only through the CLI, the control channel and MCP, and none has been compared with the reference app |
 | **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands and the CLI. Missing: variable fonts, instances between masters, version conversion, a glyph database for production names |
 | **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). No variable font, no features, no hinting, no subroutines |
@@ -144,7 +144,7 @@ on, so the engine track, where oracles prove correctness, goes first.
   parameters, 1,751 behaviour rules, 300 checks, 70 CLI rows, 49 formats, 50 tables) and 23
   behaviour notes (about 150,000 words), all in our own words. Every M3 command's `params` name
   its targets; shortcuts carry a `when` (the context they apply in).
-- **Workspace:** 20 library crates in enforced layers, two apps, `xtask`; about 84,700 lines of Rust.
+- **Workspace:** 20 library crates in enforced layers, two apps, `xtask`; about 102,600 lines of Rust.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry, atomic failure, the panic
@@ -314,7 +314,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 929 (153) |
+| | **Total** | | 932 (200) |
 
 ## Parity estimate
 
@@ -348,7 +348,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Quality checks | 3 | 33 | 0 | 2% | `audit` holds 34 of the 36 outline checks with their fixes named, but no `audit.*` command, live audit or markers exist; the other 264 checks |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
 | Agent surfaces | 4 | 11 | 3 | 30% | execute, list, inspect and batch over three surfaces; `ui.screenshot` and `ui.render`; no pointer or key injection, dialogs, MCP resources or prompts |
-| **Feature parity** | **117** | **929** | **153** | **~7%** | |
+| **Feature parity** | **117** | **932** | **200** | **~7%** | |
 
 ## Out of scope (by design or by law)
 
