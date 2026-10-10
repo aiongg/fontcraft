@@ -17,6 +17,7 @@
 //! | [`snap`] | where a dragged point lands: nodes, then handles, guides, metric lines, alignment |
 //! | [`snap_guides`] | snapping to the background's points, guides and their crossings |
 //! | [`select`], [`lasso`], [`hand`], [`zoom`], [`knife`], [`rotate`], [`scale`], [`measure`], [`annotate`] | the tools, as state machines |
+//! | [`guide_drag`] | the Select tool's guide drags and double-clicks |
 //! | [`bbox`] | the selection's bounding box, its knobs, and the freehand transform drags |
 //! | [`draw`], [`pencil`], [`primitives`] | the drawing tools |
 //! | [`cycling`] | tool letters, and the tools that share a toolbar button |
@@ -30,6 +31,7 @@ pub mod cycling;
 pub mod draw;
 pub mod event;
 pub mod geometry;
+pub mod guide_drag;
 pub mod hand;
 pub mod hit;
 pub mod keymap;

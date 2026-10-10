@@ -627,7 +627,13 @@ pub fn selection_supplies(session: &Session, state: &UiState, spec: &CommandSpec
     let Some(m) = selection_targets(session, state, spec) else {
         return Err(format!("edit a glyph and select {what} first"));
     };
-    if wanted.iter().any(|(_, key, _)| m.contains_key(*key)) { Ok(()) } else { Err(format!("select {what} first")) }
+    if !wanted.iter().any(|(_, key, _)| m.contains_key(*key)) {
+        return Err(format!("select {what} first"));
+    }
+    match (session.font().ok(), state.tab()) {
+        (Some(font), Some(tab)) => scene(font, tab).map_or(Ok(()), |scene| crate::shell::item_state::ready(&scene, &tab.selection, spec.id)),
+        _ => Ok(()),
+    }
 }
 
 /// The edited glyph's point under the window or font point `at`, and the object there.

@@ -11,6 +11,7 @@ pub mod clipboard;
 pub mod context_menu;
 pub mod drawing;
 pub mod font_view;
+pub mod item_state;
 pub mod keymap;
 pub mod menus;
 pub mod palette;

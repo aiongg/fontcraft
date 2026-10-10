@@ -739,6 +739,23 @@ How FontCraft draws guides and snaps to them (our decisions where the handbook i
   the glyph's width and metric span when no CJK grid is set: our reading of a parameter the
   handbook does not explain.
 
+How FontCraft edits guides on the canvas (Select tool; documented, not yet observed):
+
+| Gesture | Result |
+|---|---|
+| drag the knob | `guide.setProperties` with the new `x`, `y`, one undo step. The knob snaps like a node, never to its own guide; `Ctrl` suspends snapping |
+| drag the guide elsewhere | `guide.setProperties` with a new `angle`: the guide turns about its knob, and the side that was pressed follows the pointer |
+| the same on an angle-locked guide | the guide moves, as a knob drag moves it |
+| double-click the knob | the angle grows by 90°; an angle-locked guide does not turn |
+| double-click the guide elsewhere | Guide Properties (`dialog.guideProperties`, our addition): position, angle, angle lock, sidebearing reference, measurement, name and colour over `guide.setProperties`, with a live preview |
+| `Alt`+drag | a copy (`selection.move` with `duplicate`) |
+| knob drag with other objects selected | everything selected moves (`selection.move`) |
+| right-click off a guide | Add Guide through the click, or through the two selected nodes; `Alt` held: Add Global Guide. The new guide is selected |
+| right-click a guide | its `canvas.guide` commands (Make Global or Make Local, Lock or Unlock, Measurement Guide, Remove) and Guide Properties… |
+
+A locked guide refuses every gesture above, and so does a local guide of a locked glyph. A
+global guide belongs to the master, so a glyph lock leaves it free.
+
 ## 21. Undo (`undo.perGlyphHistory`)
 
 Each glyph has its own undo stack, in both Edit View and Font View. Edits to data outside a

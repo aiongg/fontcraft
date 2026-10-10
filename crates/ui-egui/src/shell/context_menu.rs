@@ -9,7 +9,10 @@
 //!   `canvas.component` or `canvas.guide` for the clicked object, and `canvas.path` when that
 //!   object's path is wholly selected. On empty canvas it follows the selection.
 //! - Items keep the order of their inventory rows ([`ORDER`]) and are greyed out as menu bar
-//!   items are (`tools_glue::selection_supplies`).
+//!   items are (`tools_glue::selection_supplies`). The selection also hides items that do not
+//!   apply (Unlock Path on an unlocked path) and checks checkable ones ([`super::item_state`]).
+//! - Add Global Guide replaces Add Guide while Alt is held ([`ContextItem::alternate`]).
+//! - A guide's menu ends with Guide Properties…, which opens that guide's dialog.
 //! - An item runs through `run_from_shell` with its targets from the selection
 //!   (`tools_glue::with_targets`), plus what the click adds: the clicked segment, node or guide,
 //!   and the click position for the commands that place something.
@@ -23,6 +26,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::UI_COMMANDS;
+use super::item_state::{self, GUIDE_PROPERTIES};
 use crate::app::FontcraftApp;
 use crate::state::UiState;
 use crate::tools_glue::{self, Space};
@@ -78,7 +82,16 @@ pub struct ContextItem {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
+    /// Whether a checkable item is checked; absent for other items.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
+    /// Drawn only while Alt is held, in place of the item before it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub alternate: bool,
 }
+
+/// Items drawn only while Alt is held.
+const ALTERNATES: &[&str] = &["guide.addGlobal"];
 
 /// The items of one `context` value; sections are drawn with a separator between them.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -180,13 +193,25 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
             all.push(Candidate { id: c.0, label: c.1, context, spec: None });
         }
     }
+    all.push(Candidate { id: GUIDE_PROPERTIES, label: "Guide Properties…", context: &[GUIDE], spec: None });
     let rank = |id: &str| ORDER.iter().position(|o| *o == id).unwrap_or(ORDER.len());
     all.sort_by_key(|c| rank(c.id));
+    let font = session.font().ok();
+    let tab = state.tab();
+    let scene = font.zip(tab).and_then(|(font, tab)| tools_glue::scene(font, tab));
+    let selection = tab.map(|t| &t.selection);
+    let visible = |id: &str| match (&scene, selection) {
+        (Some(scene), Some(selection)) => item_state::visible(scene, selection, id),
+        _ => id != GUIDE_PROPERTIES,
+    };
     let mut shown: Vec<&'static str> = Vec::new();
     let mut out = Vec::new();
     for &kind in kinds {
-        let items: Vec<ContextItem> =
-            all.iter().filter(|c| c.context.contains(&kind) && !shown.contains(&c.id)).map(|c| item(session, state, c)).collect();
+        let items: Vec<ContextItem> = all
+            .iter()
+            .filter(|c| c.context.contains(&kind) && !shown.contains(&c.id) && visible(c.id))
+            .map(|c| item(session, state, scene.as_ref().zip(selection), c))
+            .collect();
         shown.extend(items.iter().map(|i| i.command));
         if !items.is_empty() {
             out.push(Section { context: kind, items });
@@ -195,12 +220,19 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
     out
 }
 
-fn item(session: &Session, state: &UiState, c: &Candidate) -> ContextItem {
+fn item(session: &Session, state: &UiState, at: Option<(&Scene, &Selection)>, c: &Candidate) -> ContextItem {
     let check = match c.spec {
         Some(spec) => (spec.enabled)(session).and_then(|()| tools_glue::selection_supplies(session, state, spec)),
         None => ui_enabled(state, c.id),
     };
-    ContextItem { command: c.id, label: c.label, enabled: check.is_ok(), disabled_reason: check.err() }
+    ContextItem {
+        command: c.id,
+        label: c.label,
+        enabled: check.is_ok(),
+        disabled_reason: check.err(),
+        checked: at.and_then(|(scene, selection)| item_state::checked(scene, selection, c.id)),
+        alternate: ALTERNATES.contains(&c.id),
+    }
 }
 
 /// Whether a shell command of [`UI_CONTEXT`] can run now.
@@ -209,6 +241,7 @@ fn ui_enabled(state: &UiState, id: &str) -> Result<(), String> {
     match id {
         "path.focusOnSelectedPath" if tab.selection.points.is_empty() => Err("select a point of the paths to focus on first".into()),
         "path.clearFocusOnPaths" if tab.focus.is_none() => Err("no path has the focus".into()),
+        GUIDE_PROPERTIES if tab.selection.guides.len() != 1 => Err("select one guide first".into()),
         _ => Ok(()),
     }
 }
@@ -216,6 +249,9 @@ fn ui_enabled(state: &UiState, id: &str) -> Result<(), String> {
 /// The parameters item `id` of `menu` runs with: the targets from the selection, plus what the
 /// click adds.
 pub fn params_for(app: &FontcraftApp, menu: &ContextMenu, id: &str) -> Value {
+    if id == GUIDE_PROPERTIES {
+        return guide_properties(app).unwrap_or(Value::Null);
+    }
     let base = tools_glue::with_targets(app, id, Value::Null);
     let Some(spec) = find_command(id) else { return base };
     let mut m = match base {
@@ -281,6 +317,35 @@ pub fn params_for(app: &FontcraftApp, menu: &ContextMenu, id: &str) -> Value {
     Value::Object(m)
 }
 
+/// The `dialog.open` parameters of Guide Properties… for the one selected guide.
+fn guide_properties(app: &FontcraftApp) -> Option<Value> {
+    with_scene(app, |scene, selection| {
+        let r = *selection.guides.iter().next()?;
+        let g = fontcraft_tools::guide_drag::guide(scene, r)?;
+        Some(json!({"dialog": GUIDE_PROPERTIES, "params": fontcraft_tools::guide_drag::properties(scene, r, g)}))
+    })
+    .flatten()
+}
+
+/// The commands item `id` of `menu` runs, in order: the item's command, then for a new guide
+/// the selection of that guide.
+pub fn steps_for(app: &FontcraftApp, menu: &ContextMenu, id: &'static str) -> Vec<(&'static str, Value)> {
+    let params = params_for(app, menu, id);
+    if id == GUIDE_PROPERTIES {
+        return vec![("dialog.open", params)];
+    }
+    let new_guide = match id {
+        "guide.add" => with_scene(app, |scene, _| json!({"scope": "local", "index": scene.local_guides().len()})),
+        "guide.addGlobal" => with_scene(app, |scene, _| json!({"scope": "global", "index": scene.global_guides.len()})),
+        _ => None,
+    };
+    let mut out = vec![(id, params)];
+    if let Some(guide) = new_guide {
+        out.push(("selection.set", json!({ "guides": [guide] })));
+    }
+    out
+}
+
 /// Runs `f` with the edited glyph's scene and the selection.
 fn with_scene<R>(app: &FontcraftApp, f: impl FnOnce(&Scene, &Selection) -> R) -> Option<R> {
     let font = app.session.font().ok()?;
@@ -296,8 +361,14 @@ pub fn invoke(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
     if !item.enabled {
         return Err(item.disabled_reason.clone().unwrap_or_else(|| format!("`{id}` is not available now")));
     }
-    let params = params_for(app, &menu, id);
-    app.run_from_shell(id, &params)
+    let mut result = Value::Null;
+    for (command, params) in steps_for(app, &menu, item.command) {
+        let value = app.run_from_shell(command, &params)?;
+        if command == item.command || command == "dialog.open" {
+            result = value;
+        }
+    }
+    Ok(result)
 }
 
 /// Draws the open context menu, and queues the command of the item picked in it.
@@ -311,6 +382,7 @@ pub fn show(app: &mut FontcraftApp, ui: &egui::Ui, pending: &mut Vec<(&'static s
     let mut open = true;
     let mut picked = None;
     let anchor = Pos2::new(menu.screen.x as f32, menu.screen.y as f32);
+    let alt = ui.input(|i| i.modifiers.alt);
     egui::Popup::new(egui::Id::new("fontcraft.canvas.contextMenu"), ui.ctx().clone(), anchor, ui.layer_id())
         .kind(egui::PopupKind::Menu)
         .layout(Layout::top_down_justified(Align::Min))
@@ -321,8 +393,15 @@ pub fn show(app: &mut FontcraftApp, ui: &egui::Ui, pending: &mut Vec<(&'static s
                 if index > 0 {
                     ui.separator();
                 }
-                for item in &section.items {
-                    let response = ui.add_enabled(item.enabled, egui::Button::new(item.label));
+                for (at, item) in section.items.iter().enumerate() {
+                    let replaced = section.items.get(at + 1).is_some_and(|next| next.alternate);
+                    if (item.alternate && !alt) || (replaced && alt) {
+                        continue;
+                    }
+                    let response = match item.checked {
+                        Some(mut on) => ui.add_enabled(item.enabled, egui::Checkbox::new(&mut on, item.label)),
+                        None => ui.add_enabled(item.enabled, egui::Button::new(item.label)),
+                    };
                     let response = match &item.disabled_reason {
                         Some(why) => response.on_disabled_hover_text(why),
                         None => response,
@@ -334,8 +413,7 @@ pub fn show(app: &mut FontcraftApp, ui: &egui::Ui, pending: &mut Vec<(&'static s
             }
         });
     if let Some(id) = picked {
-        let params = params_for(app, &menu, id);
-        pending.push((id, params));
+        pending.extend(steps_for(app, &menu, id));
         open = false;
     }
     if !open {

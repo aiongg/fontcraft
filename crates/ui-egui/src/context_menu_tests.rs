@@ -121,7 +121,10 @@ fn a_right_click_on_a_node_lists_the_node_commands_and_runs_them_like_the_comman
     assert!(position("path.toggleNodeType") < position("path.openCorner"), "rows' order: {node:?}");
     assert!(position("path.openCorner") < position("path.makeNodeFirst"), "rows' order: {node:?}");
     assert!(commands(&open, 1).contains(&"glyph.toggleLocked"), "the glyph section follows");
-    assert!(open.items().filter(|i| i.command != "path.clearFocusOnPaths").all(|i| i.enabled), "{:?}", open.sections);
+    let greyed: Vec<&str> = open.items().filter(|i| !i.enabled).map(|i| i.command).collect();
+    assert_eq!(greyed, ["path.connectNodes", "path.closeOpenPaths", "path.clearFocusOnPaths"], "one node of a closed path: {:?}", open.sections);
+    assert!(node.contains(&"path.lockPath") && !node.contains(&"path.unlockPath"), "an unlocked path offers Lock Path only");
+    assert_eq!(open.item("glyph.toggleLocked").unwrap().checked, Some(false), "Locked is a check item");
 
     // The first frame of a popup only measures it; the second draws it.
     w.idle(&mut app);
@@ -217,4 +220,29 @@ fn menu_items_grey_out_until_the_selection_supplies_their_targets() {
     app.state.tab_mut().unwrap().selection = Selection::new();
     assert!(tools_glue::selection_supplies(&app.session, &app.state, corner).is_err(), "no node selected: Open Corner is greyed out");
     assert!(!menu_item(&mut app, id).enabled);
+}
+
+#[test]
+fn items_follow_the_state_of_what_is_selected() {
+    let mut app = edit_app();
+    app.run("path.addPath", &json!({"glyph": "A", "closed": false, "nodes": [{"x": 400, "y": 100}, {"x": 500, "y": 100}, {"x": 500, "y": 200}]}))
+        .unwrap();
+    let open_menu = |app: &mut FontcraftApp, points: Value| {
+        app.run("selection.set", &json!({ "points": points })).unwrap();
+        context_menu::open(app, Point::new(900.0, 900.0), tools_glue::Space::Font).unwrap();
+        menu(app)
+    };
+
+    let ends = open_menu(&mut app, json!([[1, 0], [1, 2]]));
+    assert!(ends.item("path.connectNodes").unwrap().enabled, "two open ends can be connected");
+    assert!(ends.item("path.closeOpenPaths").unwrap().enabled, "the path is open");
+
+    app.run("path.lockPath", &json!({"glyph": "A", "shapes": [1]})).unwrap();
+    let locked = open_menu(&mut app, json!([[1, 0]]));
+    assert!(locked.item("path.unlockPath").is_some() && locked.item("path.lockPath").is_none(), "{:?}", locked.sections);
+    assert!(!locked.item("path.connectNodes").unwrap().enabled, "one node is not two ends");
+
+    app.run("glyph.toggleLocked", &json!({"glyph": "A"})).unwrap();
+    let glyph_locked = open_menu(&mut app, json!([]));
+    assert_eq!(glyph_locked.item("glyph.toggleLocked").unwrap().checked, Some(true));
 }

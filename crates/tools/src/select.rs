@@ -14,6 +14,7 @@
 //! | `Alt`+click a line segment | `path.convertSegmentToCurve` |
 //! | double-click a node | `path.toggleNodeType` (`Alt`: `path.toggleNodeTypeKeepingOutline`) |
 //! | double-click a segment | select its whole path |
+//! | drag a guide's knob, or the guide elsewhere; double-click it | see [`crate::guide_drag`] |
 //! | `Escape` during a gesture | cancel it |
 //!
 //! Presses on the bounding box's knobs and just outside it go to [`crate::bbox`] first.
@@ -23,6 +24,7 @@ use serde_json::{Value, json};
 
 use crate::event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use crate::geometry::{dist, finite, rect_corners};
+use crate::guide_drag::GuideDrag;
 use crate::hit::{Hit, HitResult, hit_test};
 use crate::output::{Action, Invocation, Output, Overlay, OverlayKind};
 use crate::scene::Scene;
@@ -73,6 +75,8 @@ struct Press {
     /// A plain click on an object of a larger selection selects only that object, unless the
     /// press becomes a drag.
     reduce_to: Option<Selection>,
+    /// What a drag does to the pressed guide, when it moves or turns that guide alone.
+    guide: Option<GuideDrag>,
 }
 
 #[derive(Clone, Debug)]
@@ -161,6 +165,7 @@ enum State {
     Pressed(Box<Press>),
     Dragging(Box<Drag>),
     Marquee(Box<Marquee>),
+    Guide(Box<GuideDrag>),
 }
 
 /// The Select tool.
@@ -216,7 +221,15 @@ impl SelectTool {
             Hit::Node { .. } | Hit::Handle { .. } | Hit::Anchor { .. } => hit.at,
             _ => ev.pos,
         };
-        self.state = State::Pressed(Box::new(Press { down: ev.pos, grab, hit, mods: ev.mods, selection, reduce_to }));
+        // A knob dragged with other objects selected moves them all; Alt duplicates.
+        let guide = match hit.hit {
+            Hit::Guide { guide } if !ev.mods.alt => {
+                let knob = crate::guide_drag::guide(scene, guide).is_some_and(|g| crate::guide_drag::on_knob(cx, g, ev.pos));
+                if knob && selection.len() > 1 { None } else { GuideDrag::press(cx, guide, ev.pos, hit.at) }
+            }
+            _ => None,
+        };
+        self.state = State::Pressed(Box::new(Press { down: ev.pos, grab, hit, mods: ev.mods, selection, reduce_to, guide }));
         out
     }
 
@@ -226,7 +239,18 @@ impl SelectTool {
             State::Idle => out.handled = false,
             State::Pressed(press) => {
                 let moved = dist(cx.view.to_screen(press.down), cx.view.to_screen(ev.pos));
-                if moved < cx.settings.drag_threshold || press.hit.locked || cx.scene.locked {
+                if moved < cx.settings.drag_threshold {
+                    return out;
+                }
+                if let Some(mut guide) = press.guide.take() {
+                    out.push(Action::Begin { label: guide.label().into() });
+                    if let Some(inv) = guide.update(cx, ev.pos, ev.mods.ctrl) {
+                        out.push(Action::Preview { invocation: inv });
+                    }
+                    self.state = State::Guide(Box::new(guide));
+                    return out;
+                }
+                if press.hit.locked || cx.scene.locked {
                     return out;
                 }
                 let mods = press.mods;
@@ -265,6 +289,11 @@ impl SelectTool {
                 if s != m.last {
                     m.last = s.clone();
                     out.push(Action::Select { selection: s });
+                }
+            }
+            State::Guide(guide) => {
+                if let Some(inv) = guide.update(cx, ev.pos, ev.mods.ctrl) {
+                    out.push(Action::Preview { invocation: inv });
                 }
             }
         }
@@ -321,6 +350,12 @@ impl SelectTool {
                     out.push(Action::Select { selection: s });
                 }
             }
+            State::Guide(mut guide) => {
+                if let Some(inv) = guide.update(cx, ev.pos, ev.mods.ctrl) {
+                    out.push(Action::Preview { invocation: inv });
+                }
+                out.push(Action::Commit);
+            }
         }
         out
     }
@@ -337,6 +372,11 @@ impl SelectTool {
                 out.push(Action::Run { invocation: Invocation::new(id, Value::Object(params)) });
             }
             Hit::Segment { shape, .. } => out.push(Action::Select { selection: path_points(cx.scene, shape) }),
+            Hit::Guide { guide } => {
+                if let Some(invocation) = crate::guide_drag::double_click(cx, guide, ev.pos) {
+                    out.push(Action::Run { invocation });
+                }
+            }
             _ => {}
         }
         out
@@ -420,6 +460,12 @@ impl Tool for SelectTool {
                     m.update(pos, false);
                 }
             }
+            State::Guide(guide) => {
+                let pos = guide.last_pos;
+                if let Some(inv) = guide.update(cx, pos, mods.ctrl) {
+                    out.push(Action::Preview { invocation: inv });
+                }
+            }
             _ => {}
         }
         out
@@ -428,7 +474,7 @@ impl Tool for SelectTool {
     fn cancel(&mut self) -> Output {
         let mut out = crate::bbox::cancel(&mut self.knobs);
         match std::mem::take(&mut self.state) {
-            State::Dragging(_) => out.push(Action::Cancel),
+            State::Dragging(_) | State::Guide(_) => out.push(Action::Cancel),
             State::Marquee(m) => {
                 let m = *m;
                 if m.last != m.base {
@@ -447,14 +493,8 @@ impl Tool for SelectTool {
     fn overlays(&self) -> Vec<Overlay> {
         match &self.state {
             State::Marquee(m) => vec![Overlay::Polygon { kind: OverlayKind::Marquee, points: m.polygon().to_vec() }],
-            State::Dragging(drag) => {
-                let Some(s) = &drag.snap else { return Vec::new() };
-                let mut v: Vec<Overlay> = s.lines.iter().map(|&(from, to)| Overlay::Line { kind: OverlayKind::SnapLine, from, to }).collect();
-                if let Some(at) = s.marker {
-                    v.push(Overlay::Marker { kind: OverlayKind::SnapTarget, at });
-                }
-                v
-            }
+            State::Dragging(drag) => snap_overlays(drag.snap.as_ref()),
+            State::Guide(guide) => snap_overlays(guide.snap.as_ref()),
             State::Idle => match &self.hover {
                 Some(h) => vec![Overlay::Marker { kind: if h.locked { OverlayKind::HoverLocked } else { OverlayKind::Hover }, at: h.at }],
                 None => Vec::new(),
@@ -462,4 +502,14 @@ impl Tool for SelectTool {
             State::Pressed(_) => Vec::new(),
         }
     }
+}
+
+/// The lines and the target marker of a snap.
+fn snap_overlays(snap: Option<&Snap>) -> Vec<Overlay> {
+    let Some(s) = snap else { return Vec::new() };
+    let mut v: Vec<Overlay> = s.lines.iter().map(|&(from, to)| Overlay::Line { kind: OverlayKind::SnapLine, from, to }).collect();
+    if let Some(at) = s.marker {
+        v.push(Overlay::Marker { kind: OverlayKind::SnapTarget, at });
+    }
+    v
 }

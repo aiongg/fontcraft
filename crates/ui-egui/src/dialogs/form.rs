@@ -32,6 +32,8 @@ pub enum Kind {
     Integer { min: f64, max: f64 },
     /// A checkbox.
     Bool,
+    /// A line of text of at most `max` characters; empty is allowed.
+    Text { max: usize },
     /// One word of a list, as a pop-up menu. `labels`, when given, holds the text the menu shows
     /// for each word, in the same order.
     Choice {
@@ -79,6 +81,11 @@ impl Field {
         Self { key: key.into(), label: label.into(), kind: Kind::Bool, default: json!(default), doc: doc.into() }
     }
 
+    /// A text field of at most `max` characters.
+    pub fn text(key: &str, label: &str, max: usize, doc: &str) -> Self {
+        Self { key: key.into(), label: label.into(), kind: Kind::Text { max }, default: json!(""), doc: doc.into() }
+    }
+
     /// A pop-up menu of `(word, label)` pairs: the value is the word, the menu shows the label.
     pub fn choice(key: &str, label: &str, choices: &[(&str, &str)], default: &str, doc: &str) -> Self {
         Self {
@@ -118,14 +125,18 @@ impl Field {
         Self { key: key.into(), label: label.into(), kind: Kind::Order { labels }, default, doc: doc.into() }
     }
 
-    /// A field that takes typed text (numbers, paths).
+    /// A field that takes typed text (numbers, text, paths).
     pub fn is_text(&self) -> bool {
-        matches!(self.kind, Kind::Number { .. } | Kind::Integer { .. } | Kind::Folder)
+        matches!(self.kind, Kind::Number { .. } | Kind::Integer { .. } | Kind::Text { .. } | Kind::Folder)
     }
 
     /// The longest text the field takes.
     pub fn max_text(&self) -> usize {
-        if self.kind == Kind::Folder { MAX_PATH_TEXT } else { MAX_FIELD_TEXT }
+        match self.kind {
+            Kind::Folder => MAX_PATH_TEXT,
+            Kind::Text { max } => max,
+            _ => MAX_FIELD_TEXT,
+        }
     }
 
     /// A folder field with no folder in `value`.
@@ -156,6 +167,11 @@ impl Field {
                 Ok(if whole { json!(n as i64) } else { json!(n) })
             }
             Kind::Bool => value.as_bool().map(Value::Bool).ok_or_else(|| format!("`{key}` must be true or false")),
+            Kind::Text { max } => match value.as_str() {
+                Some(text) if text.chars().count() <= *max => Ok(json!(text)),
+                Some(_) => Err(format!("`{key}` must be at most {max} characters")),
+                None => Err(format!("`{key}` must be text")),
+            },
             Kind::Choice { choices, .. } => match value.as_str() {
                 Some(word) if choices.iter().any(|c| c == word) => Ok(json!(word)),
                 _ => Err(format!("`{key}` must be one of {}", choices.join(", "))),
@@ -274,7 +290,9 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose:
             let value = dialog.values.get(&field.key).cloned().unwrap_or(Value::Null);
             ui.label(&field.label);
             let response = match &field.kind {
-                Kind::Number { .. } | Kind::Integer { .. } => text_field(ui, dialog, field, &value, tokens.dialog_field_width, events),
+                Kind::Number { .. } | Kind::Integer { .. } | Kind::Text { .. } => {
+                    text_field(ui, dialog, field, &value, tokens.dialog_field_width, events)
+                }
                 Kind::Bool => {
                     let mut on = value.as_bool().unwrap_or(false);
                     let r = ui.add(egui::Checkbox::without_text(&mut on)).on_hover_text(&field.doc);
@@ -368,7 +386,7 @@ pub fn moved(order: &[usize], from: usize, to: usize) -> Option<Vec<usize>> {
     Some(next)
 }
 
-/// A number or folder field. Its text is the value, or what is being typed while it has the
+/// A number, text or folder field. Its text is the value, or what is being typed while it has the
 /// keyboard.
 fn text_field(ui: &mut egui::Ui, dialog: &OpenDialog, field: &Field, value: &Value, width: f32, events: &mut Vec<Event>) -> egui::Response {
     let id = widget_id(&field.key);

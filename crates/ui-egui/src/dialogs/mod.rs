@@ -38,6 +38,7 @@
 
 mod export;
 pub mod form;
+mod guide_properties;
 pub mod import_outlines_missing_glyph;
 mod interpolate_with_background;
 pub mod pasted_outline_bounds;
@@ -169,6 +170,7 @@ pub const DIALOGS: &[Dialog] = &[
     export::DIALOG,
     export::OTF,
     export::UFO,
+    guide_properties::DIALOG,
 ];
 
 /// The shell commands of this module.
@@ -804,7 +806,7 @@ pub fn click(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
             choose(app, id)?;
             Ok(inspect(app))
         }
-        Kind::Number { .. } | Kind::Integer { .. } | Kind::Folder => {
+        Kind::Number { .. } | Kind::Integer { .. } | Kind::Text { .. } | Kind::Folder => {
             commit_edit(app)?;
             focus(app, &field.key);
             Ok(inspect(app))

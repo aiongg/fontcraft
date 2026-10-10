@@ -2092,7 +2092,7 @@ milestone = "M3"
 summary = "Canvas context-menu command that adds a local guide to the displayed layer: horizontal through the clicked position, or, when exactly two nodes are selected, running through those two nodes."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
-notes = "The position given is rounded to the font's grid; a guide through two points keeps their exact positions. The angle is in degrees counter-clockwise from horizontal, kept from 0 to 360."
+notes = "The position given is rounded to the font's grid; a guide through two points keeps their exact positions. The angle is in degrees counter-clockwise from horizontal, kept from 0 to 360. In the canvas context menu, right-clicking off a guide offers Add Guide through the click, or through the two selected nodes, and selects the new guide; right-clicking a guide lists the `canvas.guide` commands that fit its state (Lock or Unlock, Make Global or Make Local; only Unlock on a locked guide) and Guide Properties…. Documented but not yet observed."
 
 [[command]]
 id = "guide.addGlobal"
@@ -2107,7 +2107,7 @@ milestone = "M3"
 summary = "Alternate context-menu item, shown while Option is held, that adds the guide as a global (master-wide) guide instead of a local one."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
-notes = "`glyph` and `layer` pick the master of that layer and add `selection` to the result. Global guides are undoable like every other edit (D4)."
+notes = "`glyph` and `layer` pick the master of that layer and add `selection` to the result. Global guides are undoable like every other edit (D4). On the canvas (M3.9) the context menu shows it in place of Add Guide while Alt is held, through the click."
 
 [[behavior]]
 id = "guides.fromMeasurementTool"
@@ -2147,7 +2147,7 @@ milestone = "M3"
 summary = "A guide is selected by clicking anywhere on it and shows a filled knob while selected. Dragging the knob moves the guide, dragging the guide anywhere else changes its angle, and double-clicking the knob turns the guide perpendicular to its present orientation."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
-notes = "M3.9 draws the knob: a ring, filled while the guide is selected. Dragging the knob or the guide and double-clicking the knob are not built yet."
+notes = "Built in M3.9 with the Select tool: the knob is a ring, filled while the guide is selected. A knob drag runs `guide.setProperties` with the new `x`, `y` as one interaction, and the knob snaps like a node (Ctrl suspends it). A drag elsewhere on the guide turns it about the knob, the pressed side following the pointer. A double-click on the knob adds 90° to the angle. Our addition: a double-click elsewhere on the guide opens `dialog.guideProperties`. A locked guide, and a local guide of a locked glyph, do none of this. With other objects selected, a knob drag moves them all (`selection.move`). Documented but not yet observed."
 
 [[behavior]]
 id = "guides.keyboard"
@@ -2236,6 +2236,18 @@ ref = "Edit View › Local & Global Guides"
 status = "inferred"
 notes = "An empty name, filter or colour clears it. An angle-locked guide refuses a new angle unless the same call sets `angleLocked: false`, so a rotating drag cannot turn it. The sidebearing reference is stored as the guide's `alignment` key in `.glyphs` data (`right`; `center` for both); left is the default and writes nothing. Which `alignment` value the reference writes for both sidebearings is our reading of the format, not confirmed."
 
+[[panel]]
+id = "dialog.guideProperties"
+label = "Guide Properties"
+location = "dialog"
+controls = ["X and Y fields", "Angle field", "Lock Angle checkbox", "Measured From pop-up (left, right or both sidebearings)", "Measurement checkbox", "Name field", "Colour field", "OK / Cancel"]
+area = "guides-metrics"
+milestone = "M3"
+summary = "Our dialog over `guide.setProperties` for one guide, with a live preview: the fields the reference shows in the Info box for a selected guide, plus its colour. A double-click on a guide's line with the Select tool opens it, as does Guide Properties… in the guide's context menu."
+ref = "Edit View › Local & Global Guides"
+status = "inferred"
+notes = "Built in M3.9. It opens with the guide's present values; OK keeps the preview as one undo step, Cancel puts the guide back. A locked guide does not open it. The colour is `r,g,b,a` text until a colour well exists."
+
 [[command]]
 id = "guide.remove"
 label = "Remove"
@@ -2292,6 +2304,7 @@ milestone = "M3"
 summary = "Closing the lock next to a guide's angle in the Info box freezes the angle, so dragging the guide can no longer rotate it until the lock is opened again."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "Built in M3.9: a drag on an angle-locked guide away from its knob moves the guide as a knob drag does, and a double-click on its knob does not turn it. Documented but not yet observed."
 
 [[behavior]]
 id = "guides.sidebearingReference"
