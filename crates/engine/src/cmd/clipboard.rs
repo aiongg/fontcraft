@@ -45,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Copy",
             ["Edit"],
             Some("Cmd+C"),
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} the targets as clipboard text, at their own coordinates. A path is copied whole when it is in `shapes` or every on-curve node of it is in `points`; otherwise each run of its selected segments (both end nodes in `points`, or the segment in `segments`) becomes an open path. Without a target list the whole side of the layer is copied with its local guides. Images, annotations and shapes the model keeps unread are not copied → {json: our clipboard fragment, svg: an SVG document for other apps, skipped?: shapes left out}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} the targets as clipboard text, at their own coordinates. A path is copied whole when it is in `shapes` or every on-curve node of it is in `points`; otherwise each run of its selected segments (both end nodes in `points`, or the segment in `segments`) becomes an open path. Without a target list the whole side of the layer is copied with its local guides. Images, annotations and shapes the model keeps unread are not copied. With `glyphs: [names]` (and `master?: id`, the master shown) it copies those glyphs whole instead, for edit.paste and edit.pasteSpecial → {json: our clipboard fragment, svg: an SVG document for other apps, skipped?: shapes left out} | {json: the copied glyphs, glyphs: [names]}",
             has_doc,
             copy
         )
@@ -55,7 +55,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste",
             ["Edit"],
             Some("Cmd+V"),
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", json?: string, svg?: string, text?: string, at?: [x, y]} adds clipboard contents to the layer. `json` is our fragment, `svg` a drawing read at one font unit per SVG unit with SVG y = 0 on the baseline, `text` either one, told apart by its content; `json` wins, and `svg` is used when `json` cannot be read. Pasted things keep their coordinates, or with `at` the bottom left of their box lands there. Coordinates are rounded to the font's grid unless its spacing is 0. A pasted anchor replaces the layer's anchor of the same name, global guides go to the layer's master. `outOfBounds` is true when the pasted box lies more than half an em outside the glyph box, and `correction` is the move that puts its bottom left at the origin. A locked glyph refuses it → {pasted: count, flavour: \"json\" | \"svg\", outOfBounds: bool, bounds?: [xMin, yMin, xMax, yMax], correction?: [dx, dy], notes?: what the SVG reader left out, selection}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\", json?: string, svg?: string, text?: string, at?: [x, y]} adds clipboard contents to the layer. `json` is our fragment, `svg` a drawing read at one font unit per SVG unit with SVG y = 0 on the baseline, `text` either one, told apart by its content; `json` wins, and `svg` is used when `json` cannot be read. Pasted things keep their coordinates, or with `at` the bottom left of their box lands there. Coordinates are rounded to the font's grid unless its spacing is 0. A pasted anchor replaces the layer's anchor of the same name, global guides go to the layer's master. `outOfBounds` is true when the pasted box lies more than half an em outside the glyph box, and `correction` is the move that puts its bottom left at the origin. A locked glyph refuses it. When `json` or `text` holds copied glyphs (edit.copy with `glyphs`), each is added as a new glyph at its place in the default sort order, with the first free counter suffix (A.001) and no code points when its name is taken, and no `glyph` is needed → {pasted: count, flavour: \"json\" | \"svg\" | \"glyphs\", glyphs?: [names], renamed?: [{from, to}], outOfBounds: bool, bounds?: [xMin, yMin, xMax, yMax], correction?: [dx, dy], notes?: what the SVG reader left out, selection}",
             has_doc,
             paste
         )
@@ -86,6 +86,9 @@ struct Copied {
 
 fn copy(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("edit.copy", p)?;
+    if p.get("glyphs").is_some() {
+        return super::glyph_set::copy_glyphs(s, &p);
+    }
     let c = gather(s.font()?, &p)?;
     let mut out = json!({"json": c.json, "svg": c.svg});
     if c.skipped > 0
@@ -339,6 +342,9 @@ fn place(f: &mut Fragment, dx: f64, dy: f64, step: f64) {
 
 fn paste(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("edit.paste", p)?;
+    if let Some(text) = super::glyph_set::glyphs_text(&p)? {
+        return super::glyph_set::paste_glyphs(s, &p, text);
+    }
     let mut t = Targets::parse(&p)?;
     if t.has_lists() {
         return Err(p.bad("takes no target lists: it adds to the layer"));

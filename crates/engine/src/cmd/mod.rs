@@ -22,6 +22,7 @@ pub mod fit_curve;
 mod font;
 mod glyph;
 mod glyph_info;
+mod glyph_set;
 mod guide;
 mod inspect;
 mod layer;
@@ -165,6 +166,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(edit::specs());
         v.extend(clipboard::specs());
         v.extend(glyph::specs());
+        v.extend(glyph_set::specs());
         v.extend(path::specs());
         v.extend(spacing::specs());
         v.extend(font::specs());
