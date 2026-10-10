@@ -74,11 +74,21 @@ fn each_fix_leaves_its_check_silent() {
     // Starts at the top right instead of the bottom left.
     add(&mut s, "H", lines(&[(100.0, 100.0), (0.0, 100.0), (0.0, 0.0), (100.0, 0.0)]), true);
     add(&mut s, "I", rect(0.0, 0.0, 100.0, 100.0), true);
+    // An S-curve along the bottom edge: it changes its bend at (50, 0).
+    add(&mut s, "J", json!([line(0.0, 0.0), off(30.0, 60.0), off(70.0, -60.0), curve(100.0, 0.0), line(100.0, 100.0), line(0.0, 100.0)]), true);
+    add(&mut s, "K", json!([line(0.0, 0.0), off(30.0, 1.0), off(70.0, 1.0), curve(100.0, 0.0), line(100.0, 100.0), line(0.0, 100.0)]), true);
+    add(&mut s, "L", json!([line(0.0, 0.0), off(0.0, 0.0), off(100.0, 0.0), curve(100.0, 0.0), line(50.0, 80.0)]), true);
+    add(&mut s, "M", lines(&[(0.0, 0.0), (100.0, 0.0), (100.0, 0.5), (100.0, 100.0), (0.0, 100.0)]), true);
     s.edit("fractional coordinates", |font| {
         let mut g = font.glyph_mut("I")?;
         if let Some(Shape::Path(p)) = g.layers[0].shapes.first_mut() {
             p.nodes[1].x = 100.4;
             p.nodes[2].x = 100.4;
+        }
+        drop(g);
+        let mut m = font.glyph_mut("M")?;
+        if let Some(Shape::Path(p)) = m.layers[0].shapes.first_mut() {
+            p.nodes[2].y = 0.5;
         }
         Ok(())
     })
@@ -94,6 +104,10 @@ fn each_fix_leaves_its_check_silent() {
         ("check.outlines.openPath", "G", "path.closeOpenPaths"),
         ("check.outlines.startPointPosition", "H", "path.makeNodeFirst"),
         ("check.outlines.nodesOffGrid", "I", "path.roundCoordinates"),
+        ("check.outlines.inflections", "J", "path.addInflections"),
+        ("check.outlines.zeroLengthHandle", "L", "path.tidyUpPaths"),
+        ("check.outlines.nearCoincidentPoints", "M", "path.tidyUpPaths"),
+        ("check.outlines.almostStraightCurve", "K", "path.tidyUpPaths"),
     ];
     for (check, glyph, command) in cases {
         let select = json!({"profile": "strict", "checks": [check], "glyphs": [glyph]});

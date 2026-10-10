@@ -135,11 +135,21 @@ pub fn specs() -> Vec<CommandSpec> {
         )
         .targets(&[K::Glyphs, K::Layer, K::Points, K::Shapes]),
         cmd!(
+            "path.addInflections",
+            "Add Inflections",
+            [],
+            None,
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index]} or {glyphs: [names], layer?: id | layers?: [ids]}. Adds a smooth node at each inflection of the cubic segments whose two end nodes are in `points`, of the paths in `shapes`, or of every path, splitting each segment there without changing the outline (new points on the grid). An inflection within 1 unit of a segment end gets no node → {glyphs, skipped, selection?: {glyph, layer, shapes}}",
+            has_doc,
+            add_inflections
+        )
+        .targets(&[K::Glyphs, K::Layer, K::Points, K::Shapes]),
+        cmd!(
             "path.tidyUpPaths",
             "Tidy up Paths",
             ["Path"],
             Some("Cmd+Shift+T"),
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index]} or {glyphs: [names], layer?: id | layers?: [ids]}. On the nodes in `points`, the paths in `shapes`, or every path: straight curves become lines, a node on the one before it is merged into it, a node on the line between its neighbours is removed, and each node becomes smooth when a curve meets it and its directions are within 1°, else a corner. Removing points can break compatibility with other masters → {glyphs, skipped, selection?: {glyph, layer, shapes}}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], straighten?: units (0 to 100, default 0)} or {glyphs: [names], layer?: id | layers?: [ids], straighten?}. On the nodes in `points`, the paths in `shapes`, or every path: straight curves become lines (with `straighten`, also curves that stray less than that many units from the line between their ends), a node on the one before it is merged into it, a node on the line between its neighbours is removed, and each node becomes smooth when a curve meets it and its directions are within 1°, else a corner. Removing points can break compatibility with other masters → {glyphs, skipped, selection?: {glyph, layer, shapes}}",
             has_doc,
             tidy_up_paths
         )
@@ -833,9 +843,25 @@ fn force_extremes(s: &mut Session, v: &Value) -> Result<Value> {
     extremes(s, v, "path.forceExtremes", "Force Extremes", true)
 }
 
+fn add_inflections(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("path.addInflections", v)?;
+    let grid = grid(s.font()?);
+    run_layers(s, &p, "Add Inflections", &["points", "shapes"], |layer, side, t| {
+        each_contour(layer.parts_mut(side).shapes, t, move |c, sel| po::add_inflections(c, sel, grid).map(|(c, _)| c))
+    })
+}
+
 fn tidy_up_paths(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.tidyUpPaths", v)?;
-    run_layers(s, &p, "Tidy up Paths", &["points", "shapes"], |layer, side, t| each_contour(layer.parts_mut(side).shapes, t, po::tidy_up))
+    let straighten = match p.opt_f64("straighten")? {
+        Some(v) if !(0.0..=po::MAX_STRAIGHTEN).contains(&v) => {
+            return Err(p.bad(format!("`straighten` must be between 0 and {}", po::MAX_STRAIGHTEN)));
+        }
+        v => v.unwrap_or(0.0),
+    };
+    run_layers(s, &p, "Tidy up Paths", &["points", "shapes"], |layer, side, t| {
+        each_contour(layer.parts_mut(side).shapes, t, move |c, sel| po::tidy_up_straightening(c, sel, straighten))
+    })
 }
 
 fn tidy_up_paths_for_all_masters(s: &mut Session, v: &Value) -> Result<Value> {

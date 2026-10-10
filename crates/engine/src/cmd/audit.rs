@@ -69,6 +69,9 @@ const FIX_ORDER: [&str; 9] = [
     "setStartPoint",
     "roundCoordinates",
 ];
+/// Added to the largest deviation the almost-straight check reported, so the reported curves fall
+/// strictly inside Tidy up Paths' `straighten` limit.
+const STRAIGHTEN_MARGIN: f64 = 1e-6;
 const FIX_LABEL: &str = "Fix Audit Results";
 const NO_RUN: &str = "no audit has run on this document since it was opened: run audit.run first";
 
@@ -863,7 +866,12 @@ fn calls_for(
     };
     match fix {
         "closePaths" => some(paths_of(layer, findings, |p| !p.closed && p.nodes.iter().filter(|n| n.on_curve()).count() >= 2), None),
-        "tidyPaths" | "addExtremes" | "addInflections" => some(paths_of(layer, findings, |_| true), None),
+        "tidyPaths" => {
+            // Curves the almost-straight check reported are straightened as far as it reported.
+            let straighten = findings.iter().filter_map(|f| f.data.get("deviation")).fold(0.0, |a: f64, &d| a.max(d));
+            some(paths_of(layer, findings, |_| true), (straighten > 0.0).then(|| ("straighten", json!(straighten + STRAIGHTEN_MARGIN))))
+        }
+        "addExtremes" | "addInflections" => some(paths_of(layer, findings, |_| true), None),
         "removeOverlap" => some(paths_of(layer, findings, |_| true), Some(("keepOpenPaths", json!(true)))),
         "correctPathDirection" | "roundCoordinates" => whole(),
         "setStartPoint" => {

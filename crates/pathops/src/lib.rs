@@ -10,6 +10,7 @@
 //! | Booleans and Remove Overlap on contours, results as nodes | [`boolean`], [`remove_overlap`] |
 //! | Correct Path Direction | [`correct_direction`] |
 //! | Add Extremes, Force Extremes | [`add_extremes`] |
+//! | Add Inflections | [`add_inflections`] |
 //! | Tidy up Paths | [`tidy_up`] |
 //! | Open Corner, Reconnect Nodes | [`open_corners`], [`reconnect_nodes`] |
 //! | Cut with Line (the Knife) | [`cut_with_line`] |
@@ -31,6 +32,7 @@ mod direction;
 mod extremes;
 pub mod filters;
 mod graph;
+mod inflections;
 mod limit;
 mod mask;
 mod stroke;
@@ -48,13 +50,14 @@ pub use cut::cut_with_line;
 pub use direction::{Directed, MAX_NESTING_CONTOURS, correct_direction};
 pub use extremes::{ExtremesOptions, MIN_EXTREME_SEGMENT, NEAR_EXTREME_DEGREES, NEAR_EXTREME_DISTANCE, add_extremes};
 pub use graph::Rewired;
+pub use inflections::{MIN_INFLECTION_DISTANCE, add_inflections};
 pub use limit::{TIME_LIMIT, Unfinished, catch_panic, run_with_time_limit};
 pub use mask::{LayerShape, MAX_MASKS, MaskMode, composite};
 pub use stroke::{
     Cap, CapAxis, Join, MAX_PEN_RATIO, MAX_STROKE_SEGMENTS, MAX_STROKE_WIDTH, MITER_LIMIT, STROKE_TOLERANCE, StrokeStyle, position_from_stored,
     position_to_stored, stroke_outline,
 };
-pub use tidy::{TIDY_TOLERANCE, tidy_up};
+pub use tidy::{MAX_STRAIGHTEN, TIDY_TOLERANCE, tidy_up, tidy_up_straightening};
 
 /// Largest coordinate magnitude, in font units, an operation accepts. Equal to the model's limit.
 /// Below it linesweeper's tolerance stays at its floor of 1e-6 units.

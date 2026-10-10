@@ -904,13 +904,13 @@ label = "Tidy up Paths"
 menu = ["Path"]
 shortcut = "Cmd+Shift+T"
 kind = "engine"
-params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index]} | {glyphs: [names], layer?: id | layers?: [ids]} → {glyphs, skipped, selection?}"
+params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], straighten?: units} | {glyphs: [names], layer?: id | layers?: [ids], straighten?} → {glyphs, skipped, selection?}"
 area = "path-ops"
 milestone = "M3"
 summary = "Heuristically sets each node to smooth or corner and removes redundant points: handles lying on a straight segment, on-curve nodes sitting exactly on the line between their neighbours, and adjacent nodes with identical coordinates (which get merged). Works on the selected nodes, or on all nodes when nothing is selected."
 ref = "Edit View › Converting Nodes and Segments"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run. FontCraft: points within 0.01 units count as on a line or as one point; a node is smooth when a curve meets it and its two directions are within 1° (03a question 9). Segment changes need both end nodes selected."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run. FontCraft: points within 0.01 units count as on a line or as one point; a node is smooth when a curve meets it and its two directions are within 1° (03a question 9). Segment changes need both end nodes selected. `straighten` (FontCraft's own, 0 to 100 units) also turns curves that stray less than that from their chord into lines; the audit's `tidyPaths` fix passes the deviation check.outlines.almostStraightCurve reported."
 
 [[command]]
 id = "path.tidyUpPathsForAllMasters"
@@ -1496,12 +1496,13 @@ label = "Add Inflections"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layer?: id, points?: [[shape, node]], shapes?: [index] (with one glyph)} → {glyphs: [names], added: count}"
+params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index]} or {glyphs: [names], layer?: id | layers?: [ids]} → {glyphs, skipped, selection?}"
 area = "path-ops"
 milestone = "M3"
 summary = "Inserts a node at every inflection of the targeted cubic segments, splitting each segment there without changing the outline. It is the repair the audit runs for check.outlines.inflections; the Draw tool's Shift+click adds one inflection at a time."
 ref = "Edit View › Extremes & Inflections; docs/spec/21-qa.md § 5"
 status = "inferred"
+notes = "Built in M3.18 as the audit fix `addInflections`, with the targets and result of path.addExtremes. An inflection within 1 unit of a segment end gets no node, the distance under which check.outlines.inflections ignores one. New nodes are smooth and rounded to the grid."
 
 [[command]]
 id = "path.insertNode"

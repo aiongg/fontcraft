@@ -4,10 +4,14 @@ use std::collections::HashSet;
 
 use crate::PathOpError;
 use crate::boolean::SMOOTH_MAX_DEGREES;
-use crate::contour::{Contour, NodeKind, RNode, Ring, dist_to_segment};
+use crate::contour::{Contour, NodeKind, RNode, Ring, Seg, dist_to_segment};
 
 /// Points within this many units of a line, or of each other, count as on it, or as one point.
 pub const TIDY_TOLERANCE: f64 = 0.01;
+/// The most [`tidy_up_straightening`] straightens: the largest `maxDeviation` the audit takes.
+pub const MAX_STRAIGHTEN: f64 = 100.0;
+/// Points sampled on each piece of a curve to measure how far it strays from its chord.
+const STRAIGHTEN_SAMPLES: u32 = 32;
 
 /// Tidy up Paths on one contour, on the on-curve nodes `selected` (indices into
 /// `contour.nodes`), or on all of them. In this order it
@@ -23,6 +27,15 @@ pub const TIDY_TOLERANCE: f64 = 0.01;
 /// Removing points can break compatibility with other masters (`tidyUp.mayBreakCompatibility`);
 /// that check belongs to the caller.
 pub fn tidy_up(contour: &Contour, selected: Option<&[usize]>) -> Result<Contour, PathOpError> {
+    tidy_up_straightening(contour, selected, 0.0)
+}
+
+/// [`tidy_up`] that also turns into lines the curves (both end nodes selected) whose every point
+/// lies less than `straighten` units from the line between their ends: the repair for the audit's
+/// almost-straight curves. Values up to [`TIDY_TOLERANCE`] add nothing; at most
+/// [`MAX_STRAIGHTEN`] is used.
+pub fn tidy_up_straightening(contour: &Contour, selected: Option<&[usize]>, straighten: f64) -> Result<Contour, PathOpError> {
+    let straighten = if straighten.is_finite() { straighten.clamp(0.0, MAX_STRAIGHTEN) } else { 0.0 };
     let mut ring = Ring::from_contour(contour)?;
     let set: Option<HashSet<usize>> = selected.map(|s| s.iter().copied().collect());
     let chosen = |r: &RNode| set.as_ref().is_none_or(|s| r.src.is_some_and(|i| s.contains(&i)));
@@ -30,7 +43,11 @@ pub fn tidy_up(contour: &Contour, selected: Option<&[usize]>) -> Result<Contour,
     for j in ring.segment_ends() {
         let flat = ring.prev(j).and_then(|p| ring.nodes.get(p)).is_some_and(chosen)
             && ring.nodes.get(j).is_some_and(chosen)
-            && ring.seg(j).is_some_and(|s| s.is_curve() && s.ctrl.iter().all(|c| dist_to_segment(c.point, s.from, s.to) <= TIDY_TOLERANCE));
+            && ring.seg(j).is_some_and(|s| {
+                s.is_curve()
+                    && (s.ctrl.iter().all(|c| dist_to_segment(c.point, s.from, s.to) <= TIDY_TOLERANCE)
+                        || (straighten > TIDY_TOLERANCE && s.from != s.to && strays_less(&s, straighten)))
+            });
         if flat && let Some(r) = ring.nodes.get_mut(j) {
             r.ctrl.clear();
             r.node.kind = NodeKind::Line;
@@ -64,6 +81,14 @@ pub fn tidy_up(contour: &Contour, selected: Option<&[usize]>) -> Result<Contour,
         }
     }
     Ok(ring.to_contour())
+}
+
+/// Whether every sampled point of the segment lies less than `limit` units from the line between
+/// its ends.
+fn strays_less(seg: &Seg<'_>, limit: f64) -> bool {
+    seg.pieces().iter().all(|piece| {
+        (0..=STRAIGHTEN_SAMPLES).all(|i| dist_to_segment(piece.eval(f64::from(i) / f64::from(STRAIGHTEN_SAMPLES)), seg.from, seg.to) < limit)
+    })
 }
 
 /// Is node `j` between two straight segments and on the line between its neighbours?
