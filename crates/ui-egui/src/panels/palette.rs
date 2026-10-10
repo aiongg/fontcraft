@@ -4,7 +4,7 @@
 
 use serde_json::json;
 
-use super::{Pending, SECTIONS, dimensions, fit_curve, layers, transformations, widgets};
+use super::{Pending, SECTIONS, dimensions, fit_curve, layers, stroke, transformations, widgets};
 use crate::app::FontcraftApp;
 
 /// Draws one section's contents.
@@ -20,9 +20,12 @@ fn drawer(section: &str) -> Option<Draw> {
     }
 }
 
-/// The contextual sections, shown at the foot of the Palette while Show Info is on (id, title,
-/// contents). Stroke joins them when `path.setStroke` exists.
-const CONTEXTUAL: &[(&str, &str, Draw)] = &[];
+/// Whether a contextual section has something to show.
+type Shown = fn(&FontcraftApp) -> bool;
+
+/// The contextual sections, shown at the foot of the Palette while Show Info is on and their
+/// `Shown` holds (id, title, shown, contents).
+const CONTEXTUAL: &[(&str, &str, Shown, Draw)] = &[("stroke", "Stroke", stroke::shown, stroke::show)];
 
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let frame = egui::Frame::NONE.fill(app.tokens.panel).inner_margin(app.tokens.palette_margin);
@@ -40,7 +43,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 ui.separator();
             }
             if app.state.display.info {
-                for (id, title, draw) in CONTEXTUAL {
+                for (id, title, shown, draw) in CONTEXTUAL {
+                    if !shown(app) {
+                        continue;
+                    }
                     ui.label(egui::RichText::new(*title).strong());
                     ui.push_id(*id, |ui| draw(app, ui, pending));
                 }

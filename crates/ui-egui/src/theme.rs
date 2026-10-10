@@ -174,6 +174,10 @@ pub struct Tokens {
     pub annotation_text_size: f32,
     /// The handle of a selected annotation.
     pub annotation_handle_radius: f32,
+    /// The edited layer's paths as drawn, under the black composite outline, when strokes or
+    /// masks make the two differ (`stroke.display`, `mask.display`).
+    pub source_outline: Color32,
+    pub source_outline_width: f32,
 }
 
 impl Tokens {
@@ -282,6 +286,8 @@ impl Tokens {
             annotation_text: Color32::from_rgb(0x30, 0x30, 0x30),
             annotation_text_size: 12.0,
             annotation_handle_radius: 4.0,
+            source_outline: Color32::from_rgb(0xb4, 0xb4, 0xb4),
+            source_outline_width: 1.0,
         }
     }
 

@@ -38,6 +38,8 @@ mod draw_tests;
 #[cfg(test)]
 mod panels_tests;
 #[cfg(test)]
+mod stroke_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tools_tests;

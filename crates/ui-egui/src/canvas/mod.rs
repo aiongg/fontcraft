@@ -8,6 +8,7 @@
 //! | [`guides`] | guides, the grid, parameter metric lines, CJK grids, measurement labels |
 //! | [`background`] | the background and the other visible layers, behind the outline |
 //! | [`fill`] | filled glyphs, rasterised by the `render` crate into a texture |
+//! | [`composite`] | (no drawing) each glyph's outline with strokes expanded and masks applied, cached |
 //! | [`nodes`] | nodes and handles with the display conventions of `docs/spec/03a` § 4 |
 //! | [`selection`] | the selection, and the active tool's overlays (marquee, snapping lines…) |
 //! | [`bbox`] | the selection's bounding box and knobs, and the transformation origin |
@@ -20,6 +21,7 @@
 pub mod annotations;
 pub mod background;
 pub mod bbox;
+pub mod composite;
 pub mod fill;
 pub mod guides;
 pub mod metrics;
@@ -78,18 +80,25 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         {
             background::draw(&c, font, glyph, layer, &state.display);
         }
-        let what = fill::Fill {
-            doc: session.active().map(|d| (d.id, d.revision)).unwrap_or_default(),
-            others: state.display.fill_preview,
-            edited: state.display.fill_preview && *preview_tool,
-        };
+        let doc = session.active().map(|d| (d.id, d.revision)).unwrap_or_default();
+        let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && *preview_tool };
         fill::draw(&c, fill_cache, font, &master.id, &tab, &line, what);
         let Some(layer) = tab.edited_glyph().and_then(|g| font.glyph(g)).and_then(|g| g.layer(&master.id)) else { return };
+        // The composite in black; under it, when strokes or masks make it differ, the paths as
+        // drawn in light grey: centre lines of strokes and the parts masks cut away
+        // (`stroke.display`, `mask.display`).
         if let Some(glyph) = tab.edited_glyph()
-            && let Ok(outline) = font.outline(glyph, &master.id)
+            && let Some(composite) = fill_cache.outlines.get(doc, font, glyph, &master.id)
         {
             let to_screen = Affine::translate(v.origin.to_vec2()) * Affine::scale_non_uniform(v.scale(), -v.scale());
-            for contour in flatten(&(to_screen * outline)) {
+            if composite.styled
+                && let Ok(source) = font.outline(glyph, &master.id)
+            {
+                for contour in flatten(&(to_screen * source)) {
+                    painter.add(egui::Shape::line(contour, Stroke::new(tokens.source_outline_width, tokens.source_outline)));
+                }
+            }
+            for contour in flatten(&(to_screen * composite.outline.clone())) {
                 painter.add(egui::Shape::line(contour, Stroke::new(tokens.outline_width, tokens.outline)));
             }
         }

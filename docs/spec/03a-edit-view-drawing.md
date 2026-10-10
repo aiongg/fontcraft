@@ -506,6 +506,18 @@ How FontCraft builds a stroke (our construction, `fontcraft_pathops::stroke_outl
 The pieces (one per segment, join and cap) are united with the nonzero rule, so the outline has no
 overlaps. The result does not interpolate yet (M9).
 
+How FontCraft's Stroke section works (`crates/ui-egui/src/panels/stroke.rs`):
+
+- A path counts as selected when it is selected whole or one of its nodes or handles is. With
+  several, a field shows a value only when every selected path has it.
+- Width always; emptying it removes the stroke (`width: null`). With a stroke: height (empty
+  means the width), position with the presets −100, 0 and 100, Fill for closed paths, the four
+  joins, and for open paths the five start caps and the five end caps.
+- Each control runs `path.setStroke` with only the key it changes.
+- A click on the axis-aligned cap uses the automatic axis. Holding it for half a second opens a
+  menu: automatic, X axis, Y axis. The forced axis is stored once per path, so it serves both
+  ends.
+
 Storage: the path attributes `strokeWidth`, `strokeHeight`, `strokePos`, `lineJoin` (0 miter,
 1 round, 2 bevel, 3 round full), `lineCapStart` and `lineCapEnd` (0 butt, 1 round, 2 square,
 3 round inset, 4 axis-aligned) and `fill`, as `docs/spec/30-source-formats.md` § 2.7 lists them.
@@ -549,7 +561,11 @@ How FontCraft composites a layer (`fontcraft_pathops::composite`, and in the eng
    Open paths without a stroke fill nothing and are dropped once a mask applies.
 4. A layer with no stroke and no mask is passed on contour for contour.
 
-The canvas draws this composite in black, and export compiles it before overlap removal.
+The canvas fills this composite and draws it in black, and export compiles it before overlap
+removal. When the layer has a stroked or a mask path, the paths themselves are drawn in light grey
+under it: the centre lines of strokes, the parts masks cut away and the mask paths. The canvas
+keeps each glyph's composite until the glyph's shapes change (or, for a glyph with components,
+until any edit).
 `path.setMask` writes mask value 1, which every format version reads as a subtracting mask.
 `filter.shapeOrder` takes the new order as a list of every shape index; hints that refer to a path
 by index are not renumbered.

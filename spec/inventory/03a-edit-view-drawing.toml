@@ -1610,7 +1610,7 @@ milestone = "M3"
 summary = "Palette section at the bottom right holding the live stroke attributes of the selected path. It is available only while Show Info is on and a path is selected."
 ref = "Edit View › Strokes"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:08: a Stroke section appears at the bottom of the Palette while a path is selected and is absent with nothing selected (partly visible). Its fields are not shown."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:08: a Stroke section appears at the bottom of the Palette while a path is selected and is absent with nothing selected (partly visible). Its fields are not shown. Built in M3.11: a path counts as selected when it is selected whole or one of its nodes or handles is. Controls: width (emptying it removes the stroke); with a stroke, height (empty: the width), position with the presets −100, 0 and 100, Fill (closed paths), the joins miter, bevel, round and round full, and for open paths the start and end caps butt, square, round, round inset and axis-aligned. Holding the axis-aligned cap for half a second opens a menu (automatic, X axis, Y axis); the forced axis is one per path, so it serves both ends. Each control runs `path.setStroke` with only its own key. The buttons carry text, not icons."
 
 [[command]]
 id = "path.setStroke"
@@ -1650,6 +1650,7 @@ milestone = "M3"
 summary = "In Edit View the original (centre) path of a stroked path is drawn light grey and the resulting stroke outline black."
 ref = "Edit View › Creating Strokes"
 status = "handbook"
+notes = "Built in M3.11: the canvas draws the layer's composite (`cmd::stroke::layer_outline`) in black and, when the layer has a stroked or a mask path, the paths themselves in light grey under it. The filled preview fills the composite, so a stroked open path fills as its stroke outline. Documented, not yet observed."
 
 [[command]]
 id = "path.expandOutline"
@@ -1796,6 +1797,7 @@ milestone = "M3"
 summary = "With masks in play, the parts of paths that are subtracted away are drawn light grey and the resulting outline black."
 ref = "Edit View › Masking"
 status = "handbook"
+notes = "Built in M3.11 with `stroke.display`: the paths as drawn, mask paths included, in light grey under the black composite. Documented, not yet observed."
 
 [[command]]
 id = "filter.shapeOrder"

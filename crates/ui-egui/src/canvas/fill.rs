@@ -1,6 +1,7 @@
 //! Filled glyphs on the canvas. egui fills only convex shapes, so filled outlines (with their
 //! counters) are rasterised by the `render` crate, which fills closed contours only, into one
-//! canvas-sized texture, rebuilt only when the document, the tab or the camera changes.
+//! canvas-sized texture, rebuilt only when the document, the tab or the camera changes. Each glyph
+//! is filled as its composite ([`super::composite`]): strokes expanded, masks applied.
 
 use std::hash::{Hash, Hasher};
 
@@ -9,14 +10,24 @@ use fontcraft_geom::{Affine, BezPath};
 use fontcraft_model::Font;
 use fontcraft_render::{Style, render_path};
 
+use super::composite::CompositeCache;
 use super::{Painting, flatten};
 use crate::state::Tab;
 
-/// The last fill texture and what it was drawn from.
+/// The last fill texture and what it was drawn from, and the glyphs' composite outlines.
 #[derive(Default)]
 pub struct FillCache {
     key: Option<u64>,
     texture: Option<TextureHandle>,
+    pub outlines: CompositeCache,
+}
+
+impl FillCache {
+    /// The fill texture last drawn.
+    #[cfg(test)]
+    pub(crate) fn texture_id(&self) -> Option<egui::TextureId> {
+        self.texture.as_ref().map(TextureHandle::id)
+    }
 }
 
 /// What to fill.
@@ -36,7 +47,8 @@ pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, master: &str, tab:
     let mut filled = BezPath::new();
     for (i, (name, (x, _))) in tab.glyphs.iter().zip(line).enumerate() {
         let edited = i == tab.edited;
-        let Ok(mut outline) = font.outline(name, master) else { continue };
+        let Some(composite) = cache.outlines.get(what.doc, font, name, master) else { continue };
+        let mut outline = composite.outline.clone();
         outline.apply_affine(Affine::translate((x - offset, 0.0)));
         if (edited && what.edited) || (!edited && what.others) {
             filled.extend(outline.elements().iter().copied());
