@@ -8,7 +8,8 @@
 //!
 //! The app gives the engine the system clock (Last Changed stamps), the user's settings and the
 //! user's custom glyph data from the settings folder ([`user_files`]), and saves the settings
-//! whenever they change.
+//! whenever they change. Started without a file, it shows the Start Window unless the person
+//! turned that off.
 #![forbid(unsafe_code)]
 
 mod control_server;
@@ -19,6 +20,7 @@ use std::process::ExitCode;
 
 use fontcraft_engine::Session;
 use fontcraft_ui_egui::FontcraftApp;
+use fontcraft_ui_egui::shell::start_window;
 use serde_json::json;
 
 const USAGE: &str = "\
@@ -27,7 +29,8 @@ FontCraft, the font editor
 USAGE:
   fontcraft [FILE] [--control PORT]
 
-  FILE             a .fontcraft file to open (default: a new font)
+  FILE             a font file to open (default: the Start Window, or a new font when the
+                   Start Window is turned off)
   --control PORT   listen on 127.0.0.1:PORT for the JSON control protocol (no authentication:
                    enable it only while you use it)
   -h, --help       this text
@@ -89,12 +92,25 @@ fn run() -> Result<(), String> {
     for p in &problems {
         eprintln!("fontcraft: {p}");
     }
+    // With no file to open, the Start Window takes the place of a new document while its Show
+    // window on startup setting is on.
+    let show_start = file.is_none() && session.settings().get_bool(start_window::SHOW_AT_LAUNCH).unwrap_or(true);
     match file {
-        Some(path) => session.execute("file.open", &json!({"path": path})).map(|_| ()).map_err(|e| e.to_string())?,
+        Some(path) => {
+            session.execute("file.open", &json!({"path": path})).map_err(|e| e.to_string())?;
+            if let Err(e) = start_window::remember(&mut session, &path) {
+                eprintln!("fontcraft: {e}");
+            }
+        }
+        None if show_start => {}
         None => session.execute("file.new", &json!({})).map(|_| ()).map_err(|e| e.to_string())?,
     }
     let mut app = FontcraftApp::new(session);
     app.picker = Some(Box::new(pickers::SystemPicker));
+    app.state.start.reveal = start_window::Reveal(Some(pickers::reveal));
+    if show_start {
+        app.run("window.startWindow", &json!({}))?;
+    }
     if let Some(first) = problems.first() {
         app.state.status = first.clone();
     }

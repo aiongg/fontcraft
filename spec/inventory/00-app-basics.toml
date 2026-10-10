@@ -108,7 +108,7 @@ label = "Open Recent"
 menu = ["File"]
 shortcut = ""
 kind = "ui"
-params = "{index?: number, path?: string} → {title, path}"
+params = "{index?: number, path?: string, clear?: bool} → {title, path} | {cleared}"
 area = "ui-chrome"
 milestone = "M4"
 summary = "Reopens one of the recently used documents; the list is kept with the preferences and can be cleared."
@@ -117,6 +117,8 @@ status = "inferred"
 notes = "Checked in the M4 planning pass (it was a `memory` row): the handbook documents the Start Window's list of recent documents, not an Open Recent menu item; the menu item is a platform convention we add. Moved from M14 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Start Window (M4) needs the list. The list lives in the user settings, the owner's decision (docs/plans/M4.md § 7 question 4)."
 guesses = [
   "The list holds the last ten documents opened or saved, newest first; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window.",
+  "File › Open Recent without an index or a path shows the Start Window's list of recent documents, since the menu bar has no submenu of files. Settled when the menu bar can list them.",
+  "A path is kept once, as an absolute path; opening or saving it again moves it to the top. Settled by observing the Start Window.",
 ]
 
 [[command]]

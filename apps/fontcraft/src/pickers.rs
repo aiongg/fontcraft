@@ -1,6 +1,8 @@
-//! The platform's file and folder choosers, for the dialogs and File › Import.
+//! The platform's file and folder choosers, for the dialogs and File › Import, and Show in
+//! Finder.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use fontcraft_ui_egui::shell::pickers::Picker;
 
@@ -17,4 +19,28 @@ impl Picker for SystemPicker {
     fn files(&mut self, title: &str, kind: &str, extensions: &[&str]) -> Vec<PathBuf> {
         rfd::FileDialog::new().set_title(title).add_filter(kind, extensions).pick_files().unwrap_or_default()
     }
+}
+
+/// Shows `path` in the system's file manager (Show in Finder): selected in its folder where the
+/// platform can do that, else the folder that holds it.
+pub fn reveal(path: &Path) -> Result<(), String> {
+    let mut command = if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg("-R").arg(path);
+        c
+    } else if cfg!(target_os = "windows") {
+        let mut select = std::ffi::OsString::from("/select,");
+        select.push(path);
+        let mut c = Command::new("explorer");
+        c.arg(select);
+        c
+    } else {
+        let mut c = Command::new("xdg-open");
+        c.arg(path.parent().unwrap_or(path));
+        c
+    };
+    let mut child = command.spawn().map_err(|e| format!("cannot start the file manager: {e}"))?;
+    // Wait on another thread, so the finished process does not linger.
+    let _ = std::thread::spawn(move || child.wait());
+    Ok(())
 }

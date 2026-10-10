@@ -278,13 +278,19 @@ label = "Glyph Info"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{}"
+params = "{open?: bool, query?: string, sortBy?: string, select?: [names]} → {open, query, sortBy, count, selected}"
 area = "font-view"
 milestone = "M4"
 summary = "Opens the Glyph Info window: a searchable, sortable table of every entry in the glyph database."
 ref = "Font View › Names & Unicode › Glyph Info Database"
 status = "handbook"
-notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) lists the columns: glyph name, Unicode value, category, subcategory, script and composition. Multiple rows are selected with Shift or Cmd. The composition column is empty until M6 provides decomposition data. Documented, not yet observed."
+notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) lists the columns: glyph name, Unicode value, category, subcategory, script and composition. Multiple rows are selected with Shift or Cmd. The composition column is left out until M6 provides decomposition data. Documented, not yet observed. FontCraft: crates/ui-egui/src/shell/glyph_info.rs; the table shows what glyphData.search returns for the search field and the sorted column, so the window and the headless query agree. Add to Font runs glyphInfo.addToFont with the selected names."
+guesses = [
+  "The table adds a Description column (ours). Settled by observing the window.",
+  "With an empty search field the table is empty and asks for a name, a character or a code point: glyphData.search needs a query, and the whole database (with every CJK ideograph) is too long a list to be useful. Settled by observing the window when it opens.",
+  "Sorting is ascending only; a second click on the sorted header keeps the order. Settled by observing a second header click.",
+  "Shift+click selects the rows from the last clicked one; Cmd+click adds or removes one row. Settled by observing the window.",
+]
 
 [[command]]
 id = "glyphInfo.addToFont"

@@ -11,6 +11,7 @@ pub mod clipboard;
 pub mod context_menu;
 pub mod drawing;
 pub mod font_view;
+pub mod glyph_info;
 pub mod item_state;
 pub mod keymap;
 pub mod masters;
@@ -18,6 +19,7 @@ pub mod menus;
 pub mod palette;
 pub mod pickers;
 pub mod selection;
+pub mod start_window;
 pub mod status_bar;
 pub mod tabs;
 pub mod toolbar;
@@ -52,10 +54,19 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (masters::COMMANDS, masters::run),
     (font_view::inspector::COMMANDS, font_view::inspector::run),
     (font_view::sidebar::COMMANDS, font_view::sidebar::run),
+    (glyph_info::COMMANDS, glyph_info::run),
+    (start_window::COMMANDS, start_window::run),
 ];
 
 /// Every shell command, in module order.
 pub static UI_COMMANDS: LazyLock<Vec<UiCommand>> = LazyLock::new(|| MODULES.iter().flat_map(|(c, _)| c.iter().copied()).collect());
+
+/// Draws the shell's floating windows, one call per window. Their buttons queue commands in
+/// `pending`.
+pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
+    glyph_info::show(app, ui, pending);
+    start_window::show(app, ui, pending);
+}
 
 pub fn is_ui_command(id: &str) -> bool {
     UI_COMMANDS.iter().any(|c| c.0 == id)

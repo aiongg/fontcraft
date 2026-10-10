@@ -46,6 +46,14 @@ milestone = "M4"
 summary = "Window shown when the app starts with no document open. It lists recent documents and, after pressing plus, lets the user pick scripts and glyph sets and create a document with empty glyphs for them."
 ref = "Create"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: crates/ui-egui/src/shell/start_window.rs. The chooser's scripts and sets are the built-in glyph sets (see file.newFromGlyphSets), so its lists differ from the reference's by design. The Create Document button runs file.newFromGlyphSets with the included scripts and their checked sets, so the window and the headless command give the same document."
+guesses = [
+  "Each glyph set's checkbox shows its glyph count after its name. Settled by observing the chooser.",
+  "Without earlier picks, Latin is included with its default sets. Settled by observing the chooser on a fresh install.",
+  "A script switched on takes its default sets (its Core set) checked; the checkboxes of a script that is not included are greyed out. Settled by observing the chooser.",
+  "While there are recent documents the chooser has a Recent Documents button that goes back to the list. Settled by observing the window.",
+  "The window closes when a document is opened or created. Settled by observing the window.",
+]
 
 [[command]]
 id = "window.startWindow"
@@ -53,12 +61,13 @@ label = "Start Window"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{}"
+params = "{open?: bool, chooser?: bool} → {open, chooser, recent, picks}"
 area = "ui-chrome"
 milestone = "M4"
 summary = "Opens the Start Window at any time, not only at launch."
 ref = "Create"
 status = "handbook"
+notes = "Opening the window restores the last picks of file.newFromGlyphSets (start.chooserPicks). chooser: true shows the script chooser in place of the recent documents, as the plus button does."
 
 [[behavior]]
 id = "start.shownAtLaunchWithoutDocuments"
@@ -67,6 +76,10 @@ milestone = "M4"
 summary = "The Start Window appears at launch when no document is open. Clearing its Show window on startup checkbox suppresses it on later launches (a persisted preference)."
 ref = "Create"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft: the desktop app started without a file shows the Start Window and no document while start.showAtLaunch is on (apps/fontcraft/src/main.rs)."
+guesses = [
+  "With Show window on startup off, the app opens a new document at launch, as File › New does. Settled by observing a launch with the checkbox cleared.",
+]
 
 [[setting]]
 id = "start.showAtLaunch"
@@ -91,6 +104,7 @@ milestone = "M4"
 summary = "Double-clicking an entry of the recent documents list opens that document. When the list is empty the script chooser is shown in its place."
 ref = "Create"
 status = "handbook"
+notes = "Documented, not yet observed. Double-click runs file.openRecent with the entry's path; the list is file.openRecent's (see its row)."
 
 [[command]]
 id = "file.showInFinder"
@@ -104,6 +118,7 @@ milestone = "M4"
 summary = "Context-menu item on a recent document in the Start Window (Ctrl-click or right-click) that reveals the file in the system file manager."
 ref = "Create"
 status = "handbook"
+notes = "The desktop app reveals the file with the platform's file manager: selected in its folder on macOS and Windows, its folder opened on Linux (xdg-open). Without a file manager (the browser, MCP, tests) the command says it cannot. A path that does not exist is refused."
 
 [[command]]
 id = "file.new"
