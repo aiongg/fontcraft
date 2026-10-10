@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-audit.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-pathops.workspace = true
 fontcraft-model.workspace = true

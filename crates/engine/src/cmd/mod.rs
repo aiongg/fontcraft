@@ -9,6 +9,7 @@
 //! [`crate::Session::edit`], which makes the change one undo step.
 
 mod annotation;
+mod audit;
 mod background;
 mod clipboard;
 mod common;
@@ -182,6 +183,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(filter::specs());
         v.extend(stroke::specs());
         v.extend(pathops::specs());
+        v.extend(audit::specs());
         v
     })
 }

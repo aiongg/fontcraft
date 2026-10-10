@@ -32,9 +32,10 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "After components are decomposed, the glyph's contours cross each other or themselves, or a contour lies inside another contour that runs the same way. Curves are flattened into 24 line pieces each and only proper crossings count; the contours of one component are not compared with each other. Message codes: `crossing` and `nested-same-direction`. The fix replaces the contours with their union, repeating the union until the result is stable, and then restores the earlier contour order and start points where it can."
+summary = "After components are decomposed, the glyph's contours cross each other or themselves, or a contour lies inside another contour that runs the same way. Curves are flattened into 24 line pieces each and only proper crossings count; the contours of one component are not compared with each other. Message codes: `crossing` and `nested-same-direction`. The fix replaces the paths involved with their union (Remove Overlap); open paths and components stay."
 ref = "checkoutlinesufo overlap removal (do_overlap_removal); fontTools ttLib.removeOverlaps"
 status = "docs"
+notes = "Restoring the earlier contour order and start points after the union (audit.outlineFixKeepsContourOrder) is not built yet."
 
 [[check]]
 id = "check.outlines.coincidentPoints"
@@ -79,6 +80,7 @@ milestone = "M3"
 summary = "A contour with four or fewer on-curve points whose bounding box area is below `minArea` (default 25 square units), typically a sliver left by overlap removal. The fix deletes the contour."
 ref = "checkoutlinesufo tiny sub-paths (remove_tiny_sub_paths, --min-area)"
 status = "docs"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.noContours"
@@ -98,7 +100,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and every sampled on-curve point of the inner contour (up to 16) is inside the outer contour. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix recomputes all directions from nesting."
+summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and every sampled on-curve point of the inner contour (up to 16) is inside the outer contour. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix runs Correct Path Direction on the layer: directions from nesting, each closed path starting at its lowest, then leftmost, node, and the paths sorted."
 ref = "fontbakery outline_direction"
 status = "docs"
 
@@ -112,6 +114,7 @@ milestone = "M3"
 summary = "An on-curve point sits within 2 units of, but not on, a vertical metric: baseline, x-height (lowercase letters only), cap height (uppercase only), ascender or descender. The report is dropped when more than 100 points match. The fix moves the point and its handles onto the metric line."
 ref = "fontbakery outline_alignment_miss"
 status = "docs"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.jaggySegments"
@@ -189,6 +192,7 @@ milestone = "M3"
 summary = "The source mixes cubic and quadratic curves, either inside one glyph layer (code `mixed-in-layer`) or in a layer whose curves are all of the type the font uses less (code `differs-from-font`), which is normally accidental and can confuse the build. The fix converts everything to the font's main curve type."
 ref = "fontbakery ufo_consistent_curve_type (not in any fontbakery profile)"
 status = "docs"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.openCorners"
@@ -200,6 +204,7 @@ milestone = "M3"
 summary = "A contour contains an open corner: two segments that cross a short distance before a corner node, leaving a small triangular overlap outside the shape. Reported per layer; matters for sources that must round or offset cleanly. The fix trims the corner to the crossing point."
 ref = "fontbakery ufo_no_open_corners (not in any fontbakery profile)"
 status = "docs"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.missingExtremes"
@@ -222,6 +227,7 @@ milestone = "M3"
 summary = "A cubic segment changes its bending direction (has an inflection) between its nodes. The fix inserts a node at each inflection."
 ref = "Editor audit convention (inflection points)"
 status = "inferred"
+notes = "Report-only until the command path.addInflections exists."
 
 [[check]]
 id = "check.outlines.almostStraightCurve"
@@ -244,6 +250,7 @@ milestone = "M3"
 summary = "A handle is within `maxAngle` degrees (default 2) of horizontal or vertical without being exact, or is less than `maxOffset` units (default 2) off the axis while within 10 degrees of it; the angle limit on the offset rule keeps short diagonal handles out. The fix snaps the handle to the axis, keeping its length."
 ref = "Editor audit convention (slightly slanted handles)"
 status = "inferred"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.zeroLengthHandle"
@@ -277,6 +284,7 @@ milestone = "M3"
 summary = "Two contours of one glyph have the same points (same or opposite direction), as happens after pasting twice. The fix deletes the extra copies."
 ref = "Editor audit convention (duplicate paths)"
 status = "inferred"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.openPath"
@@ -299,6 +307,7 @@ milestone = "M3"
 summary = "A contour consists of a single point, or of only off-curve points with no usable shape. The fix deletes it."
 ref = "Editor audit convention (stray points); fontbakery outline_direction also reports paths with no bounds"
 status = "inferred"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.zeroAreaContour"
@@ -310,6 +319,7 @@ milestone = "M3"
 summary = "A closed contour encloses no area, for example two points joined by lines or a path folded back onto itself. The fix deletes it."
 ref = "Editor audit convention (degenerate paths)"
 status = "inferred"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.invalidSegmentStructure"
@@ -365,6 +375,7 @@ milestone = "M3"
 summary = "A node flagged smooth has incoming and outgoing directions that differ by more than `maxAngle` degrees (default 1), so the curve has a visible kink. The fix rotates the handles onto a common line, keeping their lengths."
 ref = "Editor audit convention (non-collinear smooth nodes)"
 status = "inferred"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.unflaggedSmoothNode"
@@ -376,6 +387,7 @@ milestone = "M3"
 summary = "A node flagged as corner has exactly collinear handles; it probably should be smooth. The fix sets the smooth flag."
 ref = "Editor audit convention (node type clean-up)"
 status = "inferred"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.unbalancedHandles"
@@ -409,6 +421,7 @@ milestone = "M3"
 summary = "At a smooth node the curvature on the two sides differs by more than `maxRatio` (default 2). The fix moves the node along its handle line until the curvatures match."
 ref = "Editor audit convention (curvature continuity)"
 status = "inferred"
+notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
 
 [[check]]
 id = "check.outlines.startPointPosition"
@@ -3252,12 +3265,13 @@ label = "Run Audit"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{target?: 'document'|path|[paths], profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], scope?: ['source'|'binary'|'family'], glyphs?: [names|ranges], masters?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: {checkId: {threshold: value}}, all?: bool, network?: bool, includeIgnored?: bool, includePassed?: bool}"
+params = "{target?: 'document'|path|[paths], profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], scope?: ['source'|'binary'|'family'], glyphs?: [names|ranges], masters?: [ids], layers?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: {checkId: {threshold: value}}, maxResults?: count, all?: bool, network?: bool, includeIgnored?: bool, includePassed?: bool}"
 area = "qa"
 milestone = "M3"
 summary = "Runs the selected checks on the open document, a source or font file, or a set of files treated as a family, and returns the result document described in docs/spec/21-qa.md. Defaults: the current document, the document's default profile, every glyph and master, and only glyphs changed since the last run unless `all` is set. Changes nothing in the font."
 ref = "fontbakery check-profile; AFDKO checkoutlinesufo; AFDKO comparefamily; fontTools varLib.interpolatable"
 status = "docs"
+notes = "M3 builds the open-document target with profile, checks, exclude, groups, scope, glyphs (names), masters, layers, minSeverity, config, maxResults and includePassed. Without `layers` a run skips backup layers. A pattern that matches no registered check is an error. File and family targets, glyph ranges, the per-glyph hash cache (`all`), network and the ignore list wait for M12."
 
 [[command]]
 id = "audit.list"
@@ -3271,6 +3285,7 @@ milestone = "M3"
 summary = "Returns the check registry: id, group, severity, scope, home profile, whether a fix exists, and the one-line description of each check, optionally filtered."
 ref = "fontbakery --list-checks"
 status = "docs"
+notes = "The `scope` filter keeps or drops every check: all registered checks read the source."
 
 [[command]]
 id = "audit.describe"
@@ -3284,6 +3299,7 @@ milestone = "M3"
 summary = "Returns everything known about one check: description, preconditions, message codes, thresholds with their defaults, the fix id and its parameters, and the profiles that include it."
 ref = "Our design; cf. fontbakery check rationale display"
 status = "inferred"
+notes = "M3 returns no message codes and no fix parameters: the registry does not hold them yet."
 
 [[command]]
 id = "audit.results"
@@ -3291,12 +3307,13 @@ label = "Get Audit Results"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{target?: 'document'|path, checks?: [id|glob], glyphs?: [names], minSeverity?: 'info'|'warn'|'fail', fixable?: bool, includeIgnored?: bool}"
+params = "{target?: 'document'|path, checks?: [id|glob], exclude?: [id|glob], glyphs?: [names], minSeverity?: 'info'|'warn'|'fail', fixable?: bool, includeIgnored?: bool}"
 area = "qa"
 milestone = "M3"
 summary = "Returns the cached results of the last run for a target without running anything, optionally filtered. Results for glyphs edited since that run are marked stale."
 ref = "Our design"
 status = "inferred"
+notes = "M3 keeps the last run of each open document until the document is saved or closed. A glyph counts as edited when its layers differ from the run's."
 
 [[command]]
 id = "audit.fix"
@@ -3304,12 +3321,13 @@ label = "Fix Issues"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{target?: 'document'|path, results?: [resultId], checks?: [id|glob], glyphs?: [names], masters?: [ids], safeOnly?: bool, dryRun?: bool, keepOriginal?: 'backupLayer'|'none', decimal?: bool, keepContourOrder?: bool, output?: path}"
+params = "{target?: 'document'|path, results?: [resultId], profile?: id, checks?: [id|glob], exclude?: [id|glob], groups?: [group], glyphs?: [names], masters?: [ids], layers?: [ids], minSeverity?: 'info'|'warn'|'fail', config?: object, maxResults?: count, safeOnly?: bool, dryRun?: bool, keepOriginal?: 'backupLayer'|'none', decimal?: bool, keepContourOrder?: bool, output?: path}"
 area = "qa"
 milestone = "M3"
 summary = "Applies the registered fix of every selected result that has one, as a single undo step, then re-runs the affected checks and returns what changed and what remains. `dryRun` reports the planned edits only; `safeOnly` (default true) skips fixes that alter the design; `output` writes a fixed copy of a file target instead of overwriting it."
 ref = "AFDKO checkoutlinesufo -e, -o, -w, -d, --ignore-contour-order"
 status = "docs"
+notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. Fixes run through path.closeOpenPaths, path.tidyUpPaths, path.removeOverlap, path.correctPathDirection, path.addExtremes, path.makeNodeFirst and path.roundCoordinates; a fix without a command (the auditor fixes of docs/spec/21-qa.md § 5, and addInflections until path.addInflections exists) is skipped with the reason. The result cap does not hide findings from a fix. `decimal`, `keepContourOrder` and file targets wait for M12; `output` is refused."
 
 [[command]]
 id = "audit.clearCache"
@@ -3336,6 +3354,7 @@ milestone = "M3"
 summary = "Lists the built-in profiles (outlines, opentype, universal, strict) and any user or project profiles, each with its check count and where it is stored."
 ref = "fontbakery profiles"
 status = "docs"
+notes = "M3 lists the four built-in profiles; the counts are of the checks registered so far. User and project profiles wait for M12."
 
 [[command]]
 id = "audit.profile.show"
@@ -3729,6 +3748,7 @@ milestone = "M3"
 summary = "Heuristic outline checks are capped: when one check yields more than `maxResults` (default 100) results in a font, the individual results are replaced by one informational summary result with the count, since that many hits usually means the heuristic does not suit the design."
 ref = "fontbakery outline checks FALSE_POSITIVE_CUTOFF"
 status = "docs"
+notes = "Built in M3. audit.fix ignores the cap, so a capped check is still fixed everywhere."
 
 [[behavior]]
 id = "audit.glyphHashCache"
@@ -3737,6 +3757,7 @@ milestone = "M3"
 summary = "For source targets the auditor stores a hash of each glyph's outline and metrics with the results; a later run skips glyphs whose hash is unchanged and reuses their results, unless `all` is set. Results fixed or changed by hand invalidate the hash of that glyph only."
 ref = "AFDKO checkoutlinesufo hash map (--all, --clear-hash-map)"
 status = "docs"
+notes = "Not built in M3: every run examines every selected glyph. audit.results marks the results of glyphs edited since the run as stale."
 
 [[behavior]]
 id = "audit.glyphSelectionSyntax"
@@ -3753,6 +3774,7 @@ milestone = "M3"
 summary = "Outline geometry checks look at a glyph as it will be exported: components are decomposed in a temporary copy before the test. A fix that changes such a glyph writes the decomposed, repaired outline; glyphs whose test passes are left as composites."
 ref = "AFDKO checkoutlinesufo (decomposeAllComponents before testing)"
 status = "docs"
+notes = "M3 tests the decomposed outline but does not decompose when fixing: with safeOnly the layer is skipped, without it Remove Overlap merges the paths and leaves the components."
 
 [[behavior]]
 id = "audit.outlineFixOrder"
@@ -3761,6 +3783,7 @@ milestone = "M3"
 summary = "Outline fixes run in a fixed order: coincident points, flat curves and collinear lines first, then overlap removal, then tiny-contour removal, then collinear lines once more, because overlap removal can create new collinear nodes and slivers."
 ref = "AFDKO checkoutlinesufo (do_overlap_removal, do_cleanup)"
 status = "docs"
+notes = "M3 order: close open paths, Tidy up Paths, Remove Overlap, Tidy up Paths again (only after an overlap removal), Correct Path Direction, Add Extremes, add inflections, start points, Round Coordinates. Tiny-contour removal has no command yet. The layer is checked again before each step."
 
 [[behavior]]
 id = "audit.outlineFixRounding"
@@ -3769,6 +3792,7 @@ milestone = "M3"
 summary = "After an outline fix the coordinates are rounded to integers, or to three decimals when decimal coordinates are allowed, and points that became coincident through rounding are merged."
 ref = "AFDKO checkoutlinesufo -d and post-fix clean-up"
 status = "docs"
+notes = "Not built in M3: the fix commands put the points they create on the font's grid, and nothing else is rounded afterwards."
 
 [[behavior]]
 id = "audit.outlineFixKeepsContourOrder"
@@ -3777,6 +3801,7 @@ milestone = "M3"
 summary = "After overlap removal the auditor puts contours back in their earlier order: untouched contours keep their index, merged contours are matched by their topmost point, and a contour's start point is moved back to its old node when that node survives. Can be switched off."
 ref = "AFDKO checkoutlinesufo restore_contour_order, --ignore-contour-order"
 status = "docs"
+notes = "Not built in M3: path.removeOverlap keeps node names and data, but not the earlier contour order or start points."
 
 [[behavior]]
 id = "audit.fixKeepsOriginal"
@@ -3785,6 +3810,7 @@ milestone = "M3"
 summary = "A fix applied to a source glyph first copies the unfixed layer to a backup layer of the same master, unless told not to; a fix applied to a font file overwrites the file unless an output path is given."
 ref = "AFDKO checkoutlinesufo processed-glyphs layer, -w, -o"
 status = "docs"
+notes = "Built in M3 for the open document through layers.addBackupLayer (named by date and time). The backup is made only for a layer the fix changes."
 
 [[behavior]]
 id = "audit.fixIsOneUndoStep"
@@ -3793,6 +3819,7 @@ milestone = "M3"
 summary = "All edits made by one audit.fix call form a single undo step, and each fix is an ordinary engine command call that is logged like any other."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M3. The journal records the audit.fix call; its result lists each command call with its parameters, so the fix can be replayed without the auditor."
 
 [[behavior]]
 id = "audit.interpolationComparesNeighbours"
