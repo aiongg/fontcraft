@@ -30,9 +30,9 @@ pub enum BoolOp {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum OpenPaths {
     /// Leave them as they are, after the merged contours.
-    #[default]
     Keep,
-    /// Delete them.
+    /// Delete them, as the handbook describes Remove Overlap.
+    #[default]
     Remove,
 }
 
@@ -45,7 +45,7 @@ pub struct OverlapOptions {
 
 impl Default for OverlapOptions {
     fn default() -> Self {
-        Self { grid: 1.0, open_paths: OpenPaths::Keep }
+        Self { grid: 1.0, open_paths: OpenPaths::Remove }
     }
 }
 
@@ -263,7 +263,8 @@ fn settle(mut ring: Ring, known: &InputNodes, grid: f64) -> Option<(usize, Ring)
     while j < ring.len() {
         if implied(&ring, j, known, grid) {
             let gone = ring.nodes.remove(j);
-            if let Some(next) = ring.nodes.get_mut(j % ring.nodes.len().max(1)) {
+            let len = ring.nodes.len().max(1);
+            if let Some(next) = ring.nodes.get_mut(j % len) {
                 let mut ctrl = gone.ctrl;
                 ctrl.append(&mut next.ctrl);
                 next.ctrl = ctrl;
@@ -400,11 +401,11 @@ mod tests {
         let stray = Contour::new(true, vec![Node::new(Point::new(5.0, 5.0), NodeKind::Line)]);
         let square = rect(0.0, 0.0, 10.0, 10.0);
         let input = [open.clone(), square, stray.clone()];
-        let kept = remove_overlap(&input, OverlapOptions::default()).unwrap();
+        let kept = remove_overlap(&input, OverlapOptions { grid: 1.0, open_paths: OpenPaths::Keep }).unwrap();
         assert_eq!(kept.len(), 3);
         assert_eq!(kept[1], open);
         assert_eq!(kept[2], stray);
-        let removed = remove_overlap(&input, OverlapOptions { grid: 1.0, open_paths: OpenPaths::Remove }).unwrap();
+        let removed = remove_overlap(&input, OverlapOptions::default()).unwrap();
         assert_eq!(removed.len(), 1);
         assert!(removed[0].closed);
     }

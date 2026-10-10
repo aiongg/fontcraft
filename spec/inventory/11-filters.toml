@@ -699,7 +699,7 @@ milestone = "M3"
 summary = "Besides merging, Remove Overlap deletes all open paths and single stray nodes from the processed glyphs."
 ref = "Filters › Built-in Filters › Remove Overlap"
 status = "handbook"
-notes = "Not yet observed in the reference app (docs/plans/M3.md › M3.6, rule 3). The pathops crate takes the choice as a parameter (keep or remove); until it is observed, Remove Overlap keeps open paths and paths of one node unchanged."
+notes = "Documented in the handbook, not yet observed in the reference app (docs/plans/M3.md › M3.6). Remove Overlap follows the handbook and removes open paths and paths of one node by default; the pathops crate also offers keeping them (`OpenPaths::Keep`)."
 
 [[behavior]]
 id = "path.removeOverlap.expectsCorrectDirections"
