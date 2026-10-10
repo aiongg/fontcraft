@@ -10,6 +10,7 @@
 
 mod annotation;
 mod background;
+mod clipboard;
 mod compile;
 mod dimensions;
 mod edit;
@@ -155,6 +156,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         let mut v = Vec::new();
         v.extend(file::specs());
         v.extend(edit::specs());
+        v.extend(clipboard::specs());
         v.extend(glyph::specs());
         v.extend(path::specs());
         v.extend(spacing::specs());

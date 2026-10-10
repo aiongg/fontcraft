@@ -661,13 +661,13 @@ label = "Outlines…"
 menu = ["File", "Import"]
 shortcut = ""
 kind = "engine"
-params = "{files: [paths], glyphs?: [names], layer?: id, onMissingGlyph?: add|skip} → {imported: [{file, glyph}], unmatched: [files]}"
+params = "{files: [paths], glyphs?: [names], layer?: id, onMissingGlyph?: add|skip, scale?: unscaled|em} → {imported: [{file, glyph, paths, notes?}], added: [names], unmatched: [files], failed: [{file, error}]}"
 area = "import-export"
 milestone = "M3"
 summary = "Imports the vector paths of PDF, EPS or SVG files as glyph outlines. From Font View several files are matched to glyphs by file name; from Edit View one file goes into the current glyph. With an explicit glyph parameter the file-name matching is bypassed."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
-notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route."
+notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route. The handbook does not say how a drawing is scaled; ours reads one font unit per SVG unit with SVG y = 0 at the ascender (`scale: em` fits the drawing's box to the em) and rounds to the grid as a paste does."
 
 [[panel]]
 id = "dialog.importOutlinesMissingGlyph"

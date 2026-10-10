@@ -161,6 +161,14 @@ add formats (`open.compiledFormats`).
 - Only geometry is kept. Fill and other styling are dropped; PDF stroke width becomes a stroke
   style on the path (`import.outlinesDropStyling`).
 
+FontCraft's choices where the handbook is silent:
+
+- Scale: one font unit per SVG unit, with SVG y = 0 at the master's ascender. `scale: em` fits the
+  drawing's box (its `viewBox`, or its width and height) to the em instead.
+- Imported paths are added after the layer's shapes and rounded to the grid, as a paste is.
+- A file that cannot be read is listed in `failed` and the others are imported. The command fails
+  only when no file was imported and at least one failed.
+
 Raster images are not covered by this chapter.
 
 ### 4.2 Metrics (`file.importMetrics`, File › Import › Metrics…, from Font View)
@@ -210,6 +218,19 @@ Edit › Paste (Cmd+V) onto the current glyph accepts outlines from common vecto
   shapes always arrive at (0, 0) (`paste.affinityClipboardModes`).
 - Sketch: shapes should be stroke-only (1 pt, no fill) to avoid doubled outlines
   (`paste.strokeAndFillMayDouble`, inferred cause).
+
+FontCraft's clipboard (`edit.copy`, `edit.cut`, `edit.paste`):
+
+- Copy returns two flavours: our JSON fragment (format `fontcraft-clipboard`, with a version) and
+  an SVG document. The engine never touches the system clipboard; the desktop shell does.
+- A path is copied whole when it is a target shape or all its on-curve nodes are target points.
+  Otherwise each run of its selected segments becomes an open path.
+- Paste prefers the fragment and falls back to SVG. SVG is read at one unit per SVG unit with
+  SVG y = 0 on the baseline, so our own SVG flavour pastes back at the copied coordinates.
+- "Far outside" means more than half an em outside the glyph box (advance width by descender to
+  ascender). The suggested correction moves the pasted box's bottom left to the origin. Both
+  are our choices; the dialog (`dialog.pastedOutlineBounds`) offers that move.
+- A pasted anchor replaces the layer's anchor of the same name. Global guides go to the master.
 
 ## 6. Projects
 
