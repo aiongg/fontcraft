@@ -104,6 +104,7 @@ milestone = "M3"
 summary = "The export dialog attached to the current document. Each tab is an output kind with its own options; Next… either exports straight away or first asks where to write."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
+notes = "Built: the OTF tab alone, as dialog.exportOtf. The tab switcher waits for tabs in the dialog framework; the Variable Fonts, UFO and Metrics tabs wait for their dialogs."
 
 [[panel]]
 id = "dialog.exportOtf"
@@ -123,6 +124,7 @@ milestone = "M3"
 summary = "Options for static OpenType export: outline flavour, the container formats to write, overlap removal, autohinting and the two destinations (a folder, or direct installation into the system)."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
+notes = "Runs file.exportStatic. Built fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), removeOverlap and autohint (both off; the engine refuses either one on until overlap removal and hinting on export exist). The destination folder is a dialog.open parameter until the framework has a folder field. Not built: the File Format checkboxes (need a field for a list of words; the containers default to plain), the destination checkbox and Test Install. The dialog must not preview: exporting writes files, so OK runs the command once."
 
 [[panel]]
 id = "dialog.exportVariable"
@@ -180,6 +182,7 @@ milestone = "M3"
 summary = "Folder chooser shown when the destination path in the export dialog is clicked, when a font export starts with neither destination ticked, and after Next… on the UFO tab."
 ref = "Import & Export › Exporting Font Files › Export Destination"
 status = "handbook"
+notes = "The system folder chooser, opened by the desktop shell; the engine only takes the chosen path as the command's destination. Not built yet: it needs a folder field in the dialog framework."
 
 # ───────────────────────────── Export: rules ─────────────────────────────
 

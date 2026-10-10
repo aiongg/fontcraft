@@ -15,6 +15,8 @@ exports all open documents and shows no dialog.
 Rules for every export:
 
 - Files already present at the target are replaced (`export.overwritesExisting`).
+- The dialog shows no live preview: exporting writes files and changes nothing in the font, so
+  the export runs once, when the dialog is confirmed. It leaves no undo step.
 
 ### 1.1 OTF tab: static fonts (`file.exportStatic`, `dialog.exportOtf`)
 

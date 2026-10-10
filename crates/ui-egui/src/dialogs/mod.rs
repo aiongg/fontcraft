@@ -17,6 +17,7 @@
 //! `Down` step the value by 1, by 10 with `Shift`. With no field taking the keyboard, `Return`
 //! is OK and `Escape` is Cancel. The rest of the app takes no input until the dialog closes.
 
+mod export;
 pub mod form;
 pub mod import_outlines_missing_glyph;
 mod interpolate_with_background;
@@ -63,6 +64,7 @@ pub const DIALOGS: &[Dialog] = &[
     import_outlines_missing_glyph::DIALOG,
     pasted_outline_bounds::DIALOG,
     transformations::DIALOG,
+    export::DIALOG,
 ];
 
 /// The shell commands of this module.
