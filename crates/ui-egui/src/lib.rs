@@ -47,6 +47,8 @@ mod e2e_tests;
 #[cfg(test)]
 mod edit_background_tests;
 #[cfg(test)]
+mod font_view_tests;
+#[cfg(test)]
 mod guide_edit_tests;
 #[cfg(test)]
 mod panels_tests;

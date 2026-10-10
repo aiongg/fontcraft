@@ -157,8 +157,11 @@ pub(crate) fn open(app: &mut FontcraftApp, args: &Args, glyphs: Vec<String>) -> 
     }
     let id = app.state.next_tab_id;
     app.state.next_tab_id += 1;
-    // A new tab draws in the master of the tab it was opened from.
-    let master = app.state.tab().and_then(|t| t.master.clone());
+    // A new tab draws in the master of the tab it was opened from, or Font View's.
+    let master = match app.state.tab() {
+        Some(t) => t.master.clone(),
+        None => app.state.font_view.master.clone(),
+    };
     let mut tab = Tab { id, glyphs, master, ..Default::default() };
     tab.view = view::fit(font, &tab, app.state.canvas_size, f64::from(app.tokens.fit_margin));
     app.state.tabs.push(tab);

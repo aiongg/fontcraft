@@ -14,17 +14,13 @@ use crate::icons::Icon;
 use crate::shell::transform::OriginMode;
 
 /// The targets of transform command `id`: the Edit View selection (the whole edited layer when it
-/// is empty), else the glyphs selected in Font View.
+/// is empty), else the glyphs selected in Font View, in the layer of Font View's master
+/// (`fontView.batch.palette`).
 fn targets(app: &FontcraftApp, id: &str) -> Option<Map<String, Value>> {
     if app.state.tab().is_some() {
         return edit_targets(app, id);
     }
-    if app.state.selected_glyphs.is_empty() {
-        return None;
-    }
-    let mut m = Map::new();
-    m.insert("glyphs".into(), json!(app.state.selected_glyphs));
-    Some(m)
+    crate::shell::font_view::batch_targets(app, fontcraft_engine::find_command(id)?)
 }
 
 /// The targets of boolean command `id`: in Edit View the selected paths (none: every path of the

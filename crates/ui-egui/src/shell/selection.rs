@@ -29,7 +29,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Select All",
         &["Edit"],
         "Cmd+A",
-        "{} Edit View: every point of the edited layer; when they are all selected already, its anchors and components too → {selection}. Font View: every glyph → {glyphs}",
+        "{} Edit View: every point of the edited layer; when they are all selected already, its anchors and components too → {selection}. Font View: every visible glyph → {glyphs}",
     ),
     (
         "edit.deselectAll",
@@ -43,7 +43,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Invert Selection",
         &["Edit"],
         "Cmd+Alt+Shift+I",
-        "{} select the points and anchors of the edited layer that are not selected, and nothing else → {selection}",
+        "{} select the points and anchors of the edited layer that are not selected, and nothing else → {selection}. Font View: the visible glyphs that are not selected → {glyphs}",
     ),
     (
         "selection.selectNext",
@@ -93,14 +93,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             Ok(json!({"tool": switch.tool, "previous": switch.previous}))
         }
         "tool.list" => Ok(app.tools.toolbox.list()),
-        "edit.selectAll" | "edit.deselectAll" if app.state.tab().is_none() => {
-            let glyphs = match (id, app.session.font()) {
-                ("edit.selectAll", Ok(font)) => font.glyphs.iter().map(|g| g.name.clone()).collect(),
-                _ => Vec::new(),
-            };
-            app.state.selected_glyphs = glyphs;
-            Ok(json!({"glyphs": app.state.selected_glyphs}))
-        }
+        "edit.selectAll" | "edit.deselectAll" | "edit.invertSelection" if app.state.tab().is_none() => Ok(super::font_view::select(app, id)),
         "path.clearFocusOnPaths" => {
             if let Some(tab) = app.state.tab_mut() {
                 tab.focus = None;

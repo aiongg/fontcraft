@@ -121,6 +121,38 @@ pub struct Tokens {
     pub cell_gap: f32,
     /// Size of the glyph name under a cell.
     pub cell_label_size: f32,
+    /// The glyph name under a cell that is not selected (cells are light in both themes).
+    pub cell_label: Color32,
+    /// Margin around Font View's grid and list.
+    pub font_view_margin: f32,
+    /// Space between a cell's edge and its glyph.
+    pub cell_inset: f32,
+    /// Width of the ring around a selected cell.
+    pub cell_selection_width: f32,
+    /// The cut-out at the top left of a cell that only its layer colours, as a share of the side.
+    pub cell_cutout: f32,
+    /// The twelve colour labels (`glyph.colorLabelIndices`), and the opacity a cell is tinted with.
+    pub color_labels: [Color32; 12],
+    pub color_label_alpha: u8,
+    /// Cell badges: annotation note, custom glyph info, not exported.
+    pub badge_size: f32,
+    pub badge_note: Color32,
+    pub badge_info: Color32,
+    pub badge_info_text: Color32,
+    pub badge_non_export: Color32,
+    /// The Unicode marker beside a cell's name, and the size of a code point printed there.
+    pub unicode_marker: Color32,
+    pub unicode_marker_size: f32,
+    pub cell_value_size: f32,
+    /// A `glyphOrder` section header across the grid: its height and text size.
+    pub section_header_height: f32,
+    pub section_header_size: f32,
+    /// List View: row and header height, the width unit columns are measured in, the Char
+    /// column's text size.
+    pub list_row_height: f32,
+    pub list_header_height: f32,
+    pub list_column_unit: f32,
+    pub list_char_size: f32,
     /// The selection's bounding box and its knobs.
     pub bounding_box: Color32,
     /// Side of a bounding-box knob.
@@ -279,6 +311,40 @@ impl Tokens {
             cell_label_height: 16.0,
             cell_gap: 4.0,
             cell_label_size: 10.0,
+            cell_label: Color32::from_rgb(0x4a, 0x4a, 0x4a),
+            font_view_margin: 8.0,
+            cell_inset: 4.0,
+            cell_selection_width: 2.0,
+            cell_cutout: 0.3,
+            color_labels: [
+                Color32::from_rgb(0xe0, 0x4b, 0x4b),
+                Color32::from_rgb(0xf0, 0x92, 0x3c),
+                Color32::from_rgb(0xa5, 0x6f, 0x3c),
+                Color32::from_rgb(0xf2, 0xd3, 0x3c),
+                Color32::from_rgb(0x9a, 0xd4, 0x6a),
+                Color32::from_rgb(0x3f, 0x9a, 0x4f),
+                Color32::from_rgb(0x4c, 0xc4, 0xd8),
+                Color32::from_rgb(0x4a, 0x7f, 0xe0),
+                Color32::from_rgb(0x9b, 0x62, 0xd4),
+                Color32::from_rgb(0xe8, 0x7b, 0xb8),
+                Color32::from_rgb(0xc4, 0xc4, 0xc4),
+                Color32::from_rgb(0x7a, 0x7a, 0x7a),
+            ],
+            color_label_alpha: 150,
+            badge_size: 10.0,
+            badge_note: Color32::from_rgb(0xf5, 0xd0, 0x40),
+            badge_info: Color32::from_rgb(0x10, 0x10, 0x10),
+            badge_info_text: Color32::WHITE,
+            badge_non_export: Color32::from_rgb(0xd8, 0x30, 0x30),
+            unicode_marker: Color32::from_rgb(0x8a, 0x8a, 0x8a),
+            unicode_marker_size: 5.0,
+            cell_value_size: 8.0,
+            section_header_height: 24.0,
+            section_header_size: 12.0,
+            list_row_height: 20.0,
+            list_header_height: 22.0,
+            list_column_unit: 40.0,
+            list_char_size: 15.0,
             bounding_box: Color32::from_rgb(0x5a, 0x6e, 0x8c),
             knob_size: 6.0,
             transform_origin: Color32::from_rgb(0xe8, 0x40, 0x40),

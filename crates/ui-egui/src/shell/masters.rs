@@ -1,6 +1,6 @@
 //! The active layer, its edited side and the master a tab draws in: `layers.select` (a click on a
 //! row of the Layers section), `path.editBackground` (Cmd+B) and `view.selectMaster` (Cmd+1 to
-//! Cmd+9).
+//! Cmd+9), which in Font View picks the master the cells draw.
 //!
 //! A tab draws every glyph in its master; `layers.select` shows single glyphs in another layer
 //! (another master's, or a backup). The edited glyph's shown layer is the active layer: the
@@ -39,7 +39,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Select Master",
         &[],
         "Cmd+1",
-        "{tab?: id, master: index (0 is the first master) | id | name} draw every glyph of the tab in this master; Cmd+1 to Cmd+9 pick the first nine → {tab, master (id), name, layer (the active layer)}",
+        "{tab?: id, master: index (0 is the first master) | id | name} draw every glyph of the tab in this master; while Font View shows (and no tab is named), the master Font View's cells draw. Cmd+1 to Cmd+9 pick the first nine → {tab (null in Font View), master (id), name, layer (the active layer)}",
     ),
 ];
 
@@ -51,6 +51,9 @@ enum Extend {
 }
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
+    if id == "view.selectMaster" && app.state.tab().is_none() && args.get("tab").is_none() {
+        return select_font_view_master(app, args);
+    }
     let index = match args.index("tab")? {
         Some(tab) => app.state.tab_index(tab).ok_or_else(|| args.err(format!("no tab has id {tab}")))?,
         None => app.state.active_tab.ok_or_else(|| args.err("no Edit View tab is showing (open a glyph first)"))?,
@@ -154,6 +157,27 @@ fn edit_background(app: &mut FontcraftApp, args: &Args, index: usize) -> Result<
 }
 
 fn select_master(app: &mut FontcraftApp, args: &Args, index: usize) -> Result<Value, String> {
+    let (id, name) = find_master(app, args)?;
+    let tab = app.state.tabs.get_mut(index).ok_or_else(|| args.err("no such tab"))?;
+    tab.master = Some(id.clone());
+    tab.layers.clear();
+    tab.layer_selection.clear();
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let tab = app.state.tabs.get(index).ok_or_else(|| args.err("no such tab"))?;
+    let layer = view::active_layer(font, tab).map(|l| l.id.clone());
+    Ok(json!({"tab": tab.id, "master": id, "name": name, "layer": layer}))
+}
+
+/// `view.selectMaster` while Font View shows: the master its cells draw
+/// (`fontView.cell.followsMaster`).
+fn select_font_view_master(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
+    let (id, name) = find_master(app, args)?;
+    app.state.font_view.master = Some(id.clone());
+    Ok(json!({"tab": Value::Null, "master": id, "name": name}))
+}
+
+/// The id and name of the master `master` names.
+fn find_master(app: &FontcraftApp, args: &Args) -> Result<(String, String), String> {
     let font = app.session.font().map_err(|e| e.to_string())?;
     let given = args.get("master").ok_or_else(|| args.err("`master` (an index, id or name) is required"))?;
     let master = match given {
@@ -169,12 +193,5 @@ fn select_master(app: &mut FontcraftApp, args: &Args, index: usize) -> Result<Va
             .ok_or_else(|| args.err(format!("no master has the id or name `{s}`")))?,
         _ => return Err(args.err("`master` must be an index, an id or a name")),
     };
-    let (id, name) = (master.id.clone(), master.name.clone());
-    let tab = app.state.tabs.get_mut(index).ok_or_else(|| args.err("no such tab"))?;
-    tab.master = Some(id.clone());
-    tab.layers.clear();
-    tab.layer_selection.clear();
-    let tab = app.state.tabs.get(index).ok_or_else(|| args.err("no such tab"))?;
-    let layer = view::active_layer(font, tab).map(|l| l.id.clone());
-    Ok(json!({"tab": tab.id, "master": id, "name": name, "layer": layer}))
+    Ok((master.id.clone(), master.name.clone()))
 }

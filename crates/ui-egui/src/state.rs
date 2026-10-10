@@ -46,6 +46,8 @@ pub struct UiState {
     pub panels: crate::panels::PanelState,
     /// Live audit, the audit markers, and the results they show.
     pub audit: crate::shell::audit::AuditState,
+    /// Font View: view mode, cell size, master, List View columns and sort, the query.
+    pub font_view: crate::shell::font_view::FontViewState,
 }
 
 impl Default for UiState {
@@ -63,6 +65,7 @@ impl Default for UiState {
             transform: Default::default(),
             panels: crate::panels::PanelState::default(),
             audit: Default::default(),
+            font_view: Default::default(),
         }
     }
 }

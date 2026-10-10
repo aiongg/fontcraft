@@ -1,11 +1,12 @@
 //! Palette › Fit Curve: the two range fields (`fitCurve.setRange`), minus, the eight step buttons
 //! (`fitCurve.applyStep`), plus, and balance, all on the curve segments of the Edit View
-//! selection. A marker under the steps shows the selected handles' length
+//! selection; in Font View on those of every selected glyph, as it last had them selected in
+//! Edit View. A marker under the steps shows the selected handles' length
 //! (`fitCurve.getHandleLength`).
 
 use fontcraft_engine::cmd::fit_curve;
-use fontcraft_model::Font;
-use serde_json::{Value, json};
+use fontcraft_model::{Font, Shape};
+use serde_json::{Map, Value, json};
 
 use super::{Pending, edit_targets, palette, widgets, with};
 use crate::app::FontcraftApp;
@@ -21,6 +22,38 @@ pub fn range(app: &FontcraftApp) -> [f64; 2] {
     app.state.panels.fit_curve_range.unwrap_or_else(|| font_range(app.session.font().ok()))
 }
 
+/// In Font View, the targets of each selected glyph: its layer of Font View's master with the
+/// nodes it last had selected in Edit View that the layer still has (`fontView.batch.palette`).
+pub fn font_view_targets(app: &FontcraftApp) -> Vec<Map<String, Value>> {
+    let (Ok(font), Some(master)) = (app.session.font(), crate::shell::font_view::master(app)) else { return Vec::new() };
+    let kept = &app.state.font_view.node_selections;
+    app.state
+        .selected_glyphs
+        .iter()
+        .filter_map(|name| {
+            let remembered = kept.get(name)?;
+            let layer = font.glyph(name)?.layer(&master)?;
+            let points: Vec<Value> = remembered
+                .points
+                .iter()
+                .filter(|&&(shape, node)| match layer.shapes.get(shape) {
+                    Some(Shape::Path(p)) => node < p.nodes.len(),
+                    _ => false,
+                })
+                .map(|&(shape, node)| json!([shape, node]))
+                .collect();
+            if points.is_empty() {
+                return None;
+            }
+            let mut m = Map::new();
+            m.insert("glyph".into(), json!(name));
+            m.insert("layer".into(), json!(master));
+            m.insert("points".into(), Value::Array(points));
+            Some(m)
+        })
+        .collect()
+}
+
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let [min, max] = range(app);
     let targets = edit_targets(app, "fitCurve.applyStep").filter(|t| t.contains_key("points"));
@@ -28,10 +61,17 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         .clone()
         .and_then(|t| app.session.execute("fitCurve.getHandleLength", &Value::Object(t)).ok())
         .and_then(|r| r.get("percent").and_then(Value::as_f64));
-    let enabled = targets.is_some();
+    let batch = if app.state.tab().is_none() { font_view_targets(app) } else { Vec::new() };
+    let enabled = targets.is_some() || !batch.is_empty();
+    // In Font View every selected glyph is one step of a batch, so the whole change is one undo
+    // step.
     let run = |pending: &mut Pending, id: &'static str, extra: Value| {
         if let Some(t) = &targets {
             pending.push((id, with(t.clone(), extra)));
+        } else if !batch.is_empty() {
+            let label = fontcraft_engine::find_command(id).map_or(id, |c| c.label);
+            let steps: Vec<Value> = batch.iter().map(|t| json!({"command": id, "params": with(t.clone(), extra.clone())})).collect();
+            pending.push(("command.batch", json!({"label": label, "steps": steps})));
         }
     };
     let range = json!({"min": min, "max": max});
@@ -93,7 +133,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     });
     ui.add_space(tokens.fit_curve_step * 0.4);
     if !enabled {
-        let hint = if app.state.tab().is_some() { "Select curve segments" } else { "Open a glyph and select curve segments" };
+        let hint = if app.state.tab().is_some() { "Select curve segments" } else { "Select glyphs whose curve segments were selected in Edit View" };
         palette::note(app, ui, hint);
     }
 }

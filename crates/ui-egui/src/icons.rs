@@ -65,6 +65,9 @@ pub enum Icon {
     CapRound,
     CapRoundInset,
     CapAxisAligned,
+    // Font View's mode buttons.
+    GridView,
+    ListView,
 }
 
 /// Every icon, for tests and previews.
@@ -120,6 +123,8 @@ pub const ALL: &[Icon] = &[
     Icon::CapRound,
     Icon::CapRoundInset,
     Icon::CapAxisAligned,
+    Icon::GridView,
+    Icon::ListView,
 ];
 
 /// The icon of the pointer tool `id` (an id of `fontcraft_tools::TOOLS`).
@@ -484,6 +489,19 @@ fn draw(pen: &mut Pen, icon: Icon) {
         Icon::CapAxisAligned => {
             pen.closed(&[(0.05, 0.75), (0.42, 0.38), (0.82, 0.38), (0.25, 0.95)]);
             pen.dot((0.62, 0.38), 0.06);
+        }
+        Icon::GridView => {
+            for y in [0.14, 0.56] {
+                for x in [0.14, 0.56] {
+                    pen.rect_fill((x, y), (x + 0.3, y + 0.3), 0.0);
+                }
+            }
+        }
+        Icon::ListView => {
+            for y in [0.2, 0.5, 0.8] {
+                pen.dot((0.16, y), 0.06);
+                pen.line(&[(0.32, y), (0.88, y)]);
+            }
         }
     }
 }

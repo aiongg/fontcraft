@@ -35,6 +35,8 @@ pub struct FontcraftApp {
     pub(crate) clipboard_out: Option<String>,
     pub(crate) menu_cache: MenuCache,
     pub(crate) fill_cache: FillCache,
+    /// Font View's caches and the edit or drag in progress.
+    pub(crate) font_view: shell::font_view::FontViewUi,
     themed: bool,
 }
 
@@ -57,6 +59,7 @@ impl FontcraftApp {
             clipboard_out: None,
             menu_cache: MenuCache::default(),
             fill_cache: FillCache::default(),
+            font_view: Default::default(),
             themed: false,
         }
     }
@@ -74,6 +77,7 @@ impl FontcraftApp {
             self.session.execute(id, params).map_err(|e| e.to_string())
         };
         self.after_command();
+        shell::font_view::remember_node_selection(self);
         if result.is_ok() && matches!(id, "audit.run" | "audit.fix") {
             self.state.audit.reread = true;
         }
@@ -128,13 +132,12 @@ impl FontcraftApp {
         state.active_tab = active.and_then(|id| state.tab_index(id));
     }
 
-    /// The master `ui.render` draws in by default: the showing tab's master; in Font View, which
-    /// has no master of its own, the first.
+    /// The master `ui.render` draws in by default: the showing tab's master, else Font View's.
     pub fn render_master(&self) -> Option<String> {
         let font = self.session.font().ok()?;
         match self.state.tab() {
             Some(tab) => crate::canvas::view::tab_master(font, tab).map(|m| m.id.clone()),
-            None => font.masters.first().map(|m| m.id.clone()),
+            None => shell::font_view::master(self),
         }
     }
 
@@ -208,6 +211,8 @@ impl FontcraftApp {
         if tools_glue::dispatch_queued(self) {
             ui.ctx().request_repaint();
         }
+        // Pointer tools change the selection without a command.
+        shell::font_view::remember_node_selection(self);
         if let Some(text) = self.clipboard_out.take() {
             ui.ctx().copy_text(text);
         }

@@ -516,6 +516,9 @@ pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
     if !empty || spec.targets.is_empty() {
         return params;
     }
+    if app.state.tab().is_none() {
+        return crate::shell::font_view::batch_targets(app, spec).map_or(params, Value::Object);
+    }
     match selection_targets(&app.session, &app.state, spec) {
         Some(m) => Value::Object(m),
         None => params,
