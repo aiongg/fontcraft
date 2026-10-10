@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**335 guesses on 240 rows (124 of them live commands).**
+**387 guesses on 266 rows (131 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -18,11 +18,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `edit.copy` | M3 | inferred | yes | The clipboard text is our JSON format with an SVG flavour; what the reference puts on the clipboard is not documented. |
 | `edit.paste` | M3 | inferred | yes | Paste reads our JSON clipboard format or SVG; which other clipboard data the reference accepts is not documented. |
 | `file.close` | M0 | memory | yes | The Save, Don't Save and Cancel question and Cmd+W are recalled from the reference, not read in a source. |
+| `file.openRecent` | M4 | inferred | yes | The list holds the last ten documents opened or saved, newest first; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window. |
+| `file.openRecent` | M4 | inferred | yes | File › Open Recent without an index or a path shows the Start Window's list of recent documents, since the menu bar has no submenu of files. Settled when the menu bar can list them. |
+| `file.openRecent` | M4 | inferred | yes | A path is kept once, as an absolute path; opening or saving it again moves it to the top. Settled by observing the Start Window. |
 | `path.convertToCubic` | M3 | handbook | yes | New handles are not rounded to the grid, so the outline stays exact; the handbook does not say whether the reference rounds them. |
 | `dialog.livePreview` (behavior) | M3 | inferred | – | Every filter dialog previews its result live and OK keeps it as one undo step; a tutorial video shows this for Transformations only. |
 | `dialog.livePreview` (behavior) | M3 | inferred | – | Dialogs remember their last values for the session, and their first values are ours (11-filters open questions). |
 | `dialog.fieldKeys` (behavior) | M3 | inferred | – | Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only. |
-| `file.openRecent` | M4 | inferred | no | The list holds the last ten documents opened or saved, newest first; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window. |
 
 ## `03a-edit-view-drawing.toml`
 
@@ -74,6 +76,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `guide.displayLines` | M3 | inferred | yes | A display-lines parameter without a script prefix applies to every glyph, since the glyph data that marks CJK glyphs is not built yet. |
 | `guide.displayLines` | M3 | inferred | yes | The CJK grid divides the box from x 0 to the width and from the descender to the ascender. |
 | `guide.displayLines` | M3 | inferred | yes | The design grid parameter is read as a horizontal and a vertical step in units, drawn over the CJK box, or over the glyph's width and metric span when no CJK grid is set; the handbook does not explain it. |
+| `start.shownAtLaunchWithoutDocuments` (behavior) | M4 | handbook | – | With Show window on startup off, the app opens a new document at launch, as File › New does. Settled by observing a launch with the checkbox cleared. |
 | `tools.sharedButtonCycling` (behavior) | M3 | handbook | – | Holding a shared toolbar button for 0.4 s opens its menu; the reference's hold time is not documented. |
 | `nodes.smoothAndCornerTypes` (behavior) | M3 | handbook | – | Selected nodes, handles and segments are drawn in orange; no source names the reference's selection colour. |
 | `selection.marqueeSelectsNodesAndHandles` (behavior) | M3 | handbook | – | A marquee selects the handles inside it whatever their node (03a question 7). |
@@ -93,6 +96,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `guides.knobAndSelection` (behavior) | M3 | handbook | – | A double-click on the guide away from its knob opens dialog.guideProperties, our addition. |
 | `guides.angleLock` (behavior) | M3 | handbook | – | A drag on an angle-locked guide away from its knob moves the guide, as a knob drag does (03a question 27). |
 | `guides.sidebearingReference` (behavior) | M3 | handbook | – | Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27). |
+| `guides.globalScopeFilter` (behavior) | M4 | handbook | – | A filter that does not read as a predicate leaves the guide shown in every glyph. Settled by opening a file whose guide filter the reference cannot read. |
+| `window.start` (panel) | M4 | handbook | – | Each glyph set's checkbox shows its glyph count after its name. Settled by observing the chooser. |
+| `window.start` (panel) | M4 | handbook | – | Without earlier picks, Latin is included with its default sets. Settled by observing the chooser on a fresh install. |
+| `window.start` (panel) | M4 | handbook | – | A script switched on takes its default sets (its Core set) checked; the checkboxes of a script that is not included are greyed out. Settled by observing the chooser. |
+| `window.start` (panel) | M4 | handbook | – | While there are recent documents the chooser has a Recent Documents button that goes back to the list. Settled by observing the window. |
+| `window.start` (panel) | M4 | handbook | – | The window closes when a document is opened or created. Settled by observing the window. |
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The width and height fields run from 1 to 2,000,000 units and open at 100. |
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The click is the shape's bottom-left corner (03a question 5). |
 | `editView.toolbar` (panel) | M3 | handbook | – | A secondary click on a shared button also opens its menu; no source shows the reference doing so. |
@@ -129,7 +138,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `measure.ruler` | M3 | inferred | yes | Crossings follow the nonzero winding rule, and a line that only touches a contour does not cross it; the handbook does not say how the reference merges overlapping contours. |
 | `measure.ruler` | M3 | inferred | yes | Components are measured like paths, and the ruler stays until the next click or tool change (03b question 10). |
 | `annotation.add` | M3 | inferred | yes | New annotations get a text box 200 units wide, an arrow at 45° and a circle 100 units across; the handbook gives no defaults (03b question 11). |
+| `infoBox.showsColorLabels` (behavior) | M4 | handbook | – | The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation. |
 | `background.snapping` (behavior) | M3 | handbook | – | The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets. |
+| `editView.contextMenu` (panel) | M4 | handbook | – | The swatch row opens the glyph section of the menu, under a Glyph Color caption (Layer Color while Alt is held). Settled by observation. |
+| `editView.contextMenu` (panel) | M4 | handbook | – | The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation. |
 | `measurement` (tool) | M3 | handbook | – | The ruler's ends snap unless Ctrl is held, and Shift keeps it horizontal or vertical, whichever is nearer. |
 | `measurement` (tool) | M3 | handbook | – | The ruler stays until the next press, Escape or a tool change (03b question 9). |
 | `measurement` (tool) | M3 | handbook | – | G with any modifiers adds the measurement guide. |
@@ -173,6 +185,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.sortByColumn` | M4 | handbook | yes | Glyphs without a value in the sort column go last in both directions, and ties keep glyph order. Settled by observation. |
 | `fontView.sortByColumn` | M4 | handbook | yes | The sort belongs to the Font View tab and is not saved with the document. Settled by observation. |
 | `fontView.setColumns` | M4 | handbook | yes | At least one column stays shown; the header's context menu lists every column with a check mark. Settled by observation. |
+| `fontView.toggleInspector` | M4 | handbook | yes | The inspector is shown when a document opens. Settled by observation. |
+| `fontView.toggleInspectorDetails` | M4 | handbook | yes | The extra rows start collapsed. Settled by observation. |
 | `fontView.getState` | M4 | inferred | yes | Our own query for agents; there is no reference behaviour to settle. |
 | `glyph.addGlyphs` | M4 | handbook | yes | A comma is not a separator: an item containing one is an invalid name and is reported. Settled by observation (05 question 7). |
 | `glyph.addGlyphs` | M4 | handbook | yes | A range covers every code point from the first endpoint's to the second's; code points Unicode does not assign, and surrogates, are skipped, and one range holds at most 65,536 code points. Settled by observation (05 question 7). |
@@ -194,6 +208,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyph.updateGlyphInfo` | M4 | handbook | yes | With Use Custom Naming on, names are kept and only the other properties are updated. Settled by observation. |
 | `glyph.updateGlyphInfo` | M4 | handbook | yes | A rename the command makes goes through glyph.rename, so references follow it; a new name that is already taken (by any glyph of the font before the command, or by an earlier glyph of the batch) leaves the glyph's name and Unicode values unchanged and is reported. Settled by observation. |
 | `glyph.updateGlyphInfo` | M4 | handbook | yes | The Unicode values follow the name whether or not it changed: the glyph data's code point for it, none for a name it knows without one (A.alt), and the stored values for a name it does not know. Settled by observation. |
+| `window.glyphInfo` | M4 | handbook | yes | The table adds a Description column (ours). Settled by observing the window. |
+| `window.glyphInfo` | M4 | handbook | yes | With an empty search field the table is empty and asks for a name, a character or a code point: glyphData.search needs a query, and the whole database (with every CJK ideograph) is too long a list to be useful. Settled by observing the window when it opens. |
+| `window.glyphInfo` | M4 | handbook | yes | Sorting is ascending only; a second click on the sorted header keeps the order. Settled by observing a second header click. |
+| `window.glyphInfo` | M4 | handbook | yes | Shift+click selects the rows from the last clicked one; Cmd+click adds or removes one row. Settled by observing the window. |
 | `glyphInfo.addToFont` | M4 | handbook | yes | Names the font already has are left as they are and listed in `existing`; no Replace question is asked. Settled by observation. |
 | `fontView.listMissingGlyphs` | M4 | handbook | yes | A Categories entry expects the glyphs that the languages of the listed scripts need and that the glyph data puts in that category, subcategory or case group; without language data it has no expected set. Settled by observing the badge of a category in a font with one language list shown. |
 | `fontView.generateMissingGlyphs` | M4 | handbook | yes | Generated glyphs are empty, 600 units wide (as New Glyph), take the code point the entry gives or the glyph data gives their name, and are placed by the default sort key; all of them are one undo step. Settled by observing Generate on a list filter. |
@@ -203,6 +221,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `edit.pasteSpecial` | M4 | handbook | yes | All Data keeps the target's name and code points. Settled by observation. |
 | `edit.pasteSpecial` | M4 | handbook | yes | LSB moves the outline and keeps the right side bearing; RSB sets the width from the outline's right edge. Settled by observation. |
 | `edit.pasteSpecial` | M4 | handbook | yes | As Components adds each component at the origin, after the shapes already there, and leaves out a component that would make a glyph refer to itself. Settled by observation. |
+| `edit.infoForSelection` | M4 | handbook | yes | The menu item opens the window and does not toggle it; `open: false` closes it. Settled by observation. |
+| `edit.infoForSelection` | M4 | handbook | yes | In Edit View the window describes the edited glyph. Settled by observation. |
 | `glyph.getInfo` | M4 | inferred | yes | Our own query for agents; there is no reference behaviour to settle. |
 | `glyph.rename` | M4 | handbook | yes | When the base name changes, the Unicode values become the glyph data's for the new name whenever the data knows the name, directly or through the suffix, ligature or code-point rules, so renaming B to A.alt clears them; a name the data does not know keeps the stored values. Settled by observation (05 question 4). |
 | `glyph.rename` | M4 | handbook | yes | Rename updates the font's references by name: components (also in backgrounds), kerning pairs, UFO groups, the glyphOrder parameter of the font and its instances, and metrics keys of the glyph and its layers. Feature code, kerning contexts, other custom parameters, hints and display strings are not rewritten; the result lists where the old name is still used. Settled by observation (05 question 9). |
@@ -229,6 +249,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `edit.findAndReplace` | M4 | handbook | yes | The results are not converted to nice names: Find and Replace gives the names it computes. Settled by observation. |
 | `edit.findAndReplace` | M4 | handbook | yes | In Regex mode a group reference is a backslash and one digit (`\0` is the whole match, `\10` is group 1 followed by 0), `\\` is a backslash, and `$` is plain text. Settled by renaming with a two-digit group reference and a `$` in the reference app. |
 | `edit.findAndReplace` | M4 | handbook | yes | Regex mode is case-sensitive, and an empty Find appends Replace in Regex mode as in plain mode. Settled by observation. |
+| `fontView.setSearch` | M4 | handbook | yes | Glyphs that a new search hides are deselected, so batch commands never act on glyphs the view does not show. Settled by observing whether the reference keeps hidden glyphs selected after a search. |
+| `fontView.setSearch` | M4 | handbook | yes | A term the matcher refuses (a regular expression that does not compile yet) is refused and the view stays as it was; the field keeps the typed text while it has the keyboard. Settled by typing an unfinished regular expression in the reference's field. |
+| `fontView.selectSidebarEntries` | M4 | handbook | yes | Shift-click selects every entry listed between the last entry selected in the clicked entry's section and the clicked one, in any section (the handbook names filters only), and keeps the other sections' entries. Settled by Shift-clicking categories and languages in the reference. |
+| `fontView.selectSidebarEntries` | M4 | handbook | yes | Without a selected entry in its section, a Shift-clicked entry is added as Cmd-click adds it. Settled by Shift-clicking an entry of an unused section in the reference. |
+| `fontView.selectSidebarEntries` | M4 | handbook | yes | Glyphs that a new sidebar selection hides are deselected. Settled by observing whether the reference keeps hidden glyphs selected after choosing a sidebar entry. |
+| `fontView.selectSidebarEntries` | M4 | handbook | yes | A selected entry that disappears (a removed or renamed filter, a category with no glyph left) is deselected. Settled by removing a selected filter in the reference. |
 | `fontView.queryGlyphs` | M4 | inferred | yes | Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text. |
 | `fontView.addSmartFilter` | M4 | handbook | yes | Headless, a filter added without rules gets one rule every glyph matches (Glyph Name contains an empty text), standing for the editor's single empty rule. Settled by observing what an untouched new smart filter shows. |
 | `path.roundCoordinates` | M3 | handbook | yes | A font whose grid is off (spacing 0) rounds to whole units. |
@@ -248,6 +274,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.column.char` (behavior) | M4 | handbook | – | A character the interface font lacks is drawn with the glyph's own outline from the document, at row height in the text colour, instead of a system font's. Settled by observing the reference with a code point that the system fonts lack. |
 | `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Every column is shown by default, in this order: ID, Char, Name, Unicode, Production Name, Script, Category, Subcategory, Case, Direction, Exports, Color, Tags, Sort Name, Note, Components, Last Changed, LSB, RSB, Width, Left Group, Right Group. Settled by observation (05 question 14). |
 | `fontView.column.otherProperties` (behavior) | M4 | handbook | – | Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation. |
+| `fontView.inspector.mixedExport` (behavior) | M4 | handbook | – | A click on the mixed box makes every selected glyph export. Settled by observation. |
+| `fontView.inspector.tagsField` (behavior) | M4 | handbook | – | Leaving the Tags field also commits the typed text as a tag; Escape drops it. Settled by observation. |
+| `fontView.inspector.tagsField` (behavior) | M4 | handbook | – | Each capsule has a cross that removes the tag from every selected glyph (glyph.removeTag). Settled by observation. |
+| `fontView.inspector.tagsField` (behavior) | M4 | handbook | – | Several tags pasted at once with commas are added one command each. Settled by observation. |
 | `fontView.sidebar.missingBadge` (behavior) | M4 | handbook | – | The badge counts expected glyphs present by name or by code point (a glyph with the character counts even under another name). Settled by observing a badge for a font that names a glyph differently. |
 | `fontView.paste.glyphs` (behavior) | M4 | handbook | – | Pasted glyphs take their place in the default sort order, like added glyphs. Settled by observation. |
 | `fontView.paste.nameClashSuffix` (behavior) | M4 | handbook | – | A renamed pasted glyph has no code points, so the existing glyph stays the one for its characters. Settled by observation. |
@@ -285,11 +315,33 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.grid` (panel) | M4 | handbook | – | Section headers of the glyphOrder parameter show only while the view lists every glyph in glyph order (no filter, search or sort). Settled by observation. |
 | `fontView.list` (panel) | M4 | handbook | – | A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. Settled by observation. |
 | `fontView.list` (panel) | M4 | handbook | – | Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation. |
+| `fontView.inspector` (panel) | M4 | handbook | – | With several glyphs selected the Name field is read-only and shows Multiple Values, since glyph names are unique. Settled by observation. |
+| `fontView.inspector` (panel) | M4 | handbook | – | The metric and kerning group fields are shown read-only until their commands exist (M5). Settled by M5. |
+| `fontView.inspector` (panel) | M4 | handbook | – | A Unicode value typed with several glyphs selected goes to all of them, as for any other field. Settled by observation. |
+| `fontView.inspector` (panel) | M4 | handbook | – | The orientation icon between the metric fields is left out until M5 (fontView.toggleMetricsOrientation). Settled by M5. |
+| `window.selectionInfo` (panel) | M4 | handbook | – | Turning on the sort name check box only enables the field; the field's value is stored when it is committed. Turning it off removes the stored sort name (glyph.setSortName with null). Settled by observation. |
+| `window.selectionInfo` (panel) | M4 | handbook | – | The window is not modal and follows the selection while it is open. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation. |
+| `fontView.glyphContextMenu` (panel) | M4 | handbook | – | With Alt held the swatches set the layer colour of Font View's master. Settled by observation. |
+| `fontView.sidebar` (panel) | M4 | handbook | – | The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference. |
+| `fontView.sidebar` (panel) | M4 | handbook | – | The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | A language requires its CLDR main exemplar characters only; the auxiliary, index, numbers and punctuation sets are not counted. Settled by comparing a language's badge total in the reference with its CLDR sets. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | CLDR lists letters in lowercase, so each character's single-character uppercase form is added (ß gets none; Georgian gets no Mtavruli capitals). Settled by observing whether the reference's badge for a Latin-script language counts capitals. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | A language is listed under the glyph database's script that most of its exemplar characters belong to, ignoring Common and Inherited characters (Japanese falls under han, Korean under hangul). Settled by observing where the reference lists Japanese and other mixed-script languages. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | Every CLDR locale with its own main exemplar set is a language entry, regional and script variants included (de-CH, sr-Latn); those that inherit their parent's set are left out. Settled by observing which entries the reference lists under one script. |
+| `fontView.searchField` (panel) | M4 | handbook | – | The magnifier menu offers All Fields, Name Only, Unicode Value Only and Note Only as one choice, then Match Case and Regex. Settled by opening the reference's magnifier menu. |
 | `fontView.statusBar` (panel) | M4 | handbook | – | The counts read "N selected · N shown · N in font". Settled by observation. |
+| `dialog.addGlyphsExisting` (panel) | M4 | handbook | – | The three answers are a pop-up menu (Keep Existing first) with Add Glyphs and Cancel, as dialogs have two buttons; the handbook shows three buttons. Settled by observation. |
+| `dialog.missingGlyphs` (panel) | M4 | handbook | – | Every missing glyph starts chosen, so Generate right away adds them all. Settled by opening the reference's list and pressing Generate. |
+| `dialog.pasteSpecial` (panel) | M4 | handbook | – | The dialog opens on Glyphs With Same Name with All Data ticked. Settled by observation. |
+| `dialog.removeGlyph` (panel) | M4 | handbook | – | Remove or Decompose is a pop-up menu, Decompose first, beside Remove and Cancel, as dialogs have two buttons; the handbook shows a Decompose button. Settled by observation. |
+| `dialog.removeGlyph` (panel) | M4 | handbook | – | The metrics-key question is a second pop-up menu in the same dialog (Dissolve first) instead of a second dialog. Settled by observation. |
+| `dialog.findAndReplaceGlyphNames` (panel) | M4 | handbook | – | A Match Case checkbox, on by default, as names are case-sensitive; the handbook names only Find, Replace and Regex. Settled by observation. |
+| `dialog.findAndReplaceGlyphNames` (panel) | M4 | handbook | – | Nothing is renamed until Replace; there is no live preview. Settled by observation. |
+| `dialog.smartFilterEditor` (panel) | M4 | handbook | – | A new smart filter is named New Filter, or New Filter 2 and so on when the name is taken. Settled by adding a smart filter in the reference. |
+| `dialog.listFilterEditor` (panel) | M4 | handbook | – | A new list filter is named New List, or New List 2 and so on when the name is taken. Settled by adding a list filter in the reference. |
+| `dialog.languagesList` (panel) | M4 | handbook | – | The checklist offers every script the language data lists and the default ones, alphabetically. Settled by opening the reference's list. |
 
 ## `07-import-export.toml`
 
