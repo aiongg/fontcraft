@@ -1,11 +1,11 @@
 //! Path › Transformations: translate, scale, slant and Cursivy of `path.transformations` about
 //! an origin, previewed on the selected points or, with none selected, on the whole layer.
 //!
-//! The fields are flat (Translate X and Y, Scale horizontal and vertical with a lock, the slant
-//! kind and angle); the dialog shapes them into the command's `translate`, `scale`, `slant` and
-//! `cursivy`, leaving out a translation of 0 and a scale of 100 %. While the lock is on, the two
-//! scale fields hold the same value. The "…" menu copies the values as a Filter or PreFilter
-//! custom parameter.
+//! The fields sit under the headings Translate (X, Y), Origin, Scale (horizontal, vertical, and
+//! a lock button) and Slant (kind, angle), in the reference's order. The dialog shapes them into
+//! the command's `translate`, `scale`, `slant` and `cursivy`, leaving out a translation of 0 and
+//! a scale of 100 %. While the lock is on, the two scale fields hold the same value. The "…"
+//! menu copies the values as a Filter or PreFilter custom parameter.
 
 use fontcraft_model::MAX_COORDINATE;
 use serde_json::{Map, Value, json};
@@ -40,33 +40,31 @@ const ORIGINS: [(&str, &str); 5] = [
 
 fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
     vec![
-        Field::number("translateX", "Translate X", -MAX_COORDINATE, MAX_COORDINATE, 0.0, "Horizontal move in font units, after the scale and slant"),
-        Field::number("translateY", "Translate Y", -MAX_COORDINATE, MAX_COORDINATE, 0.0, "Vertical move in font units, after the scale and slant"),
+        Field::number("translateX", "X", -MAX_COORDINATE, MAX_COORDINATE, 0.0, "Horizontal move in font units, after the scale and slant")
+            .in_group("Translate"),
+        Field::number("translateY", "Y", -MAX_COORDINATE, MAX_COORDINATE, 0.0, "Vertical move in font units, after the scale and slant")
+            .in_group("Translate"),
         Field::choice(
             "origin",
             "Origin",
             &ORIGINS,
             "baseline",
             "The fixed point of the scale and slant: a metric height of the master, at half the advance width",
-        ),
-        Field::number("scaleX", "Scale Horizontal", -MAX_PERCENT, MAX_PERCENT, 100.0, "Horizontal scale in percent"),
-        Field::number(
-            "scaleY",
-            "Scale Vertical",
-            -MAX_PERCENT,
-            MAX_PERCENT,
-            100.0,
-            "Vertical scale in percent; follows the horizontal scale while the lock is on",
-        ),
-        Field::bool("scaleLocked", "Lock Scale", true, "Keep the vertical scale equal to the horizontal one"),
+        )
+        .in_group("Origin"),
+        Field::number("scaleX", "Horizontal", -MAX_PERCENT, MAX_PERCENT, 100.0, "Horizontal scale in percent").in_group("Scale"),
+        Field::number("scaleY", "Vertical", -MAX_PERCENT, MAX_PERCENT, 100.0, "Vertical scale in percent; follows the horizontal scale while the lock is on")
+            .in_group("Scale"),
+        Field::lock("scaleLocked", "Proportional", true, "Locked: the vertical scale stays equal to the horizontal one").in_group("Scale"),
         Field::choice(
             "slantKind",
-            "Slant Kind",
+            "Kind",
             &[("slant", "Slant"), ("cursivy", "Cursivy")],
             "slant",
             "Slant: a plain shear about the origin; Cursivy: a slant with optical correction of the curves, which needs the master's horizontal and vertical stems",
-        ),
-        Field::number("slant", "Slant", -MAX_SLANT, MAX_SLANT, 0.0, "Degrees of the shear about the origin"),
+        )
+        .in_group("Slant"),
+        Field::number("slant", "Angle", -MAX_SLANT, MAX_SLANT, 0.0, "Degrees of the shear about the origin").in_group("Slant"),
     ]
 }
 

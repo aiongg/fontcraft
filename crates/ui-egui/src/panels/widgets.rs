@@ -156,6 +156,12 @@ pub fn button(ui: &mut egui::Ui, id: Id, label: &str, hover: &str, enabled: bool
 
 /// A square push button showing a drawn icon (`crate::icons`) instead of a label.
 pub fn icon_button(ui: &mut egui::Ui, id: Id, icon: Icon, hover: &str, enabled: bool, selected: bool) -> bool {
+    let response = icon_button_response(ui, id, icon, hover, enabled, selected);
+    enabled && response.clicked()
+}
+
+/// [`icon_button`]'s response.
+pub fn icon_button_response(ui: &mut egui::Ui, id: Id, icon: Icon, hover: &str, enabled: bool, selected: bool) -> egui::Response {
     let side = ui.spacing().interact_size.y;
     let (rect, _) = ui.allocate_exact_size(egui::vec2(side, side), Sense::hover());
     let response = ui.interact(rect, id, if enabled { Sense::click() } else { Sense::hover() });
@@ -165,7 +171,7 @@ pub fn icon_button(ui: &mut egui::Ui, id: Id, icon: Icon, hover: &str, enabled: 
         ui.painter().rect(rect.expand(visuals.expansion), visuals.corner_radius, visuals.weak_bg_fill, visuals.bg_stroke, StrokeKind::Inside);
         icons::paint(ui.painter(), rect.shrink(side * 0.18), icon, color);
     }
-    enabled && response.on_hover_text(hover).clicked()
+    if enabled { response.on_hover_text(hover) } else { response }
 }
 
 /// The nine points of a bounding box, row by row from the top, as the commands name them.

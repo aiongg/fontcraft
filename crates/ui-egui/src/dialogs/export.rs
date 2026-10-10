@@ -72,6 +72,7 @@ fn ufo_fields(session: &Session) -> Vec<Field> {
             },
             default: json!(ids),
             doc: "The masters to write, each as its own UFO".into(),
+            group: None,
         },
         Field::bool("productionNames", "Convert Glyph Names to Production Names", false, "Rename the glyphs to their production names in the UFOs"),
         Field::bool(

@@ -48,7 +48,7 @@ for the next frame and replies when the frame arrives.
 | `ui.dialog.set` | `{field, value}` | gives a field of the open dialog a value and previews it; a number field also takes text. The `ui.dialog.inspect` reply |
 | `ui.dialog.confirm` | | OK: the preview becomes one undo step, `{confirmed, changed, command, params}`; in a `runOnOk` dialog the command runs once, `{confirmed, command, params, result}`, and a failure keeps the dialog open |
 | `ui.dialog.cancel` | | Cancel: the font as it was when the dialog opened; `{cancelled}` |
-| `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, a tab by its dialog id (shows that tab), an action by its id (runs it: `{action, command, text, result}`; `text` also goes to the system clipboard), or a field by its key (a checkbox toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`; a folder field opens the folder chooser, or without one takes the keyboard) |
+| `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, a tab by its dialog id (shows that tab), an action by its id (runs it: `{action, command, text, result}`; `text` also goes to the system clipboard), or a field by its key (a checkbox or lock toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`; a folder field opens the folder chooser, or without one takes the keyboard) |
 | `control.methods` | | this table |
 
 `ui.inspect` also names the active pointer tool (`tool`), the running interaction
@@ -104,11 +104,15 @@ Field kinds and how to set them with `ui.dialog.set`:
 | `kind` | `value` |
 |---|---|
 | `number`, `integer` | a number, or its text |
-| `bool` | `true` or `false` |
+| `bool`, `lock` | `true` or `false` (a `lock` is a lock button, closed while `true`) |
+| `text` | a string of at most `max` characters; `""` is allowed |
 | `choice` | one word of `choices`; `labels` is what the menu shows |
 | `multi` | a list of words of `choices` (any order; kept in the list's order) |
 | `folder` | a folder path; `""` is none, and the parameter is left out |
 | `order` | every row index of `labels` once, the first row on top (`dialog.shapeOrder`: the first is the bottom shape) |
+
+A field with a `group` sits under that heading in the window; the heading does not change the
+parameters.
 
 A dialog's fields need not be its command's parameters one to one: `params` in
 `ui.dialog.inspect` is always what OK runs. `dialog.transformations` has Translate X and Y, Scale

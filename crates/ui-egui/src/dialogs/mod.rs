@@ -799,7 +799,7 @@ pub fn click(app: &mut FontcraftApp, id: &str) -> Result<Value, String> {
     }
     let field = d.field(id)?.clone();
     match &field.kind {
-        Kind::Bool => {
+        Kind::Bool | Kind::Lock => {
             let on = d.values.get(id).and_then(Value::as_bool).unwrap_or(false);
             commit_edit(app)?;
             set(app, id, &json!(!on))

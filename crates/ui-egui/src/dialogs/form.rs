@@ -7,6 +7,8 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use super::{Editing, Event, OpenDialog};
+use crate::icons::Icon;
+use crate::panels::widgets::icon_button_response;
 use crate::theme::Tokens;
 
 /// Most fields one dialog may have (a schema read from the engine is capped by it).
@@ -32,6 +34,8 @@ pub enum Kind {
     Integer { min: f64, max: f64 },
     /// A checkbox.
     Bool,
+    /// On or off, as a lock button.
+    Lock,
     /// A line of text of at most `max` characters; empty is allowed.
     Text { max: usize },
     /// One word of a list, as a pop-up menu. `labels`, when given, holds the text the menu shows
@@ -68,22 +72,35 @@ pub struct Field {
     pub default: Value,
     /// One line for tooltips and agents.
     pub doc: String,
+    /// The heading the field sits under; a heading row opens each run of fields with one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 impl Field {
     /// A number field.
     pub fn number(key: &str, label: &str, min: f64, max: f64, default: f64, doc: &str) -> Self {
-        Self { key: key.into(), label: label.into(), kind: Kind::Number { min, max }, default: json!(default), doc: doc.into() }
+        Self { key: key.into(), label: label.into(), kind: Kind::Number { min, max }, default: json!(default), doc: doc.into(), group: None }
     }
 
     /// A checkbox.
     pub fn bool(key: &str, label: &str, default: bool, doc: &str) -> Self {
-        Self { key: key.into(), label: label.into(), kind: Kind::Bool, default: json!(default), doc: doc.into() }
+        Self { key: key.into(), label: label.into(), kind: Kind::Bool, default: json!(default), doc: doc.into(), group: None }
+    }
+
+    /// On or off, drawn as a lock that is closed while on.
+    pub fn lock(key: &str, label: &str, default: bool, doc: &str) -> Self {
+        Self { kind: Kind::Lock, ..Self::bool(key, label, default, doc) }
+    }
+
+    /// The field under heading `group`.
+    pub fn in_group(self, group: &str) -> Self {
+        Self { group: Some(group.into()), ..self }
     }
 
     /// A text field of at most `max` characters.
     pub fn text(key: &str, label: &str, max: usize, doc: &str) -> Self {
-        Self { key: key.into(), label: label.into(), kind: Kind::Text { max }, default: json!(""), doc: doc.into() }
+        Self { key: key.into(), label: label.into(), kind: Kind::Text { max }, default: json!(""), doc: doc.into(), group: None }
     }
 
     /// A pop-up menu of `(word, label)` pairs: the value is the word, the menu shows the label.
@@ -97,6 +114,7 @@ impl Field {
             },
             default: json!(default),
             doc: doc.into(),
+            group: None,
         }
     }
 
@@ -111,18 +129,19 @@ impl Field {
             },
             default: json!(default),
             doc: doc.into(),
+            group: None,
         }
     }
 
     /// A folder path, empty at first.
     pub fn folder(key: &str, label: &str, doc: &str) -> Self {
-        Self { key: key.into(), label: label.into(), kind: Kind::Folder, default: json!(""), doc: doc.into() }
+        Self { key: key.into(), label: label.into(), kind: Kind::Folder, default: json!(""), doc: doc.into(), group: None }
     }
 
     /// An order of the rows `labels`, at first as listed.
     pub fn order(key: &str, label: &str, labels: Vec<String>, doc: &str) -> Self {
         let default = json!((0..labels.len()).collect::<Vec<_>>());
-        Self { key: key.into(), label: label.into(), kind: Kind::Order { labels }, default, doc: doc.into() }
+        Self { key: key.into(), label: label.into(), kind: Kind::Order { labels }, default, doc: doc.into(), group: None }
     }
 
     /// A field that takes typed text (numbers, text, paths).
@@ -166,7 +185,7 @@ impl Field {
                 }
                 Ok(if whole { json!(n as i64) } else { json!(n) })
             }
-            Kind::Bool => value.as_bool().map(Value::Bool).ok_or_else(|| format!("`{key}` must be true or false")),
+            Kind::Bool | Kind::Lock => value.as_bool().map(Value::Bool).ok_or_else(|| format!("`{key}` must be true or false")),
             Kind::Text { max } => match value.as_str() {
                 Some(text) if text.chars().count() <= *max => Ok(json!(text)),
                 Some(_) => Err(format!("`{key}` must be at most {max} characters")),
@@ -245,7 +264,7 @@ fn filter_field(p: &Value) -> Result<Field, String> {
         other => return Err(format!("`{key}` has an unknown kind {other:?}")),
     };
     let label = Some(text("label")).filter(|l| !l.is_empty()).unwrap_or_else(|| key.clone());
-    Ok(Field { key, label, kind, default: p.get("default").cloned().unwrap_or(Value::Null), doc: text("doc") })
+    Ok(Field { key, label, kind, default: p.get("default").cloned().unwrap_or(Value::Null), doc: text("doc"), group: None })
 }
 
 /// The values a dialog opens with: each field's default, unless `given` sets it.
@@ -286,7 +305,15 @@ pub fn widget_id(key: &str) -> egui::Id {
 /// folder chooser, so folder fields show Choose….
 pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose: bool, events: &mut Vec<Event>) {
     egui::Grid::new("fontcraft-dialog-fields").num_columns(2).spacing([tokens.dialog_spacing, tokens.dialog_spacing]).show(ui, |ui| {
+        let mut group: Option<&str> = None;
         for field in &dialog.fields {
+            if field.group.as_deref() != group {
+                group = field.group.as_deref();
+                if let Some(heading) = group {
+                    ui.label(egui::RichText::new(heading).strong());
+                    ui.end_row();
+                }
+            }
             let value = dialog.values.get(&field.key).cloned().unwrap_or(Value::Null);
             ui.label(&field.label);
             let response = match &field.kind {
@@ -298,6 +325,15 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose:
                     let r = ui.add(egui::Checkbox::without_text(&mut on)).on_hover_text(&field.doc);
                     if r.changed() {
                         events.push(Event::Set(field.key.clone(), json!(on)));
+                    }
+                    r
+                }
+                Kind::Lock => {
+                    let on = value.as_bool().unwrap_or(false);
+                    let icon = if on { Icon::Locked } else { Icon::Unlocked };
+                    let r = icon_button_response(ui, widget_id(&field.key), icon, &field.doc, true, on);
+                    if r.clicked() {
+                        events.push(Event::Set(field.key.clone(), json!(!on)));
                     }
                     r
                 }

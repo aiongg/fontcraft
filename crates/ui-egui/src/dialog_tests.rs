@@ -338,3 +338,26 @@ fn offset_curve_opens_with_vertical_empty_and_runs_it_as_the_horizontal_distance
     direct.run("filter.offsetCurve", &json!({"glyph": "A", "horizontal": 12, "vertical": 12})).unwrap();
     assert!(font(&app).same_as(&font(&direct)));
 }
+
+#[test]
+fn transformations_groups_its_fields_and_locks_the_scale_with_a_button() {
+    let mut app = square_app();
+    let opened = call(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"dialog": "dialog.transformations"}}));
+    let groups: Vec<&str> = opened["fields"].as_array().unwrap().iter().filter_map(|f| f["group"].as_str()).collect();
+    let mut headings = groups.clone();
+    headings.dedup();
+    assert_eq!(headings, ["Translate", "Origin", "Scale", "Slant"], "{groups:?}");
+    let lock = opened["fields"].as_array().unwrap().iter().find(|f| f["id"] == "scaleLocked").unwrap();
+    assert_eq!((lock["kind"].as_str(), lock["value"].as_bool()), (Some("lock"), Some(true)));
+
+    let ctx = egui::Context::default();
+    for _ in 0..5 {
+        frame(&ctx, &mut app, Vec::new());
+    }
+    let at = ctx.read_response(dialogs::form::widget_id("scaleLocked")).expect("the lock button is drawn").rect.center();
+    let button = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+    frame(&ctx, &mut app, vec![Event::PointerMoved(at), button(true)]);
+    frame(&ctx, &mut app, vec![button(false)]);
+    assert_eq!(app.dialog.as_ref().unwrap().values["scaleLocked"], json!(false), "a click opens the lock");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+}
