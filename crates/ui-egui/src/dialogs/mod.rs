@@ -997,7 +997,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
                         // A round button with three dots drawn at its centre: the "…" glyph sits on
                         // the text baseline, low in the button.
                         let size = ui.spacing().interact_size.y;
-                        let button = egui::Button::new("").min_size(egui::vec2(size, size)).corner_radius(size / 2.0);
+                        let button = egui::Button::new("")
+                            .min_size(egui::vec2(size, size))
+                            .corner_radius(size / 2.0)
+                            .stroke(egui::Stroke::new(1.0, tokens.text_dim));
                         let (response, _) = egui::containers::menu::MenuButton::from_button(button).ui(ui, |ui| {
                             for a in d.actions {
                                 if ui.button(a.label).clicked() {
