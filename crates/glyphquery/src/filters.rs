@@ -97,7 +97,7 @@ pub fn validate_filters(items: &[Filter]) -> Result<(), QueryError> {
 }
 
 fn validate_level(items: &[Filter], depth: usize, count: &mut usize) -> Result<(), QueryError> {
-    if depth > MAX_FOLDER_DEPTH {
+    if depth > MAX_FOLDER_DEPTH && !items.is_empty() {
         return fail(format!("filter folders are nested more than {MAX_FOLDER_DEPTH} levels deep"));
     }
     let mut names = HashSet::new();
@@ -206,7 +206,12 @@ pub fn add_filter(items: &mut Vec<Filter>, parent: &[String], filter: Filter) ->
     let mut filter = filter;
     *filter.name_mut() = name.clone();
     level.push(filter);
-    validate_filters(items)?;
+    if let Err(e) = validate_filters(items) {
+        if let Ok(level) = level_mut(items, parent) {
+            level.pop();
+        }
+        return Err(e);
+    }
     let mut path = parent.to_vec();
     path.push(name);
     Ok(path)

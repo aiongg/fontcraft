@@ -302,6 +302,9 @@ fn group_entries(items: &[Plist], depth: usize, count: &mut usize, data: &GlyphD
 
 // ── The catalog ─────────────────────────────────────────────────────────────────────────────────
 
+/// An expected character with the category, subcategory and case the glyph data gives it.
+type Pooled = (Expected, Option<String>, Option<String>, Option<String>);
+
 /// A font's glyphs, ready to be sorted into sidebar entries. Each glyph's effective properties
 /// are computed at most once for everything asked of one catalog.
 pub struct Catalog<'a> {
@@ -510,7 +513,7 @@ impl<'a> Catalog<'a> {
 
     /// Every character the languages of the listed scripts need, with the category, subcategory
     /// and case the glyph data gives its glyph.
-    fn expected_pool(&self) -> Vec<(Expected, Option<String>, Option<String>, Option<String>)> {
+    fn expected_pool(&self) -> Vec<Pooled> {
         let shown = self.shown_scripts();
         let sets: Vec<&LanguageSet> = self.languages.iter().filter(|l| shown.contains(&l.script)).collect();
         self.language_expected(&sets)

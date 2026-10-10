@@ -608,8 +608,7 @@ fn tokenize(text: &str) -> Result<Vec<Tok>, QueryError> {
             '"' | '\'' => {
                 let mut s = String::new();
                 let mut closed = false;
-                loop {
-                    let Some((_, d)) = it.next() else { break };
+                while let Some((_, d)) = it.next() {
                     if d == c {
                         closed = true;
                         break;

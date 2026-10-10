@@ -928,6 +928,7 @@ dependencies = [
  "fontcraft-decompile",
  "fontcraft-format",
  "fontcraft-geom",
+ "fontcraft-glyphquery",
  "fontcraft-io-glyphs",
  "fontcraft-io-svg",
  "fontcraft-io-ufo",
@@ -964,6 +965,18 @@ name = "fontcraft-glyphdata"
 version = "0.0.1"
 dependencies = [
  "miniz_oxide 0.8.9",
+]
+
+[[package]]
+name = "fontcraft-glyphquery"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-glyphdata",
+ "fontcraft-model",
+ "fontcraft-plist",
+ "regex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

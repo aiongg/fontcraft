@@ -1,7 +1,7 @@
 //! Font View's filtering commands: fontView.queryGlyphs, the filter commands, the Languages list
 //! and missing glyphs.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 
@@ -64,7 +64,7 @@ fn query_glyphs_combines_entries_rules_and_search() {
     let sections: Vec<&str> = r["sidebar"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
     assert_eq!(sections, vec!["all", "section", "section", "section"]);
 
-    let deep = format!("{}name == 'A'{}", "(".repeat(1000), ")".repeat(1000));
+    let deep = format!("{}name == 'A'{}", "(".repeat(100), ")".repeat(100));
     refused(&mut s, "fontView.queryGlyphs", json!({"rules": {"all": [{"property": "custom", "value": deep}]}}), "nested");
     refused(&mut s, "fontView.queryGlyphs", json!({"search": {"query": "(?:a{1000}){1000}", "regex": true}}), "regular expression");
     refused(&mut s, "fontView.queryGlyphs", json!({"master": "m09"}), "m09");

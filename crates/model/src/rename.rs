@@ -208,7 +208,7 @@ fn mentioned<'m>(text: &str, map: &Names<'m>, after_slash: bool) -> Vec<&'m str>
             continue;
         }
         if let Some((&old, _)) = text.get(s..e).and_then(|t| map.get_key_value(t))
-            && !out.contains(old)
+            && !out.contains(&old)
         {
             out.push(old);
         }

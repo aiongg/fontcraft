@@ -1,7 +1,7 @@
 //! The glyph set: glyph.addGlyphs, glyph.duplicateGlyph, glyph.removeGlyph with its answers,
 //! glyphInfo.addToFont, whole glyphs through edit.copy and edit.paste, and edit.pasteSpecial.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 

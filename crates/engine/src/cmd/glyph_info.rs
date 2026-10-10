@@ -279,7 +279,7 @@ fn targets(p: &Params, font: &Font) -> Result<Vec<String>> {
 /// `glyphs` in glyph order, or every glyph in glyph order when absent.
 fn targets_in_order(p: &Params, font: &Font) -> Result<Vec<String>> {
     let order = glyph_order(font);
-    let named = |i: &usize| font.glyphs.get(*i).map(|g| g.name.clone());
+    let named = |i: &usize| font.glyphs.as_arcs().get(*i).map(|g| g.name.clone());
     match p.opt_glyphs("glyphs", font)? {
         None => Ok(order.iter().filter_map(named).collect()),
         Some(names) => {
@@ -306,7 +306,7 @@ fn edit_info(s: &mut Session, label: &str, names: &[String], f: impl Fn(&mut Gly
     s.edit(label, |font| {
         for name in names {
             let mut g = font.glyph_mut(name)?;
-            f(&mut *g.info);
+            f(&mut g.info);
             g.info.tidy();
         }
         Ok(())
