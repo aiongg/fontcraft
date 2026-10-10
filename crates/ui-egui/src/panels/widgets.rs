@@ -160,16 +160,22 @@ pub fn icon_button(ui: &mut egui::Ui, id: Id, icon: Icon, hover: &str, enabled: 
     enabled && response.clicked()
 }
 
+/// An icon button's side, in widget heights: a little taller than a text row, so the icon's
+/// details show.
+const ICON_BUTTON_SCALE: f32 = 1.25;
+/// The margin around a button's icon, as a share of its side.
+const ICON_INSET: f32 = 0.12;
+
 /// [`icon_button`]'s response.
 pub fn icon_button_response(ui: &mut egui::Ui, id: Id, icon: Icon, hover: &str, enabled: bool, selected: bool) -> egui::Response {
-    let side = ui.spacing().interact_size.y;
+    let side = ui.spacing().interact_size.y * ICON_BUTTON_SCALE;
     let (rect, _) = ui.allocate_exact_size(egui::vec2(side, side), Sense::hover());
     let response = ui.interact(rect, id, if enabled { Sense::click() } else { Sense::hover() });
     if ui.is_rect_visible(rect) {
         let visuals = ui.style().interact_selectable(&response, selected);
         let color = if enabled { visuals.text_color() } else { ui.visuals().weak_text_color() };
         ui.painter().rect(rect.expand(visuals.expansion), visuals.corner_radius, visuals.weak_bg_fill, visuals.bg_stroke, StrokeKind::Inside);
-        icons::paint(ui.painter(), rect.shrink(side * 0.18), icon, color);
+        icons::paint(ui.painter(), rect.shrink(side * ICON_INSET), icon, color);
     }
     if enabled { response.on_hover_text(hover) } else { response }
 }

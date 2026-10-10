@@ -186,7 +186,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let join = values.common(|s| s.join);
     let label_width = ui.spacing().interact_size.x;
     ui.horizontal(|ui| {
-        ui.add_sized([label_width, ui.spacing().interact_size.y], egui::Label::new("Join"));
+        row_label(ui, label_width, "Join");
         for (name, icon, hover) in JOINS {
             if widgets::icon_button(ui, widgets::id(("stroke.join", name)), icon, hover, true, join == Some(name)) {
                 set(pending, json!({ "join": name }));
@@ -198,7 +198,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         let axis = values.common(|s| s.cap_axis);
         for (key, title, current) in [("capStart", "Start", values.common(|s| s.cap_start)), ("capEnd", "End", values.common(|s| s.cap_end))] {
             ui.horizontal(|ui| {
-                ui.add_sized([label_width, ui.spacing().interact_size.y], egui::Label::new(title));
+                row_label(ui, label_width, title);
                 for (name, icon, hover) in CAPS {
                     let id = widgets::id(("stroke.cap", key, name));
                     let clicked = widgets::icon_button(ui, id, icon, hover, true, current == Some(name));
@@ -218,6 +218,15 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             });
         }
     }
+}
+
+/// `text` at the left of a `width`-wide cell, so the rows' buttons line up.
+fn row_label(ui: &mut egui::Ui, width: f32, text: &str) {
+    let size = egui::vec2(width, ui.spacing().interact_size.y);
+    ui.allocate_ui_with_layout(size, egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_min_width(width);
+        ui.label(text);
+    });
 }
 
 /// What the axis-aligned cap button's hold did this frame.
