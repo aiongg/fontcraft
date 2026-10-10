@@ -4,7 +4,7 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-10 (M3 at its close: every measure of `docs/plans/M3.md` § 5 met except one command, `path.sharpenCorner`, which no source describes)._
+_Last updated: 2026-10-10 (M3 closed: every measure of `docs/plans/M3.md` § 5 met; `path.sharpenCorner`, which no source describes, moved to `fidelity`)._
 
 ## Where we are
 
@@ -53,7 +53,7 @@ overlap-removal difference from fontmake's; the rest differ by less than one uni
 allow-listed. `crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
 transforms; fontTools reads all of its output back.
 
-**What is real: editing by command (M3).** 213 of the 932 commands exist, 184 of them from M3.
+**What is real: editing by command (M3).** 213 of the 932 commands exist, 184 of them from M3, which is complete.
 Every editing command takes explicit targets (shapes, nodes, segments, the foreground or the
 background) and runs the same from the window, `fontcraft-cli run`, MCP and the control channel:
 
@@ -105,17 +105,19 @@ UFO tabs. Agents drive the window with `ui.pointer`, `ui.key`, `ui.text`, `ui.to
 `ui.render` draws glyphs to PNG without a window, the same bytes every time. `layer.inspect`
 reads a layer's outline with addresses. An end-to-end test draws "H", "O" and "n" on a new font
 over the control channel alone, edits them and exports a font that skrifa and fontTools read
-back. 932 tests pass, including a sweep that runs every engine command with hostile parameters.
-The whole gate (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names,
-layering, wasm) is green.
+back. 934 tests pass, including a sweep that runs every engine command with hostile parameters.
+The whole gate (`cargo xtask ci`: format, lints, tests, spec, parity, guesses, assets, vendor
+names, layering, wasm) is green.
 
 **What is not.** Nothing in the editor has been compared with the running reference app. M3's
 behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
 a detail is unconfirmed, the handbook decides (Remove Overlap, for example, deletes open paths).
+Where no source says, we choose, and each choice is listed in `docs/guesses.md` to revisit
+(203 guesses on 160 rows).
 
 | Gap | Detail |
 |---|---|
-| `path.sharpenCorner` | the one M3 command not built: no written source says what it does, and the tutorial video shows the menu item without running it. Moving it to the `fidelity` milestone awaits the owner |
+| `path.sharpenCorner` | moved to the `fidelity` milestone: no written source says what it does, and the tutorial video shows the menu item without running it |
 | Text mode | Edit View edits glyphs, not typed text; text mode is M5 |
 | Masters | Font View draws the first master and has no master choice of its own (M4); the toolbar has no master icons (M9) |
 | Export dialog | OTF and UFO tabs; the Variable tab is M9 and the Metrics tab M5 |
@@ -148,7 +150,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
 | **Breadth:** commands, tools and panels exist | ~12% | 213 of 932 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); 27 of 172 panels, many of them partial (the Font View grid, the toolbar, the Info box, the Palette and five of its sections, the bottom bar, 16 dialog rows) |
-| **Depth:** features behave like the reference | ~5% | the M3 commands, tools, panels and dialogs behave as the handbook describes them, and none has been compared with the reference app. `path.sharpenCorner` has no source; the gaps are listed above |
+| **Depth:** features behave like the reference | ~5% | the M3 commands, tools, panels and dialogs behave as the handbook describes them, and none has been compared with the reference app. `path.sharpenCorner` waits in `fidelity`; the gaps are listed above |
 | **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands, the Export dialog and the CLI. Missing: variable fonts, instances between masters, version conversion, a glyph database for production names, stroke attributes in UFO |
 | **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers; strokes, masks and overlap removal in the outline stage. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, non-spacing marks only the glyph database knows (M4), smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). With overlaps removed, 99.58% (TrueType) and 99.87% (CFF) of glyphs have no overlap-removal difference from fontmake's (`docs/plans/M3.md` § 5). No variable font, no features, no hinting, no subroutines |
 | **Agent automation** | ~55% | every existing command is reachable from CLI, control channel and MCP; the control channel's 19 methods drive the window's tools, pointer, keys, text fields, dialogs and menus; `ui.screenshot` and `ui.render` show the result; an agent can draw, edit and export glyphs over the control channel alone (end-to-end test). Missing: `ui.click` beyond dialogs, `ui.set`, MCP resources and prompts |
@@ -159,9 +161,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 ### What to build next (in priority order)
 
-1. **The owner's review of M3**: the measures and their results (`docs/plans/M3.md` § 5), the
-   window, and the open decision on `path.sharpenCorner` (§ M3.18).
-2. **M4's planning pass, Font View and glyph management**, as `docs/execution-plan.md` § 3
+1. **M4's planning pass, Font View and glyph management**, as `docs/execution-plan.md` § 3
    describes it: list the milestone's rows, answer the open questions of its notes, verify or
    drop its `memory` rows, and write `docs/plans/M4.md` for the owner to accept.
 
@@ -381,7 +381,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 6 (5) |
-| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 🟡 measures met except `path.sharpenCorner` (owner decision pending): every package M3.0 to M3.18 built; 184 of 185 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner` has no written source; moving it to `fidelity` awaits the owner | 185 (184) |
+| M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ✅ every measure met: every package M3.0 to M3.18 built; 184 of 184 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner`, which no source describes, moved to `fidelity` | 184 (184) |
 | M4 | Font View and glyph management | ⬜ | 57 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
@@ -410,7 +410,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 45 | 22 | 16% | tabs, zoom and scroll work; the toolbar with shared buttons and their menus; tools chosen by their letters, shared letters cycle; context menus; menu items greyed out by the selection; bottom bar zoom controls. Missing: settings window, shortcut editor, workspaces, title bar, sidebars, the toolbar's master icons (M9); nothing compared with the reference |
 | Font View | 6 | 62 | 6 | 3% | list view, sidebar and filters, glyph data, Add Glyphs syntax, batch commands, inspector |
 | Edit View text mode | 4 | 25 | 1 | 0% | everything but the fill-preview toggle |
-| Drawing and editing outlines | 10 | 96 | 79 | 25% | node, segment, transform, clipboard and selection commands; in the window Select, Lasso, Hand, Zoom, Draw, Pencil, Rectangle, Ellipse, Rotate and Scale, the bounding box and its knobs, context menus, the Info box, the Palette's Transformations and Fit Curve sections, the Transformations and Primitive Measurements dialogs, editing in any master. Missing: `path.sharpenCorner` (no source); nothing compared with the reference |
+| Drawing and editing outlines | 10 | 96 | 79 | 25% | node, segment, transform, clipboard and selection commands; in the window Select, Lasso, Hand, Zoom, Draw, Pencil, Rectangle, Ellipse, Rotate and Scale, the bounding box and its knobs, context menus, the Info box, the Palette's Transformations and Fit Curve sections, the Transformations and Primitive Measurements dialogs, editing in any master. Missing: `path.sharpenCorner` (no source, in `fidelity`); nothing compared with the reference |
 | Path operations and filters | 6 | 66 | 40 | 28% | Remove Overlap, the booleans, path direction, extremes and inflections, Tidy up, Open Corner, Reconnect, Cut with Line, curve conversion and rounding as commands; the Knife; the six filters with dialogs and export strings; strokes and masks drawn on the canvas and applied at export; the Stroke section and the Shape Order dialog. Missing: stroke attributes in UFO, hints renumbered after Shape Order and Expand Outline; nothing compared with the reference |
 | Reusing shapes | 7 | 77 | 0 | 0% | everything; components are only exported (as composites, decomposed where the format needs it) |
 | Layers | 3 | 21 | 19 | 35% | background and layer commands; Edit Background; the active layer and the tab's master; the background and other visible layers drawn on the canvas; the Palette's Layers section with its row context menu; the Interpolate with Background dialog. Missing: Font View's master choice (M4); nothing compared with the reference |

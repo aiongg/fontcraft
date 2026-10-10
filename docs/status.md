@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M3 at its close: every measure met except `path.sharpenCorner`._
+_Updated: 2026-10-10, M3 closed; M4's planning pass next._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (932 tests; about 113,000 lines of Rust in 20 crates,
+- `cargo xtask ci` passes all ten steps (934 tests; about 113,000 lines of Rust in 20 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
-- 213 of the 932 inventory commands exist (`docs/parity.md`); M3 has 185 commands, 184 of them
-  live. Feature parity is about 12% (ROADMAP.md › Parity estimate).
+- 213 of the 932 inventory commands exist (`docs/parity.md`); M3's 184 commands are all
+  live; `path.sharpenCorner` moved to `fidelity`. Feature parity is about 12% (ROADMAP.md › Parity estimate).
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 UI package were reviewed. macOS and
   Windows have **not** been built.
@@ -18,10 +18,7 @@ _Updated: 2026-10-10, M3 at its close: every measure met except `path.sharpenCor
 
 ## Where to start
 
-1. **The owner's review of M3.** The measures and their results are in `docs/plans/M3.md` § 5;
-   the open decision is § M3.18: move `path.sharpenCorner` to the `fidelity` milestone, since
-   no written source says what it does. Wait for the owner's answer before changing that row.
-2. **M4's planning pass, Font View and glyph management** (`docs/execution-plan.md` § 3): list
+1. **M4's planning pass, Font View and glyph management** (`docs/execution-plan.md` § 3): list
    the milestone's rows (57 commands, 6 live), answer the open questions of its notes, verify or
    drop its `memory` rows, and write `docs/plans/M4.md` for the owner to accept.
 
@@ -44,9 +41,9 @@ M3, Edit View drawing (`docs/plans/M3.md`), as built:
 | M3.10 (window) | the active layer (`layers.select`), the tab's master (`view.selectMaster`, Cmd+1 to Cmd+9), Edit Background (Cmd+B) |
 | M3.11 (rest) | strokes and masks drawn on the canvas and applied at export; the Palette's Stroke section |
 | M3.17 | audit commands (`audit.run`, `list`, `describe`, `results`, `fix`, `profile.list`), eight fixes that each clear their check, `path.addInflections`, Tidy up Paths' `straighten`; live audit and canvas markers; `cargo xtask audit` |
-| M3.18 | the § 5 measures: all met but "commands live" (184 of 185); the end-to-end test (an agent draws H, O and n over the control channel and exports them) |
+| M3.18 | the § 5 measures, all met (184 of 184 commands live); the end-to-end test (an agent draws H, O and n over the control channel and exports them) |
 
-Not built: `path.sharpenCorner` (owner decision pending). Left for later milestones: text mode
+Moved to `fidelity`: `path.sharpenCorner` (no source). Left for later milestones: text mode
 (M5), Font View's master choice (M4), the toolbar's master icons (M9), the Export dialog's
 Variable (M9) and Metrics (M5) tabs.
 
@@ -93,7 +90,7 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   About 450 open questions are listed at the ends of the notes.
 - **No M3 behaviour has been compared with the reference app.** Tools, panels and dialogs
   follow the handbook; 5 editor rows are confirmed by tutorial videos.
-- **M3 gaps** (ROADMAP.md › What is not): `path.sharpenCorner` is not built; Font View draws
+- **M3 gaps** (ROADMAP.md › What is not): `path.sharpenCorner` waits in `fidelity`; Font View draws
   the first master only (M4); the Export dialog has OTF and UFO tabs only; the Import Outlines
   missing-glyph question is asked once for all unmatched files, not once per file; Shape Order
   and Expand Outline do not renumber hints that refer to a path by index; a UFO keeps no stroke
@@ -297,3 +294,10 @@ Append one terse entry per session: what landed, numbers, what is still open.
   corpus sources: 0 failures. Round trips and oracle equal the baselines. 931 tests; 213 of
   932 commands live; about 113,000 lines of Rust. Next: the owner's review of M3, then M4's
   planning pass.
+- **2026-10-10, owner's review of M3.** The owner accepted the agents' choices where the
+  handbook is silent, except Extrude's export string: Extrude has none until a source shows
+  one (`filter.apply` refuses it). `path.sharpenCorner` moved to `fidelity`, so M3 is closed
+  with 184 of 184 commands live. Every choice of ours where no source says what the reference
+  does is a row's `guesses` entry; `cargo xtask guesses` writes `docs/guesses.md` (203 on 160
+  rows) and fails when a live `inferred` or `memory` command has none; `own = true` marks rows
+  with no reference counterpart. 934 tests. Next: M4's planning pass.
