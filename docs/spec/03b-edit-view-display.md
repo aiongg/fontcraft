@@ -450,11 +450,23 @@ the active Edit View tab and is blank otherwise.
    then by order; glyphs missing in the source are skipped and listed in the result.
 4. Which tool becomes active when Escape leaves text mode, and where the cursor lands when
    Escape returns to it.
+   **Answered for M5 (our decision):** leaving text mode makes the Select tool active; returning
+   puts the cursor before the glyph that was edited (`editView.toggleTextMode`).
 5. Select Sample Text: replace the whole tab text or insert at the cursor? Does the string wrap
    around at the end of the list for Next/Previous?
+   **Answered for M5 (our decision):** it replaces the whole tab text; Next and Previous wrap
+   around (`edit.selectSampleText`, `edit.selectNextSampleString`).
 6. Home/End at the first or last glyph: stop or wrap? Does Home/End act on a text selection of
    several glyphs?
+   **Answered for M5 (our decision):** they stop at the ends of the glyph order, and with a
+   selection of several glyphs they replace only the current glyph (`editView.previousGlyph`,
+   `editView.nextGlyph`).
 7. How placeholders serialise in the tab string of the file format and on the clipboard.
+   **Partly answered (source), the rest our decision (M5):** display strings write a glyph without
+   a character as `/name` (`/Smily` and `/_part.test` in corpus files the reference saved). Ours:
+   an escape ends at the next slash, space or line break; a placeholder is `/Placeholder`; on the
+   plain-text clipboard a placeholder is the current glyph's text (`text.displayStrings`,
+   `editView.insertText`, `edit.addPlaceholder`).
 8. Zoom step factor of Zoom In/Out and the minimum and maximum zoom values.
    **Answered for M3 (our decision, 2026-10-09):** a factor of √2 per step, within the existing
    `ZOOM_RANGE`.
@@ -463,6 +475,8 @@ the active Edit View tab and is blank otherwise.
    **Answered for M3 (our decision, 2026-10-09):** the line shows with the Measurement tool and
    stays until the next click or tool change. The text-mode measurement line (height, storage) is
    M5.
+   **Answered for M5 (our decision):** the text-mode line height is kept per tab and starts at half
+   the x-height of the tab's master (`view.setMeasurementLineHeight`).
 10. Ruler: are components and other visible glyphs measured exactly like paths; is the ruler
     kept after the mouse is released?
     **Answered for M3 (our decision, 2026-10-09):** components are measured like paths; the ruler
@@ -475,9 +489,16 @@ the active Edit View tab and is blank otherwise.
 12. Image crop: coordinate space of the stored rectangle; meaning of "layer bounds"; whether a
     layer can hold more than one image; which formats FontCraft decodes natively (PDF, PSD).
 13. Preview blur range and unit; which custom parameters the instance preview honours.
+    **Answered for M5 (our decision):** blur from 0 to 10 screen points of radius
+    (`preview.setBlur`). Instance parameters wait for M9, when instances are interpolated.
 14. Exact order of the bottom-bar controls and where the kerning mode button sits.
+    **Answered for M5 (our decision):** the Preview Area's eye button sits at the left end; at the
+    right end, from left to right, the three writing-direction buttons, the zoom controls of M3
+    and the kerning mode button last, at the bottom right as the handbook places it.
 15. Info box: can the Unicode value be edited in place; how the box lays out when several
     glyphs are selected in text mode.
+    **Answered for M5 (our decision):** the Unicode value is shown, not edited; with several glyphs
+    selected in the text the box describes the glyph after the cursor (`infoBox.glyph`).
 16. Edit > Info for Selection is given as Cmd+Alt+I in the guides section of this chapter but
     as Cmd+Shift+I (the Show Info shortcut) in the Palette chapter; one of them is a typo.
 17. The portable replacement for the UnicodeChecker hand-off and for the OS character picker.

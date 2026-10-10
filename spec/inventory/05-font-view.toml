@@ -1635,6 +1635,7 @@ milestone = "M5"
 summary = "The inspector shows LSB, RSB and width of the selected glyph on the current master, or TSB, BSB, vertical origin and vertical width after switching orientation. The fields accept numbers or metrics keys as defined in the spacing chapter."
 ref = "Font View › Glyph Properties › Metrics"
 status = "handbook"
+notes = "Shown read-only since M4; M5 makes the fields editable through the spacing.* commands."
 
 [[behavior]]
 id = "fontView.inspector.kerningGroups"
@@ -1643,6 +1644,7 @@ milestone = "M5"
 summary = "The inspector shows and edits the left and right kerning group names of the selected glyphs, so many glyphs can be assigned to a group in one step."
 ref = "Font View › Glyph Properties › Kerning Groups"
 status = "handbook"
+notes = "Shown read-only since M4; M5 makes the fields editable through kerning.setLeftGroup and kerning.setRightGroup."
 
 [[behavior]]
 id = "fontView.inspector.tagsField"

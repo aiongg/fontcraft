@@ -593,6 +593,9 @@ milestone = "M5"
 summary = "Sets a new advance width, or new left and/or right sidebearings, on the selected glyph layers. Passing width selects width mode; otherwise each of lsb and rsb that is present is changed, absolutely or (relative) as a delta."
 ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
 status = "handbook"
+guesses = [
+  "Width mode without on both sides keeps the left sidebearing and moves the right one; the handbook says the difference lands on one side without saying which.",
+]
 
 [[panel]]
 id = "dialog.transformMetrics"

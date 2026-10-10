@@ -27,6 +27,9 @@ milestone = "M5"
 summary = "Floating box drawn under the current glyph in Edit View with its name, Unicode value, sidebearings, width, kerning values and kerning groups. Current glyph means the glyph being edited; with text mode on, it is the glyph immediately following the text cursor. Shown only while View > Show Info is on."
 ref = "Edit View › Info Box"
 status = "handbook"
+guesses = [
+  "With several glyphs selected in the text, the Info box describes the glyph after the cursor only, and the Unicode value is shown, not edited.",
+]
 
 [[panel]]
 id = "infoBox.glyphVertical"
@@ -904,45 +907,56 @@ milestone = "M5"
 summary = "Switches between typing text and editing the current glyph. The handbook states the Escape toggle but not which tool becomes active when leaving text mode."
 ref = "Edit View › Entering Text"
 status = "handbook"
+guesses = [
+  "Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either.",
+]
 
 [[command]]
 id = "editView.insertText"
 label = "Insert Text"
 menu = []
 shortcut = ""
-kind = "engine"
+kind = "ui"
 params = "{tab?: id, text?: string, glyphs?: [names], at?: index, replace?: [start, end]}"
 area = "edit-text"
 milestone = "M5"
 summary = "Inserts characters or named glyphs into the tab's string at the text cursor or a given index. This is what typing and pasting do; characters map to glyphs through their Unicode values."
 ref = "Edit View › Entering Text › Text Tool"
 status = "handbook"
+notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3). A glyph without a character is written `/name`, as the reference writes it into the display strings of the files it saves (`/Smily`, `/_part.test` in corpus files)."
+guesses = [
+  "A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends.",
+]
 
 [[command]]
 id = "editView.setText"
 label = "Set Tab Text"
 menu = []
 shortcut = ""
-kind = "engine"
+kind = "ui"
 params = "{tab?: id, text?: string, glyphs?: [names]}"
 area = "edit-text"
 milestone = "M5"
 summary = "Replaces the whole string shown in an Edit View tab. Headless counterpart of selecting all text and typing."
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
+notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3)."
+own = true
 
 [[command]]
 id = "editView.getText"
 label = "Get Tab Text"
 menu = []
 shortcut = ""
-kind = "engine"
+kind = "ui"
 params = "{tab?: id}"
 area = "edit-text"
 milestone = "M5"
 summary = "Query returning the tab's string as a glyph name list with placeholders and line breaks marked, the cursor index, the current glyph, the writing direction and the active master."
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
+notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3)."
+own = true
 
 [[command]]
 id = "editView.setCursor"
@@ -956,6 +970,7 @@ milestone = "M5"
 summary = "Places the text cursor before the glyph at the given index, optionally selecting a run of glyphs, which also changes the current glyph. Headless form of clicking in the text or using the arrow keys."
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
+own = true
 
 [[command]]
 id = "edit.emojiAndSymbols"
@@ -1013,6 +1028,7 @@ milestone = "M5"
 summary = "Query returning the glyph names the Find Glyphs pop-up would list for a search string, using the same matching rules. Lets agents use the search without the dialog."
 ref = "Edit View › Entering Text › Find Glyphs to Insert"
 status = "inferred"
+own = true
 
 [[command]]
 id = "editView.previousGlyph"
@@ -1027,6 +1043,9 @@ milestone = "M5"
 summary = "Replaces the current glyph in the tab with the glyph that precedes it in the font's glyph order. On keyboards without Home, Fn+Left does the same."
 ref = "Edit View › Entering Text › Change the Current Glyph"
 status = "handbook"
+guesses = [
+  "At the first glyph of the order Previous Glyph does nothing (no wrap), and with several glyphs selected in the text it replaces only the current glyph.",
+]
 
 [[command]]
 id = "editView.nextGlyph"
@@ -1041,6 +1060,9 @@ milestone = "M5"
 summary = "Replaces the current glyph in the tab with the glyph that follows it in the font's glyph order. On keyboards without End, Fn+Right does the same."
 ref = "Edit View › Entering Text › Change the Current Glyph"
 status = "handbook"
+guesses = [
+  "At the last glyph of the order Next Glyph does nothing (no wrap).",
+]
 
 [[command]]
 id = "editView.previousVisibleGlyph"
@@ -1075,13 +1097,17 @@ id = "edit.addPlaceholder"
 label = "Add Placeholder"
 menu = ["Edit"]
 shortcut = "Cmd+Alt+Shift+P"
-kind = "engine"
+kind = "ui"
 params = "{tab?: id, at?: index}"
 area = "edit-text"
 milestone = "M5"
 summary = "Inserts a placeholder item into the tab text. A placeholder has no glyph of its own: it always renders as the current glyph and changes whenever the current glyph does."
 ref = "Edit View › Entering Text › Placeholder Glyphs"
 status = "handbook"
+notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3)."
+guesses = [
+  "A placeholder is written `/Placeholder` in display strings and copied to the plain-text clipboard as the text of the current glyph; no source shows either.",
+]
 
 [[command]]
 id = "editView.setWritingDirection"
@@ -1127,6 +1153,10 @@ milestone = "M5"
 summary = "Window for proofing running text of any length. The reference renders with the operating system's shaping engine and draws characters the font lacks in a system fallback font; FontCraft needs its own shaper to match this."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
+notes = "M5 lays the preview out with the Edit View text layout: characters map to glyphs by Unicode value, the document kerning applies, and the writing direction orders the glyphs. Substitution and other positioning features need compiled feature code, which is M8; the preview gains a shaping engine then (docs/plans/M5.md § 3)."
+guesses = [
+  "Until M8 the preview applies the document kerning and no other feature; the reference shapes the text through the operating system.",
+]
 
 [[command]]
 id = "textPreview.setText"
@@ -1140,6 +1170,7 @@ milestone = "M5"
 summary = "Replaces the content of the Text Preview field. Headless form of typing or pasting into it."
 ref = "Edit View › Entering Text › Text Preview"
 status = "inferred"
+own = true
 
 [[command]]
 id = "textPreview.setStyle"
@@ -1153,6 +1184,9 @@ milestone = "M5"
 summary = "Chooses which style of the font the Text Preview renders, as the pop-up at the top left of the window does."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
+guesses = [
+  "Until instances are interpolated (M9) the style list holds the masters and the instances that sit at a master location.",
+]
 
 [[command]]
 id = "textPreview.setFontSize"
@@ -1244,6 +1278,9 @@ milestone = "M5"
 summary = "Opens the list of stored sample strings; choosing one with a click or the arrow keys puts it into the Edit View text. Whether it replaces the whole text or inserts at the cursor is not stated."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
+guesses = [
+  "Choosing a sample string replaces the whole text of the tab; the handbook says the string goes into the text without saying where.",
+]
 
 [[command]]
 id = "edit.selectNextSampleString"
@@ -1257,6 +1294,9 @@ milestone = "M5"
 summary = "Switches the Edit View text to the sample string after the current one without opening the list. No default shortcut; one can be assigned in the settings."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
+guesses = [
+  "Next and Previous wrap around at the ends of the list.",
+]
 
 [[command]]
 id = "edit.selectPreviousSampleString"
@@ -1306,6 +1346,9 @@ milestone = "M5"
 summary = "Text in Edit View wraps at a preset maximum line width, which is an application setting."
 ref = "Edit View › Entering Text"
 status = "handbook"
+guesses = [
+  "Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default.",
+]
 
 [[behavior]]
 id = "text.currentGlyphAfterCursor"
@@ -1330,6 +1373,18 @@ milestone = "M14"
 summary = "The reference exposes the tab text to operating-system text services (the app menu's Services submenu). This is platform specific and has no direct cross-platform equivalent."
 ref = "Edit View › Entering Text › Text Tool"
 status = "handbook"
+
+[[behavior]]
+id = "text.displayStrings"
+area = "edit-text"
+milestone = "M5"
+summary = "The texts of the open Edit View tabs are stored in the document as its display strings, one string per tab, with a glyph that has no character written as `/name`. Opening a document opens its tabs again from them."
+ref = "GlyphsSDK file-format specification, versions 3 and 4 › DisplayStrings (UIState.plist in a package)"
+status = "docs"
+notes = "The reference writes them unless the `Write DisplayStrings` custom parameter is false. FontCraft keeps the stored strings unchanged since M1; restoring and writing them is § 7 question 4 of docs/plans/M5.md."
+guesses = [
+  "Opening a document opens one tab per stored string, and saving writes the open tabs in tab order; changing a tab's text is not an undo step and does not mark the document modified.",
+]
 
 [[behavior]]
 id = "text.findMatchesAllTerms"
@@ -1370,6 +1425,9 @@ milestone = "M5"
 summary = "Characters the font does not cover are drawn in a system fallback font in the Text Preview rather than as missing-glyph boxes."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
+guesses = [
+  "Characters the font lacks are drawn in the interface font of the app.",
+]
 
 [[behavior]]
 id = "sampleStrings.storedInSettings"
@@ -1466,6 +1524,9 @@ milestone = "M5"
 summary = "Moves the text-mode measurement line to a given height above the baseline. In the reference this is done by Cmd+Alt+Ctrl-clicking or dragging in text mode, or by dragging with the Measurement tool."
 ref = "Edit View › Measuring › Measurement Line"
 status = "handbook"
+guesses = [
+  "The text-mode measurement line height is kept per tab and starts at half the x-height of the tab master; no source gives the default or where it is kept.",
+]
 
 [[command]]
 id = "measure.sidebearingsAtHeight"
@@ -1479,6 +1540,7 @@ milestone = "M5"
 summary = "Query returning, per glyph, the distance from the left edge of the advance to the first outline crossing at height y and from the last crossing to the right edge. These are the numbers the measurement line prints."
 ref = "Edit View › Measuring › Measurement Line"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "measurement.labelColors"
@@ -2243,6 +2305,9 @@ milestone = "M5"
 summary = "Blurs the preview by an adjustable amount to test legibility. Bound to the slider next to the Flip button; its range and unit are not documented."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+guesses = [
+  "The blur amount runs from 0 to 10 screen points of blur radius; the handbook gives no range or unit.",
+]
 
 [[command]]
 id = "preview.alwaysCenterActiveGlyph"
@@ -2269,6 +2334,7 @@ milestone = "M5"
 summary = "Shifts the previewed line horizontally. Headless form of dragging the text sideways in the Preview Area."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "inferred"
+own = true
 
 [[command]]
 id = "preview.render"

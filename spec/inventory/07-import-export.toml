@@ -92,6 +92,9 @@ ref = "Import & Export › Exporting Font Files › Exporting Metrics"
 status = "handbook"
 
 # ───────────────────────────── Export: dialogs ─────────────────────────────
+guesses = [
+  "The `metrics` format is our kerning-text format (`kerning-text` in 30-formats.toml), because the reference does not document its own metrics file; files in the reference format are neither read nor written.",
+]
 
 [[panel]]
 id = "dialog.export"
@@ -440,6 +443,9 @@ ref = "Import & Export › Exporting Font Files › Exporting Metrics"
 status = "handbook"
 
 # ───────────────────────────── Source formats and saving ─────────────────────────────
+guesses = [
+  "Group pairs are expanded to glyph pairs with the exceptions applied, so the AFM file holds the kerning that applies to every covered glyph pair; the handbook does not say.",
+]
 
 [[behavior]]
 id = "source.saveAsChoosesFormat"
@@ -661,6 +667,9 @@ milestone = "M5"
 summary = "Pair kerning and kerning groups (classes) from a compiled font are mostly recovered into the document's kerning data; contextual kerning is not recovered."
 ref = "Import & Export › Opening Font Files › Importing OpenType Features"
 status = "handbook"
+guesses = [
+  "A class read from a compiled font becomes a kerning group named after its first glyph in glyph order; no source says how the reference names recovered groups.",
+]
 
 [[behavior]]
 id = "open.postscriptHintsPreserved"
@@ -752,6 +761,10 @@ milestone = "M5"
 summary = "Reads spacing and kerning for one master from a metrics file, an AFM file, a Glyphs file or a UFO and applies the parts the user ticks to the open document. Available from Font View. Which options exist depends on the file type (see the two dialogs); sourceMaster for multi-master source files is our addition."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+notes = "`keepAlignedComponents` waits for automatic alignment (M6); until then it is accepted and has no effect."
+guesses = [
+  "The import goes to the master given, else the first master, and `sourceMaster` defaults to the first master of the source file.",
+]
 
 [[panel]]
 id = "dialog.importMetricsFile"
@@ -809,14 +822,18 @@ milestone = "M5"
 summary = "Glyph metrics from a metrics or AFM file are applied in one of four modes: take LSB and width (RSB follows), take RSB and width (LSB follows), take both sidebearings (width follows), or take the width and centre the outline so both sidebearings are equal. No default mode is stated."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+guesses = [
+  "The default mode is LSB and width (the RSB follows); the handbook gives no default.",
+]
 
 [[behavior]]
 id = "import.metricsBreaksAutoAlignment"
 area = "spacing-kerning"
-milestone = "M5"
+milestone = "M6"
 summary = "If an imported value for an automatically aligned composite differs from what alignment would compute, alignment is switched off for the affected components so the imported value can hold. Ticking Keep Aligned Components prevents this and the aligned glyph keeps its derived metrics."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+notes = "Moved from M5 to M6 by the M5 planning pass: automatic alignment is built in M6, so nothing can break it before then."
 
 [[behavior]]
 id = "import.metricsSelectedGlyphs"

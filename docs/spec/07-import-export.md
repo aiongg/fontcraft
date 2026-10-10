@@ -286,7 +286,12 @@ Export:
    twice, or detected?
 8. Test Install: mechanism per platform, and what replaces it on Linux, Windows and the web.
 9. Metrics file: actual syntax and extension of the reference's format; do we read it at all?
+   **Answered for M5 (our decision):** the reference's metrics file is undocumented, so FontCraft
+   neither reads nor writes it; the Metrics tab writes our kerning-text format or AFM
+   (`file.exportMetrics`, `kerning-text` in 30-formats.toml).
 10. AFM export: are group pairs expanded to glyph pairs, and are exceptions applied?
+    **Answered for M5 (our decision):** group pairs are expanded to glyph pairs with the exceptions
+    applied (`export.afmIsLossy`). fontTools `afmLib` checks that the files read back.
 11. Which features are blocked while the source format is UFO, and what does the warning offer?
 12. Older Glyphs format versions: exactly which data is dropped when saving in a compatible
     mode, and is the user told at save time?
@@ -298,6 +303,10 @@ Export:
     and the baseline mapped for PDF/EPS/SVG? Is there a multi-file mode in Edit View?
 17. Import Metrics: target master (current?), source master for multi-master files, default
     mode, exact dialog captions, and whether the Glyphs/UFO dialog has the glyph-scope options.
+    **Answered for M5 (our decision):** the target is the master given, else the first master; the
+    source master defaults to the source file's first master; the default mode is LSB and width;
+    the Glyphs and UFO dialog offers Selected Glyphs too (`file.importMetrics`,
+    `import.metricsModes`).
 18. Import Features: merge or replace on name clashes; are classes and prefixes imported too?
 19. Pasted-outline correction: threshold, and whether it translates only.
 20. Projects: file syntax; is the font link stored relative or absolute; does the project keep

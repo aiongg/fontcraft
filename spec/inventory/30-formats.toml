@@ -414,6 +414,7 @@ milestone = "M5"
 summary = "Text file with global metrics, per-glyph advance widths and bounding boxes, and flat kerning pairs. Exported for one master and imported into one master; group kerning is expanded to pairs on export and metrics keys are not representable, so importing can change sidebearings and break links."
 ref = "Import & Export › Exporting Metrics, Importing Metrics; Adobe TN 5004"
 status = "docs"
+notes = "fontTools `afmLib` (MIT) is the oracle: it reads what FontCraft writes, and FontCraft reads what it writes."
 
 [[format]]
 id = "pfm"
@@ -578,6 +579,7 @@ milestone = "M5"
 summary = "Our own tab-separated exchange format for one master: kerning lines `first<TAB>second<TAB>value` where a side starting with `@` names a kerning group, group membership lines, and optional metrics lines giving LSB, RSB, width and metrics keys per glyph. It exists because AFM cannot hold groups or keys and the reference's own metrics file is undocumented; it is also what the Kerning window copies as text."
 ref = "Import & Export › Exporting Metrics (the reference's undocumented Metrics File is the model for the content)"
 status = "inferred"
+own = true
 
 [[format]]
 id = "fea-kern"

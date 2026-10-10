@@ -363,6 +363,7 @@ effect = "ui"
 summary = "Width in units for new glyphs and layers, replacing the built-in defaults of 600 (1000 for CJK glyphs, 200 for corner components). The source types it as an integer but also allows a `script: value` form (for example `hebrew: 460`) that limits it to one script; repeat the parameter per script."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "M4 creates glyphs at the built-in defaults; M5 applies the parameter, the `script: value` form included, to New Glyph, Add Glyphs and new layers."
 
 [[parameter]]
 name = "descender"
@@ -1048,6 +1049,10 @@ effect = "other"
 summary = "Set on a master to mirror the spacing and kerning of the first master, so only the first master needs spacing and kerning. Suits colour-layer fonts and families whose metrics stay constant across weights."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "fontc and glyphsLib take a linked master advance widths (horizontal, vertical width and vertical origin) and its kerning from the master it follows, for master layers only, not intermediate layers (fontc `glyphs2fontir/src/source.rs` and `glyphs-reader/src/font.rs`, glyphsLib `builder/kerning.py`). A staff answer on the reference forum says metrics and kerning cannot be linked separately (thread \"Link Metrics With Master but not the kerning\")."
+guesses = [
+  "Spacing and kerning commands refuse to edit a linked master and name the master it follows; no source says what the reference does with such an edit.",
+]
 
 [[parameter]]
 name = "Link Metrics With Master"
@@ -1059,6 +1064,7 @@ effect = "other"
 summary = "Like Link Metrics With First Master, but the value names the master to follow. Master names should be unique when this is used."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "fontc and glyphsLib take a linked master advance widths (horizontal, vertical width and vertical origin) and its kerning from the master it follows, for master layers only, not intermediate layers (fontc `glyphs2fontir/src/source.rs` and `glyphs-reader/src/font.rs`, glyphsLib `builder/kerning.py`). A staff answer on the reference forum says metrics and kerning cannot be linked separately (thread \"Link Metrics With Master but not the kerning\"). The value is a master id or name; fontc tries the id first. With both parameters on a master, Link Metrics With First Master wins (fontc)."
 
 [[parameter]]
 name = "Local Interpolation"

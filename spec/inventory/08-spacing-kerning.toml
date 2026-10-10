@@ -62,6 +62,10 @@ milestone = "M5"
 summary = "With the caret in a numeric Info box field, Up raises and Down lowers the value by 1 unit; with Shift the step is 10 and with Cmd+Shift it is 100. What the keys do in a field holding a metrics key is not stated."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "handbook"
+guesses = [
+  "Up and Down in a field that holds a metrics key leave the key unchanged; no source says what they do there.",
+  "In a kern field Up adds 1 and Down subtracts 1 (10 with Shift), as a user report on the reference forum describes (thread \"Glyphs 3 bug report: arrow keys in kerning\").",
+]
 
 [[command]]
 id = "spacing.setLeftSidebearing"
@@ -75,6 +79,10 @@ milestone = "M5"
 summary = "Sets the left sidebearing of a glyph layer to a number, or stores a metrics key (a string such as 'l', '=h+8' or '==u') for it. A number changes the space left of the outline and, we assume, the advance width with it (as the spacing shortcuts do); a key is stored and evaluated. This is what typing into the Info box field does."
 ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
 status = "handbook"
+guesses = [
+  "A numeric left sidebearing moves the outline, components and anchors sideways and changes the width by the same amount, so the right sidebearing stays.",
+  "A key is evaluated and applied as soon as it is stored.",
+]
 
 [[command]]
 id = "spacing.setRightSidebearing"
@@ -88,6 +96,9 @@ milestone = "M5"
 summary = "Sets the right sidebearing of a glyph layer to a number (changing the width) or stores a metrics key for it. This is what typing into the Info box field does."
 ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
 status = "handbook"
+guesses = [
+  "A key is evaluated and applied as soon as it is stored.",
+]
 
 [[command]]
 id = "spacing.setWidth"
@@ -103,6 +114,7 @@ ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
 guesses = [
   "A numeric width change is absorbed by the right sidebearing; the handbook does not say how it is split.",
+  "A width key may be a glyph name, a constant or a calculation; `|` and `@` are refused in the width field.",
 ]
 
 [[command]]
@@ -117,6 +129,10 @@ milestone = "M5"
 summary = "Sets the top sidebearing (the T field of the vertical Info box). The chapter only says the field is shown for top-to-bottom text; editing it and its effect on the vertical origin and height are assumed by analogy with the horizontal fields."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "inferred"
+guesses = [
+  "Setting the top sidebearing moves the vertical origin and changes the vertical width by the same amount, so the bottom sidebearing stays, as the left sidebearing does horizontally.",
+  "The top and bottom fields take the same key forms as the left and right ones, with `|` naming the opposite vertical sidebearing; `@` is refused there.",
+]
 
 [[command]]
 id = "spacing.setBottomSidebearing"
@@ -130,6 +146,9 @@ milestone = "M5"
 summary = "Sets the bottom sidebearing (the B field of the vertical Info box). As with the top sidebearing, the chapter documents the display only; the editing behaviour is assumed."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "inferred"
+guesses = [
+  "Setting the bottom sidebearing changes the vertical width only.",
+]
 
 [[command]]
 id = "spacing.getMetrics"
@@ -145,6 +164,7 @@ ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
 status = "inferred"
 
 # ───────────────────────────── Spacing shortcuts ─────────────────────────────
+own = true
 
 [[command]]
 id = "spacing.increaseLeftSidebearing"
@@ -309,6 +329,9 @@ milestone = "M5"
 summary = "The spacing shortcuts act only while the Text tool is active, on the current glyph (the one after the cursor). They are disabled in the locked kerning mode."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts; Kerning › Kerning Modes"
 status = "handbook"
+guesses = [
+  "A spacing shortcut on a metric that holds a metrics key changes the number and keeps the key, which then shows as out of sync; no source says whether the reference keeps the key, removes it or ignores the keypress.",
+]
 
 [[behavior]]
 id = "spacing.shortcutModifierScheme"
@@ -317,6 +340,9 @@ milestone = "M5"
 summary = "Modifier scheme for the arrow-key spacing shortcuts: Ctrl addresses the left sidebearing, Cmd the right one, Ctrl and Cmd together shift the outline within the width, and Shift multiplies the 1-unit step to 10. Left/Right arrows give the direction in which the addressed edge moves."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+guesses = [
+  "In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text; in top-to-bottom text they do nothing in M5. No source says.",
+]
 
 [[behavior]]
 id = "spacing.shiftKeepsWidth"
@@ -343,6 +369,7 @@ milestone = "M5"
 summary = "Typing a glyph name instead of a number into the LSB, RSB or width field stores a metrics key: the field then takes the value of the same metric of the named glyph (LSB from its LSB, RSB from its RSB, width from its width)."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
+notes = "Without a leading `=` the whole text is one glyph name: on the reference forum, its developers explain that `n-20` names a glyph and `=n-20` subtracts 20 (thread \"Build 1015 metrics keys\", 2017)."
 
 [[behavior]]
 id = "metricsKey.notSyncedAutomatically"
@@ -351,6 +378,10 @@ milestone = "M5"
 summary = "A linked metric is not recalculated when the glyph it refers to changes. The stored number stays as it is until an update command runs, and the key is flagged as out of sync in the meantime."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
+guesses = [
+  "A key whose chain of references returns to its own glyph, or runs deeper than 32 steps, is an error: the metric keeps its number and the key is reported. A forum answer by the reference developers shows the reference does not stop such cycles (thread \"Possible bug with spacing formula\").",
+  "Division by zero, and a result outside 0 to 65,535 units for a width or −32,768 to 32,767 for a sidebearing, are errors reported the same way.",
+]
 
 [[behavior]]
 id = "metricsKey.outOfSyncInEditView"
@@ -393,6 +424,9 @@ milestone = "M5"
 summary = "Re-evaluates every metrics key on the current layer of the current glyph, or of all selected glyphs, and applies the results, clearing all out-of-sync flags there."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
+guesses = [
+  "Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value.",
+]
 
 [[command]]
 id = "glyph.updateMetricsForAllMasters"
@@ -419,6 +453,7 @@ milestone = "M5"
 summary = "Query, our addition for agents and tests: parses a metrics key in the context of a glyph, layer and field and returns the rounded value it yields or a parse/lookup error, without changing the document."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "inferred"
+own = true
 
 [[command]]
 id = "spacing.listOutOfSyncMetrics"
@@ -432,6 +467,7 @@ milestone = "M5"
 summary = "Query, our addition: lists glyph, layer and field for each metrics key whose evaluated value differs from the stored metric. Headless counterpart of the red markers and the Font View warning triangles."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "inferred"
+own = true
 
 [[behavior]]
 id = "metricsKey.calculationSyntax"
@@ -440,6 +476,12 @@ milestone = "M5"
 summary = "A calculated key is an equals sign, a glyph name, one arithmetic operator and a number, in that order: '=h+8', '=hyphen/2'. Only this single-operation form is documented; chained operations and parentheses are not."
 ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Key Calculations"
 status = "handbook"
+notes = "Files saved by the reference combine `|` with an operator (`=|quoteleft*0.5`, 3 keys in the corpus), so that form is valid. Corpus keys by form (4,413 keys in 18 sources): bare name 2,929; `=` and a signed number 616; `=|name` 405; `=` and a number 203; `=name` with an operation 153; `=name` 104; `=|name` with an operation 3; none with `@`."
+guesses = [
+  "Spaces around the parts of a key are ignored.",
+  "A key holds at most one operation; a second operator or a parenthesis makes it invalid, and it is reported, not evaluated.",
+  "`@` and its height come last, after the operation (`=H+8@200`).",
+]
 
 [[behavior]]
 id = "metricsKey.operators"
@@ -456,6 +498,9 @@ milestone = "M5"
 summary = "The number in a calculation may have a decimal fraction ('=o*1.2', '=koKai-thai/1.5'). Note that glyph names can themselves contain a hyphen, so the parser must not read the hyphen in 'ka-deva' as a minus sign."
 ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Key Calculations"
 status = "handbook"
+guesses = [
+  "The glyph name is the longest leading part of the key that names a glyph in the font; what follows must be nothing, an operation, or `@` and a number. So `=ka-deva/1.4` reads ka-deva even when a glyph `ka` exists.",
+]
 
 [[behavior]]
 id = "metricsKey.resultRounded"
@@ -464,6 +509,9 @@ milestone = "M5"
 summary = "Before a calculated metrics key takes effect, its result is rounded to a whole number of font units. Tie-breaking for exact halves is not stated."
 ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Key Calculations"
 status = "handbook"
+guesses = [
+  "Exact halves round up (toward positive infinity), as both oracles round kerning values: fontc 1.0.0 and fontmake 3.12.1 write −10.5 as −10 and 10.5 as 11.",
+]
 
 [[behavior]]
 id = "metricsKey.constant"
@@ -472,6 +520,9 @@ milestone = "M5"
 summary = "'=' followed by just a number ('=64') pins the metric to that constant. Unlike a plain numeric entry, the key is remembered, so the value can be restored by an update after outline edits have changed the sidebearing."
 ref = "Spacing & Kerning › Spacing › Metrics Keys › Constant Metrics Keys"
 status = "handbook"
+guesses = [
+  "On a glyph that is not aligned automatically, `=-30` and `=+30` are constants; reports on the reference forum treat `=-30` as a key that should work (thread \"Build 1015 metrics keys\"). On a glyph aligned automatically the form is the offset of `metricsKey.autoAlignedOffset`, evaluated from M6.",
+]
 
 [[behavior]]
 id = "metricsKey.bareNameEqualsReference"
@@ -501,9 +552,13 @@ status = "handbook"
 id = "metricsKey.glyphLevelByDefault"
 area = "spacing-kerning"
 milestone = "M5"
-summary = "A metrics key entered with a single '=' (or as a bare name) belongs to the glyph and applies on every master. We assume each master layer evaluates it against the referenced glyph's layer of the same master; the chapter does not spell that out."
+summary = "A metrics key entered with a single '=' (or as a bare name) belongs to the glyph and applies on every master; each master layer evaluates it against the referenced glyph's layer of the same master."
 ref = "Spacing & Kerning › Spacing › Metrics Keys › Local Metrics Keys"
 status = "handbook"
+notes = "The file format stores glyph-level keys on the glyph (`metricLeft`, `metricRight`, `metricWidth`) and local keys on the layer (GlyphsSDK file-format specification, versions 3 and 4)."
+guesses = [
+  "A layer that is not a master layer (intermediate, alternate, backup) reads the referenced glyph's layer with the same layer id, else the layer of its own master; no source says.",
+]
 
 [[behavior]]
 id = "metricsKey.localPrefix"
@@ -512,6 +567,11 @@ milestone = "M5"
 summary = "A key starting with two equals signs ('==u', '==endash+12') is local: it is stored on the layer it was typed on, affects only that master, and serves as an exception to the glyph-level key the other masters keep using."
 ref = "Spacing & Kerning › Spacing › Metrics Keys › Local Metrics Keys"
 status = "handbook"
+notes = "In the file a local key is the layer key, written without `==` (Inter Roman has 448 layers with keys, such as `metricLeft = n;` on a layer of `l.ss02`); `==` is how the field shows and takes it."
+guesses = [
+  "On its layer a local key wins over the glyph-level key of the same field.",
+  "A plain number typed into a field removes the key the field showed: a local key from the layer, a glyph-level key from the glyph.",
+]
 
 [[behavior]]
 id = "metricsKey.baselineOffset"
@@ -520,6 +580,9 @@ milestone = "M5"
 summary = "A key may end with '@' and a number to take the referenced sidebearing at one height instead of from the bounding box: '=H@0' measures H's sidebearing along the baseline and '=H@150' along a horizontal line 150 units above it."
 ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Keys at Baseline Offsets"
 status = "handbook"
+guesses = [
+  "When the line at the given height does not cross the outline, the key uses the bounding-box sidebearing; no source says.",
+]
 
 [[behavior]]
 id = "metricsKey.autoAlignedDisplay"
@@ -546,6 +609,7 @@ milestone = "M5"
 summary = "Left-to-right kerning and right-to-left kerning are separate data sets. Edits, the Info box and the Kerning window all work on the set of the writing direction currently selected in Edit View, so the direction must be set before kerning mixed-direction fonts."
 ref = "Spacing & Kerning › Kerning"
 status = "handbook"
+notes = "Right-to-left pairs are stored in logical order, and a group side names the side that faces the pair: the first glyph (on the right) is given by its left group, written `@MMK_R_…`, the second by its right group, written `@MMK_L_…`. Both oracles read them so: a test font with `@MMK_R_alef` – `@MMK_L_bet` = −77 compiles to −77 between alef and bet in the `hebr` kern lookup (fontc 1.0.0 and fontmake 3.12.1; glyphsLib `builder/groups.py` and `builder/kerning.py`, fontc `glyphs2fontir/src/source.rs`)."
 
 [[behavior]]
 id = "kerning.highlightColors"
@@ -567,6 +631,9 @@ milestone = "M5"
 summary = "Sets the Edit View kerning mode, or with no parameter advances to the next of the three modes, as a click on the mode icon at the bottom right of the canvas does."
 ref = "Spacing & Kerning › Kerning › Kerning Modes"
 status = "handbook"
+guesses = [
+  "A new Edit View tab starts in kerning mode; no source gives the default.",
+]
 
 [[panel]]
 id = "editView.kerningModeButton"
@@ -639,6 +706,10 @@ milestone = "M5"
 summary = "A value typed into a kern field is applied when Return is pressed or the field loses focus. Emptying the field deletes the kerning between the two glyphs (rather than storing zero). An unset pair shows the grey placeholder 'Kern'."
 ref = "Spacing & Kerning › Kerning › Info Box"
 status = "handbook"
+guesses = [
+  "A typed 0 is stored as a pair with value 0, which overrides a group value; both oracles keep such a pair (a 0 exception against a −60 group pair compiles to 0).",
+  "A typed value with a fraction is rounded to a whole unit; values read from files keep their fractions.",
+]
 
 [[command]]
 id = "kerning.setPair"
@@ -680,6 +751,7 @@ ref = "Spacing & Kerning › Kerning › Kerning Groups; Kerning Group Exception
 status = "inferred"
 
 # ───────────────────────────── Kerning shortcuts ─────────────────────────────
+own = true
 
 [[command]]
 id = "kerning.increaseLeft"
@@ -693,6 +765,9 @@ milestone = "M5"
 summary = "Text tool: changes the kerning of the pair made of the preceding glyph and the current glyph by one step of 1 unit, in the direction the handbook calls 'increase'. By analogy with Ctrl+Left for spacing we read this as more room (value +1); the sign must be confirmed in the app."
 ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
 status = "handbook"
+guesses = [
+  "Increase adds to the kerning value (more space) and decrease subtracts; the handbook table names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair.",
+]
 
 [[command]]
 id = "kerning.increaseLeftBy10"
@@ -792,6 +867,9 @@ milestone = "M5"
 summary = "The kerning shortcuts work with the Text tool, with the cursor between the two glyphs to be kerned, and only while the kerning mode is not 'no kerning'. They adjust the pair selected by the lock states; that a missing pair is created on the first keypress is assumed."
 ref = "Spacing & Kerning › Kerning › Kerning Shortcuts; Kerning Modes"
 status = "handbook"
+guesses = [
+  "A keypress changes the kerning that applies by the step and stores the result on the sides the locks choose, creating that pair when it does not exist; no source says.",
+]
 
 [[behavior]]
 id = "kerning.shortcutModifierScheme"
@@ -802,6 +880,9 @@ ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
 status = "handbook"
 
 # ───────────────────────────── Kerning groups ─────────────────────────────
+guesses = [
+  "In right-to-left text Ctrl picks the pair with the glyph that is visually on the left and Cmd the pair with the glyph visually on the right; no source says.",
+]
 
 [[behavior]]
 id = "kerning.groupSemantics"
@@ -815,9 +896,10 @@ status = "handbook"
 id = "kerning.twoGroupsPerGlyph"
 area = "spacing-kerning"
 milestone = "M5"
-summary = "Each glyph has at most two kerning groups, a left one and a right one, which are independent namespaces: a left group and a right group with the same name are unrelated. We assume membership belongs to the glyph and is shared by all masters; the chapter does not say."
+summary = "Each glyph has at most two kerning groups, a left one and a right one, which are independent namespaces: a left group and a right group with the same name are unrelated. Membership belongs to the glyph, so all masters share it, and so do left-to-right and right-to-left kerning."
 ref = "Spacing & Kerning › Kerning › Kerning Groups"
 status = "handbook"
+notes = "The file format stores the groups on the glyph (`kernLeft`, `kernRight`; GlyphsSDK file-format specification). Both oracles use the same groups for right-to-left pairs, with the side that faces the pair (`kerning.directionsStoredSeparately`)."
 
 [[behavior]]
 id = "kerning.verticalGroups"
@@ -826,6 +908,10 @@ milestone = "M5"
 summary = "Glyphs set top to bottom use a top group and a bottom group in place of left and right. The chapter gives no further detail on vertical kerning (pair storage, shortcuts, feature output)."
 ref = "Spacing & Kerning › Kerning › Kerning Groups"
 status = "handbook"
+notes = "Neither oracle exports vertical kerning: a test font with a `kerningVertical` pair compiles to a GPOS table with only `kern` in fontc 1.0.0 and fontmake 3.12.1."
+guesses = [
+  "M5 stores and edits vertical pairs and shows them in top-to-bottom text; export writes none, as neither oracle does.",
+]
 
 [[behavior]]
 id = "kerning.groupNameCharset"
@@ -881,6 +967,9 @@ milestone = "M5"
 summary = "Assigns the top kerning group used when the glyph is set top to bottom. The chapter states that the group exists; the field behaviour is assumed to match the horizontal groups."
 ref = "Spacing & Kerning › Kerning › Kerning Groups"
 status = "handbook"
+guesses = [
+  "The top and bottom group fields check names as the left and right ones do.",
+]
 
 [[command]]
 id = "kerning.setBottomGroup"
@@ -907,6 +996,7 @@ milestone = "M5"
 summary = "Query, our addition: returns the kerning groups per side with their member glyphs. It supplies the data behind Show Group Members and the group rows of the Kerning window."
 ref = "Spacing & Kerning › Kerning › Kerning Groups"
 status = "inferred"
+own = true
 
 [[command]]
 id = "view.showGroupMembers"
@@ -938,6 +1028,7 @@ milestone = "M5"
 summary = "A kerning exception is a stored pair in which at least one side is a single glyph that also belongs to a group; for that combination it replaces the value the group pair would give. All other members keep the group value."
 ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions"
 status = "handbook"
+notes = "Both oracles keep an exception whose value is 0: in a test font, T–oacute = 0 against T–@o = −60 compiles to 0 (fontc 1.0.0, fontmake 3.12.1)."
 
 [[behavior]]
 id = "kerning.lockStates"
@@ -946,6 +1037,10 @@ milestone = "M5"
 summary = "Each side of the pair at the cursor has a lock in the Info box. Closed (the normal state) means edits are stored against that glyph's group; open means edits are stored against the glyph itself. With T closed and ö open, editing the pair writes right-group-of-T against ö: an exception for ö that still applies to every member of T's right group."
 ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions"
 status = "handbook"
+notes = "The reference scripting API reads and sets whether the kerning to the previous or next glyph is an exception (GSLayer kerning methods, docu.glyphsapp.com), and the file format has no lock field, so the lock state follows from the stored pairs."
+guesses = [
+  "A lock is open when the pair that applies names that glyph itself on that side while the glyph has a group there; opening a lock stores such a pair at the value that applied, so the kerning does not change.",
+]
 
 [[behavior]]
 id = "kerning.closingLockRemovesException"
@@ -954,6 +1049,9 @@ milestone = "M5"
 summary = "Closing an open lock removes the exception, so the glyph falls back to its group's kerning for that pair. The handbook does not say whether the exception pair is deleted at once or what happens to its value."
 ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions"
 status = "handbook"
+guesses = [
+  "Closing a lock deletes the exception pair in the current master only; the all-masters variant exists only for deletion in the Kerning window.",
+]
 
 [[command]]
 id = "kerning.addException"
@@ -990,6 +1088,7 @@ ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions; UFO 3 spec �
 status = "docs"
 
 # ───────────────────────────── Kerning window ─────────────────────────────
+notes = "Both oracles compile this order. In a test font with A–@V = −30 and @A–V = −40, the pair A V gets −30 (glyph–group wins) in fontc 1.0.0 and fontmake 3.12.1; Aacute V gets −40 and Aacute W the group–group −50. fontc resolves pairs in the same order (`fontbe/src/features/kern.rs`, `lookup_kerning_value`, after fontTools `ufoLib/kerning.py`). What the reference Edit View shows is documented only as far as exceptions overriding groups."
 
 [[command]]
 id = "window.kerning"
@@ -1049,6 +1148,7 @@ milestone = "M5"
 summary = "Actions menu of the Kerning window with the three commands the chapter names. Further items may exist in the reference; only these are documented."
 ref = "Spacing & Kerning › Kerning › Kerning Window"
 status = "handbook"
+notes = "The reference kerning tutorial (glyphsapp.com/learn/kerning) lists the same three items in the gear menu: Clean Up, Compress and Show All Glyphs."
 
 [[command]]
 id = "kerning.listPairs"
@@ -1062,6 +1162,7 @@ milestone = "M5"
 summary = "Query, our addition: returns the stored kerning pairs of a master and direction, filtered and sorted with the same options the Kerning window offers. It is the data source of the window."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
 status = "inferred"
+own = true
 
 [[command]]
 id = "kerning.filterPairs"
@@ -1168,6 +1269,9 @@ milestone = "M5"
 summary = "Renames a kerning group from the Kerning window by editing its name in a row. With scope 'pair' only the selected pair is pointed at the new name; with scope 'font' the group is renamed everywhere. Only groups on the edited side are affected."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+guesses = [
+  "With scope `pair`, only the side of the selected pair changes to the new name and the glyphs keep their group; no source says whether the reference also moves glyphs into the new group.",
+]
 
 [[panel]]
 id = "dialog.renameKerningGroup"
@@ -1179,6 +1283,9 @@ milestone = "M5"
 summary = "Question asked after a group name is edited in the Kerning window: limit the change to the selected pair, or rename the group across the font. Button captions are not given in the handbook."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+guesses = [
+  "The buttons read This Pair, All Pairs and Cancel; the handbook gives no captions.",
+]
 
 [[command]]
 id = "kerning.copyPairs"
@@ -1192,6 +1299,9 @@ milestone = "M5"
 summary = "Copies kerning pairs with their values to the clipboard. In the UI this is Edit › Copy (Cmd+C) while rows are selected in the Kerning window; Edit › Select All (Cmd+A) selects every listed pair first."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+guesses = [
+  "The clipboard holds the pairs as kerning-text lines (`left<TAB>right<TAB>value`), so they also paste into a text editor; no source gives the reference clipboard format.",
+]
 
 [[command]]
 id = "kerning.pastePairs"
@@ -1205,6 +1315,9 @@ milestone = "M5"
 summary = "Adds the kerning pairs on the clipboard to the current master, which may be a different master or a different font than the one they were copied from. In the UI this is Edit › Paste (Cmd+V) in the Kerning window. Pairs that already exist are handled according to the conflict choice."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+guesses = [
+  "A pasted group side keeps its name; a group the target font lacks is pasted as it is and reported.",
+]
 
 [[panel]]
 id = "dialog.pasteKerningConflict"
@@ -1216,6 +1329,9 @@ milestone = "M5"
 summary = "Warning shown when pasted kerning pairs would replace pairs already present in the target master. A cancel option is likely but not mentioned."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+guesses = [
+  "The warning has a Cancel button besides Overwrite and Keep Existing.",
+]
 
 [[command]]
 id = "kerning.deletePairs"
@@ -1242,6 +1358,9 @@ milestone = "M5"
 summary = "Actions-menu command: deletes every obsolete kerning pair, meaning pairs that name a glyph no longer in the font or a group that no glyph belongs to any more. Whether it covers all masters or only the current one is not stated."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
 status = "handbook"
+guesses = [
+  "Clean Up acts on the given master and direction only, like the Kerning window list.",
+]
 
 [[command]]
 id = "kerning.compress"
@@ -1255,6 +1374,9 @@ milestone = "M5"
 summary = "Actions-menu command: rewrites glyph–glyph and glyph–group pairs to use the kerning groups of the glyphs involved wherever possible, reducing the pair count. One run lifts one side per pair, so it may need repeating; untilStable (our addition) repeats until nothing changes."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
 status = "handbook"
+guesses = [
+  "Compress acts on the given master and direction only.",
+]
 
 [[behavior]]
 id = "kerning.windowListsCurrentDirection"
@@ -1271,6 +1393,9 @@ milestone = "M5"
 summary = "The search term filters the list to pairs that contain it; the options change the test to exact match, prefix, suffix or exclusion, restrict to group or non-group entries, restrict the search to the left or right side, and optionally keep only pairs involving glyphs selected in Font View. Reset restores the defaults."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
 status = "handbook"
+guesses = [
+  "The defaults are contains, every entry kind, both sides and not limited to the Font View selection; Reset returns to them.",
+]
 
 [[behavior]]
 id = "kerning.windowEntryColors"
@@ -1287,6 +1412,9 @@ milestone = "M5"
 summary = "Clicking the Left, Value or Right header sorts by that column and clicking the same header again inverts the order. Sorting by Value brings the extreme kerning values to the ends of the list for review."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
 status = "handbook"
+guesses = [
+  "Before a header is clicked the list keeps the stored order of the pairs.",
+]
 
 [[behavior]]
 id = "kerning.windowSelectionDrivesEditView"
@@ -1295,6 +1423,9 @@ milestone = "M5"
 summary = "Selecting a row, by click or by Up/Down, displays that pair in Edit View and replaces the pair previously at the cursor if there was one. For a row with one or two groups just one representative glyph pair is shown."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
 status = "handbook"
+guesses = [
+  "A group side is shown by its first member in glyph order.",
+]
 
 [[behavior]]
 id = "kerning.windowInPlaceEditing"
@@ -1335,6 +1466,7 @@ milestone = "M5"
 summary = "Stored pairs are not removed automatically when a glyph is deleted or a group loses its last member; they stay as obsolete pairs until Clean Up is run."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
 status = "handbook"
+notes = "Pending owner question (docs/plans/M5.md § 7, question 2): whether removing a glyph should also remove the pairs that name it, in the same undo step. Until it is answered, this row holds."
 
 [[behavior]]
 id = "kerning.compressRules"
@@ -1343,6 +1475,9 @@ milestone = "M5"
 summary = "Compress replaces a glyph side of a pair by that glyph's kerning group when it has one, turning glyph–glyph and glyph–group pairs into group pairs. A pair that is a genuine exception (its value differs from the group pair it would collide with) is kept; an exception whose value equals the group value is redundant and is absorbed."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
 status = "handbook"
+guesses = [
+  "When two pairs would lift to the same group pair with different values, neither is lifted.",
+]
 
 [[behavior]]
 id = "kerning.compressOneStepPerRun"
@@ -1353,6 +1488,10 @@ ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning 
 status = "handbook"
 
 # ───────────────────────────── Kerning and feature code ─────────────────────────────
+notes = "The handbook example lifts the left side first: T–m becomes @T–m, then @T–@n."
+guesses = [
+  "A run lifts the left side of every pair that can lift it, else its right side.",
+]
 
 [[behavior]]
 id = "kerning.implicitKernFeature"

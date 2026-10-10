@@ -97,11 +97,14 @@ Evaluation rules stated:
 
 Parsing hazards the implementation has to settle (see Open questions):
 
-- Glyph names may contain `-` and `.` (`koKai-thai`), so `-` is not always an operator. A
-  workable rule is to resolve the longest prefix that is an existing glyph name, but the
-  reference's rule is unknown.
-- `=-12` is an offset on an auto-aligned glyph but could be read as a negative constant
-  elsewhere.
+- Glyph names may contain `-` and `.` (`koKai-thai`), so `-` is not always an operator.
+  FontCraft takes the longest leading part that names a glyph in the font (our rule; the
+  reference's is unknown). Without a leading `=` the whole text is one glyph name.
+- `=-12` is an offset on an auto-aligned glyph (M6) and a negative constant elsewhere.
+
+In the file, a glyph-level key is stored on the glyph and a local key on the layer, without the
+`==` (GlyphsSDK file-format specification; Inter Roman has 448 layers with their own keys). `==`
+is only how the Info box shows and takes a local key.
 
 ### 2.2 Syncing
 
@@ -235,7 +238,9 @@ Order we implement (from the UFO 3 `kerning.plist` rules, status `docs`,
 5. no pair: 0
 
 The first stored pair wins. Steps 2 and 3 can both exist for the same two glyphs; UFO gives
-glyph–group priority. Whether the reference resolves that tie the same way is an open question.
+glyph–group priority, and so do both oracles' compiled fonts (fontc 1.0.0 and fontmake 3.12.1
+on a test font with both mixed pairs). Whether the reference's Edit View resolves that tie the
+same way is still to be observed.
 `kerning.getPair` reports the value and the step that supplied it.
 
 ### 3.8 Kerning window (`window.kerning`, Window › Kerning, Cmd+Alt+K)
@@ -310,37 +315,114 @@ is in `07-import-export.md`, section 4.2).
 
 1. Sign of the kerning shortcuts: does "increase" add to the value (more space) or make the
    pair tighter?
+   **Answered for M5 (our decision):** increase adds to the value (more space), decrease subtracts.
+   The handbook table names the directions without a sign; the reference kerning tutorial
+   (glyphsapp.com/learn/kerning) says negative values tighten. Guess on `kerning.increaseLeft`.
 2. Do the spacing and kerning shortcuts follow the visual or the logical side in right-to-left
    and vertical text?
+   **Answered for M5 (our decision):** in right-to-left text the shortcuts follow the visual side,
+   as in left-to-right text; in top-to-bottom text they do nothing in M5. Guesses on
+   `spacing.shortcutModifierScheme` and `kerning.shortcutModifierScheme`.
 3. Spacing shortcuts on a metric that holds a metrics key, or on an auto-aligned glyph: is the
    key removed, kept and flagged, or is the keypress ignored?
+   **Answered for M5 (our decision):** the number changes, the key stays and shows as out of sync
+   (`spacing.shortcutsNeedTextTool`). Auto-aligned glyphs wait for M6.
 4. Up/Down in an Info box field that holds a metrics key or a kern field: what happens?
+   **Answered for M5 (our decision):** in a field with a key, Up and Down leave the key unchanged.
+   In a kern field they add and subtract 1 (10 with Shift), as a user report on the reference forum
+   describes (`spacing.infoBoxArrowSteps`).
 5. Numeric width edit: which sidebearing absorbs the change?
+   **Answered for M5 (our decision):** the right sidebearing absorbs it; the left one stays
+   (`spacing.setWidth`). `glyph.transformMetrics` without *on both sides* does the same.
 6. Metrics key grammar: is whitespace allowed? Can `|` and `@` be combined with an operator, and
    in what order (`=|n+10`, `=h+8@200`)? More than one operation? Negative constants (`=-12` on
    a non-aligned glyph)? How are hyphenated glyph names told apart from subtraction?
+   **Partly answered by sources, the rest our decision (M5):** text without a leading `=` is one
+   glyph name, so `n-20` names a glyph and `=n-20` subtracts (forum answer by the reference
+   developers, thread "Build 1015 metrics keys", 2017). `|` combines with an operator: files the
+   reference saved hold `=|quoteleft*0.5`. `=-30` on a glyph that is not aligned automatically is a
+   constant (forum bug reports treat it as a working key). Ours: spaces are ignored, one operation
+   at most, `@` comes last (`=H+8@200`), and the glyph name is the longest leading part that names
+   a glyph in the font. Guesses on `metricsKey.calculationSyntax`, `metricsKey.decimalOperands`,
+   `metricsKey.constant`. Of the corpus's 4,413 keys, 2,929 are bare names, 616 `=` and a signed
+   number, 405 `=|name`, 203 constants, 153 calculations, 104 `=name` and 3 `=|name` with an
+   operation; none uses `@` or `==` (local keys are stored on the layer without `==`).
 7. Which key forms are valid in the width field (calculation, `|`, `@`)? What do `|` and `@`
    mean for the T/B fields?
+   **Answered for M5 (our decision):** the width field takes a glyph name, a constant or a
+   calculation and refuses `|` and `@` (`spacing.setWidth`). The T and B fields take the same forms
+   as LSB and RSB with top and bottom in place of left and right; `@` is refused there.
 8. Evaluation details: division by zero, a referenced glyph that does not exist, a reference
    cycle, a referenced glyph that is itself out of sync, rounding of exact halves, and which
    layer of the referenced glyph is read for intermediate or alternate layers.
+   **Answered for M5 (our decision):** division by zero, a cycle, a chain deeper than 32 steps and
+   a result out of range are errors: the metric keeps its number and the key is reported. A forum
+   answer by the reference developers shows that the reference does not stop cycles (thread
+   "Possible bug with spacing formula"). A missing glyph makes the key unlinked
+   (`metricsKeys.unlinkedDisplay`). Update Metrics evaluates in dependency order, so a chain
+   settles in one run. Halves round up, as the oracles round kerning. A layer that is not a master
+   layer reads the referenced glyph's layer with the same id, else the layer of its own master.
+   Guesses on `metricsKey.notSyncedAutomatically`, `metricsKey.resultRounded`,
+   `metricsKey.glyphLevelByDefault`, `glyph.updateMetrics`.
 9. `@offset`: how is the sidebearing measured when the outline does not cross that height?
+   **Answered for M5 (our decision):** the key uses the bounding-box sidebearing
+   (`metricsKey.baselineOffset`).
 10. A `==` local key next to a glyph-level key on the same field: does the local key simply win
     on its layer? How is a local key removed?
+   **Answered for M5 (our decision):** on its layer the local key wins. A plain number typed into a
+   field removes the key the field shows: a local key from the layer, a glyph-level key from the
+   glyph (`metricsKey.localPrefix`). In the file a local key is the layer's own key, written
+   without `==`.
 11. Kerning lookup: is the precedence in section 3.7 what the reference does, in particular
     glyph–group before group–glyph?
+   **Answered for compiled fonts by the oracles:** in a test font with A–@V = −30 and @A–V = −40,
+   fontc 1.0.0 and fontmake 3.12.1 both give A V −30, so glyph–group wins; fontc resolves pairs in
+   this order (`fontbe/src/features/kern.rs`). What the reference's Edit View shows stays to be
+   observed; FontCraft uses the same order there.
 12. Locks: does opening a lock immediately create a pair with the group's value? Does closing
     delete the exception pair for that master only? Is lock state derived from stored pairs or
     stored separately?
+   **Answered for M5 (sources and our decision):** the lock state follows from the stored pairs:
+   the file format has no lock field, and the reference scripting API reads and sets whether the
+   kerning to the neighbour is an exception. Ours: opening a lock stores the pair that the open
+   lock names at the value that applied; closing deletes that exception in the current master only
+   (`kerning.lockStates`, `kerning.closingLockRemovesException`).
 13. Are kerning groups per glyph across all masters (assumed) and shared between LTR and RTL?
+   **Answered (sources):** per glyph across all masters: the file format stores `kernLeft` and
+   `kernRight` on the glyph. Shared with right-to-left kerning: both oracles read right-to-left
+   pairs with the group of the side that faces the pair (the first glyph's left group, written
+   `@MMK_R_…`; the second glyph's right group, `@MMK_L_…`), and a test font compiles that way in
+   both (`kerning.directionsStoredSeparately`).
 14. Kerning window: default search options, the default sort order, whether further actions
     exist in the menu, the clipboard text format for copied pairs, and whether Clean Up and
     Compress act on one master or all.
+   **Answered for M5 (source and our decisions):** the reference kerning tutorial lists the same
+   three actions (Clean Up, Compress, Show All Glyphs). Ours: the search defaults are contains,
+   every entry kind, both sides, not limited to the selection; the list keeps the stored order
+   until a header is clicked; copied pairs are kerning-text lines; Clean Up and Compress act on the
+   current master and direction.
 15. Compress: order of side promotion, and what happens when promoted pairs collide with
     different values.
+   **Answered for M5 (source and our decision):** the handbook example lifts the left side first.
+   When two pairs would lift to the same group pair with different values, neither is lifted; a
+   lifted pair that meets a stored group pair follows the handbook rule (kept as an exception when
+   the values differ).
 16. Rename with scope "pair": does it create a new group, and what membership does it get?
+   **Answered for M5 (our decision):** no new group: only the selected pair's side is renamed and
+   the glyphs keep their group (`kerning.renameGroup`).
 17. Zero-valued pairs: stored (as a deliberate exception) or removed? Are fractional kerning
     values allowed?
+   **Answered for M5 (oracles and our decision):** zero pairs are stored and override group values;
+   both oracles keep them in the compiled font. Values read from files keep their fractions; typed
+   values are rounded to whole units. Both oracles round compiled kerning half up (−10.5 → −10,
+   10.5 → 11, −10.6 → −11).
 18. Vertical kerning: storage, shortcuts, Kerning window listing, and the feature generated.
+   **Partly answered (oracles), the rest our decision (M5):** neither fontc nor fontmake exports
+   vertical kerning (no `vkrn` from a `kerningVertical` pair). M5 stores and edits vertical pairs
+   and shows them in top-to-bottom text; there are no vertical kerning shortcuts in M5.
 19. Implicit `kern` feature: lookup structure, script/language handling, interaction with a
     hand-written `kern` feature, and any value or size limits.
+   **Open for M8.** Known: both oracles split the generated kern lookups by script (a test font
+   with Latin and Hebrew pairs gets a lookup per script), and the handbook's Layout chapter says a
+   hand-written feature of the same name places the generated code where it holds the line `#
+   Automatic Code`.
