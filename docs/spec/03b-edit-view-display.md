@@ -256,6 +256,23 @@ arrow keys move the selected ones by 1, Shift 10, Cmd 100 units (`annotation.mov
 removes them (`annotation.delete`). Data commands: `annotation.add`, `annotation.update`,
 `annotation.list`.
 
+How FontCraft stores and edits them (our decisions where the handbook is silent):
+
+| Type | Stored as | Values | Default from `annotation.add` |
+|---|---|---|---|
+| `text` | `Text` | text (several lines), box width | width 200 units |
+| `arrow` | `Arrow` | angle in degrees, kept from 0 to 360 | 45° |
+| `circle` | `Circle` | diameter, stored in the file's `width` key | 100 units |
+| `plus`, `minus` | `Plus`, `Minus` | none | |
+
+- Each layer side (foreground, background) has its own list, addressed by index like the
+  other target lists. Deleting an annotation moves the later ones up.
+- A value given for a type that does not use it is an error. An empty text removes the text.
+- Positions are not rounded to the grid: they mark places on the drawing, not outline points.
+- A width or diameter of 0 means the file stores none; the canvas draws the default then.
+- The direction of a positive angle is open, as for every angle in the file format
+  (`30-source-formats.md`, open question 1).
+
 ## Images
 
 **Adding.** `glyph.addImage` (Glyph > Add Image…), or drop a file on a Font View cell or on a
@@ -354,9 +371,9 @@ the active Edit View tab and is blank otherwise.
     stays until the next click or tool change.
 11. Keyboard shortcut of the Annotation tool; default width, angle and diameter of new
     annotations; the units and anchor point of each annotation's position.
-    **Answered for M3 (our decision, 2026-10-09):** our default values, in `theme::Tokens`: text
-    width 200 units, circle diameter 100, arrow at 45°. The Annotation tool's key is `A`, as its row
-    says.
+    **Answered for M3 (our decision, 2026-10-09):** text width 200 units, circle diameter 100,
+    arrow at 45°. `annotation.add` applies them when the caller gives no value, so a tool click
+    and the command give the same annotation. The Annotation tool's key is `A`, as its row says.
 12. Image crop: coordinate space of the stored rectangle; meaning of "layer bounds"; whether a
     layer can hold more than one image; which formats FontCraft decodes natively (PDF, PSD).
 13. Preview blur range and unit; which custom parameters the instance preview honours.
