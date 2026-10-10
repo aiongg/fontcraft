@@ -3,7 +3,7 @@
 //!
 //! | Rule | Items |
 //! |---|---|
-//! | [`visible`] | Lock Path or Unlock Path, never both; a guide's Lock or Unlock, Make Global or Make Local; Guide Properties… for one editable guide |
+//! | [`visible`] | Lock Path or Unlock Path, never both; a guide's Lock or Unlock, Make Global or Make Local; Guide Properties… for one editable guide; Open Corner for a selected corner node that is not an open end; Make Node First for nodes of closed paths |
 //! | [`ready`] | Connect Nodes needs two open ends; Close Open Paths needs an open path |
 //! | [`checked`] | Locked (the glyph), Measurement Guide |
 //!
@@ -46,6 +46,14 @@ pub fn visible(scene: &Scene, selection: &Selection, id: &str) -> bool {
         "guide.makeGlobal" => guides.is_empty() || guides.iter().any(|(r, _)| r.scope == GuideScope::Local),
         "guide.makeLocal" => guides.iter().any(|(r, _)| r.scope == GuideScope::Global),
         GUIDE_PROPERTIES => matches!(guides.as_slice(), [(r, g)] if guide_drag::editable(scene, *r, g)),
+        "path.openCorner" => selection
+            .on_curve_points(scene)
+            .iter()
+            .any(|&(s, n)| scene.path(s).is_some_and(|p| p.nodes.get(n).is_some_and(|node| node.on_curve() && !node.smooth) && !open_end(p, n))),
+        "path.makeNodeFirst" => {
+            let nodes = selection.on_curve_points(scene);
+            !nodes.is_empty() && nodes.iter().all(|&(s, _)| scene.path(s).is_some_and(|p| p.closed))
+        }
         _ => true,
     }
 }

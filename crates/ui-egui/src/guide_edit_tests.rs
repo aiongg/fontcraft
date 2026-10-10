@@ -159,6 +159,7 @@ fn the_context_menu_adds_guides_and_lists_the_commands_of_a_guide() {
         assert!(on_guide.contains(&label), "{label} missing from {on_guide:?}");
     }
     assert!(!on_guide.iter().any(|l| *l == "Unlock Guide" || *l == "Make Local Guide"), "{on_guide:?}");
+    assert!(!on_guide.iter().any(|l| *l == "Add Guide" || *l == "Add Global Guide"), "adding is for clicks off guides: {on_guide:?}");
     let opened = context_menu::invoke(&mut app, "dialog.guideProperties").unwrap();
     assert!(app.dialog.is_some(), "Guide Properties… opens the dialog: {opened}");
     crate::dialogs::cancel(&mut app).unwrap();

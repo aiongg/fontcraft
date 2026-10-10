@@ -200,7 +200,10 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
     let tab = state.tab();
     let scene = font.zip(tab).and_then(|(font, tab)| tools_glue::scene(font, tab));
     let selection = tab.map(|t| &t.selection);
+    // On a guide the menu offers the guide's commands; adding a guide is for clicks off guides.
+    let on_guide = kinds.contains(&GUIDE);
     let visible = |id: &str| match (&scene, selection) {
+        _ if on_guide && matches!(id, "guide.add" | "guide.addGlobal") => false,
         (Some(scene), Some(selection)) => item_state::visible(scene, selection, id),
         _ => id != GUIDE_PROPERTIES,
     };

@@ -141,6 +141,29 @@ fn a_right_click_on_a_node_lists_the_node_commands_and_runs_them_like_the_comman
 }
 
 #[test]
+fn open_corner_and_make_node_first_show_only_where_they_apply() {
+    let mut app = edit_app();
+    // Shape 1: an open path whose middle node is smooth.
+    app.run(
+        "path.addPath",
+        &json!({"glyph": "A", "closed": false, "nodes": [{"x": 400, "y": 100}, {"x": 500, "y": 200, "smooth": true}, {"x": 400, "y": 300}]}),
+    )
+    .unwrap();
+    let shown = |app: &mut FontcraftApp, points: Value| -> Vec<&'static str> {
+        app.run("selection.set", &json!({ "points": points })).unwrap();
+        context_menu::open(app, Point::new(0.0, 0.0), tools_glue::Space::Font).unwrap();
+        menu(app).items().map(|i| i.command).collect()
+    };
+    let corner = shown(&mut app, json!([[0, 2]]));
+    assert!(corner.contains(&"path.openCorner") && corner.contains(&"path.makeNodeFirst"), "a corner of a closed path: {corner:?}");
+    let end = shown(&mut app, json!([[1, 0]]));
+    assert!(!end.contains(&"path.openCorner") && !end.contains(&"path.makeNodeFirst"), "an open end: {end:?}");
+    let smooth = shown(&mut app, json!([[1, 1]]));
+    assert!(!smooth.contains(&"path.openCorner"), "a smooth node: {smooth:?}");
+    assert!(!smooth.contains(&"path.makeNodeFirst"), "a node of an open path: {smooth:?}");
+}
+
+#[test]
 fn a_right_click_on_a_segment_acts_on_that_segment() {
     let mut app = edit_app();
     let w = Window::new();
