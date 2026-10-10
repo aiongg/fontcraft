@@ -69,6 +69,13 @@ impl Oracle {
         }
     }
 
+    /// Does the tool remove overlaps when it builds a static font? fontc never does; fontmake
+    /// does by default. FontCraft's side is built the same way, and with overlaps removed the
+    /// outlines are compared by rendered coverage ([`crate::compare::Outlines::Coverage`]).
+    pub fn removes_overlaps(self) -> bool {
+        self == Oracle::Fontmake
+    }
+
     /// Can the tool build this outline flavour?
     pub fn builds(self, flavour: Flavour) -> bool {
         !(self == Oracle::Fontc && flavour == Flavour::Cff)
@@ -247,8 +254,9 @@ fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Buil
         // Specialised charstrings without subroutines: what FontCraft's CFF writer is planned to do.
         args.extend(["--optimize-cff".into(), "1".into()]);
     }
-    // Overlaps stay, as in fontc and in FontCraft before M3; glyph names stay the source's.
-    args.extend(["--keep-overlaps".into(), "--no-production-names".into()]);
+    // Overlaps are removed, by fontmake's default backend, as FontCraft removes them for static
+    // fonts; the outlines are compared by rendered coverage. Glyph names stay the source's.
+    args.push("--no-production-names".into());
     if req.flavour == Flavour::TrueType {
         // fontc and FontCraft leave out an on-curve point exactly between two off-curve points.
         args.push("--drop-implied-oncurves".into());

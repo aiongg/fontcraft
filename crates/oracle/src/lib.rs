@@ -4,8 +4,9 @@
 //! A run ([`check`]) builds the source both ways with the same options and a fixed timestamp
 //! (FontCraft through a closure the caller supplies, the reference through [`tools`]), reads both
 //! fonts back and compares them normalised ([`compare`]). Each table comes out identical,
-//! equivalent (it differs only where normalisation allows), allowed (every difference is on the
-//! allow-list, [`allow`]), different, or skipped (outside the comparison for now: layout tables
+//! equivalent (it differs only where normalisation allows), coverage-equal (outline tables only:
+//! some glyphs differ in their points but cover the same pixels), allowed (every difference is on
+//! the allow-list, [`allow`]), different, or skipped (outside the comparison for now: layout tables
 //! until M8, variation tables until M9). Differences in how the two programs read the source, such
 //! as a different glyph set or order, are reported apart as source-reading findings.
 //!
@@ -49,6 +50,10 @@ pub enum Status {
     Identical,
     /// Different bytes, the same content once normalised.
     Equivalent,
+    /// An outline table whose glyphs are all equivalent or, where their points differ, cover
+    /// the same pixels ([`outline::coverage_equal`]). Used where both sides removed overlaps.
+    #[serde(rename = "coverage-equal")]
+    CoverageEqual,
     /// Different, and every difference is on the allow-list.
     Allowed,
     Different,
@@ -61,6 +66,7 @@ impl Status {
         match self {
             Status::Identical => "identical",
             Status::Equivalent => "equivalent",
+            Status::CoverageEqual => "coverage-equal",
             Status::Allowed => "allowed",
             Status::Different => "different",
             Status::Skipped => "skipped",
@@ -89,6 +95,30 @@ pub struct TableResult {
     /// Reasons of the allow-list entries that matched.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub allowed: Vec<String>,
+    /// For an outline table (`glyf`, `CFF `): how the glyphs both fonts have compared.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glyphs: Option<GlyphCounts>,
+}
+
+/// How the outlines of the glyphs both fonts have compared, before the allow-list.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphCounts {
+    pub compared: usize,
+    /// The same segments within half a unit, start points free.
+    pub same: usize,
+    /// Different segments, the same rendered coverage.
+    pub coverage_equal: usize,
+    pub different: usize,
+}
+
+impl GlyphCounts {
+    fn add(&mut self, o: &GlyphCounts) {
+        self.compared += o.compared;
+        self.same += o.same;
+        self.coverage_equal += o.coverage_equal;
+        self.different += o.different;
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -225,7 +255,7 @@ pub fn check(source: &Path, label: &str, settings: &Settings, ours: impl FnOnce(
     if let (Ok(o), Ok(b)) = (&ours, &mut built)
         && !b.alternatives.is_empty()
     {
-        closest_master(&o.bytes, b);
+        closest_master(&o.bytes, b, compare::Outlines::of(settings.oracle));
     }
     let reference = built.as_ref().ok().and_then(|b| std::fs::read(&b.path).ok());
     report.outcome = match (&ours, &built) {
@@ -254,7 +284,7 @@ pub fn check(source: &Path, label: &str, settings: &Settings, ours: impl FnOnce(
         }
     }
     if let (Ok(o), Some(theirs)) = (&ours, &reference) {
-        match compare::compare(&o.bytes, theirs) {
+        match compare::compare_with(&o.bytes, theirs, compare::Outlines::of(settings.oracle)) {
             Ok(c) => {
                 report.notes.extend(c.notes);
                 report.source_reading = c.source_reading;
@@ -278,11 +308,11 @@ pub fn check(source: &Path, label: &str, settings: &Settings, ours: impl FnOnce(
 
 /// Of masters that share a name, the file whose font differs least from ours (fewest differing
 /// tables, then fewest differences) becomes `built.path`. The note names the choice.
-fn closest_master(ours: &[u8], built: &mut tools::Built) {
+fn closest_master(ours: &[u8], built: &mut tools::Built, outlines: compare::Outlines) {
     let candidates: Vec<PathBuf> = std::iter::once(built.path.clone()).chain(built.alternatives.iter().cloned()).collect();
     let distance = |path: &PathBuf| {
         let theirs = std::fs::read(path).ok()?;
-        let c = compare::compare(ours, &theirs).ok()?;
+        let c = compare::compare_with(ours, &theirs, outlines).ok()?;
         let different: Vec<&TableResult> = c.tables.iter().filter(|t| t.status == Status::Different).collect();
         Some((different.len(), different.iter().map(|t| t.count).sum::<usize>()))
     };
@@ -359,6 +389,7 @@ fn slug(label: &str) -> String {
 pub struct Counts {
     pub identical: usize,
     pub equivalent: usize,
+    pub coverage_equal: usize,
     pub allowed: usize,
     pub different: usize,
     pub skipped: usize,
@@ -376,6 +407,8 @@ pub struct Summary {
     pub source_reading: usize,
     /// Per table tag, over the compared sources whose fonts have the table.
     pub tables: BTreeMap<String, Counts>,
+    /// Per outline table tag, the glyphs compared over the compared sources.
+    pub glyphs: BTreeMap<String, GlyphCounts>,
 }
 
 pub fn summarise(reports: &[SourceReport]) -> Summary {
@@ -399,9 +432,13 @@ pub fn summarise(reports: &[SourceReport]) -> Summary {
             match t.status {
                 Status::Identical => c.identical += 1,
                 Status::Equivalent => c.equivalent += 1,
+                Status::CoverageEqual => c.coverage_equal += 1,
                 Status::Allowed => c.allowed += 1,
                 Status::Different => c.different += 1,
                 Status::Skipped => c.skipped += 1,
+            }
+            if let Some(g) = &t.glyphs {
+                s.glyphs.entry(t.tag.clone()).or_default().add(g);
             }
         }
     }
@@ -457,15 +494,39 @@ pub fn render_summary(s: &Summary) -> String {
         "{} sources: reference built {}, FontCraft built {}, compared {}; {} with a source-reading difference",
         s.sources, s.reference_built, s.fontcraft_built, s.compared, s.source_reading
     );
-    let _ = writeln!(out, "{:<6} {:>9} {:>10} {:>7} {:>9} {:>7}", "table", "identical", "equivalent", "allowed", "different", "skipped");
+    let _ = writeln!(
+        out,
+        "{:<6} {:>9} {:>10} {:>14} {:>7} {:>9} {:>7}",
+        "table", "identical", "equivalent", "coverage-equal", "allowed", "different", "skipped"
+    );
     let mut tags: Vec<&String> = s.tables.keys().collect();
     let rank = |t: &str| compare::CORE.iter().position(|c| *c == t).unwrap_or(compare::CORE.len());
     tags.sort_by_key(|t| (rank(t), (*t).clone()));
     for tag in tags {
         if let Some(c) = s.tables.get(tag) {
-            let _ =
-                writeln!(out, "{:<6} {:>9} {:>10} {:>7} {:>9} {:>7}", tag.trim_end(), c.identical, c.equivalent, c.allowed, c.different, c.skipped);
+            let _ = writeln!(
+                out,
+                "{:<6} {:>9} {:>10} {:>14} {:>7} {:>9} {:>7}",
+                tag.trim_end(),
+                c.identical,
+                c.equivalent,
+                c.coverage_equal,
+                c.allowed,
+                c.different,
+                c.skipped
+            );
         }
+    }
+    for (tag, g) in &s.glyphs {
+        let _ = writeln!(
+            out,
+            "{} glyphs: {} compared, {} same, {} coverage-equal, {} different (before the allow-list)",
+            tag.trim_end(),
+            g.compared,
+            g.same,
+            g.coverage_equal,
+            g.different
+        );
     }
     out
 }

@@ -1,7 +1,5 @@
 //! Outline preparation (`docs/spec/40-compile.md` § 1.3), in the reference compilers' filter
-//! order (`compile.filterOrder`): decompose, then convert curves, then fix the direction. Overlap
-//! removal, which belongs between the first two, comes with the path engine (M3); fontc does not
-//! remove overlaps either.
+//! order (`compile.filterOrder`): decompose, remove overlaps, convert curves, fix the direction.
 //!
 //! 1. **Decompose** (`compile.mixedGlyphsBecomeSimple`,
 //!    `compile.overflowingComponentTransformDecompose`, `compile.otfDecomposesAllComponents`): a
@@ -12,11 +10,21 @@
 //!    when the transform mirrors it, reversed; glyphs that are decomposed themselves are
 //!    decomposed before the glyphs that use them. This is fontc's `convert_components_to_contours`
 //!    and `resolve_inconsistencies` (`fontir/src/glyph.rs`, Apache-2.0).
-//! 2. **Curves** (TrueType only, `compile.cu2quTolerance`): every cubic segment becomes a
+//! 2. **Overlaps** (`compile.removeOverlapsStatic`, `export.removeOverlapOption`), unless the
+//!    options keep them: every glyph that has contours after step 1 becomes the nonzero union of
+//!    its closed contours, as Path › Remove Overlap makes it ([`fontcraft_pathops::remove_overlap`];
+//!    result points stay unrounded until the glyph is written, as in fontmake). Open paths take
+//!    no part and are left out, with a warning. A composite keeps its components, so components
+//!    that overlap each other stay as they are (fontmake's `RemoveOverlapsFilter` skips glyphs
+//!    without contours the same way). Each glyph runs on a worker thread under
+//!    [`Settings::overlap_time_limit`] (docs/plans/M3.md › M3.6, rule 8): a glyph that runs out
+//!    of time or fails keeps its overlaps, with a warning naming it. In the browser the union
+//!    runs inline.
+//! 3. **Curves** (TrueType only, `compile.cu2quTolerance`): every cubic segment becomes a
 //!    quadratic spline within the tolerance, by kurbo's port of fontTools' cu2qu
 //!    (`cubics_to_quadratic_splines`), as fontc converts them. A segment it cannot convert within
 //!    100 pieces (not seen in practice) is approximated by kurbo's subdivision instead.
-//! 3. **Direction** (TrueType only, `compile.reverseContourDirection`): contours are reversed,
+//! 4. **Direction** (TrueType only, `compile.reverseContourDirection`): contours are reversed,
 //!    from the PostScript convention sources use to the TrueType one, unless the options keep
 //!    the direction. Composites are not touched.
 //!
@@ -25,9 +33,11 @@
 //! ([`crate::ot_round`]).
 
 use std::collections::{HashMap, VecDeque};
+use std::time::Duration;
 
 use fontcraft_geom::{Affine, BezPath, CubicBez, PathEl, Point, cubics_to_quadratic_splines};
 use fontcraft_model::{MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, ModelError, ResolvedComponent, ResolvedGlyph};
+use fontcraft_pathops::{OpenPaths, OverlapOptions, PathOpError, contours_from_bez, remove_overlap, run_with_time_limit};
 
 use crate::{CompileError, Expansion, MAX_COMPONENTS, MAX_TT_COORDINATE, preflight::transformed};
 
@@ -50,6 +60,9 @@ pub struct Settings {
     /// Most path elements decomposition may create over all glyphs
     /// ([`crate::MAX_EXPANDED_ELEMENTS`] in a compile).
     pub max_expanded: usize,
+    pub remove_overlap: bool,
+    /// How long one glyph's overlap removal may run.
+    pub overlap_time_limit: Duration,
 }
 
 /// One glyph ready for its table.
@@ -90,6 +103,7 @@ pub fn prepare(glyphs: &[ResolvedGlyph], s: &Settings, warnings: &mut Vec<String
         } else {
             g.contours.clone()
         };
+        let contours = if s.remove_overlap { without_overlaps(g, contours, s.overlap_time_limit, warnings) } else { contours };
         out.push(simple(g, contours, s, warnings)?);
     }
     Ok(out)
@@ -152,6 +166,60 @@ fn decomposed(
     }
     memo.insert(i, out.clone());
     Ok(out)
+}
+
+/// `contours` with their overlaps removed, or as they are, with a warning, when that fails or
+/// takes longer than `limit`.
+fn without_overlaps(g: &ResolvedGlyph, contours: Vec<BezPath>, limit: Duration, warnings: &mut Vec<String>) -> Vec<BezPath> {
+    if contours.is_empty() {
+        return contours;
+    }
+    let input = contours.clone();
+    let job = move || -> Result<(Vec<BezPath>, usize), PathOpError> {
+        let nodes: Vec<_> = input.iter().flat_map(contours_from_bez).collect();
+        let open = nodes.iter().filter(|c| !c.closed && c.nodes.len() > 1).count();
+        let merged = remove_overlap(&nodes, OverlapOptions { grid: 0.0, open_paths: OpenPaths::Remove })?;
+        let paths = merged.iter().map(|c| c.to_bez().map(with_closing_line)).collect::<Result<_, _>>()?;
+        Ok((paths, open))
+    };
+    let kept = |why: String| format!("glyph `{}` keeps its overlapping contours: {why}", g.name);
+    match run_with_time_limit(limit, job) {
+        Ok(Ok((paths, open))) => {
+            if open > 0 {
+                warnings.push(format!("glyph `{}`: {open} open paths were left out; overlap removal takes closed paths only", g.name));
+            }
+            paths
+        }
+        Ok(Err(e)) => {
+            warnings.push(kept(e.to_string()));
+            contours
+        }
+        Err(e) => {
+            warnings.push(kept(e.to_string()));
+            contours
+        }
+    }
+}
+
+/// `path` with an explicit line back to the start of each closed subpath that does not end
+/// there, the form [`fontcraft_model::Path::to_contour`] gives compilers.
+fn with_closing_line(path: BezPath) -> BezPath {
+    let mut out = BezPath::new();
+    let (mut start, mut current) = (Point::ZERO, Point::ZERO);
+    for el in path.elements() {
+        match *el {
+            PathEl::MoveTo(p) => (start, current) = (p, p),
+            PathEl::LineTo(p) | PathEl::QuadTo(_, p) | PathEl::CurveTo(_, _, p) => current = p,
+            PathEl::ClosePath => {
+                if current != start {
+                    out.line_to(start);
+                }
+                current = start;
+            }
+        }
+        out.push(*el);
+    }
+    out
 }
 
 /// Every point of `path`, on-curve and off-curve.

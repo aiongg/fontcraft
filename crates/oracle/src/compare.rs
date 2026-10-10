@@ -9,7 +9,7 @@
 //! | hmtx, vmtx | compared as advance and side bearing per glyph, by glyph name |
 //! | name | compared as a set of records; the reference compiler's own stamp at the end of the version string (ID 5); IDs 256 and up (feature and variation names) left out |
 //! | cmap | compared as code point → glyph name mappings over all Unicode subtables, plus the list of subtables and the variation sequences |
-//! | glyf, CFF | outlines drawn and compared within half a unit, start points free; for `glyf` also each glyph's kind (empty, simple, composite), components, flags, bounds and instructions |
+//! | glyf, CFF | outlines drawn and compared within half a unit, start points free; for `glyf` also each glyph's kind (empty, simple, composite), components, flags, bounds and instructions. With overlaps removed on both sides ([`Outlines::Coverage`]), outlines that differ are compared by rendered coverage, and a simple glyph whose outline is coverage-equal is not compared by contour count or bounds |
 //! | loca | offsets: compared through `glyf` |
 //! | maxp, OS/2, post | field by field |
 //!
@@ -26,7 +26,7 @@ use skrifa::raw::types::{GlyphId, Tag};
 use skrifa::raw::{FontRef, TableProvider};
 
 use crate::outline::{self, Match};
-use crate::{Difference, Finding, FindingKind, Status, TableResult};
+use crate::{Difference, Finding, FindingKind, GlyphCounts, Oracle, Status, TableResult};
 
 /// Most differences kept per table before the rest are only counted.
 pub const MAX_KEPT: usize = 100_000;
@@ -41,6 +41,24 @@ pub const CORE: &[&str] = &["head", "hhea", "maxp", "OS/2", "hmtx", "cmap", "nam
 pub const LAYOUT: &[&str] = &["GSUB", "GPOS", "GDEF", "kern", "BASE", "JSTF", "MATH"];
 /// Variation tables, compared from M9.
 pub const VARIATION: &[&str] = &["fvar", "gvar", "avar", "HVAR", "VVAR", "MVAR", "STAT", "cvar", "CFF2"];
+
+/// How outlines are compared.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outlines {
+    /// Segment by segment within half a unit.
+    Exact,
+    /// Segment by segment, and outlines that differ by rendered coverage
+    /// ([`outline::coverage_equal`]): two overlap removals give the same shape with different
+    /// points.
+    Coverage,
+}
+
+impl Outlines {
+    /// The comparison for builds against `oracle`.
+    pub fn of(oracle: Oracle) -> Self {
+        if oracle.removes_overlaps() { Outlines::Coverage } else { Outlines::Exact }
+    }
+}
 
 /// Result of comparing two fonts.
 #[derive(Clone, Debug, Default)]
@@ -103,8 +121,13 @@ fn tag_text(t: Tag) -> String {
 /// The glyphs both fonts have: name, our id, their id, in our order.
 type Common = Vec<(String, GlyphId, GlyphId)>;
 
-/// Compares `ours` with `theirs` (the reference compiler's font).
+/// Compares `ours` with `theirs` (the reference compiler's font), outlines exactly.
 pub fn compare(ours: &[u8], theirs: &[u8]) -> Result<Comparison, String> {
+    compare_with(ours, theirs, Outlines::Exact)
+}
+
+/// Compares `ours` with `theirs`, outlines as `outlines` says.
+pub fn compare_with(ours: &[u8], theirs: &[u8], outlines: Outlines) -> Result<Comparison, String> {
     let a = Side::new(ours, "FontCraft's font")?;
     let b = Side::new(theirs, "the reference font")?;
     let mut out = Comparison::default();
@@ -144,7 +167,7 @@ pub fn compare(ours: &[u8], theirs: &[u8]) -> Result<Comparison, String> {
     let mut order: Vec<String> = CORE.iter().map(|t| (*t).to_string()).filter(|t| tags_a.contains(t) || tags_b.contains(t)).collect();
     order.extend(tags_a.union(&tags_b).filter(|t| !CORE.contains(&t.as_str())).cloned());
     for tag in order {
-        out.tables.push(table(&a, &b, &common, &tag, tags_a.contains(&tag), tags_b.contains(&tag)));
+        out.tables.push(table(&a, &b, &common, &tag, tags_a.contains(&tag), tags_b.contains(&tag), outlines));
     }
     Ok(out)
 }
@@ -165,10 +188,11 @@ fn skipped(tag: &str, note: &str) -> TableResult {
         count: 0,
         note: Some(note.to_string()),
         allowed: Vec::new(),
+        glyphs: None,
     }
 }
 
-fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool) -> TableResult {
+fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool, outlines: Outlines) -> TableResult {
     if LAYOUT.contains(&tag) {
         return skipped(tag, "layout table: compared from M8");
     }
@@ -178,8 +202,8 @@ fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool)
     if tag == "DSIG" {
         return skipped(tag, "signature: not compared");
     }
-    let outlines = |t: &BTreeSet<String>| t.contains("glyf") || t.contains("CFF ");
-    if !(in_a && in_b) && (tag == "glyf" || tag == "loca" || tag == "CFF ") && outlines(&a.tags()) && outlines(&b.tags()) {
+    let has_outlines = |t: &BTreeSet<String>| t.contains("glyf") || t.contains("CFF ");
+    if !(in_a && in_b) && (tag == "glyf" || tag == "loca" || tag == "CFF ") && has_outlines(&a.tags()) && has_outlines(&b.tags()) {
         return skipped(tag, "the two fonts have different outline flavours");
     }
     match (in_a, in_b) {
@@ -190,6 +214,7 @@ fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool)
     }
     let (Some(raw_a), Some(raw_b)) = (a.table(tag), b.table(tag)) else { return skipped(tag, "cannot be read") };
     let same_bytes = raw_a == raw_b;
+    let mut glyphs = None;
     let (diffs, note) = match tag {
         "head" => (head(a, b), None),
         "hhea" => (hhea(a, b), None),
@@ -201,8 +226,16 @@ fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool)
         "name" => name(a, b),
         "cmap" => (cmap(a, b), None),
         "hmtx" => (hmtx(a, b, common), None),
-        "glyf" => (glyf(a, b, common), variable_reference(b).then(|| "the reference is variable: USE_MY_METRICS is not compared".to_string())),
-        "CFF " => (cff(a, b, common), Some("decoded outlines compared; size and encoding are not".to_string())),
+        "glyf" => {
+            let (d, g) = glyf(a, b, common, outlines);
+            glyphs = Some(g);
+            (d, variable_reference(b).then(|| "the reference is variable: USE_MY_METRICS is not compared".to_string()))
+        }
+        "CFF " => {
+            let (d, g) = cff(a, b, common, outlines);
+            glyphs = Some(g);
+            (d, Some("decoded outlines compared; size and encoding are not".to_string()))
+        }
         "loca" => (Vec::new(), Some("offsets: compared through glyf".to_string())),
         _ => {
             let d = if same_bytes { Vec::new() } else { vec![diff("bytes", format!("{} bytes", raw_a.len()), format!("{} bytes", raw_b.len()))] };
@@ -210,7 +243,12 @@ fn table(a: &Side, b: &Side, common: &Common, tag: &str, in_a: bool, in_b: bool)
         }
     };
     let identical = same_bytes || (tag == "head" && head_bytes_equal(raw_a, raw_b));
-    result(tag, identical, diffs, note)
+    let mut out = result(tag, identical, diffs, note);
+    if out.status == Status::Equivalent && glyphs.is_some_and(|g| g.coverage_equal > 0) {
+        out.status = Status::CoverageEqual;
+    }
+    out.glyphs = glyphs;
+    out
 }
 
 fn result(tag: &str, identical: bool, mut differences: Vec<Difference>, note: Option<String>) -> TableResult {
@@ -223,7 +261,7 @@ fn result(tag: &str, identical: bool, mut differences: Vec<Difference>, note: Op
     } else {
         Status::Equivalent
     };
-    TableResult { tag: tag.to_string(), status, differences, count, note, allowed: Vec::new() }
+    TableResult { tag: tag.to_string(), status, differences, count, note, allowed: Vec::new(), glyphs: None }
 }
 
 fn diff(key: impl Into<String>, ours: impl Into<String>, theirs: impl Into<String>) -> Difference {
@@ -645,17 +683,24 @@ fn glyf_structure(s: &Side, gid: GlyphId, use_my_metrics: bool) -> Result<(Strin
     }
 }
 
-fn glyf(a: &Side, b: &Side, common: &Common) -> Vec<Difference> {
+fn glyf(a: &Side, b: &Side, common: &Common, outlines: Outlines) -> (Vec<Difference>, GlyphCounts) {
     let mut out = Vec::new();
+    let mut counts = GlyphCounts::default();
     let use_my_metrics = !variable_reference(b);
     for (name, ga, gb) in common {
+        let outline = outline_match("glyf", name, a, *ga, b, *gb, outlines);
+        counts.count(&outline);
+        // Two overlap removals may split a shape into contours differently and place its
+        // extreme points a little differently; the coverage says whether the shape is the same.
+        let same_shape = outline == OutlineMatch::CoverageEqual;
         match (glyf_structure(a, *ga, use_my_metrics), glyf_structure(b, *gb, use_my_metrics)) {
             (Ok(x), Ok(y)) => {
-                if x.0 != y.0 {
+                let both_simple = x.0.starts_with("simple") && y.0.starts_with("simple");
+                if x.0 != y.0 && !(same_shape && both_simple) {
                     // Bounds and instructions of glyphs of different kinds say nothing more.
                     out.push(diff(format!("glyf {name} structure"), x.0, y.0));
                 } else {
-                    if x.1 != y.1 {
+                    if x.1 != y.1 && !same_shape {
                         out.push(diff(format!("glyf {name} bounds"), x.1, y.1));
                     }
                     if x.2 != y.2 {
@@ -665,27 +710,66 @@ fn glyf(a: &Side, b: &Side, common: &Common) -> Vec<Difference> {
             }
             (x, y) => out.push(diff(format!("glyf {name} structure"), x.map(|v| v.0).unwrap_or_else(|e| e), y.map(|v| v.0).unwrap_or_else(|e| e))),
         }
-        if let Some(d) = outline_difference("glyf", name, a, *ga, b, *gb) {
+        if let OutlineMatch::Different(d) = outline {
             out.push(d);
         }
     }
-    out
+    (out, counts)
 }
 
-fn cff(a: &Side, b: &Side, common: &Common) -> Vec<Difference> {
-    common.iter().filter_map(|(name, ga, gb)| outline_difference("CFF", name, a, *ga, b, *gb)).collect()
+fn cff(a: &Side, b: &Side, common: &Common, outlines: Outlines) -> (Vec<Difference>, GlyphCounts) {
+    let mut out = Vec::new();
+    let mut counts = GlyphCounts::default();
+    for (name, ga, gb) in common {
+        let outline = outline_match("CFF", name, a, *ga, b, *gb, outlines);
+        counts.count(&outline);
+        if let OutlineMatch::Different(d) = outline {
+            out.push(d);
+        }
+    }
+    (out, counts)
 }
 
-fn outline_difference(table: &str, name: &str, a: &Side, ga: GlyphId, b: &Side, gb: GlyphId) -> Option<Difference> {
+/// How one glyph's outlines compared.
+#[derive(Clone, Debug, PartialEq)]
+enum OutlineMatch {
+    Same,
+    CoverageEqual,
+    Different(Difference),
+}
+
+impl GlyphCounts {
+    fn count(&mut self, m: &OutlineMatch) {
+        self.compared += 1;
+        match m {
+            OutlineMatch::Same => self.same += 1,
+            OutlineMatch::CoverageEqual => self.coverage_equal += 1,
+            OutlineMatch::Different(_) => self.different += 1,
+        }
+    }
+}
+
+fn outline_match(table: &str, name: &str, a: &Side, ga: GlyphId, b: &Side, gb: GlyphId, outlines: Outlines) -> OutlineMatch {
     let key = format!("{table} {name} outline");
     match (outline::draw(&a.font, ga), outline::draw(&b.font, gb)) {
         (Ok(x), Ok(y)) => {
             let (x, y) = (x.unwrap_or_default(), y.unwrap_or_default());
             match outline::compare(&x, &y) {
-                Match::Same | Match::Rotated => None,
-                Match::Different { ours, theirs } => Some(diff(key, ours, theirs)),
+                Match::Same | Match::Rotated => OutlineMatch::Same,
+                Match::Different { ours, theirs } => match outlines {
+                    Outlines::Coverage => match outline::coverage_equal(&x, &y) {
+                        Ok(c) if c.equal => OutlineMatch::CoverageEqual,
+                        Ok(c) => OutlineMatch::Different(diff(
+                            key,
+                            format!("{ours}; coverage differs by up to {:.2} per pixel, {:.2}% of the ink", c.max_pixel, c.share * 100.0),
+                            theirs,
+                        )),
+                        Err(e) => OutlineMatch::Different(diff(key, format!("{ours}; coverage not compared: {e}"), theirs)),
+                    },
+                    Outlines::Exact => OutlineMatch::Different(diff(key, ours, theirs)),
+                },
             }
         }
-        (x, y) => Some(diff(key, x.err().unwrap_or_else(|| "drawn".into()), y.err().unwrap_or_else(|| "drawn".into()))),
+        (x, y) => OutlineMatch::Different(diff(key, x.err().unwrap_or_else(|| "drawn".into()), y.err().unwrap_or_else(|| "drawn".into()))),
     }
 }

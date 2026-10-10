@@ -46,14 +46,14 @@ fn settings(oracle: Oracle, flavour: Flavour, tool: PathBuf) -> Settings {
 }
 
 /// FontCraft's side: the saved source read back and compiled, as the CLI does it.
-fn ours(path: &Path, flavour: Flavour) -> Result<Ours, OursError> {
+fn ours(path: &Path, oracle: Oracle, flavour: Flavour) -> Result<Ours, OursError> {
     let (font, warnings) = open(path, None).map_err(|e| OursError::Failed(e.to_string()))?;
     let hint = Hint { family: font.family_name.clone(), style: font.default_master().unwrap().name.clone() };
     let outlines = match flavour {
         Flavour::TrueType => fontcraft_compile::Flavour::TrueType,
         Flavour::Cff => fontcraft_compile::Flavour::Cff,
     };
-    let options = Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, ..Default::default() };
+    let options = Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, remove_overlap: oracle.removes_overlaps(), ..Default::default() };
     let compiled = compile(&font, &font.default_target().unwrap(), outlines, &options).map_err(|e| OursError::Failed(e.to_string()))?;
     Ok(Ours { bytes: compiled.bytes, warnings, hint })
 }
@@ -62,7 +62,7 @@ fn ours(path: &Path, flavour: Flavour) -> Result<Ours, OursError> {
 /// code points and advances match. Other tables are M2.2's to bring to parity.
 fn assert_comparable(oracle: Oracle, source: &Path, label: &str) {
     let Some(tool) = tool(oracle) else { return };
-    let report = check(source, label, &settings(oracle, Flavour::TrueType, tool), || ours(source, Flavour::TrueType));
+    let report = check(source, label, &settings(oracle, Flavour::TrueType, tool), || ours(source, oracle, Flavour::TrueType));
     eprintln!("{}", fontcraft_oracle::render(&report));
     assert_eq!(report.outcome, Outcome::Compared, "{:?}", report.messages);
     assert!(report.source_reading.is_empty(), "{:?}", report.source_reading);
@@ -108,7 +108,7 @@ fn fontmake_and_fontcraft_build_the_same_cff_outlines() {
     let dir = temp("fontmake-cff");
     let path = dir.join("Fixture.glyphs");
     save(&sample(), &path, SaveFormat::Glyphs).unwrap();
-    let report = check(&path, "Fixture.glyphs", &settings(Oracle::Fontmake, Flavour::Cff, tool), || ours(&path, Flavour::Cff));
+    let report = check(&path, "Fixture.glyphs", &settings(Oracle::Fontmake, Flavour::Cff, tool), || ours(&path, Oracle::Fontmake, Flavour::Cff));
     eprintln!("{}", fontcraft_oracle::render(&report));
     assert_eq!(report.outcome, Outcome::Compared, "{:?}", report.messages);
     let status = |tag: &str| report.tables.iter().find(|t| t.tag == tag).map(|t| t.status);

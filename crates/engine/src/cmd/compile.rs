@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile Fonts",
             [],
             None,
-            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
+            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
             has_doc,
             compile
         ),
@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Describe Compile Plan",
             [],
             None,
-            "{formats?, containers?, instances?, mastersAsInstances?, destination?, outlines?, sections?: [\"outputs\"|\"glyphOrder\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing: per output the instance, format, PostScript name, glyph count, the files (paths with a destination, names without) and the tables; the final glyph order of the first output; each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, files, tables?}], glyphOrder?, instances?: [{instance, source, master, location}], skipped, warnings}",
+            "{formats?, containers?, instances?, mastersAsInstances?, destination?, outlines?, sections?: [\"outputs\"|\"glyphOrder\"|\"tables\"|\"instances\"]} what font.compile would build with the same parameters, without building or writing: per output the instance, format, PostScript name, glyph count, whether overlaps are removed, the files (paths with a destination, names without) and the tables; the final glyph order of the first output; each instance's master and location. sections: the parts to return (default all) → {outputs?: [{instance, source, format, postscriptName, style, glyphs, removeOverlap, files, tables?}], glyphOrder?, instances?: [{instance, source, master, location}], skipped, warnings}",
             has_doc,
             compile_plan
         ),
@@ -483,19 +483,6 @@ pub(super) fn check_size(req: &Request, jobs: usize) -> Result<()> {
     Ok(())
 }
 
-/// The warning every static export carries until overlap removal exists.
-pub(super) const OVERLAPS_KEPT: &str = "overlapping contours were kept: removing overlaps on export is not supported yet (ROADMAP.md, M3)";
-
-/// Reads `removeOverlap` (or `removeOverlaps`): asking for it is refused until it exists; leaving
-/// it out keeps overlaps with a warning.
-pub(super) fn overlap_warning(value: Option<bool>, key: &str) -> Result<Option<&'static str>> {
-    match value {
-        Some(true) => Err(EngineError::Unsupported(format!("`{key}`: removing overlaps on export (ROADMAP.md, M3)"))),
-        Some(false) => Ok(None),
-        None => Ok(Some(OVERLAPS_KEPT)),
-    }
-}
-
 // ---------- staging files on disk ----------
 
 /// Files written under temporary names, renamed into place by [`Stage::commit`]. Dropping a stage
@@ -749,9 +736,9 @@ fn formats(p: &Params) -> Result<Vec<Flavour>> {
     Ok(out)
 }
 
-/// The `outlines` group of `font.compile`, into `options`; the overlap warning, if any.
-fn outline_options(p: &Params, options: &mut Options) -> Result<Option<&'static str>> {
-    let Some(group) = p.opt_object("outlines")? else { return overlap_warning(None, "outlines.removeOverlaps") };
+/// The `outlines` group of `font.compile`, into `options`.
+fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
+    let Some(group) = p.opt_object("outlines")? else { return Ok(()) };
     let flag = |key: &str| -> Result<Option<bool>> {
         match group.get(key) {
             None | Some(Value::Null) => Ok(None),
@@ -767,17 +754,18 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<Option<&'static 
     if let Some(key) = group.keys().find(|k| !matches!(k.as_str(), "keepDirection" | "conversionError" | "removeOverlaps")) {
         return Err(EngineError::Unsupported(format!("`outlines.{key}`")));
     }
-    overlap_warning(flag("removeOverlaps")?, "outlines.removeOverlaps")
+    options.remove_overlap = flag("removeOverlaps")?.unwrap_or(true);
+    Ok(())
 }
 
 /// The parts of a `font.compile` request shared with `font.compilePlan`.
-fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request, Option<&'static str>)> {
+fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     let font = s.font()?;
     let flavours = formats(p)?;
     let dest = Dest::read(p)?;
     let containers = containers(p, "containers", &dest)?;
     let mut options = Options::default();
-    let overlaps = outline_options(p, &mut options)?;
+    outline_options(p, &mut options)?;
     let pick = Pick::read(p, "instances")?;
     let jobs = jobs(font, &pick, p.bool_or("mastersAsInstances", false)?, p)?;
     if jobs.is_empty() {
@@ -788,16 +776,15 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request, Option
     }
     let req = Request { flavours, containers, options, dest, first_only: false };
     check_size(&req, jobs.len())?;
-    Ok((jobs, req, overlaps))
+    Ok((jobs, req))
 }
 
 fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compile", p)?;
-    let (jobs, mut req, overlaps) = compile_request(s, &p)?;
+    let (jobs, mut req) = compile_request(s, &p)?;
     req.options.timestamp = timestamp(&p)?;
     let doc = s.doc()?;
     let mut report = Report::default();
-    report.warnings.extend(overlaps.map(str::to_string));
     let mut sink = Sink::new(&req.dest, false)?;
     build(&doc.font, &doc.title, &jobs, &req, &mut sink, &mut report)?;
     if matches!(req.dest, Dest::File(_)) && report.file_count() > 1 {
@@ -822,7 +809,7 @@ pub(super) fn nothing_built(report: &Report) -> EngineError {
 
 fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.compilePlan", p)?;
-    let (jobs, req, overlaps) = compile_request(s, &p)?;
+    let (jobs, req) = compile_request(s, &p)?;
     const SECTIONS: [&str; 4] = ["outputs", "glyphOrder", "tables", "instances"];
     let sections: Vec<&str> = match p.opt_strings("sections")? {
         None => SECTIONS.to_vec(),
@@ -842,7 +829,7 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let (font, source) = (&doc.font, doc.title.as_str());
     font.check()?;
     let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
-    let mut warnings: Vec<String> = overlaps.map(str::to_string).into_iter().collect();
+    let mut warnings: Vec<String> = Vec::new();
     let mut glyph_order: Option<Vec<String>> = None;
     for job in &jobs {
         let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
@@ -874,7 +861,8 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
                 .collect();
             let mut out = json!({
                 "instance": job.label, "source": job.source, "format": format_name(flavour), "postscriptName": plan.postscript_name,
-                "style": plan.style_name, "glyphs": plan.glyph_order.len(), "files": files, "warnings": plan.warnings,
+                "style": plan.style_name, "glyphs": plan.glyph_order.len(), "removeOverlap": req.options.remove_overlap, "files": files,
+                "warnings": plan.warnings,
             });
             if let (true, Value::Object(m)) = (want("tables"), &mut out) {
                 m.insert("tables".into(), json!(plan.tables));

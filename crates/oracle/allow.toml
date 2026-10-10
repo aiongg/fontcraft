@@ -517,3 +517,27 @@ sources = ["/VheaParams.glyphs"]
 oracle = "fontmake"
 ours = "0"
 reason = "The source sets the vertical line gap to 0; fontmake writes 1000, fontc the source's 0 (FontCraft follows fontc)."
+
+# --- Overlap removal (M3.7) ----------------------------------------------------------------------
+# fontmake removes overlaps with booleanOperations, FontCraft with its own engine. Both give the
+# same shape; where they place a point differs (docs/spec/40-compile.md § 3.8).
+
+[[allow]]
+table = "glyf"
+key = "glyf * outline"
+oracle = "fontmake"
+ours = "*; coverage differs by up to 0.* per pixel, 0.0*% of the ink"
+reason = "Overlap removal: an intersection point that falls near a half unit is rounded to the other side, or one engine leaves a point on a straight line where the other merges two segments. The outlines differ by less than one unit: no pixel by a whole pixel, and under 0.1% of the ink in total."
+
+[[allow]]
+table = "CFF"
+key = "CFF * outline"
+oracle = "fontmake"
+ours = "*; coverage differs by up to 0.* per pixel, 0.0*% of the ink"
+reason = "Overlap removal: an intersection point that falls near a half unit is rounded to the other side, or one engine leaves a point on a straight line where the other merges two segments. The outlines differ by less than one unit: no pixel by a whole pixel, and under 0.1% of the ink in total."
+
+[[allow]]
+table = "maxp"
+key = "maxp.maxPoints"
+oracle = "fontmake"
+reason = "Overlap removal: the two engines leave different numbers of points where contours merge (FontCraft keeps a point on a straight line where two contours met, docs/plans/M3.md › M3.6, rule 7), so the largest point count of a glyph can differ by a few points."

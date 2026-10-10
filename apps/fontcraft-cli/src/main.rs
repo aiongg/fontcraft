@@ -53,7 +53,8 @@ USAGE:
       once per format (default ttf) and container (default plain). Files are named by PostScript
       name in DIR (default: the current folder); with both formats each goes into a ttf or otf
       subfolder. -o names the one file a single SOURCE builds. Instances between masters are
-      skipped until interpolation exists. --plan prints what would be built, without building.
+      skipped until interpolation exists. Overlapping contours are merged unless --keep-overlaps is
+      given. --plan prints what would be built, without building.
       One JSON line per SOURCE.
 
   fontcraft-cli info FILE [--section NAME,...] [--all-names] [--face N]
@@ -561,7 +562,7 @@ fn oracle(args: &[String]) -> Outcome {
                 warnings.push(format!("compiled master `{}`, the variable font origin, instead of the first", master.name));
             }
             let hint = fontcraft_oracle::Hint { family: font.family_name.clone(), style: master.name.clone() };
-            let options = fontcraft_engine::compile::Options { timestamp, ..Default::default() };
+            let options = fontcraft_engine::compile::Options { timestamp, remove_overlap: against.removes_overlaps(), ..Default::default() };
             let target = fontcraft_engine::model::Target::Master(master.id.clone());
             let outlines = match flavour {
                 Flavour::TrueType => fontcraft_engine::compile::Flavour::TrueType,

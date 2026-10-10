@@ -16,8 +16,9 @@ fn sample() -> Font {
     f
 }
 
+/// `f` compiled with its contours as drawn (overlap removal would also fix their direction).
 fn build(f: &Font, timestamp: i64) -> Vec<u8> {
-    compile_ttf(f, &Options { timestamp, ..Default::default() }).unwrap().bytes
+    compile_ttf(f, &Options { timestamp, remove_overlap: false, ..Default::default() }).unwrap().bytes
 }
 
 fn table<'a>(c: &'a compare::Comparison, tag: &str) -> &'a TableResult {
@@ -210,6 +211,7 @@ fn the_allow_list_accepts_a_table_only_when_every_difference_is_listed() {
         differences: diffs,
         note: None,
         allowed: Vec::new(),
+        glyphs: None,
     };
     let mut tables = vec![t("OS/2", vec![d("OS/2.usMaxContext")]), t("name", vec![d("name 3/1/0x0409/5")]), t("hhea", vec![d("hhea.ascender")])];
     apply_allow(&mut tables, &allow, "fontmake", "x/only/here/a.glyphs");
@@ -290,7 +292,8 @@ fn colour_sequences_are_removed_from_tool_logs() {
 
 #[test]
 fn a_summary_counts_tables_over_compared_sources() {
-    let t = |tag: &str, status| TableResult { tag: tag.into(), status, differences: Vec::new(), count: 0, note: None, allowed: Vec::new() };
+    let t =
+        |tag: &str, status| TableResult { tag: tag.into(), status, differences: Vec::new(), count: 0, note: None, allowed: Vec::new(), glyphs: None };
     let report = |outcome, tables| SourceReport {
         source: "s".into(),
         oracle: Oracle::Fontc,
@@ -443,4 +446,36 @@ fn a_source_the_tools_do_not_read_is_refused() {
     assert!(!Oracle::Fontc.builds(Flavour::Cff));
     assert!(Oracle::Fontmake.builds(Flavour::Cff));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn outlines_with_different_points_but_the_same_coverage_are_coverage_equal() {
+    use fontcraft_model::{Node, NodeKind};
+    let mut ours = sample();
+    ours.glyph_mut("A").unwrap().layers[0].shapes =
+        vec![Shape::Path(Contour::rect(0.0, 0.0, 400.0, 400.0)), Shape::Path(Contour::rect(200.0, 200.0, 600.0, 600.0))];
+    // The same union drawn by hand, with one more point on its bottom edge.
+    let corners =
+        [(0.0, 0.0), (200.0, 0.0), (400.0, 0.0), (400.0, 200.0), (600.0, 200.0), (600.0, 600.0), (200.0, 600.0), (200.0, 400.0), (0.0, 400.0)];
+    let theirs_font = |dx: f64| {
+        let mut f = sample();
+        let nodes = corners.iter().map(|&(x, y)| Node::new(x + dx, y, NodeKind::Line)).collect();
+        f.glyph_mut("A").unwrap().layers[0].shapes = vec![Shape::Path(Contour::new(true, nodes))];
+        compile_ttf(&f, &Options { remove_overlap: false, ..Default::default() }).unwrap().bytes
+    };
+    let ours = compile_ttf(&ours, &Options::default()).unwrap().bytes;
+
+    let exact = compare::compare(&ours, &theirs_font(0.0)).unwrap();
+    assert_eq!(table(&exact, "glyf").status, Status::Different);
+    let c = compare::compare_with(&ours, &theirs_font(0.0), compare::Outlines::Coverage).unwrap();
+    let glyf = table(&c, "glyf");
+    assert_eq!(glyf.status, Status::CoverageEqual, "{glyf:?}");
+    assert_eq!(glyf.glyphs.map(|g| (g.coverage_equal, g.different)), Some((1, 0)));
+    assert_eq!(summarise(&[]).glyphs.len(), 0);
+
+    // Two units to the side is a different shape.
+    let c = compare::compare_with(&ours, &theirs_font(2.0), compare::Outlines::Coverage).unwrap();
+    let glyf = table(&c, "glyf");
+    assert_eq!(glyf.status, Status::Different);
+    assert!(glyf.differences.iter().any(|d| d.key == "glyf A outline" && d.ours.contains("coverage differs")), "{glyf:?}");
 }

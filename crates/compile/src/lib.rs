@@ -8,7 +8,7 @@
 //! | Resolve | [`drawing::resolve`] | one master, or an instance at a master, as the compiler reads it: glyphs, contours, components, metrics, names; strokes expanded and masks applied |
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph order | [`order`] | the font's order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
-//! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), cubic to quadratic, contour direction |
+//! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
 //! | Table builders and assembly | `build`, [`cff`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post`, then the font file |
 //!
 //! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
@@ -38,6 +38,8 @@ pub mod outline;
 pub mod plan;
 pub mod preflight;
 mod ranges;
+
+use std::time::Duration;
 
 use fontcraft_model::{Font, ModelError, Resolved, Target};
 
@@ -119,11 +121,23 @@ pub struct Options {
     pub keep_direction: bool,
     /// Style name written to the `name` table. Empty: the resolved master's or instance's name.
     pub style_name: String,
+    /// Merge each glyph's overlapping contours into one outline (`compile.removeOverlapsStatic`).
+    pub remove_overlap: bool,
+    /// How long overlap removal may take for one glyph before the glyph keeps its overlaps, with
+    /// a warning. Not used in the browser, where there are no worker threads.
+    pub overlap_time_limit: Duration,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { timestamp: 0, conversion_error: DEFAULT_CONVERSION_ERROR, keep_direction: false, style_name: String::new() }
+        Self {
+            timestamp: 0,
+            conversion_error: DEFAULT_CONVERSION_ERROR,
+            keep_direction: false,
+            style_name: String::new(),
+            remove_overlap: true,
+            overlap_time_limit: fontcraft_pathops::TIME_LIMIT,
+        }
     }
 }
 
@@ -169,7 +183,14 @@ pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Opti
     let upm = f64::from(resolved.units_per_em);
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
-    let settings = outline::Settings { flavour, tolerance: upm * error, keep_direction: options.keep_direction, max_expanded: MAX_EXPANDED_ELEMENTS };
+    let settings = outline::Settings {
+        flavour,
+        tolerance: upm * error,
+        keep_direction: options.keep_direction,
+        max_expanded: MAX_EXPANDED_ELEMENTS,
+        remove_overlap: options.remove_overlap,
+        overlap_time_limit: options.overlap_time_limit,
+    };
     let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
     let bytes = build::assemble(&resolved, &glyphs, &outlines, flavour, synthesised_notdef, options, &mut warnings)?;
     Ok(Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings })

@@ -5,6 +5,8 @@
 //! packing, point order inside a contour (the start point) and composites against flattened
 //! copies all draw the same segments.
 
+use fontcraft_geom::{BezPath, Point};
+use fontcraft_pathops::coverage_difference;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::prelude::{LocationRef, Size};
 use skrifa::raw::types::GlyphId;
@@ -154,6 +156,54 @@ pub fn compare(ours: &Outline, theirs: &Outline) -> Match {
         return Match::Different { ours: show(a), theirs: show(b) };
     }
     if rotated { Match::Rotated } else { Match::Same }
+}
+
+/// The largest coverage difference of one pixel, and the share of the reference's ink the
+/// differences may add up to, for two outlines to be coverage-equal (docs/plans/M3.md § 5).
+pub const COVERAGE_PIXEL: f64 = 0.5;
+pub const COVERAGE_SHARE: f64 = 0.005;
+
+/// `outline` as Bézier paths in font units, one per contour.
+pub fn to_paths(outline: &Outline) -> Vec<BezPath> {
+    let pt = |q: &[f32; 2]| Point::new(f64::from(q[0]), f64::from(q[1]));
+    outline
+        .contours
+        .iter()
+        .filter_map(|c| {
+            let start = c.last()?.end();
+            let mut path = BezPath::new();
+            path.move_to(pt(&start));
+            for s in c {
+                match s {
+                    Segment::Line(p) => path.line_to(pt(p)),
+                    Segment::Quad(a, p) => path.quad_to(pt(a), pt(p)),
+                    Segment::Cubic(a, b, p) => path.curve_to(pt(a), pt(b), pt(p)),
+                }
+            }
+            path.close_path();
+            Some(path)
+        })
+        .collect()
+}
+
+/// Do `ours` and `theirs` cover the same pixels? Both are filled with the nonzero rule at one
+/// pixel per unit; they are coverage-equal when no pixel differs by more than
+/// [`COVERAGE_PIXEL`] and the differences add up to at most [`COVERAGE_SHARE`] of the
+/// reference's ink. An error when the outlines cannot be rasterised (too large, out of range).
+pub fn coverage_equal(ours: &Outline, theirs: &Outline) -> Result<Coverage, String> {
+    let d = coverage_difference(&to_paths(theirs), &to_paths(ours)).map_err(|e| e.to_string())?;
+    let share = if d.ink > 0.0 { d.total / d.ink } else { d.total };
+    Ok(Coverage { equal: d.within(COVERAGE_PIXEL, COVERAGE_SHARE), max_pixel: d.max_pixel, share })
+}
+
+/// How two outlines' coverage compared.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Coverage {
+    pub equal: bool,
+    /// Largest difference of one pixel, 0 to 1.
+    pub max_pixel: f64,
+    /// The differences added up, as a share of the reference's ink.
+    pub share: f64,
 }
 
 /// `c` drawn the other way round, from the same start point.

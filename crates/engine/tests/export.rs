@@ -260,7 +260,7 @@ fn export_all_builds_instances_at_masters_and_reports_the_rest() {
     assert_eq!(skipped[0]["instance"], "Medium");
     assert!(skipped[0]["reason"].as_str().unwrap().contains("between masters"));
     assert_eq!(out["documents"][1]["fonts"][0]["source"], "default", "a font without instances exports its first master");
-    assert!(out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("overlap")));
+    assert!(!out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("overlap")), "overlaps are removed");
 
     // Each instance draws its master: the Bold instance has the Bold advance.
     let bold = std::fs::read(out_dir.join("ttf/TestSans-Heavy.ttf")).unwrap();
@@ -295,6 +295,7 @@ fn compile_plan_describes_what_compile_builds_without_writing() {
         assert_eq!(planned["tables"], json!(written), "{path}");
     }
     assert_eq!(outputs[0]["postscriptName"], "TestSans-Regular");
+    assert_eq!(outputs[0]["removeOverlap"], true);
     assert_eq!(plan["glyphOrder"], json!([".notdef", "A"]));
     assert_eq!(plan["skipped"][0]["instance"], "Medium");
     let instances = plan["instances"].as_array().unwrap();
@@ -417,4 +418,45 @@ fn a_font_without_a_family_name_is_named_by_its_source_file() {
     let ps = font.localized_strings(skrifa::string::StringId::POSTSCRIPT_NAME).english_or_first().unwrap().to_string();
     assert_eq!(ps, "-Regular");
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// How many contours glyph `name` of a compiled font has.
+fn contours(bytes: &[u8], name: char) -> usize {
+    struct Count(usize);
+    impl skrifa::outline::OutlinePen for Count {
+        fn move_to(&mut self, _: f32, _: f32) {
+            self.0 += 1;
+        }
+        fn line_to(&mut self, _: f32, _: f32) {}
+        fn quad_to(&mut self, _: f32, _: f32, _: f32, _: f32) {}
+        fn curve_to(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) {}
+        fn close(&mut self) {}
+    }
+    let font = skrifa::FontRef::new(bytes).unwrap();
+    let glyph = font.outline_glyphs().get(font.charmap().map(name).unwrap()).unwrap();
+    let mut pen = Count(0);
+    let settings = skrifa::outline::DrawSettings::unhinted(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
+    glyph.draw(settings, &mut pen).unwrap();
+    pen.0
+}
+
+#[test]
+fn export_removes_overlaps_unless_asked_to_keep_them() {
+    let mut s = drawn();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": rect(300.0, 300.0, 700.0, 900.0)}));
+    for outlines in ["truetype", "cff"] {
+        let font = |s: &mut Session, p: Value| {
+            let out = run(s, "file.exportStatic", p);
+            assert!(!out["warnings"].to_string().contains("overlap"), "{out}");
+            base64::engine::general_purpose::STANDARD.decode(out["dataBase64"].as_str().unwrap()).unwrap()
+        };
+        let merged = font(&mut s, json!({"outlines": outlines, "timestamp": 0}));
+        assert_eq!(contours(&merged, 'A'), 1, "{outlines}");
+        let kept = font(&mut s, json!({"outlines": outlines, "timestamp": 0, "removeOverlap": false}));
+        assert_eq!(contours(&kept, 'A'), 2, "{outlines}");
+    }
+    let plan = run(&mut s, "font.compilePlan", json!({"outlines": {"removeOverlaps": false}}));
+    assert_eq!(plan["outputs"][0]["removeOverlap"], false);
+    let built = run(&mut s, "font.compile", json!({"formats": ["otf"], "outlines": {"removeOverlaps": false}}));
+    assert_eq!(built["warnings"], json!([]));
 }

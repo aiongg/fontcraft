@@ -92,3 +92,30 @@ fn compile_builds_each_format_and_container_and_plans_without_writing() {
     assert_eq!(cli(&["compile", src, "--format", "variable", "--output-dir", out]).0, 4);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn compile_merges_overlaps_unless_told_to_keep_them() {
+    let dir = temp("overlaps");
+    let mut s = Session::with_document();
+    for (x, y) in [(0, 0), (200, 200)] {
+        let nodes = json!([{"x": x, "y": y}, {"x": x + 400, "y": y}, {"x": x + 400, "y": y + 400}, {"x": x, "y": y + 400}]);
+        s.execute("path.addPath", &json!({"glyph": "A", "nodes": nodes})).unwrap();
+    }
+    let src = dir.join("Overlaps.fontcraft");
+    s.execute("file.saveAs", &json!({"path": src})).unwrap();
+    let src = src.to_str().unwrap();
+    let paths_in_a = |file: &Path| {
+        let (font, _) = fontcraft_engine::io::open(file, None).unwrap();
+        let glyph = font.glyph("A").unwrap();
+        glyph.layers[0].shapes.len()
+    };
+    for (name, extra) in [("merged.ttf", None), ("kept.ttf", Some("--keep-overlaps"))] {
+        let file = dir.join(name);
+        let mut args = vec!["compile", src, "-o", file.to_str().unwrap()];
+        args.extend(extra);
+        let (code, _, stderr) = cli(&args);
+        assert_eq!(code, 0, "{stderr}");
+        assert_eq!(paths_in_a(&file), if extra.is_some() { 2 } else { 1 }, "{name}");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}

@@ -245,8 +245,9 @@ are later work.
 without instances builds its first master. `--instances=NAME,...` builds only the instances with those
 exact names (a comma-separated list, not a pattern); `--masters-as-instances` adds one font per master.
 Until interpolation (M9) an instance is built only where it sits at a master; the others are listed as
-skipped, and a source that builds nothing fails. Overlaps are kept with a warning until overlap removal
-exists (M3); asking to remove them fails. Contours are reversed for TrueType unless
+skipped, and a source that builds nothing fails. Overlapping contours are merged unless
+`--keep-overlaps` is given; a glyph whose overlaps cannot be removed keeps them, with a warning
+naming it. Contours are reversed for TrueType unless
 `--keep-direction`; curves are converted to quadratics within `--conversion-error` em (default 0.001).
 `--timestamp` sets `head.created` and `head.modified` (default `SOURCE_DATE_EPOCH`, else now). CFF output
 is not subroutinised yet. Later: production names unless `--no-production-names`; glyphs flagged as not

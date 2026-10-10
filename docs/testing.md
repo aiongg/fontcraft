@@ -90,6 +90,7 @@ Each table comes out as one of:
 |---|---|
 | identical | the same bytes (`head`: apart from the checksum and the dates) |
 | equivalent | different bytes, nothing different once normalised |
+| coverage-equal | `glyf` or `CFF ` against fontmake: some glyphs have different points but cover the same pixels (below) |
 | allowed | every difference is on `crates/oracle/allow.toml`, which gives the reason |
 | different | the first differences are listed, keyed by field, record or glyph |
 | skipped | not compared, and the report says why: layout tables until M8, variation tables until M9, tables FontCraft does not write yet |
@@ -106,6 +107,17 @@ What normalisation removes or canonicalises:
 | glyf, CFF | outlines drawn by skrifa without hinting, components resolved, compared within half a unit with any start point; reversed contours are named as such. For `glyf` also each glyph's kind (empty, simple, composite with its components and flags), bounds and instruction length; against a variable reference the `USE_MY_METRICS` flag is left out (fontc never sets it in a variable font, and FontCraft's static build does) |
 | loca | offsets: compared through `glyf` |
 | maxp, OS/2, post | field by field |
+
+Overlaps. fontc never removes overlaps, so against fontc FontCraft builds with overlaps kept
+and outlines are compared point by point. fontmake removes them for static fonts (its default
+backend), and so does FontCraft against it. Two overlap removals give the same shape with
+different points, so a glyph whose points differ is then compared by rendered coverage
+(`fontcraft_pathops::coverage_difference`): both outlines filled with the nonzero rule at one
+pixel per unit, coverage exact across each row and sampled on 16 sub-rows per pixel. The glyph
+is coverage-equal when no pixel differs by more than 0.5 and the differences add up to at most
+0.5% of the reference glyph's ink. A coverage-equal simple glyph is not compared by contour
+count or bounds. The summary counts the glyphs of each outline table: compared, the same,
+coverage-equal, different.
 
 Glyphs are matched by name. A different glyph set or glyph order is reported once, as a
 source-reading difference: the two programs read the source differently (fontc turns bracket

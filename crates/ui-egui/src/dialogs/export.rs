@@ -25,7 +25,7 @@ fn fields(_: &Session) -> Vec<Field> {
             "cff",
             "cff: PostScript outlines in a .otf file; truetype: quadratic outlines in a .ttf file",
         ),
-        Field::bool("removeOverlap", "Remove Overlap", false, "Merge overlapping paths and components in every exported glyph"),
+        Field::bool("removeOverlap", "Remove Overlap", true, "Merge overlapping paths and components in every exported glyph"),
         Field::bool("autohint", "Autohint", false, "Add automatic hints to the exported fonts"),
     ]
 }
@@ -85,13 +85,13 @@ mod tests {
         call(&mut app, "ui.dialog.set", json!({"field": "outlines", "value": "truetype"}));
         let done = call(&mut app, "ui.dialog.confirm", json!({}));
         assert_eq!(done["params"]["outlines"], "truetype");
-        assert_eq!(done["params"]["removeOverlap"], false);
+        assert_eq!(done["params"]["removeOverlap"], true);
 
         let mut direct = drawn();
         direct
             .run(
                 "file.exportStatic",
-                &json!({"outlines": "truetype", "removeOverlap": false, "autohint": false, "destination": direct_dir, "timestamp": 0}),
+                &json!({"outlines": "truetype", "removeOverlap": true, "autohint": false, "destination": direct_dir, "timestamp": 0}),
             )
             .unwrap();
         let (wrote, expected) = (files(&by_dialog), files(&direct_dir));

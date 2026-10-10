@@ -10,20 +10,19 @@
 //! one `glyph` they are errors.
 //!
 //! The geometry comes from `fontcraft-pathops`. Each layer's operation runs through
-//! [`run_with_time_limit`]: the boolean engine can loop forever on rare inputs
+//! [`po::run_with_time_limit`]: the boolean engine can loop forever on rare inputs
 //! (docs/plans/M3.md › M3.6, rule 8), so on native targets the operation runs on a worker thread
-//! and a layer that takes longer than [`TIME_LIMIT`] is left as it was. Nodes carry a tag through
+//! and a layer that takes longer than [`po::TIME_LIMIT`] is left as it was. Nodes carry a tag through
 //! each operation, so a node that survives keeps its name, identifier, lock and user data, and a
 //! result path keeps the attributes of the path it comes from.
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fmt;
 use std::time::Duration;
 
 use fontcraft_geom::{BezPath, CubicBez, Point, Rect, Shape as _, Vec2, cubics_to_quadratic_splines, round_point, round_to_grid};
 use fontcraft_model::{Font, Layer, LayerPartsMut, LayerSide, MAX_COORDINATE, Master, Node, NodeKind, Path, Shape, Transform};
-use fontcraft_pathops::{self as po, BoolOp, OpenPaths, OverlapOptions, PathOpError};
+use fontcraft_pathops::{self as po, BoolOp, OpenPaths, OverlapOptions, PathOpError, TIME_LIMIT, run_with_time_limit};
 use serde_json::{Value, json};
 
 use super::common::{Outcome, each_layer, grid, in_range, scope};
@@ -31,10 +30,6 @@ use super::*;
 use crate::EngineError;
 use crate::params::{Params, TargetKind as K, Targets, kind};
 
-/// How long one layer's operation may run before it is abandoned and the layer left as it was.
-/// The slowest layer of the corpus takes under a millisecond; the boolean engine's rare endless
-/// loops never finish.
-pub(crate) const TIME_LIMIT: Duration = Duration::from_secs(5);
 /// Open Corner's overlap, as a share of the em, for a master without stems of either direction.
 const DEFAULT_OVERLAP_SHARE: f64 = 0.04;
 /// Largest Open Corner overlap a caller may give, in units.
@@ -232,55 +227,6 @@ pub fn specs() -> Vec<CommandSpec> {
         )
         .targets(&[K::Glyphs]),
     ]
-}
-
-// ── The time limit ──────────────────────────────────────────────────────────────────────────────
-
-/// Why an operation run with a time limit gave no result.
-#[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub(crate) enum Unfinished {
-    TimedOut(Duration),
-    Panicked(String),
-    NoWorker(String),
-}
-
-impl fmt::Display for Unfinished {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TimedOut(limit) => write!(f, "the operation took longer than {} s and was abandoned", limit.as_secs_f64()),
-            Self::Panicked(m) => write!(f, "the operation failed with an internal error: {m}"),
-            Self::NoWorker(e) => write!(f, "no worker thread could be started: {e}"),
-        }
-    }
-}
-
-/// Runs `f` under the panic guard on a worker thread and waits at most `limit` for it. A worker
-/// that does not finish in time is abandoned: it cannot be stopped, so it runs on detached and
-/// its result is dropped. Callers hand it owned data, so nothing they keep changes after a
-/// timeout. Used where no person waits for one glyph (batch commands, export).
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn run_with_time_limit<T: Send + 'static>(limit: Duration, f: impl FnOnce() -> T + Send + 'static) -> std::result::Result<T, Unfinished> {
-    use std::sync::mpsc::{RecvTimeoutError, sync_channel};
-    let (tx, rx) = sync_channel(1);
-    let _worker = std::thread::Builder::new()
-        .name("fontcraft-pathops".into())
-        .spawn(move || {
-            let _ = tx.send(crate::guard::catch_panic(f));
-        })
-        .map_err(|e| Unfinished::NoWorker(e.to_string()))?;
-    match rx.recv_timeout(limit) {
-        Ok(Ok(v)) => Ok(v),
-        Ok(Err(message)) => Err(Unfinished::Panicked(message)),
-        Err(RecvTimeoutError::Timeout) => Err(Unfinished::TimedOut(limit)),
-        Err(RecvTimeoutError::Disconnected) => Err(Unfinished::Panicked("the worker stopped without a result".into())),
-    }
-}
-
-/// The browser has no threads: `f` runs here, under the panic guard, without a limit.
-#[cfg(target_arch = "wasm32")]
-pub(crate) fn run_with_time_limit<T: Send + 'static>(_limit: Duration, f: impl FnOnce() -> T + Send + 'static) -> std::result::Result<T, Unfinished> {
-    crate::guard::catch_panic(f).map_err(Unfinished::Panicked)
 }
 
 // ── Contours in, paths out ──────────────────────────────────────────────────────────────────────
@@ -1437,13 +1383,6 @@ mod tests {
             Ok(_) => panic!("the blocked job finished"),
         }
         assert_eq!(shapes, before);
-    }
-
-    #[test]
-    fn the_runner_passes_results_and_reports_panics() {
-        assert_eq!(run_with_time_limit(TIME_LIMIT, || 7), Ok(7));
-        let caught = run_with_time_limit(TIME_LIMIT, || -> u8 { panic!("boom") });
-        assert_eq!(caught, Err(Unfinished::Panicked("boom".into())));
     }
 
     #[test]

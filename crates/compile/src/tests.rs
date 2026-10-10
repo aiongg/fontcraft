@@ -248,7 +248,9 @@ fn too_many_points_is_an_error_not_a_corrupt_glyph() {
     let mut f = sample();
     let nodes: Vec<Node> = (0..70_000).map(|i| Node::new(f64::from(i % 1000), f64::from(i / 1000), NodeKind::Line)).collect();
     f.glyph_mut("C").unwrap().layers[0].shapes.push(path(true, nodes));
-    assert!(matches!(compile_ttf(&f, &Options::default()), Err(CompileError::Glyph { message, .. }) if message.contains("points")));
+    // Kept overlaps: the union of this zigzag has far fewer points.
+    let options = Options { remove_overlap: false, ..Default::default() };
+    assert!(matches!(compile_ttf(&f, &options), Err(CompileError::Glyph { message, .. }) if message.contains("points")));
 }
 
 #[test]
@@ -580,7 +582,14 @@ fn notdef_goes_first_and_is_drawn_when_absent() {
 // --- Outline preparation ---------------------------------------------------------------------
 
 fn settings() -> Settings {
-    Settings { flavour: Flavour::TrueType, tolerance: 1.0, keep_direction: false, max_expanded: MAX_EXPANDED_ELEMENTS }
+    Settings {
+        flavour: Flavour::TrueType,
+        tolerance: 1.0,
+        keep_direction: false,
+        max_expanded: MAX_EXPANDED_ELEMENTS,
+        remove_overlap: false,
+        overlap_time_limit: fontcraft_pathops::TIME_LIMIT,
+    }
 }
 
 #[test]
@@ -1169,7 +1178,17 @@ fn hostile_cff_input_is_an_error_not_a_panic() {
     assert!(out.warnings.iter().any(|w| w.contains("CFF")), "{:?}", out.warnings);
 }
 
-// --- Strokes and masks ----------------------------------------------------------------------
+// --- Overlap removal, strokes and masks ------------------------------------------------------
+
+/// A font whose `A` is two overlapping squares.
+fn overlapping() -> Font {
+    let mut f = Font::new("Overlap Sans");
+    let mut a = f.glyph_mut("A").unwrap();
+    a.layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 400.0, 400.0)));
+    a.layers[0].shapes.push(Shape::Path(Path::rect(200.0, 200.0, 600.0, 600.0)));
+    drop(a);
+    f
+}
 
 /// The glyph's outline as skrifa draws it, as Bézier paths.
 fn outline_of(out: &Compiled, name: &str) -> Vec<BezPath> {
@@ -1197,6 +1216,66 @@ fn outline_of(out: &Compiled, name: &str) -> Vec<BezPath> {
     let mut pen = Bez::default();
     glyph.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).unwrap();
     vec![pen.0]
+}
+
+#[test]
+fn overlapping_contours_merge_in_both_flavours_unless_kept() {
+    let f = overlapping();
+    let target = f.default_target().unwrap();
+    for flavour in [Flavour::TrueType, Flavour::Cff] {
+        let out = compile(&f, &target, flavour, &Options::default()).unwrap();
+        assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+        let font = FontRef::new(&out.bytes).unwrap();
+        let contours = drawn(&font, gid_of(&out, "A"));
+        assert_eq!(contours.len(), 1, "{flavour:?}: one contour");
+        // The union: 400² + 400² − 200², whichever way the flavour draws it.
+        assert_eq!(area(&contours[0]).abs() / 2.0, 280_000.0, "{flavour:?}");
+        let again = compile(&f.clone(), &target, flavour, &Options::default()).unwrap();
+        assert_eq!(out.bytes, again.bytes, "{flavour:?}: deterministic");
+
+        let kept = compile(&f, &target, flavour, &Options { remove_overlap: false, ..Default::default() }).unwrap();
+        let font = FontRef::new(&kept.bytes).unwrap();
+        assert_eq!(drawn(&font, gid_of(&kept, "A")).len(), 2, "{flavour:?}: kept");
+    }
+}
+
+// The smallest input found on which the boolean engine loops forever (docs/plans/M3.md › M3.6,
+// spike result). Export must give up on the glyph, keep its overlaps and say so.
+#[test]
+fn a_glyph_whose_overlap_removal_runs_out_of_time_keeps_its_overlaps_with_a_warning() {
+    let mut f = Font::new("Hang Sans");
+    let n = Node::new;
+    let (on, off, line) = (NodeKind::Curve, NodeKind::OffCurve, NodeKind::Line);
+    let q = NodeKind::QCurve;
+    let first = vec![
+        n(648.0, -423.0, line),
+        n(162.0, 713.0, off),
+        n(-615.0, -1.0, off),
+        n(983.0, -825.0, on),
+        n(-978.0, 621.0, off),
+        n(216.0, -353.0, off),
+        n(-245.0, 468.0, on),
+        n(493.0, 57.0, off),
+        n(-673.0, -576.0, q),
+    ];
+    let second = vec![
+        n(-902.0, 239.0, line),
+        n(-219.0, -93.0, off),
+        n(-41.0, 59.0, off),
+        n(169.0, -315.0, on),
+        n(254.0, -315.0, line),
+        n(-374.0, -844.0, off),
+        n(273.0, 247.0, q),
+    ];
+    let mut a = f.glyph_mut("A").unwrap();
+    a.layers[0].shapes.push(path(true, first));
+    a.layers[0].shapes.push(path(true, second));
+    drop(a);
+    let options = Options { overlap_time_limit: std::time::Duration::from_millis(200), ..Default::default() };
+    let out = compile_ttf(&f, &options).unwrap();
+    assert!(out.warnings.iter().any(|w| w.contains("`A` keeps its overlapping contours") && w.contains("longer than")), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert_eq!(drawn(&font, gid_of(&out, "A")).len(), 2);
 }
 
 #[test]

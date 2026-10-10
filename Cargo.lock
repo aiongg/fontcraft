@@ -971,6 +971,7 @@ dependencies = [
  "fontcraft-engine",
  "fontcraft-geom",
  "fontcraft-model",
+ "fontcraft-pathops",
  "serde",
  "skrifa 0.48.0",
  "toml",

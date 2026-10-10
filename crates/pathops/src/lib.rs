@@ -16,6 +16,7 @@
 //! | Coverage comparison | [`coverage_difference`] |
 //! | Stroke outlines | [`stroke_outline`] |
 //! | A layer's shapes in order: strokes expanded, masks applied | [`composite`] |
+//! | One operation on a worker thread with a time limit | [`run_with_time_limit`] |
 //!
 //! Every function works on one layer's contours and holds no state, so a caller can run one
 //! glyph at a time, each under its own guard or time limit (docs/plans/M3.md › M3.6, rule 8).
@@ -30,6 +31,7 @@ mod direction;
 mod extremes;
 pub mod filters;
 mod graph;
+mod limit;
 mod mask;
 mod stroke;
 mod tidy;
@@ -45,6 +47,7 @@ pub use cut::cut_with_line;
 pub use direction::{Directed, MAX_NESTING_CONTOURS, correct_direction};
 pub use extremes::{ExtremesOptions, MIN_EXTREME_SEGMENT, NEAR_EXTREME_DEGREES, NEAR_EXTREME_DISTANCE, add_extremes};
 pub use graph::Rewired;
+pub use limit::{TIME_LIMIT, Unfinished, catch_panic, run_with_time_limit};
 pub use mask::{LayerShape, MAX_MASKS, MaskMode, composite};
 pub use stroke::{
     Cap, CapAxis, Join, MAX_PEN_RATIO, MAX_STROKE_SEGMENTS, MAX_STROKE_WIDTH, MITER_LIMIT, STROKE_TOLERANCE, StrokeStyle, position_from_stored,

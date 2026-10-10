@@ -772,6 +772,7 @@ milestone = "M2"
 summary = "fontmake removes overlaps by default when building static fonts and skips it for interpolatable masters and variable fonts; --keep-overlaps turns it off and --overlaps-backend chooses booleanOperations (default) or pathops. fontc never removes overlaps and makeotf leaves it to a separate tool. We remove overlaps for static output by default using our own boolean engine and keep them for variable output."
 ref = "fontmake USAGE.md (--keep-overlaps, --overlaps-backend), Lib/fontmake/font_project.py; fontc fontbe/src/glyphs.rs"
 status = "docs"
+notes = "M3.7: the outline stage runs fontcraft_pathops::remove_overlap on every glyph that has contours after decomposition, before cubic-to-quadratic conversion; composites are skipped, as ufo2ft's RemoveOverlapsFilter skips glyphs without contours. Result points stay unrounded until the glyph is written, as in fontmake. The oracle compares the result with fontmake's (booleanOperations backend) by rendered coverage; see docs/spec/40-compile.md § 3.8 for the measures."
 
 [[behavior]]
 id = "compile.overlapFlags"

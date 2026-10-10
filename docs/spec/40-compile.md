@@ -69,7 +69,9 @@ convert curves.
      go first.
 2. **Overlaps.** Removed for static output by default, kept for variable output
    (`compile.removeOverlapsStatic`); variable TrueType glyphs get the overlap flags
-   (`compile.overlapFlags`, our choice).
+   (`compile.overlapFlags`, our choice). Before this step, a layer with strokes or masks is
+   replaced by the composite of its shapes (`compositing.shapesCombineInOrder`): strokes
+   expanded, masks applied in shape order. Details in § 3.8.
 3. **Curves** (TrueType only). Cubic to quadratic at 0.001 em tolerance (`compile.cu2quTolerance`),
    all masters converted together segment by segment (`compile.cu2quAcrossMasters`). Other curve
    modes are deferred (`compile.ttfCurveModes`). Optional implied-point removal
@@ -213,7 +215,7 @@ writing fonts; `font.compilePlan` describes the same choices without building.
 | Both flavours at once | Each into a `ttf` or `otf` subfolder; a repeated file name keeps the later font, with a warning | `export.flavourSubfolders` |
 | One file as destination | Its extension sets the flavour and container; it receives the first font that can be built | `export.singleFileDestination` |
 | Failure | Files are staged under temporary names and renamed only when every font is built; a failure leaves the destination as it was | `export.failingExportWritesNothing` |
-| Overlaps | Kept, with a warning, until overlap removal (M3); asking for removal is an error | `export.removeOverlapOption` |
+| Overlaps | Removed by default (`removeOverlap`, `outlines.removeOverlaps`, `--keep-overlaps`); `font.compilePlan` reports the setting per output. A glyph whose removal fails or runs out of time keeps its overlaps, with a warning naming it | `export.removeOverlapOption` |
 
 WOFF2 uses the container's default options: `glyf` and `loca` transformed, `hmtx` not, as
 fontTools does.
@@ -405,8 +407,41 @@ head, hhea, vhea) for reuse.
 
 ### 3.8 Overlap removal
 
-fontc does none; fontmake calls Python libraries. Ours comes from the path-operations engine and
-must be robust enough to be on by default for static export.
+fontc does none; fontmake calls Python libraries. Ours comes from the path-operations engine
+(`fontcraft_pathops::remove_overlap`, the operation behind Path › Remove Overlap) and is on by
+default for static export.
+
+| Question | Rule |
+|---|---|
+| Which glyphs | Every glyph that has contours after decomposition. A composite keeps its components, so components that overlap each other stay (ufo2ft's `RemoveOverlapsFilter` skips glyphs without contours the same way). In CFF every glyph is decomposed first |
+| Where in the order | After decomposition, before cubic-to-quadratic conversion and the TrueType direction change (`compile.filterOrder`) |
+| Strokes and masks | Applied before, per layer, in shape order (`fontcraft_compile::drawing`): such a glyph is contours only |
+| Result | The nonzero union of the closed contours, outer contours counter-clockwise; result points are not rounded until the glyph is written (rounding them first put intersection points a unit away from fontmake's in 22 more Oswald glyphs); points of the input that survive keep their exact place |
+| Open paths | Left out, with a warning naming the glyph: the union takes closed paths only |
+| Failure and hangs | Each glyph runs on a worker thread with a 5 s limit (`fontcraft_pathops::run_with_time_limit`; docs/plans/M3.md › M3.6, rule 8). A glyph that fails or runs out of time keeps its overlaps, and a warning names it. In the browser the union runs inline, without a limit |
+| Oracle | Against fontc, FontCraft builds with overlaps kept. Against fontmake both sides remove them, and outlines that differ in their points are compared by rendered coverage ("coverage-equal", `docs/testing.md`) |
+
+Against fontmake (booleanOperations, its default backend) over the corpus comparison set, M3.7:
+
+| Flavour | Glyphs compared | Same points | Coverage-equal | Different from overlap removal |
+|---|---|---|---|---|
+| TrueType | 2,360 | 2,191 | 125 | 10, all in Oswald |
+| CFF | 2,361 | 1,818 | 506 | 3, all in Oswald |
+
+No glyph timed out or failed. The remaining glyph differences of the table are older,
+allow-listed causes unrelated to overlaps.
+
+The differences that overlap removal causes are on `crates/oracle/allow.toml`, for fontmake only:
+
+| Difference | Why |
+|---|---|
+| A `glyf` or `CFF` outline whose coverage differs by less than a whole pixel anywhere and under 0.1% of the ink in total | An intersection point that falls near a half unit is rounded to the other side (327.5 written as 328 against fontmake's 327), or one engine leaves a point on a straight line where the other merges two segments |
+| `maxp.maxPoints` | The two engines leave different numbers of points where contours merge (FontCraft keeps a point on a straight line where two contours met, docs/plans/M3.md › M3.6, rule 7) |
+
+fontmake's overlap removal fails on five corpus sources that build with overlaps kept:
+booleanOperations takes no quadratic segments (`glyphs2/QCurve.glyphs`, `glyphs3/QCurve.glyphs`)
+and stops with an internal error on the three `DoubleComponentError` sources. FontCraft builds
+all five.
 
 ---
 
