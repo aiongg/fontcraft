@@ -6,7 +6,7 @@ _Updated: 2026-10-10, M3 at its close: every measure met except `path.sharpenCor
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (TESTS tests; about 113,000 lines of Rust in 20 crates,
+- `cargo xtask ci` passes all nine steps (931 tests; about 113,000 lines of Rust in 20 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 213 of the 932 inventory commands exist (`docs/parity.md`); M3 has 185 commands, 184 of them
   live. Feature parity is about 12% (ROADMAP.md › Parity estimate).
@@ -294,6 +294,6 @@ Append one terse entry per session: what landed, numbers, what is still open.
   to `fidelity` awaits the owner). Overlap removal: 2,368 of 2,368 corpus layers within the
   coverage rule, median 38 µs; against fontmake 99.58% (TrueType) and 99.87% (CFF) of glyphs
   without an overlap-removal difference. Node-drag preview step on Oswald 142 µs. Audit over 348
-  corpus sources: 0 failures. Round trips and oracle equal the baselines. TESTS tests; 213 of
+  corpus sources: 0 failures. Round trips and oracle equal the baselines. 931 tests; 213 of
   932 commands live; about 113,000 lines of Rust. Next: the owner's review of M3, then M4's
   planning pass.

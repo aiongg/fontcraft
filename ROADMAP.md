@@ -105,7 +105,7 @@ UFO tabs. Agents drive the window with `ui.pointer`, `ui.key`, `ui.text`, `ui.to
 `ui.render` draws glyphs to PNG without a window, the same bytes every time. `layer.inspect`
 reads a layer's outline with addresses. An end-to-end test draws "H", "O" and "n" on a new font
 over the control channel alone, edits them and exports a font that skrifa and fontTools read
-back. TESTS tests pass, including a sweep that runs every engine command with hostile parameters.
+back. 931 tests pass, including a sweep that runs every engine command with hostile parameters.
 The whole gate (`cargo xtask ci`: format, lints, tests, spec, parity, assets, vendor names,
 layering, wasm) is green.
 
