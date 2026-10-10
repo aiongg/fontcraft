@@ -30,9 +30,6 @@ use crate::{BoolOp, MAX_NODES, MAX_SEGMENTS, OpenPaths, OverlapOptions, PathOpEr
 
 /// Largest distance, in units, either way.
 pub const MAX_OFFSET: f64 = 10_000.0;
-/// The vertical distance's default: outside the accepted range, so no given value equals it. It
-/// stands for "the horizontal distance" (the handbook's locked state).
-const SAME_AS_HORIZONTAL: f64 = -1.0e6;
 /// Most distance, in units, between a fitted offset curve and the true offset before the curve is
 /// split.
 const TOLERANCE: f64 = 0.25;
@@ -68,7 +65,7 @@ const PARAMS: &[Param] = &[
         key: "vertical",
         label: "Vertical",
         kind: ParamKind::Number { min: -MAX_OFFSET, max: MAX_OFFSET },
-        default: Value::Number(SAME_AS_HORIZONTAL),
+        default: Value::SameAs("horizontal"),
         required: false,
         slot: Slot::Position(1),
         doc: "how far horizontal edges move, in units; the horizontal distance when left out (the dialog's locked state)",
@@ -145,10 +142,9 @@ impl Filter for OffsetCurve {
 
     fn apply(&self, contours: &[Contour], args: &Args, cx: &Context) -> Result<Vec<Contour>, PathOpError> {
         let auto = args.flag("autoStroke");
-        let (horizontal, vertical) = distances(args);
         let options = OffsetOptions {
-            horizontal,
-            vertical,
+            horizontal: args.number("horizontal"),
+            vertical: args.number("vertical"),
             stroke: args.flag("makeStroke") || auto,
             auto,
             position: if auto { 50.0 } else { args.number("position") },
@@ -183,35 +179,20 @@ impl Filter for OffsetCurve {
                 _ => return Err(format!("this filter takes 4 values without a key; \"{value}\" is one too many")),
             }
         }
-        let args = Args::new(PARAMS, given.clone())?;
-        // A vertical distance equal to the horizontal one reads as left out, so that an Args
-        // always has one form and the string of the defaults reads back as the defaults.
-        if args.number("vertical") == args.number("horizontal") {
-            given.retain(|(key, _)| *key != "vertical");
-            return Args::new(PARAMS, given);
-        }
-        Ok(args)
+        Args::new(PARAMS, given)
     }
 
     fn write_items(&self, args: &Args) -> Vec<Item> {
-        let (horizontal, vertical) = distances(args);
-        let number = |v: f64| Value::Number(v).to_string();
+        let number = |key: &str| Value::Number(args.number(key)).to_string();
         let position =
             if args.flag("autoStroke") { "auto".to_string() } else { Value::Number((args.number("position") * 1e6).round() / 1e8).to_string() };
         vec![
-            Item::positional(number(horizontal)),
-            Item::positional(number(vertical)),
+            Item::positional(number("horizontal")),
+            Item::positional(number("vertical")),
             Item::positional(Value::Bool(args.flag("makeStroke")).to_string()),
             Item::positional(position),
         ]
     }
-}
-
-/// The horizontal and vertical distances of `args`; a vertical one left out is the horizontal one.
-fn distances(args: &Args) -> (f64, f64) {
-    let horizontal = args.number("horizontal");
-    let vertical = args.number("vertical");
-    (horizontal, if vertical == SAME_AS_HORIZONTAL { horizontal } else { vertical })
 }
 
 /// The ends of open paths in a stroke.

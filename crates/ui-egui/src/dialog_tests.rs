@@ -324,3 +324,17 @@ fn choice_labels_show_and_words_are_the_values() {
     frame(&ctx, &mut app, Vec::new());
     call(&mut app, "ui.dialog.cancel", json!({}));
 }
+
+#[test]
+fn offset_curve_opens_with_vertical_empty_and_runs_it_as_the_horizontal_distance() {
+    let mut app = square_app();
+    let opened = call(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"dialog": "dialog.filterOffsetCurve"}}));
+    let vertical = opened["fields"].as_array().unwrap().iter().find(|f| f["id"] == "vertical").unwrap().clone();
+    assert_eq!(vertical["value"], Value::Null, "{vertical}");
+    call(&mut app, "ui.dialog.set", json!({"field": "horizontal", "value": 12}));
+    call(&mut app, "ui.dialog.confirm", json!({}));
+
+    let mut direct = square_app();
+    direct.run("filter.offsetCurve", &json!({"glyph": "A", "horizontal": 12, "vertical": 12})).unwrap();
+    assert!(font(&app).same_as(&font(&direct)));
+}

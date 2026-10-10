@@ -123,7 +123,6 @@ fn hostile_strings_and_arguments_are_errors_that_change_nothing() {
     let before = font(&s);
     for text in [
         "OffsetCurve",
-        "OffsetCurve;10",
         "OffsetCurve;10;10;1;2",
         "OffsetCurve;10;10;1;auto;1",
         "OffsetCurve;NaN;0",
@@ -134,7 +133,6 @@ fn hostile_strings_and_arguments_are_errors_that_change_nothing() {
         assert_eq!(font(&s), before, "{text} changed the font");
     }
     for p in [
-        json!({"glyph": "B", "horizontal": 10}),
         json!({"glyph": "B", "horizontal": 10, "vertical": 10, "position": 150}),
         json!({"glyph": "B", "horizontal": 10, "vertical": 10, "capStyle": "wavy"}),
         json!({"glyph": "B", "horizontal": "abc", "vertical": 10}),
@@ -156,6 +154,12 @@ fn a_vertical_distance_left_out_is_the_horizontal_one() {
     run(&mut given, "filter.offsetCurve", json!({"glyphs": ["B", "O", "S"], "horizontal": 12, "vertical": 12}));
     assert_eq!(font(&left_out), font(&given));
     assert_eq!(bounds(&mut left_out, "B"), (-12.0, -12.0, 112.0, 112.0));
+
+    // The schema says so instead of giving a number.
+    let list = run(&mut fixture(), "filter.list", json!({}));
+    let entry = list["filters"].as_array().unwrap().iter().find(|f| f["command"] == "filter.offsetCurve").unwrap();
+    let param = entry["params"].as_array().unwrap().iter().find(|p| p["key"] == "vertical").unwrap();
+    assert_eq!((&param["default"], &param["sameAs"], &param["required"]), (&Value::Null, &json!("horizontal"), &json!(false)));
 
     // The export string with one value gives the same font.
     let mut from_string = fixture();

@@ -134,7 +134,9 @@ pub struct Param {
     /// The dialog field's label.
     pub label: &'static str,
     pub kind: ParamKind,
-    /// The value when the parameter is left out, and the dialog's first value.
+    /// The value when the parameter is left out, and the dialog's first value. A
+    /// [`Value::SameAs`] default takes the other parameter's value, and the dialog's field starts
+    /// empty.
     pub default: Value,
     /// A command or string must give it; the default only fills the dialog.
     pub required: bool,
@@ -151,6 +153,9 @@ pub enum Value {
     Bool(bool),
     /// One of a choice parameter's words, as the schema spells it.
     Word(&'static str),
+    /// Only as a default: the value of the parameter with this key, which must come earlier in
+    /// the schema and have a value of its own. A checked [`Args`] never holds it.
+    SameAs(&'static str),
 }
 
 impl fmt::Display for Value {
@@ -160,6 +165,7 @@ impl fmt::Display for Value {
             Self::Number(v) => write!(f, "{v}"),
             Self::Bool(b) => write!(f, "{}", u8::from(*b)),
             Self::Word(w) => f.write_str(w),
+            Self::SameAs(_) => Ok(()),
         }
     }
 }
@@ -205,20 +211,25 @@ impl Args {
             }
             *slot = Some(convert(param, input)?);
         }
-        let mut out = Vec::with_capacity(params.len());
+        let mut out: Vec<(&'static str, Value)> = Vec::with_capacity(params.len());
         for (param, value) in params.iter().zip(values) {
-            match value {
-                Some(v) => out.push((param.key, v)),
+            let value = match value {
+                Some(v) => v,
                 None if param.required => return Err(format!("`{}` is required", param.key)),
-                None => out.push((param.key, param.default)),
-            }
+                None => resolve(param, &out).ok_or_else(|| format!("`{}` has no default", param.key))?,
+            };
+            out.push((param.key, value));
         }
         Ok(Args { values: out })
     }
 
     /// Every parameter at its default, required ones included (the dialog's first values).
     pub fn defaults(params: &'static [Param]) -> Args {
-        Args { values: params.iter().map(|p| (p.key, p.default)).collect() }
+        let mut out: Vec<(&'static str, Value)> = Vec::with_capacity(params.len());
+        for p in params {
+            out.push((p.key, resolve(p, &out).unwrap_or(p.default)));
+        }
+        Args { values: out }
     }
 
     pub fn get(&self, key: &str) -> Option<Value> {
@@ -249,6 +260,15 @@ impl Args {
 
     pub fn iter(&self) -> impl Iterator<Item = (&'static str, Value)> + '_ {
         self.values.iter().copied()
+    }
+}
+
+/// `param`'s default, with a [`Value::SameAs`] taken from the values already in `earlier`; `None`
+/// when that parameter is not among them.
+fn resolve(param: &Param, earlier: &[(&'static str, Value)]) -> Option<Value> {
+    match param.default {
+        Value::SameAs(other) => earlier.iter().find(|(k, _)| *k == other).map(|(_, v)| *v).filter(|v| !matches!(v, Value::SameAs(_))),
+        v => Some(v),
     }
 }
 
@@ -488,10 +508,14 @@ pub fn write_items(params: &'static [Param], args: &Args) -> Vec<Item> {
         params.iter().filter_map(|p| if let Slot::Position(n) = p.slot { Some((n, p)) } else { None }).collect();
     positional.sort_by_key(|(n, _)| *n);
     let value = |p: &Param| args.get(p.key).unwrap_or(p.default);
+    let default = |p: &Param| match p.default {
+        Value::SameAs(other) => args.get(other).unwrap_or(p.default),
+        v => v,
+    };
     let mut out: Vec<Item> = positional.into_iter().map(|(_, p)| Item::positional(value(p).to_string())).collect();
     for p in params {
         if let Slot::Key(k) = p.slot
-            && (p.required || value(p) != p.default)
+            && (p.required || value(p) != default(p))
         {
             out.push(Item::keyed(k, value(p).to_string()));
         }
@@ -550,8 +574,15 @@ mod tests {
             let mut positions: Vec<usize> = f.params().iter().filter_map(|p| if let Slot::Position(n) = p.slot { Some(n) } else { None }).collect();
             positions.sort_unstable();
             assert!(positions.iter().enumerate().all(|(i, n)| i == *n), "{}: positions must run 0, 1, 2…", f.name());
+            for (i, p) in f.params().iter().enumerate() {
+                if let Value::SameAs(other) = p.default {
+                    let earlier = f.params().iter().take(i).find(|q| q.key == other);
+                    assert!(earlier.is_some_and(|q| q.kind == p.kind), "{}: `{}` must follow `{other}`, of its kind", f.name(), p.key);
+                }
+            }
             // The defaults pass the schema's own checks and survive a trip through the string.
             let args = Args::defaults(f.params());
+            assert!(args.iter().all(|(_, v)| !matches!(v, Value::SameAs(_))), "{}", f.name());
             let given: Vec<(&str, Input)> = Vec::new();
             let optional = Args::new(f.params(), given);
             assert!(optional.is_ok() || f.params().iter().any(|p| p.required), "{}", f.name());

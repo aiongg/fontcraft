@@ -90,7 +90,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Filters",
             [],
             None,
-            "{} every filter → {filters: [{name (export name), command, label, menu, origin: \"built-in\", selection: bool (takes points and segments), params: [{key, label, kind: \"number\" | \"integer\" | \"bool\" | \"choice\", min?, max?, choices?, default, required, slot: {position: n} | {key: name} | null (not in the export string), doc}], string?: an export string with the defaults, doc}]}",
+            "{} every filter → {filters: [{name (export name), command, label, menu, origin: \"built-in\", selection: bool (takes points and segments), params: [{key, label, kind: \"number\" | \"integer\" | \"bool\" | \"choice\", min?, max?, choices?, default (null with sameAs: key when it takes that parameter's value), sameAs?, required, slot: {position: n} | {key: name} | null (not in the export string), doc}], string?: an export string with the defaults, doc}]}",
             always,
             list
         ),
@@ -528,6 +528,8 @@ fn args_json(args: &Args) -> Map<String, Value> {
                 Arg::Number(n) => json!(n),
                 Arg::Bool(b) => json!(b),
                 Arg::Word(w) => json!(w),
+                // Checked arguments never hold it.
+                Arg::SameAs(_) => Value::Null,
             };
             (k.to_string(), v)
         })
@@ -596,6 +598,10 @@ fn param_json(p: &Param) -> Value {
         Arg::Number(n) => json!(n),
         Arg::Bool(b) => json!(b),
         Arg::Word(w) => json!(w),
+        Arg::SameAs(other) => {
+            m.insert("sameAs".into(), json!(other));
+            Value::Null
+        }
     };
     m.insert("default".into(), default);
     m.insert("required".into(), json!(p.required));

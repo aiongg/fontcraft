@@ -168,6 +168,8 @@ fn input(v: Value) -> Input<'static> {
         Value::Number(n) => Input::Number(n),
         Value::Bool(b) => Input::Bool(b),
         Value::Word(w) => Input::Text(w),
+        // Checked arguments never hold it.
+        Value::SameAs(_) => Input::Text(""),
     }
 }
 
