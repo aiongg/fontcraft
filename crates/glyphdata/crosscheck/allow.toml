@@ -1,0 +1,88 @@
+# Known differences between FontCraft's glyph database and the oracles, for
+# `cargo xtask glyphdata --check` (xtask/src/glyphdata_check.rs).
+#
+# An entry matches a difference by oracle (`fontc`, `glyphslib`), field, name set (`records`,
+# `suffix`, `ligature`, `uni`, `underscore`; all when absent), our value and theirs (`none`,
+# `some`, `*`, a literal, `ours-sanitised` for our value with every character other than
+# A–Z a–z 0–9 _ . removed, `name-sanitised` for the glyph name cleaned that way), the source of
+# our value, and optionally a list of names. `count` is the number of names it covers; the check
+# fails when that changes, so a new difference is never hidden by an old entry.
+
+[[allow]]
+oracle = "fontc"
+field = "unicode"
+sets = ["uni"]
+ours = "some"
+ours_source = "synthesised"
+theirs = "none"
+count = 534
+cause = """A uniXXXX name whose record exports under its own nice name (uni0041 for A) is not a \
+production name in the data, so neither oracle finds a record or gives a code point. FontCraft \
+gives the code point the name spells (05-font-view.md § 4.2, Name → Unicode)."""
+
+[[allow]]
+oracle = "glyphslib"
+field = "unicode"
+sets = ["uni"]
+ours = "some"
+ours_source = "synthesised"
+theirs = "none"
+count = 534
+cause = "As for fontc: the code point a uniXXXX name spells, when no record has that production name."
+
+[[allow]]
+oracle = "glyphslib"
+field = "case"
+sets = ["suffix"]
+ours = "some"
+ours_source = "synthesised"
+theirs = "none"
+count = 42080
+cause = """glyphsLib returns record attributes only for a name found as it is. FontCraft gives a \
+suffixed glyph its base glyph's case (the handbook: A.alt, A.ss01 and A.001 behave like A), and \
+smallCaps for a .sc suffix."""
+
+[[allow]]
+oracle = "glyphslib"
+field = "script"
+sets = ["suffix", "ligature"]
+ours = "some"
+ours_source = "synthesised"
+theirs = "none"
+count = 93824
+cause = """glyphsLib gives no script to a name it does not find as it is. FontCraft gives a \
+suffixed glyph its base glyph's script, and a ligature the script all its known parts share \
+(guess on glyphData.lookup)."""
+
+[[allow]]
+oracle = "glyphslib"
+field = "production"
+ours = "some"
+ours_source = "default"
+theirs = "ours-sanitised"
+count = 996
+cause = """A name nothing resolves keeps its own spelling as its production name in fontc and \
+FontCraft; glyphsLib removes every character other than A–Z a–z 0–9 _ . from it (kafDotless-ar \
+→ kafDotlessar). The name check of M4.2 deals with such names at export."""
+
+[[allow]]
+oracle = "glyphslib"
+field = "production"
+sets = ["ligature"]
+ours = "some"
+ours_source = "synthesised"
+theirs = "name-sanitised"
+count = 64
+cause = """A ligature with a part whose production name has a dot before the last part \
+(bh_a-telugu: uni0C2D.half and uni0C05). fontc, followed by FontCraft, joins them into \
+uni0C2D.half0C05; glyphsLib gives up and uses the cleaned glyph name. Revisit with the \
+production-name comparison of M4.2."""
+
+[[allow]]
+oracle = "glyphslib"
+field = "production"
+sets = ["ligature"]
+names = ["Omega_Omicrondasiaoxia_rhosubscript", "mu_alphavariaypogegrammeni"]
+count = 2
+cause = """glyphsLib takes an AGLFN part's AGLFN code point before its record's production name: \
+Omega is U+2126 in AGLFN and uni03A9 in the data, mu U+00B5 and uni03BC. fontc and FontCraft use the record's."""

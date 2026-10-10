@@ -150,6 +150,14 @@ the fonts can be checked with other readers (fontTools' `TTFont(...).ensureDecom
   `--optimize-cff 1`, records what its charstring pen receives, has the `cff_from_json` example
   build the table from that recording, and compares the two tables byte for byte. On a
   difference it names the first differing DICT entry or charstring.
+- **Glyph database.** `cargo xtask glyphdata --check` (outside the gate; needs
+  `cargo xtask glyphdata --fetch` first) looks up about 200,000 names in FontCraft's database, in
+  fontc's `glyphs-reader` 1.0.0 and in glyphsLib (through `crates/glyphdata/crosscheck/glyphslib.py`,
+  with the fontmake tool's Python or `FONTMAKE_PYTHON`): every record of GlyphsInfo's main file,
+  each with `.sc`, `.ss01` and `.001`, 10,000 seeded ligatures, `uniXXXX` for every BMP code point
+  with a record, and 1,000 `_` names. It compares category, subcategory, production name and code
+  point with both, and script, case and description with glyphsLib. Known differences are in
+  `crates/glyphdata/crosscheck/allow.toml`, each with its cause and the number of names it covers.
 - **Path operations.** Overlap removal is compared with the result's area and winding, and with
   an independent implementation where one is available; property tests (a union's area is at most
   the sum, removing overlap twice changes nothing).
