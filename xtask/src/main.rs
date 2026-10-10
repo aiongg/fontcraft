@@ -47,7 +47,7 @@ commands:
                   with fontc's glyphs-reader and glyphsLib (known differences: crates/glyphdata/crosscheck/allow.toml)
   glyphsets [--fetch] [--generate]
                   --fetch downloads the pinned Unicode CLDR locale files and Google Fonts glyph sets into
-                  corpus/glyphsets/ (git-ignored); --generate rebuilds crates/glyphdata/data/sets.bin
+                  data-sources/glyphsets/ (git-ignored); --generate rebuilds crates/glyphdata/data/sets.bin
   roundtrip [--mode plist|model|native] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
                   read every corpus source and write it back; count byte-identical results
                   (known differences with a reason: xtask/roundtrip-allow.toml)
@@ -119,7 +119,14 @@ fn walk(root: &Path, dir: &Path, files: &mut Vec<String>) -> Result<(), String> 
         let path = entry.map_err(|e| e.to_string())?.path();
         let rel = path.strip_prefix(root).map_err(|e| e.to_string())?.to_string_lossy().replace('\\', "/");
         if path.is_dir() {
-            if !(rel == ".git" || rel.starts_with("target") || rel == "corpus" || rel == "dist" || rel == "log" || rel == "plan/local") {
+            if !(rel == ".git"
+                || rel.starts_with("target")
+                || rel == "corpus"
+                || rel == "data-sources"
+                || rel == "dist"
+                || rel == "log"
+                || rel == "plan/local")
+            {
                 walk(root, &path, files)?;
             }
         } else {

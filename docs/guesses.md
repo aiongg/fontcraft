@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**326 guesses on 237 rows (123 of them live commands).**
+**334 guesses on 239 rows (124 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -28,6 +28,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `file.newFromGlyphSets` | M4 | handbook | yes | Phonetics and TransLatin sets are listed under latin, Coptic and the other Greek sets under greek. Settled by observing the reference's chooser. |
+| `file.newFromGlyphSets` | M4 | handbook | yes | A script picked without naming sets takes its Core set (Latin, Cyrillic, Greek and Arabic Core); a script without a default takes its first set. Settled by observing what the reference's chooser preselects when a script is switched on. |
+| `file.newFromGlyphSets` | M4 | handbook | yes | An encoded glyph takes the glyph database's name for its code point, an unencoded one the database's nice name for its source name; the source name is kept when the database knows neither. Settled by comparing a new document from the reference's chooser with the database names. |
+| `file.newFromGlyphSets` | M4 | handbook | yes | The new document keeps New's drawn .notdef first and adds no other glyph than the sets'; glyphs follow the default sort order. Settled by observing a new document from the reference's chooser. |
 | `view.editSelectedGlyphs` | M4 | handbook | yes | An open tab that holds exactly these glyphs is shown instead of a new tab. |
 | `view.showNextTab` | M3 | handbook | yes | After the last tab comes Font View, and before Font View the last tab. |
 | `view.closeTab` | M3 | handbook | yes | The tab to the left of a closed showing tab shows next. |
@@ -280,6 +284,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.grid` (panel) | M4 | handbook | – | Section headers of the glyphOrder parameter show only while the view lists every glyph in glyph order (no filter, search or sort). Settled by observation. |
 | `fontView.list` (panel) | M4 | handbook | – | A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. Settled by observation. |
 | `fontView.list` (panel) | M4 | handbook | – | Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation. |
+| `fontView.sidebar.languages` (panel) | M4 | handbook | – | A language requires its CLDR main exemplar characters only; the auxiliary, index, numbers and punctuation sets are not counted. Settled by comparing a language's badge total in the reference with its CLDR sets. |
+| `fontView.sidebar.languages` (panel) | M4 | handbook | – | CLDR lists letters in lowercase, so each character's single-character uppercase form is added (ß gets none; Georgian gets no Mtavruli capitals). Settled by observing whether the reference's badge for a Latin-script language counts capitals. |
+| `fontView.sidebar.languages` (panel) | M4 | handbook | – | A language is listed under the glyph database's script that most of its exemplar characters belong to, ignoring Common and Inherited characters (Japanese falls under han, Korean under hangul). Settled by observing where the reference lists Japanese and other mixed-script languages. |
+| `fontView.sidebar.languages` (panel) | M4 | handbook | – | Every CLDR locale with its own main exemplar set is a language entry, regional and script variants included (de-CH, sr-Latn); those that inherit their parent's set are left out. Settled by observing which entries the reference lists under one script. |
 | `fontView.statusBar` (panel) | M4 | handbook | – | The counts read "N selected · N shown · N in font". Settled by observation. |
 
 ## `07-import-export.toml`

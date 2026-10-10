@@ -2,8 +2,10 @@
 //!
 //! The pins are in `xtask/glyphsets.toml`. `--fetch` downloads the Unicode CLDR locale files and
 //! the Google Fonts glyph sets at their commits (a sparse, blob-less git fetch of the listed
-//! paths, as `glyphdata --fetch` does) into `corpus/glyphsets/` (git-ignored). `--generate`
-//! builds `crates/glyphdata/data/sets.bin` and writes the licence notices beside it.
+//! paths, as `glyphdata --fetch` does) into `data-sources/glyphsets/` (git-ignored). `--generate`
+//! builds `crates/glyphdata/data/sets.bin` and writes the licence notices beside it. The sources
+//! stay out of `corpus/` because the corpus tests read every `.glyphs` file there, and the glyph
+//! set files are lists, not fonts.
 //!
 //! Languages: every CLDR locale whose file has its own main exemplar set (`<exemplarCharacters>`
 //! without a `type` or `alt`), parsed as a UnicodeSet. Strings such as `{dž}` add each of their
@@ -92,7 +94,7 @@ pub fn pins(root: &Path) -> Result<Pins, String> {
 }
 
 pub fn dir(root: &Path) -> PathBuf {
-    root.join("corpus/glyphsets")
+    root.join("data-sources/glyphsets")
 }
 
 /// A script id as the sidebar accepts it: lowercase letters, digits, `_` or `-`.
@@ -133,7 +135,7 @@ fn read(path: &Path) -> Result<String, String> {
 
 fn check_head(d: &Path, name: &str, pin: &GitPin) -> Result<(), String> {
     if git(&d.join(name), &["rev-parse", "HEAD"]).unwrap_or_default() != pin.commit {
-        return Err(format!("corpus/glyphsets/{name} is not at the pinned commit (run `cargo xtask glyphsets --fetch`)"));
+        return Err(format!("data-sources/glyphsets/{name} is not at the pinned commit (run `cargo xtask glyphsets --fetch`)"));
     }
     Ok(())
 }

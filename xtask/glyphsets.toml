@@ -1,6 +1,6 @@
 # Sources of the built-in language and glyph-set data, crates/glyphdata/data/sets.bin.
 #
-# `cargo xtask glyphsets --fetch` downloads them into corpus/glyphsets/ (git-ignored); `--generate`
+# `cargo xtask glyphsets --fetch` downloads them into data-sources/glyphsets/ (git-ignored); `--generate`
 # rebuilds the blob and the licence files beside it. A git commit names its content. `--generate`
 # also reads the built-in glyph database (crates/glyphdata/data/glyphdata.bin) to give each
 # language a script.

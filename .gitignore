@@ -6,4 +6,6 @@
 /log/
 # Real-file test corpora, fetched at pinned commits by `cargo xtask corpus --fetch`. Never committed.
 /corpus/
+# Sources of generated data files (`cargo xtask glyphsets --fetch`). Never committed.
+/data-sources/
 .DS_Store

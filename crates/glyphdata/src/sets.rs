@@ -459,7 +459,17 @@ mod tests {
     #[test]
     fn the_builtin_data_loads_with_languages_and_glyph_sets() {
         let sets = builtin().unwrap();
-        assert!(sets.languages.iter().any(|l| l.id == "de" && l.script == "latin" && l.characters.contains(&0xC4)), "German needs Ä");
-        assert!(sets.glyph_sets.iter().any(|s| s.script == "latin" && s.default));
+        let language = |id: &str| sets.languages.iter().find(|l| l.id == id).unwrap();
+        let german = language("de");
+        assert_eq!((german.name.as_str(), german.script.as_str()), ("German", "latin"));
+        for c in "äöüßÄÖÜ".chars() {
+            assert!(german.characters.contains(&(c as u32)), "German needs {c}");
+        }
+        assert_eq!(language("ja").script, "han");
+        let core = sets.glyph_set("latin-core").unwrap();
+        assert!(core.default && core.script == "latin");
+        for c in ('A'..='Z').chain('a'..='z') {
+            assert!(core.glyphs.iter().any(|g| g.code_point == Some(c as u32)), "Latin Core lacks {c}");
+        }
     }
 }
