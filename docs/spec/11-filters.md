@@ -269,6 +269,10 @@ How FontCraft runs it (our design, unconfirmed):
   until then.
 - Cursivy is refused: with a clear error when the master has no horizontal and vertical stems,
   and as not supported yet otherwise (the correction is undocumented).
+- The dialog (`dialog.transformations`) has the Origin pop-up, the Slant field and Cursivy as a
+  checkbox. Translate, Scale with its lock and the "…" menu need dialog fields that hold an
+  `{x, y}` object and dialog actions, which the dialog framework does not have yet; agents pass
+  `translate` and `scale` to the command.
 
 ### Interpolate with Background (`path.interpolateWithBackground`, Path menu)
 

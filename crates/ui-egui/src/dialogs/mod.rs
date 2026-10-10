@@ -23,6 +23,7 @@ mod interpolate_with_background;
 pub mod pasted_outline_bounds;
 pub mod primitive_measurements;
 mod round_corners;
+mod transformations;
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -61,6 +62,7 @@ pub const DIALOGS: &[Dialog] = &[
     primitive_measurements::ELLIPSE,
     import_outlines_missing_glyph::DIALOG,
     pasted_outline_bounds::DIALOG,
+    transformations::DIALOG,
 ];
 
 /// The shell commands of this module.

@@ -570,7 +570,7 @@ milestone = "M3"
 summary = "Dialog for a one-off affine transformation of the selection or of selected layers. While it is open the canvas shows the result; Cancel puts the outlines back as they were."
 ref = "Filters › Built-in Filters › Transformations › Transformations"
 status = "observed"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:49–2:24: fields Translate X and Y, an Origin pop-up (set to baseline), Scale horizontal and vertical with a lock, a Slant field whose label carries a pop-up arrow, Cancel and OK, and a round \"…\" button at the bottom left. The glyph is drawn transformed while the dialog is open and returns to its old shape after Cancel."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:49–2:24: fields Translate X and Y, an Origin pop-up (set to baseline), Scale horizontal and vertical with a lock, a Slant field whose label carries a pop-up arrow, Cancel and OK, and a round \"…\" button at the bottom left. The glyph is drawn transformed while the dialog is open and returns to its old shape after Cancel. FontCraft's dialog has the Origin pop-up, the Slant field and Cursivy as a checkbox; Translate, Scale with its lock and the \"…\" menu wait on dialog fields that hold an {x, y} object and on dialog actions (M3.14), so agents pass translate and scale to path.transformations."
 
 [[command]]
 id = "path.transformations.copyFilterParameter"

@@ -553,6 +553,8 @@ The canvas draws this composite in black, and export compiles it before overlap 
 `path.setMask` writes mask value 1, which every format version reads as a subtracting mask.
 `filter.shapeOrder` takes the new order as a list of every shape index; hints that refer to a path
 by index are not renumbered.
+The Shape Order dialog is not built: it needs a reorderable list field, which the dialog framework
+does not have yet. Until then the menu item without `order` reports that `order` is required.
 
 ## 19. Anchors
 
