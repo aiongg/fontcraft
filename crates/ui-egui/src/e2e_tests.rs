@@ -411,12 +411,15 @@ fn check_glyph(font: &FontRef, ch: char, fixture: &[&[&str]], bounds: (i16, i16,
     let mut drawn = Ends::default();
     font.outline_glyphs().get(gid).unwrap().draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut drawn).unwrap();
     assert_eq!(drawn.0.len(), fixture.len(), "{ch}: drawn contours");
-    let ends: BTreeSet<(i32, i32)> = drawn.0.iter().flatten().map(|&(x, y)| (x.round() as i32, y.round() as i32)).collect();
+    // An on-curve point halfway between two off-curve points is left out of `glyf` and implied;
+    // the off-curve points are rounded first, so the implied point can land half a unit away.
+    let ends: Vec<(f32, f32)> = drawn.0.iter().flatten().copied().collect();
+    let near = |(x, y): (i32, i32)| ends.iter().any(|&(ex, ey)| (ex - x as f32).abs() <= 0.5 && (ey - y as f32).abs() <= 0.5);
     let (x0, y0, x1, y1) = bounds;
     for (path, contour) in fixture.iter().zip(&stored) {
         let nodes = on_curve(path);
-        for p in &nodes {
-            assert!(ends.contains(p), "{ch}: the node {p:?} is not drawn: {ends:?}");
+        for &p in &nodes {
+            assert!(near(p), "{ch}: the node {p:?} is not drawn: {ends:?}");
         }
         // Each segment keeps at least one stored point: its end node, or an off-curve point.
         assert!((nodes.len()..=8 * nodes.len()).contains(&contour.len()), "{ch}: {} points for {} segments", contour.len(), nodes.len());
