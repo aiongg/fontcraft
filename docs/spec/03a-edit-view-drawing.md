@@ -433,6 +433,35 @@ selected). Headless: `path.setStroke` (inferred).
 - `path.expandOutline` (context menu) bakes the stroke into normal outlines;
   `path.expandOutlineForAllMasters` with `Alt`.
 
+How FontCraft builds a stroke (our construction, `fontcraft_pathops::stroke_outline`):
+
+| Part | Geometry |
+|---|---|
+| Band | Between two offset curves of the path (kurbo's offset curves), `width` across; `position` p puts the edges at (p − 1) and (p + 1) half widths to the right of the path |
+| Elliptical pen | Width is the pen's horizontal size and height its vertical size. The band is built with a round pen in a space squeezed along the longer axis, then stretched back, so round parts become elliptical. The two sizes may differ by a factor of at most 100 |
+| Miter join | The outer edges extended until they meet; beyond 4 half widths, a bevel |
+| Bevel join | A straight line across the outer side of the corner |
+| Round join | A circular arc around the node on the outer side |
+| Round full join | Round on the outer side; the inner corner is filled with an arc of half the stroke width |
+| Butt cap | Square across the band at the end node |
+| Square cap | The band extended by half its width |
+| Round cap | A half circle beyond the end node |
+| Round inset cap | The band shortened by half its width, then a half circle, so the stroke ends at the end node |
+| Axis-aligned cap | Cut along the X or Y axis through the middle of the band at the end node: the axis nearer the butt cut, or the forced one. A path that ends within about 6° of a forced axis gets a butt end |
+| Fill | A closed path's own area is added to the ring |
+
+The pieces (one per segment, join and cap) are united with the nonzero rule, so the outline has no
+overlaps. The result does not interpolate yet (M9).
+
+Storage: the path attributes `strokeWidth`, `strokeHeight`, `strokePos`, `lineJoin` (0 miter,
+1 round, 2 bevel, 3 round full), `lineCapStart` and `lineCapEnd` (0 butt, 1 round, 2 square,
+3 round inset, 4 axis-aligned) and `fill`, as `docs/spec/30-source-formats.md` § 2.7 lists them.
+`strokePos` follows the format version (version 3: 0 right, 0.5 centred, 1 left; version 4: −1
+left, 0 centred, 1 right); a document not read from a `.glyphs` file is saved as version 3 and uses
+that form. No stored position is a centred stroke. Cap code 4 and the forced cap axis (the native
+key `lineCapAxis`, `x` or `y`) are not confirmed against the reference's files; UFO keeps none of
+these attributes.
+
 ### Pen points
 
 Local overrides along a stroked path (`penPoints.overrideStrokeLocally`).
@@ -456,6 +485,21 @@ Local overrides along a stroked path (`penPoints.overrideStrokeLocally`).
 - Display: removed parts light grey, result black (`mask.display`).
 - `filter.shapeOrder` (Filter › Shape Order, `dialog.shapeOrder`): reorder shapes by dragging,
   confirm with OK.
+
+How FontCraft composites a layer (`fontcraft_pathops::composite`, and in the engine
+`cmd::stroke::layer_outline`, which resolves components first):
+
+1. Shapes are taken in their stored order; the first is at the bottom.
+2. A stroked path counts as its stroke outline.
+3. A mask shape draws nothing. It subtracts its outline from everything before it, components
+   included (version 4's intersecting mask, value 2, keeps only what lies inside it instead).
+   Open paths without a stroke fill nothing and are dropped once a mask applies.
+4. A layer with no stroke and no mask is passed on contour for contour.
+
+The canvas draws this composite in black, and export compiles it before overlap removal.
+`path.setMask` writes mask value 1, which every format version reads as a subtracting mask.
+`filter.shapeOrder` takes the new order as a list of every shape index; hints that refer to a path
+by index are not renumbered.
 
 ## 19. Anchors
 
@@ -704,9 +748,9 @@ Question 31 stays open and blocks only `path.sharpenCorner`.
     strokes export (auto-expanded?) and interpolate.
     **Answered for M3 (our decision, 2026-10-09):** joins: miter, round, bevel, round full. Caps:
     butt, round, square, round inset, axis-aligned. A positive position is to the right of the path
-    direction. Butt, round, square, miter and bevel come from kurbo's stroker; round inset, round
-    full and axis-aligned are our construction. Export expands strokes; their interpolation is M9. A
-    tutorial video showing it would confirm or correct this.
+    direction. Every join and cap is our construction on kurbo's offset curves (§ 17). Export
+    expands strokes; their interpolation is M9. A tutorial video showing it would confirm or
+    correct this.
 22. **Pen points**: units and zero direction of the angle; interpolation law behind the
     progression values; default progression.
     **Deferred** to the interaction-fidelity pass: the pen-point rows carry the reason in `notes`.

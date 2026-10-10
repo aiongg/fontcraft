@@ -1596,12 +1596,13 @@ label = "Set Stroke"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, shapes: [index], width?: number|null, height?: number|null, fill?: bool, position?: number, join?: miter|round|bevel|roundFull, capStart?: butt|round|square|roundInset|axisAligned, capEnd?: same as capStart, capAxis?: auto|x|y}"
+params = "{glyph: name, layer?: id, side?: foreground|background, shapes: [index], width?: number|null, height?: number|null, fill?: bool, position?: percent, join?: miter|round|bevel|roundFull, capStart?: butt|round|square|roundInset|axisAligned, capEnd?: same as capStart, capAxis?: auto|x|y}"
 area = "path-ops"
 milestone = "M3"
 summary = "Writes the stroke attributes of one or more paths, the action behind the Stroke palette fields; setting width to null removes the stroke. The reference exposes these only as palette controls."
 ref = "Edit View › Creating Strokes"
 status = "inferred"
+notes = "Built in M3.11 (our decision): keys not given keep their values; `width: null` removes every stroke attribute. Stored as the `.glyphs` path attributes `strokeWidth`, `strokeHeight`, `strokePos`, `lineJoin`, `lineCapStart`, `lineCapEnd` and `fill`. The axis-aligned cap is stored as cap code 4 and a forced axis as the native key `lineCapAxis`; neither is confirmed against the reference's files."
 
 [[behavior]]
 id = "stroke.nonDestructiveAttribute"
@@ -1618,6 +1619,7 @@ milestone = "M3"
 summary = "A stroked closed path renders as a ring by default; with Fill checked the area enclosed by the new outlines is filled as well."
 ref = "Edit View › Creating Strokes"
 status = "handbook"
+notes = "Built in M3.11: the filled stroke is the union of the ring and the path's own area. Documented, not yet observed."
 
 [[behavior]]
 id = "stroke.display"
@@ -1634,12 +1636,13 @@ menu = []
 context = ["canvas.path"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layer?: id, shapes?: [index] (with one glyph)}"
+params = "{glyph: name | glyphs: [names], layer?: id, side?: foreground|background (with one glyph), shapes?: [index] (with one glyph)}"
 area = "path-ops"
 milestone = "M3"
 summary = "Context-menu command that replaces a stroked path by ordinary closed outlines of its stroke and drops the stroke attributes."
 ref = "Edit View › Creating Strokes"
 status = "handbook"
+notes = "Built in M3.11: the new paths have no overlaps, outer paths run counter-clockwise, points are on the grid, and they keep the mask flag and colour label of the stroked path. With `glyphs` (Font View) every stroked path of each layer is expanded."
 
 [[command]]
 id = "path.expandOutlineForAllMasters"
@@ -1647,12 +1650,13 @@ label = "Expand Outline for All Masters"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], shapes?: [index] (with one glyph)}"
+params = "{glyph: name | glyphs: [names], shapes?: [index] (with one glyph)}"
 area = "path-ops"
 milestone = "M3"
 summary = "Option variant of Expand Outline that expands the stroke on all masters of the glyph. The alternate item's label is not given in the reference."
 ref = "Edit View › Creating Strokes"
 status = "handbook"
+notes = "Built in M3.11: master layers only; `shapes` is matched by index in each master layer, and a master layer without a stroked path there is skipped and listed."
 
 [[behavior]]
 id = "stroke.position"
@@ -1661,6 +1665,7 @@ milestone = "M3"
 summary = "Stroke position is a percentage: 0 % centres the stroke on the path, −100 % puts it entirely on the left of the path and 100 % entirely on the right (left and right relative to path direction); any value in between is allowed."
 ref = "Edit View › Stroke Style"
 status = "handbook"
+notes = "Built in M3.11: documented, not yet observed. Right of the path direction is outside a counter-clockwise outer path. Stored as the format version states it: version 3 from 0 (right) through 0.5 (centred) to 1 (left), version 4 from −1 (left) to 1 (right). A document not read from a `.glyphs` file uses the version 3 form, the version it is saved in. No stored position is a centred stroke."
 
 [[behavior]]
 id = "stroke.joinsAndCaps"
@@ -1669,6 +1674,7 @@ milestone = "M3"
 summary = "A stroke has one join style out of four, and open paths have a cap style out of five chosen separately for the start and the end node. The axis-aligned cap cuts the end parallel to the X or Y axis, picking whichever is closer to the cap's natural orientation unless an axis is forced."
 ref = "Edit View › Stroke Style"
 status = "handbook"
+notes = "Built in M3.11: documented, not yet observed; the geometry is our construction (docs/spec/03a § 17). Miter up to 4 half widths, then bevel. Round full is round on the outer side and fills the inner corner with an arc of half the stroke width. Round inset is a round cap that ends at the end node. Axis-aligned cuts through the middle of the band at the end node, and is a butt end when the path ends within about 6° of a forced axis."
 
 [[command]]
 id = "path.addPenPoint"
@@ -1744,6 +1750,7 @@ milestone = "M3"
 summary = "The final outline of a layer is the composite of its shapes taken in their stored order; order matters because a mask only affects the shapes below it."
 ref = "Edit View › Compositing"
 status = "handbook"
+notes = "Built in M3.11 (`fontcraft_pathops::composite`; engine `cmd::stroke::layer_outline`): strokes are expanded, then each mask acts on everything before it, components included. Version 4's intersecting mask (value 2) keeps only what lies inside it. Export applies the composite before overlap removal. Documented, not yet observed."
 
 [[command]]
 id = "path.setMask"
@@ -1752,12 +1759,13 @@ menu = []
 context = ["canvas.path"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, shapes: [index], mask: bool}"
+params = "{glyph: name, layer?: id, side?: foreground|background, shapes: [index], mask: bool}"
 area = "path-ops"
 milestone = "M3"
 summary = "Sets or clears the Mask flag of the selected path (a Palette checkbox in the reference). A mask path is subtracted from every shape below it in shape order; it stays a normal editable path, so the subtraction is live."
 ref = "Edit View › Masking"
 status = "handbook"
+notes = "Built in M3.11: writes mask value 1 (subtract), which every format version reads as a mask; only paths take the flag. Documented, not yet observed."
 
 [[behavior]]
 id = "mask.display"
@@ -1773,12 +1781,13 @@ label = "Shape Order"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, order: [index]}"
+params = "{glyph: name, layer?: id, side?: foreground|background, order: [index]}"
 area = "path-ops"
 milestone = "M3"
 summary = "Opens a dialog listing the layer's shapes for reordering by drag and drop; OK applies the new order. With an explicit order it reorders without the dialog."
 ref = "Edit View › Masking"
 status = "handbook"
+notes = "Built in M3.11 (engine form): `order` is required; the Shape Order dialog (M3.14) supplies it. Hints that refer to a path by its index are not renumbered."
 
 [[panel]]
 id = "dialog.shapeOrder"

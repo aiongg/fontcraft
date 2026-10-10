@@ -30,6 +30,7 @@ mod node;
 mod path;
 mod session;
 mod spacing;
+pub mod stroke;
 pub mod transform;
 
 use serde::Serialize;
@@ -178,6 +179,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(node::specs());
         v.extend(fit_curve::specs());
         v.extend(filter::specs());
+        v.extend(stroke::specs());
         v
     })
 }
