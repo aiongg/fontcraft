@@ -147,10 +147,14 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let tokens = app.tokens.clone();
     let row_menu = context_menu::sections(&app.session, &app.state, &[ROW_CONTEXT]);
     for row in &shown {
-        ui.horizontal(|ui| {
+        // A selected row is filled across the section's full width, behind the eye and the kind.
+        let fill = ui.painter().add(egui::Shape::Noop);
+        let full_width = ui.available_rect_before_wrap().x_range();
+        let is_selected = selected.contains(&row.id);
+        let drawn = ui.horizontal(|ui| {
             let eye = if row.visible { "👁" } else { " " };
             let hover = if row.visible { "Hide Layer" } else { "Show Layer" };
-            if widgets::button(ui, widgets::id(("layers.eye", &row.id)), eye, hover, true, false) {
+            if widgets::flat_button(ui, widgets::id(("layers.eye", &row.id)), eye, hover) {
                 pending.push(("layers.toggleVisibility", json!({"glyphs": [glyph], "layer": row.id})));
             }
             let master_row = row.kind == "master";
@@ -172,9 +176,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             if master_row {
                 text = text.strong();
             }
-            // A selected row is filled with the selection colour; the active layer's name is
-            // underlined on it, and in the accent colour elsewhere.
-            let is_selected = selected.contains(&row.id);
+            // On a selected row the active layer's name is underlined; elsewhere it is in the
+            // accent colour.
             match (is_selected, row.id == active_layer) {
                 (true, active) => {
                     text = text.color(tokens.selected_text);
@@ -185,9 +188,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 (false, true) => text = text.color(tokens.accent),
                 (false, false) => {}
             }
-            let label = ui.add(egui::Button::selectable(is_selected, text));
+            let label = ui.add(egui::Button::selectable(false, text));
             if !master_row && row.kind != "backup" {
-                ui.label(egui::RichText::new(&row.kind).strong().color(tokens.text_dim));
+                ui.label(egui::RichText::new(&row.kind).strong().color(if is_selected { tokens.selected_text } else { tokens.text_dim }));
             }
             if label.clicked() {
                 if editing {
@@ -228,6 +231,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                 }
             });
         });
+        if is_selected {
+            let rect = egui::Rect::from_x_y_ranges(full_width, drawn.response.rect.y_range());
+            ui.painter().set(fill, egui::Shape::rect_filled(rect, f32::from(tokens.radius), tokens.row_selected));
+        }
     }
     let selected_rows: Vec<&Row> = all.iter().filter(|r| selected.contains(&r.id)).collect();
     let deletable: Vec<&str> = selected_rows.iter().filter(|r| r.kind != "master").map(|r| r.id.as_str()).collect();

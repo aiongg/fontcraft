@@ -138,6 +138,15 @@ fn line(ui: &mut egui::Ui, id: Id, shown: &str, width: f32, step: &dyn Fn(&str, 
 
 /// A push button with a stable id. `selected` draws it pressed (a mode that is on).
 pub fn button(ui: &mut egui::Ui, id: Id, label: &str, hover: &str, enabled: bool, selected: bool) -> bool {
+    text_button(ui, id, label, hover, enabled, selected, true)
+}
+
+/// A [`button`] without a fill until the pointer is over it, for buttons on a filled row.
+pub fn flat_button(ui: &mut egui::Ui, id: Id, label: &str, hover: &str) -> bool {
+    text_button(ui, id, label, hover, true, false, false)
+}
+
+fn text_button(ui: &mut egui::Ui, id: Id, label: &str, hover: &str, enabled: bool, selected: bool, filled: bool) -> bool {
     let font = egui::TextStyle::Button.resolve(ui.style());
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, ui.visuals().text_color());
     let padding = ui.spacing().button_padding;
@@ -148,7 +157,9 @@ pub fn button(ui: &mut egui::Ui, id: Id, label: &str, hover: &str, enabled: bool
     if ui.is_rect_visible(rect) {
         let visuals = ui.style().interact_selectable(&response, selected);
         let color = if enabled { visuals.text_color() } else { ui.visuals().weak_text_color() };
-        ui.painter().rect(rect.expand(visuals.expansion), visuals.corner_radius, visuals.weak_bg_fill, visuals.bg_stroke, StrokeKind::Inside);
+        if filled || response.hovered() {
+            ui.painter().rect(rect.expand(visuals.expansion), visuals.corner_radius, visuals.weak_bg_fill, visuals.bg_stroke, StrokeKind::Inside);
+        }
         ui.painter().galley_with_override_text_color(rect.center() - galley.size() / 2.0, galley, color);
     }
     enabled && response.on_hover_text(hover).clicked()
