@@ -33,15 +33,18 @@ fn pos(p: Point) -> Pos2 {
     Pos2::new(p.x as f32, p.y as f32)
 }
 
-/// The shapes for every path of `layer`, back to front.
-pub fn shapes(layer: &Layer, view: View, tokens: &Tokens, metrics: &Metrics) -> Vec<Shape> {
+/// The shapes for every path of `layer` (only the shapes in `focus`, when given), back to front.
+pub fn shapes(layer: &Layer, view: View, tokens: &Tokens, metrics: &Metrics, focus: Option<&[usize]>) -> Vec<Shape> {
     let mut back = Vec::new();
     let mut lines = Vec::new();
     let mut handles = Vec::new();
     let mut nodes = Vec::new();
     let mut marks = Vec::new();
-    for shape in &layer.shapes {
+    for (index, shape) in layer.shapes.iter().enumerate() {
         let fontcraft_model::Shape::Path(path) = shape else { continue };
+        if focus.is_some_and(|f| !f.contains(&index)) {
+            continue;
+        }
         let screen: Vec<Pos2> = path.nodes.iter().map(|n| pos(view.to_screen(n.point()))).collect();
         handle_lines(path, &screen, tokens, &mut lines);
         let on_curve: Vec<usize> = path.nodes.iter().enumerate().filter(|(_, n)| n.on_curve()).map(|(i, _)| i).collect();

@@ -5,6 +5,7 @@
 //!   Font View, Palette, and the shell commands, one list per module.
 //! - [`canvas`]: Edit View: the camera, metric lines, filled glyphs, outlines, nodes.
 //! - [`control`]: the JSON control protocol agents drive the running app with.
+//! - [`tools_glue`]: the pointer tools: canvas and control input in, interactions out.
 //! - [`theme`]: design tokens.
 //! - [`state`]: serializable UI state: tabs, their cameras and selections, display toggles.
 //!
@@ -19,9 +20,12 @@ pub mod control;
 pub mod shell;
 pub mod state;
 pub mod theme;
+pub mod tools_glue;
 
 pub use app::FontcraftApp;
 pub use shell::UI_COMMANDS;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tools_tests;

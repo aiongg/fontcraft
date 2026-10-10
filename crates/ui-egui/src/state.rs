@@ -89,11 +89,27 @@ pub struct Tab {
     pub view: TabView,
     /// The selection in the edited glyph's layer.
     pub selection: Selection,
+    /// Path focus (`path.focusOnSelectedPath`): only these shapes of the edited layer show their
+    /// nodes and can be selected.
+    pub focus: Option<Vec<usize>>,
+    /// The glyph `selection` and `focus` belong to. Both are cleared when another glyph is edited.
+    pub selection_glyph: Option<String>,
 }
 
 impl Tab {
     pub fn edited_glyph(&self) -> Option<&str> {
         self.glyphs.get(self.edited).map(String::as_str)
+    }
+
+    /// Clears the selection and the path focus when they belong to another glyph than the edited
+    /// one.
+    pub fn sync_selection(&mut self) {
+        let edited = self.edited_glyph().map(str::to_string);
+        if self.selection_glyph != edited {
+            self.selection.clear();
+            self.focus = None;
+            self.selection_glyph = edited;
+        }
     }
 
     /// The title in the tab strip.

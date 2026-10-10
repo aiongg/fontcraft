@@ -12,6 +12,7 @@ use crate::canvas::{self, fill::FillCache};
 use crate::shell::{self, UI_COMMANDS, is_ui_command, menus::MenuCache};
 use crate::state::UiState;
 use crate::theme::Tokens;
+use crate::tools_glue::{self, ToolsState};
 
 /// Commands that report nothing in the status bar when they succeed: wheel and gesture input
 /// runs them many times a second.
@@ -24,6 +25,8 @@ pub struct FontcraftApp {
     /// The active pointer tool shows the edited glyph filled under Fill Preview (the Text, Hand
     /// and Zoom tools). The tools glue sets it.
     pub preview_tool: bool,
+    /// The pointer tools and their input.
+    pub tools: ToolsState,
     pub(crate) menu_cache: MenuCache,
     pub(crate) fill_cache: FillCache,
     themed: bool,
@@ -42,6 +45,7 @@ impl FontcraftApp {
             state: UiState::default(),
             tokens: Tokens::dark(),
             preview_tool: false,
+            tools: ToolsState::default(),
             menu_cache: MenuCache::default(),
             fill_cache: FillCache::default(),
             themed: false,
@@ -122,6 +126,10 @@ impl FontcraftApp {
             self.tokens.apply(ui.ctx());
             self.themed = true;
         }
+        tools_glue::sync(self);
+        // The tools take their keys first (the Edit View keys have a `when`); the rest go to
+        // the menu shortcuts.
+        tools_glue::keys(self, ui.ctx());
         let mut pending: Vec<(&'static str, Value)> = shell::keymap::pressed(ui.ctx());
         self.menu_bar(ui, &mut pending);
         shell::tabs::strip(self, ui, &mut pending);
@@ -136,7 +144,11 @@ impl FontcraftApp {
         }
         // Commands run after drawing, so a frame never sees a half-changed document.
         for (id, params) in pending {
+            let params = tools_glue::with_targets(self, id, params);
             let _ = self.run(id, &params);
+        }
+        if tools_glue::dispatch_queued(self) {
+            ui.ctx().request_repaint();
         }
     }
 

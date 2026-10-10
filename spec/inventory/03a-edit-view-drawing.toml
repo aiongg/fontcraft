@@ -661,6 +661,7 @@ milestone = "M3"
 summary = "In edit mode the first use selects all paths of the layer; if all paths are already selected (or there are none left to add) it also selects all anchors and components, so selecting everything can take two presses."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "In Font View it selects every glyph: our choice, the handbook describes edit mode only. Edit View behaviour as documented, not yet observed."
 
 [[command]]
 id = "edit.deselectAll"
@@ -722,12 +723,13 @@ label = "Set Selection"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyph: name, layer?: id, mode?: replace|add|remove|toggle, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index]}"
+params = "{glyph?: name (the edited glyph), layer?: id, mode?: replace|add|remove|toggle, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index]} → {selection}"
 area = "drawing"
 milestone = "M3"
 summary = "Headless equivalent of clicking and Shift-clicking: sets or amends the Edit View selection from explicit object references. Our own command."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "inferred"
+notes = "The selection belongs to the showing tab and to its edited glyph; it is cleared when another glyph is edited. An address that does not resolve is an error."
 
 [[command]]
 id = "selection.selectInRegion"
@@ -735,12 +737,13 @@ label = "Select in Region"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyph: name, layer?: id, rect?: [x, y, width, height], angle?: number, polygon?: [[x, y]], nodesOnly?: bool, mode?: replace|add|toggle}"
+params = "{glyph?: name (the edited glyph), layer?: id, rect?: [x, y, width, height], angle?: degrees, polygon?: [[x, y]], nodesOnly?: bool, mode?: replace|add|remove|toggle} → {selection}"
 area = "drawing"
 milestone = "M3"
 summary = "Headless equivalent of the marquee (optionally slanted) and of the lasso: selects the points inside a rectangle or polygon given in font units, with the same nodes-only and extend options as the pointer gestures. Our own command."
 ref = "Edit View › Free-form Selections"
 status = "inferred"
+notes = "The rectangle turns by angle about its corner (x, y), as a marquee turned with Ctrl does."
 
 # ───────────────────────────── Moving ─────────────────────────────
 
@@ -1491,12 +1494,13 @@ menu = []
 context = ["canvas.node", "canvas.path"]
 shortcut = ""
 kind = "ui"
-params = "{glyph: name, layer?: id, shapes: [index]}"
+params = "{glyph?: name (the edited glyph), layer?: id, shapes?: [index] (default: the paths with a selected point)} → {shapes}"
 area = "drawing"
 milestone = "M3"
 summary = "Context-menu command that restricts Edit View editing to the paths having at least one selected point: the nodes and handles of every other path are hidden. Filters, plug-ins and scripts are not restricted and still act on all paths."
 ref = "Edit View › Focusing & Locking"
 status = "handbook"
+notes = "Per tab, cleared when the edited glyph changes (03a question 19). Documented, not yet observed."
 
 [[command]]
 id = "path.clearFocusOnPaths"
@@ -1548,6 +1552,7 @@ milestone = "M3"
 summary = "Hovering over a point on a locked path colours it red, a sign that the point cannot be dragged."
 ref = "Edit View › Focusing & Locking"
 status = "handbook"
+notes = "Documented, not yet observed. The hover ring of a point on a locked path or in a locked glyph uses the locked_point token."
 
 [[command]]
 id = "glyph.toggleLocked"

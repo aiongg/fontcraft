@@ -80,3 +80,18 @@ pub fn pressed(ctx: &egui::Context) -> Vec<(&'static str, Value)> {
     });
     out
 }
+
+/// The command a key with these modifiers runs as a menu shortcut, matched as [`pressed`] matches
+/// it (`ui.key` on the control channel).
+pub fn command_for(key: Key, modifiers: Modifiers) -> Option<(&'static str, Value)> {
+    let digits = [Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
+    if modifiers.matches_logically(Modifiers::COMMAND | Modifiers::ALT)
+        && let Some(n) = (2u64..).zip(digits).find(|(_, k)| *k == key).map(|(n, _)| n)
+    {
+        return Some(("view.showTab", json!({"index": n})));
+    }
+    KEYMAP
+        .iter()
+        .find(|(id, s)| *id != "view.showTab" && s.logical_key == key && modifiers.matches_logically(s.modifiers))
+        .map(|(id, _)| (*id, json!({})))
+}

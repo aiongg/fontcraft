@@ -11,11 +11,14 @@
 
 use base64::Engine as _;
 use fontcraft_engine::guard;
+use fontcraft_geom::Point;
 use fontcraft_render::{Image, LineOptions};
+use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerKind};
 use serde_json::{Value, json};
 
 use crate::app::FontcraftApp;
-use crate::shell::menus;
+use crate::shell::{keymap, menus};
+use crate::tools_glue::{self, MAX_POINTER_EVENTS, RawPointer, Space};
 
 /// The methods [`handle`] answers.
 pub const METHODS: &[(&str, &str)] = &[
@@ -30,8 +33,22 @@ pub const METHODS: &[(&str, &str)] = &[
         "ui.render",
         "{path?, glyphs?, text?, layer?, size?, scale?} draw glyphs filled, black on white: written to `path` as PNG, else returned as base64 `png`; returns {width, height, glyphs}",
     ),
+    ("ui.tool.select", "{tool} make a pointer tool active (the command tool.select); returns {tool, previous}"),
+    ("ui.tool.list", "{} the pointer tools and the active one (the command tool.list)"),
+    (
+        "ui.pointer",
+        "{events: [{kind: down | drag | up | move | doubleclick, x, y, space?: font | screen (default font), mods?: [shift, alt, cmd, ctrl]}]} drive the active tool like the mouse; returns {tool, busy, interaction, selection, overlays, errors}",
+    ),
+    (
+        "ui.key",
+        "{key, shift?, alt?, cmd?, ctrl?, action?: tap | press | release (default tap)} a key as the keyboard gives it: the tools' keys first, then the menu shortcuts; returns {handled, command?, result?, tool, busy, interaction, selection, overlays, errors}",
+    ),
+    ("ui.text", "{text} type into the focused text field; with none focused, each character is a ui.key tap; returns {field} or {keys, handled}"),
     ("control.methods", "{} this list"),
 ];
+
+/// Most characters one `ui.text` request may type.
+pub const MAX_TEXT: usize = 10_000;
 
 /// What [`handle_request`] did with a request.
 #[derive(Debug)]
@@ -193,6 +210,8 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
         "ui.inspect" => {
             let mut state = serde_json::to_value(&app.state).map_err(|e| e.to_string())?;
             set(&mut state, "editing", json!(app.state.editing()));
+            set(&mut state, "tool", json!(app.tools.toolbox.active_id()));
+            set(&mut state, "interaction", json!(app.session.interaction()));
             Ok(state)
         }
         "ui.menu.list" => serde_json::to_value(menus::menu_tree(&app.session)).map_err(|e| e.to_string()),
@@ -204,7 +223,160 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
             app.run(id, &inner())
         }
         "ui.render" => render(app, params),
+        "ui.tool.select" => app.run("tool.select", params),
+        "ui.tool.list" => app.run("tool.list", &Value::Null),
+        "ui.pointer" => pointer(app, params),
+        "ui.key" => {
+            let name =
+                params.get("key").and_then(Value::as_str).ok_or("ui.key: `key` (a key name such as `v`, `ArrowLeft`, `Escape`) is required")?;
+            let mut mods = modifiers("ui.key", params.get("mods"))?;
+            for (key, slot) in [("shift", &mut mods.shift), ("alt", &mut mods.alt), ("cmd", &mut mods.cmd), ("ctrl", &mut mods.ctrl)] {
+                match params.get(key) {
+                    None | Some(Value::Null) => {}
+                    Some(Value::Bool(b)) => *slot |= *b,
+                    Some(_) => return Err(format!("ui.key: `{key}` must be true or false")),
+                }
+            }
+            let action = match params.get("action").and_then(Value::as_str) {
+                None => KeyAction::Tap,
+                Some("tap") => KeyAction::Tap,
+                Some("press") => KeyAction::Press,
+                Some("release") => KeyAction::Release,
+                Some(_) => return Err("ui.key: `action` must be tap, press or release".into()),
+            };
+            Ok(key(app, name, mods, action))
+        }
+        "ui.text" => {
+            let text = params.get("text").and_then(Value::as_str).ok_or("ui.text: `text` (a string) is required")?;
+            if text.chars().count() > MAX_TEXT {
+                return Err(format!("ui.text: at most {MAX_TEXT} characters"));
+            }
+            if tools_glue::queue_text(app, text) {
+                return Ok(json!({"field": true}));
+            }
+            let mut handled = 0;
+            for c in text.chars() {
+                let mods = if c.is_uppercase() { Modifiers::SHIFT } else { Modifiers::NONE };
+                if key(app, &c.to_string(), mods, KeyAction::Tap).get("handled") == Some(&Value::Bool(true)) {
+                    handled += 1;
+                }
+            }
+            Ok(json!({"keys": text.chars().count(), "handled": handled}))
+        }
         "control.methods" => Ok(json!(METHODS.iter().map(|(m, doc)| json!({"method": m, "params": doc})).collect::<Vec<_>>())),
         other => Err(format!("unknown method `{other}` (see control.methods)")),
     }
+}
+
+/// Modifiers given as a list of names (`["shift", "alt"]`) or as `{shift, alt, cmd, ctrl}`.
+fn modifiers(method: &str, value: Option<&Value>) -> Result<Modifiers, String> {
+    let bad = || format!("{method}: `mods` must be a list of modifier names (shift, alt, cmd, ctrl)");
+    match value {
+        None | Some(Value::Null) => Ok(Modifiers::NONE),
+        Some(Value::Array(list)) => {
+            if list.len() > 8 {
+                return Err(bad());
+            }
+            let names: Vec<&str> = list.iter().map(|v| v.as_str().ok_or_else(bad)).collect::<Result<_, _>>()?;
+            Modifiers::from_names(names).map_err(|e| format!("{method}: {e}"))
+        }
+        Some(v @ Value::Object(_)) => serde_json::from_value(v.clone()).map_err(|_| bad()),
+        Some(_) => Err(bad()),
+    }
+}
+
+/// `ui.pointer`: every event is checked before the first one runs.
+fn pointer(app: &mut FontcraftApp, params: &Value) -> Result<Value, String> {
+    const M: &str = "ui.pointer";
+    let events = params.get("events").and_then(Value::as_array).ok_or_else(|| format!("{M}: `events` (a list of pointer events) is required"))?;
+    if events.len() > MAX_POINTER_EVENTS {
+        return Err(format!("{M}: at most {MAX_POINTER_EVENTS} events"));
+    }
+    let mut parsed = Vec::with_capacity(events.len());
+    for (i, e) in events.iter().enumerate() {
+        let kind: PointerKind = e
+            .get("kind")
+            .and_then(|k| serde_json::from_value(k.clone()).ok())
+            .ok_or_else(|| format!("{M}: event {i}: `kind` must be down, drag, up, move or doubleclick"))?;
+        let coord = |key: &str| {
+            e.get(key).and_then(Value::as_f64).filter(|v| v.is_finite()).ok_or_else(|| format!("{M}: event {i}: `{key}` must be a number"))
+        };
+        let at = Point::new(coord("x")?, coord("y")?);
+        let space = match e.get("space").and_then(Value::as_str) {
+            None | Some("font") => Space::Font,
+            Some("screen") => Space::Screen,
+            Some(_) => return Err(format!("{M}: event {i}: `space` must be font or screen")),
+        };
+        let mods = modifiers(M, e.get("mods"))?;
+        parsed.push(RawPointer { kind, at, space, mods });
+    }
+    if app.state.tab().is_none() {
+        return Err(format!("{M}: no Edit View tab is showing (open a glyph first)"));
+    }
+    let mut errors = Vec::new();
+    for ev in parsed {
+        errors.extend(tools_glue::pointer(app, ev));
+    }
+    Ok(tools_state(app, errors))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum KeyAction {
+    Tap,
+    Press,
+    Release,
+}
+
+/// A key for `ui.key` and `ui.text`: the tools' keys first, then the menu shortcuts.
+fn key(app: &mut FontcraftApp, name: &str, mods: Modifiers, action: KeyAction) -> Value {
+    let tool_key = Key::parse(name).filter(|_| app.state.tab().is_some());
+    let mut errors = Vec::new();
+    let mut handled = false;
+    let mut command = None;
+    if action != KeyAction::Release {
+        if let Some(k) = tool_key
+            && let Some(e) = tools_glue::key(app, KeyEvent::press(k, mods))
+        {
+            handled = true;
+            errors = e;
+        }
+        let egui_key = egui::Key::from_name(name).or_else(|| egui::Key::from_name(&name.to_uppercase()));
+        if !handled && let Some(k) = egui_key {
+            let m = egui::Modifiers { alt: mods.alt, ctrl: mods.ctrl, shift: mods.shift, mac_cmd: false, command: mods.cmd };
+            if let Some((id, params)) = keymap::command_for(k, m) {
+                let params = tools_glue::with_targets(app, id, params);
+                handled = true;
+                command = Some((id, app.run(id, &params)));
+            }
+        }
+    }
+    if action != KeyAction::Press
+        && let Some(k) = tool_key
+        && let Some(e) = tools_glue::key(app, KeyEvent::release(k, mods))
+    {
+        errors.extend(e);
+    }
+    let mut reply = tools_state(app, errors);
+    set(&mut reply, "handled", json!(handled));
+    if let Some((id, result)) = command {
+        set(&mut reply, "command", json!(id));
+        match result {
+            Ok(r) => set(&mut reply, "result", r),
+            Err(e) => set(&mut reply, "error", json!(e)),
+        }
+    }
+    reply
+}
+
+/// What the tools show after a control request: the tool, a gesture or interaction in progress,
+/// the selection, the overlays and the errors of the actions carried out.
+fn tools_state(app: &FontcraftApp, errors: Vec<String>) -> Value {
+    json!({
+        "tool": app.tools.toolbox.active_id(),
+        "busy": app.tools.toolbox.busy(),
+        "interaction": app.session.interaction(),
+        "selection": app.state.tab().map(|t| serde_json::to_value(&t.selection).unwrap_or(Value::Null)),
+        "overlays": app.tools.toolbox.overlays(),
+        "errors": errors,
+    })
 }

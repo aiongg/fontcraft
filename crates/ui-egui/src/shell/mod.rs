@@ -1,4 +1,5 @@
-//! The shell: menus, keymap, tab strip, status bar, Font View, Palette, and the shell commands.
+//! The shell: menus, keymap, tab strip, status bar, Font View, Palette, the tool and selection
+//! commands, and the shell commands.
 //!
 //! Shell commands change view and window state only; everything else is an engine command. Each
 //! module lists its own commands ([`MODULES`]), so a package adds a module instead of editing a
@@ -8,6 +9,7 @@ pub mod font_view;
 pub mod keymap;
 pub mod menus;
 pub mod palette;
+pub mod selection;
 pub mod status_bar;
 pub mod tabs;
 pub mod view;
@@ -25,8 +27,13 @@ pub type UiCommand = (&'static str, &'static str, &'static [&'static str], &'sta
 pub type Handler = fn(&mut FontcraftApp, &str, &Args) -> Result<Value, String>;
 
 /// Every shell module: its commands and the function that runs them.
-pub const MODULES: &[(&[UiCommand], Handler)] =
-    &[(font_view::COMMANDS, font_view::run), (tabs::COMMANDS, tabs::run), (view::COMMANDS, view::run), (palette::COMMANDS, palette::run)];
+pub const MODULES: &[(&[UiCommand], Handler)] = &[
+    (font_view::COMMANDS, font_view::run),
+    (tabs::COMMANDS, tabs::run),
+    (view::COMMANDS, view::run),
+    (palette::COMMANDS, palette::run),
+    (selection::COMMANDS, selection::run),
+];
 
 /// Every shell command, in module order.
 pub static UI_COMMANDS: LazyLock<Vec<UiCommand>> = LazyLock::new(|| MODULES.iter().flat_map(|(c, _)| c.iter().copied()).collect());
@@ -113,6 +120,19 @@ impl<'a> Args<'a> {
             return Err(self.err(format!("`{key}` holds at most {max} names")));
         }
         list.iter().map(|n| n.as_str().map(str::to_string).ok_or_else(bad)).collect::<Result<Vec<_>, _>>().map(Some)
+    }
+
+    /// `true` or `false`.
+    pub fn flag(&self, key: &str) -> Result<Option<bool>, String> {
+        match self.get(key) {
+            None => Ok(None),
+            Some(v) => v.as_bool().map(Some).ok_or_else(|| self.err(format!("`{key}` must be true or false"))),
+        }
+    }
+
+    /// All parameters as one JSON object (`null` when none were given).
+    pub fn value(&self) -> Value {
+        self.obj.map_or(Value::Null, |m| Value::Object(m.clone()))
     }
 
     /// A string.

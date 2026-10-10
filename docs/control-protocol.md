@@ -34,12 +34,46 @@ for the next frame and replies when the frame arrives.
 | `engine.execute` | `{command, params?}` | runs any engine or UI command; the command's own result |
 | `engine.commands` | | `{commands: [{id, label, menu, shortcut, params, query, enabled, disabled_reason?}]}`; UI commands carry `ui: true` |
 | `document.inspect` | | `{documents: [{index, active, title, path, modified, revision, familyName, glyphs, masters, undo, redo}], active}` |
-| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection}`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status` |
+| `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection, focus, selection_glyph}`: `selection` and the path `focus` belong to the glyph `selection_glyph`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status` |
 | `ui.menu.list` | | the menu tree: `[{title, items: [{command, label, path, shortcut, enabled, disabled_reason?}]}]` |
 | `ui.menu.invoke` | `{command, params?}` | runs a menu item; an id that is in no menu is an error |
 | `ui.screenshot` | `{path?}` | captures the window as PNG, written to `path` or returned as base64 `png`; `{width, height, pixelsPerPoint, path?, png?}`. Sizes are in pixels. The reply comes after the next frame is drawn. Headless hosts (tests, MCP) answer with an error |
 | `ui.render` | `{path?, glyphs?, text?, layer?, size?, scale?}` | draws glyphs filled by the nonzero rule, black on white, without a window; `{width, height, glyphs, path?, png?}`. `glyphs` names them, `text` maps characters to glyphs; neither: the edited glyph, else the Font View selection. `size` is pixels per em (default 256), `scale` pixels per font unit instead. `layer` draws that layer of the one glyph named. The same request gives the same bytes |
+| `ui.tool.select` | `{tool}` | makes a pointer tool active (the command `tool.select`): `{tool, previous}`. A gesture in progress is cancelled |
+| `ui.tool.list` | | the pointer tools (the command `tool.list`): `{active, tools: [{id, label, shortcut, group}]}` |
+| `ui.pointer` | `{events: [{kind, x, y, space?, mods?}]}` | drives the active tool like the mouse; see below |
+| `ui.key` | `{key, shift?, alt?, cmd?, ctrl?, action?}` | a key as the keyboard gives it; see below |
+| `ui.text` | `{text}` | types into the focused text field at the next frame (`{field: true}`); with none focused, each character is a `ui.key` tap (`{keys, handled}`) |
 | `control.methods` | | this table |
+
+`ui.inspect` also names the active pointer tool (`tool`) and the running interaction
+(`interaction`, the label of a drag in progress, else `null`).
+
+### Pointer and keys
+
+`ui.pointer` runs its events in order through the same path as the mouse: the active tool turns
+them into commands, a drag is one interaction (one undo step), and the tab's selection follows.
+Every event is checked before the first one runs.
+
+| Field | Values |
+|---|---|
+| `kind` | `down`, `drag`, `up`, `move` (hover), `doubleclick` (send it after the two clicks' `down` and `up`) |
+| `x`, `y` | the position |
+| `space` | `font` (default): font units of the edited glyph. `screen`: window points, as the mouse reports them |
+| `mods` | modifier names held: `shift`, `alt`, `cmd`, `ctrl`. `cmd` is Command on a Mac and Control elsewhere; `ctrl` is the key that suspends snapping |
+
+At most 10,000 events per request. The reply is `{tool, busy, interaction, selection, overlays,
+errors}`: `busy` is true while a gesture is unfinished (send its `up`), `overlays` lists what the
+canvas draws for the tool (marquee, snapping lines, hover), `errors` the messages of commands that
+failed. Use `space: "screen"` with the Hand tool: it scrolls by the pointer's movement on screen.
+
+`ui.key` resolves a key as the keyboard does: first the Edit View keys of the tools (tool letters
+`V`, `Shift+V`, `H`, `Z`; `Space` held for the Hand tool; arrows with the font's increments;
+`Return`, `Delete`, `Tab`, `Escape`), then the menu shortcuts. `key` is a character or a name:
+`ArrowLeft`, `Return`, `Delete`, `Backspace`, `Tab`, `Escape`, `Space`. `action` is `tap`
+(default: press and release), `press` or `release`; hold `Space` with `press`, send pointer
+events, then `release`. The reply is the `ui.pointer` reply plus `handled` (whether anything
+took the key), and `command` and `result` (or `error`) when a menu shortcut ran.
 
 `revision` in `document.inspect` grows with every change to a document, whoever made it. Compare
 it to learn whether the font changed since you last looked.
@@ -50,11 +84,7 @@ The names and shapes follow the sibling apps so their agents' habits carry over.
 
 | Method | Params | Milestone |
 |---|---|---|
-| `ui.tool.select` | `{tool}` make a pointer tool active; runs the command `tool.select` and returns `{tool, previous}` | M3 |
-| `ui.tool.list` | `{}` the pointer tools and the active one; runs the command `tool.list` and returns `{active, tools: [{id, label, shortcut, group}]}` | M3 |
-| `ui.pointer` | `{events: [{kind: down \| drag \| up \| move \| doubleclick, x, y, space?: "font" \| "screen", mods?}]}` drive the active tool like the mouse | M3 |
 | `ui.click` | `{id}` press the control with that stable id (`ui-design.md`) | M3 |
-| `ui.key` / `ui.text` | `{key, shift?, alt?, cmd?, ctrl?}` / `{text}` | M3 |
 | `ui.dialog.set` / `.confirm` / `.cancel` | `{field, value}` fill and submit the open dialog | M3 |
 | `ui.set` | `{panel?, theme?, …}` | M3 |
 | `ui.resize` / `ui.focus` | | M3 |

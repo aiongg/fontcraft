@@ -46,6 +46,18 @@ pub struct Tokens {
     pub zone_fill: Color32,
     /// Names on the metric lines.
     pub metric_name: Color32,
+    /// Selected nodes, handles and segments.
+    pub selection: Color32,
+    /// Inside of a marquee or a Zoom tool rectangle.
+    pub marquee_fill: Color32,
+    /// Edge of a marquee, a lasso or a Zoom tool rectangle.
+    pub marquee_stroke: Color32,
+    /// Snapping lines and the point a drag snaps to.
+    pub snap_line: Color32,
+    /// The point under the pointer.
+    pub hover_point: Color32,
+    /// A point under the pointer that cannot be moved (`paths.lockedPointsHoverRed`).
+    pub locked_point: Color32,
     pub radius: u8,
     pub font_size: f32,
     /// Outline stroke width in Edit View, in points.
@@ -64,6 +76,19 @@ pub struct Tokens {
     /// Size of the highlight behind a node on a metric line or in a zone.
     pub metric_highlight_size: f32,
     pub metric_name_size: f32,
+    /// Ring around a selected node or handle.
+    pub selection_ring_radius: f32,
+    /// Stroke of selection rings and selected segments.
+    pub selection_width: f32,
+    pub snap_line_width: f32,
+    /// Ring around the snap target and the hovered point.
+    pub marker_radius: f32,
+    /// How near the pointer must be to hit a node, a handle or a segment, in points.
+    pub hit_tolerance: f32,
+    /// How near a dragged point must come to a target to snap to it, in points (`03a` question 28).
+    pub snap_distance: f32,
+    /// How far the pointer must move before a press becomes a drag, in points.
+    pub drag_threshold: f32,
     /// Share of the canvas left free on each side when a glyph is fitted into it.
     pub fit_margin: f32,
     pub tab_min_width: f32,
@@ -107,6 +132,12 @@ impl Tokens {
             metric_highlight: Color32::from_rgb(0xdc, 0xc4, 0x8c),
             zone_fill: Color32::from_rgba_unmultiplied(0x9a, 0xb8, 0xdc, 0x38),
             metric_name: Color32::from_rgb(0x80, 0x88, 0x94),
+            selection: Color32::from_rgb(0xf0, 0x8c, 0x1e),
+            marquee_fill: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0x24),
+            marquee_stroke: Color32::from_rgb(0x2d, 0x8c, 0xeb),
+            snap_line: Color32::from_rgb(0xd0, 0x2c, 0x9c),
+            hover_point: Color32::from_rgb(0x2d, 0x8c, 0xeb),
+            locked_point: Color32::from_rgb(0xe0, 0x28, 0x28),
             radius: 3,
             font_size: 12.0,
             outline_width: 1.5,
@@ -120,6 +151,13 @@ impl Tokens {
             duplicate_node_radius: 7.5,
             metric_highlight_size: 18.0,
             metric_name_size: 10.0,
+            selection_ring_radius: 6.5,
+            selection_width: 2.0,
+            snap_line_width: 1.0,
+            marker_radius: 7.0,
+            hit_tolerance: 6.0,
+            snap_distance: 4.0,
+            drag_threshold: 3.0,
             fit_margin: 0.08,
             tab_min_width: 72.0,
             palette_width: 220.0,
