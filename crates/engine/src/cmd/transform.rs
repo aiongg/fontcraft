@@ -18,6 +18,9 @@ use super::*;
 use crate::EngineError;
 use crate::params::{GuideScope, Params, TargetKind, Targets, kind};
 
+/// A node as (shape index, node index).
+type NodeRef = (usize, usize);
+
 /// Largest scale, in percent (a factor of 10,000).
 const MAX_PERCENT: f64 = 1_000_000.0;
 /// Largest linear coefficient a component's or image's matrix may reach.
@@ -901,13 +904,13 @@ fn align_units(font: &Font, master: &Master, parts: LayerParts, t: &Targets) -> 
     }
     let mut covered = BTreeSet::new();
     let on_curve = |&(s, n): &(usize, usize)| parts.node(s, n).is_some_and(Node::on_curve);
-    for &(s, n) in sel.named_points.iter().filter(|a| on_curve(*a)) {
+    for &(s, n) in sel.named_points.iter().filter(|a| on_curve(a)) {
         let Some(node) = parts.node(s, n) else { continue };
         let points: BTreeSet<_> = std::iter::once((s, n)).chain(handles_of(parts, s, n)).collect();
         covered.extend(points.iter().copied());
         units.push(Unit { bounds: dot(node.point()), sel: Selection { points, ..Selection::default() } });
     }
-    for &(s, n) in sel.named_points.iter().filter(|a| !on_curve(*a) && !covered.contains(*a)) {
+    for &(s, n) in sel.named_points.iter().filter(|a| !on_curve(a) && !covered.contains(*a)) {
         let Some(node) = parts.node(s, n) else { continue };
         units.push(Unit { bounds: dot(node.point()), sel: Selection { points: BTreeSet::from([(s, n)]), ..Selection::default() } });
     }
@@ -1075,7 +1078,7 @@ fn align_selection(s: &mut Session, v: &Value) -> Result<Value> {
     let o = origin_point(origin, Some(bounds), font, r.master, r.layer.width);
     let target = if on_x { o.x } else { o.y };
     // The handles of a smooth node that is not itself among the points move with it.
-    let mut followers: Vec<((usize, usize), Vec<(usize, usize)>)> = Vec::new();
+    let mut followers: Vec<(NodeRef, Vec<NodeRef>)> = Vec::new();
     for &(s0, n0) in &points {
         if r.parts.node(s0, n0).is_some_and(|n| n.on_curve() && n.smooth) {
             let handles: Vec<_> = handles_of(r.parts, s0, n0).into_iter().filter(|h| !points.contains(h)).collect();

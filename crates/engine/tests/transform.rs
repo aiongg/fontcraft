@@ -1,7 +1,7 @@
 //! Transformations (M3.5): the Palette's mirror, scale, rotate, slant and align commands,
 //! Path › Align Selection, and Path › Transformations with its export string.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 
