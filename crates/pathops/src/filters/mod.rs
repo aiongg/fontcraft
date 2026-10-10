@@ -18,6 +18,7 @@ pub mod extrude;
 pub mod hatch_outline;
 pub mod roughen;
 pub mod round_corners;
+pub mod rounded_font;
 
 use std::fmt;
 
@@ -28,6 +29,7 @@ pub use extrude::Extrude;
 pub use hatch_outline::HatchOutline;
 pub use roughen::Roughen;
 pub use round_corners::RoundCorners;
+pub use rounded_font::RoundedFont;
 
 /// Longest filter string read, in bytes.
 pub const MAX_FILTER_STRING: usize = 1 << 20;
@@ -45,6 +47,7 @@ pub fn registry() -> &'static [&'static dyn Filter] {
         &Roughen,
         &RoundCorners,
         &HatchOutline,
+        &RoundedFont,
     ];
     FILTERS
 }

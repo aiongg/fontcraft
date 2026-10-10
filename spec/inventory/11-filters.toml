@@ -432,12 +432,13 @@ label = "Rounded Font"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids], stem?: number}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], stem?: units}"
 area = "path-ops"
 milestone = "M3"
 summary = "Rounds the ends of stems into full round terminals and adds a fitting overshoot. Stem widths are taken from the master's vertical stem values in Font Info; the optional stem argument (known only from the export parameter syntax) overrides them. Dialog controls are not described in the source."
 ref = "Filters › Built-in Filters › Rounded Font; Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (ours): `stem` defaults to 0, which means the master's widest vertical stem; the export string writes the stem only when one is given (`RoundedFont;`). A stem ending is a straight segment between two outward corners whose neighbouring segments are straight and parallel (within 5°), at most the stem width plus 10% across, cut at most 20° off square. It becomes two quarter-circle cubics as wide as the ending. Endings are taken in path order; two endings never share a corner, and an ending whose sides are too short for its rounding stays. Open paths, counters, components and locked paths are not changed; new points are rounded to the grid."
 
 [[behavior]]
 id = "filter.roundedFont.usesVerticalStems"
@@ -446,6 +447,7 @@ milestone = "M3"
 summary = "Rounded Font reads the vertical stem metrics of the current master (Font Info › Masters › Stems) to recognise stem endings; with no stems defined its result is undefined in the source."
 ref = "Filters › Built-in Filters › Rounded Font"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (ours): the widest of the master's vertical stems sets the widest ending that is rounded; thinner endings, such as arms measured by horizontal stems, are rounded too. With no vertical stem and no `stem` parameter the command fails with a message naming the missing vertical stem and changes nothing."
 
 [[behavior]]
 id = "filter.roundedFont.overshoot"
@@ -454,6 +456,7 @@ milestone = "M3"
 summary = "Rounded terminals are pushed slightly past their original end so they keep their optical length (overshoot compensation)."
 ref = "Filters › Built-in Filters › Rounded Font"
 status = "handbook"
+notes = "Documented, not yet observed; the amount is ours. The half circle covers the same area as the square end it replaces: for an ending of width w its centre sits w·π/8 inside the old end, so the tip stands w·(1 − π/4)/2 (about 0.107 w) past it."
 
 # --- Transformations: Transform Metrics, Transformations, Interpolate with Background ---
 

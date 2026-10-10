@@ -188,6 +188,23 @@ Rounds stem endings and adds a matching overshoot. Stem recognition uses the mas
 values (Font Info › Masters › Stems). The chapter describes no dialog fields; the export string has
 one optional `stem` value.
 
+How FontCraft runs it (our design, documented behaviour not yet observed):
+
+- A stem ending is a straight segment between two corners that point out of the filled area. The
+  segments on either side are straight and parallel (within 5°). The ending is at most the stem
+  width plus 10% across those sides, and cut at most 20° off square, so italic stems qualify.
+- The stem is the `stem` parameter, or the widest of the master's vertical stems when it is 0 or
+  left out. Endings thinner than the stem (arms, crossbar ends) are rounded too. With no vertical
+  stem and no `stem`, the filter fails and names the missing stem.
+- Each ending becomes a half circle as wide as the ending: two smooth quarter-circle cubics. The
+  half circle covers the area of the square end it replaces, so the sides get `w·π/8` shorter and
+  the tip stands `w·(1 − π/4)/2` (about a tenth of the width `w`) past the old end. That is the
+  overshoot.
+- Endings are taken in path order. Two endings never share a corner, and an ending whose sides are
+  too short for its rounding stays as it is.
+- Open paths and counters have no endings. New points are rounded to the grid.
+- Export string `RoundedFont; stem`; the stem is written only when one is given.
+
 ### Transform Metrics (`glyph.transformMetrics`, Glyph menu)
 
 Batch-sets widths or sidebearings on the selected glyph layers.
@@ -317,6 +334,8 @@ dispatches it through the registry (`filter.customParameter.sameRegistryAsComman
   **Answered for M3 (our decision, 2026-10-09):** an incompatible glyph is left unchanged and listed
   in the result (`skipped`).
 - Rounded Font dialog contents and behaviour when the master has no vertical stems.
+  **Answered for M3 (our decision, 2026-10-10):** no vertical stem and no `stem` parameter is an
+  error that names the missing stem. The dialog has one Stem field (0: the master's stems).
 - Round Corners: does "selected corners" need the node itself selected, or do selected segments count?
   **Answered for M3 (our decision, 2026-10-09):** selected nodes, or the end nodes of selected
   segments.
