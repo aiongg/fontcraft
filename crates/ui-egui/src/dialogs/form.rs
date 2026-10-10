@@ -309,11 +309,11 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose:
         for field in &dialog.fields {
             if field.group.as_deref() != group {
                 group = field.group.as_deref();
-                match group {
-                    Some(heading) => ui.label(egui::RichText::new(heading).strong()),
-                    None => ui.label(""),
-                };
-                ui.end_row();
+                // A field outside any group follows the last group without a row of its own.
+                if let Some(heading) = group {
+                    ui.label(egui::RichText::new(heading).strong());
+                    ui.end_row();
+                }
             }
             let value = dialog.values.get(&field.key).cloned().unwrap_or(Value::Null);
             if group.is_some() {

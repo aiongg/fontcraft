@@ -473,6 +473,7 @@ impl Tool for SelectTool {
 
     fn cancel(&mut self) -> Output {
         let mut out = crate::bbox::cancel(&mut self.knobs);
+        self.hover = None;
         match std::mem::take(&mut self.state) {
             State::Dragging(_) | State::Guide(_) => out.push(Action::Cancel),
             State::Marquee(m) => {

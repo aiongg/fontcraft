@@ -499,8 +499,14 @@ fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>,
             }
         }
     }
+    if dialog.mode == Mode::Preview && targets.is_empty() {
+        return Err(format!("{}: select a glyph first", dialog.title));
+    }
+    // The canvas takes no input while the dialog is open: end what the tool was doing and drop
+    // its hover marker, which would otherwise stay drawn under the dialog.
+    let out = app.tools.toolbox.cancel();
+    crate::tools_glue::apply(app, out);
     match dialog.mode {
-        Mode::Preview if targets.is_empty() => return Err(format!("{}: select a glyph first", dialog.title)),
         Mode::Preview => app.session.begin(dialog.title).map_err(|e| e.to_string())?,
         // The command acts on the active document as a whole.
         Mode::RunOnOk => {
@@ -988,7 +994,11 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
                 ui,
                 |ui| {
                     if !d.actions.is_empty() {
-                        ui.menu_button("…", |ui| {
+                        // A round button with three dots drawn at its centre: the "…" glyph sits on
+                        // the text baseline, low in the button.
+                        let size = ui.spacing().interact_size.y;
+                        let button = egui::Button::new("").min_size(egui::vec2(size, size)).corner_radius(size / 2.0);
+                        let (response, _) = egui::containers::menu::MenuButton::from_button(button).ui(ui, |ui| {
                             for a in d.actions {
                                 if ui.button(a.label).clicked() {
                                     menu_events.push(Event::Action(a.id.to_string()));
@@ -996,6 +1006,12 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
                                 }
                             }
                         });
+                        let response = response.on_hover_text("Actions");
+                        let color = ui.style().interact(&response).fg_stroke.color;
+                        let c = response.rect.center();
+                        for dx in [-1.0, 0.0, 1.0] {
+                            ui.painter().circle_filled(c + egui::vec2(dx * tokens.dialog_dots_gap, 0.0), tokens.dialog_dot_radius, color);
+                        }
                     }
                 },
                 |ui| {

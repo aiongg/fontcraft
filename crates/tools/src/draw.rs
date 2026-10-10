@@ -727,6 +727,7 @@ impl Tool for DrawTool {
         let out = self.end_gesture();
         self.drawing = None;
         self.end_pos = None;
+        self.hover = None;
         self.space = false;
         out
     }

@@ -109,6 +109,10 @@ pub struct Tokens {
     pub dialog_field_width: f32,
     /// Gap between a dialog's rows and columns.
     pub dialog_spacing: f32,
+    /// Radius of the three dots of a dialog's round actions button, and the distance between
+    /// their centres.
+    pub dialog_dot_radius: f32,
+    pub dialog_dots_gap: f32,
     /// Side of a glyph cell in Font View, in points.
     pub cell_size: f32,
     /// Height of the name line under a glyph cell.
@@ -269,6 +273,8 @@ impl Tokens {
             dialog_backdrop: Color32::from_black_alpha(40),
             dialog_field_width: 72.0,
             dialog_spacing: 8.0,
+            dialog_dot_radius: 1.5,
+            dialog_dots_gap: 4.5,
             cell_size: 64.0,
             cell_label_height: 16.0,
             cell_gap: 4.0,

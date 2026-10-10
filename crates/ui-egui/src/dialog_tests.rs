@@ -361,3 +361,12 @@ fn transformations_groups_its_fields_and_locks_the_scale_with_a_button() {
     assert_eq!(app.dialog.as_ref().unwrap().values["scaleLocked"], json!(false), "a click opens the lock");
     call(&mut app, "ui.dialog.cancel", json!({}));
 }
+
+#[test]
+fn opening_a_dialog_drops_the_canvas_hover_marker() {
+    let mut app = square_app();
+    call(&mut app, "ui.pointer", json!({"events": [{"kind": "move", "x": 300, "y": 300}]}));
+    assert!(!app.tools.toolbox.overlays().is_empty(), "the node under the pointer is marked");
+    open_round_corners(&mut app);
+    assert!(app.tools.toolbox.overlays().is_empty(), "no hover marker under the dialog");
+}
