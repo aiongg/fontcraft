@@ -383,3 +383,46 @@ fn menu_shortcuts_parse_and_run_their_commands() {
     let after = app.state.tab().map(|t| t.view.scale).unwrap();
     assert!((after / before - std::f64::consts::SQRT_2).abs() < 1e-9, "Cmd+Plus zooms in: {before} → {after}");
 }
+
+#[test]
+fn display_and_panel_toggles_change_what_is_shown() {
+    let mut app = FontcraftApp::default();
+    app.run("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 0, "width": 300, "height": 600})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+    for id in ["view.showNodesInForeground", "view.showExtraNodes", "view.showMetricsNames", "view.fillPreview", "window.palette"] {
+        let first = app.run(id, &json!({})).unwrap()["on"].clone();
+        let second = app.run(id, &json!({})).unwrap()["on"].clone();
+        assert_ne!(first, second, "{id} toggles");
+        assert_eq!(app.run(id, &json!({"on": true})).unwrap()["on"], true, "{id} sets");
+    }
+    assert!(app.state.display.nodes && app.state.display.extra_nodes && app.state.display.metrics_names && app.state.display.fill_preview);
+    assert!(app.state.show_palette);
+    app.run("window.palette", &json!({"on": false})).unwrap();
+    assert!(!app.state.show_palette);
+    assert_eq!(app.run("infoBox.setSizeLock", &json!({"locked": true})).unwrap()["locked"], true);
+    assert!(app.state.panels.size_locked);
+
+    // Zoom to Active Layer fits the glyph's vertical span, whatever the zoom was.
+    app.run("view.setZoom", &json!({"size": 4000})).unwrap();
+    let fitted = app.run("view.zoomToActiveLayer", &json!({})).unwrap();
+    app.run("view.zoomIn", &json!({})).unwrap();
+    assert_eq!(app.run("view.zoomToActiveLayer", &json!({})).unwrap(), fitted);
+    assert_ne!(app.state.tab().unwrap().view.scale, 4.0);
+
+    // The Layers section's filters: a backup layer and a second master's layer drop out.
+    let master = app.session.font().unwrap().masters[0].id.clone();
+    app.run("layers.addBackupLayer", &json!({"glyphs": ["A"], "master": master})).unwrap();
+    let tab = app.state.active_tab;
+    let rows = |app: &mut FontcraftApp| crate::panels::layers::shown_rows(app, tab, "A").len();
+    let all = rows(&mut app);
+    assert_eq!(app.run("layers.hideBackupLayers", &json!({"on": true})).unwrap()["on"], true);
+    assert_eq!(rows(&mut app), all - 1, "the backup is hidden");
+    app.run("layers.hideBackupLayers", &json!({"on": false})).unwrap();
+    assert_eq!(app.run("layers.onlyShowLayersFromCurrentMaster", &json!({})).unwrap()["on"], true);
+    assert_eq!(rows(&mut app), all, "one master: every row belongs to it");
+
+    // tool.list names the pointer tools and the active one.
+    let tools = app.run("tool.list", &json!({})).unwrap();
+    assert!(tools.to_string().contains("\"knife\""), "{tools}");
+    assert_eq!(tools["active"], "select", "{tools}");
+}

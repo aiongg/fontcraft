@@ -294,9 +294,19 @@ fn a_preview_step_on_a_corpus_font_is_fast() {
     }
     let per_step = start.elapsed() / steps;
     assert!(s.commit().unwrap());
-    eprintln!("preview step on Oswald ({glyphs} glyphs): {per_step:?}");
+    // A node drag: each pointer move previews `selection.move` of one node from where it began.
+    s.begin("Drag").unwrap();
+    let start = std::time::Instant::now();
+    for i in 0..steps {
+        s.preview("selection.move", &json!({"glyph": "A", "points": [[0, 0]], "dx": f64::from(i), "dy": 0})).unwrap();
+    }
+    let per_drag_step = start.elapsed() / steps;
+    assert!(s.commit().unwrap());
+    eprintln!("preview step on Oswald ({glyphs} glyphs): add a path {per_step:?}, move a node {per_drag_step:?}");
     if !cfg!(debug_assertions) {
-        assert!(per_step < std::time::Duration::from_millis(16), "a preview step took {per_step:?}");
+        for step in [per_step, per_drag_step] {
+            assert!(step < std::time::Duration::from_millis(16), "a preview step took {step:?}");
+        }
     }
 }
 

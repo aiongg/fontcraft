@@ -356,3 +356,89 @@ fn the_pencil_turns_a_stroke_into_one_path() {
     let p = &paths(&app, "s")[1];
     assert!(p.closed, "a stroke that ends where it began closes");
 }
+
+/// Runs `gesture` on the app `setup` gives and replays the commands it journaled on a second one:
+/// the two fonts must be the same. Returns how many commands the gesture ran.
+fn replays_as_its_commands(setup: impl Fn() -> FontcraftApp, gesture: impl Fn(&mut FontcraftApp)) -> usize {
+    let mut app = setup();
+    let start = app.session.journal().len();
+    gesture(&mut app);
+    let ran: Vec<(String, Value)> = app.session.journal()[start..].to_vec();
+    let mut headless = setup();
+    for (id, params) in &ran {
+        headless.run(id, params).unwrap_or_else(|e| panic!("{id} {params}: {e}"));
+    }
+    let font = |a: &FontcraftApp| a.session.doc().unwrap().font.clone();
+    assert!(font(&app).same_as(&font(&headless)), "the gesture and its commands {ran:?} give different fonts");
+    ran.len()
+}
+
+#[test]
+fn knife_pencil_measurement_zoom_and_hand_gestures_equal_their_commands() {
+    let square = || {
+        let mut app = editing("s");
+        app.run("path.addRectangle", &json!({"glyph": "s", "x": 100, "y": 100, "width": 300, "height": 300})).unwrap();
+        app
+    };
+    let with_tool = |app: &mut FontcraftApp, id: &str| assert_eq!(call(app, "ui.tool.select", json!({ "tool": id }))["ok"], true);
+
+    let knife = replays_as_its_commands(square, |app| {
+        with_tool(app, "knife");
+        drag(app, (250.0, 50.0), (250.0, 450.0), none());
+    });
+    assert_eq!(knife, 1, "one cut");
+    assert_eq!(paths(&square_cut(), "s").len(), 2);
+
+    let pencil = replays_as_its_commands(square, |app| {
+        with_tool(app, "pencil");
+        let events: Vec<Value> = (0..=40)
+            .map(|i| {
+                let kind = match i {
+                    0 => "down",
+                    40 => "up",
+                    _ => "drag",
+                };
+                json!({"kind": kind, "x": 100.0 + 10.0 * f64::from(i), "y": 500.0 + 40.0 * (f64::from(i) / 6.0).sin()})
+            })
+            .collect();
+        pointer(app, Value::Array(events));
+    });
+    assert_eq!(pencil, 1, "one path");
+
+    // G during a ruler drag adds a measurement guide; the ruler alone changes nothing.
+    let ruler = replays_as_its_commands(square, |app| {
+        with_tool(app, "measurement");
+        pointer(app, json!([{"kind": "down", "x": 250, "y": 50}, {"kind": "drag", "x": 250, "y": 450}]));
+        key(app, json!({"key": "g", "cmd": true, "alt": true, "ctrl": true}));
+        pointer(app, json!([{"kind": "up", "x": 250, "y": 450}]));
+    });
+    assert_eq!(ruler, 1, "one guide");
+
+    // Each annotation sub-tool: a click (a drag for the arrow) adds its annotation.
+    for sub in ["text", "arrow", "circle", "plus", "minus"] {
+        let chosen = || {
+            let mut app = square();
+            app.run("annotation.setTool", &json!({ "tool": sub })).unwrap();
+            app
+        };
+        let ran = replays_as_its_commands(chosen, |app| drag(app, (450.0, 450.0), (520.0, 500.0), none()));
+        assert_eq!(ran, 1, "{sub}: one annotation");
+    }
+
+    for tool in ["zoom", "hand"] {
+        let ran = replays_as_its_commands(square, |app| {
+            with_tool(app, tool);
+            drag(app, (150.0, 150.0), (350.0, 350.0), none());
+            click(app, 250.0, 250.0);
+        });
+        assert_eq!(ran, 0, "{tool} changes only the view");
+    }
+}
+
+/// The square of the test above, cut in two by the command alone.
+fn square_cut() -> FontcraftApp {
+    let mut app = editing("s");
+    app.run("path.addRectangle", &json!({"glyph": "s", "x": 100, "y": 100, "width": 300, "height": 300})).unwrap();
+    app.run("path.cutWithLine", &json!({"glyph": "s", "from": [250, 50], "to": [250, 450]})).unwrap();
+    app
+}
