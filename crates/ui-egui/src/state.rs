@@ -34,3 +34,23 @@ impl Default for UiState {
         }
     }
 }
+
+/// Most glyphs one tab (or one `text` parameter) may hold.
+pub const MAX_TAB_GLYPHS: usize = 10_000;
+
+/// The glyphs that encode the characters of `text`, in order. A character no glyph encodes is an
+/// error naming it.
+pub fn glyphs_for_text(font: &fontcraft_model::Font, text: &str) -> Result<Vec<String>, String> {
+    if text.chars().count() > MAX_TAB_GLYPHS {
+        return Err(format!("`text` holds at most {MAX_TAB_GLYPHS} characters"));
+    }
+    let mut by_code: std::collections::HashMap<u32, &str> = std::collections::HashMap::new();
+    for glyph in font.glyphs.iter() {
+        for u in &glyph.unicodes {
+            by_code.entry(*u).or_insert(glyph.name.as_str());
+        }
+    }
+    text.chars()
+        .map(|c| by_code.get(&u32::from(c)).map(|n| n.to_string()).ok_or_else(|| format!("no glyph encodes U+{:04X} `{c}`", u32::from(c))))
+        .collect()
+}

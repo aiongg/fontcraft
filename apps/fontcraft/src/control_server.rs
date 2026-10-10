@@ -1,7 +1,9 @@
 //! The control channel's transport: JSON lines on a loopback TCP port.
 //!
 //! Connections are read on their own threads; each request is handed to the UI thread, which
-//! answers it between frames ([`Inbox::drain`]) through `fontcraft_ui_egui::control::handle`.
+//! answers it between frames ([`Inbox::drain`]) through `fontcraft_ui_egui::control`.
+//! `ui.screenshot` asks eframe for the next rendered frame and answers when it arrives
+//! ([`Inbox::deliver_screenshots`]).
 //!
 //! Only requests are read. A line must be a JSON object with a string `method`; anything else
 //! gets one error reply and the connection is closed, so the body of an HTTP request sent to this
@@ -14,7 +16,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant};
 
-use fontcraft_ui_egui::{FontcraftApp, control};
+use fontcraft_ui_egui::FontcraftApp;
+use fontcraft_ui_egui::control::{self, Handled, ScreenshotRequest};
 use serde_json::{Value, json};
 
 /// Longest request line accepted.
@@ -29,29 +32,90 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(120);
 /// keep the window from painting.
 const FRAME_REQUESTS: usize = 64;
 const FRAME_BUDGET: Duration = Duration::from_millis(8);
+/// Most screenshots waiting for a frame at once.
+const MAX_PENDING_SCREENSHOTS: usize = 8;
 
 type Request = (Value, Sender<Value>);
+
+/// A screenshot asked of eframe, waiting for its frame.
+struct PendingShot {
+    ticket: u64,
+    request: ScreenshotRequest,
+    reply: Sender<Value>,
+    asked: Instant,
+}
 
 /// The UI thread's end: requests waiting to be answered.
 pub struct Inbox {
     requests: Receiver<Request>,
     ctx: eframe::egui::Context,
+    shots: Vec<PendingShot>,
+    next_ticket: u64,
 }
 
 impl Inbox {
     /// Answers waiting requests, up to this frame's budget; the rest wait for the next frame,
     /// which is requested at once.
-    pub fn drain(&self, app: &mut FontcraftApp) {
+    pub fn drain(&mut self, app: &mut FontcraftApp) {
         let start = Instant::now();
         for _ in 0..FRAME_REQUESTS {
-            let Ok((request, reply)) = self.requests.try_recv() else { return };
-            // The client may have gone away; that is its business.
-            let _ = reply.send(control::handle(app, &request));
+            let Ok((request, reply)) = self.requests.try_recv() else { break };
+            match control::handle_request(app, &request) {
+                // The client may have gone away; that is its business.
+                Handled::Reply(value) => {
+                    let _ = reply.send(value);
+                }
+                Handled::Screenshot(shot) => self.ask_screenshot(shot, reply),
+            }
             if start.elapsed() >= FRAME_BUDGET {
                 break;
             }
         }
         self.ctx.request_repaint();
+    }
+
+    fn ask_screenshot(&mut self, request: ScreenshotRequest, reply: Sender<Value>) {
+        // Clients that stopped waiting leave their entries behind; drop them first.
+        self.shots.retain(|s| s.asked.elapsed() < REPLY_TIMEOUT);
+        if self.shots.len() >= MAX_PENDING_SCREENSHOTS {
+            let _ = reply.send(request.fail("too many screenshots are waiting for a frame; try again"));
+            return;
+        }
+        self.next_ticket += 1;
+        let ticket = self.next_ticket;
+        self.shots.push(PendingShot { ticket, request, reply, asked: Instant::now() });
+        self.ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Screenshot(eframe::egui::UserData::new(ticket)));
+    }
+
+    /// Answers the screenshots whose frames arrived in this frame's input events.
+    pub fn deliver_screenshots(&mut self, ctx: &eframe::egui::Context) {
+        if self.shots.is_empty() {
+            return;
+        }
+        let events: Vec<(u64, std::sync::Arc<eframe::egui::ColorImage>)> = ctx.input(|i| {
+            i.raw
+                .events
+                .iter()
+                .filter_map(|e| match e {
+                    eframe::egui::Event::Screenshot { user_data, image, .. } => {
+                        user_data.data.as_ref().and_then(|d| d.downcast_ref::<u64>()).map(|t| (*t, image.clone()))
+                    }
+                    _ => None,
+                })
+                .collect()
+        });
+        let ppp = ctx.pixels_per_point();
+        for (ticket, image) in events {
+            let Some(at) = self.shots.iter().position(|s| s.ticket == ticket) else { continue };
+            let shot = self.shots.swap_remove(at);
+            let [w, h] = image.size;
+            let pixels: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+            let (w, h) = (u32::try_from(w).unwrap_or(u32::MAX), u32::try_from(h).unwrap_or(u32::MAX));
+            let _ = shot.reply.send(shot.request.finish(w, h, pixels, ppp));
+        }
+        if !self.shots.is_empty() {
+            self.ctx.request_repaint();
+        }
     }
 }
 
@@ -89,7 +153,7 @@ pub fn start(port: u16, ctx: eframe::egui::Context) -> std::io::Result<Inbox> {
             }
         }
     })?;
-    Ok(Inbox { requests: inbox, ctx })
+    Ok(Inbox { requests: inbox, ctx, shots: Vec::new(), next_ticket: 0 })
 }
 
 fn refuse(mut stream: TcpStream, why: &str) -> std::io::Result<()> {

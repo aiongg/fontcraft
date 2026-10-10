@@ -36,7 +36,8 @@ struct Shell {
 impl eframe::App for Shell {
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         // Control requests run on the UI thread, between frames, like a click would.
-        if let Some(inbox) = &self.control {
+        if let Some(inbox) = &mut self.control {
+            inbox.deliver_screenshots(ui.ctx());
             inbox.drain(&mut self.app);
         }
         // A bug in drawing costs one frame, not the session.

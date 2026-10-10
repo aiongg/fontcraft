@@ -123,6 +123,15 @@ impl FontcraftApp {
         Ok(json!({}))
     }
 
+    /// The glyphs `ui.render` draws when none are named: the edited glyph, else the Font View
+    /// selection.
+    pub fn default_render_glyphs(&self) -> Vec<String> {
+        match &self.state.editing {
+            Some(glyph) => vec![glyph.clone()],
+            None => self.state.selected_glyphs.clone(),
+        }
+    }
+
     /// Every command the app can run, engine and shell, as the control channel lists them.
     pub fn commands(&self) -> Value {
         let mut list: Vec<Value> =

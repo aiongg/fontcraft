@@ -159,3 +159,38 @@ fn themes_differ_only_where_they_should() {
     assert_ne!(dark.panel, light.panel);
     assert_eq!(dark.accent, light.accent);
 }
+
+#[test]
+fn ui_render_draws_glyph_pixels_and_screenshots_need_a_window() {
+    let mut app = FontcraftApp::default();
+    app.run("path.addPath", &json!({"glyph": "A", "nodes": [{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 310, "y": 700}]})).unwrap();
+    let render = |app: &mut FontcraftApp, params: Value| call(app, "ui.render", params);
+    let first = render(&mut app, json!({"glyphs": ["A"], "size": 100}));
+    assert_eq!(first["ok"], true, "{first}");
+    assert_eq!((first["result"]["width"].as_u64(), first["result"]["height"].as_u64()), (Some(76), Some(116)));
+    assert_eq!(render(&mut app, json!({"glyphs": ["A"], "size": 100}))["result"]["png"], first["result"]["png"], "the same bytes twice");
+    // Text maps characters to glyphs; with nothing named, the edited glyph is drawn.
+    assert_eq!(render(&mut app, json!({"text": "AB", "scale": 0.1}))["result"]["glyphs"], json!(["A", "B"]));
+    app.run("view.editSelectedGlyphs", &json!({"glyph": "A"})).unwrap();
+    assert_eq!(render(&mut app, json!({}))["result"]["glyphs"], json!(["A"]));
+    for bad in [
+        json!({"glyphs": ["nope"]}),
+        json!({"text": "\u{1F600}"}),
+        json!({"size": -1}),
+        json!({"scale": 1e9}),
+        json!({"glyphs": 5}),
+        json!({"path": 5}),
+    ] {
+        assert_eq!(render(&mut app, bad.clone())["ok"], false, "{bad}");
+    }
+    let shot = call(&mut app, "ui.screenshot", json!({}));
+    assert!(shot["error"].as_str().is_some_and(|e| e.starts_with("ui.screenshot:")), "{shot}");
+    match control::handle_request(&mut app, &json!({"id": 7, "method": "ui.screenshot", "params": {"path": "x.png"}})) {
+        control::Handled::Screenshot(request) => {
+            assert_eq!(request.path.as_deref(), Some("x.png"));
+            let reply = control::ScreenshotRequest { path: None, ..request }.finish(2, 1, vec![255; 8], 1.0);
+            assert_eq!((reply["id"].as_i64(), reply["result"]["width"].as_u64()), (Some(7), Some(2)));
+        }
+        other => panic!("ui.screenshot was answered without a window: {other:?}"),
+    }
+}

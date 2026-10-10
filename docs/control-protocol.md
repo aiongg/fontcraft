@@ -24,6 +24,8 @@ Requests are answered on the UI thread between frames, exactly as a click would 
 request becomes an error reply; the app keeps running.
 
 Transport: `apps/fontcraft/src/control_server.rs`. Dispatch: `crates/ui-egui/src/control.rs`.
+`ui.screenshot` needs the window, so the dispatch hands it back to the transport, which asks eframe
+for the next frame and replies when the frame arrives.
 
 ## Methods today
 
@@ -35,6 +37,8 @@ Transport: `apps/fontcraft/src/control_server.rs`. Dispatch: `crates/ui-egui/src
 | `ui.inspect` | | the UI state: `selected_glyphs`, `editing`, `zoom`, `show_nodes`, `show_metrics`, `show_palette`, `status` |
 | `ui.menu.list` | | the menu tree: `[{title, items: [{command, label, path, shortcut, enabled, disabled_reason?}]}]` |
 | `ui.menu.invoke` | `{command, params?}` | runs a menu item; an id that is in no menu is an error |
+| `ui.screenshot` | `{path?}` | captures the window as PNG, written to `path` or returned as base64 `png`; `{width, height, pixelsPerPoint, path?, png?}`. Sizes are in pixels. The reply comes after the next frame is drawn. Headless hosts (tests, MCP) answer with an error |
+| `ui.render` | `{path?, glyphs?, text?, layer?, size?, scale?}` | draws glyphs filled by the nonzero rule, black on white, without a window; `{width, height, glyphs, path?, png?}`. `glyphs` names them, `text` maps characters to glyphs; neither: the edited glyph, else the Font View selection. `size` is pixels per em (default 256), `scale` pixels per font unit instead. `layer` draws that layer of the one glyph named. The same request gives the same bytes |
 | `control.methods` | | this table |
 
 `revision` in `document.inspect` grows with every change to a document, whoever made it. Compare
@@ -46,8 +50,6 @@ The names and shapes follow the sibling apps so their agents' habits carry over.
 
 | Method | Params | Milestone |
 |---|---|---|
-| `ui.screenshot` | `{path?}` capture the window as PNG | M3 |
-| `ui.render` | `{path?, glyphs?, text?, size?, scale?}` render glyphs or a text line headlessly | M3 |
 | `ui.tool.select` | `{tool}` make a pointer tool active; runs the command `tool.select` and returns `{tool, previous}` | M3 |
 | `ui.tool.list` | `{}` the pointer tools and the active one; runs the command `tool.list` and returns `{active, tools: [{id, label, shortcut, group}]}` | M3 |
 | `ui.pointer` | `{events: [{kind: down \| drag \| up \| move \| doubleclick, x, y, space?: "font" \| "screen", mods?}]}` drive the active tool like the mouse | M3 |
@@ -58,8 +60,9 @@ The names and shapes follow the sibling apps so their agents' habits carry over.
 | `ui.resize` / `ui.focus` | | M3 |
 | `app.open` / `app.save` / `app.export` / `app.quit` | `{path}` … through the host (file dialogs, the browser's download) | M1 |
 
-Until `ui.screenshot` exists, check drawing with a headless frame test
-(`crates/ui-egui/src/tests.rs`) or by capturing the virtual display the app runs on.
+Check drawing with `ui.screenshot` on the running app, or with a headless frame test
+(`crates/ui-egui/src/tests.rs`). Without a display the app runs on a virtual one
+(`docs/development.md`).
 
 ## Errors agents will see
 
