@@ -1,10 +1,11 @@
-//! Glyph › Remove Glyph: the confirmation before `glyph.removeGlyph`. Remove runs the command
-//! once; Cancel removes nothing.
+//! Glyph › Remove Glyph: the confirmation before `glyph.removeGlyph`. Each button runs the
+//! command once; Cancel removes nothing.
 //!
 //! The dialog asks the command first (`confirm: false`, which changes nothing) for the answers
-//! it needs. When a removed glyph is used as a component, Remove deletes those components and
-//! Decompose, a third button, turns them into outlines first. When metrics keys point at a
-//! removed glyph, a pop-up menu asks whether to dissolve or keep them.
+//! it needs. When a removed glyph is used as a component, the default button Decompose turns
+//! those components into outlines first, so the glyphs that use it keep their shapes, and Remove
+//! deletes the components. When metrics keys point at a removed glyph, a pop-up menu asks
+//! whether to dissolve or keep them.
 
 use std::collections::HashSet;
 
@@ -20,7 +21,7 @@ const NAMED: usize = 5;
 pub const DIALOG: Dialog = Dialog {
     mode: Mode::RunOnOk,
     buttons: ["Remove", "Cancel"],
-    third: Some(Third { id: "decompose", caption: "Decompose", key: "components", ok: "remove", value: "decompose" }),
+    third: Some(Third { id: "remove", caption: "Remove", key: "components", ok: "decompose", value: "remove", ok_caption: Some("Decompose") }),
     message: "The selected glyphs are removed from the font.",
     ..Dialog::new("dialog.removeGlyph", "Remove Glyphs", "glyph.removeGlyph", Fields::Targeted(fields))
 };
@@ -39,9 +40,9 @@ fn fields(session: &mut Session, targets: &Map<String, Value>) -> Result<Vec<Fie
         fields.push(Field::choice(
             "components",
             &format!("Used as a component in {users}"),
-            &[("remove", "Remove those components"), ("decompose", "Decompose them")],
-            "remove",
-            "remove deletes every component that uses a removed glyph; decompose first turns those components into outlines",
+            &[("decompose", "Decompose them"), ("remove", "Remove those components")],
+            "decompose",
+            "decompose first turns every component that uses a removed glyph into outlines; remove deletes those components",
         ));
     }
     if needs.contains(&"metricsKeys") {

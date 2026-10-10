@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**391 guesses on 267 rows (132 of them live commands).**
+**392 guesses on 267 rows (132 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -338,7 +338,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.addGlyphsExisting` (panel) | M4 | handbook | – | The buttons sit Cancel, Replace, Keep Existing from left to right, Keep Existing the default (Return). Settled by observation. |
 | `dialog.missingGlyphs` (panel) | M4 | handbook | – | Every missing glyph starts chosen, so Generate right away adds them all. Settled by opening the reference's list and pressing Generate. |
 | `dialog.pasteSpecial` (panel) | M4 | handbook | – | The dialog opens on Glyphs With Same Name with All Data ticked. Settled by observation. |
-| `dialog.removeGlyph` (panel) | M4 | handbook | – | The buttons sit Cancel, Decompose, Remove from left to right, Remove the default (Return). Settled by observation. |
+| `dialog.removeGlyph` (panel) | M4 | handbook | – | Decompose is the default button because it keeps other glyphs' outlines; observing the reference dialog would settle it. |
+| `dialog.removeGlyph` (panel) | M4 | handbook | – | With components to answer, the buttons sit Cancel, Remove, Decompose from left to right. Settled by observation. |
 | `dialog.removeGlyph` (panel) | M4 | handbook | – | The metrics-key question is a second pop-up menu in the same dialog (Dissolve first) instead of a second dialog. Settled by observation. |
 | `dialog.findAndReplaceGlyphNames` (panel) | M4 | handbook | – | A Match Case checkbox, on by default, as names are case-sensitive; the handbook names only Find, Replace and Regex. Settled by observation. |
 | `dialog.findAndReplaceGlyphNames` (panel) | M4 | handbook | – | Nothing is renamed until Replace; there is no live preview. Settled by observation. |

@@ -160,25 +160,25 @@ fn remove_glyph_confirms_and_asks_about_components_and_metrics_keys() {
     frame(&ctx, &mut app, vec![key(Key::Delete, Modifiers::COMMAND)], Modifiers::NONE);
     let asked = inspect(&mut app);
     assert_eq!(asked["dialog"], "dialog.removeGlyph", "Cmd+Delete: {asked}");
-    assert_eq!(asked["captions"], json!({"ok": "Remove", "decompose": "Decompose", "cancel": "Cancel"}));
-    assert_eq!(asked["params"], json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "dissolve"}));
+    assert_eq!(asked["captions"], json!({"ok": "Decompose", "remove": "Remove", "cancel": "Cancel"}), "Decompose is the default");
+    assert_eq!(asked["params"], json!({"glyphs": ["A"], "components": "decompose", "metricsKeys": "dissolve"}));
     assert!(asked["fields"][0]["label"].as_str().unwrap().contains('B'), "{asked}");
     assert!(asked["fields"][1]["label"].as_str().unwrap().contains('C'), "{asked}");
     assert!(Arc::ptr_eq(&font(&app), &before), "asking changed nothing");
-    call(&mut app, "ui.click", json!({"id": "ok"}));
-    let mut direct = referenced_app();
-    direct.run("glyph.removeGlyph", &json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "dissolve"})).unwrap();
-    assert!(font(&app).glyph("A").is_none());
-    assert!(font(&app).same_as(&font(&direct)), "the dialog and the command give the same font");
-    assert!(app.state.selected_glyphs.is_empty(), "the removed glyph left the selection");
-
-    // Decompose turns the components into outlines first.
-    let mut app = referenced_app();
-    open(&mut app, "dialog.removeGlyph", json!({"glyphs": ["A"]}));
-    call(&mut app, "ui.click", json!({"id": "decompose"}));
+    frame(&ctx, &mut app, vec![key(Key::Enter, Modifiers::NONE)], Modifiers::NONE);
     let mut direct = referenced_app();
     direct.run("glyph.removeGlyph", &json!({"glyphs": ["A"], "components": "decompose", "metricsKeys": "dissolve"})).unwrap();
-    assert!(font(&app).same_as(&font(&direct)), "Decompose gives the font the command gives");
+    assert!(font(&app).glyph("A").is_none());
+    assert!(font(&app).same_as(&font(&direct)), "Return decomposes, as the command does");
+    assert!(app.state.selected_glyphs.is_empty(), "the removed glyph left the selection");
+
+    // Remove deletes the components.
+    let mut app = referenced_app();
+    open(&mut app, "dialog.removeGlyph", json!({"glyphs": ["A"]}));
+    call(&mut app, "ui.click", json!({"id": "remove"}));
+    let mut direct = referenced_app();
+    direct.run("glyph.removeGlyph", &json!({"glyphs": ["A"], "components": "remove", "metricsKeys": "dissolve"})).unwrap();
+    assert!(font(&app).same_as(&font(&direct)), "Remove gives the font the command gives");
 
     let mut app = referenced_app();
     let before = font(&app);

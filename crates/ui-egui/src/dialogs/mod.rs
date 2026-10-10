@@ -116,7 +116,8 @@ impl Dialog {
 /// A third button beside OK and Cancel, for a question with two answers that both go ahead
 /// (Keep Existing or Replace; Remove or Decompose). It shows while the dialog has the field
 /// `key`, which the buttons answer instead of a control of its own: OK gives it `ok`, the third
-/// button gives it `value`, and either then confirms. `ui.click {id}` presses it.
+/// button gives it `value`, and either then confirms. `ui.click {id}` presses it. While it shows,
+/// `ok_caption`, when given, names the OK button in place of the dialog's own caption.
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct Third {
     pub id: &'static str,
@@ -124,6 +125,7 @@ pub struct Third {
     pub key: &'static str,
     pub ok: &'static str,
     pub value: &'static str,
+    pub ok_caption: Option<&'static str>,
 }
 
 /// An item of a dialog's "…" menu: a query run with the dialog's parameters whose `text` goes
@@ -405,6 +407,11 @@ impl OpenDialog {
     /// The third button, while the dialog has the field it answers.
     pub fn third(&self) -> Option<Third> {
         self.third.filter(|t| self.fields.iter().any(|f| f.key == t.key))
+    }
+
+    /// The OK button's caption.
+    pub fn ok_caption(&self) -> &'static str {
+        self.third().and_then(|t| t.ok_caption).unwrap_or(self.buttons[0])
     }
 
     fn field(&self, key: &str) -> Result<&Field, String> {
@@ -863,8 +870,8 @@ pub fn inspect(app: &FontcraftApp) -> Value {
             None => json!(["ok", "cancel"]),
         },
         "captions": match d.third() {
-            Some(t) => json!({"ok": d.buttons[0], t.id: t.caption, "cancel": d.buttons[1]}),
-            None => json!({"ok": d.buttons[0], "cancel": d.buttons[1]}),
+            Some(t) => json!({"ok": d.ok_caption(), t.id: t.caption, "cancel": d.buttons[1]}),
+            None => json!({"ok": d.ok_caption(), "cancel": d.buttons[1]}),
         },
         "canChooseFolder": app.picker.is_some(),
     })
@@ -1132,7 +1139,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
                 },
                 |ui| {
                     // Right to left: OK on the right, then the third button, then Cancel.
-                    let [ok, cancel] = d.buttons;
+                    let (ok, cancel) = (d.ok_caption(), d.buttons[1]);
                     let can_confirm = d.error.is_none() || d.mode == Mode::RunOnOk;
                     if ui.add_enabled(can_confirm, egui::Button::new(ok)).clicked() {
                         events.push(Event::Confirm);

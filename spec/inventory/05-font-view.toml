@@ -1301,9 +1301,10 @@ milestone = "M4"
 summary = "Confirmation shown before glyphs are deleted. When other glyphs reference them, Remove also deletes those components while Decompose first turns them into outlines."
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
-notes = "Cmd+Delete and Glyph › Remove Glyph open it on the selected glyphs. It asks glyph.removeGlyph with `confirm: false` for the answers the command needs. With `components` needed, a line names the glyphs that use a removed glyph, Remove runs the command with `components: \"remove\"` and the Decompose button with `components: \"decompose\"`. With `metricsKeys` needed, a pop-up menu asks the question of dialog.removeGlyphMetricsKeys. Each button runs the command once; Cancel changes nothing. Documented, not yet observed."
+notes = "Cmd+Delete and Glyph › Remove Glyph open it on the selected glyphs. It asks glyph.removeGlyph with `confirm: false` for the answers the command needs. With `components` needed, a line names the glyphs that use a removed glyph, the default button Decompose (Return) runs the command with `components: \"decompose\"` and Remove with `components: \"remove\"`; with nothing to ask, Remove is the default. With `metricsKeys` needed, a pop-up menu asks the question of dialog.removeGlyphMetricsKeys. Each button runs the command once; Cancel changes nothing. Documented, not yet observed."
 guesses = [
-  "The buttons sit Cancel, Decompose, Remove from left to right, Remove the default (Return). Settled by observation.",
+  "Decompose is the default button because it keeps other glyphs' outlines; observing the reference dialog would settle it.",
+  "With components to answer, the buttons sit Cancel, Remove, Decompose from left to right. Settled by observation.",
   "The metrics-key question is a second pop-up menu in the same dialog (Dissolve first) instead of a second dialog. Settled by observation.",
 ]
 
@@ -2020,7 +2021,7 @@ milestone = "M4"
 summary = "When a glyph to be deleted is referenced by components elsewhere, the dialog gains a Decompose button. Remove deletes the glyph together with every component pointing at it; Decompose first converts those components to outlines and then deletes the glyph."
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M4: glyph.removeGlyph takes the answer as `components`, and decomposing needs only the layers, not M6's component editing. Documented, not yet observed."
+notes = "Moved from M6 to M4: glyph.removeGlyph takes the answer as `components`, and decomposing needs only the layers, not M6's component editing. In dialog.removeGlyph, Decompose is the default button. Documented, not yet observed."
 guesses = ["Decompose reverses each path that a mirroring component transform (negative determinant) places, as export decomposition does, so the outline keeps its direction. Settled by decomposing a mirrored component in the reference app and checking the path direction."]
 
 [[behavior]]

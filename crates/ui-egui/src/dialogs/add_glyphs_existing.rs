@@ -14,7 +14,7 @@ pub const DIALOG: Dialog = Dialog {
     follow_up: true,
     after: Some(After { command: "glyph.addGlyphs", params: follow_up }),
     buttons: ["Keep Existing", "Cancel"],
-    third: Some(Third { id: "replace", caption: "Replace", key: "onExisting", ok: "keep", value: "replace" }),
+    third: Some(Third { id: "replace", caption: "Replace", key: "onExisting", ok: "keep", value: "replace", ok_caption: None }),
     message: "Some of these glyphs are in the font already.",
     ..Dialog::new("dialog.addGlyphsExisting", "Glyphs Already in Font", "glyph.addGlyphs", Fields::Targeted(fields))
 };
