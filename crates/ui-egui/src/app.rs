@@ -68,6 +68,9 @@ impl FontcraftApp {
             self.session.execute(id, params).map_err(|e| e.to_string())
         };
         self.after_command();
+        if result.is_ok() && matches!(id, "audit.run" | "audit.fix") {
+            self.state.audit.reread = true;
+        }
         match &result {
             Ok(_) if QUIET.contains(&id) => {}
             Ok(_) => self.state.status = format!("{id}: done"),

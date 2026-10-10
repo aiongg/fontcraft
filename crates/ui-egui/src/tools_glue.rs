@@ -353,7 +353,7 @@ pub fn key_mods(m: egui::Modifiers) -> Modifiers {
 /// one is for context menus.
 pub fn collect(tools: &mut ToolsState, ui: &egui::Ui, response: &egui::Response, rect: Rect) {
     tools.canvas = Some(rect);
-    let over = response.contains_pointer();
+    let over = response.hovered();
     let (events, mods, double) = ui.input(|i| {
         let double = i.pointer.button_double_clicked(PointerButton::Primary).then(|| i.pointer.interact_pos()).flatten();
         (i.events.clone(), i.modifiers, double)
