@@ -155,6 +155,26 @@ normally add.
 the selection's bounding box, ignoring the origin. Path > Align Selection (Cmd+Shift+A) is a
 separate command that does respect the origin setting (see the path editing notes).
 
+**How FontCraft applies them (our design).**
+
+- Every button is one affine map about the origin. A tool or the bounding box passes its own
+  point as `origin` (`{mode: "reference", point: [x, y]}`) and runs the same command inside an
+  interaction, so a drag is one undo step.
+- `origin` takes the four modes of the table above. The shell keeps the chosen mode
+  (`transform.setOrigin` is a shell command); the engine command receives it each time.
+  Default: the centre of the selection's box.
+- The selection's box is measured from the addressed nodes and handles, the curves of whole
+  paths, the outlines of components, and the anchors, guides and annotations named. For a whole
+  layer it is the box of its shapes, or of its anchors when it has none.
+- An addressed on-curve node carries its handles. A whole layer means its shapes and anchors;
+  its guides stay where they are.
+- A component or image keeps its decomposed placement when the map has no rotation or slant;
+  otherwise its placement becomes a matrix.
+- Points and anchors are rounded to the grid after the map; guides and annotations are not.
+- Align: the objects are each shape, each addressed on-curve node with its handles, each lone
+  handle and each anchor; without target lists, every shape of the layer. Fewer than two
+  objects change nothing and the result carries a message (question 7).
+
 **Booleans.**
 
 | Operation | With a selection | Without a selection |
@@ -198,6 +218,13 @@ operation the Remove Overlap export option runs on every glyph.
    **Answered for M3 (our decision, 2026-10-09):** slant is a shear by the tangent of the angle
    about the origin. Opposite buttons are exact for mirroring and 90° rotation; other pairs are
    exact up to grid rounding. The rest of this question stays open.
+   **Further choices made when building it (2026-10-10), unconfirmed:** Slant Up moves what lies
+   right of the origin up, Slant Down moves it down. The metrics-point origin sits at half the
+   advance width for every operation, not only mirroring. Opposite buttons are exact because
+   quarter turns use exact sines and cosines and each result is rounded to the grid; no
+   unrounded positions are kept. A rotation by another angle is undone only up to grid rounding
+   and only about a fixed origin (reference or metrics point): the box of a turned selection is
+   a different box, so a box origin moves between the two clicks.
 6. Which icon is "centre horizontally" and which "centre vertically": the handbook lists six
    align buttons but the wording of the two centre buttons can be read either way.
 7. Align with a single selected object or a single point: no-op, or aligned to something else

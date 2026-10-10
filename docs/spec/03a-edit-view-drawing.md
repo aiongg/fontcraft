@@ -309,6 +309,13 @@ baseline × the vertical through the point where the slanted LSB crosses half th
 
 Equivalent manual route: set width or height to 0 in the Info box (`align.viaZeroDimension`).
 
+Headless form (our design): `axis` is `auto`, `vertical` (the points share one x) or
+`horizontal` (they share one y). The coordinate is the origin's: for a box origin, the left,
+centre or right (bottom, centre or top) of the box around the points; for the other modes, the
+origin point's x or y. Whole paths named in `shapes` take part with all their points; a single
+node with no background node to go to, or fewer than two points, changes nothing and the result
+carries a message. The anchor and component cases are M6.
+
 ## 11. Duplicating and deleting
 
 - `Alt`+drag a selection drags a copy (`duplicate.optionDrag`). With a partial path selected the

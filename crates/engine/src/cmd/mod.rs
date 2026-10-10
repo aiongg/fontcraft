@@ -22,6 +22,7 @@ mod meta;
 mod path;
 mod session;
 mod spacing;
+pub mod transform;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -161,6 +162,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(annotation::specs());
         v.extend(background::specs());
         v.extend(layers::specs());
+        v.extend(transform::specs());
         v
     })
 }

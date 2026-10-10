@@ -142,6 +142,19 @@ selected.
   Origin baseline gives `Transformations;Slant:10;SlantCorrection:0;Origin:4;`: no spaces, a
   semicolon after every item, and fields at their neutral value left out.
 
+How FontCraft runs it (our design, unconfirmed):
+
+- The map scales, then slants, about the origin, then translates.
+- The default origin is the baseline. A metrics origin sits at half the advance width.
+- `string` takes an export string in place of the other settings, so the dialog, an agent and
+  export run the same code. A missing `ScaleX` or `ScaleY` means 100; the writer writes each axis
+  that is not 100 and always writes `Origin`. `SlantCorrection:1` is Cursivy. `include` and
+  `exclude` limit the glyphs; with neither `glyph` nor `glyphs`, every glyph is changed.
+- `LSB`, `RSB` and `Width` belong to Transform Metrics (M5); a string holding them is refused
+  until then.
+- Cursivy is refused: with a clear error when the master has no horizontal and vertical stems,
+  and as not supported yet otherwise (the correction is undocumented).
+
 ### Interpolate with Background (`path.interpolateWithBackground`, Path menu)
 
 `amount` in percent: 0 keeps the foreground, 100 gives the background shape, between blends, outside
