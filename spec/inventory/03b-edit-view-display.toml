@@ -156,7 +156,10 @@ milestone = "M3"
 summary = "Chooses which of the nine points of the selection bounding box the X and Y fields of the Info box report and edit. The chosen point is highlighted in blue; picking the centre makes X/Y the centre of the selection."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Built in M3.15. Default bottom left (our choice, the default of `selection.getInfo`; the handbook gives none)."
+notes = "Built in M3.15. Bottom left is also the default of `selection.getInfo`."
+guesses = [
+  "The reference point starts at bottom left; the handbook gives no default.",
+]
 
 [[command]]
 id = "selection.getInfo"
@@ -170,6 +173,9 @@ milestone = "M3"
 summary = "Query returning what the selection Info box shows: bounding box position at the reference point, width and height, and for a single node its coordinates, and for a single handle also delta X, delta Y and length to its on-curve node. Headless counterpart of reading the Info box; not a reference menu item."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "inferred"
+guesses = [
+  "Our own query; its fields follow the Info box, and its default reference point (bottom left) is ours.",
+]
 
 [[command]]
 id = "selection.setPosition"
@@ -330,7 +336,10 @@ milestone = "M3"
 summary = "Increases the Edit View magnification by one step. The step size is not stated in the handbook."
 ref = "Edit View › Glyph Display › Zooming"
 status = "handbook"
-notes = "Built in M3.2 (our decision, 03b open question 8): one step multiplies the scale by √2; the zoom value stays between 50 and 64,000."
+notes = "Built in M3.2."
+guesses = [
+  "One step multiplies the scale by √2, and the zoom value stays between 50 and 64,000 (03b question 8).",
+]
 
 [[command]]
 id = "view.zoomOut"
@@ -357,7 +366,10 @@ milestone = "M3"
 summary = "Sets the zoom so that the span from descender to ascender of the active layer fills the window as far as possible."
 ref = "Edit View › Glyph Display › Zooming"
 status = "handbook"
-notes = "Built in M3.2 (our decision): the descender-to-ascender span, or the advance width when that is the tighter limit, fills the window less 8% on each side; the glyph's centre goes to the window's centre."
+notes = "Built in M3.2: the glyph's centre goes to the window's centre."
+guesses = [
+  "The descender-to-ascender span, or the advance width when that is the tighter limit, fills the window less 8% on each side.",
+]
 
 [[command]]
 id = "view.zoomToActualSize"
@@ -398,7 +410,10 @@ milestone = "M3"
 summary = "Zooms and scrolls so that a given canvas rectangle fills the window. Headless form of dragging a rectangle with the Zoom tool."
 ref = "Edit View › Glyph Display › Zooming"
 status = "inferred"
-notes = "Built in M3.2: `rect` is in the edited glyph's font units; the rectangle fills the window less 8% on each side."
+notes = "Built in M3.2: `rect` is in the edited glyph's font units."
+guesses = [
+  "The rectangle fills the window less 8% on each side, the margin of Zoom to Active Layer.",
+]
 
 [[command]]
 id = "view.scrollTo"
@@ -413,6 +428,9 @@ summary = "Pans the Edit View canvas to an absolute position or by an offset. He
 ref = "Edit View › Glyph Display › Panning"
 status = "inferred"
 notes = "Built in M3.2: `x` and `y` name the font point (edited glyph's units) shown at the window's centre; `dx` and `dy` then move the content by that many screen points, right and down. The wheel scrolls through this command; Shift turns a vertical wheel horizontal. Scroll bars are not drawn yet."
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[panel]]
 id = "editView.bottomBar"
@@ -652,6 +670,9 @@ summary = "Query returning the state of every View-menu display toggle, the zoom
 ref = "Edit View › Glyph Display › View Options"
 status = "inferred"
 notes = "Built in M3.2: returns every toggle by its camelCase name (`nodes`, `metrics`, `fillPreview`…), `palette`, `zoom`, `center` (edited glyph's units), `tab`, `direction` (always `ltr` until text mode) and `previewFeatures` (empty until text mode)."
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[behavior]]
 id = "view.reporterPluginsInViewMenu"
@@ -708,7 +729,11 @@ milestone = "M3"
 summary = "Toggles between editing the layer's foreground and its background. While the background is the active side the canvas is drawn slightly darker."
 ref = "Edit View › Background"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Edit Background with Cmd+B. Not run. Built in M3.10 as the handbook describes it, not yet observed: a shell command that sets the tab's edited side and clears the selection. While the background is edited the canvas draws it as the outline with its nodes, the tools and the Palette work on it, and every command the shell runs that takes `side` gets `side: \"background\"`. Our decisions: the side belongs to the tab and stays when another glyph, layer or master is edited; audit markers are not drawn on the background."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Edit Background with Cmd+B. Not run. Built in M3.10 as the handbook describes it, not yet observed: a shell command that sets the tab's edited side and clears the selection. While the background is edited the canvas draws it as the outline with its nodes, the tools and the Palette work on it, and every command the shell runs that takes `side` gets `side: \"background\"`."
+guesses = [
+  "The edited side belongs to the tab and stays when another glyph, layer or master is edited.",
+  "Audit markers are not drawn on the background.",
+]
 
 [[command]]
 id = "path.selectionToBackground"
@@ -723,6 +748,9 @@ summary = "Replaces the whole content of the background with a copy of the curre
 ref = "Edit View › Background"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Selection to Background with Cmd+J. Not run."
+guesses = [
+  "A selected point or segment copies its whole path, and the other side's guides, hints, annotations and image stay; the handbook does not say what is replaced.",
+]
 
 [[command]]
 id = "path.addSelectionToBackground"
@@ -736,6 +764,9 @@ milestone = "M3"
 summary = "Alt variant of Selection to Background: copies the selection into the background and keeps what is already there."
 ref = "Edit View › Background"
 status = "handbook"
+guesses = [
+  "A copied anchor replaces the background's anchor of the same name.",
+]
 
 [[command]]
 id = "path.swapWithBackground"
@@ -750,6 +781,9 @@ summary = "Exchanges the full contents of the foreground and the background of t
 ref = "Edit View › Background"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Swap with Background with Cmd+Ctrl+J. Not run."
+guesses = [
+  "Swap exchanges shapes, anchors, guides, hints and annotations but not the placed image, and removes a background the swap leaves empty.",
+]
 
 [[command]]
 id = "path.clearBackground"
@@ -763,6 +797,9 @@ milestone = "M3"
 summary = "Empties the background layers of the selected glyphs. In the reference it only appears in the Path menu while Alt is held; which entry it replaces is not stated."
 ref = "Edit View › Background"
 status = "handbook"
+guesses = [
+  "Clear Background is its own Path menu item and acts on the active layer of the targeted glyphs, image included (03b question 2).",
+]
 
 [[command]]
 id = "path.assignBackground"
@@ -777,6 +814,9 @@ summary = "Copies outlines from another font file into the background of every s
 ref = "Edit View › Background"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Assign Background… without a shortcut. Not run."
+guesses = [
+  "Glyphs are matched by name and masters by name, then by position; a source with fewer masters gives its first (03b question 3).",
+]
 
 [[behavior]]
 id = "background.everyLayerHasOne"
@@ -802,7 +842,10 @@ milestone = "M3"
 summary = "While the background is displayed, its nodes and outlines are snapping targets for edits on the active side."
 ref = "Edit View › Background"
 status = "handbook"
-notes = "Built in M3.9 (our reading): the background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides. Its outlines between nodes are not targets. They count whenever the layer has a background: Show Background does not turn them off yet."
+notes = "Built in M3.9. They count whenever the layer has a background: Show Background does not turn them off yet."
+guesses = [
+  "The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets.",
+]
 
 [[behavior]]
 id = "background.darkenedCanvas"
@@ -1352,7 +1395,12 @@ milestone = "M3"
 summary = "Read-only tool for coordinates and distances. It labels all points of every glyph visible in the tab and measures along a dragged ruler, showing the ruler's angle at its end."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: with the Measurement tool active, every node and handle is labelled with its X and Y, and the deltas between consecutive on-curve nodes appear in red as dx, dy pairs. Not shown: the ruler drag, Shift, G, the temporary-tool keys. Built in M3.9 (our reading where the handbook is silent): the ruler's ends snap unless Ctrl is held; Shift keeps it horizontal or vertical, whichever is nearer; the ruler stays until the next press, Escape or a tool change. G with any modifiers adds the measurement guide. The labels cover the edited glyph only, and Cmd and Cmd+Ctrl+Alt do not switch tools yet."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: with the Measurement tool active, every node and handle is labelled with its X and Y, and the deltas between consecutive on-curve nodes appear in red as dx, dy pairs. Not shown: the ruler drag, Shift, G, the temporary-tool keys. Built in M3.9. The labels cover the edited glyph only, and Cmd and Cmd+Ctrl+Alt do not switch tools yet."
+guesses = [
+  "The ruler's ends snap unless Ctrl is held, and Shift keeps it horizontal or vertical, whichever is nearer.",
+  "The ruler stays until the next press, Escape or a tool change (03b question 9).",
+  "G with any modifiers adds the measurement guide.",
+]
 
 [[command]]
 id = "measure.ruler"
@@ -1366,7 +1414,11 @@ milestone = "M3"
 summary = "Query returning the points where a line segment, or the whole line of a guide, crosses the layer's outlines and components, the distances between consecutive crossings with X deltas also relative to the italic angle, and the line's angle. Headless form of dragging a ruler with the Measurement tool and of the numbers a measurement guide prints; overlapping regions are treated as merged."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "inferred"
-notes = "Merging uses the non-zero winding rule: a crossing counts only where the line passes between outside and inside the outline. A line that only touches a contour does not cross it. Each gap says whether it lies inside the outline (a stem) or outside (a counter)."
+notes = "Each gap says whether it lies inside the outline (a stem) or outside (a counter)."
+guesses = [
+  "Crossings follow the nonzero winding rule, and a line that only touches a contour does not cross it; the handbook does not say how the reference merges overlapping contours.",
+  "Components are measured like paths, and the ruler stays until the next click or tool change (03b question 10).",
+]
 
 [[command]]
 id = "measure.coordinates"
@@ -1380,7 +1432,10 @@ milestone = "M3"
 summary = "Query returning every on-curve node, off-curve point and anchor of a layer with coordinates, plus the X and Y deltas between consecutive on-curve nodes with X corrected for the italic angle. Headless form of the labels the Measurement tool draws."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "inferred"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: the Measurement tool labels every node and handle with X and Y and shows dx, dy deltas between consecutive on-curve nodes, the data this query returns. The query itself is our design."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: the Measurement tool labels every node and handle with X and Y and shows dx, dy deltas between consecutive on-curve nodes, the data this query returns."
+guesses = [
+  "The query is our design; its data is what the Measurement tool's labels show.",
+]
 
 [[command]]
 id = "guide.toggleMeasurement"
@@ -1520,7 +1575,11 @@ milestone = "M3"
 summary = "Tool for attaching notes and correction marks to a glyph layer. What a click does depends on the sub-tool chosen in the annotation palette. The shortcut is stated in the TrueType hinting chapter, where the same key does something else while the instructor tool is active."
 ref = "Edit View › Annotating"
 status = "handbook"
-notes = "Built in M3.16 (our design): each sub-tool is a tool of its own (`annotationSelect` … `annotationMinus`); A keeps the sub-tool in use, else returns to the one used last (Annotation Selection before any; Shift+A steps to the next, as for every shared button), and `tool.select` with `annotation` picks Annotation Selection. The tool takes Cmd+A, the arrow keys and Delete before the menu shortcuts. Handles show and work on selected annotations only."
+notes = "Built in M3.16: each sub-tool is a tool of its own (`annotationSelect` … `annotationMinus`); A keeps the sub-tool in use, else returns to the one used last (Annotation Selection before any; Shift+A steps to the next, as for every shared button), and `tool.select` with `annotation` picks Annotation Selection. The tool takes Cmd+A, the arrow keys and Delete before the menu shortcuts."
+guesses = [
+  "Each annotation sub-tool is a tool of its own, and A returns to the sub-tool used last (Annotation Selection before any).",
+  "Handles show and work on selected annotations only.",
+]
 
 [[tool]]
 id = "annotationSelect"
@@ -1623,6 +1682,9 @@ milestone = "M3"
 summary = "Adds one annotation of the given type to a layer. Width applies to text notes, angle to arrows and diameter to circles; a value given for another type is an error. The handbook gives no defaults; ours are a text box 200 units wide, an arrow at 45° and a circle 100 units across. Positions are not rounded to the grid."
 ref = "Edit View › Annotating"
 status = "inferred"
+guesses = [
+  "New annotations get a text box 200 units wide, an arrow at 45° and a circle 100 units across; the handbook gives no defaults (03b question 11).",
+]
 
 [[command]]
 id = "annotation.update"
@@ -1703,6 +1765,9 @@ milestone = "M3"
 summary = "Query returning the annotations stored on a layer, in list order, with type, position and the values the type uses: text and width for a note, angle for an arrow, diameter for a circle. A type FontCraft does not know is returned as stored, with every value the file holds."
 ref = "Edit View › Annotating"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[behavior]]
 id = "annotation.storedPerLayer"

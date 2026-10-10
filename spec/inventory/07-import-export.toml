@@ -35,6 +35,9 @@ milestone = "M2"
 summary = "Exports every open document in one go without showing the export dialog; the menu item replaces Export… while Option is held. The handbook does not say which options are used; we assume each document's last-used export settings (to be confirmed). FontCraft has no remembered settings yet, so the command takes them as parameters: every exportable instance of each chosen document, in each outline flavour and container asked for, into one destination folder, reporting what it wrote and what it skipped."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
+guesses = [
+  "The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters.",
+]
 
 [[command]]
 id = "file.exportStatic"
@@ -218,6 +221,9 @@ milestone = "M2"
 summary = "Each exported file is named by the font's PostScript name (family and style without spaces, joined by a hyphen) plus the extension of its flavour and container: .ttf or .otf, .woff, .woff2. An instance's fileName custom parameter replaces that stem. FontCraft drops characters that cannot be in a file name, and names the files of a font with no family name by the source file's name without its extension (Draft-Bold.ttf, not -Bold.ttf); the name table keeps the empty family."
 ref = "Import & Export › Exporting Font Files; Appendix › Custom Parameters › fileName"
 status = "memory"
+guesses = [
+  "The PostScript-name stem is recalled from the reference, not read in a source; dropping characters a file name cannot hold and falling back to the source file's name are ours.",
+]
 
 [[behavior]]
 id = "export.instancesBetweenMasters"
@@ -234,6 +240,9 @@ milestone = "M2"
 summary = "An export that writes both outline flavours at once (file.exportAll, font.compile) puts each flavour's files into a subfolder named ttf or otf of the destination, so the WOFF and WOFF2 files of the two flavours do not overwrite each other. Two fonts with the same file name in one export: the later one is kept, with a warning."
 ref = "docs/spec/40-compile.md › 1.12 Export"
 status = "inferred"
+guesses = [
+  "An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented.",
+]
 
 [[behavior]]
 id = "export.failingExportWritesNothing"
@@ -561,6 +570,9 @@ milestone = "M1"
 summary = "Opens a source (.glyphs, .glyphspackage, .ufo) or a compiled font (.otf, .ttf, .ttc, .pfb) as a document. This chapter states what can be opened but not the menu item or its shortcut, so label and menu are our assumption; fontIndex for collections is our addition. The shortcut is the platform convention; the chapter does not state it."
 ref = "Import & Export › Opening Font Files"
 status = "handbook"
+guesses = [
+  "The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.",
+]
 
 [[behavior]]
 id = "open.compiledFormats"
@@ -672,7 +684,10 @@ milestone = "M3"
 summary = "Imports the vector paths of PDF, EPS or SVG files as glyph outlines. From Font View several files are matched to glyphs by file name; from Edit View one file goes into the current glyph. With an explicit glyph parameter the file-name matching is bypassed."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
-notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route. The handbook does not say how a drawing is scaled; ours reads one font unit per SVG unit with SVG y = 0 at the ascender (`scale: em` fits the drawing's box to the em) and rounds to the grid as a paste does. File › Import › Outlines… in the desktop app opens the system file chooser (SVG files, several at once) and imports them as the person's run, so dialog.importOutlinesMissingGlyph can follow; without a chooser it says to run the command with `files`. From Edit View the files are matched by name too, not put into the current glyph (not built)."
+notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route. `scale: em` fits the drawing's box to the em, and points are rounded to the grid as a paste does. File › Import › Outlines… in the desktop app opens the system file chooser (SVG files, several at once) and imports them as the person's run, so dialog.importOutlinesMissingGlyph can follow; without a chooser it says to run the command with `files`. From Edit View the files are matched by name too, not put into the current glyph (not built)."
+guesses = [
+  "An SVG reads as one font unit per SVG unit with SVG y = 0 at the ascender; the handbook does not say how a drawing is scaled.",
+]
 
 [[panel]]
 id = "dialog.importOutlinesMissingGlyph"
@@ -684,7 +699,10 @@ milestone = "M3"
 summary = "Prompt shown once per imported file whose base name matches no glyph in the font."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
-notes = "The handbook asks once per file, with OK (skip) and Add Glyph. FontCraft asks once for all the files `file.importOutlines` lists as `unmatched`: OK runs it again on them with `onMissingGlyph` (add creates each glyph), with a live preview; Cancel skips them. It opens after the person runs the import (menu, shortcut), not after a control-channel or MCP run. The buttons read Add Glyphs and Skip, as one question covers every file; the handbook's per-file question has Add Glyph and OK (skip). Documented but not yet observed."
+notes = "The handbook asks once per file, with OK (skip) and Add Glyph. FontCraft asks once for all the files `file.importOutlines` lists as `unmatched`: OK runs it again on them with `onMissingGlyph` (add creates each glyph), with a live preview; Cancel skips them. It opens after the person runs the import (menu, shortcut), not after a control-channel or MCP run. Documented but not yet observed."
+guesses = [
+  "One question covers every unmatched file, with the buttons Add Glyphs and Skip; the handbook asks once per file, with Add Glyph and OK (skip).",
+]
 
 [[behavior]]
 id = "import.outlinesBatchByFileName"
@@ -709,6 +727,9 @@ milestone = "M3"
 summary = "In Edit View the same command takes a single file and places its paths in the current glyph, regardless of the file's name. Whether existing shapes are kept or replaced, and which layer receives them, is not stated (we assume the active layer, appended)."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
+guesses = [
+  "A single file imported in Edit View is appended to the active layer; the handbook does not say whether existing shapes are kept or which layer receives them.",
+]
 
 [[behavior]]
 id = "import.outlinesDropStyling"
@@ -849,7 +870,11 @@ milestone = "M3"
 summary = "Offer shown when pasted outlines land far outside the glyph box. The handbook shows the dialog only as a picture, so button captions and the exact correction (translate only, or also scale) are unknown."
 ref = "Import & Export › Vector Drawing Applications"
 status = "handbook"
-notes = "Opened after `edit.paste` returns `outOfBounds`. OK runs `selection.move` on the paste's `selection` by its `correction` (dx, dy: the pasted box's bottom left to the origin), with a live preview; the correction only translates. It opens after the person pastes (menu, shortcut), not after a control-channel or MCP paste. The buttons read Move and Keep Position, with the line \"The pasted outline lies outside the glyph box.\" above the fields. Our choices; documented but not yet observed."
+notes = "Opened after `edit.paste` returns `outOfBounds`. OK runs `selection.move` on the paste's `selection` by its `correction` (dx, dy: the pasted box's bottom left to the origin), with a live preview; the correction only translates. It opens after the person pastes (menu, shortcut), not after a control-channel or MCP paste. Documented but not yet observed."
+guesses = [
+  "The correction only translates: it moves the pasted box's bottom left to the origin.",
+  "The buttons read Move and Keep Position, with the line \"The pasted outline lies outside the glyph box.\" above the fields.",
+]
 
 [[behavior]]
 id = "paste.outOfBoundsCorrection"
@@ -890,6 +915,9 @@ milestone = "M3"
 summary = "The handbook advises Sketch users to copy shapes with a 1 pt stroke and no fill to avoid doubled outlines. We read this as: a shape that has both fill and stroke may arrive as two contours; that reading is inferred, the cause is not explained."
 ref = "Import & Export › Vector Drawing Applications › Sketch"
 status = "inferred"
+guesses = [
+  "A pasted shape with both fill and stroke may arrive as two contours; this is our reading of the handbook's advice, which gives no cause.",
+]
 
 # ───────────────────────────── Projects ─────────────────────────────
 

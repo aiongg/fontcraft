@@ -30,13 +30,15 @@ The first build of the desktop app compiles the windowing and GPU stack and take
 | `test` | `cargo test --workspace` | a test fails |
 | `spec` | `cargo xtask spec` | the inventory breaks a rule of `spec/README.md` |
 | `parity` | `cargo xtask parity --check` | a registered command has no inventory row; a command is engine in one place and UI in the other; `docs/parity.md` is stale |
+| `guesses` | `cargo xtask guesses --check` | a live `inferred` or `memory` command has no `guesses` entry; `docs/guesses.md` is stale |
 | `assets` | `cargo xtask assets` | an asset (an image anywhere in the tree, or any file under `assets/`) has no row in `ASSETS.md`; a row names a file that is gone; a compiled font is in the tree, whatever its extension |
 | `brands` | `cargo xtask brands` | user-visible text names another vendor's product |
 | `layers` | `cargo xtask layers` | a crate depends upward, a UI crate is used below L6, a crate is not registered |
 | `wasm` | `cargo xtask wasm` | a library crate does not build for the browser |
 
 Run a step alone with `cargo xtask <step>`. After adding or renaming a command run `cargo xtask
-parity` and commit `docs/parity.md`.
+parity` and commit `docs/parity.md`; after changing a row's `guesses` run `cargo xtask guesses` and
+commit `docs/guesses.md`.
 
 ## Repository layout
 

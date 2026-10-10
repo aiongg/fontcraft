@@ -42,6 +42,11 @@ impl Row {
     pub fn str(&self, field: &str) -> &str {
         self.fields.get(field).and_then(Value::as_str).unwrap_or("")
     }
+
+    /// The row's `guesses`: choices of ours where no source says what the reference does.
+    pub fn guesses(&self) -> Vec<&str> {
+        self.fields.get("guesses").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default()
+    }
 }
 
 pub struct Inventory {
@@ -245,6 +250,12 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                 }
                 if !absent_or_str("notes") {
                     err("`notes` must be a string".into());
+                }
+                let guesses_ok = fields.get("guesses").is_none_or(|v| {
+                    v.as_array().is_some_and(|a| !a.is_empty() && a.iter().all(|g| g.as_str().is_some_and(|g| !g.trim().is_empty())))
+                });
+                if !guesses_ok {
+                    err("`guesses` must be a non-empty list of sentences".into());
                 }
                 if fields.contains_key("context") && kind != "command" {
                     err("only a command has `context`".into());

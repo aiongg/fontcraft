@@ -28,6 +28,8 @@ lists the decision as the owner's.
 ## 2. Adding a command: the checklist
 
 - [ ] Its row exists in `spec/inventory/*.toml` (add it if it is our own design, `status = "inferred"`).
+- [ ] Every choice of ours where no source says what the reference does is a sentence in the
+      row's `guesses`; a live `inferred` or `memory` command needs at least one.
 - [ ] The work is a function in the right lower-layer crate.
 - [ ] `cmd!(…)` in `crates/engine/src/cmd/<area>.rs`: the id from the inventory, label, menu
       path, shortcut, a params doc that starts with `{…}` and says what is returned after `→`.
@@ -37,7 +39,8 @@ lists the decision as the owner's.
       the parameter; the command sweep passes without special-casing.
 - [ ] If the junk-parameter generator has no value that could break your parameter kind, add one
       to `fontcraft_testkit::junk_values`.
-- [ ] `cargo xtask parity` (commit the regenerated `docs/parity.md`).
+- [ ] `cargo xtask parity` and `cargo xtask guesses` (commit the regenerated `docs/parity.md` and
+      `docs/guesses.md`).
 
 ## 3. Planning a milestone
 
@@ -48,7 +51,7 @@ made exact when they are about to be built.
 1. List the milestone's rows (`docs/parity.md` › By milestone gives the counts).
 2. Go through the open questions of its notes. For each: answer it by observation if the owner
    has the reference app or a tutorial video shows it (set `status = "observed"`), by an oracle if it is about output, or by a
-   decision of ours recorded in the note. A question that cannot be answered and blocks nothing
+   decision of ours recorded in the note and in the row's `guesses`. A question that cannot be answered and blocks nothing
    stays open.
 3. Verify every `memory` row or drop it.
 4. Group rows into packages that touch disjoint crates and files (§ 5), ordered by dependency.

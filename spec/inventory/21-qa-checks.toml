@@ -216,6 +216,9 @@ milestone = "M3"
 summary = "A curve segment reaches a horizontal or vertical extreme between its nodes instead of at a node. Extremes closer than `minDistance` units (default 1) to an existing node are ignored. The fix splits the segment at each extreme without changing its shape."
 ref = "Editor audit convention (extremum points); related: fontbakery opentype/points_out_of_bounds"
 status = "inferred"
+guesses = [
+  "The default `minDistance` of 1 unit is a first guess to tune on real fonts (21-qa question 5).",
+]
 
 [[check]]
 id = "check.outlines.inflections"
@@ -239,6 +242,9 @@ milestone = "M3"
 summary = "A curve segment deviates from the straight line between its end points by less than `maxDeviation` units (default 2) but is not exactly flat. The fix converts it to a line."
 ref = "Editor audit convention (almost-straight curves); extends checkoutlinesufo flat curves"
 status = "inferred"
+guesses = [
+  "The default `maxDeviation` of 2 units is a first guess to tune on real fonts (21-qa question 5).",
+]
 
 [[check]]
 id = "check.outlines.almostOrthogonalHandle"
@@ -251,6 +257,9 @@ summary = "A handle is within `maxAngle` degrees (default 2) of horizontal or ve
 ref = "Editor audit convention (slightly slanted handles)"
 status = "inferred"
 notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
+guesses = [
+  "The defaults `maxAngle` 2° and `maxOffset` 2 units are first guesses to tune on real fonts (21-qa question 5).",
+]
 
 [[check]]
 id = "check.outlines.zeroLengthHandle"
@@ -273,6 +282,9 @@ milestone = "M3"
 summary = "Two consecutive on-curve points are closer than `minDistance` units (default 1) without being identical. The fix merges them into one node, keeping the outer handles."
 ref = "Editor audit convention (duplicate or stacked nodes); extends checkoutlinesufo coincident points"
 status = "inferred"
+guesses = [
+  "The default `minDistance` of 1 unit is a first guess to tune on real fonts (21-qa question 5).",
+]
 
 [[check]]
 id = "check.outlines.duplicateContour"
@@ -353,6 +365,9 @@ milestone = "M3"
 summary = "A coordinate lies outside the range a compiled font can store (magnitude above 32766, code `beyond-storage`, fail) or implausibly far from the em square (more than `maxEmMultiple` em, default 4, code `far-from-em`, warn)."
 ref = "Editor audit convention; limit from fontbakery opentype/points_out_of_bounds"
 status = "inferred"
+guesses = [
+  "The default `maxEmMultiple` of 4 em is a first guess to tune on real fonts (21-qa question 5).",
+]
 
 [[check]]
 id = "check.outlines.nearAlignmentZone"
@@ -364,6 +379,9 @@ milestone = "M3"
 summary = "An extreme on-curve point lies just outside an alignment zone, within `margin` units (default 2) of its edge, so it will not be treated as an overshoot by the hinter."
 ref = "Editor audit convention (near-miss of zones); complements fontbakery outline_alignment_miss"
 status = "inferred"
+guesses = [
+  "The default `margin` of 2 units is a first guess to tune on real fonts (21-qa question 5).",
+]
 
 [[check]]
 id = "check.outlines.kinkedSmoothNode"
@@ -376,6 +394,9 @@ summary = "A node flagged smooth has incoming and outgoing directions that diffe
 ref = "Editor audit convention (non-collinear smooth nodes)"
 status = "inferred"
 notes = "Report-only in M3: no command carries the fix out yet (docs/spec/21-qa.md § 5)."
+guesses = [
+  "The default `maxAngle` of 1° is a first guess to tune on real fonts (21-qa question 5).",
+]
 
 [[check]]
 id = "check.outlines.unflaggedSmoothNode"
@@ -399,6 +420,9 @@ milestone = "M3"
 summary = "The two handles of a curve segment have very different relative lengths (ratio above `maxRatio`, default 4) or one handle is longer than the distance to the handles' intersection, which makes the curve lumpy."
 ref = "Editor audit convention (unbalanced handles)"
 status = "inferred"
+guesses = [
+  "The default `maxRatio` of 4 is a first guess to tune on real fonts (21-qa question 5).",
+]
 
 [[check]]
 id = "check.outlines.crossedHandles"
@@ -3300,6 +3324,9 @@ summary = "Returns everything known about one check: description, preconditions,
 ref = "Our design; cf. fontbakery check rationale display"
 status = "inferred"
 notes = "M3 returns no fix parameters: the registry does not hold them yet. The message codes are those the check emits, with `too-many-results` for a capped check."
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "audit.results"
@@ -3314,6 +3341,9 @@ summary = "Returns the cached results of the last run for a target without runni
 ref = "Our design"
 status = "inferred"
 notes = "M3 keeps the last run of each open document until the next run or until the document closes; saving keeps it. A glyph counts as edited when its layers differ from the run's."
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "audit.fix"
@@ -3328,6 +3358,9 @@ summary = "Applies the registered fix of every selected result that has one, as 
 ref = "AFDKO checkoutlinesufo -e, -o, -w, -d, --ignore-contour-order"
 status = "docs"
 notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. Fixes run through path.closeOpenPaths, path.tidyUpPaths, path.removeOverlap, path.correctPathDirection, path.addExtremes, path.makeNodeFirst and path.roundCoordinates; a fix without a command (the auditor fixes of docs/spec/21-qa.md § 5, and addInflections until path.addInflections exists) is skipped with the reason. The result cap does not hide findings from a fix. `decimal`, `keepContourOrder` and file targets wait for M12; `output` is refused."
+guesses = [
+  "An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).",
+]
 
 [[command]]
 id = "audit.clearCache"
@@ -3641,7 +3674,10 @@ milestone = "M3"
 summary = "Turns on or off the automatic re-run of the outlines profile on the glyph being edited."
 ref = "Our design"
 status = "inferred"
-notes = "Built in M3.17. Off when the app starts. While on, every change to the document re-runs the outlines profile on the edited layer (audit.liveAudit)."
+notes = "Built in M3.17. While on, every change to the document re-runs the outlines profile on the edited layer (audit.liveAudit)."
+guesses = [
+  "Live audit is off when the app starts; the default is ours.",
+]
 
 [[command]]
 id = "audit.toggleMarkers"
@@ -3655,7 +3691,10 @@ milestone = "M3"
 summary = "Shows or hides the on-canvas markers that flag the nodes, segments and components of current audit results in Edit View."
 ref = "Our design"
 status = "inferred"
-notes = "Built in M3.17. On when the app starts. Turning it on also reads the last audit.run again, so a run made while the glyph stayed unchanged shows."
+notes = "Built in M3.17. Turning it on also reads the last audit.run again, so a run made while the glyph stayed unchanged shows."
+guesses = [
+  "Markers are on when the app starts; the default is ours.",
+]
 
 [[command]]
 id = "audit.filterResults"

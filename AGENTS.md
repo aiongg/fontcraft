@@ -61,7 +61,7 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
 - **Oracles decide compiler questions.** Where FontCraft and a reference compiler disagree on a
   table, the difference is either fixed or written down in `docs/spec/40-compile.md` with the reason.
 - **The gate**: `cargo xtask ci` (fmt, clippy with the no-panic lints, tests, spec, parity,
-  assets, brands, layers, wasm), run once when a task or batch is done, or when the brief says.
+  guesses, assets, brands, layers, wasm), run once when a task or batch is done, or when the brief says.
   While working, `cargo check` and the tests of the crate you changed are enough. One task per
   commit, named by its id (`M1.3: …`).
 
@@ -91,3 +91,5 @@ model, commands), [`docs/decisions/`](docs/decisions/) (why things are the way t
   `docs/spec/`, has not been confirmed. Don't treat it as fact; mark it `observed` once checked
   against the running reference app, on our own fonts or in a public tutorial video named in the
   row's `notes`.
+- A choice of ours where no source says what the reference does goes into the row's `guesses`
+  list, one sentence each; `docs/guesses.md` is generated from them (`cargo xtask guesses`).

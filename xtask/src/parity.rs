@@ -11,7 +11,7 @@ use std::path::Path;
 
 use crate::spec::{self, Inventory, KINDS};
 
-fn live_ids() -> BTreeSet<&'static str> {
+pub fn live_ids() -> BTreeSet<&'static str> {
     fontcraft_engine::command_specs().iter().map(|c| c.id).chain(fontcraft_ui_egui::UI_COMMANDS.iter().map(|c| c.0)).collect()
 }
 

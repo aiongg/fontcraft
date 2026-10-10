@@ -737,6 +737,9 @@ milestone = "M2"
 summary = "Non-exporting glyphs, which underscore-named part glyphs are by default, are left out of the exported font; composites using them must therefore have those components decomposed at export. The decomposition step is our inference from the non-export rule."
 ref = "Reusing Shapes › Components › Underscore Components"
 status = "inferred"
+guesses = [
+  "Components that use non-exporting glyphs are decomposed at export; our inference from the non-export rule.",
+]
 
 # =====================================================================================
 # Smart components

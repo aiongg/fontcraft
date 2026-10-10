@@ -132,6 +132,9 @@ milestone = "M4"
 summary = "Our headless equivalent of clicking cells: sets the Font View glyph selection by name. Every batch command without explicit targets acts on this selection."
 ref = "Font View › Batch-Processing › Selecting Glyphs"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "fontView.getState"
@@ -2788,7 +2791,9 @@ milestone = "M3"
 summary = "Moves every node, handle, anchor and component offset of the targeted layers to the nearest position on the font's grid (whole units unless the grid spacing says otherwise)."
 ref = "Font View › Batch-Processing; Font Info › Other Settings (grid)"
 status = "handbook"
-notes = "FontCraft: a font whose grid is off (spacing 0) rounds to whole units."
+guesses = [
+  "A font whose grid is off (spacing 0) rounds to whole units.",
+]
 
 [[command]]
 id = "path.roundCoordinatesForAllMasters"
@@ -2802,6 +2807,9 @@ milestone = "M3"
 summary = "The Option-key form of Round Coordinates: applies it to every master layer of the targeted glyphs. An alias of path.roundCoordinates with allMasters; the label is ours."
 ref = "Font View › Batch-Processing"
 status = "handbook"
+guesses = [
+  "The label \"… for All Masters\" is ours; the handbook describes the Option key but not the item's label (03a question 18).",
+]
 
 [[command]]
 id = "path.removeOverlapForAllMasters"
@@ -2815,6 +2823,9 @@ milestone = "M3"
 summary = "The Option-key form of Remove Overlap: applies it to every master layer of the targeted glyphs. An alias of path.removeOverlap over all masters; the label is ours."
 ref = "Font View › Batch-Processing"
 status = "handbook"
+guesses = [
+  "The label \"… for All Masters\" is ours; the handbook describes the Option key but not the item's label (03a question 18).",
+]
 
 [[command]]
 id = "glyph.decomposeGlyphForAllMasters"
@@ -2841,4 +2852,7 @@ milestone = "M3"
 summary = "Rewrites cubic segments as quadratic ones, approximating within a tolerance (the compiler's by default), as TrueType outlines need. The opposite is path.convertToCubic."
 ref = "Font View › Batch-Processing"
 status = "handbook"
-notes = "FontCraft: new off-curve points are rounded to the grid. With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible."
+guesses = [
+  "New off-curve points are rounded to the grid.",
+  "With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible.",
+]

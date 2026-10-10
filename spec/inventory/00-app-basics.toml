@@ -16,6 +16,9 @@ milestone = "M0"
 summary = "Reverts the last change of the active document and moves it to the redo list. FontCraft keeps one history per document; the reference keeps one per glyph, with font-level changes outside it (docs/spec/00-open-decisions.md, D4)."
 ref = "platform convention"
 status = "memory"
+guesses = [
+  "The menu label and Cmd+Z are recalled from the reference, not read in a source.",
+]
 
 [[command]]
 id = "edit.redo"
@@ -29,6 +32,9 @@ milestone = "M0"
 summary = "Reapplies the change last undone. Any new change empties the redo list."
 ref = "platform convention"
 status = "memory"
+guesses = [
+  "The menu label and Cmd+Shift+Z are recalled from the reference, not read in a source.",
+]
 
 [[command]]
 id = "edit.cut"
@@ -42,6 +48,9 @@ milestone = "M3"
 summary = "Copies the targeted points, shapes, anchors and guides (edit.copy) and then deletes them (edit.delete), as one undo step. Font View cuts whole glyphs and text mode cuts text (M4, M5). The handbook names Cut in the Edit menu; the data it returns is our design (clipboard format)."
 ref = "Edit View › Duplicating Paths; Import & Export › Vector Drawing Applications"
 status = "inferred"
+guesses = [
+  "What Cut puts on the clipboard (our JSON text with an SVG flavour) is our format; the reference's clipboard content is not documented.",
+]
 
 [[command]]
 id = "edit.copy"
@@ -56,6 +65,9 @@ summary = "Returns the targeted points, shapes, anchors and guides as our JSON f
 ref = "Edit View › Duplicating Paths; Import & Export › Vector Drawing Applications"
 status = "inferred"
 notes = "Shell (M3.8): Cmd+C and Edit › Copy in Edit View run this on the selection and put the `json` text on the system clipboard. egui hands the platform one text per copy, so the SVG flavour reaches other apps only through this command's result. Cmd+X and Edit › Cut do the same with edit.cut. Nothing is copied while a text field has the keyboard or a dialog is open."
+guesses = [
+  "The clipboard text is our JSON format with an SVG flavour; what the reference puts on the clipboard is not documented.",
+]
 
 [[command]]
 id = "edit.paste"
@@ -70,6 +82,9 @@ summary = "Inserts a JSON fragment or SVG into the layer at the original coordin
 ref = "Edit View › Duplicating Paths; Import & Export › Vector Drawing Applications"
 status = "inferred"
 notes = "Shell (M3.8): Cmd+V in Edit View runs this with the system clipboard's text as `text` on the edited layer, as the person's run, so dialog.pastedOutlineBounds can follow. Edit › Paste asks the platform for the clipboard text first. Clipboard text over 16 MiB is refused with a message."
+guesses = [
+  "Paste reads our JSON clipboard format or SVG; which other clipboard data the reference accepts is not documented.",
+]
 
 [[command]]
 id = "file.close"
@@ -83,6 +98,9 @@ milestone = "M0"
 summary = "Closes the active document. With unsaved changes the app asks Save, Don't Save or Cancel; headless, the command fails unless discard is true."
 ref = "platform convention"
 status = "memory"
+guesses = [
+  "The Save, Don't Save and Cancel question and Cmd+W are recalled from the reference, not read in a source.",
+]
 
 [[command]]
 id = "file.openRecent"
@@ -135,7 +153,10 @@ milestone = "M3"
 summary = "Rewrites quadratic segments as cubic ones, exactly (every quadratic curve has one cubic form). The opposite, path.convertToQuadratic, approximates within the compiler's tolerance. Path › Other in Font View runs it on every selected glyph (fontView.batch.convertToCubic)."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
-notes = "FontCraft: the new handles are not rounded, so the outline stays exact; each implied on-curve point of a quadratic spline becomes a smooth node."
+notes = "Each implied on-curve point of a quadratic spline becomes a smooth node."
+guesses = [
+  "New handles are not rounded to the grid, so the outline stays exact; the handbook does not say whether the reference rounds them.",
+]
 
 [[command]]
 id = "document.inspect"
@@ -149,6 +170,9 @@ milestone = "M0"
 summary = "Summarises the open documents. `revision` grows with every change, so an agent can tell whether a document changed since it last looked, whoever changed it."
 ref = "FontCraft design (docs/control-protocol.md)"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "command.batch"
@@ -162,6 +186,9 @@ milestone = "M1"
 summary = "Runs several commands as one transaction and one undo step: if any step fails, none of them takes effect. The building block of actions, scripts and multi-step agent edits."
 ref = "FontCraft design, following the sibling apps"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "document.activate"
@@ -175,6 +202,9 @@ milestone = "M1"
 summary = "Makes another open document the one commands act on, chosen by its position among the open documents or by its file. The window's tab or document list calls it; agents call it to switch between fonts."
 ref = "FontCraft design, following the sibling apps"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[behavior]]
 id = "file.openTwiceActivates"
@@ -244,6 +274,9 @@ milestone = "M3"
 summary = "Opens a command's dialog, by the dialog's id or by the command it runs. Parameters of its fields set their first values; the others (glyph, glyphs, layer, points…) say what it acts on, else the selection does. A menu item whose command has a dialog opens it the same way. Agents fill it with ui.dialog.set and close it with ui.dialog.confirm or ui.dialog.cancel."
 ref = "FontCraft design (decision 0004, item 6)"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[behavior]]
 id = "dialog.livePreview"
@@ -252,6 +285,10 @@ milestone = "M3"
 summary = "A dialog is a form over its command's parameters. Every change of a field shows the command's result on the canvas at once, computed from the font as it was when the dialog opened, without an undo step. OK keeps the last preview as one undo step labelled with the dialog's title; Cancel puts back the font the dialog opened on. Filling the dialog and pressing OK gives the same font as running the command with the same parameters. Every filter with parameters has a dialog generated from its filter.list schema. While a dialog is open the rest of the app takes no editing input."
 ref = "FontCraft design (decision 0004, item 6)"
 status = "inferred"
+guesses = [
+  "Every filter dialog previews its result live and OK keeps it as one undo step; a tutorial video shows this for Transformations only.",
+  "Dialogs remember their last values for the session, and their first values are ours (11-filters open questions).",
+]
 
 [[behavior]]
 id = "dialog.fieldKeys"
@@ -260,4 +297,6 @@ milestone = "M3"
 summary = "In a dialog's number field, Return takes the typed value, Escape drops it and leaves the field, Tab and Shift+Tab take it and move to the next or previous field, Up and Down change the value by 1 and by 10 with Shift, each change previewed. Text that is not a value in the field's range is refused and the field keeps its value. With no field taking the keyboard, Return is OK and Escape is Cancel."
 ref = "Edit View › Measuring › Measuring with the Info box (the field rules); platform convention (Return and Escape)"
 status = "inferred"
-notes = "The field rules follow the handbook's Info box rows infoBox.fieldEditing and infoBox.arrowKeyStepping; they are documented for the Info box, not for dialogs, and not yet observed in a dialog."
+guesses = [
+  "Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only.",
+]

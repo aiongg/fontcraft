@@ -176,7 +176,10 @@ milestone = "M4"
 summary = "In Font View, opens the selected glyphs for editing in Edit View; double-clicking a glyph or a selection does the same. The reference gives the key but no menu label for it."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2 (our decision): shows the tab that holds exactly these glyphs if one is open, else opens a new tab."
+notes = "Built in M3.2."
+guesses = [
+  "An open tab that holds exactly these glyphs is shown instead of a new tab.",
+]
 
 [[command]]
 id = "view.showTab"
@@ -203,7 +206,10 @@ milestone = "M3"
 summary = "Activates the tab to the right of the current one."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2 (our decision): after the last tab comes Font View, and before Font View the last tab."
+notes = "Built in M3.2."
+guesses = [
+  "After the last tab comes Font View, and before Font View the last tab.",
+]
 
 [[command]]
 id = "view.showPreviousTab"
@@ -230,7 +236,11 @@ milestone = "M3"
 summary = "Closes the current Edit View tab. The close button that appears when the pointer is over a tab title does the same for that tab."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2 (our decision): `index` is a strip position (1 is Font View, which cannot be closed); the tab to the left of a closed showing tab shows next. Closed tabs are kept, the last 32, for Reopen Last Closed Tab."
+notes = "Built in M3.2: `index` is a strip position (1 is Font View, which cannot be closed)."
+guesses = [
+  "The tab to the left of a closed showing tab shows next.",
+  "The last 32 closed tabs are kept for Reopen Last Closed Tab.",
+]
 
 [[command]]
 id = "view.closeOtherTabs"
@@ -314,7 +324,15 @@ milestone = "M3"
 summary = "Pen tool for building Bézier outlines node by node. Clicks give straight joins, drags give curve handles whose length sets the curvature; it also opens paths at a node and inserts nodes at extremes and inflections."
 ref = "Edit View › Draw Tool"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 22:56–23:12 and 29:57–30:03: clicks place corner nodes joined by straight segments, a drag places a node with two handles and a curved segment, and a click on the first node closes the path, which then fills. Not shown: the Alt, Cmd and Space drag variants, opening a closed path at a node, Shift+click on a segment. At 22:57 a click on another path's segment starts the new line there; whether that also inserts a node into the clicked path is not visible (03a open question 3). FontCraft follows the handbook for the gestures not shown (documented, not yet observed). Our decisions (03a § 5): a click on a segment places the node on the segment and leaves the clicked path alone; Shift+click on a segment inserts at an extremum or inflection even while drawing; a click on an open end continues that path, and while drawing joins the two paths; a missing handle of a curved segment lies a third of the way from its node to the other handle; Shift keeps nodes and handles to 45° steps; Escape or another tool ends the path."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 22:56–23:12 and 29:57–30:03: clicks place corner nodes joined by straight segments, a drag places a node with two handles and a curved segment, and a click on the first node closes the path, which then fills. Not shown: the Alt, Cmd and Space drag variants, opening a closed path at a node, Shift+click on a segment. At 22:57 a click on another path's segment starts the new line there; whether that also inserts a node into the clicked path is not visible (03a open question 3). FontCraft follows the handbook for the gestures not shown (documented, not yet observed)."
+guesses = [
+  "A click on a segment places the new node on the segment and leaves the clicked path alone (03a question 3).",
+  "Shift+click on a segment inserts at an extremum or inflection even while drawing.",
+  "A click on an open end continues that path, and while drawing joins the two paths.",
+  "A missing handle of a curved segment lies a third of the way from its node to the other handle.",
+  "Shift keeps nodes and handles to 45° steps (03a question 4).",
+  "Escape or another tool ends the path.",
+]
 
 [[tool]]
 id = "pencil"
@@ -329,7 +347,11 @@ milestone = "M3"
 summary = "Freehand drawing tool aimed at tablets and styluses. The traced result follows the hand closely and therefore carries more nodes than a constructed path, so it normally needs cleaning up afterwards."
 ref = "Edit View › Pencil Tool"
 status = "handbook"
-notes = "Documented, not yet observed. Our decisions (03a § 5): the stroke is fitted with cubic curves within one screen point, so it stays node-heavy; a stroke that ends on its start, within the hit tolerance, gives a closed path."
+notes = "Documented, not yet observed."
+guesses = [
+  "The stroke is fitted with cubic curves within one screen point, so it stays node-heavy.",
+  "A stroke that ends on its start, within the hit tolerance, gives a closed path.",
+]
 
 [[tool]]
 id = "rectangle"
@@ -411,6 +433,9 @@ milestone = "M3"
 summary = "Makes the named pointer tool active in Edit View, as its toolbar button or key does. The control method ui.tool.select runs it. Our own command: the reference chooses tools only through the toolbar and keys."
 ref = "Edit View › Draw Tool; docs/control-protocol.md"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "tool.list"
@@ -424,6 +449,9 @@ milestone = "M3"
 summary = "Query that lists the pointer tools with their keys and toolbar groups and names the active one. The control method ui.tool.list runs it. Our own command."
 ref = "Edit View › Draw Tool; docs/control-protocol.md"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[panel]]
 id = "dialog.primitiveMeasurements"
@@ -435,7 +463,11 @@ milestone = "M3"
 summary = "Dialog shown after a single click with the Primitives tool; the typed measurements define the rectangle or ellipse that is then created at the clicked position. Field names, defaults and which point of the shape lands on the click are not documented."
 ref = "Edit View › Primitives"
 status = "handbook"
-notes = "A form over `path.addRectangle` (rectangle mode) or `path.addEllipse` (ellipse mode) with the click as `x`, `y` and a live preview. Our choices where the handbook is silent: width and height fields from 1 to 2,000,000 units, both opening at 100, and the click as the shape's bottom-left corner. Documented but not yet observed."
+notes = "A form over `path.addRectangle` (rectangle mode) or `path.addEllipse` (ellipse mode) with the click as `x`, `y` and a live preview. Documented but not yet observed."
+guesses = [
+  "The width and height fields run from 1 to 2,000,000 units and open at 100.",
+  "The click is the shape's bottom-left corner (03a question 5).",
+]
 
 [[command]]
 id = "path.addRectangle"
@@ -449,6 +481,9 @@ milestone = "M3"
 summary = "Headless equivalent of the rectangle primitive: appends a closed four-node rectangular path to the layer. Our own command; the reference only has the tool."
 ref = "Edit View › Primitives"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "path.addEllipse"
@@ -462,6 +497,9 @@ milestone = "M3"
 summary = "Headless equivalent of the ellipse primitive: appends a closed elliptical path with nodes at its four extremes to the layer. Our own command; the reference only has the tool."
 ref = "Edit View › Primitives"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "path.addPath"
@@ -475,6 +513,9 @@ milestone = "M3"
 summary = "Headless equivalent of drawing with the Draw tool: appends a path given as an ordered point list in path direction. Its nodes are rounded to the font's grid, like every point a command creates (Addressing, decision 0004). Our own command."
 ref = "Edit View › Draw Tool"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "layer.inspect"
@@ -488,6 +529,9 @@ milestone = "M3"
 summary = "Query that returns one layer's outline with the address of every shape, node, anchor, guide and annotation, in the form the target parameters of the editing commands use. Agents and tests read outlines with it. Our own command."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[panel]]
 id = "editView.toolbar"
@@ -504,7 +548,10 @@ milestone = "M3"
 summary = "Row of tool buttons above the Edit View canvas. A click makes the tool active (`tool.select`); a shared button's menu lists the tools of its group."
 ref = "Edit View › Draw Tool; Edit View › Cutting Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (https://www.youtube.com/watch?v=VGe96Qjlvvc; Glyphs 3), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. FontCraft: the buttons come from `tool.list` in its order; the icons are our own drawings (`crates/ui-egui/src/icons.rs`); the secondary button also opens a shared button's menu."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (https://www.youtube.com/watch?v=VGe96Qjlvvc; Glyphs 3), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. FontCraft: the buttons come from `tool.list` in its order; the icons are our own drawings (`crates/ui-egui/src/icons.rs`)."
+guesses = [
+  "A secondary click on a shared button also opens its menu; no source shows the reference doing so.",
+]
 
 [[behavior]]
 id = "tools.sharedButtonCycling"
@@ -513,7 +560,10 @@ milestone = "M3"
 summary = "Tools that share one toolbar button (Select/Lasso, the two Primitives modes, Erase/Knife) have one shortcut letter; pressing Shift plus that letter switches to the other tool of the group, and click-and-hold on the button opens a menu listing the group's tools."
 ref = "Edit View › Cutting Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. Not shown: Shift plus the letter (documented, not yet observed). FontCraft: the letter returns to the group's tool used last (the first one before any); Shift with the letter steps to the next tool of the group. The shared button shows the group's tool used last; holding it 0.4 s, or clicking it with the secondary button, opens the menu (`editView.toolbar`). The hold time is ours: the reference's is not documented."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. Not shown: Shift plus the letter (documented, not yet observed). FontCraft: the letter returns to the group's tool used last (the first one before any); Shift with the letter steps to the next tool of the group. The shared button shows the group's tool used last; holding it 0.4 s, or clicking it with the secondary button, opens the menu (`editView.toolbar`)."
+guesses = [
+  "Holding a shared toolbar button for 0.4 s opens its menu; the reference's hold time is not documented.",
+]
 
 [[behavior]]
 id = "points.terminology"
@@ -530,6 +580,9 @@ milestone = "M3"
 summary = "Every node is either smooth or corner. A smooth node keeps its two handles collinear at all times and is drawn as a green circle; a corner node lets its handles take any angle (collinear or not) and is drawn as a blue square. Node size and colours come from the settings."
 ref = "Edit View › Draw Tool"
 status = "handbook"
+guesses = [
+  "Selected nodes, handles and segments are drawn in orange; no source names the reference's selection colour.",
+]
 
 [[behavior]]
 id = "handles.display"
@@ -610,7 +663,10 @@ milestone = "M3"
 summary = "Main pointer tool: selects, moves, converts, duplicates, scales and rotates nodes, handles, segments, paths, anchors, guides and components, and gives access to the canvas context menu."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
-notes = "Context menu: the handbook documents only that right-click or Ctrl+click opens it for the item under the pointer. What it selects first, its sections and its item targets are our design, documented in docs/spec/03a § 6 (Canvas context menu) but not yet observed."
+notes = "Context menu: the handbook documents only that right-click or Ctrl+click opens it for the item under the pointer."
+guesses = [
+  "The canvas context menu's sections, item targets and what a right-click selects first are our design (docs/spec/03a § 6).",
+]
 
 [[tool]]
 id = "lasso"
@@ -635,6 +691,9 @@ summary = "A marquee picks up both nodes and handles that fall inside it; with O
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:28: a marquee over a whole glyph selects its nodes and its handles. Not shown: the Option variant."
+guesses = [
+  "A marquee selects the handles inside it whatever their node (03a question 7).",
+]
 
 [[behavior]]
 id = "selection.slantedMarquee"
@@ -668,6 +727,9 @@ summary = "A segment is treated as selected when both of its end nodes are selec
 ref = "Edit View › Deleting Nodes"
 status = "handbook"
 notes = "Video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.5: with the two end nodes of a segment selected, the segment between them is drawn highlighted. Not shown: the case of a selected handle."
+guesses = [
+  "Clicking a segment selects its two end nodes (03a question 7).",
+]
 
 [[command]]
 id = "edit.selectAll"
@@ -681,7 +743,10 @@ milestone = "M3"
 summary = "In edit mode the first use selects all paths of the layer; if all paths are already selected (or there are none left to add) it also selects all anchors and components, so selecting everything can take two presses."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "In Font View it selects every glyph: our choice, the handbook describes edit mode only. Edit View behaviour as documented, not yet observed."
+notes = "Edit View behaviour as documented, not yet observed."
+guesses = [
+  "In Font View it selects every glyph; the handbook describes edit mode only.",
+]
 
 [[command]]
 id = "edit.deselectAll"
@@ -722,6 +787,9 @@ milestone = "M3"
 summary = "With exactly one node or handle selected, moves the selection to the following point along the path. With an anchor selected it moves to the next anchor, and with a guide selected to the next guide."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
+guesses = [
+  "Tab steps through nodes in path order, then the next path, then anchors, then guides, then back to the start (03a question 8).",
+]
 
 [[command]]
 id = "selection.selectPrevious"
@@ -749,7 +817,10 @@ milestone = "M3"
 summary = "Headless equivalent of clicking and Shift-clicking: sets or amends the Edit View selection from explicit object references. Our own command."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "inferred"
-notes = "The selection belongs to the showing tab and to its edited glyph; it is cleared when another glyph is edited. An address that does not resolve is an error."
+notes = "An address that does not resolve is an error."
+guesses = [
+  "The selection belongs to the showing tab and is cleared when another glyph is edited; the reference's rule is not documented.",
+]
 
 [[command]]
 id = "selection.selectInRegion"
@@ -763,7 +834,9 @@ milestone = "M3"
 summary = "Headless equivalent of the marquee (optionally slanted) and of the lasso: selects the points inside a rectangle or polygon given in font units, with the same nodes-only and extend options as the pointer gestures. Our own command."
 ref = "Edit View › Free-form Selections"
 status = "inferred"
-notes = "The rectangle turns by angle about its corner (x, y), as a marquee turned with Ctrl does."
+guesses = [
+  "A turned region rotates about its corner (x, y), our reading of the marquee turned with Ctrl.",
+]
 
 # ───────────────────────────── Moving ─────────────────────────────
 
@@ -797,6 +870,9 @@ milestone = "M3"
 summary = "Moving a node moves the handles attached to it by the same offset even when those handles are not selected. Holding Option moves only the points that are actually selected."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
+guesses = [
+  "Alt with an arrow key moves only the selected points (03a question 1).",
+]
 
 [[behavior]]
 id = "move.nudge"
@@ -805,6 +881,9 @@ milestone = "M3"
 summary = "Nudging (Ctrl+Option while moving nodes, or Option pressed after a drag has begun) moves the selected nodes and at the same time rescales the surrounding unselected handles in proportion, so the neighbouring curves keep their character instead of being sheared."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
+guesses = [
+  "Ctrl+Alt with an arrow key nudges, by the arrow increments 1, 10 and 100 (03a question 2).",
+]
 
 [[behavior]]
 id = "move.handles"
@@ -846,6 +925,9 @@ milestone = "M3"
 summary = "Switches each selected node between smooth and corner (also run by double-clicking a node). Turning a corner smooth adds handles on both sides where missing and may bend the outline to line the handles up; with keepOutline (Alt+Return or Alt+double-click) the shape is left exactly as it is."
 ref = "Edit View › Converting Nodes and Segments"
 status = "handbook"
+guesses = [
+  "Turning a corner smooth adds missing handles a third of the way along the segment and turns handles that are not collinear to the bisector of their directions, keeping their lengths (03a question 9).",
+]
 
 [[command]]
 id = "path.toggleNodeTypeKeepingOutline"
@@ -910,7 +992,11 @@ milestone = "M3"
 summary = "Heuristically sets each node to smooth or corner and removes redundant points: handles lying on a straight segment, on-curve nodes sitting exactly on the line between their neighbours, and adjacent nodes with identical coordinates (which get merged). Works on the selected nodes, or on all nodes when nothing is selected."
 ref = "Edit View › Converting Nodes and Segments"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run. FontCraft: points within 0.01 units count as on a line or as one point; a node is smooth when a curve meets it and its two directions are within 1° (03a question 9). Segment changes need both end nodes selected. `straighten` (FontCraft's own, 0 to 100 units) also turns curves that stray less than that from their chord into lines; the audit's `tidyPaths` fix passes the deviation check.outlines.almostStraightCurve reported."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run. FontCraft: segment changes need both end nodes selected. `straighten` (FontCraft's own, 0 to 100 units) also turns curves that stray less than that from their chord into lines; the audit's `tidyPaths` fix passes the deviation check.outlines.almostStraightCurve reported."
+guesses = [
+  "Points within 0.01 units count as on a line or as one point.",
+  "A node counts as smooth when a curve meets it and its two directions are within 1° (03a question 9).",
+]
 
 [[command]]
 id = "path.tidyUpPathsForAllMasters"
@@ -967,7 +1053,10 @@ milestone = "M3"
 summary = "A beige diamond is drawn behind any node that sits precisely on one of the vertical metric lines, and a node inside an alignment zone with a beige circle, so their placement can be judged even when zoomed far out."
 ref = "Edit View › Nodes in Alignment Zones"
 status = "handbook"
-notes = "Built in M3.2 (our reading): \"vertical metric lines\" are the master's horizontal lines that measure height (ascender, cap height, x-height, baseline, descender, and any other metric but the italic angle). A node on one, within 1e-6 units, gets the diamond; otherwise a node inside an alignment zone gets the circle."
+notes = "Built in M3.2: a node on one, within 1e-6 units, gets the diamond; otherwise a node inside an alignment zone gets the circle."
+guesses = [
+  "\"Vertical metric lines\" are read as the master's height lines: ascender, cap height, x-height, baseline, descender and any other metric but the italic angle.",
+]
 
 [[behavior]]
 id = "nodes.duplicateHighlight"
@@ -1053,7 +1142,10 @@ milestone = "M3"
 summary = "With several nodes selected the Info box shows X, Y, width and height of the selection; editing X/Y moves it and editing width/height scales it about the reference point chosen in the nine-point origin control beside the fields. A closed lock scales width and height together, an open lock independently."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
-notes = "Built in M3.15: the lock is `infoBox.setSizeLock`, open by default (our choice; the handbook gives no default)."
+notes = "Built in M3.15: the lock is `infoBox.setSizeLock`."
+guesses = [
+  "The width and height lock starts open; the handbook gives no default.",
+]
 
 [[behavior]]
 id = "infoBox.pointCounts"
@@ -1077,7 +1169,10 @@ milestone = "M3"
 summary = "The lock between the width and height fields of the Info box. Closed, editing either scales the selection in both directions by the same factor; open, only in the edited one."
 ref = "Edit View › Scaling & Rotating"
 status = "inferred"
-notes = "The handbook describes the lock; the command id and label are ours. Open by default (our choice)."
+notes = "The handbook describes the lock; the command id and label are ours."
+guesses = [
+  "The lock starts open; the handbook gives no default.",
+]
 [[behavior]]
 id = "numberFields.arrowKeyStepping"
 area = "ui-chrome"
@@ -1102,6 +1197,9 @@ summary = "Lines up all selected nodes, handles and anchors on one coordinate. I
 ref = "Edit View › Aligning"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Align Selection with Cmd+Shift+A. Not run."
+guesses = [
+  "When width equals height the selection aligns on one X, and the transformation origin's column or row picks min, centre or max (03a question 13).",
+]
 
 [[behavior]]
 id = "align.viaZeroDimension"
@@ -1153,6 +1251,9 @@ summary = "Dragging a selection with Option held leaves the original in place an
 ref = "Edit View › Duplicating Paths"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible."
+guesses = [
+  "Alt held at mouse-down on a selection drags a copy, and Alt pressed after the drag started switches to nudge (03a question 1).",
+]
 
 [[command]]
 id = "edit.delete"
@@ -1167,6 +1268,10 @@ milestone = "M3"
 summary = "Removes the selection. A deleted node is taken out without opening the path, and the neighbouring handles are refitted so the remaining segment follows the old shape as closely as possible. The same key removes selected anchors and pen points."
 ref = "Edit View › Deleting Nodes"
 status = "handbook"
+guesses = [
+  "The refitted segment keeps its end nodes and the directions it leaves and enters them in, and fits the two handle lengths by least squares over the removed segments (03a question 10).",
+  "With only handles selected the segment becomes a line; with every node of a path selected the path is removed.",
+]
 
 [[command]]
 id = "edit.deleteInAllMasters"
@@ -1181,6 +1286,9 @@ milestone = "M3"
 summary = "Deletes the selected nodes with shape reconstruction, and removes the corresponding nodes in every master of the glyph as well."
 ref = "Edit View › Deleting Nodes"
 status = "handbook"
+guesses = [
+  "Nodes are matched across masters by address; a layer whose structure differs is skipped and listed (03a question 11).",
+]
 
 [[command]]
 id = "path.deleteAndBreak"
@@ -1298,6 +1406,9 @@ milestone = "M3"
 summary = "Headless equivalent of the Knife tool: the segment from `from` to `to` cuts every path it crosses. Along the line, crossings with closed paths are paired in order within each stretch that enters and leaves the filled area (nonzero winding), and each pair is joined by straight segments along the line, so the pieces close along the cut and pieces of overlapping paths join one another. A stretch where the line starts or ends inside a shape is not cut; points where the line only touches a path are not crossings. Open paths are split where the line crosses them. Our own command."
 ref = "Edit View › Cutting Paths"
 status = "inferred"
+guesses = [
+  "Crossings are paired within each stretch where the line enters and leaves the filled area, so a cut through overlapping paths joins their pieces; no source shows the Knife on overlapping paths.",
+]
 
 # ───────────────────────────── Re-segmenting (open corners) ─────────────────────────────
 
@@ -1314,7 +1425,12 @@ milestone = "M3"
 summary = "Context-menu command that replaces a selected corner node by two nodes whose segments cross in a small triangular overlap, so the two segments can be edited independently. Does nothing on smooth nodes; with a segment selected it opens the nodes at both ends of that segment."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30–15:36 and 28:34–28:45, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75–0:31: offered in the context menu of a selected corner node and of a selected segment; the corner becomes two nodes whose segments cross, leaving a small loop, and the nodes are then edited independently. Not shown: the no-op on smooth nodes, and that a selected segment opens the nodes at both of its ends. FontCraft: each end node moves along its own segment's direction, so the handles keep their directions. The distance is sqrt((dx·ox)² + (dy·oy)²) for a unit direction (dx, dy), where (ox, oy) is the overlap of `openCorner.overlapSize`. Corners whose two directions are within 1° of straight or reversed are left alone. A master with stems of one direction only uses that stem for both; a master without stems uses 4% of the em (our choice). `overlap` overrides both. The context menu lists it only when a selected on-curve node is a corner (not smooth) and not an end of an open path."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30–15:36 and 28:34–28:45, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75–0:31: offered in the context menu of a selected corner node and of a selected segment; the corner becomes two nodes whose segments cross, leaving a small loop, and the nodes are then edited independently. Not shown: the no-op on smooth nodes, and that a selected segment opens the nodes at both of its ends. FontCraft: the distance is sqrt((dx·ox)² + (dy·oy)²) for a unit direction (dx, dy), where (ox, oy) is the overlap of `openCorner.overlapSize`. `overlap` overrides it. The context menu lists it only when a selected on-curve node is a corner (not smooth) and not an end of an open path."
+guesses = [
+  "A master with stems of one direction only uses that stem for both directions, and a master without stems uses an overlap of 4% of the em.",
+  "Each end node moves along its own segment's direction, so the handles keep their directions.",
+  "Corners whose two directions are within 1° of straight or reversed are left alone.",
+]
 
 [[command]]
 id = "path.reconnectNodes"
@@ -1329,7 +1445,11 @@ milestone = "M3"
 summary = "Context-menu command with two uses: on the two nodes of an open corner it restores the single corner node; on any even number of selected nodes it pairs each node with its nearest selected neighbour and rewires the outline through those pairs, creating overlapping corners."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 28:34–28:35, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75: listed as the first item of the context menu, above Open Corner, with nodes selected. Its effect is not shown. FontCraft (03a question 15): pairs go nearest first. An open-corner pair becomes one node where the incoming direction of the first and the outgoing direction of the second meet. Any other pair is rewired: the path into each node continues, after a straight segment, along the path out of the other node; nodes at the same place become one corner. An odd number of nodes is refused."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 28:34–28:35, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75: listed as the first item of the context menu, above Open Corner, with nodes selected. Its effect is not shown. FontCraft: a pair that is not an open corner is rewired: the path into each node continues, after a straight segment, along the path out of the other node; nodes at the same place become one corner. An odd number of nodes is refused."
+guesses = [
+  "Pairs go nearest first, ties to the lower address (03a question 15).",
+  "An open-corner pair becomes one node where the incoming direction of the first and the outgoing direction of the second meet; any other pair is rewired with straight segments.",
+]
 
 [[command]]
 id = "path.sharpenCorner"
@@ -1395,7 +1515,10 @@ milestone = "M3"
 summary = "Node context-menu command that makes the clicked on-curve node the start node of its closed path, rotating the stored point order without changing the shape."
 ref = "Edit View › Controlling Path Direction"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30: Make Node First is listed in the context menu of a selected corner node, followed by a Reverse Contour item. Its effect is not shown. FontCraft: the context menu lists it only when every selected on-curve node lies on a closed path."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30: Make Node First is listed in the context menu of a selected corner node, followed by a Reverse Contour item. Its effect is not shown."
+guesses = [
+  "The context menu offers it only when every selected on-curve node lies on a closed path.",
+]
 
 [[command]]
 id = "path.reverseContours"
@@ -1424,6 +1547,9 @@ milestone = "M3"
 summary = "Option variant of Reverse Contours that reverses the corresponding paths on all masters of the glyph. The reference describes the modifier but not the alternate item's label."
 ref = "Edit View › Controlling Path Direction"
 status = "handbook"
+guesses = [
+  "The label \"Reverse Contours for All Masters\" is ours, and paths are matched across masters by address (03a questions 11 and 18).",
+]
 
 [[command]]
 id = "path.correctPathDirection"
@@ -1437,7 +1563,11 @@ milestone = "M3"
 summary = "Works out the proper direction of every path on the current layer (or on each selected glyph layer) from how the paths nest, and applies it. As side effects it reorders the layer's shapes and moves each path's start node to its bottom-left node."
 ref = "Edit View › Controlling Path Direction"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30 and 30:21–30:23: the Path menu lists Correct Path Direction with Cmd+Shift+R, and it is run. The reordering and the start-node change are not visible. FontCraft: a path is inside another when that one is larger, its bounding box holds the path's box, and most of the path's sample points (nodes and segment midpoints) lie inside it; paths that only overlap are both outer. Open paths keep their direction and start node. Components are sorted among the paths by the same key (the bottom-left corner of their outline's bounds); images keep their places."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30 and 30:21–30:23: the Path menu lists Correct Path Direction with Cmd+Shift+R, and it is run. The reordering and the start-node change are not visible. FontCraft: sample points are nodes and segment midpoints. Open paths keep their direction and start node. Components are sorted among the paths by the same key (the bottom-left corner of their outline's bounds); images keep their places."
+guesses = [
+  "A path is inside another when that one is larger, holds its bounding box and holds most of its sample points; paths that only overlap are both outer.",
+  "Shapes are sorted by the bottom-left corner of their bounds, and the start node is the lowest, then leftmost, on-curve node (03a question 16).",
+]
 
 [[command]]
 id = "path.correctPathDirectionForAllMasters"
@@ -1474,7 +1604,11 @@ milestone = "M3"
 summary = "Inserts nodes at the horizontal and vertical extremes of all paths on the active layer. An extreme is skipped when adding it would leave a very short segment (the existing node placement is assumed deliberate); a node sitting only slightly off an extreme is moved onto it, with the shape preserved as far as possible and its handles made exactly horizontal or vertical."
 ref = "Edit View › Extremes & Inflections"
 status = "handbook"
-notes = "FontCraft (03a question 17): a node within 2 units and 2° of an extreme keeps its place, and its handles within 2° of the axis are made exactly horizontal or vertical, which puts the extreme on the node. An extreme is skipped when the chord from it to the end of its segment, or to the extreme before it, is shorter than 3 units. New nodes are smooth and rounded to the grid, with their handles lined up with them."
+notes = "New nodes are smooth and rounded to the grid, with their handles lined up with them."
+guesses = [
+  "A node within 2 units and 2° of an extreme keeps its place, and its handles within 2° of the axis are made exactly horizontal or vertical (03a question 17).",
+  "An extreme is skipped when the chord from it to the end of its segment, or to the extreme before it, is shorter than 3 units.",
+]
 
 [[command]]
 id = "path.forceExtremes"
@@ -1488,7 +1622,10 @@ milestone = "M3"
 summary = "Option variant of Add Extremes that inserts a node at every extreme without the short-segment exception."
 ref = "Edit View › Extremes & Inflections"
 status = "handbook"
-notes = "FontCraft: every extreme that rounds to a new point is added; the near-extreme handle rule of Add Extremes still applies."
+notes = "The near-extreme handle rule of Add Extremes still applies."
+guesses = [
+  "Force Extremes adds every extreme that rounds to a new point, however short the segment it leaves.",
+]
 
 [[command]]
 id = "path.addInflections"
@@ -1502,7 +1639,10 @@ milestone = "M3"
 summary = "Inserts a node at every inflection of the targeted cubic segments, splitting each segment there without changing the outline. It is the repair the audit runs for check.outlines.inflections; the Draw tool's Shift+click adds one inflection at a time."
 ref = "Edit View › Extremes & Inflections; docs/spec/21-qa.md § 5"
 status = "inferred"
-notes = "Built in M3.18 as the audit fix `addInflections`, with the targets and result of path.addExtremes. An inflection within 1 unit of a segment end gets no node, the distance under which check.outlines.inflections ignores one. New nodes are smooth and rounded to the grid."
+notes = "Built in M3.18 as the audit fix `addInflections`, with the targets and result of path.addExtremes. New nodes are smooth and rounded to the grid."
+guesses = [
+  "An inflection within 1 unit of a segment end gets no node, the distance under which check.outlines.inflections ignores one.",
+]
 
 [[command]]
 id = "path.insertNode"
@@ -1517,6 +1657,9 @@ milestone = "M3"
 summary = "Headless equivalent of the Draw tool's Shift-click on a segment: splits a segment at a parameter, or at the extremum or inflection closest to a given position, without changing the shape. Our own command."
 ref = "Edit View › Extremes & Inflections"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[behavior]]
 id = "extremes.addedAtExportByFilter"
@@ -1541,7 +1684,10 @@ milestone = "M3"
 summary = "Context-menu command that restricts Edit View editing to the paths having at least one selected point: the nodes and handles of every other path are hidden. Filters, plug-ins and scripts are not restricted and still act on all paths."
 ref = "Edit View › Focusing & Locking"
 status = "handbook"
-notes = "Per tab, cleared when the edited glyph changes (03a question 19). Documented, not yet observed."
+notes = "Documented, not yet observed."
+guesses = [
+  "Path focus belongs to the tab and is cleared when the tab's edited glyph changes (03a question 19).",
+]
 
 [[command]]
 id = "path.clearFocusOnPaths"
@@ -1608,6 +1754,9 @@ milestone = "M3"
 summary = "Checkable item in a glyph's context menu that locks or unlocks the whole glyph. A locked glyph rejects every modification, whether from pointer tools, filters, plug-ins or scripts, and shows a lock icon in its top-right corner in both Edit View and Font View."
 ref = "Edit View › Focusing & Locking"
 status = "handbook"
+guesses = [
+  "Locks are stored in the file, and a glyph lock refuses every change to the glyph's own data (layers, outlines, anchors, guides, width, metrics keys) but not kerning (03a question 20).",
+]
 
 # ───────────────────────────── Strokes ─────────────────────────────
 
@@ -1643,7 +1792,13 @@ milestone = "M3"
 summary = "Writes the stroke attributes of one or more paths, the action behind the Stroke palette fields; setting width to null removes the stroke. The reference exposes these only as palette controls."
 ref = "Edit View › Creating Strokes"
 status = "inferred"
-notes = "Built in M3.11 (our decision): keys not given keep their values; `width: null` removes every stroke attribute. Stored as the `.glyphs` path attributes `strokeWidth`, `strokeHeight`, `strokePos`, `lineJoin`, `lineCapStart`, `lineCapEnd` and `fill`. The axis-aligned cap is stored as cap code 4 and a forced axis as the native key `lineCapAxis`; neither is confirmed against the reference's files."
+notes = "Built in M3.11: keys not given keep their values; `width: null` removes every stroke attribute. Stored as the `.glyphs` path attributes `strokeWidth`, `strokeHeight`, `strokePos`, `lineJoin`, `lineCapStart`, `lineCapEnd` and `fill`."
+guesses = [
+  "The axis-aligned cap is stored as cap code 4; not confirmed against the reference's files.",
+  "A forced cap axis is kept in the native key `lineCapAxis`, which .glyphs files do not hold, so saving as .glyphs loses it (a known loss).",
+  "A UFO keeps no stroke or mask attributes, so saving as UFO loses strokes and masks (a known loss).",
+  "Stroke positions and mask values keep the stored form of the document's .glyphs version, so converting a document between versions 3 and 4 changes where strokes sit and what masks do (a known loss until the reference's conversion is observed).",
+]
 
 [[behavior]]
 id = "stroke.nonDestructiveAttribute"
@@ -1716,7 +1871,12 @@ milestone = "M3"
 summary = "A stroke has one join style out of four, and open paths have a cap style out of five chosen separately for the start and the end node. The axis-aligned cap cuts the end parallel to the X or Y axis, picking whichever is closer to the cap's natural orientation unless an axis is forced."
 ref = "Edit View › Stroke Style"
 status = "handbook"
-notes = "Built in M3.11: documented, not yet observed; the geometry is our construction (docs/spec/03a § 17). Miter up to 4 half widths, then bevel. Round full is round on the outer side and fills the inner corner with an arc of half the stroke width. Round inset is a round cap that ends at the end node. Axis-aligned cuts through the middle of the band at the end node, and is a butt end when the path ends within about 6° of a forced axis."
+notes = "Built in M3.11: documented, not yet observed."
+guesses = [
+  "Every join and cap shape is our construction on offset curves (docs/spec/03a § 17): miter up to 4 half widths, then bevel.",
+  "Round full is round on the outer side and fills the inner corner with an arc of half the stroke width; round inset is a round cap that ends at the end node.",
+  "The axis-aligned cap cuts through the middle of the band at the end node and is a butt end when the path ends within about 6° of a forced axis.",
+]
 
 [[command]]
 id = "path.addPenPoint"
@@ -1792,7 +1952,10 @@ milestone = "M3"
 summary = "The final outline of a layer is the composite of its shapes taken in their stored order; order matters because a mask only affects the shapes below it."
 ref = "Edit View › Compositing"
 status = "handbook"
-notes = "Built in M3.11 (`fontcraft_pathops::composite`; `fontcraft_compile::drawing::layer_outline`, which the canvas and export share): strokes are expanded, then each mask acts on everything before it, components included. Version 4's intersecting mask (value 2) keeps only what lies inside it. Export applies the composite before overlap removal: a glyph whose layer has a stroke or a mask is compiled as contours only; a layer whose composite cannot be made (a stroke width given as an expression) is compiled from its shapes as they are, with a warning. Documented, not yet observed."
+notes = "Built in M3.11 (`fontcraft_pathops::composite`; `fontcraft_compile::drawing::layer_outline`, which the canvas and export share): strokes are expanded, then each mask acts on everything before it, components included. Version 4's intersecting mask (value 2) keeps only what lies inside it. At export, a layer whose composite cannot be made (a stroke width given as an expression) is compiled from its shapes as they are, with a warning. Documented, not yet observed."
+guesses = [
+  "Export applies strokes and masks before overlap removal, so a glyph whose layer has a stroke or a mask is compiled as contours only; the handbook does not say how the reference exports them.",
+]
 
 [[command]]
 id = "path.setMask"
@@ -1807,7 +1970,10 @@ milestone = "M3"
 summary = "Sets or clears the Mask flag of the selected path (a Palette checkbox in the reference). A mask path is subtracted from every shape below it in shape order; it stays a normal editable path, so the subtraction is live."
 ref = "Edit View › Masking"
 status = "handbook"
-notes = "Built in M3.11: writes mask value 1 (subtract), which every format version reads as a mask; only paths take the flag. Documented, not yet observed."
+notes = "Built in M3.11: writes mask value 1 (subtract), which every format version reads as a mask. Documented, not yet observed."
+guesses = [
+  "Only paths take the mask flag, though a mask cuts components below it too (03a question 23).",
+]
 
 [[behavior]]
 id = "mask.display"
@@ -1842,7 +2008,11 @@ milestone = "M3"
 summary = "Dialog of Filter › Shape Order used to rearrange the shapes of a layer; this chapter describes it only as far as masking needs."
 ref = "Edit View › Masking"
 status = "handbook"
-notes = "Built (M3.14): a list of the layer's shapes, the first row the bottom shape (shape 0, drawn first; our choice). Each row reads `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`, the index from when the dialog opened. A row dragged onto another takes its place; the canvas previews the order and OK is one undo step. Agents give `order` with ui.dialog.set. What the reference's rows show and which end is the top are not observed (docs/spec/03a-edit-view-drawing.md, open question 24)."
+notes = "Built (M3.14): a list of the layer's shapes. Each row reads `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`, the index from when the dialog opened. A row dragged onto another takes its place; the canvas previews the order and OK is one undo step. Agents give `order` with ui.dialog.set."
+guesses = [
+  "The first row is the bottom shape (shape 0, drawn first).",
+  "Rows read `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`; what the reference's rows show and which end is the top are not observed (03a open question 24).",
+]
 
 # ───────────────────────────── Anchors ─────────────────────────────
 
@@ -2096,6 +2266,10 @@ milestone = "M3"
 summary = "Any dragged node or other object snaps to the nodes and handles of paths, including those inside components. Near a component node, small markers for the component's nodes fade in as snap targets. Holding Ctrl disables snapping."
 ref = "Edit View › Magnetic Guides"
 status = "handbook"
+guesses = [
+  "The snap distance is 4 screen points, with the priority nodes, handles, guides, metric lines (03a question 28).",
+  "Ctrl suspends snapping as well as magnetic guides.",
+]
 
 [[command]]
 id = "guide.add"
@@ -2165,7 +2339,11 @@ milestone = "M3"
 summary = "A guide is selected by clicking anywhere on it and shows a filled knob while selected. Dragging the knob moves the guide, dragging the guide anywhere else changes its angle, and double-clicking the knob turns the guide perpendicular to its present orientation."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
-notes = "Built in M3.9 with the Select tool: the knob is a ring, filled while the guide is selected. A knob drag runs `guide.setProperties` with the new `x`, `y` as one interaction, and the knob snaps like a node (Ctrl suspends it). A drag elsewhere on the guide turns it about the knob, the pressed side following the pointer. A double-click on the knob adds 90° to the angle. Our addition: a double-click elsewhere on the guide opens `dialog.guideProperties`. A locked guide, and a local guide of a locked glyph, do none of this. With other objects selected, a knob drag moves them all (`selection.move`). Documented but not yet observed."
+notes = "Built in M3.9 with the Select tool: the knob is a ring, filled while the guide is selected. A knob drag runs `guide.setProperties` with the new `x`, `y` as one interaction, and the knob snaps like a node (Ctrl suspends it). A double-click on the knob adds 90° to the angle. A locked guide, and a local guide of a locked glyph, do none of this. With other objects selected, a knob drag moves them all (`selection.move`). Documented but not yet observed."
+guesses = [
+  "A drag on the guide away from its knob turns it about the knob, the pressed side following the pointer (03a question 27).",
+  "A double-click on the guide away from its knob opens dialog.guideProperties, our addition.",
+]
 
 [[behavior]]
 id = "guides.keyboard"
@@ -2252,7 +2430,10 @@ milestone = "M3"
 summary = "Writes the properties of a guide that the reference edits through the Info box and Info for Selection: position, angle, angle lock, sidebearing reference, measurement flag, name, colour and, for global guides, the glyph filter (predicate text). Our own command."
 ref = "Edit View › Local & Global Guides"
 status = "inferred"
-notes = "An empty name, filter or colour clears it. An angle-locked guide refuses a new angle unless the same call sets `angleLocked: false`, so a rotating drag cannot turn it. The sidebearing reference is stored as the guide's `alignment` key in `.glyphs` data (`right`; `center` for both); left is the default and writes nothing. Which `alignment` value the reference writes for both sidebearings is our reading of the format, not confirmed."
+notes = "An empty name, filter or colour clears it. An angle-locked guide refuses a new angle unless the same call sets `angleLocked: false`, so a rotating drag cannot turn it. The sidebearing reference is stored as the guide's `alignment` key in `.glyphs` data (`right`; `center` for both); left is the default and writes nothing."
+guesses = [
+  "Both sidebearings are written as the guide's `alignment = center` and the right one as `right`; our reading of the format, not confirmed.",
+]
 
 [[panel]]
 id = "dialog.guideProperties"
@@ -2265,6 +2446,9 @@ summary = "Our dialog over `guide.setProperties` for one guide, with a live prev
 ref = "Edit View › Local & Global Guides"
 status = "inferred"
 notes = "Built in M3.9. It opens with the guide's present values; OK keeps the preview as one undo step, Cancel puts the guide back. A locked guide does not open it. The colour is `r,g,b,a` text until a colour well exists."
+guesses = [
+  "The dialog is our own form over guide.setProperties; the reference edits a guide in the Info box.",
+]
 
 [[command]]
 id = "guide.remove"
@@ -2279,6 +2463,9 @@ milestone = "M3"
 summary = "Removes guides. Our own command; the chapter does not say how a guide is deleted (presumably the Delete key on a selected guide)."
 ref = "Edit View › Local & Global Guides"
 status = "inferred"
+guesses = [
+  "Delete removes a selected guide; the chapter does not say how the reference deletes one (03a question 27).",
+]
 
 [[command]]
 id = "guide.list"
@@ -2292,6 +2479,9 @@ milestone = "M3"
 summary = "Query returning every guide a layer shows, its own local guides and then its master's global guides, with all their properties. Our own command: what the canvas and the Info box read."
 ref = "Edit View › Local & Global Guides"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "guide.displayLines"
@@ -2305,7 +2495,12 @@ milestone = "M3"
 summary = "Query returning the lines Edit View draws for a layer besides guides: the grid step, the master's metrics with the per-script ascender, cap height and descender parameters and the small-cap and shoulder heights applied, the alignment zones, and the CJK grid, CJK guide and design grid parameters. Our own command: the canvas draws what it returns."
 ref = "Font Info › Masters › Metrics & Alignment Zones; Appendix › Custom Parameters"
 status = "inferred"
-notes = "Script-prefixed parameters match the glyph's own script property; a parameter without a prefix applies to every glyph, since the glyph data that would say which glyphs are CJK is not built yet. The CJK grid divides the box from x 0 to the width and from the descender to the ascender."
+notes = "Script-prefixed parameters match the glyph's own script property."
+guesses = [
+  "A display-lines parameter without a script prefix applies to every glyph, since the glyph data that marks CJK glyphs is not built yet.",
+  "The CJK grid divides the box from x 0 to the width and from the descender to the ascender.",
+  "The design grid parameter is read as a horizontal and a vertical step in units, drawn over the CJK box, or over the glyph's width and metric span when no CJK grid is set; the handbook does not explain it.",
+]
 
 [[behavior]]
 id = "guides.infoBoxFields"
@@ -2322,7 +2517,10 @@ milestone = "M3"
 summary = "Closing the lock next to a guide's angle in the Info box freezes the angle, so dragging the guide can no longer rotate it until the lock is opened again."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
-notes = "Built in M3.9: a drag on an angle-locked guide away from its knob moves the guide as a knob drag does, and a double-click on its knob does not turn it. Documented but not yet observed."
+notes = "Built in M3.9: a double-click on its knob does not turn it. Documented but not yet observed."
+guesses = [
+  "A drag on an angle-locked guide away from its knob moves the guide, as a knob drag does (03a question 27).",
+]
 
 [[behavior]]
 id = "guides.sidebearingReference"
@@ -2331,6 +2529,9 @@ milestone = "M3"
 summary = "A guide's horizontal position is measured from the left sidebearing by default. It can instead be tied to the right sidebearing or to both sidebearings, so that a (typically slanted or global) guide keeps its relation to the right edge when the glyph width changes."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+guesses = [
+  "Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27).",
+]
 
 [[behavior]]
 id = "guides.measurementFlag"

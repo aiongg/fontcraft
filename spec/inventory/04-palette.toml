@@ -103,7 +103,10 @@ milestone = "M3"
 summary = "Query returning the Dimensions values noted for a master, optionally limited to the fields of one script."
 ref = "Palette › Dimensions"
 status = "inferred"
-notes = "The field keys per script come from the corpus files (Latin: HH, HV, OH, OV, nV, nd, oH, oV, tH; Arabic: arAlef, arBar); the reference does not document them. An unknown script given explicitly is an error; a glyph whose script has no known fields gets every value."
+notes = "An unknown script given explicitly is an error; a glyph whose script has no known fields gets every value."
+guesses = [
+  "The field keys per script come from the corpus files (Latin: HH, HV, OH, OV, nV, nd, oH, oV, tH; Arabic: arAlef, arBar); the reference does not document them.",
+]
 
 [[behavior]]
 id = "dimensions.perMaster"
@@ -112,6 +115,9 @@ milestone = "M3"
 summary = "Dimensions values are kept separately for every master, so switching master switches the numbers shown."
 ref = "Palette › Dimensions"
 status = "handbook"
+guesses = [
+  "Values are stored under `GSDimensionPlugin.Dimensions` in the font's user data, one dictionary per master id, the key the corpus files use (Palette question 1).",
+]
 
 [[behavior]]
 id = "dimensions.fieldsFollowScript"
@@ -178,6 +184,9 @@ milestone = "M3"
 summary = "Sets both handles of each selected curve segment to an explicit percentage. Generalises the eight buttons for agents; values are clamped to 1 to 100."
 ref = "Palette › Fit Curve"
 status = "inferred"
+guesses = [
+  "A handle's percentage is its length over the distance from its node to the intersection of the two handles, or the chord when the handles are parallel (Palette question 2).",
+]
 
 [[command]]
 id = "fitCurve.increase"
@@ -191,6 +200,9 @@ milestone = "M3"
 summary = "Plus button: lengthens the handles of the selected curve segments uniformly by one increment. The handbook does not give the increment; ours is the next of the eight steps above the segment's mean percentage, at most the top of the range."
 ref = "Palette › Fit Curve"
 status = "inferred"
+guesses = [
+  "Plus moves to the next of the eight steps above the segment's mean percentage; the handbook gives no increment.",
+]
 
 [[command]]
 id = "fitCurve.decrease"
@@ -204,6 +216,9 @@ milestone = "M3"
 summary = "Minus button: shortens the handles of the selected curve segments uniformly by one increment. Ours is the step below the segment's mean percentage, at least the bottom of the range."
 ref = "Palette › Fit Curve"
 status = "inferred"
+guesses = [
+  "Minus moves to the step below the segment's mean percentage; the handbook gives no increment.",
+]
 
 [[command]]
 id = "fitCurve.setRange"
@@ -230,6 +245,9 @@ milestone = "M3"
 summary = "Scale button of the Fit Curve section: redistributes the lengths of the two handles of each selected segment so they are balanced while the segment keeps its overall curvature. The handbook does not give the rule; ours sets both handles to their mean percentage."
 ref = "Palette › Fit Curve"
 status = "inferred"
+guesses = [
+  "Balance sets both handles to their mean percentage; the handbook gives no rule.",
+]
 
 [[command]]
 id = "fitCurve.getHandleLength"
@@ -243,6 +261,9 @@ milestone = "M3"
 summary = "Query returning the current handle length percentage of each selected segment, the value the grey marker under the buttons indicates."
 ref = "Palette › Fit Curve"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[behavior]]
 id = "fitCurve.bothHandles"
@@ -259,6 +280,9 @@ milestone = "M3"
 summary = "Handle length is expressed as a percentage from 1 to 100. About 55 percent approximates a circular or elliptical arc; higher values flatten the curve near its nodes, lower values flatten its middle and sharpen its ends."
 ref = "Palette › Fit Curve"
 status = "handbook"
+guesses = [
+  "Without the `Fit Curve Panel Settings` parameter the range is 48 to 74 %, the handbook's example, and values beyond the range are clamped to it (Palette question 2).",
+]
 
 [[behavior]]
 id = "fitCurve.lengthIndicator"
@@ -330,6 +354,9 @@ milestone = "M3"
 summary = "Toggles the eye of a layer. A visible layer is drawn as a faint blue outline behind the active layer of the same glyph. Whether the flag is saved in the document is not stated; we treat it as document data."
 ref = "Palette › Layers"
 status = "handbook"
+guesses = [
+  "Visibility is stored with the layer and saved (Palette question 3).",
+]
 
 [[command]]
 id = "layers.addBackupLayer"
@@ -343,6 +370,9 @@ milestone = "M3"
 summary = "Plus button: adds a backup layer under the current master of the glyph, named with the current date and time. The handbook describes backups as copies of earlier drawings but does not state outright that the new layer starts as a copy of the active one; we copy the active layer."
 ref = "Palette › Layers › Backup Layers"
 status = "handbook"
+guesses = [
+  "Plus copies the active layer, and the backup is named by the date and time in UTC (Palette question 3).",
+]
 
 [[command]]
 id = "layers.delete"
@@ -398,6 +428,9 @@ milestone = "M3"
 summary = "Restores a backup layer: its content becomes the master layer's content, the previous master content is saved to a newly created backup layer, and the restored backup is removed. Dragging a backup row onto a master row does the same."
 ref = "Palette › Layers › Backup Layers"
 status = "handbook"
+guesses = [
+  "Use as Master takes backup layers only (Palette question 4).",
+]
 
 [[command]]
 id = "layers.onlyShowLayersFromCurrentMaster"
@@ -437,6 +470,9 @@ milestone = "M3"
 summary = "Query returning the layers of a glyph in palette order with id, name, kind (master, backup, intermediate, alternate, colour, other), owning master and visibility."
 ref = "Palette › Layers"
 status = "inferred"
+guesses = [
+  "Rows are ordered by master in master order, each master layer followed by that master's other layers in file order.",
+]
 
 [[behavior]]
 id = "layers.sortedByMaster"
@@ -541,6 +577,9 @@ summary = "Chooses the fixed point for Palette transformations: a point of the s
 ref = "Palette › Transformations › Transformation Origin"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Transformations section shows the 3×3 box picker, a reference-point crosshair and a metrics-origin picker. Choosing an origin is not shown. Built in M3.5: `point` without `mode` places the reference point and keeps the mode (what a click with the Rotate or Scale tool sends); `boxPoint` and `metric` are kept for their modes; mode `reference` needs a placed point."
+guesses = [
+  "The metrics-point origin sits at half the advance width for every operation, not only mirroring (Palette question 5).",
+]
 
 [[command]]
 id = "transform.mirrorHorizontal"
@@ -648,6 +687,9 @@ milestone = "M3"
 summary = "Shears the selection horizontally so that it leans to the left by the angle in the slant field, keeping the transformation origin fixed. Opposite of Slant Right."
 ref = "Palette › Transformations › Rotating & Slanting"
 status = "handbook"
+guesses = [
+  "Slant is a shear by the tangent of the angle about the origin (Palette question 5).",
+]
 
 [[command]]
 id = "transform.slantRight"
@@ -674,6 +716,9 @@ milestone = "M3"
 summary = "Shears the selection vertically, downward, by the angle in the slant field: what lies right of the transformation origin moves down and what lies left moves up (our choice; the handbook does not say which side moves). Opposite of Slant Up."
 ref = "Palette › Transformations › Rotating & Slanting"
 status = "inferred"
+guesses = [
+  "What lies right of the transformation origin moves down; the handbook does not say which side moves.",
+]
 
 [[command]]
 id = "transform.slantUp"
@@ -687,6 +732,9 @@ milestone = "M3"
 summary = "Shears the selection vertically, upward, by the angle in the slant field: what lies right of the transformation origin moves up and what lies left moves down (our choice, as for Slant Down)."
 ref = "Palette › Transformations › Rotating & Slanting"
 status = "inferred"
+guesses = [
+  "What lies right of the transformation origin moves up; the handbook does not say which side moves.",
+]
 
 [[command]]
 id = "transform.alignLeft"
@@ -700,6 +748,9 @@ milestone = "M3"
 summary = "Moves the selected points, paths or path parts, anchors and components so their left edges meet the left edge of the selection's bounding box."
 ref = "Palette › Transformations › Aligning"
 status = "handbook"
+guesses = [
+  "Aligning a single object or point changes nothing and says so (Palette question 7).",
+]
 
 [[command]]
 id = "transform.alignCenterHorizontal"
@@ -778,7 +829,10 @@ milestone = "M3"
 summary = "Merges overlapping closed paths into their combined outline. It acts on the selected paths, or on every path of the layer when nothing is selected, and is the same operation the Remove Overlap export option applies to all glyphs."
 ref = "Palette › Transformations › Boolean Operations"
 status = "handbook"
-notes = "FontCraft: unlike Remove Overlap, open paths stay as they are. With `glyphs`, a locked glyph or a layer the operation cannot finish is listed in `skipped` and left as it was; with one `glyph` it is an error."
+notes = "With `glyphs`, a locked glyph or a layer the operation cannot finish is listed in `skipped` and left as it was; with one `glyph` it is an error."
+guesses = [
+  "Open paths stay as they are, unlike Remove Overlap, and components are not changed (Palette question 8).",
+]
 
 [[command]]
 id = "transform.booleanSubtract"
@@ -792,7 +846,10 @@ milestone = "M3"
 summary = "Cuts the selected closed paths out of the unselected ones. Each group is merged first so the result does not depend on internal overlaps. With no selection, the frontmost path is the one subtracted."
 ref = "Palette › Transformations › Boolean Operations"
 status = "handbook"
-notes = "FontCraft: the frontmost path is the last closed path in shape order. Without closed paths on both sides the command is refused (skipped with `glyphs`)."
+notes = "Without closed paths on both sides the command is refused (skipped with `glyphs`)."
+guesses = [
+  "The frontmost path is the last closed path in shape order (Palette question 8).",
+]
 
 [[command]]
 id = "transform.booleanIntersect"
@@ -806,7 +863,10 @@ milestone = "M3"
 summary = "Keeps only the area where the selected closed paths and the unselected ones overlap. With no selection, the frontmost path plays the role of the selected path."
 ref = "Palette › Transformations › Boolean Operations"
 status = "handbook"
-notes = "FontCraft: the frontmost path is the last closed path in shape order. Without closed paths on both sides the command is refused (skipped with `glyphs`)."
+notes = "Without closed paths on both sides the command is refused (skipped with `glyphs`)."
+guesses = [
+  "The frontmost path is the last closed path in shape order (Palette question 8).",
+]
 
 [[command]]
 id = "transform.getSettings"
@@ -820,7 +880,10 @@ milestone = "M3"
 summary = "Query returning the Transformations section's state: origin mode and point, scale percentages and lock, rotate angle and slant angle."
 ref = "Palette › Transformations"
 status = "inferred"
-notes = "Built in M3.5: {origin: {mode, boxPoint, metric, point}, scale: {x, y, locked}, rotateAngle, slantAngle}. The handbook gives no starting values; ours are the box centre, 110 % with the lock closed, 90° and 10°."
+notes = "Built in M3.5: {origin: {mode, boxPoint, metric, point}, scale: {x, y, locked}, rotateAngle, slantAngle}."
+guesses = [
+  "The starting values are ours: the box centre, 110 % with the lock closed, 90° and 10°.",
+]
 
 
 [[command]]
@@ -835,7 +898,11 @@ milestone = "M3"
 summary = "Sets the values of the Transformations fields: horizontal and vertical scale, rotation angle and slant angle. The buttons beside each field apply them."
 ref = "Palette › Transformations"
 status = "inferred"
-notes = "Defaults (our choice; the handbook gives none): scale 110 % with the lock closed, rotation 90°, slant 10°. The tutorial video named in `palette.transformations` shows the second scale field greyed, which suggests a closed lock. FontCraft (ours): a scale is non-zero and within ±1000000 %, a rotation within ±3600°, a slant strictly between -90° and 90°; the result is the settings, as transform.getSettings returns them. The values live in the same state as transform.setOrigin and transform.setScaleLock."
+notes = "The result is the settings, as transform.getSettings returns them. The values live in the same state as transform.setOrigin and transform.setScaleLock."
+guesses = [
+  "The defaults, scale 110 % with the lock closed, rotation 90° and slant 10°, are ours; the tutorial video named in palette.transformations shows the second scale field greyed, which suggests a closed lock.",
+  "The limits are ours: a scale is non-zero and within ±1000000 %, a rotation within ±3600°, a slant strictly between -90° and 90°.",
+]
 [[behavior]]
 id = "transform.targetsBySelection"
 area = "drawing"
@@ -859,6 +926,9 @@ milestone = "M3"
 summary = "The buttons on either side of a value field are exact inverses of each other, and applying one after the other returns the original coordinates without the rounding drift the unit grid could otherwise cause. How the reference achieves this (stored unrounded positions or an undo-like shortcut) is not explained."
 ref = "Palette › Transformations"
 status = "handbook"
+guesses = [
+  "Opposite buttons are exact for mirroring and quarter turns, through exact sines and cosines and grid rounding; other angles are undone only up to grid rounding (Palette question 5).",
+]
 
 [[behavior]]
 id = "transform.originIndicator"

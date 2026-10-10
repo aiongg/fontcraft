@@ -101,6 +101,9 @@ milestone = "M5"
 summary = "Sets the advance width of a glyph layer to a number or stores a metrics key for it; the handbook names the width as the third metric a key can link. How a numeric width change is split between the sidebearings is not stated here (we assume the right sidebearing absorbs it)."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
+guesses = [
+  "A numeric width change is absorbed by the right sidebearing; the handbook does not say how it is split.",
+]
 
 [[command]]
 id = "spacing.setTopSidebearing"

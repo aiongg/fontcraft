@@ -73,6 +73,9 @@ milestone = "M7"
 summary = "Reads Font Info fields as structured data: the font-wide fields, or the fields of one master or one export. Without keys it returns every built-in field, every added field with all its localizations, and the custom parameters of that scope."
 ref = "Font Info"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "font.info.set"
@@ -86,6 +89,9 @@ milestone = "M7"
 summary = "Writes one or more built-in or added fields in a single undoable step. With several masters or instances as targets the same value is written to each, matching the multi-selection editing of the UI."
 ref = "Font Info"
 status = "inferred"
+guesses = [
+  "Our own command with no counterpart in the reference; its parameters and result are our design.",
+]
 
 [[command]]
 id = "font.info.listFields"
