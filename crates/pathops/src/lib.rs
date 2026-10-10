@@ -1,17 +1,46 @@
-//! FontCraft path operations on plain Bézier paths (L2).
+//! FontCraft path operations (L2), on plain Bézier paths and on contours as node lists.
 //!
 //! The boolean engine is linesweeper. It panics on a NaN coordinate, gives wrong results for
 //! infinite ones, and loses small contours next to huge ones (its tolerance grows with the
 //! largest coordinate), so every path is checked by [`prepare`] before linesweeper sees it.
 //!
-//! [`union`] removes overlaps with the nonzero rule; [`coverage_difference`] compares two outlines
-//! by their rendered coverage. `cargo xtask overlap` measures both on the corpus
-//! (docs/plans/M3.md › M3.6).
+//! | Operation | Function |
+//! |---|---|
+//! | Union, difference, intersection of paths | [`union`], [`difference`], [`intersection`], [`binary`] |
+//! | Booleans and Remove Overlap on contours, results as nodes | [`boolean`], [`remove_overlap`] |
+//! | Correct Path Direction | [`correct_direction`] |
+//! | Add Extremes, Force Extremes | [`add_extremes`] |
+//! | Tidy up Paths | [`tidy_up`] |
+//! | Open Corner, Reconnect Nodes | [`open_corners`], [`reconnect_nodes`] |
+//! | Cut with Line (the Knife) | [`cut_with_line`] |
+//! | Coverage comparison | [`coverage_difference`] |
+//!
+//! Every function works on one layer's contours and holds no state, so a caller can run one
+//! glyph at a time, each under its own guard or time limit (docs/plans/M3.md › M3.6, rule 8).
+//! `cargo xtask overlap` measures [`union`] on the corpus.
 #![forbid(unsafe_code)]
+
+mod boolean;
+mod contour;
+mod corner;
+mod cut;
+mod direction;
+mod extremes;
+mod graph;
+mod tidy;
 
 use std::fmt;
 
 use fontcraft_geom::{BezPath, CubicBez, ParamCurve, PathEl, Point, QuadBez, Rect, Shape};
+
+pub use boolean::{BoolOp, OpenPaths, OverlapOptions, SMOOTH_MAX_DEGREES, binary, boolean, difference, intersection, remove_overlap};
+pub use contour::{Contour, MAX_NODES, MIN_GRID, Node, NodeKind, contours_from_bez, round_to_grid};
+pub use corner::{MAX_RECONNECT_NODES, Opened, open_corners, reconnect_nodes};
+pub use cut::cut_with_line;
+pub use direction::{Directed, MAX_NESTING_CONTOURS, correct_direction};
+pub use extremes::{ExtremesOptions, MIN_EXTREME_SEGMENT, NEAR_EXTREME_DEGREES, NEAR_EXTREME_DISTANCE, add_extremes};
+pub use graph::Rewired;
+pub use tidy::{TIDY_TOLERANCE, tidy_up};
 
 /// Largest coordinate magnitude, in font units, an operation accepts. Equal to the model's limit.
 /// Below it linesweeper's tolerance stays at its floor of 1e-6 units.
@@ -46,6 +75,15 @@ pub enum PathOpError {
     OpenPath,
     /// The raster for a coverage comparison would exceed [`MAX_COVERAGE_PIXELS`].
     TooLarge { width: usize, height: usize },
+    /// More than [`MAX_NODES`] nodes.
+    TooManyNodes(usize),
+    /// More than [`MAX_NESTING_CONTOURS`] closed contours to nest.
+    TooManyContours(usize),
+    /// A node list that makes no path (an off-curve node where an on-curve one must be, or the
+    /// wrong number of off-curve nodes before an on-curve one).
+    Malformed(String),
+    /// A parameter the operation cannot take.
+    Invalid(String),
     /// The boolean engine refused the input.
     Engine(String),
 }
@@ -58,6 +96,10 @@ impl fmt::Display for PathOpError {
             Self::TooManySegments(n) => write!(f, "the paths have {n} segments; at most {MAX_SEGMENTS} are allowed"),
             Self::OpenPath => write!(f, "an open path cannot take part in a path operation"),
             Self::TooLarge { width, height } => write!(f, "a {width} × {height} raster is too large to compare"),
+            Self::TooManyNodes(n) => write!(f, "the paths have {n} nodes; at most {MAX_NODES} are allowed"),
+            Self::TooManyContours(n) => write!(f, "the layer has {n} closed paths; at most {MAX_NESTING_CONTOURS} are allowed"),
+            Self::Malformed(e) => write!(f, "a path cannot be read: {e}"),
+            Self::Invalid(e) => write!(f, "{e}"),
             Self::Engine(e) => write!(f, "the path operation failed: {e}"),
         }
     }
@@ -208,10 +250,7 @@ fn check(v: f64) -> Result<(), PathOpError> {
 /// quadratic input stays quadratic. Result points that are not input points (intersections) are
 /// not on any grid.
 pub fn union(paths: &[BezPath]) -> Result<Vec<BezPath>, PathOpError> {
-    let input = prepare(paths)?;
-    let contours = linesweeper::binary_op(&input, &BezPath::new(), linesweeper::FillRule::NonZero, linesweeper::BinaryOp::Union)
-        .map_err(|e| PathOpError::Engine(e.to_string()))?;
-    Ok(contours.into_contours().map(|c| merge_close_points(&c.path)).collect())
+    binary(paths, &[], BoolOp::Union)
 }
 
 /// `path` without segments that end within [`MERGE_DISTANCE`] of where they start. A contour that
@@ -416,6 +455,19 @@ impl Grid {
     }
 }
 
+/// Contours the tests of several modules share.
+#[cfg(test)]
+pub(crate) mod fixtures {
+    use super::{Contour, Node, NodeKind};
+    use fontcraft_geom::Point;
+
+    /// A closed rectangle, counter-clockwise from the bottom left.
+    pub(crate) fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Contour {
+        let n = |x: f64, y: f64| Node::new(Point::new(x, y), NodeKind::Line);
+        Contour::new(true, vec![n(x0, y0), n(x1, y0), n(x1, y1), n(x0, y1)])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -516,31 +568,74 @@ mod tests {
         paths
     }
 
-    /// The plan's random-path measure. Ignored: linesweeper 0.5 still hangs on rare inputs
+    /// Every operation on one random case. Errors are fine; panics are not.
+    fn every_operation(paths: &[BezPath], seed: u64) {
+        let contours: Vec<Contour> = paths.iter().flat_map(contours_from_bez).collect();
+        let _ = union(paths);
+        let (a, b) = paths.split_at(paths.len() / 2);
+        let _ = difference(a, b);
+        let _ = intersection(a, b);
+        let _ = remove_overlap(&contours, OverlapOptions::default());
+        let (ca, cb) = contours.split_at(contours.len() / 2);
+        let _ = boolean(ca, cb, BoolOp::Intersection, 1.0);
+        let _ = correct_direction(&contours);
+        for c in &contours {
+            let _ = add_extremes(c, None, ExtremesOptions { force: seed.is_multiple_of(2), grid: 1.0 });
+            let _ = tidy_up(c, None);
+            let all: Vec<usize> = (0..c.nodes.len()).collect();
+            let _ = open_corners(c, &all, fontcraft_geom::Vec2::new(10.0, 20.0), 1.0);
+        }
+        let on_curve: Vec<(usize, usize)> = contours
+            .iter()
+            .enumerate()
+            .flat_map(|(i, c)| c.nodes.iter().enumerate().filter(|(_, n)| n.on_curve()).map(move |(k, _)| (i, k)))
+            .take(4)
+            .collect();
+        let _ = reconnect_nodes(&contours, &on_curve, 1.0);
+        let from = Point::new((seed % 2001) as f64 - 1000.0, -1100.0);
+        let to = Point::new(((seed >> 16) % 2001) as f64 - 1000.0, 1100.0);
+        let _ = cut_with_line(&contours, from, to, 1.0);
+    }
+
+    /// Runs `cases` random cases through `run`, each on its own thread, and lists the cases that
+    /// panicked or took more than a second.
+    fn random_run(cases: usize, run: fn(&[BezPath], u64)) -> Vec<String> {
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        let mut failures = Vec::new();
+        for i in 0..cases {
+            let paths = random_case(&mut seed);
+            let (tx, rx) = std::sync::mpsc::channel();
+            let input = paths.clone();
+            let case_seed = seed;
+            std::thread::spawn(move || {
+                let r = std::panic::catch_unwind(|| run(&input, case_seed));
+                let _ = tx.send(r.is_ok());
+            });
+            let failure = match rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                Ok(true) => continue,
+                Ok(false) => format!("case {i} panicked"),
+                Err(_) => format!("case {i} took more than a second"),
+            };
+            let svg = paths.iter().map(BezPath::to_svg).collect::<Vec<_>>().join(" ");
+            failures.push(if failures.is_empty() { format!("{failure}: {svg}") } else { failure });
+        }
+        failures
+    }
+
+    #[test]
+    fn random_paths_through_every_operation_never_panic() {
+        let failures = random_run(500, every_operation);
+        assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    /// The plan's random-path measure: 10,000 cases of up to 64 segments through every operation.
+    /// Ignored for its length, and because linesweeper 0.5 still hangs on rare inputs
     /// (docs/plans/M3.md › M3.6, spike result), which a thread cannot stop.
     /// `cargo test -p fontcraft-pathops -- --ignored random_paths`
     #[test]
     #[ignore]
     fn random_paths_never_panic_and_finish_within_a_second() {
-        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
-        let mut failures = Vec::new();
-        for i in 0..10_000 {
-            let paths = random_case(&mut seed);
-            let (tx, rx) = std::sync::mpsc::channel();
-            let input = paths.clone();
-            std::thread::spawn(move || {
-                let r = std::panic::catch_unwind(|| union(&input).map(|_| ()));
-                let _ = tx.send(r.is_ok());
-            });
-            match rx.recv_timeout(std::time::Duration::from_secs(1)) {
-                Ok(true) => {}
-                Ok(false) => failures.push(format!("case {i} panicked")),
-                Err(_) => failures.push(format!("case {i} took more than a second")),
-            }
-            if failures.len() == 1 && failures[0].starts_with(&format!("case {i}")) {
-                failures[0] += &format!(": {}", paths.iter().map(BezPath::to_svg).collect::<Vec<_>>().join(" "));
-            }
-        }
+        let failures = random_run(10_000, every_operation);
         assert!(failures.is_empty(), "{failures:#?}");
     }
 }

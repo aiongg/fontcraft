@@ -887,7 +887,7 @@ milestone = "M3"
 summary = "Heuristically sets each node to smooth or corner and removes redundant points: handles lying on a straight segment, on-curve nodes sitting exactly on the line between their neighbours, and adjacent nodes with identical coordinates (which get merged). Works on the selected nodes, or on all nodes when nothing is selected."
 ref = "Edit View › Converting Nodes and Segments"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run. FontCraft: points within 0.01 units count as on a line or as one point; a node is smooth when a curve meets it and its two directions are within 1° (03a question 9). Segment changes need both end nodes selected."
 
 [[command]]
 id = "path.tidyUpPathsForAllMasters"
@@ -1252,7 +1252,7 @@ kind = "engine"
 params = "{glyph: name, layer?: id, from: [x, y], to: [x, y], shapes?: [index]} → {selection}"
 area = "path-ops"
 milestone = "M3"
-summary = "Headless equivalent of the Knife tool: splits every path crossed by the given line and closes the pieces along it. Our own command."
+summary = "Headless equivalent of the Knife tool: the segment from `from` to `to` cuts every path it crosses. Along the line, crossings with closed paths are paired in order within each stretch that enters and leaves the filled area (nonzero winding), and each pair is joined by straight segments along the line, so the pieces close along the cut and pieces of overlapping paths join one another. A stretch where the line starts or ends inside a shape is not cut; points where the line only touches a path are not crossings. Open paths are split where the line crosses them. Our own command."
 ref = "Edit View › Cutting Paths"
 status = "inferred"
 
@@ -1271,7 +1271,7 @@ milestone = "M3"
 summary = "Context-menu command that replaces a selected corner node by two nodes whose segments cross in a small triangular overlap, so the two segments can be edited independently. Does nothing on smooth nodes; with a segment selected it opens the nodes at both ends of that segment."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30–15:36 and 28:34–28:45, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75–0:31: offered in the context menu of a selected corner node and of a selected segment; the corner becomes two nodes whose segments cross, leaving a small loop, and the nodes are then edited independently. Not shown: the no-op on smooth nodes, and that a selected segment opens the nodes at both of its ends."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30–15:36 and 28:34–28:45, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75–0:31: offered in the context menu of a selected corner node and of a selected segment; the corner becomes two nodes whose segments cross, leaving a small loop, and the nodes are then edited independently. Not shown: the no-op on smooth nodes, and that a selected segment opens the nodes at both of its ends. FontCraft: each end node moves along its own segment's direction, so the handles keep their directions. The distance is sqrt((dx·ox)² + (dy·oy)²) for a unit direction (dx, dy), where (ox, oy) is the overlap of `openCorner.overlapSize`. Corners whose two directions are within 1° of straight or reversed are left alone."
 
 [[command]]
 id = "path.reconnectNodes"
@@ -1286,7 +1286,7 @@ milestone = "M3"
 summary = "Context-menu command with two uses: on the two nodes of an open corner it restores the single corner node; on any even number of selected nodes it pairs each node with its nearest selected neighbour and rewires the outline through those pairs, creating overlapping corners."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 28:34–28:35, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75: listed as the first item of the context menu, above Open Corner, with nodes selected. Its effect is not shown."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 28:34–28:35, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75: listed as the first item of the context menu, above Open Corner, with nodes selected. Its effect is not shown. FontCraft (03a question 15): pairs go nearest first. An open-corner pair becomes one node where the incoming direction of the first and the outgoing direction of the second meet. Any other pair is rewired: the path into each node continues, after a straight segment, along the path out of the other node; nodes at the same place become one corner. An odd number of nodes is refused."
 
 [[command]]
 id = "path.sharpenCorner"
@@ -1394,7 +1394,7 @@ milestone = "M3"
 summary = "Works out the proper direction of every path on the current layer (or on each selected glyph layer) from how the paths nest, and applies it. As side effects it reorders the layer's shapes and moves each path's start node to its bottom-left node."
 ref = "Edit View › Controlling Path Direction"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30 and 30:21–30:23: the Path menu lists Correct Path Direction with Cmd+Shift+R, and it is run. The reordering and the start-node change are not visible."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30 and 30:21–30:23: the Path menu lists Correct Path Direction with Cmd+Shift+R, and it is run. The reordering and the start-node change are not visible. FontCraft: a path is inside another when that one is larger, its bounding box holds the path's box, and most of the path's sample points (nodes and segment midpoints) lie inside it; paths that only overlap are both outer. Open paths keep their direction and start node."
 
 [[command]]
 id = "path.correctPathDirectionForAllMasters"
@@ -1431,6 +1431,7 @@ milestone = "M3"
 summary = "Inserts nodes at the horizontal and vertical extremes of all paths on the active layer. An extreme is skipped when adding it would leave a very short segment (the existing node placement is assumed deliberate); a node sitting only slightly off an extreme is moved onto it, with the shape preserved as far as possible and its handles made exactly horizontal or vertical."
 ref = "Edit View › Extremes & Inflections"
 status = "handbook"
+notes = "FontCraft (03a question 17): a node within 2 units and 2° of an extreme keeps its place, and its handles within 2° of the axis are made exactly horizontal or vertical, which puts the extreme on the node. An extreme is skipped when the chord from it to the end of its segment, or to the extreme before it, is shorter than 3 units. New nodes are smooth and rounded to the grid, with their handles lined up with them."
 
 [[command]]
 id = "path.forceExtremes"
@@ -1444,6 +1445,7 @@ milestone = "M3"
 summary = "Option variant of Add Extremes that inserts a node at every extreme without the short-segment exception."
 ref = "Edit View › Extremes & Inflections"
 status = "handbook"
+notes = "FontCraft: every extreme that rounds to a new point is added; the near-extreme handle rule of Add Extremes still applies."
 
 [[command]]
 id = "path.addInflections"
