@@ -105,6 +105,7 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "lasso", label: "Lasso Select", shortcut: "V", group: "select" },
     ToolInfo { id: "hand", label: "Hand", shortcut: "H", group: "" },
     ToolInfo { id: "zoom", label: "Zoom", shortcut: "Z", group: "" },
+    ToolInfo { id: "knife", label: "Knife", shortcut: "E", group: "erase" },
 ];
 
 /// A new tool by id, or `None` for an unknown id.
@@ -114,6 +115,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "lasso" => Box::new(LassoTool::default()),
         "hand" => Box::new(HandTool::default()),
         "zoom" => Box::new(ZoomTool::default()),
+        "knife" => Box::new(crate::knife::KnifeTool::default()),
         _ => return None,
     };
     Some(tool)

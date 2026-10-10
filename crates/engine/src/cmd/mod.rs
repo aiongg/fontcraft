@@ -28,6 +28,7 @@ mod measure;
 mod meta;
 mod node;
 mod path;
+mod pathops;
 mod session;
 mod spacing;
 pub mod stroke;
@@ -180,6 +181,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(fit_curve::specs());
         v.extend(filter::specs());
         v.extend(stroke::specs());
+        v.extend(pathops::specs());
         v
     })
 }

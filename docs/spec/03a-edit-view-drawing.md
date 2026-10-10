@@ -371,6 +371,8 @@ segments. What is left becomes open paths, in the place of the original.
   and rewires through the pairs.
 - Overlap size ≈ half the master's first vertical stem and half its first horizontal stem
   (`openCorner.overlapSize`). Reads master stem values from Font Info.
+  A master with stems of one direction only uses that stem for both; a master without stems
+  uses 4% of the em (our choice); `path.openCorner`'s `overlap` parameter overrides both.
 - An opened corner whose triangle is small relative to the adjacent visible segments is treated
   as invisible in the result, so it may also sit on the outside of a shape; above the threshold
   it shows (`openCorner.invisibleWhenSmall`).

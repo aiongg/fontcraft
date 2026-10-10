@@ -767,12 +767,13 @@ label = "Union"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layer?: id, shapes?: [index] (with one glyph)}"
+params = "{glyph: name, layer?: id, side?, shapes?: [index]} | {glyphs: [names], layer?: id | layers?: [ids]} → {glyphs, skipped, selection?}"
 area = "path-ops"
 milestone = "M3"
 summary = "Merges overlapping closed paths into their combined outline. It acts on the selected paths, or on every path of the layer when nothing is selected, and is the same operation the Remove Overlap export option applies to all glyphs."
 ref = "Palette › Transformations › Boolean Operations"
 status = "handbook"
+notes = "FontCraft: unlike Remove Overlap, open paths stay as they are. With `glyphs`, a locked glyph or a layer the operation cannot finish is listed in `skipped` and left as it was; with one `glyph` it is an error."
 
 [[command]]
 id = "transform.booleanSubtract"
@@ -780,12 +781,13 @@ label = "Subtract"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layer?: id, shapes?: [index] (with one glyph)}"
+params = "{glyph: name, layer?: id, side?, shapes?: [index]} | {glyphs: [names], layer?: id | layers?: [ids]} → {glyphs, skipped, selection?}"
 area = "path-ops"
 milestone = "M3"
 summary = "Cuts the selected closed paths out of the unselected ones. Each group is merged first so the result does not depend on internal overlaps. With no selection, the frontmost path is the one subtracted."
 ref = "Palette › Transformations › Boolean Operations"
 status = "handbook"
+notes = "FontCraft: the frontmost path is the last closed path in shape order. Without closed paths on both sides the command is refused (skipped with `glyphs`)."
 
 [[command]]
 id = "transform.booleanIntersect"
@@ -793,12 +795,13 @@ label = "Intersect"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layer?: id, shapes?: [index] (with one glyph)}"
+params = "{glyph: name, layer?: id, side?, shapes?: [index]} | {glyphs: [names], layer?: id | layers?: [ids]} → {glyphs, skipped, selection?}"
 area = "path-ops"
 milestone = "M3"
 summary = "Keeps only the area where the selected closed paths and the unselected ones overlap. With no selection, the frontmost path plays the role of the selected path."
 ref = "Palette › Transformations › Boolean Operations"
 status = "handbook"
+notes = "FontCraft: the frontmost path is the last closed path in shape order. Without closed paths on both sides the command is refused (skipped with `glyphs`)."
 
 [[command]]
 id = "transform.getSettings"

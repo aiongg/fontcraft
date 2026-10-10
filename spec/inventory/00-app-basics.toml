@@ -127,12 +127,13 @@ label = "Convert to Cubic"
 menu = ["Path", "Other"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layer?: id, allMasters?: bool} → {glyphs: [names], segments: count}"
+params = "{glyph: name, layer?: id, side?} | {glyphs: [names], layer?: id | layers?: [ids]} | {glyphs | glyph, allMasters: true} → {glyphs, skipped, segments: count}"
 area = "path-ops"
 milestone = "M3"
 summary = "Rewrites quadratic segments as cubic ones, exactly (every quadratic curve has one cubic form). The opposite, path.convertToQuadratic, approximates within the compiler's tolerance. Path › Other in Font View runs it on every selected glyph (fontView.batch.convertToCubic)."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "FontCraft: the new handles are not rounded, so the outline stays exact; each implied on-curve point of a quadratic spline becomes a smooth node."
 
 [[command]]
 id = "document.inspect"

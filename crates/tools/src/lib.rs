@@ -25,6 +25,7 @@ pub mod geometry;
 pub mod hand;
 pub mod hit;
 pub mod keymap;
+pub mod knife;
 pub mod lasso;
 pub mod output;
 pub mod scene;

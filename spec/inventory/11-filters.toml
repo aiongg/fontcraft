@@ -683,13 +683,13 @@ label = "Remove Overlap"
 menu = ["Path"]
 shortcut = "Cmd+Shift+O"
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids], shapes?: [index] (with one glyph)}"
+params = "{glyph: name, layer?: id, side?, shapes?: [index]} | {glyphs: [names], layer?: id | layers?: [ids]}, keepOpenPaths?: bool = false → {glyphs, skipped, selection?}"
 area = "path-ops"
 milestone = "M3"
 summary = "Unions overlapping closed paths into non-overlapping outlines. Works on the selected paths, or on all paths of the layer when nothing is selected or when several glyphs are targeted. Filter-registry entry for the Path menu command; the shortcut is given in the Font View and Reusing Shapes chapters."
 ref = "Filters › Built-in Filters › Remove Overlap; Font View chapter (shortcut)"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Remove Overlap with Cmd+Shift+O. 15:06–15:10 and 30:18–30:19: overlapping shapes are merged into one after Select All (partly visible; the command is not seen)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Remove Overlap with Cmd+Shift+O. 15:06–15:10 and 30:18–30:19: overlapping shapes are merged into one after Select All (partly visible; the command is not seen). FontCraft: nonzero union by the pathops crate; new points are rounded to the grid; components stay. With `glyphs`, a locked glyph or a layer the operation cannot finish is listed in `skipped` and left as it was; with one `glyph` it is an error. A layer that takes longer than 5 s is skipped (docs/plans/M3.md › M3.6, rule 8)."
 
 [[behavior]]
 id = "path.removeOverlap.selectionRule"
@@ -706,7 +706,7 @@ milestone = "M3"
 summary = "Besides merging, Remove Overlap deletes all open paths and single stray nodes from the processed glyphs."
 ref = "Filters › Built-in Filters › Remove Overlap"
 status = "handbook"
-notes = "Documented in the handbook, not yet observed in the reference app (docs/plans/M3.md › M3.6). Remove Overlap follows the handbook and removes open paths and paths of one node by default; the pathops crate also offers keeping them (`OpenPaths::Keep`)."
+notes = "Documented in the handbook, not yet observed in the reference app (docs/plans/M3.md › M3.6). Remove Overlap follows the handbook and removes open paths and paths of one node by default; the pathops crate also offers keeping them (`OpenPaths::Keep`). The command parameter `keepOpenPaths: true` keeps them."
 
 [[behavior]]
 id = "path.removeOverlap.expectsCorrectDirections"
