@@ -1340,11 +1340,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer?: id, points?: [[shape, node]], shapes?: [index]} → {selection}"
 area = "path-ops"
-milestone = "M3"
+milestone = "fidelity"
 summary = "Context-menu command offered with selected nodes, a selected segment or a selected path, listed below Open Corner when that item is offered. What it does to the outline is not described in the handbook and has not been observed (03a open question 31)."
 ref = "Edit View context menu; not described in the handbook"
 status = "observed"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:12 (path selected) and 15:30 (corner node selected), and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75 (segment selected): the item appears in the canvas context menu each time. It is never run. The name suggests it turns an opened or rounded corner back into one sharp corner; that is unconfirmed."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:12 (path selected) and 15:30 (corner node selected), and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75 (segment selected): the item appears in the canvas context menu each time. It is never run. The name suggests it turns an opened or rounded corner back into one sharp corner; that is unconfirmed. Waits for an observation of the reference app running it (owner's decision); until then it has no command and no menu item."
 
 [[behavior]]
 id = "openCorner.overlapSize"

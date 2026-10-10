@@ -42,7 +42,7 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 | M0: Skeleton and vertical slice | 5 | 5 (100.0%) | 0 | 0 | 11 | 0 | 0 | 3 | 0 | 0 |
 | M1: Source model and file I/O (native, UFO, designspace, .glyphs, binary import) | 10 | 10 (100.0%) | 0 | 2 | 84 | 3 | 0 | 3 | 15 | 0 |
 | M2: Compile core: static TTF and OTF, oracle harness | 6 | 5 (83.3%) | 0 | 0 | 111 | 48 | 0 | 2 | 4 | 13 |
-| M3: Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 185 | 184 (99.5%) | 19 | 25 | 185 | 11 | 34 | 0 | 2 | 0 |
+| M3: Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 184 | 184 (100.0%) | 19 | 25 | 185 | 11 | 34 | 0 | 2 | 0 |
 | M4: Font View and glyph management | 57 | 6 (10.5%) | 0 | 24 | 143 | 1 | 0 | 0 | 0 | 0 |
 | M5: Spacing, kerning and text mode | 109 | 1 (0.9%) | 1 | 23 | 101 | 6 | 0 | 0 | 2 | 0 |
 | M6: Components and anchors | 65 | 0 (0.0%) | 1 | 16 | 142 | 6 | 0 | 0 | 0 | 0 |
@@ -54,7 +54,7 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 | M12: Command-line tool suite and quality checks | 71 | 0 (0.0%) | 0 | 2 | 42 | 0 | 263 | 61 | 6 | 15 |
 | M13: Plug-ins, scripting and automation depth | 114 | 0 (0.0%) | 4 | 17 | 80 | 2 | 1 | 1 | 10 | 0 |
 | M14: 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | 31 | 0 (0.0%) | 0 | 7 | 40 | 5 | 0 | 0 | 1 | 0 |
-| fidelity: Interaction-fidelity pass: side by side with the reference, every modifier, cursor and default | 3 | 0 (0.0%) | 2 | 0 | 7 | 0 | 0 | 0 | 0 | 0 |
+| fidelity: Interaction-fidelity pass: side by side with the reference, every modifier, cursor and default | 4 | 0 (0.0%) | 2 | 0 | 7 | 0 | 0 | 0 | 0 | 0 |
 
 ## By source
 
