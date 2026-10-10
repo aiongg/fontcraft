@@ -78,6 +78,16 @@ Sweeps the glyph shape along a vector to make a solid shadow body.
 With `dontSubtract` off the original outline is subtracted from the swept shape, so only the shadow
 remains; on, the result is the whole swept shape. Reads and writes the layer's paths.
 
+How FontCraft runs it (our design, documented behaviour not yet observed):
+
+- The swept shape is the original area plus the band each piece of a closed path covers as it
+  moves. Curves are split where they run parallel to the sweep, so each band is a simple area.
+- The sweep vector is rounded to the grid, and so are new points. An offset of 0, or one that
+  rounds to 0, changes nothing. Open paths stay as they are.
+- Offset 0 to 1,000,000 units; angle -360 to 360 degrees. The dialog's first values are ours:
+  offset 50, angle -45, Don't Subtract off.
+- Export string (our choice; none is documented): `Extrude; offset; angle; dontsubtract`.
+
 ### Hatch Outline (`filter.hatchOutline`)
 
 Fills the glyph shape with parallel strokes.

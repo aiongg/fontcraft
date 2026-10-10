@@ -116,12 +116,13 @@ label = "Extrude"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], layers?: [ids], offset: number, angle: number, dontSubtract?: bool = false}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids], offset: number, angle: number, dontSubtract?: bool = false}"
 area = "path-ops"
 milestone = "M3"
 summary = "Builds a solid drop-shadow body by sweeping the glyph shape along a straight vector of the given length and direction. By default the original shape is then cut out of the swept shape, leaving only the shadow; Don't Subtract keeps the full swept shape."
 ref = "Filters › Built-in Filters › Extrude"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft geometry (ours): the swept shape is the original area plus the band each piece of a closed path sweeps; curves are split where they run parallel to the sweep. The sweep vector is rounded to the grid, so are new points; an offset of 0 (or one that rounds to 0) changes nothing. Open paths, components and locked paths are not changed. Offset 0 to 1000000 units, angle -360 to 360 degrees. Export string (our choice, none is documented): Extrude; offset; angle; dontsubtract."
 
 [[panel]]
 id = "dialog.filterExtrude"
@@ -137,6 +138,7 @@ milestone = "M3"
 summary = "Options dialog of the Extrude filter. Default values of Offset and Angle are not stated in the source; Don't Subtract is off by default."
 ref = "Filters › Built-in Filters › Extrude"
 status = "handbook"
+notes = "FontCraft first values (ours): offset 50, angle -45 (down and to the right), Don't Subtract off (the `default` of each parameter in filter.list)."
 
 [[behavior]]
 id = "filter.extrude.offsetIsLength"
@@ -864,6 +866,7 @@ milestone = "M7"
 summary = "No export string is documented for Extrude or for Interpolate with Background; whether they can be used as Filter parameters must be checked in the reference app."
 ref = "Appendix › Custom Parameters › Filter"
 status = "inferred"
+notes = "FontCraft (our choice until checked): Extrude reads and writes `Extrude; offset; angle; dontsubtract`, all positional, the last 1 or 0."
 
 [[behavior]]
 id = "filter.customParameter.sameRegistryAsCommands"

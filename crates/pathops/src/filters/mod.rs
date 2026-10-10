@@ -14,6 +14,7 @@
 //! `Key: value` pairs, booleans are `1` or `0`, and a trailing `include:` or `exclude:` item names
 //! the glyphs the filter runs on or skips.
 
+pub mod extrude;
 pub mod round_corners;
 
 use std::fmt;
@@ -21,6 +22,7 @@ use std::fmt;
 use crate::PathOpError;
 use crate::contour::Contour;
 
+pub use extrude::Extrude;
 pub use round_corners::RoundCorners;
 
 /// Longest filter string read, in bytes.
@@ -35,6 +37,7 @@ pub fn registry() -> &'static [&'static dyn Filter] {
     // One filter per line, so filters added in parallel merge cleanly.
     #[rustfmt::skip]
     static FILTERS: &[&dyn Filter] = &[
+        &Extrude,
         &RoundCorners,
     ];
     FILTERS
