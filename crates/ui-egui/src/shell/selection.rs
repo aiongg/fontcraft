@@ -115,7 +115,7 @@ fn edit(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> 
     let (change, reply) = {
         let font = app.session.font().map_err(|e| e.to_string())?;
         let tab = app.state.tab().ok_or_else(|| args.err("no Edit View tab is showing (open a glyph first)"))?;
-        let scene = tools_glue::scene(font, tab).ok_or_else(|| args.err("the edited glyph has no layer in the active master"))?;
+        let scene = tools_glue::shown_scene(&app.session, font, tab).ok_or_else(|| args.err("the edited glyph has no layer in the active master"))?;
         check_target(args, &scene)?;
         let change = change(id, args, &scene, &tab.selection)?;
         let reply = match &change {

@@ -150,7 +150,7 @@ pub fn hit_test(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Optio
     }
 
     let local = scene.local_guides().iter().enumerate().map(|(i, g)| (GuideScope::Local, i, g));
-    let global = scene.global_guides.iter().enumerate().map(|(i, g)| (GuideScope::Global, i, g));
+    let global = scene.shown_global_guides().map(|(i, g)| (GuideScope::Global, i, g));
     let mut guide: Option<(f64, HitResult)> = None;
     for (scope, index, g) in local.chain(global) {
         let Some((d, at)) = line_distance(pos, Point::new(g.x, g.y), g.angle) else { continue };

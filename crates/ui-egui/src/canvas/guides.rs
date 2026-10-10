@@ -187,13 +187,7 @@ impl Extras {
             let mut measured = Vec::new();
             if display.guides {
                 if let (Some(data), Some(edited)) = (data.as_deref(), font.glyph(glyph)) {
-                    out.out_of_scope = master
-                        .guides
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, g)| !in_scope(g, edited, font, data, &master.id))
-                        .map(|(index, _)| index)
-                        .collect();
+                    out.out_of_scope = out_of_scope(&master.guides, edited, font, data, &master.id);
                 }
                 let hidden = &out.out_of_scope;
                 let local = layer.info.guides.iter().enumerate().map(|(index, g)| (GuideScope::Local, index, g));
@@ -238,6 +232,21 @@ impl Extras {
         }
         out
     }
+}
+
+/// The global guides of `master`, by index, whose filter leaves out the edited glyph of `tab`.
+pub(crate) fn hidden_global_guides(session: &Session, font: &Font, tab: &Tab) -> Vec<usize> {
+    let Some(layer) = super::view::active_layer(font, tab) else { return Vec::new() };
+    let Some(master) = font.masters.iter().find(|m| m.id == layer.master) else { return Vec::new() };
+    if master.guides.iter().all(|g| g.filter.as_deref().is_none_or(|f| f.trim().is_empty())) {
+        return Vec::new();
+    }
+    let (Some(glyph), Ok(data)) = (tab.edited_glyph().and_then(|g| font.glyph(g)), session.glyph_data()) else { return Vec::new() };
+    out_of_scope(&master.guides, glyph, font, &data, &master.id)
+}
+
+fn out_of_scope(guides: &[Guide], glyph: &Glyph, font: &Font, data: &GlyphData, master: &str) -> Vec<usize> {
+    guides.iter().enumerate().filter(|(_, g)| !in_scope(g, glyph, font, data, master)).map(|(index, _)| index).collect()
 }
 
 /// Whether a global guide shows in `glyph`: always without a filter, or with one that does not

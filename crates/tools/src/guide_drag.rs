@@ -225,7 +225,11 @@ fn snap_apart(cx: &Context<'_>, r: GuideRef, p: Point) -> Snap {
             if r.index < globals.len() {
                 globals.remove(r.index);
             }
-            snap(&with_parts(cx.scene, &cx.scene.layer, &globals), &cx.view, p, &moving, distance)
+            let mut without = with_parts(cx.scene, &cx.scene.layer, &globals);
+            // The indices after the dragged guide move down by one.
+            without.hidden_global_guides =
+                cx.scene.hidden_global_guides.iter().filter(|&&i| i != r.index).map(|&i| if i > r.index { i - 1 } else { i }).collect();
+            snap(&without, &cx.view, p, &moving, distance)
         }
     }
 }

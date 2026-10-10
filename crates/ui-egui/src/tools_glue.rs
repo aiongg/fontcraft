@@ -140,6 +140,14 @@ pub fn scene<'a>(font: &'a Font, tab: &Tab) -> Option<Scene<'a>> {
     Some(scene)
 }
 
+/// [`scene`] without the global guides whose filter leaves out the edited glyph, as the canvas
+/// draws it: what pointer tools and selection commands may reach.
+pub fn shown_scene<'a>(session: &Session, font: &'a Font, tab: &Tab) -> Option<Scene<'a>> {
+    let mut scene = scene(font, tab)?;
+    scene.hidden_global_guides = crate::canvas::guides::hidden_global_guides(session, font, tab);
+    Some(scene)
+}
+
 /// The edited glyph's transform on the canvas now.
 pub fn current_view(app: &FontcraftApp) -> Option<View> {
     let font = app.session.font().ok()?;
@@ -154,7 +162,7 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     let FontcraftApp { session, state, tools, tokens, .. } = app;
     let font = session.font().map_err(|e| e.to_string())?;
     let tab = state.tab().ok_or("no Edit View tab is showing (open a glyph first)")?;
-    let mut scene = scene(font, tab).ok_or("the edited glyph has no layer in the active master")?;
+    let mut scene = shown_scene(session, font, tab).ok_or("the edited glyph has no layer in the active master")?;
     scene.background_shown = state.display.background;
     scene.guides_shown = state.display.guides;
     let view = view::tools_view(&tab.view, view::edited_offset(font, tab), center);

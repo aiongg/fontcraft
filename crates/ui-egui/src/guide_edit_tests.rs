@@ -187,3 +187,30 @@ fn the_context_menu_adds_guides_and_lists_the_commands_of_a_guide() {
     let steps = context_menu::steps_for(&app, &menu, "guide.add");
     assert_eq!(steps[0].1["throughPoints"], json!([[0, 0], [0, 2]]), "two selected nodes: through them");
 }
+
+#[test]
+fn a_global_guide_its_filter_hides_cannot_be_clicked_or_stepped_to() {
+    let mut app = FontcraftApp::default();
+    app.run("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+    app.run("guide.addGlobal", &json!({"x": 150, "y": 600})).unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+    app.run("view.setZoom", &json!({"size": 1000, "center": [400, 400]})).unwrap();
+    let global_0 = json!({"scope": "global", "index": 0});
+    let set_filter = |app: &mut FontcraftApp, text: &str| {
+        app.run("guide.setProperties", &json!({"glyph": "A", "guide": global_0, "filter": text})).unwrap();
+    };
+    let click = |app: &mut FontcraftApp| {
+        app.run("selection.set", &json!({})).unwrap();
+        pointer(app, json!([{"kind": "down", "x": 500, "y": 600}, {"kind": "up", "x": 500, "y": 600}]));
+        serde_json::to_value(&app.state.tab().unwrap().selection).unwrap()
+    };
+
+    set_filter(&mut app, "name == 'B'");
+    assert_eq!(click(&mut app), json!({}), "the guide is not drawn in A, so a click misses it");
+    app.run("selection.set", &json!({"points": [[0, 3]]})).unwrap();
+    let steps: Vec<Value> = (0..5).map(|_| app.run("selection.selectNext", &json!({})).unwrap()["selection"].clone()).collect();
+    assert!(steps.iter().all(|s| s.get("guides").is_none()), "Tab never reaches it: {steps:?}");
+
+    set_filter(&mut app, "name == 'A'");
+    assert_eq!(click(&mut app), json!({"guides": [global_0]}), "shown in A, the click selects it");
+}

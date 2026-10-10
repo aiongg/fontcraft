@@ -48,6 +48,9 @@ pub struct Scene<'a> {
     pub layer: Cow<'a, Layer>,
     /// The guides of the layer's master.
     pub global_guides: &'a [Guide],
+    /// The global guides, by index, whose filter leaves out this glyph. They are not drawn, so
+    /// they are not hit, snapped to or stepped through either.
+    pub hidden_global_guides: Vec<usize>,
     /// Horizontal metric lines (baseline, x-height, cap height, ascender, descender), in font units.
     pub metric_lines: Vec<f64>,
     /// The glyph is locked: points can be selected but not moved.
@@ -71,6 +74,7 @@ impl<'a> Scene<'a> {
             side: LayerSide::Foreground,
             layer: Cow::Borrowed(layer),
             global_guides: &[],
+            hidden_global_guides: Vec::new(),
             metric_lines: Vec::new(),
             locked: false,
             focus: None,
@@ -204,6 +208,11 @@ impl<'a> Scene<'a> {
     /// The resolved components, in the order they were added.
     pub fn components(&self) -> &[ComponentGeom] {
         &self.components
+    }
+
+    /// The global guides that show in this glyph, with their indices.
+    pub fn shown_global_guides(&self) -> impl Iterator<Item = (usize, &'a Guide)> + '_ {
+        self.global_guides.iter().enumerate().filter(|(i, _)| !self.hidden_global_guides.contains(i))
     }
 
     /// The layer's own guides.

@@ -290,7 +290,7 @@ pub fn tab_order(scene: &Scene) -> Vec<Item> {
     }
     out.extend(scene.layer.anchors.iter().map(|a| Item::Anchor(a.name.clone())));
     out.extend((0..scene.local_guides().len()).map(|index| Item::Guide(GuideRef { scope: GuideScope::Local, index })));
-    out.extend((0..scene.global_guides.len()).map(|index| Item::Guide(GuideRef { scope: GuideScope::Global, index })));
+    out.extend(scene.shown_global_guides().map(|(index, _)| Item::Guide(GuideRef { scope: GuideScope::Global, index })));
     out
 }
 
