@@ -49,6 +49,10 @@ pub struct Scene<'a> {
     pub locked: bool,
     /// Path focus: when set, only these shapes can be hit and selected.
     pub focus: Option<Vec<usize>>,
+    /// The background and the guides are showing (`view.showBackground`, `view.showGuides`);
+    /// a dragged point snaps only to what is showing.
+    pub background_shown: bool,
+    pub guides_shown: bool,
     components: Vec<ComponentGeom>,
     component_points: usize,
 }
@@ -64,6 +68,8 @@ impl<'a> Scene<'a> {
             metric_lines: Vec::new(),
             locked: false,
             focus: None,
+            background_shown: true,
+            guides_shown: true,
             components: Vec::new(),
             component_points: 0,
         }

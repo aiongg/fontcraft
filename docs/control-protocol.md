@@ -74,7 +74,9 @@ canvas draws for the tool (marquee, snapping lines, hover), `errors` the message
 failed. Use `space: "screen"` with the Hand tool: it scrolls by the pointer's movement on screen.
 
 `ui.key` resolves a key as the keyboard does: first the Edit View keys of the tools (tool letters
-`V`, `Shift+V`, `H`, `Z`; `Space` held for the Hand tool; arrows with the font's increments;
+`V` Select, `Shift+V` Lasso Select, `H` Hand, `Z` Zoom, `E` Knife, `R` Rotate, `S` Scale,
+`L` Measurement, `A` Annotation; a letter shared by several tools picks the one in use, else the
+one last chosen, and `Shift` with it moves to the next; `Space` held for the Hand tool; arrows with the font's increments;
 `Return`, `Delete`, `Tab`, `Escape`), then the menu shortcuts. `key` is a character or a name:
 `ArrowLeft`, `Return`, `Delete`, `Backspace`, `Tab`, `Escape`, `Space`. `action` is `tap`
 (default: press and release), `press` or `release`; hold `Space` with `press`, send pointer

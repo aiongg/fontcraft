@@ -136,8 +136,9 @@ pub fn snap(scene: &Scene, view: &View, p: Point, moving: &Moving, distance: f64
         }
     }
 
-    // The background's points, then guides and their crossings.
-    if let Some(s) = crate::snap_guides::background(scene, p, tol).or_else(|| crate::snap_guides::guides(scene, p, tol)) {
+    // The background's points, then guides and their crossings, each only while it is showing.
+    let background = scene.background_shown.then(|| crate::snap_guides::background(scene, p, tol)).flatten();
+    if let Some(s) = background.or_else(|| scene.guides_shown.then(|| crate::snap_guides::guides(scene, p, tol)).flatten()) {
         return s;
     }
 

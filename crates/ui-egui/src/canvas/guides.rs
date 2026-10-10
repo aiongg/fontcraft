@@ -496,17 +496,18 @@ pub fn draw_measurement(c: &Painting, extras: &Extras) {
     }
     if let Some((from, to, ruler)) = &extras.ruler {
         let (a, b) = (pos(c.view.to_screen(*from)), pos(c.view.to_screen(*to)));
-        if usable(a) && usable(b) {
-            c.painter.line_segment([a, b], Stroke::new(1.0, tokens.measure_ruler));
-            if let Some(angle) = ruler.angle {
-                c.painter.text(
-                    Pos2::new(b.x + LABEL_OFFSET, b.y - LABEL_OFFSET),
-                    Align2::LEFT_BOTTOM,
-                    format!("{}°", num(angle)),
-                    font.clone(),
-                    tokens.measure_ruler,
-                );
-            }
+        // The line itself is an overlay of the tool (`selection::overlay_shapes`).
+        if usable(a)
+            && usable(b)
+            && let Some(angle) = ruler.angle
+        {
+            c.painter.text(
+                Pos2::new(b.x + LABEL_OFFSET, b.y - LABEL_OFFSET),
+                Align2::LEFT_BOTTOM,
+                format!("{}°", num(angle)),
+                font.clone(),
+                tokens.measure_ruler,
+            );
         }
         draw_crossings(c, ruler, tokens.measure_ruler);
     }

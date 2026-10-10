@@ -155,6 +155,13 @@ fn snapping_reaches_the_background_and_guide_crossings() {
     let s = at(52.0, 250.0);
     assert_eq!(s.kind, Some(SnapKind::Guide), "the guide alone");
     assert!((s.point.x - 50.0).abs() < 1e-9 && (s.point.y - 250.0).abs() < 1e-9, "{:?}", s.point);
+
+    // Hidden background and hidden guides are not snapped to.
+    scene.background_shown = false;
+    scene.guides_shown = false;
+    let at = |x: f64, y: f64| snap(&scene, &view, Point::new(x, y), &Moving::default(), 4.0);
+    assert_eq!(at(202.0, 298.0).kind, None, "the hidden background");
+    assert_eq!(at(52.0, 250.0).kind, None, "a hidden guide");
 }
 
 #[test]
@@ -223,7 +230,7 @@ fn annotation_keys_select_all_delete_and_move() {
     let mut tools = Toolbox::new();
     let key = |shell: &mut Shell, tools: &mut Toolbox, key: Key, mods: Modifiers| shell.run(|cx| tools.key(cx, &KeyEvent::press(key, mods)));
     let out = key(&mut shell, &mut tools, Key::Char('a'), NONE);
-    assert_eq!(runs_of(&out), vec![("tool.select", json!({"tool": "annotation"}))]);
+    assert_eq!(runs_of(&out), vec![("tool.select", json!({"tool": "annotationSelect"}))]);
     tools.select("annotationCircle").unwrap();
     let out = key(&mut shell, &mut tools, Key::Char('a'), NONE);
     assert_eq!(runs_of(&out), vec![("tool.select", json!({"tool": "annotationCircle"}))], "A keeps the sub-tool in use");

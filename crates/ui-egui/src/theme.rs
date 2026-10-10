@@ -151,6 +151,7 @@ pub struct Tokens {
     pub measure_delta: Color32,
     /// The ruler, its crossings and their distances; measurement guides use their own colour.
     pub measure_ruler: Color32,
+    pub measure_ruler_width: f32,
     pub measure_label_size: f32,
     /// Dots where a ruler or a measurement guide crosses the outline.
     pub measure_crossing_radius: f32,
@@ -264,6 +265,7 @@ impl Tokens {
             measure_off_curve: Color32::from_rgb(0x2a, 0x9a, 0x3a),
             measure_delta: Color32::from_rgb(0xd0, 0x2c, 0x2c),
             measure_ruler: Color32::from_rgb(0x00, 0x8c, 0x9c),
+            measure_ruler_width: 1.0,
             measure_label_size: 10.0,
             measure_crossing_radius: 3.0,
             background_outline: Color32::from_rgba_unmultiplied(0xe0, 0x40, 0x40, 0x90),

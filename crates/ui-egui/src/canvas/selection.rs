@@ -97,6 +97,8 @@ pub fn overlay_shapes(overlays: &[Overlay], view: View, tokens: &Tokens) -> Vec<
                 if usable(a) && usable(b) {
                     let stroke = match kind {
                         OverlayKind::KnifeLine => Stroke::new(tokens.selection_width, tokens.knife_line),
+                        // Its angle and crossings come from `guides::draw_measurement`.
+                        OverlayKind::Ruler => Stroke::new(tokens.measure_ruler_width, tokens.measure_ruler),
                         _ => Stroke::new(tokens.snap_line_width, tokens.snap_line),
                     };
                     out.push(Shape::line_segment([a, b], stroke));
