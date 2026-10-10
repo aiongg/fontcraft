@@ -92,10 +92,14 @@ pub fn overlay_shapes(overlays: &[Overlay], view: View, tokens: &Tokens) -> Vec<
                     _ => out.push(Shape::closed_line(screen, edge)),
                 }
             }
-            Overlay::Line { from, to, .. } => {
+            Overlay::Line { kind, from, to } => {
                 let (a, b) = (pos(view.to_screen(*from)), pos(view.to_screen(*to)));
                 if usable(a) && usable(b) {
-                    out.push(Shape::line_segment([a, b], Stroke::new(tokens.snap_line_width, tokens.snap_line)));
+                    let stroke = match kind {
+                        OverlayKind::KnifeLine => Stroke::new(tokens.selection_width, tokens.knife_line),
+                        _ => Stroke::new(tokens.snap_line_width, tokens.snap_line),
+                    };
+                    out.push(Shape::line_segment([a, b], stroke));
                 }
             }
             Overlay::Marker { kind, at } => {

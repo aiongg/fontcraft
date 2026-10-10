@@ -94,6 +94,8 @@ pub enum OverlayKind {
     Hover,
     /// The hovered point cannot be moved (`paths.lockedPointsHoverRed`).
     HoverLocked,
+    /// The Knife tool's cutting line.
+    KnifeLine,
 }
 
 /// Something a tool asks the canvas to draw, in font units.

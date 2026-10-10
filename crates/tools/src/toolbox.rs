@@ -22,8 +22,9 @@ pub struct Switch {
 /// The tools of one Edit View: the active one, and a temporary one while `Space` is held.
 pub struct Toolbox {
     active: Box<dyn Tool>,
-    /// The Select group's tool last used, which plain `V` returns to.
-    last_in_select_group: &'static str,
+    /// The tool last chosen for each shortcut letter shared by several tools, which the plain
+    /// letter returns to: `(letter, tool id)`.
+    last_by_letter: Vec<(&'static str, &'static str)>,
     temporary: Option<Box<dyn Tool>>,
 }
 
@@ -42,7 +43,7 @@ impl Default for Toolbox {
 impl Toolbox {
     /// A toolbox with the Select tool active.
     pub fn new() -> Self {
-        Self { active: Box::new(SelectTool::default()), last_in_select_group: "select", temporary: None }
+        Self { active: Box::new(SelectTool::default()), last_by_letter: Vec::new(), temporary: None }
     }
 
     /// The tool that receives events now: the temporary one while `Space` is held.
@@ -68,8 +69,11 @@ impl Toolbox {
             self.active = tool;
         }
         let now = self.active.id();
-        if matches!(now, "select" | "lasso") {
-            self.last_in_select_group = now;
+        if let Some(info) = TOOLS.iter().find(|t| t.id == now) {
+            match self.last_by_letter.iter_mut().find(|(letter, _)| *letter == info.shortcut) {
+                Some(slot) => slot.1 = now,
+                None => self.last_by_letter.push((info.shortcut, now)),
+            }
         }
         Ok(Switch { tool: now, previous, output })
     }
@@ -131,27 +135,35 @@ impl Toolbox {
         edit_view_key(cx, ev).map_or_else(Output::default, Output::with)
     }
 
-    /// The tool letters: `V`, `Shift+V`, `H`, `Z`, as `tool.select` invocations.
+    /// The tool letters of [`TOOLS`], as `tool.select` invocations. A letter shared by several
+    /// tools chooses the active one of them, else the one last chosen; with `Shift` it moves to
+    /// the next tool sharing the letter.
     fn letter(&self, ev: &KeyEvent) -> Option<Action> {
         let Key::Char(c) = ev.key else { return None };
         if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
             return None;
         }
+        let is_letter = |t: &&crate::tool::ToolInfo| {
+            let mut chars = t.shortcut.chars();
+            chars.next().is_some_and(|s| s.eq_ignore_ascii_case(&c)) && chars.next().is_none()
+        };
+        let members: Vec<&'static str> = TOOLS.iter().filter(is_letter).map(|t| t.id).collect();
+        let first = *members.first()?;
+        if ev.mods.shift && members.len() < 2 {
+            return None;
+        }
         let base = self.active.id();
-        let in_group = matches!(base, "select" | "lasso");
-        let other = |id: &str| if id == "lasso" { "select" } else { "lasso" };
-        let id = match (c, ev.mods.shift) {
-            ('v', false) => {
-                if in_group {
-                    base
-                } else {
-                    self.last_in_select_group
-                }
-            }
-            ('v', true) => other(if in_group { base } else { self.last_in_select_group }),
-            ('h', false) => "hand",
-            ('z', false) => "zoom",
-            _ => return None,
+        let current = if members.contains(&base) {
+            base
+        } else {
+            let shortcut = TOOLS.iter().find(|t| t.id == first).map_or("", |t| t.shortcut);
+            self.last_by_letter.iter().find(|(letter, _)| *letter == shortcut).map_or(first, |(_, id)| *id)
+        };
+        let id = if ev.mods.shift {
+            let at = members.iter().position(|m| *m == current).unwrap_or(0);
+            members.get((at + 1) % members.len()).copied().unwrap_or(first)
+        } else {
+            current
         };
         Some(Action::Run { invocation: Invocation::new("tool.select", json!({ "tool": id })) })
     }

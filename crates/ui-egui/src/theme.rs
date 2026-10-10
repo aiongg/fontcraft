@@ -58,6 +58,8 @@ pub struct Tokens {
     pub hover_point: Color32,
     /// A point under the pointer that cannot be moved (`paths.lockedPointsHoverRed`).
     pub locked_point: Color32,
+    /// The Knife tool's cutting line while it is dragged.
+    pub knife_line: Color32,
     pub radius: u8,
     pub font_size: f32,
     /// Outline stroke width in Edit View, in points.
@@ -138,6 +140,7 @@ impl Tokens {
             snap_line: Color32::from_rgb(0xd0, 0x2c, 0x9c),
             hover_point: Color32::from_rgb(0x2d, 0x8c, 0xeb),
             locked_point: Color32::from_rgb(0xe0, 0x28, 0x28),
+            knife_line: Color32::from_rgb(0xe0, 0x28, 0x28),
             radius: 3,
             font_size: 12.0,
             outline_width: 1.5,

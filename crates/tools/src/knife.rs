@@ -84,7 +84,7 @@ impl Tool for KnifeTool {
 
     fn overlays(&self) -> Vec<Overlay> {
         match self.press {
-            Some(p) if p.dragged => vec![Overlay::Line { kind: OverlayKind::Marquee, from: p.start, to: p.current }],
+            Some(p) if p.dragged => vec![Overlay::Line { kind: OverlayKind::KnifeLine, from: p.start, to: p.current }],
             _ => Vec::new(),
         }
     }
@@ -152,7 +152,7 @@ mod tests {
         let mut knife = KnifeTool::default();
         assert!(pointer(&mut knife, &layer, PointerKind::Down, 50.0, -20.0).actions.is_empty());
         assert!(pointer(&mut knife, &layer, PointerKind::Drag, 50.0, 40.0).actions.is_empty());
-        assert_eq!(knife.overlays(), vec![Overlay::Line { kind: OverlayKind::Marquee, from: Point::new(50.0, -20.0), to: Point::new(50.0, 40.0) }]);
+        assert_eq!(knife.overlays(), vec![Overlay::Line { kind: OverlayKind::KnifeLine, from: Point::new(50.0, -20.0), to: Point::new(50.0, 40.0) }]);
         let out = pointer(&mut knife, &layer, PointerKind::Up, 50.0, 120.0);
         let expected = json!({"glyph": "A", "layer": "m01", "from": [50.0, -20.0], "to": [50.0, 120.0], "shapes": [0]});
         assert_eq!(out.actions, vec![Action::Run { invocation: Invocation::new("path.cutWithLine", expected) }], "the locked path is left out");

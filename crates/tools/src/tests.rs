@@ -455,6 +455,8 @@ fn tool_letters_and_space_choose_tools() {
     assert_eq!(runs(&out)[0].params, json!({"tool": "hand"}));
     let out = h.key(&mut tools, Key::Char('v'), Modifiers::SHIFT);
     assert_eq!(runs(&out)[0].params, json!({"tool": "lasso"}));
+    let out = h.key(&mut tools, Key::Char('e'), NONE);
+    assert_eq!(runs(&out)[0].params, json!({"tool": "knife"}), "every tool's letter comes from the tool list");
 
     let switch = tools.select("lasso").unwrap();
     assert_eq!((switch.tool, switch.previous), ("lasso", "select"));
