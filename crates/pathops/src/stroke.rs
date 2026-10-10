@@ -17,12 +17,17 @@
 //!
 //! The elliptical pen is a round pen in a space squeezed along its longer axis: the pieces are
 //! built there and stretched back, so round joins and caps become elliptical arcs.
+//!
+//! The offsets, mitres, arcs, cap edges and axis-aligned cuts come from [`crate::stroker`], which
+//! Offset Curve's Make Stroke shares.
 
 use std::f64::consts::PI;
 
 use fontcraft_geom::{Affine, BezPath, CubicBez, Line, ParamCurve, PathEl, Point, Shape, Vec2};
-use kurbo::{Arc, ParamCurveArclen, PathSeg};
+use kurbo::{ParamCurveArclen, PathSeg};
 
+pub use crate::stroker::MITER_LIMIT;
+use crate::stroker::{Bez, CapShape, Fit, arc, cap_edge, cut_normal, miter_tip, offset_piece, to_cut};
 use crate::{PathOpError, check, union};
 
 /// Widest stroke, in font units, either way.
@@ -33,8 +38,6 @@ pub const MAX_PEN_RATIO: f64 = 100.0;
 /// Most segments one stroked path may have. Each segment gives a piece of four or more
 /// segments, so the pieces stay within [`crate::MAX_SEGMENTS`].
 pub const MAX_STROKE_SEGMENTS: usize = 10_000;
-/// A miter join longer than this many half stroke widths becomes a bevel (the SVG default).
-pub const MITER_LIMIT: f64 = 4.0;
 /// Largest distance, in font units, between an offset curve or arc and the true one.
 pub const STROKE_TOLERANCE: f64 = 0.05;
 
@@ -251,14 +254,15 @@ pub fn stroke_outline(path: &BezPath, style: &StrokeStyle) -> Result<Vec<BezPath
     style.check()?;
     let subpaths = subpaths(path)?;
     let pen = Pen::new(style);
+    let mut budget = 0usize;
     let mut pieces = Vec::new();
     for sub in &subpaths {
-        let segs: Vec<PathSeg> = sub.segs.iter().map(|s| straighten(pen.into * *s, pen.tolerance)).filter(|s| !degenerate(s)).collect();
+        let segs: Vec<Bez> = sub.segs.iter().map(|s| straighten(pen.into * *s, pen.tolerance)).filter(|s| !degenerate(s)).collect();
         let mut built = Vec::new();
         if sub.closed {
-            pen.closed_pieces(&segs, style, &mut built);
+            pen.closed_pieces(&segs, style, &mut built, &mut budget)?;
         } else {
-            pen.open_pieces(segs, style, &mut built);
+            pen.open_pieces(segs, style, &mut built, &mut budget)?;
         }
         pieces.extend(built.into_iter().map(|p| pen.back * p));
         if sub.closed && style.fill {
@@ -345,19 +349,18 @@ fn path_of(start: Point, segs: &[PathSeg], closed: bool) -> BezPath {
 }
 
 /// A segment whose points are all one point draws nothing and has no direction.
-fn degenerate(seg: &PathSeg) -> bool {
+fn degenerate(seg: &Bez) -> bool {
     match *seg {
-        PathSeg::Line(l) => l.p0 == l.p1,
-        PathSeg::Quad(q) => q.p0 == q.p1 && q.p0 == q.p2,
-        PathSeg::Cubic(c) => c.p0 == c.p1 && c.p0 == c.p2 && c.p0 == c.p3,
+        Bez::Line(a, b) => a == b,
+        Bez::Cubic(c) => c.p0 == c.p1 && c.p0 == c.p2 && c.p0 == c.p3,
     }
 }
 
 /// `seg` as a cubic, or as a line when its control points lie within `tolerance` of its chord:
 /// kurbo's offset curves need a cubic whose control points are not all on one line.
-fn straighten(seg: PathSeg, tolerance: f64) -> PathSeg {
+fn straighten(seg: PathSeg, tolerance: f64) -> Bez {
     let c = match seg {
-        PathSeg::Line(_) => return seg,
+        PathSeg::Line(l) => return Bez::Line(l.p0, l.p1),
         PathSeg::Quad(q) => q.raise(),
         PathSeg::Cubic(c) => c,
     };
@@ -366,26 +369,10 @@ fn straighten(seg: PathSeg, tolerance: f64) -> PathSeg {
     if len <= f64::EPSILON {
         // A loop that ends where it starts: straight only if it has no width at all.
         let flat = (c.p1 - c.p0).cross(c.p2 - c.p0).abs() <= tolerance * tolerance;
-        return if flat { PathSeg::Line(Line::new(c.p0, c.p3)) } else { PathSeg::Cubic(c) };
+        return if flat { Bez::Line(c.p0, c.p3) } else { Bez::Cubic(c) };
     }
     let off = |p: Point| (p - c.p0).cross(chord).abs() / len;
-    if off(c.p1) <= tolerance && off(c.p2) <= tolerance { PathSeg::Line(Line::new(c.p0, c.p3)) } else { PathSeg::Cubic(c) }
-}
-
-/// The directions a segment starts and ends in, read from the nearest distinct control point.
-fn tangents(seg: &PathSeg) -> (Vec2, Vec2) {
-    const EPS: f64 = 1e-12;
-    let first = |ds: &[Vec2]| ds.iter().copied().find(|d| d.hypot2() > EPS).unwrap_or(Vec2::ZERO);
-    match *seg {
-        PathSeg::Line(l) => (l.p1 - l.p0, l.p1 - l.p0),
-        PathSeg::Quad(q) => (first(&[q.p1 - q.p0, q.p2 - q.p0]), first(&[q.p2 - q.p1, q.p2 - q.p0])),
-        PathSeg::Cubic(c) => (first(&[c.p1 - c.p0, c.p2 - c.p0, c.p3 - c.p0]), first(&[c.p3 - c.p2, c.p3 - c.p1, c.p3 - c.p0])),
-    }
-}
-
-fn unit(v: Vec2) -> Option<Vec2> {
-    let h = v.hypot();
-    (h > 1e-12 && h.is_finite()).then_some(v / h)
+    if off(c.p1) <= tolerance && off(c.p2) <= tolerance { Bez::Line(c.p0, c.p3) } else { Bez::Cubic(c) }
 }
 
 /// The unit normal on the right of direction `t` (y up).
@@ -416,7 +403,10 @@ fn sector(center: Point, r: f64, from: Vec2, sweep: f64, tolerance: f64) -> BezP
 /// Appends the arc around `center` that starts at `center + r · from` (the current point) and
 /// turns by `sweep` radians.
 fn arc_to(p: &mut BezPath, center: Point, r: f64, from: Vec2, sweep: f64, tolerance: f64) {
-    Arc::new(center, (r, r), from.atan2(), sweep, 0.0).to_cubic_beziers(tolerance, |a, b, c| p.curve_to(a, b, c));
+    let u = r * from;
+    for c in arc(center, u, Vec2::new(-u.y, u.x), sweep, tolerance) {
+        p.curve_to(c.p1, c.p2, c.p3);
+    }
 }
 
 fn polygon(points: &[Point]) -> BezPath {
@@ -478,60 +468,43 @@ impl Pen {
         (self.d2 - self.d1) / 2.0
     }
 
-    /// The offset curve of `seg` at `d` units to its right, starting with a move.
-    fn offset(&self, seg: &PathSeg, d: f64) -> BezPath {
-        let mut out = BezPath::new();
-        match *seg {
-            PathSeg::Line(l) => {
-                let n = unit(l.p1 - l.p0).map_or(Vec2::ZERO, right);
-                out.move_to(l.p0 + d * n);
-                out.line_to(l.p1 + d * n);
-            }
-            PathSeg::Quad(_) | PathSeg::Cubic(_) => {
-                let c = match *seg {
-                    PathSeg::Quad(q) => q.raise(),
-                    PathSeg::Cubic(c) => c,
-                    PathSeg::Line(l) => CubicBez::new(l.p0, l.p0, l.p1, l.p1),
-                };
-                if d == 0.0 {
-                    out.move_to(c.p0);
-                    out.curve_to(c.p1, c.p2, c.p3);
-                } else {
-                    // kurbo offsets toward the left normal for a positive distance.
-                    kurbo::offset::offset_cubic(c, -d, self.tolerance, &mut out);
-                }
-            }
-        }
-        out
+    /// The offset of `seg` at `d` units to its right (the shared pen counts left as positive).
+    fn offset(&self, seg: &Bez, d: f64, budget: &mut usize) -> Result<Vec<Bez>, PathOpError> {
+        offset_piece(seg, Vec2::new(1.0, 1.0), -d, Fit::Parallel(self.tolerance), budget)
     }
 
     /// The area between the offsets of `seg` at the band's two edges.
-    fn strip(&self, seg: &PathSeg) -> BezPath {
-        let mut p = self.offset(seg, self.d1);
-        for el in self.offset(seg, self.d2).reverse_subpaths().elements() {
-            match *el {
-                PathEl::MoveTo(q) => p.line_to(q),
-                PathEl::ClosePath => {}
-                other => p.push(other),
-            }
+    fn strip(&self, seg: &Bez, budget: &mut usize) -> Result<Option<BezPath>, PathOpError> {
+        let near = self.offset(seg, self.d1, budget)?;
+        let far = self.offset(seg, self.d2, budget)?;
+        let (Some(first), Some(back)) = (near.first(), far.last()) else { return Ok(None) };
+        let mut p = BezPath::new();
+        p.move_to(first.start());
+        for b in &near {
+            b.push_to(&mut p);
+        }
+        p.line_to(back.end());
+        for b in far.iter().rev() {
+            b.reversed().push_to(&mut p);
         }
         p.close_path();
-        p
+        Ok(Some(p))
     }
 
-    fn closed_pieces(&self, segs: &[PathSeg], style: &StrokeStyle, out: &mut Vec<BezPath>) {
+    fn closed_pieces(&self, segs: &[Bez], style: &StrokeStyle, out: &mut Vec<BezPath>, budget: &mut usize) -> Result<(), PathOpError> {
         for (i, seg) in segs.iter().enumerate() {
-            out.push(self.strip(seg));
+            out.extend(self.strip(seg, budget)?);
             let next = segs.get(i + 1).or_else(|| segs.first());
             if let Some(next) = next {
                 self.join(seg, next, style.join, out);
             }
         }
+        Ok(())
     }
 
-    fn open_pieces(&self, mut segs: Vec<PathSeg>, style: &StrokeStyle, out: &mut Vec<BezPath>) {
-        let (Some(first), Some(last)) = (segs.first().copied(), segs.last().copied()) else { return };
-        let (Some(t0), Some(t1)) = (unit(tangents(&first).0), unit(tangents(&last).1)) else { return };
+    fn open_pieces(&self, mut segs: Vec<Bez>, style: &StrokeStyle, out: &mut Vec<BezPath>, budget: &mut usize) -> Result<(), PathOpError> {
+        let (Some(first), Some(last)) = (segs.first().copied(), segs.last().copied()) else { return Ok(()) };
+        let (Some(t0), Some(t1)) = (first.start_dir(), last.end_dir()) else { return Ok(()) };
         let start = End { p: first.start(), t: t0, out: -t0 };
         let end = End { p: last.end(), t: t1, out: t1 };
         let start_cut = (style.cap_start == Cap::AxisAligned).then(|| self.cut(start, style.cap_axis)).flatten();
@@ -542,7 +515,7 @@ impl Pen {
             Cap::Butt | Cap::Round | Cap::Square => 0.0,
         };
         let (mut trim_start, mut trim_end) = (trim(style.cap_start, start_cut), trim(style.cap_end, end_cut));
-        let length: f64 = segs.iter().map(|s| s.arclen(ARCLEN_ACCURACY)).sum();
+        let length: f64 = segs.iter().map(|s| s.path_seg().arclen(ARCLEN_ACCURACY)).sum();
         if trim_start + trim_end >= length {
             // A path too short for its caps keeps a sliver, shortened from both ends alike.
             let k = 0.999 * length / (trim_start + trim_end);
@@ -552,24 +525,25 @@ impl Pen {
         trim_front(&mut segs, trim_start);
         trim_back(&mut segs, trim_end);
         for (i, seg) in segs.iter().enumerate() {
-            out.push(self.strip(seg));
+            out.extend(self.strip(seg, budget)?);
             if let Some(next) = segs.get(i + 1) {
                 self.join(seg, next, style.join, out);
             }
         }
-        let (Some(first), Some(last)) = (segs.first(), segs.last()) else { return };
-        if let Some(t) = unit(tangents(first).0) {
+        let (Some(first), Some(last)) = (segs.first(), segs.last()) else { return Ok(()) };
+        if let Some(t) = first.start_dir() {
             self.cap(End { p: first.start(), t, out: -t }, style.cap_start, start_cut, out);
         }
-        if let Some(t) = unit(tangents(last).1) {
+        if let Some(t) = last.end_dir() {
             self.cap(End { p: last.end(), t, out: t }, style.cap_end, end_cut, out);
         }
+        Ok(())
     }
 
     /// The pieces where `a` meets `b`: the outer wedge, and for a round full join the inner
     /// fillet.
-    fn join(&self, a: &PathSeg, b: &PathSeg, join: Join, out: &mut Vec<BezPath>) {
-        let (Some(t0), Some(t1)) = (unit(tangents(a).1), unit(tangents(b).0)) else { return };
+    fn join(&self, a: &Bez, b: &Bez, join: Join, out: &mut Vec<BezPath>) {
+        let (Some(t0), Some(t1)) = (a.end_dir(), b.start_dir()) else { return };
         let p = a.end();
         let turn = t0.cross(t1).atan2(t0.dot(t1));
         if turn.abs() * self.d2.max(-self.d1) <= JOIN_GAP {
@@ -595,12 +569,11 @@ impl Pen {
             let a0 = p + r_out * n0;
             let a1 = p + r_out * n1;
             match join {
+                Join::Miter => match miter_tip(a0, t0, a1, t1, p, r_out) {
+                    Some(tip) => out.push(polygon(&[p, a0, tip, a1])),
+                    None => out.push(polygon(&[p, a0, a1])),
+                },
                 Join::Bevel => out.push(polygon(&[p, a0, a1])),
-                Join::Miter if 1.0 / (turn / 2.0).cos() <= MITER_LIMIT => {
-                    let tip = p + r_out * (n0 + n1) / (1.0 + turn.cos());
-                    out.push(polygon(&[p, a0, tip, a1]));
-                }
-                Join::Miter => out.push(polygon(&[p, a0, a1])),
                 Join::Round | Join::RoundFull => out.push(sector(p, r_out, n0, turn, tol)),
             }
         }
@@ -636,12 +609,8 @@ impl Pen {
     /// the cut's axis.
     fn cut(&self, end: End, axis: CapAxis) -> Option<Cut> {
         let n = right(end.t);
-        let horizontal = match axis {
-            CapAxis::X => true,
-            CapAxis::Y => false,
-            CapAxis::Auto => n.x.abs() >= n.y.abs(),
-        };
-        let (along, normal) = if horizontal { (Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0)) } else { (Vec2::new(0.0, 1.0), Vec2::new(1.0, 0.0)) };
+        let normal = cut_normal(end.t, axis);
+        let along = Vec2::new(normal.y, normal.x);
         let cos = n.dot(along).abs();
         if cos <= 1e-9 {
             return None;
@@ -658,37 +627,31 @@ impl Pen {
         let n = right(end.t);
         let a = end.p + self.d1 * n;
         let b = end.p + self.d2 * n;
-        let r = self.half();
         match cap {
             Cap::Butt => {}
-            Cap::Square => out.push(polygon(&[a, b, b + r * end.out, a + r * end.out])),
-            Cap::Round | Cap::RoundInset => {
-                let m = a.midpoint(b);
-                let from = -n;
-                let sweep = if from.cross(end.out) > 0.0 { PI } else { -PI };
+            Cap::Square | Cap::Round | Cap::RoundInset => {
+                let shape = if cap == Cap::Square { CapShape::Square } else { CapShape::Round };
                 let mut p = BezPath::new();
                 p.move_to(a);
-                arc_to(&mut p, m, r, from, sweep, self.tolerance);
+                for piece in cap_edge(a, b, end.out, shape, self.tolerance) {
+                    piece.push_to(&mut p);
+                }
                 p.close_path();
                 out.push(p);
             }
             Cap::AxisAligned => {
                 let Some(cut) = cut else { return };
-                let across = end.out.dot(cut.normal);
-                if across.abs() <= 1e-9 {
-                    return;
-                }
-                let reach = |q: Point| q + ((cut.m - q).dot(cut.normal) / across).max(0.0) * end.out;
-                out.push(polygon(&[a, b, reach(b), reach(a)]));
+                let (Some(sa), Some(sb)) = (to_cut(a, end.out, cut.m, cut.normal), to_cut(b, end.out, cut.m, cut.normal)) else { return };
+                out.push(polygon(&[a, b, b + sb.max(0.0) * end.out, a + sa.max(0.0) * end.out]));
             }
         }
     }
 }
 
 /// Shortens `segs` by `len` units of arc length from the start.
-fn trim_front(segs: &mut Vec<PathSeg>, mut len: f64) {
+fn trim_front(segs: &mut Vec<Bez>, mut len: f64) {
     while len > 0.0 {
-        let Some(first) = segs.first().copied() else { return };
+        let Some(first) = segs.first().map(Bez::path_seg) else { return };
         let l = first.arclen(ARCLEN_ACCURACY);
         if len >= l {
             segs.remove(0);
@@ -697,16 +660,16 @@ fn trim_front(segs: &mut Vec<PathSeg>, mut len: f64) {
         }
         let t = first.inv_arclen(len, ARCLEN_ACCURACY);
         if let Some(f) = segs.first_mut() {
-            *f = first.subsegment(t..1.0);
+            *f = Bez::of_seg(first.subsegment(t..1.0));
         }
         return;
     }
 }
 
 /// Shortens `segs` by `len` units of arc length from the end.
-fn trim_back(segs: &mut Vec<PathSeg>, mut len: f64) {
+fn trim_back(segs: &mut Vec<Bez>, mut len: f64) {
     while len > 0.0 {
-        let Some(last) = segs.last().copied() else { return };
+        let Some(last) = segs.last().map(Bez::path_seg) else { return };
         let l = last.arclen(ARCLEN_ACCURACY);
         if len >= l {
             segs.pop();
@@ -715,7 +678,7 @@ fn trim_back(segs: &mut Vec<PathSeg>, mut len: f64) {
         }
         let t = last.inv_arclen(l - len, ARCLEN_ACCURACY);
         if let Some(e) = segs.last_mut() {
-            *e = last.subsegment(0.0..t);
+            *e = Bez::of_seg(last.subsegment(0.0..t));
         }
         return;
     }

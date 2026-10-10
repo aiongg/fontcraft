@@ -34,6 +34,7 @@ mod graph;
 mod limit;
 mod mask;
 mod stroke;
+mod stroker;
 mod tidy;
 
 use std::fmt;

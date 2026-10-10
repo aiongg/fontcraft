@@ -544,11 +544,16 @@ How FontCraft builds a stroke (our construction, `fontcraft_pathops::stroke_outl
 | Square cap | The band extended by half its width |
 | Round cap | A half circle beyond the end node |
 | Round inset cap | The band shortened by half its width, then a half circle, so the stroke ends at the end node |
-| Axis-aligned cap | Cut along the X or Y axis through the middle of the band at the end node: the axis nearer the butt cut, or the forced one. A path that ends within about 6° of a forced axis gets a butt end |
+| Axis-aligned cap | Cut along the X or Y axis through the middle of the band at the end node: the axis nearer the butt cut (vertical for a path that ends at 45°), or the forced one. A path that ends within about 6° of a forced axis gets a butt end |
 | Fill | A closed path's own area is added to the ring |
 
 The pieces (one per segment, join and cap) are united with the nonzero rule, so the outline has no
 overlaps. The result does not interpolate yet (M9).
+
+The offsets, the mitre, the arcs, the cap edges and the axis-aligned cut are the ones Offset
+Curve's Make Stroke uses (`crates/pathops/src/stroker.rs`). A centred stroke with equal width and
+height and round caps covers the same area as Make Stroke with equal distances, position 50 and
+round caps.
 
 How FontCraft's Stroke section works (`crates/ui-egui/src/panels/stroke.rs`):
 

@@ -19,33 +19,28 @@
 //! - Keep Compatible. Every node moves to where the offset lines of its two segments meet, and
 //!   every handle is refitted to the new ends, so the result has the same nodes as the input and
 //!   stays compatible between masters. Nothing is merged or removed.
+//!
+//! The pen, the curve fitting, the mitre, the arcs of round caps and the axis-aligned cut come
+//! from [`crate::stroker`], which path strokes share. Beyond [`MITER_LIMIT`] a corner is
+//! bevelled, or with Keep Compatible the mitre is shortened.
 
-use fontcraft_geom::{CubicBez, ParamCurve, ParamCurveNearest, Point, Vec2};
+use fontcraft_geom::{CubicBez, Point, Vec2};
 
 use super::round_corners::fill_sides;
 use super::{Args, Context, Filter, Input, Item, Param, ParamKind, Slot, Value};
 use crate::boolean::takes_part;
-use crate::contour::{Contour, DIRECTION_EPSILON, Node, NodeKind, Piece, RNode, Ring, Seg, round_to_grid};
-use crate::{BoolOp, MAX_NODES, MAX_SEGMENTS, OpenPaths, OverlapOptions, PathOpError, SMOOTH_MAX_DEGREES, boolean, remove_overlap};
+use crate::contour::{Contour, Node, NodeKind, RNode, Ring, Seg, round_to_grid};
+use crate::stroke::CapAxis;
+use crate::stroker::{
+    Bez, CapShape, Fit, JOIN_EPSILON, MITER_LIMIT, cap_edge, cut_normal, fit, intersect, miter_tip, offset_piece, reach, to_cut, unit,
+};
+use crate::{BoolOp, MAX_NODES, OpenPaths, OverlapOptions, PathOpError, SMOOTH_MAX_DEGREES, boolean, remove_overlap};
 
 /// Largest distance, in units, either way.
 pub const MAX_OFFSET: f64 = 10_000.0;
 /// Most distance, in units, between a fitted offset curve and the true offset before the curve is
 /// split.
 const TOLERANCE: f64 = 0.25;
-/// A curve is halved at most this many times over, into at most 64 pieces.
-const MAX_DEPTH: u32 = 6;
-/// A mitre reaches at most this many times the offset from its node. Beyond that the corner is
-/// bevelled, or with Keep Compatible the mitre is shortened.
-const MITER_LIMIT: f64 = 4.0;
-/// Offset ends closer than this, in units, are one point.
-const JOIN_EPSILON: f64 = 1e-6;
-/// Points of a curve its fitted offset is compared with.
-const SAMPLES: usize = 8;
-/// Step, in curve parameter, of a direction read from two nearby points.
-const STEP: f64 = 1e-3;
-/// Handle length of a quarter ellipse drawn as one cubic, as a fraction of its radius.
-const KAPPA: f64 = 0.552_284_749_830_793_4;
 
 const CAP_STYLES: &[&str] = &["flat", "square", "round", "roundInset", "aligned"];
 
@@ -426,240 +421,12 @@ fn squeeze(mut rings: Vec<Ring>, v: f64) -> Vec<Ring> {
     rings
 }
 
-// ── The pen and the offset of a curve ───────────────────────────────────────────────────────────
-
-/// How far side `k` of the pen moves a point whose path runs in unit direction `t`.
-fn reach(t: Vec2, pen: Vec2, k: f64) -> Vec2 {
-    Vec2::new(-t.y * pen.x * k, t.x * pen.y * k)
-}
-
-fn unit(v: Vec2) -> Option<Vec2> {
-    (v.is_finite() && v.hypot() > DIRECTION_EPSILON).then(|| v.normalize())
-}
-
-fn deriv(c: &CubicBez, t: f64) -> Vec2 {
-    let mt = 1.0 - t;
-    (c.p1 - c.p0) * (3.0 * mt * mt) + (c.p2 - c.p1) * (6.0 * mt * t) + (c.p3 - c.p2) * (3.0 * t * t)
-}
-
-fn deriv2(c: &CubicBez, t: f64) -> Vec2 {
-    ((c.p2 - c.p1) - (c.p1 - c.p0)) * (6.0 * (1.0 - t)) + ((c.p3 - c.p2) - (c.p2 - c.p1)) * (6.0 * t)
-}
-
-/// The unit direction of `c` at `t`. Where a handle is retracted, it is read from two nearby
-/// points.
-fn tangent(c: &CubicBez, t: f64) -> Option<Vec2> {
-    unit(deriv(c, t)).or_else(|| unit(c.eval((t + STEP).min(1.0)) - c.eval((t - STEP).max(0.0))))
-}
-
-/// The point of side `k`'s offset of `c` at `t`.
-fn offset_at(c: &CubicBez, t: f64, pen: Vec2, k: f64) -> Option<Point> {
-    Some(c.eval(t) + reach(tangent(c, t)?, pen, k))
-}
-
-/// The unit direction of side `k`'s offset of `c` at `t`.
-fn offset_dir(c: &CubicBez, t: f64, pen: Vec2, k: f64) -> Option<Vec2> {
-    let d1 = deriv(c, t);
-    let speed = d1.hypot();
-    if speed > DIRECTION_EPSILON {
-        // The pen is linear in the direction, so the offset's derivative times the speed is
-        // c′·|c′| plus the pen applied to the part of c″ square to the direction.
-        let along = d1 / speed;
-        let d2 = deriv2(c, t);
-        if let Some(u) = unit(d1 * speed + reach(d2 - along * along.dot(d2), pen, k)) {
-            return Some(u);
-        }
-    }
-    let (a, b) = ((t - STEP).max(0.0), (t + STEP).min(1.0));
-    unit(offset_at(c, b, pen, k)? - offset_at(c, a, pen, k)?)
-}
-
-/// A cubic from `p0` to `p3` that follows side `k`'s offset of `c`: it leaves and arrives in the
-/// offset's directions, with handle lengths fitted (least squares) to points of the true offset.
-/// A handle marked in `retracted` stays on its node.
-fn fit(c: &CubicBez, p0: Point, p3: Point, pen: Vec2, k: f64, retracted: [bool; 2]) -> CubicBez {
-    let d0 = offset_dir(c, 0.0, pen, k).or_else(|| tangent(c, 0.0)).unwrap_or(Vec2::ZERO);
-    let d1 = offset_dir(c, 1.0, pen, k).or_else(|| tangent(c, 1.0)).unwrap_or(Vec2::ZERO);
-    let (mut m11, mut m12, mut m22, mut r1, mut r2) = (0.0, 0.0, 0.0, 0.0, 0.0);
-    for i in 1..=SAMPLES {
-        let t = i as f64 / (SAMPLES + 1) as f64;
-        let Some(target) = offset_at(c, t, pen, k) else { continue };
-        let mt = 1.0 - t;
-        let base = p0.to_vec2() * (mt * mt * mt + 3.0 * mt * mt * t) + p3.to_vec2() * (3.0 * mt * t * t + t * t * t);
-        let r = target.to_vec2() - base;
-        let (u, w) = (d0 * (3.0 * mt * mt * t), d1 * (-3.0 * mt * t * t));
-        m11 += u.dot(u);
-        m12 += u.dot(w);
-        m22 += w.dot(w);
-        r1 += u.dot(r);
-        r2 += w.dot(r);
-    }
-    let chord = p0.distance(p3);
-    let fallback = chord / 3.0;
-    let (a, b) = match retracted {
-        [true, true] => (0.0, 0.0),
-        [true, false] => (0.0, if m22 > 0.0 { r2 / m22 } else { fallback }),
-        [false, true] => (if m11 > 0.0 { r1 / m11 } else { fallback }, 0.0),
-        [false, false] => {
-            let det = m11 * m22 - m12 * m12;
-            // Never negative (Cauchy–Schwarz); near zero when the samples cannot tell the two
-            // lengths apart.
-            if det > 0.0 && det > 1e-12 * m11 * m22 { ((r1 * m22 - r2 * m12) / det, (r2 * m11 - r1 * m12) / det) } else { (fallback, fallback) }
-        }
-    };
-    // A handle longer than this is a fit gone wrong.
-    let limit = 2.0 * (chord + c.p0.distance(c.p1) + c.p1.distance(c.p2) + c.p2.distance(c.p3));
-    let sane = |l: f64, keep: bool| {
-        if keep {
-            0.0
-        } else if l.is_finite() && (0.0..=limit).contains(&l) {
-            l
-        } else {
-            fallback
-        }
-    };
-    let [keep0, keep1] = retracted;
-    CubicBez::new(p0, p0 + d0 * sane(a, keep0), p3 - d1 * sane(b, keep1), p3)
-}
-
-/// The largest distance from points of the true offset to `fitted`.
-fn fit_error(c: &CubicBez, fitted: &CubicBez, pen: Vec2, k: f64) -> f64 {
-    let mut worst: f64 = 0.0;
-    for i in 0..SAMPLES {
-        let t = (i as f64 + 0.5) / SAMPLES as f64;
-        if let Some(p) = offset_at(c, t, pen, k) {
-            worst = worst.max(fitted.nearest(p, 1e-6).distance_sq);
-        }
-    }
-    worst.sqrt()
-}
-
-/// Side `k`'s offset of `c` as cubics within [`TOLERANCE`], appended to `out`.
-fn offset_cubic(c: CubicBez, pen: Vec2, k: f64, depth: u32, out: &mut Vec<Bez>, budget: &mut usize) -> Result<(), PathOpError> {
-    let (Some(p0), Some(p3)) = (offset_at(&c, 0.0, pen, k), offset_at(&c, 1.0, pen, k)) else { return Ok(()) };
-    let fitted = fit(&c, p0, p3, pen, k, [false, false]);
-    if depth >= MAX_DEPTH || fit_error(&c, &fitted, pen, k) <= TOLERANCE {
-        return push(out, Bez::Cubic(fitted), budget);
-    }
-    offset_cubic(c.subsegment(0.0..0.5), pen, k, depth + 1, out, budget)?;
-    offset_cubic(c.subsegment(0.5..1.0), pen, k, depth + 1, out, budget)
-}
-
-fn push(out: &mut Vec<Bez>, b: Bez, budget: &mut usize) -> Result<(), PathOpError> {
-    *budget += 1;
-    if *budget > MAX_SEGMENTS {
-        return Err(PathOpError::TooManySegments(*budget));
-    }
-    out.push(b);
-    Ok(())
-}
-
-/// Where the line through `p` along `a` meets the line through `q` along `b`, with the distances
-/// along each: `p + a·s = q + b·u`. `None` for parallel lines.
-fn intersect(p: Point, a: Vec2, q: Point, b: Vec2) -> Option<(Point, f64, f64)> {
-    let cross = a.cross(b);
-    if cross.abs() < 1e-9 {
-        return None;
-    }
-    let d = q - p;
-    let (s, u) = (d.cross(b) / cross, d.cross(a) / cross);
-    Some((p + a * s, s, u))
-}
-
 // ── Exact sides ─────────────────────────────────────────────────────────────────────────────────
-
-/// A straight or cubic piece of a path.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Bez {
-    Line(Point, Point),
-    Cubic(CubicBez),
-}
-
-impl Bez {
-    /// A quadratic piece becomes the cubic that draws the same curve.
-    fn of(piece: Piece) -> Bez {
-        match piece {
-            Piece::Line(a, b) => Bez::Line(a, b),
-            Piece::Quad(q) => Bez::Cubic(CubicBez::new(q.p0, q.p0 + (q.p1 - q.p0) * (2.0 / 3.0), q.p2 + (q.p1 - q.p2) * (2.0 / 3.0), q.p2)),
-            Piece::Cubic(c) => Bez::Cubic(c),
-        }
-    }
-
-    fn start(&self) -> Point {
-        match self {
-            Bez::Line(a, _) => *a,
-            Bez::Cubic(c) => c.p0,
-        }
-    }
-
-    fn end(&self) -> Point {
-        match self {
-            Bez::Line(_, b) => *b,
-            Bez::Cubic(c) => c.p3,
-        }
-    }
-
-    fn is_line(&self) -> bool {
-        matches!(self, Bez::Line(..))
-    }
-
-    fn degenerate(&self) -> bool {
-        match self {
-            Bez::Line(a, b) => a.distance(*b) <= JOIN_EPSILON,
-            Bez::Cubic(c) => [c.p1, c.p2, c.p3].iter().all(|p| p.distance(c.p0) <= JOIN_EPSILON),
-        }
-    }
-
-    fn start_dir(&self) -> Option<Vec2> {
-        match self {
-            Bez::Line(a, b) => unit(*b - *a),
-            Bez::Cubic(c) => tangent(c, 0.0),
-        }
-    }
-
-    fn end_dir(&self) -> Option<Vec2> {
-        match self {
-            Bez::Line(a, b) => unit(*b - *a),
-            Bez::Cubic(c) => tangent(c, 1.0),
-        }
-    }
-
-    /// Moves the start; a handle moves with its node.
-    fn set_start(&mut self, p: Point) {
-        match self {
-            Bez::Line(a, _) => *a = p,
-            Bez::Cubic(c) => {
-                let d = p - c.p0;
-                c.p0 = p;
-                c.p1 += d;
-            }
-        }
-    }
-
-    fn set_end(&mut self, p: Point) {
-        match self {
-            Bez::Line(_, b) => *b = p,
-            Bez::Cubic(c) => {
-                let d = p - c.p3;
-                c.p3 = p;
-                c.p2 += d;
-            }
-        }
-    }
-
-    /// The ring node that ends this piece.
-    fn rnode(&self) -> RNode {
-        match self {
-            Bez::Line(_, b) => RNode::new(Node::new(*b, NodeKind::Line), Vec::new()),
-            Bez::Cubic(c) => RNode::new(Node::new(c.p3, NodeKind::Curve), vec![Node::off(c.p1), Node::off(c.p2)]),
-        }
-    }
-}
 
 /// The pieces of a ring, quadratic ones as cubics, without pieces of no length. A closed ring
 /// starts with the segment that closes it.
 fn pieces_of(ring: &Ring) -> Vec<Bez> {
-    ring.segment_ends().filter_map(|j| ring.seg(j)).flat_map(|s| s.pieces()).map(Bez::of).filter(|b| !b.degenerate()).collect()
+    ring.segment_ends().filter_map(|j| ring.seg(j)).flat_map(|s| s.pieces()).map(Bez::of_piece).filter(|b| !b.degenerate()).collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -686,15 +453,7 @@ fn side(pieces: &[Bez], closed: bool, pen: Vec2, k: f64, joins: Joins, budget: &
     let mut prev: Option<&Bez> = None;
     let mut first: Option<&Bez> = None;
     for piece in pieces {
-        let mut offs = Vec::new();
-        match piece {
-            Bez::Line(a, b) => {
-                let Some(t) = unit(*b - *a) else { continue };
-                let w = reach(t, pen, k);
-                push(&mut offs, Bez::Line(*a + w, *b + w), budget)?;
-            }
-            Bez::Cubic(c) => offset_cubic(*c, pen, k, 0, &mut offs, budget)?,
-        }
+        let mut offs = offset_piece(piece, pen, k, Fit::Pen(TOLERANCE), budget)?;
         let Some(head) = offs.first() else { continue };
         if let (Some(p), Some(last)) = (prev, spans.last()) {
             let j = join(last, head, p, piece, k, joins);
@@ -745,16 +504,11 @@ fn join(a: &Bez, b: &Bez, pa: &Bez, pb: &Bez, k: f64, joins: Joins) -> Join {
     let node = pa.end();
     let (Some(tin), Some(tout)) = (pa.end_dir(), pb.start_dir()) else { return straight(&[ae, bs]) };
     let (da, db) = (a.end_dir().unwrap_or(tin), b.start_dir().unwrap_or(tout));
-    let hit = intersect(ae, da, bs, db);
     let width = ae.distance(node).max(bs.distance(node));
     let outer = tin.cross(tout) * k < 0.0;
     if outer || joins == Joins::Parallel {
         // The offset ends move apart: their lines meet ahead of `a` and behind `b`.
-        if let Some((m, s, u)) = hit
-            && s >= 0.0
-            && u <= 0.0
-            && m.distance(node) <= MITER_LIMIT * width
-        {
+        if let Some(m) = miter_tip(ae, da, bs, db, node, width) {
             let mut j = Join::default();
             if a.is_line() {
                 j.end = Some(m);
@@ -771,7 +525,7 @@ fn join(a: &Bez, b: &Bez, pa: &Bez, pb: &Bez, k: f64, joins: Joins) -> Join {
         // Two offset lines that cross: both end where they meet.
         if joins == Joins::Parallel
             && let (Bez::Line(a0, _), Bez::Line(_, b1)) = (a, b)
-            && let Some((m, s, u)) = hit
+            && let Some((m, s, u)) = intersect(ae, da, bs, db)
             && s <= 0.0
             && u >= 0.0
             && -s <= a0.distance(ae)
@@ -917,9 +671,8 @@ fn open_stroke(mut left: Ring, mut right: Ring, ends: &Ends, cap: CapStyle) -> O
         for (ring, p) in [(&mut left, l), (&mut right, r)] {
             let shift = match cap {
                 CapStyle::RoundInset => -(l.distance(r) / 2.0),
-                CapStyle::Aligned if t.x.abs() >= t.y.abs() => (end.x - p.x) / t.x,
-                CapStyle::Aligned => (end.y - p.y) / t.y,
-                _ => 0.0,
+                CapStyle::Aligned => to_cut(p, t, end, cut_normal(t, CapAxis::Auto)).unwrap_or(0.0),
+                CapStyle::Flat | CapStyle::Square | CapStyle::Round => 0.0,
             };
             if shift.is_finite() && shift != 0.0 {
                 shift_end(ring, at_end, t * shift);
@@ -965,27 +718,30 @@ fn shift_end(ring: &mut Ring, at_end: bool, delta: Vec2) {
 }
 
 /// A cap from `a` to `b`, bulging along `t`: the nodes between them, and the kind and handles of
-/// the segment that ends at `b`.
+/// the segment that ends at `b`. A round cap is two quarter ellipses, whatever its size, so masters
+/// stay compatible.
 fn cap_nodes(a: Point, b: Point, t: Option<Vec2>, cap: CapStyle) -> (Vec<RNode>, NodeKind, Vec<Node>) {
-    let half = a.distance(b) / 2.0;
-    let Some(t) = t.filter(|_| half > JOIN_EPSILON) else { return (Vec::new(), NodeKind::Line, Vec::new()) };
-    let ext = t * half;
-    match cap {
-        CapStyle::Square => {
-            let line = |p: Point| RNode::new(Node::new(p, NodeKind::Line), Vec::new());
-            (vec![line(a + ext), line(b + ext)], NodeKind::Line, Vec::new())
-        }
-        CapStyle::Round | CapStyle::RoundInset => {
-            // Two quarter ellipses with conjugate radii `a - c` and `ext`.
-            let c = a.midpoint(b);
-            let r = a - c;
-            let top = c + ext;
-            let mid =
-                RNode::new(Node { smooth: true, ..Node::new(top, NodeKind::Curve) }, vec![Node::off(a + ext * KAPPA), Node::off(top + r * KAPPA)]);
-            (vec![mid], NodeKind::Curve, vec![Node::off(top - r * KAPPA), Node::off(b + ext * KAPPA)])
-        }
-        CapStyle::Flat | CapStyle::Aligned => (Vec::new(), NodeKind::Line, Vec::new()),
-    }
+    let shape = match cap {
+        CapStyle::Square => CapShape::Square,
+        CapStyle::Round | CapStyle::RoundInset => CapShape::Round,
+        CapStyle::Flat | CapStyle::Aligned => CapShape::Flat,
+    };
+    let edge = match t {
+        Some(t) => cap_edge(a, b, t, shape, f64::INFINITY),
+        None => vec![Bez::Line(a, b)],
+    };
+    let Some((last, between)) = edge.split_last() else { return (Vec::new(), NodeKind::Line, Vec::new()) };
+    let smooth = shape == CapShape::Round;
+    let mids = between
+        .iter()
+        .map(|piece| {
+            let mut r = piece.rnode();
+            r.node.smooth = smooth;
+            r
+        })
+        .collect();
+    let end = last.rnode();
+    (mids, end.node.kind, end.ctrl)
 }
 
 #[cfg(test)]
@@ -995,6 +751,9 @@ mod tests {
     use crate::filters::FilterString;
     use crate::fixtures::rect;
     use fontcraft_geom::Rect;
+
+    /// Handle length of a quarter circle drawn as one cubic, as a fraction of its radius.
+    const KAPPA: f64 = 0.552_284_749_830_793_4;
 
     fn options(h: f64, v: f64) -> OffsetOptions {
         OffsetOptions { horizontal: h, vertical: v, stroke: false, auto: false, position: 50.0, compatible: false, cap: CapStyle::Flat }
