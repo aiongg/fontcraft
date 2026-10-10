@@ -447,10 +447,14 @@ mod tests {
         assert_eq!(origin.tag, Some(0));
         // The sweep is rounded too: (43.3, 25) becomes (43, 25).
         assert_eq!(measure(&out).1, (0.0, 0.0, 143.0, 125.0));
+        // The circle's own off-curve points (at 55.23) stay where they are.
         let circle = [circle(100.0)];
         let out = extrude(&circle, 80.0, -45.0, false, 1.0).unwrap();
         assert!(!out.is_empty());
-        assert!(out.iter().flat_map(|c| &c.nodes).all(|n| n.point.x.fract() == 0.0 && n.point.y.fract() == 0.0));
+        let original: Vec<Point> = circle[0].nodes.iter().map(|n| n.point).collect();
+        let new = out.iter().flat_map(|c| &c.nodes).filter(|n| !original.contains(&n.point));
+        assert!(new.clone().count() > 0);
+        assert!(new.into_iter().all(|n| n.point.x.fract() == 0.0 && n.point.y.fract() == 0.0));
     }
 
     #[test]

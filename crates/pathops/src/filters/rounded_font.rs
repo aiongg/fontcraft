@@ -12,9 +12,9 @@ use std::f64::consts::{FRAC_PI_4, FRAC_PI_8};
 
 use fontcraft_geom::{Point, Vec2};
 
+use super::round_corners::fill_sides;
 use super::{Args, Context, Filter, Item, Param, ParamKind, Slot, Value};
 use crate::contour::{Contour, DIRECTION_EPSILON, Node, NodeKind, RNode, Ring, angle_degrees, round_to_grid};
-use crate::direction::correct_direction;
 use crate::{MAX_COORDINATE, MAX_NODES, PathOpError};
 
 /// An ending up to this fraction wider than the stem still counts as a stem ending.
@@ -120,29 +120,6 @@ pub fn rounded_font(contours: &[Contour], stem: f64, grid: f64) -> Result<Vec<Co
         out.push(contour);
     }
     Ok(out)
-}
-
-/// For each contour: 1 when the filled area lies to the left of its direction, -1 when it lies to
-/// the right, 0 for an open contour or one without area. Correct Path Direction turns every closed
-/// contour so the filled area is on its left; a contour it reverses has it on the right.
-fn fill_sides(contours: &[Contour], rings: &[Ring]) -> Result<Vec<f64>, PathOpError> {
-    let directed = correct_direction(contours)?;
-    let mut sides = vec![0.0; rings.len()];
-    for (k, &i) in directed.order.iter().enumerate() {
-        let (Some(ring), Some(c), Some(side)) = (rings.get(i), directed.contours.get(k), sides.get_mut(i)) else { continue };
-        if !ring.closed {
-            continue;
-        }
-        let (before, after) = (ring.area(), Ring::from_contour(c)?.area());
-        *side = if before == 0.0 {
-            0.0
-        } else if (before > 0.0) == (after > 0.0) {
-            1.0
-        } else {
-            -1.0
-        };
-    }
-    Ok(sides)
 }
 
 /// The rounding of one stem ending: the segment from node `a` to node `b`.

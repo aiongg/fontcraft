@@ -31,6 +31,7 @@ fn fixture() -> Session {
     let counter = json!([{"x": 80, "y": 80}, {"x": 80, "y": 120}, {"x": 120, "y": 120}, {"x": 120, "y": 80}]);
     run(&mut s, "path.addPath", json!({"glyph": "O", "nodes": counter}));
     run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
+    run(&mut s, "glyph.newGlyph", json!({"name": "Big"}));
     run(&mut s, "path.addPath", json!({"glyph": "Big", "nodes": rect(0.0, 0.0, 100.0, 50_000.0)}));
     s
 }

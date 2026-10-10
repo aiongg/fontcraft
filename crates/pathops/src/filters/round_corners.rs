@@ -139,7 +139,7 @@ pub fn round_corners(contours: &[Contour], radius: f64, visual: bool, cx: &Conte
 /// For each contour: 1 when the filled area lies to the left of its direction, -1 when it lies to
 /// the right, 0 for an open contour or one without area. Correct Path Direction turns every closed
 /// contour so the filled area is on its left; a contour it reverses has it on the right.
-fn fill_sides(contours: &[Contour], rings: &[Ring]) -> Result<Vec<f64>, PathOpError> {
+pub(crate) fn fill_sides(contours: &[Contour], rings: &[Ring]) -> Result<Vec<f64>, PathOpError> {
     let directed = correct_direction(contours)?;
     let mut sides = vec![0.0; rings.len()];
     for (k, &i) in directed.order.iter().enumerate() {

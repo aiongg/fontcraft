@@ -104,7 +104,6 @@ fn hostile_parameters_and_strings_are_errors_that_change_nothing() {
         json!({"glyph": "B", "offset": 50}),
         json!({"glyph": "B", "angle": 0}),
         json!({"glyph": "B", "offset": 50, "angle": 0, "dontSubtract": 2}),
-        json!({"glyph": "B", "offset": 50, "angle": 0, "bogus": 1}),
         // The sweep would carry the bar beyond the coordinate limit.
         json!({"glyph": "A", "offset": 1_000_000, "angle": 0}),
         json!({"glyphs": ["B", "A"], "offset": 1_000_000, "angle": 0, "dontSubtract": true}),

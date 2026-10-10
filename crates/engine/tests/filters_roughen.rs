@@ -70,7 +70,8 @@ fn roughen_cuts_every_segment_and_moves_every_node_within_the_limits() {
     // Curves become straight pieces.
     let mut oval = roughened(json!({"glyph": "O", "segmentLength": 60, "horizontal": 0, "vertical": 0}));
     let out = nodes(&mut oval, "O");
-    assert!(out.len() > 20 && out.iter().all(|n| n["type"] != "offcurve" && n["type"] != "curve"));
+    assert_eq!(out.len(), 20, "five pieces per quarter arc of about 314 units");
+    assert!(out.iter().all(|n| n["type"] != "offcurve" && n["type"] != "curve"));
 }
 
 #[test]

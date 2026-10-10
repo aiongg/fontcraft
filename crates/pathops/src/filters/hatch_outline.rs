@@ -137,7 +137,7 @@ impl Filter for HatchOutline {
     /// with `Offset: 0`, it is off.
     fn read_items(&self, items: &[Item]) -> Result<Args, String> {
         let is_offset = |i: &Item| i.key.as_deref().is_some_and(|k| k.eq_ignore_ascii_case("Offset"));
-        let on = items.iter().find(|&i| is_offset(i)).is_some_and(|i| i.value.trim().parse::<f64>().map_or(true, |v| v != 0.0));
+        let on = items.iter().find(|&i| is_offset(i)).is_some_and(|i| i.value.trim().parse::<f64>() != Ok(0.0));
         let kept: Vec<Item> = items.iter().filter(|&i| on || !is_offset(i)).cloned().collect();
         let read = super::read_items(PARAMS, &kept)?;
         let given = read.iter().filter(|(k, _)| *k != "offsetPath").map(|(k, v)| (k, input(v))).chain([("offsetPath", Input::Bool(on))]);
