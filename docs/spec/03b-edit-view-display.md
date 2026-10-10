@@ -264,6 +264,22 @@ How `measure.ruler` finds crossings (our design):
 - With `guide` instead of `from` and `to`, the whole line of the guide is measured; this is what a
   measurement guide prints.
 
+How FontCraft's Measurement tool behaves (our decisions where the handbook is silent):
+
+- The labels cover the edited glyph only; the other glyphs of the tab are not labelled yet. A
+  label shows at most two decimals. Deltas print `italicDx, dy`.
+- The ruler's ends snap like a dragged point (`Ctrl` turns it off). With `Shift`, the ruler is
+  horizontal or vertical, whichever is nearer to the pointer; it does not snap then.
+- The ruler stays after the button comes up, until the next press, `Escape` or a tool change. A
+  click without a drag removes it.
+- `G` during the drag, with any modifiers, adds a local guide from the ruler's start along the
+  ruler and turns it into a measurement guide, as one undo step (`command.batch` of `guide.add`
+  and `guide.toggleMeasurement`). The guide's position is rounded to the grid like any new guide.
+- Overlapped stretches are not drawn grey yet. Cmd for the Select tool and Cmd+Ctrl+Alt for a
+  temporary Measurement tool are not built yet.
+- Measurement guides print each gap's distance at its middle, in the guide's colour, with a dot
+  at each crossing.
+
 **Measurement line** (`view.showMeasurementLine`, text mode):
 
 - one horizontal line across the text at an adjustable height (`view.setMeasurementLineHeight`;

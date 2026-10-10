@@ -28,6 +28,7 @@ pub const KEYMAP: &[KeyBinding] = &[
     KeyBinding { keys: "Shift+V", when: "editView", command: "tool.select", note: "the other tool of the Select group" },
     KeyBinding { keys: "H", when: "editView", command: "tool.select", note: "Hand" },
     KeyBinding { keys: "Z", when: "editView", command: "tool.select", note: "Zoom" },
+    KeyBinding { keys: "L", when: "editView", command: "tool.select", note: "Measurement" },
     KeyBinding { keys: "Space (held)", when: "editView", command: "", note: "the Hand tool while held" },
     KeyBinding { keys: "Cmd+Space (held)", when: "editView", command: "", note: "the Zoom tool while held; Alt+click zooms out" },
     KeyBinding { keys: "Escape", when: "tool:*", command: "", note: "cancel the gesture in progress" },
@@ -44,6 +45,7 @@ pub const KEYMAP: &[KeyBinding] = &[
     KeyBinding { keys: "Alt+Delete", when: "editView", command: "edit.deleteInAllMasters", note: "the selected points and shapes" },
     KeyBinding { keys: "Tab", when: "editView", command: "selection.selectNext", note: "" },
     KeyBinding { keys: "Shift+Tab", when: "editView", command: "selection.selectPrevious", note: "" },
+    KeyBinding { keys: "G", when: "tool:measurement", command: "command.batch", note: "while dragging the ruler: a measurement guide along it" },
 ];
 
 fn run(id: &str, params: Map<String, Value>) -> Action {

@@ -30,6 +30,8 @@ pub use app::FontcraftApp;
 pub use shell::UI_COMMANDS;
 
 #[cfg(test)]
+mod canvas_layers_tests;
+#[cfg(test)]
 mod dialog_tests;
 #[cfg(test)]
 mod panels_tests;

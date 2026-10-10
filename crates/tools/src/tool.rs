@@ -9,7 +9,7 @@ use crate::output::{Output, Overlay};
 use crate::scene::Scene;
 use crate::selection::Selection;
 use crate::view::View;
-use crate::{hand::HandTool, lasso::LassoTool, rotate::RotateTool, scale::ScaleTool, select::SelectTool, zoom::ZoomTool};
+use crate::{hand::HandTool, lasso::LassoTool, measure::MeasureTool, rotate::RotateTool, scale::ScaleTool, select::SelectTool, zoom::ZoomTool};
 
 /// Distances and steps the tools use. The shell fills the screen distances from `theme::Tokens`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -113,6 +113,7 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "knife", label: "Knife", shortcut: "E", group: "erase" },
     ToolInfo { id: "rotate", label: "Rotate", shortcut: "R", group: "" },
     ToolInfo { id: "scale", label: "Scale", shortcut: "S", group: "" },
+    ToolInfo { id: "measurement", label: "Measurement", shortcut: "L", group: "" },
 ];
 
 /// A new tool by id, or `None` for an unknown id.
@@ -125,6 +126,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "knife" => Box::new(crate::knife::KnifeTool::default()),
         "rotate" => Box::new(RotateTool::default()),
         "scale" => Box::new(ScaleTool::default()),
+        "measurement" => Box::new(MeasureTool::default()),
         _ => return None,
     };
     Some(tool)

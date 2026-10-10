@@ -129,6 +129,31 @@ pub struct Tokens {
     pub layers_indent: f32,
     pub info_box_margin: f32,
     pub bottom_bar_margin: f32,
+    /// Local guides (`guides.localVersusGlobal`: blue).
+    pub guide_local: Color32,
+    /// Global guides (red).
+    pub guide_global: Color32,
+    pub guide_width: f32,
+    /// The knob at a guide's position: filled when the guide is selected.
+    pub guide_knob_radius: f32,
+    /// A guide's name, at its left end.
+    pub guide_name_size: f32,
+    /// The font's grid, drawn while its step is at least `grid_min_spacing` points on screen.
+    pub grid_line: Color32,
+    pub grid_min_spacing: f32,
+    /// The CJK grid, the CJK guide box and the design grid.
+    pub cjk_grid: Color32,
+    /// Measurement tool labels (`measurement.labelColors`): on-curve coordinates.
+    pub measure_on_curve: Color32,
+    /// Off-curve coordinates.
+    pub measure_off_curve: Color32,
+    /// Deltas between neighbouring on-curve nodes.
+    pub measure_delta: Color32,
+    /// The ruler, its crossings and their distances; measurement guides use their own colour.
+    pub measure_ruler: Color32,
+    pub measure_label_size: f32,
+    /// Dots where a ruler or a measurement guide crosses the outline.
+    pub measure_crossing_radius: f32,
 }
 
 impl Tokens {
@@ -210,6 +235,20 @@ impl Tokens {
             layers_indent: 12.0,
             info_box_margin: 12.0,
             bottom_bar_margin: 2.0,
+            guide_local: Color32::from_rgb(0x2d, 0x7d, 0xd8),
+            guide_global: Color32::from_rgb(0xd8, 0x3a, 0x3a),
+            guide_width: 1.0,
+            guide_knob_radius: 4.0,
+            guide_name_size: 10.0,
+            grid_line: Color32::from_rgba_unmultiplied(0x90, 0x98, 0xa4, 0x30),
+            grid_min_spacing: 8.0,
+            cjk_grid: Color32::from_rgba_unmultiplied(0x6a, 0x9a, 0x6a, 0x90),
+            measure_on_curve: Color32::from_rgb(0x1e, 0x5f, 0xd0),
+            measure_off_curve: Color32::from_rgb(0x2a, 0x9a, 0x3a),
+            measure_delta: Color32::from_rgb(0xd0, 0x2c, 0x2c),
+            measure_ruler: Color32::from_rgb(0x00, 0x8c, 0x9c),
+            measure_label_size: 10.0,
+            measure_crossing_radius: 3.0,
         }
     }
 

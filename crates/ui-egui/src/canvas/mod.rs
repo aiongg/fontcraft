@@ -5,6 +5,7 @@
 //! |---|---|
 //! | [`view`] | (no drawing) the camera: line layout, fitting, the tools' view transform |
 //! | [`metrics`] | metric lines, zones and their names |
+//! | [`guides`] | guides, the grid, parameter metric lines, CJK grids, measurement labels |
 //! | [`fill`] | filled glyphs, rasterised by the `render` crate into a texture |
 //! | [`nodes`] | nodes and handles with the display conventions of `docs/spec/03a` § 4 |
 //! | [`selection`] | the selection, and the active tool's overlays (marquee, snapping lines…) |
@@ -16,6 +17,7 @@
 
 pub mod bbox;
 pub mod fill;
+pub mod guides;
 pub mod metrics;
 pub mod nodes;
 pub mod selection;
@@ -49,6 +51,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
     egui::CentralPanel::default().frame(frame).show(ui, |ui| {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         state.canvas_size = [f64::from(rect.width()), f64::from(rect.height())];
+        let extras = guides::Extras::query(session, &tab, &state.display, tools.toolbox.active_id(), &tools.toolbox.overlays());
         let Ok(font) = session.font() else { return };
         let Some(master) = view::active_master(font) else { return };
         let line = view::layout(font, &master.id, &tab.glyphs);
@@ -65,6 +68,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         if state.display.metrics {
             metrics::draw(&c, &lines, &marks, width, view::vertical_span(font, master), state.display.metrics_names);
         }
+        guides::draw_lines(&c, &extras, &state.display);
         let what = fill::Fill {
             doc: session.active().map(|d| (d.id, d.revision)).unwrap_or_default(),
             others: state.display.fill_preview,
@@ -80,6 +84,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
                 painter.add(egui::Shape::line(contour, Stroke::new(tokens.outline_width, tokens.outline)));
             }
         }
+        guides::draw_guides(&c, font, layer, &tab.selection, &extras, &state.display);
         let focus = tab.focus.as_deref();
         if state.display.nodes {
             painter.extend(selection::segment_shapes(layer, &tab.selection, v, tokens, focus));
@@ -88,6 +93,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         }
         painter.extend(bbox::shapes(font, &tab, tools.toolbox.active_id(), state.display.bounding_box, &state.transform, v, tokens));
         painter.extend(selection::overlay_shapes(&tools.toolbox.overlays(), v, tokens));
+        guides::draw_measurement(&c, &extras);
     });
 }
 

@@ -1,6 +1,7 @@
 //! Where a dragged point lands.
 //!
-//! Priority (`docs/spec/03a` question 28): nodes, then handles, then guides, then metric lines.
+//! Priority (`docs/spec/03a` question 28): nodes, then handles, then the background's points,
+//! then guides ([`crate::snap_guides`]), then metric lines.
 //! A point that finds none of them can still line up on one axis with another node (the magnetic
 //! alignment lines). Points that move with the drag are never targets. The snap distance is in
 //! screen points; the shell passes its token value. `Ctrl` suspends snapping: the tools then do
@@ -12,7 +13,7 @@ use fontcraft_geom::Point;
 use fontcraft_model::NodeKind;
 use serde::Serialize;
 
-use crate::geometry::{dist, finite, line_distance};
+use crate::geometry::{dist, finite};
 use crate::scene::Scene;
 use crate::selection::Selection;
 use crate::view::View;
@@ -135,16 +136,9 @@ pub fn snap(scene: &Scene, view: &View, p: Point, moving: &Moving, distance: f64
         }
     }
 
-    // Guides: the nearest point on the nearest guide.
-    let mut guide: Option<(f64, Point)> = None;
-    for g in scene.local_guides().iter().chain(scene.global_guides.iter()) {
-        let Some((d, foot)) = line_distance(p, Point::new(g.x, g.y), g.angle) else { continue };
-        if d <= tol && guide.is_none_or(|b| d < b.0) {
-            guide = Some((d, foot));
-        }
-    }
-    if let Some((_, foot)) = guide {
-        return Snap { point: foot, kind: Some(SnapKind::Guide), node: None, marker: Some(foot), lines: Vec::new() };
+    // The background's points, then guides and their crossings.
+    if let Some(s) = crate::snap_guides::background(scene, p, tol).or_else(|| crate::snap_guides::guides(scene, p, tol)) {
+        return s;
     }
 
     // Metric lines on y, the sidebearings on x, then alignment with other nodes on each axis

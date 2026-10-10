@@ -2110,6 +2110,7 @@ milestone = "M3"
 summary = "While a measurement line is being dragged with the Measurement tool, pressing G with Cmd, Option and Ctrl held turns that line into a guide."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "Built in M3.9 for the Measurement tool: G with any modifiers during the drag. The guide starts at the ruler's start, follows the ruler and is rounded to the grid; adding it and turning it into a measurement guide are one undo step. The temporary Measurement tool from other tools is not built yet."
 
 [[command]]
 id = "view.showGuides"
@@ -2131,6 +2132,7 @@ milestone = "M3"
 summary = "A local guide belongs to one glyph layer, is drawn blue and shows only on that layer. A global guide belongs to a master, is drawn red and shows on every glyph of that master unless its scope is restricted."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "Drawn in M3.9 in the theme's blue and red; a guide's own colour wins. Showing a global guide only on the glyphs of its filter waits for M4."
 
 [[behavior]]
 id = "guides.knobAndSelection"
@@ -2139,6 +2141,7 @@ milestone = "M3"
 summary = "A guide is selected by clicking anywhere on it and shows a filled knob while selected. Dragging the knob moves the guide, dragging the guide anywhere else changes its angle, and double-clicking the knob turns the guide perpendicular to its present orientation."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "M3.9 draws the knob: a ring, filled while the guide is selected. Dragging the knob or the guide and double-clicking the knob are not built yet."
 
 [[behavior]]
 id = "guides.keyboard"
@@ -2307,6 +2310,7 @@ milestone = "M3"
 summary = "A guide can be given a name through the Name field of the Info box; the name is drawn at the left end of the guide."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
+notes = "Built in M3.9: the name is drawn at the guide's left end, the lower end of a vertical guide."
 
 [[behavior]]
 id = "guides.globalScopeFilter"

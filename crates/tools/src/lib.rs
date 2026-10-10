@@ -15,7 +15,8 @@
 //! | [`hit`] | what lies under the pointer: nodes, handles, segments, anchors, components, guides |
 //! | [`selection`] | the selection and the commands' target object built from it |
 //! | [`snap`] | where a dragged point lands: nodes, then handles, guides, metric lines, alignment |
-//! | [`select`], [`lasso`], [`hand`], [`zoom`], [`rotate`], [`scale`] | the tools, as state machines |
+//! | [`snap_guides`] | snapping to the background's points, guides and their crossings |
+//! | [`select`], [`lasso`], [`hand`], [`zoom`], [`rotate`], [`scale`], [`measure`] | the tools, as state machines |
 //! | [`bbox`] | the selection's bounding box, its knobs, and the freehand transform drags |
 //! | [`keymap`] | the Edit View keys these tools answer |
 //! | [`toolbox`] | the active tool, temporary tools (Space, Cmd+Space) and key routing |
@@ -29,6 +30,7 @@ pub mod hit;
 pub mod keymap;
 pub mod knife;
 pub mod lasso;
+pub mod measure;
 pub mod output;
 pub mod rotate;
 pub mod scale;
@@ -37,6 +39,7 @@ pub mod segment;
 pub mod select;
 pub mod selection;
 pub mod snap;
+pub mod snap_guides;
 pub mod tool;
 pub mod toolbox;
 pub mod view;
@@ -60,6 +63,8 @@ pub const MAX_LASSO_POINTS: usize = 10_000;
 /// Most sampled points kept for the outlines of a scene's components.
 pub const MAX_COMPONENT_POINTS: usize = 200_000;
 
+#[cfg(test)]
+mod measure_annotate_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

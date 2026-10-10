@@ -634,6 +634,22 @@ Rules (our design where the handbook is silent):
 - A global guide's `filter` is kept as predicate text. Showing a global guide only on the glyphs
   its filter selects waits for the Smart Filter rules (M4).
 
+How FontCraft draws guides and snaps to them (our decisions where the handbook is silent):
+
+- A guide is a line across the whole canvas: blue when local, red when global, or the guide's
+  own colour when it has one. Its knob is a ring at its position, filled while the guide is
+  selected; a locked guide shows a padlock instead. The name sits at the guide's left end (the
+  lower end of a vertical guide).
+- View › Show Guides hides guides and the numbers of measurement guides.
+- A dragged point near a guide lands on it. Where the guide crosses another guide, a metric line
+  or a sidebearing within the snap distance, the point lands on the crossing.
+- The canvas also draws the font's grid once a grid step is at least 8 points on screen, the
+  metric lines that parameters set (`shoulderHeight`, `smallCapHeight`, per-script values) while
+  metrics show, and the CJK grid, CJK guide box and design grid as dotted lines. The design grid
+  reads its values as a horizontal and a vertical step in units, drawn over the CJK box, or over
+  the glyph's width and metric span when no CJK grid is set: our reading of a parameter the
+  handbook does not explain.
+
 ## 21. Undo (`undo.perGlyphHistory`)
 
 Each glyph has its own undo stack, in both Edit View and Font View. Edits to data outside a

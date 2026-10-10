@@ -96,6 +96,8 @@ pub enum OverlayKind {
     HoverLocked,
     /// The Knife tool's cutting line.
     KnifeLine,
+    /// The Measurement tool's ruler; the canvas labels its crossings (`measure.ruler`).
+    Ruler,
 }
 
 /// Something a tool asks the canvas to draw, in font units.

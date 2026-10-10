@@ -799,6 +799,7 @@ milestone = "M3"
 summary = "While the background is displayed, its nodes and outlines are snapping targets for edits on the active side."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "Built in M3.9 (our reading): the background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides. Its outlines between nodes are not targets. They count whenever the layer has a background: Show Background does not turn them off yet."
 
 [[behavior]]
 id = "background.darkenedCanvas"
@@ -1347,7 +1348,7 @@ milestone = "M3"
 summary = "Read-only tool for coordinates and distances. It labels all points of every glyph visible in the tab and measures along a dragged ruler, showing the ruler's angle at its end."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: with the Measurement tool active, every node and handle is labelled with its X and Y, and the deltas between consecutive on-curve nodes appear in red as dx, dy pairs. Not shown: the ruler drag, Shift, G, the temporary-tool keys."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: with the Measurement tool active, every node and handle is labelled with its X and Y, and the deltas between consecutive on-curve nodes appear in red as dx, dy pairs. Not shown: the ruler drag, Shift, G, the temporary-tool keys. Built in M3.9 (our reading where the handbook is silent): the ruler's ends snap unless Ctrl is held; Shift keeps it horizontal or vertical, whichever is nearer; the ruler stays until the next press, Escape or a tool change. G with any modifiers adds the measurement guide. The labels cover the edited glyph only, and Cmd and Cmd+Ctrl+Alt do not switch tools yet."
 
 [[command]]
 id = "measure.ruler"
@@ -1424,6 +1425,7 @@ milestone = "M3"
 summary = "With the Measurement tool, on-curve coordinates are printed in blue, off-curve coordinates in green and the X/Y deltas between neighbouring on-curve nodes in red."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
+notes = "Built in M3.9 with these colours from the theme tokens; labels print at most two decimals."
 
 [[behavior]]
 id = "measurement.italicCorrectedDelta"
@@ -1432,6 +1434,7 @@ milestone = "M3"
 summary = "The X deltas shown by the Measurement tool are taken relative to the master's italic angle, so a segment that runs exactly along the italic angle reports an X delta of zero."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
+notes = "Built in M3.9: the delta labels print `italicDx, dy` from `measure.coordinates`."
 
 [[behavior]]
 id = "measurement.rulerAngle"
@@ -1440,6 +1443,7 @@ milestone = "M3"
 summary = "The ruler shows its angle at its end point in counterclockwise degrees, with 0 meaning a ruler dragged straight up."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
+notes = "Built in M3.9: the angle `measure.ruler` returns, printed at the ruler's end."
 
 [[behavior]]
 id = "measurement.allVisibleGlyphs"
@@ -1448,6 +1452,7 @@ milestone = "M3"
 summary = "Coordinates and rulers of the Measurement tool cover every glyph shown in the Edit View tab, not only the active one, and a ruler may cross several glyphs."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
+notes = "Not built in M3.9: the labels and the ruler cover the edited glyph only."
 
 [[behavior]]
 id = "measurement.overlapsIgnored"
@@ -1456,6 +1461,7 @@ milestone = "M3"
 summary = "Rulers and measurement guides measure the merged shape: crossings that lie inside an overlap of paths are skipped. Such overlapped stretches are drawn light grey to show they will vanish when overlaps are removed at export."
 ref = "Edit View › Measuring › Measurement Guides"
 status = "handbook"
+notes = "M3.9: crossings inside overlaps are skipped (`measure.ruler`); the overlapped stretches are not drawn grey yet."
 
 [[behavior]]
 id = "measurement.guidesAlwaysOn"
@@ -1464,6 +1470,7 @@ milestone = "M3"
 summary = "A guide in measurement mode prints the distances between its crossings with outlines and components whenever guides are visible, whichever tool is active."
 ref = "Edit View › Measuring › Measurement Guides"
 status = "handbook"
+notes = "Built in M3.9: each gap's distance at its middle and a dot at each crossing, in the guide's colour, while Show Guides is on."
 
 [[behavior]]
 id = "measurementLine.semantics"
