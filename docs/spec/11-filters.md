@@ -86,7 +86,9 @@ How FontCraft runs it (our design, documented behaviour not yet observed):
   rounds to 0, changes nothing. Open paths stay as they are.
 - Offset 0 to 1,000,000 units; angle -360 to 360 degrees. The dialog's first values are ours:
   offset 50, angle -45, Don't Subtract off.
-- Export string (our choice; none is documented): `Extrude; offset; angle; dontsubtract`.
+- No export string is documented, so Extrude has none until a written source shows its form
+  (owner's decision). `filter.apply` refuses an Extrude string, or positional items, with a message
+  and changes nothing; it runs Extrude with named parameters only.
 
 ### Hatch Outline (`filter.hatchOutline`)
 
@@ -344,6 +346,8 @@ dispatches it through the registry (`filter.customParameter.sameRegistryAsComman
   **Answered for M3 (our decision, 2026-10-09):** dialogs remember their last values for the
   session. The first defaults are ours, written in each filter's row when it is built.
 - Extrude and Interpolate with Background: is there an export string? None is documented.
+  **Answered for Extrude (owner's decision, 2026-10-10):** no string form until a written source
+  shows one.
 - Roughen export string has a fourth `angle` value with no dialog field in the chapter.
 - Offset Curve export string has no slots for Keep Compatible or Cap Style; are they settable at export?
 - Hatch Outline: can the export string turn Offset Path off (open paths), e.g. `Offset: 0`?

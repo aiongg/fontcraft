@@ -44,7 +44,7 @@ const PARAMS: &[Param] = &[
         kind: ParamKind::Number { min: 0.0, max: MAX_COORDINATE },
         default: Value::Number(50.0),
         required: true,
-        slot: Slot::Position(0),
+        slot: Slot::None,
         doc: "length of the sweep, in units",
     },
     Param {
@@ -53,7 +53,7 @@ const PARAMS: &[Param] = &[
         kind: ParamKind::Number { min: -MAX_ANGLE, max: MAX_ANGLE },
         default: Value::Number(-45.0),
         required: true,
-        slot: Slot::Position(1),
+        slot: Slot::None,
         doc: "direction of the sweep in degrees, counterclockwise, 0 pointing right",
     },
     Param {
@@ -62,12 +62,12 @@ const PARAMS: &[Param] = &[
         kind: ParamKind::Bool,
         default: Value::Bool(false),
         required: false,
-        slot: Slot::Position(2),
+        slot: Slot::None,
         doc: "keep the original area in the result instead of leaving the shadow only",
     },
 ];
 
-const DOC: &str = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), offset: units (0 to 1000000), angle: degrees (-360 to 360, counterclockwise, 0 pointing right), dontSubtract?: bool (default false)} sweeps the closed paths `offset` units in the direction `angle` and replaces them with the swept shape minus the original, which leaves the shadow only; with dontSubtract the original area stays part of the result. An offset of 0 changes nothing. Open paths, components and locked paths are not changed; new points are rounded to the grid. Export string: Extrude; offset; angle; dontsubtract → {glyphs: [names], skipped: [{glyph, layer?, reason}]}";
+const DOC: &str = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), offset: units (0 to 1000000), angle: degrees (-360 to 360, counterclockwise, 0 pointing right), dontSubtract?: bool (default false)} sweeps the closed paths `offset` units in the direction `angle` and replaces them with the swept shape minus the original, which leaves the shadow only; with dontSubtract the original area stays part of the result. An offset of 0 changes nothing. Open paths, components and locked paths are not changed; new points are rounded to the grid. Extrude has no export string form: filter.apply runs it only with args as an object of parameters → {glyphs: [names], skipped: [{glyph, layer?, reason}]}";
 
 impl Filter for Extrude {
     fn id(&self) -> &'static str {
@@ -88,6 +88,10 @@ impl Filter for Extrude {
 
     fn params(&self) -> &'static [Param] {
         PARAMS
+    }
+
+    fn has_string_form(&self) -> bool {
+        false
     }
 
     fn apply(&self, contours: &[Contour], args: &Args, cx: &Context) -> Result<Vec<Contour>, PathOpError> {

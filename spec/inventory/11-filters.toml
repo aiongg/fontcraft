@@ -122,7 +122,7 @@ milestone = "M3"
 summary = "Builds a solid drop-shadow body by sweeping the glyph shape along a straight vector of the given length and direction. By default the original shape is then cut out of the swept shape, leaving only the shadow; Don't Subtract keeps the full swept shape."
 ref = "Filters › Built-in Filters › Extrude"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft geometry (ours): the swept shape is the original area plus the band each piece of a closed path sweeps; curves are split where they run parallel to the sweep. The sweep vector is rounded to the grid, so are new points; an offset of 0 (or one that rounds to 0) changes nothing. Open paths, components and locked paths are not changed. Offset 0 to 1000000 units, angle -360 to 360 degrees. Export string (our choice, none is documented): Extrude; offset; angle; dontsubtract."
+notes = "Documented, not yet observed. FontCraft geometry (ours): the swept shape is the original area plus the band each piece of a closed path sweeps; curves are split where they run parallel to the sweep. The sweep vector is rounded to the grid, so are new points; an offset of 0 (or one that rounds to 0) changes nothing. Open paths, components and locked paths are not changed. Offset 0 to 1000000 units, angle -360 to 360 degrees. No export string form is documented, so Extrude has none until a written source shows one (owner's decision): filter.apply refuses an Extrude string or positional items and runs it with named parameters only."
 
 [[panel]]
 id = "dialog.filterExtrude"
@@ -891,7 +891,7 @@ milestone = "M7"
 summary = "No export string is documented for Extrude or for Interpolate with Background; whether they can be used as Filter parameters must be checked in the reference app."
 ref = "Appendix › Custom Parameters › Filter"
 status = "inferred"
-notes = "FontCraft (our choice until checked): Extrude reads and writes `Extrude; offset; angle; dontsubtract`, all positional, the last 1 or 0."
+notes = "Extrude has no export string until a written source shows its form (owner's decision): an Extrude Filter parameter is refused with a message and changes nothing."
 
 [[behavior]]
 id = "filter.customParameter.sameRegistryAsCommands"

@@ -84,6 +84,11 @@ pub trait Filter: Sync {
     /// before anything is allocated; the result may hold at most [`crate::MAX_NODES`] nodes and
     /// only coordinates within ±[`crate::MAX_COORDINATE`].
     fn apply(&self, contours: &[Contour], args: &Args, cx: &Context) -> Result<Vec<Contour>, PathOpError>;
+    /// Whether the filter has an export-string form. A filter without one runs from its command
+    /// and from `filter.apply` with named parameters only; its parameters have no slot.
+    fn has_string_form(&self) -> bool {
+        true
+    }
     /// Reads the items of an export string (after the name, without `include`/`exclude`).
     /// Override when a value is written differently from the parameter (a fraction for a
     /// percentage, a word for a flag).
@@ -586,6 +591,10 @@ mod tests {
             let given: Vec<(&str, Input)> = Vec::new();
             let optional = Args::new(f.params(), given);
             assert!(optional.is_ok() || f.params().iter().any(|p| p.required), "{}", f.name());
+            if !f.has_string_form() {
+                assert!(f.params().iter().all(|p| p.slot == Slot::None), "{}: no string form, so no slots", f.name());
+                continue;
+            }
             let s = FilterString::parse(&FilterString::write(*f, &args, &[], &[])).unwrap();
             assert_eq!(f.read_items(&s.items).unwrap(), args, "{}", f.name());
         }

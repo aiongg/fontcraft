@@ -90,7 +90,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Filters",
             [],
             None,
-            "{} every filter → {filters: [{name (export name), command, label, menu, origin: \"built-in\", selection: bool (takes points and segments), params: [{key, label, kind: \"number\" | \"integer\" | \"bool\" | \"choice\", min?, max?, choices?, default (null with sameAs: key when it takes that parameter's value), sameAs?, required, slot: {position: n} | {key: name} | null (not in the export string), doc}], string?: an export string with the defaults, doc}]}",
+            "{} every filter → {filters: [{name (export name), command, label, menu, origin: \"built-in\", selection: bool (takes points and segments), params: [{key, label, kind: \"number\" | \"integer\" | \"bool\" | \"choice\", min?, max?, choices?, default (null with sameAs: key when it takes that parameter's value), sameAs?, required, slot: {position: n} | {key: name} | null (not in the export string), doc}], string?: an export string with the defaults (absent when the filter has no string form), doc}]}",
             always,
             list
         ),
@@ -155,7 +155,9 @@ fn run_filter(s: &mut Session, v: &Value, f: &'static dyn Filter) -> Result<Valu
         })
     })?;
     let mut v = out.to_json();
-    if let Some(o) = v.as_object_mut() {
+    if f.has_string_form()
+        && let Some(o) = v.as_object_mut()
+    {
         o.insert("string".into(), json!(FilterString::write(f, &args, &[], &[])));
     }
     Ok(v)
@@ -376,10 +378,15 @@ fn names() -> Vec<&'static str> {
 /// `filter.apply` share it.
 pub fn parse_filter_string(text: &str) -> std::result::Result<FilterString, String> {
     let fs = FilterString::parse(text)?;
-    if find(&fs.name).is_none() {
-        return Err(format!("unknown filter `{}`; the filters are {}", fs.name, names().join(", ")));
+    match find(&fs.name) {
+        None => Err(format!("unknown filter `{}`; the filters are {}", fs.name, names().join(", "))),
+        Some(Entry::Contour(f)) if !f.has_string_form() => Err(no_string_form(f)),
+        Some(_) => Ok(fs),
     }
-    Ok(fs)
+}
+
+fn no_string_form(f: &dyn Filter) -> String {
+    format!("{} has no export string form; run {} or give `args` as an object of its parameters", f.name(), f.id())
 }
 
 /// Runs the filter string `text` on every glyph it includes, on the layers `layers` names (the
@@ -460,6 +467,7 @@ fn apply(s: &mut Session, v: &Value) -> Result<Value> {
             let args = Args::new(f.params(), given).map_err(|e| p.bad(format!("`args`: {e}")))?;
             (f.id(), args_json(&args))
         }
+        (Entry::Contour(f), _) if !f.has_string_form() => return Err(p.bad(no_string_form(f))),
         (Entry::Contour(f), _) => {
             let args = f.read_items(&fs.items).map_err(|e| p.bad(format!("{}: {e}", fs.name)))?;
             (f.id(), args_json(&args))
@@ -542,7 +550,7 @@ fn list(_: &mut Session, _: &Value) -> Result<Value> {
     let mut out: Vec<Value> = filters::registry()
         .iter()
         .map(|f| {
-            json!({
+            let mut entry = json!({
                 "name": f.name(),
                 "command": f.id(),
                 "label": f.label(),
@@ -550,9 +558,14 @@ fn list(_: &mut Session, _: &Value) -> Result<Value> {
                 "origin": "built-in",
                 "selection": f.takes_selection(),
                 "params": f.params().iter().map(param_json).collect::<Vec<_>>(),
-                "string": FilterString::write(*f, &Args::defaults(f.params()), &[], &[]),
                 "doc": f.doc(),
-            })
+            });
+            if f.has_string_form()
+                && let Some(o) = entry.as_object_mut()
+            {
+                o.insert("string".into(), json!(FilterString::write(*f, &Args::defaults(f.params()), &[], &[])));
+            }
+            entry
         })
         .collect();
     for (name, id, label, menu) in COMMAND_FILTERS {

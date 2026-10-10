@@ -1,5 +1,5 @@
-//! Extrude (M3.12): `filter.extrude`, its export string through `filter.apply`, and hostile
-//! parameters.
+//! Extrude (M3.12): `filter.extrude`, `filter.apply` with named parameters, the refused export
+//! string, and hostile parameters.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
@@ -52,7 +52,7 @@ fn extrude_leaves_the_shadow_or_keeps_the_original_area() {
     let mut s = fixture();
     let v = run(&mut s, "filter.extrude", json!({"glyph": "B", "offset": 50, "angle": 0}));
     assert_eq!(v["glyphs"], json!(["B"]));
-    assert_eq!(v["string"], "Extrude;50;0;0;");
+    assert!(v.get("string").is_none(), "Extrude has no export string: {v}");
     assert_eq!(bounds(&mut s, "B"), (100.0, 0.0, 150.0, 100.0));
     run(&mut s, "edit.undo", json!({}));
 
@@ -68,32 +68,41 @@ fn extrude_leaves_the_shadow_or_keeps_the_original_area() {
 }
 
 #[test]
-fn the_export_string_and_the_parameters_give_the_same_font() {
-    let forms = [
-        ("filter.extrude", json!({"glyphs": ["A", "O"], "offset": 40, "angle": -30, "dontSubtract": true})),
-        ("filter.apply", json!({"glyphs": ["A", "O"], "string": "Extrude; 40; -30; 1"})),
-        ("filter.apply", json!({"glyphs": ["A", "O"], "filter": "extrude", "args": ["40", "-30", "1"]})),
-        ("filter.apply", json!({"glyphs": ["A", "O"], "filter": "filter.extrude", "args": {"offset": 40, "angle": -30, "dontSubtract": true}})),
-        ("filter.apply", json!({"string": "Extrude;40;-30;1;include:A,O;"})),
-        ("filter.apply", json!({"string": "Extrude;40;-30;1;", "exclude": ["B"]})),
-    ];
-    let untouched = shapes(&mut fixture(), "B");
-    let original = shapes(&mut fixture(), "A");
-    let mut results = Vec::new();
-    for (id, params) in &forms {
-        let mut s = fixture();
-        run(&mut s, id, params.clone());
-        results.push((shapes(&mut s, "A"), shapes(&mut s, "O"), shapes(&mut s, "B")));
+fn filter_apply_with_parameters_matches_the_command() {
+    let mut direct = fixture();
+    run(&mut direct, "filter.extrude", json!({"glyphs": ["A", "O"], "offset": 40, "angle": -30, "dontSubtract": true}));
+    let mut applied = fixture();
+    run(&mut applied, "filter.apply", json!({"filter": "Extrude", "args": {"offset": 40, "angle": -30, "dontSubtract": true}, "exclude": ["B"]}));
+    assert_ne!(shapes(&mut direct, "A"), shapes(&mut fixture(), "A"), "the filter changed A");
+    for glyph in ["A", "O", "B"] {
+        assert_eq!(shapes(&mut applied, glyph), shapes(&mut direct, glyph), "{glyph}");
     }
-    assert_ne!(results[0].0, original, "the filter changed A");
-    for (i, r) in results.iter().enumerate() {
-        assert_eq!(r, &results[0], "form {i}: {}", forms[i].1);
-        assert_eq!(r.2, untouched, "form {i} left B alone");
+    assert_eq!(shapes(&mut applied, "B"), shapes(&mut fixture(), "B"));
+}
+
+/// No written source shows an export string for Extrude, so it has none: every string or
+/// positional form is refused and leaves the font as it was.
+#[test]
+fn an_extrude_string_is_refused_and_changes_nothing() {
+    let mut s = fixture();
+    let before = font(&s);
+    for params in [
+        json!({"string": "Extrude; 40; -30; 1"}),
+        json!({"glyphs": ["A", "O"], "string": "extrude;40;-30;1;include:A,O;"}),
+        json!({"glyph": "A", "filter": "Extrude", "args": ["40", "-30", "1"]}),
+        json!({"glyph": "A", "filter": "filter.extrude"}),
+    ] {
+        let e = s.execute("filter.apply", &params).unwrap_err().to_string();
+        assert!(e.contains("no export string form"), "{params}: {e}");
+        assert_eq!(font(&s), before, "{params} changed the font");
     }
+    let list = run(&mut s, "filter.list", json!({}));
+    let extrude = list["filters"].as_array().unwrap().iter().find(|f| f["name"] == "Extrude").unwrap();
+    assert!(extrude.get("string").is_none(), "{extrude}");
 }
 
 #[test]
-fn hostile_parameters_and_strings_are_errors_that_change_nothing() {
+fn hostile_parameters_are_errors_that_change_nothing() {
     let mut s = fixture();
     let before = font(&s);
     let params = [
@@ -111,19 +120,5 @@ fn hostile_parameters_and_strings_are_errors_that_change_nothing() {
     for p in params {
         assert!(s.execute("filter.extrude", &p).is_err(), "{p}");
         assert_eq!(font(&s), before, "{p} changed the font");
-    }
-    for text in [
-        "Extrude",
-        "Extrude;50",
-        "Extrude;NaN;0",
-        "Extrude;50;inf",
-        "Extrude;-5;0",
-        "Extrude;50;0;2",
-        "Extrude;50;0;0;9",
-        "Extrude;Offset:50;0",
-        "Extrude;1000000;0",
-    ] {
-        assert!(s.execute("filter.apply", &json!({"string": text})).is_err(), "{text}");
-        assert_eq!(font(&s), before, "{text} changed the font");
     }
 }
