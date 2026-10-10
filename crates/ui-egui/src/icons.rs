@@ -459,21 +459,22 @@ fn draw(pen: &mut Pen, icon: Icon) {
             pen.rect_fill((0.38, 0.38), (0.62, 0.62), 0.0);
         }
         // Joins: the outline of a wide band turning a corner, and the corner node, as the caps
-        // draw a band's end. Outer edge at 0.12, inner edge at 0.52, the path along 0.32.
+        // draw a band's end. The band fills the icon's square like the other icons' drawings:
+        // outer edge at 0.04, inner edge at 0.54, the path along 0.29.
         Icon::JoinMiter | Icon::JoinBevel | Icon::JoinRound | Icon::JoinRoundFull => {
             let outer: Vec<P> = match icon {
-                Icon::JoinMiter => vec![(0.12, 0.92), (0.12, 0.12), (0.92, 0.12)],
-                Icon::JoinBevel => vec![(0.12, 0.92), (0.12, 0.32), (0.32, 0.12), (0.92, 0.12)],
-                _ => [(0.12, 0.92)].into_iter().chain(quarter_arc((0.32, 0.32), 0.2)).chain([(0.92, 0.12)]).collect(),
+                Icon::JoinMiter => vec![(0.04, 0.98), (0.04, 0.04), (0.98, 0.04)],
+                Icon::JoinBevel => vec![(0.04, 0.98), (0.04, 0.29), (0.29, 0.04), (0.98, 0.04)],
+                _ => [(0.04, 0.98)].into_iter().chain(quarter_arc((0.29, 0.29), 0.25)).chain([(0.98, 0.04)]).collect(),
             };
             let inner: Vec<P> = match icon {
-                Icon::JoinRoundFull => [(0.52, 0.92)].into_iter().chain(quarter_arc((0.72, 0.72), 0.2)).chain([(0.92, 0.52)]).collect(),
-                _ => vec![(0.52, 0.92), (0.52, 0.52), (0.92, 0.52)],
+                Icon::JoinRoundFull => [(0.54, 0.98)].into_iter().chain(quarter_arc((0.79, 0.79), 0.25)).chain([(0.98, 0.54)]).collect(),
+                _ => vec![(0.54, 0.98), (0.54, 0.54), (0.98, 0.54)],
             };
             let mut outline = outer;
             outline.extend(inner.into_iter().rev());
             pen.closed(&outline);
-            pen.dot((0.32, 0.32), 0.06);
+            pen.dot((0.29, 0.29), 0.07);
         }
         // Caps: the outline of a band's end, with its end node.
         Icon::CapButt => pen.cap(&[(0.6, 0.36), (0.6, 0.64)]),

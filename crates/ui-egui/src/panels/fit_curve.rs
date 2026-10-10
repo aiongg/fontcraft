@@ -93,6 +93,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     });
     ui.add_space(tokens.fit_curve_step * 0.4);
     if !enabled {
-        palette::note(app, ui, "Select curve segments in Edit View");
+        let hint = if app.state.tab().is_some() { "Select curve segments" } else { "Open a glyph and select curve segments" };
+        palette::note(app, ui, hint);
     }
 }

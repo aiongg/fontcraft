@@ -191,3 +191,20 @@ fn the_boolean_buttons_run_their_commands() {
     assert_eq!(id, "transform.booleanUnion");
     assert!(params.get("shapes").is_none(), "with nothing selected the union takes every path");
 }
+
+#[test]
+fn the_stroke_section_does_not_widen_the_palette() {
+    let palette_width =
+        |w: &Window| egui::containers::panel::PanelState::load(&w.ctx, egui::Id::new("palette")).expect("the Palette is drawn").size().x;
+    let mut app = line_app(Some(json!({"glyph": "A", "shapes": [0], "width": 100})));
+    let mut w = Window::default();
+    w.settle(&mut app);
+    let before = palette_width(&w);
+    app.run("selection.set", &json!({"points": [[0, 1]]})).unwrap();
+    w.settle(&mut app);
+    assert!(w.ctx.read_response(widgets::id(("stroke.join", "round"))).is_some(), "the Stroke section shows");
+    assert_eq!(palette_width(&w), before);
+    let rect = |id| w.ctx.read_response(id).expect("drawn").rect;
+    let (field, last) = (rect(widgets::id("stroke.position")), rect(widgets::id(("stroke.positionPreset", "100"))));
+    assert!((field.center().y - last.center().y).abs() < 1.0, "the presets sit beside the field: {field:?} {last:?}");
+}

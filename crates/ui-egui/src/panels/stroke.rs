@@ -142,7 +142,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let set = |pending: &mut Pending, extra: Value| pending.push(("path.setStroke", with(targets.clone(), extra)));
     let stroked = values.stroked();
 
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label("Width");
         match widgets::number(ui, widgets::id("stroke.width"), values.common(|s| s.width).flatten(), width, true) {
             Some(widgets::NumberEdit::Set(v)) => set(pending, json!({ "width": v })),
@@ -163,7 +163,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     }
 
     let position = values.common(|s| s.position);
-    ui.horizontal(|ui| {
+    // Tight spacing keeps the presets beside the field at the Palette's width; a narrower
+    // Palette wraps them rather than growing.
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x /= 2.0;
         ui.label("Position");
         if let Some(widgets::NumberEdit::Set(v)) = widgets::number(ui, widgets::id("stroke.position"), position, width, false) {
             set(pending, json!({ "position": v.clamp(-100.0, 100.0) }));
