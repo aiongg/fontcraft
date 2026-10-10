@@ -81,10 +81,16 @@ table above), and the same limits apply to it as to any documentation:
   Creative Commons material only, each with a row in [`ASSETS.md`](../ASSETS.md).
 - **Glyph data.** The mapping from glyph names to Unicode values, categories and production names
   is data FontCraft needs. Permitted sources: the Adobe Glyph List and AGLFN (BSD-3-Clause), the
-  GlyphData XML published by the primary reference's authors (BSD-3-Clause, used with
-  attribution), and the Unicode Character Database (Unicode licence). Fields those do not publish
-  (decomposition recipes, default anchors, sort order) are derived by us from Unicode data or
-  authored, never extracted from an app.
+  GlyphData XML published by the primary reference's authors in GlyphsInfo, and the Unicode
+  Character Database (Unicode License v3). GlyphsInfo is MIT ("Copyright (c) 2016 Georg Seifert")
+  up to commit 9e03a49 of 2024-11-22 and BSD-3-Clause ("Copyright (c) 2024, Georg Seifert") from
+  that commit on. Both are permitted; the LICENSE at the pinned commit decides the `NOTICE` text.
+  Its README carries Adobe's BSD-3-Clause notice for the Adobe Glyph List, which travels with the
+  data. Fields those do not publish (decomposition recipes, default anchors, sort order) are
+  derived by us from Unicode data or authored, never extracted from an app.
+- **Language and glyph-set data.** Permitted: the Unicode CLDR data (Unicode License v3) and the
+  Google Fonts glyph sets (Apache-2.0, characters adapted from CLDR). Not permitted: Hyperglot
+  (GPL-3.0) and the reference app's own language and glyph-set lists.
 - **Fonts.** Compiled fonts are never committed. Test fonts are built in code; real fonts come
   from the pinned corpus of openly licensed families (`xtask/corpus.toml`).
 - Prefer generating defaults in code (sample strings, icons, cursors) over importing them.

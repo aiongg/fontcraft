@@ -938,10 +938,10 @@ Question 31 stays open and blocks only `path.sharpenCorner`.
     (decision 0004 item 4, D4). No per-glyph filter in M3.
 30. **Start Window**: the list of scripts and glyph sets comes from the app's glyph data; we need
     our own data source for it.
-    **Planned for M4 (2026-10-10):** the owner chooses the source (`docs/plans/M4.md` § 7,
-    question 3). Proposed: languages from the Unicode CLDR exemplar characters (Unicode License
-    v3), glyph sets from the Google Fonts glyph sets once their data licence is confirmed, both
-    turned into glyph names through FontCraft's glyph database.
+    **Answered for M4 (the owner's decision, 2026-10-10, `docs/plans/M4.md` § 7, question 3):**
+    languages from the Unicode CLDR exemplar characters (Unicode License v3), glyph sets from the
+    Google Fonts glyph sets (Apache-2.0, confirmed in `docs/references.md`), both turned into glyph
+    names through FontCraft's glyph database.
 31. **Sharpen Corner**: what does it do, and on what selection? Tutorial videos show the item in
     the canvas context menu with corner nodes, a segment or a path selected, below Open Corner, but
     never run it. The handbook does not describe it. The name suggests it turns an opened or

@@ -114,9 +114,9 @@ milestone = "M4"
 summary = "Reopens one of the recently used documents; the list is kept with the preferences and can be cleared."
 ref = "Create (the Start Window's recent documents); platform convention"
 status = "inferred"
-notes = "Checked in the M4 planning pass (it was a `memory` row): the handbook documents the Start Window's list of recent documents, not an Open Recent menu item; the menu item is a platform convention we add. Moved from M14: the Start Window (M4) needs the list."
+notes = "Checked in the M4 planning pass (it was a `memory` row): the handbook documents the Start Window's list of recent documents, not an Open Recent menu item; the menu item is a platform convention we add. Moved from M14 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Start Window (M4) needs the list. The list lives in the user settings, the owner's decision (docs/plans/M4.md § 7 question 4)."
 guesses = [
-  "The list holds the last ten documents opened or saved, newest first, in the user settings; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window.",
+  "The list holds the last ten documents opened or saved, newest first; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window.",
 ]
 
 [[command]]

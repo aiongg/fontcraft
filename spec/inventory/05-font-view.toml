@@ -165,7 +165,7 @@ milestone = "M4"
 summary = "Opens a dialog with one text field and adds a glyph for every item, items separated by spaces, line breaks or tabs: a glyph name, a literal character, a uniXXXX / uXXXXX value, a colon range, or a glyph recipe. Items given as a character, a Unicode name or a legacy name are converted to the database nice name; names already in the font trigger the Replace / Keep Existing / Cancel dialog."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs; tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "Separators and the conversion of legacy names (uni0421, dotlessi) come from the tutorial, checked in the M4 planning pass. Recipe items (component=glyph, base+mark=glyph) are built with M6, which owns components and anchors; until then they are listed in the result's `skipped`. Documented, not yet observed."
+notes = "Separators and the conversion of legacy names (uni0421, dotlessi) come from the tutorial, checked in the M4 planning pass. Recipe items (component=glyph, base+mark=glyph) are built with M6, which owns components and anchors; until then they are listed in the result's `skipped` (the owner's decision, docs/plans/M4.md § 7 question 7). Documented, not yet observed."
 guesses = [
   "A comma is not a separator: an item containing one is an invalid name and is reported. Settled by observation (05 question 7).",
   "A range covers every code point from the first endpoint's to the second's; code points Unicode does not assign, and surrogates, are skipped, and one range holds at most 65,536 code points. Settled by observation (05 question 7).",
@@ -623,7 +623,7 @@ milestone = "M4"
 summary = "Our query: returns the name each glyph will carry in an exported font, applying the per-glyph override, the database value, then the suffix and ligature rules, and falling back to the nice name."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "inferred"
-notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4); the M2 compiler writes source names."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4); the M2 compiler writes source names."
 guesses = [
   "Our own query for agents; its answers must equal the names the oracles write (fontc and fontmake with production names on).",
 ]
@@ -731,7 +731,7 @@ milestone = "M4"
 summary = "Chooses which scripts are listed in the Languages section by default (the plus button beside the section title opens a checklist). Scripts that have glyphs in the font are listed regardless."
 ref = "Font View › Filtering Font View › Languages"
 status = "handbook"
-notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.addSmartFilter"
@@ -745,7 +745,7 @@ milestone = "M4"
 summary = "Creates a rule-based filter in the Filters section and opens the Smart Filter editor with a single empty rule. Chosen from the actions menu in the font window's bottom-left corner."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
-notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.addListFilter"
@@ -759,7 +759,7 @@ milestone = "M4"
 summary = "Creates a filter defined by an explicit, ordered list of glyph names, pre-filled with the currently selected glyphs. Chosen from the actions menu in the font window's bottom-left corner."
 ref = "Font View › Filtering Font View › List Filters"
 status = "handbook"
-notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.addFilterFolder"
@@ -773,7 +773,7 @@ milestone = "M4"
 summary = "Creates a folder in the Filters section. Folders hold filters and other folders; selecting one shows the union of everything inside it."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
-notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.editFilter"
@@ -787,7 +787,7 @@ milestone = "M4"
 summary = "Opens the editor of the selected smart or list filter (also by double-clicking the filter's icon) and stores the new name, rules or name list on OK; Cancel discards the edits."
 ref = "Font View › Filtering Font View › Smart Filters; List Filters"
 status = "handbook"
-notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.renameFilter"
@@ -802,7 +802,7 @@ milestone = "M4"
 summary = "Renames a filter or folder in place without opening its editor: double-click the name, or select the entry and press Return."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
-notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.removeFilter"
@@ -816,7 +816,7 @@ milestone = "M4"
 summary = "Deletes the selected filter or folder (actions menu). Removing a folder removes every filter inside it as well."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
-notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 [[command]]
 id = "fontView.moveFilter"
@@ -830,7 +830,7 @@ milestone = "M4"
 summary = "Reorders a filter within the Filters list or moves it into or out of a folder (drag and drop in the UI)."
 ref = "Font View › Filtering Font View › Managing Filters"
 status = "handbook"
-notes = "Kind `engine` (M4 planning pass): filters and the scripts the Languages section lists live in the user settings, which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
+notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 
 # ───────────────────────────── Images ─────────────────────────────
 
@@ -1011,6 +1011,7 @@ milestone = "M4"
 summary = "Filters Font View by writing script and by language coverage sets. Only a short default list of scripts is shown, plus any script present in the font; custom entries can come from Groups.plist."
 ref = "Font View › Filtering Font View › Languages; Custom Categories & Languages"
 status = "handbook"
+notes = "Languages and their characters come from the Unicode CLDR exemplar characters (Unicode License v3), grouped by script and turned into glyph names through FontCraft's glyph database; they give the missing-glyph badges. This is the owner's decision (docs/plans/M4.md § 7 question 3): the reference's language lists are app data we may not use. Hyperglot is not used (GPL-3.0)."
 
 [[panel]]
 id = "fontView.sidebar.filters"
@@ -1475,7 +1476,7 @@ milestone = "M4"
 summary = "Each glyph has a readable nice name used everywhere in the editor and a production name used only in exported font files. The swap happens automatically at export."
 ref = "Font View › Glyph Properties › Glyph Name; Production Name"
 status = "handbook"
-notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
 
 [[behavior]]
 id = "glyph.exportDefault"
@@ -1548,7 +1549,7 @@ milestone = "M4"
 summary = "Every glyph has a default production name following the Adobe Glyph List conventions, often of the uniXXXX or uXXXXX form. The user can override it per glyph in the expanded inspector or in Selection Info."
 ref = "Font View › Glyph Properties › Production Name"
 status = "handbook"
-notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
 
 [[behavior]]
 id = "glyph.scriptProperty"
@@ -1822,6 +1823,7 @@ milestone = "M4"
 summary = "Each database record carries: nice name, production name, Unicode value, components of composites, default anchors, marks shown in the mark cloud, script, category and subcategory. The published GlyphData.xml adds case, direction, description, alternative names and a legacy Unicode value."
 ref = "Font View › Names & Unicode › Glyph Info Database; GlyphsInfo GlyphData.xml"
 status = "handbook"
+notes = "FontCraft's built-in database is GlyphsInfo's GlyphData.xml and GlyphData_Ideographs.xml at a pinned commit, with the Adobe Glyph List and the Unicode Character Database for names GlyphsInfo lacks. This is the owner's decision (docs/plans/M4.md § 7 question 2): it is the only open data with the reference's names, categories and production names, and fontc and glyphsLib read the same file. Components, anchors and mark-cloud marks are not in the published data and stay empty unless custom data gives them."
 
 [[behavior]]
 id = "glyphData.xmlAttributes"
@@ -1886,7 +1888,7 @@ milestone = "M4"
 summary = "A database record without a production attribute uses its nice name as the production name (Aacute stays Aacute). Records that need a different export name state it, mostly as uniXXXX or uXXXXX and occasionally as a custom name such as two_fraction_seven."
 ref = "GlyphsInfo GlyphData.xml"
 status = "docs"
-notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
 
 [[behavior]]
 id = "glyphData.legacyUnicode"
@@ -1979,7 +1981,7 @@ milestone = "M4"
 summary = "The Adobe Glyph List is a text file of name;codepoints records (one or more four-digit uppercase hex values separated by spaces). AGLFN, the subset recommended for new fonts, has codepoint;name;character-name records. Lines starting with # are comments and blank lines are skipped."
 ref = "agl-aglfn README.md; glyphlist.txt; aglfn.txt"
 status = "docs"
-notes = "Moved from M2 in the M4 planning pass: the Adobe Glyph List arrives with the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Adobe Glyph List arrives with the glyph database (M4)."
 
 # ── Production names at export ──
 
@@ -1990,7 +1992,7 @@ milestone = "M4"
 summary = "At export each glyph is written under, in order of preference: its own production-name override, the production name of its database record, a name synthesised from suffix and ligature rules, or its unchanged nice name."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "docs"
-notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
 
 [[behavior]]
 id = "export.productionNameSuffix"
@@ -1999,7 +2001,7 @@ milestone = "M4"
 summary = "For a suffixed name whose base has a database production name, the result is that production name followed by the same dot suffix (a small-cap Cyrillic A-cy.sc becomes uni0410.sc)."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
-notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
 
 [[behavior]]
 id = "export.productionNameLigature"
@@ -2008,7 +2010,7 @@ milestone = "M4"
 summary = "For an underscore-joined name each part is resolved to its production name, or kept if it is already an AGLFN name; if any part is unknown, no production name is synthesised. If at least one part is a uniXXXX name and no part lies beyond the BMP, the parts collapse to uni followed by all the four-digit values; otherwise the parts are joined with underscores. The dot suffix is re-attached at the end."
 ref = "fontc glyphs-reader glyphdata.rs"
 status = "docs"
-notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
 
 [[behavior]]
 id = "export.productionNameForm"
@@ -2017,7 +2019,7 @@ milestone = "M4"
 summary = "A code-point production name is uni plus exactly four uppercase hexadecimal digits for the BMP, and u plus five or six uppercase hexadecimal digits above it."
 ref = "Font View › Glyph Properties › Production Name; fontc glyphs-reader glyphdata.rs"
 status = "handbook"
-notes = "Moved from M2 in the M4 planning pass: production names need the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): production names need the glyph database (M4)."
 
 [[behavior]]
 id = "export.aglNameParsing"
@@ -2026,7 +2028,7 @@ milestone = "M4"
 summary = "Reading a production name back to text follows the Adobe Glyph List specification: drop everything from the first dot, split at underscores, and map each part through the glyph list, the uniXXXX form (groups of four hex digits) or the uXXXX to uXXXXXX form; parts that match nothing map to no character."
 ref = "agl-aglfn README.md (AGL Specification)"
 status = "docs"
-notes = "Moved from M2 in the M4 planning pass: the Adobe Glyph List arrives with the glyph database (M4)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the Adobe Glyph List arrives with the glyph database (M4)."
 
 [[behavior]]
 id = "export.cidMapping"
@@ -2069,7 +2071,7 @@ milestone = "M4"
 summary = "A font with an invalid glyph name cannot be exported. The export results report an Illegal glyph name error that names the glyph and the position of the bad character, with a Show button that opens the glyph in a new tab; the same error can come from compiling feature code in Font Info."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
-notes = "Moved from M2 in the M4 planning pass: the name check (font.validateGlyphNames) is M4. File › Export refuses a font with an invalid name, as the handbook says. font.compile and the CLI follow fontc instead and write a sanitised name with a warning (compile.productionNameSanitising): oracles decide compiler questions (docs/plans/M4.md, owner question 8)."
+notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.md § 7 question 6): the name check (font.validateGlyphNames) is M4. File › Export refuses a font with an invalid name, as the handbook says. font.compile and the CLI follow fontc instead and write a sanitised name with a warning (compile.productionNameSanitising): oracles decide compiler questions (the owner's decision, docs/plans/M4.md § 7 question 8)."
 
 [[behavior]]
 id = "glyphName.underscorePrefix"
@@ -2517,6 +2519,7 @@ milestone = "M4"
 summary = "The Languages section lists scripts, each expandable into language or subset filters, with the same counts, badges and checkmarks as categories."
 ref = "Font View › Filtering Font View › Languages"
 status = "handbook"
+notes = "Languages and their characters come from the Unicode CLDR exemplar characters (Unicode License v3), grouped by script and turned into glyph names through FontCraft's glyph database; they give the missing-glyph badges. This is the owner's decision (docs/plans/M4.md § 7 question 3): the reference's language lists are app data we may not use. Hyperglot is not used (GPL-3.0)."
 
 [[behavior]]
 id = "fontView.sidebar.scriptAutoShown"
@@ -2844,7 +2847,7 @@ milestone = "M4"
 summary = "Without a custom order, glyphs are ordered by sort name, where a glyph's sort name is its own override, else the database value, else its glyph name. The same order is used in Font View and in exported fonts."
 ref = "Font View › Glyph Order; Sort Name; GlyphsSDK GlyphsFileFormatv3.md; tutorials \"Alter the glyph order in Font view\" and \"Roll your own glyph data\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed."
+notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below)."
 guesses = [
   "An opened file keeps its stored glyph order, which is the order the oracles compile; only glyphs added later, renamed, or given a sort name move to the place the sort key gives. Settled by observing where the reference puts a new glyph (05 question 2).",
   "The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2).",

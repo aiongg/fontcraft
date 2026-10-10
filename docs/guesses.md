@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**250 guesses on 196 rows (91 of them live commands).**
+**249 guesses on 195 rows (91 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -22,7 +22,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `dialog.livePreview` (behavior) | M3 | inferred | – | Every filter dialog previews its result live and OK keeps it as one undo step; a tutorial video shows this for Transformations only. |
 | `dialog.livePreview` (behavior) | M3 | inferred | – | Dialogs remember their last values for the session, and their first values are ours (11-filters open questions). |
 | `dialog.fieldKeys` (behavior) | M3 | inferred | – | Dialog number fields follow the Info box's editing and arrow-key rules (infoBox.fieldEditing, infoBox.arrowKeyStepping); the handbook documents them for the Info box only. |
-| `file.openRecent` | M4 | inferred | no | The list holds the last ten documents opened or saved, newest first, in the user settings; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window. |
+| `file.openRecent` | M4 | inferred | no | The list holds the last ten documents opened or saved, newest first; a file that no longer exists is dropped when the list is shown. Settled by observing the Start Window. |
 
 ## `03a-edit-view-drawing.toml`
 
@@ -89,7 +89,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `guides.knobAndSelection` (behavior) | M3 | handbook | – | A double-click on the guide away from its knob opens dialog.guideProperties, our addition. |
 | `guides.angleLock` (behavior) | M3 | handbook | – | A drag on an angle-locked guide away from its knob moves the guide, as a knob drag does (03a question 27). |
 | `guides.sidebearingReference` (behavior) | M3 | handbook | – | Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27). |
-| `file.newFromGlyphSets` | M4 | handbook | no | The scripts and glyph sets offered come from our own data source (docs/plans/M4.md, owner question 3); the reference's lists are app data we may not use, so the sets differ from the reference's by design. |
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The width and height fields run from 1 to 2,000,000 units and open at 100. |
 | `dialog.primitiveMeasurements` (panel) | M3 | handbook | – | The click is the shape's bottom-left corner (03a question 5). |
 | `editView.toolbar` (panel) | M3 | handbook | – | A secondary click on a shared button also opens its menu; no source shows the reference doing so. |
