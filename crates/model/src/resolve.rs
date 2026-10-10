@@ -26,7 +26,7 @@
 
 use fontcraft_geom::{Affine, BezPath, Point};
 
-use crate::{AlignmentZone, Font, Master, ModelError, Params, Properties, Shape, SourceFormat, metric};
+use crate::{AlignmentZone, Font, Glyph, Layer, Master, ModelError, Params, Properties, Shape, SourceFormat, metric};
 
 /// What to resolve.
 #[derive(Clone, Debug, PartialEq)]
@@ -207,6 +207,10 @@ pub fn blue_values(zones: &[AlignmentZone]) -> (Vec<f64>, Vec<f64>) {
     (blues, other)
 }
 
+/// What [`Font::resolve_drawn`] asks for each glyph's layer: its whole drawing as contours, an
+/// error, or `None` to take the layer's shapes as they are.
+pub type DrawLayer<'a> = dyn FnMut(&Glyph, &Layer) -> Option<Result<Vec<BezPath>, String>> + 'a;
+
 impl Font {
     /// A master's alignment zones as the reference reads a format 3 master: the overshoot of
     /// every metric but the italic angle that has one, in the font's metric order, then the
@@ -237,6 +241,14 @@ impl Font {
     /// The font is assumed valid ([`Font::check`]); a path that is not is still an error, not a
     /// panic.
     pub fn resolve(&self, target: &Target) -> Result<Resolved, ModelError> {
+        self.resolve_drawn(target, &mut |_, _| None)
+    }
+
+    /// [`Font::resolve`], with `draw` asked first for the contours of each glyph's layer. Where it
+    /// answers, its contours are the glyph's whole drawing (the layer's components included) in
+    /// place of the layer's paths and components; an error it gives is the glyph's. A compiler
+    /// passes the composite of strokes and masks here, which the model cannot compute.
+    pub fn resolve_drawn(&self, target: &Target, draw: &mut DrawLayer<'_>) -> Result<Resolved, ModelError> {
         let mut notes = Vec::new();
         let (master, instance) = match target {
             Target::Master(id) => (self.master(id)?, None),
@@ -311,7 +323,15 @@ impl Font {
             out.width = layer.width;
             out.vert_width = layer.info.vert_width;
             out.vert_origin = layer.info.vert_origin;
-            for shape in &layer.shapes {
+            let shapes: &[Shape] = match draw(g, layer) {
+                Some(drawn) => {
+                    out.contours = drawn.map_err(bad)?.into_iter().filter(|c| !c.elements().is_empty()).collect();
+                    undrawable += layer.shapes.iter().filter(|s| matches!(s, Shape::Raw(_))).count();
+                    &[]
+                }
+                None => &layer.shapes,
+            };
+            for shape in shapes {
                 match shape {
                     Shape::Path(p) => {
                         let contour = p.to_contour().map_err(bad)?;

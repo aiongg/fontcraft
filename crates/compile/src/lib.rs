@@ -5,7 +5,7 @@
 //!
 //! | Stage | Where | What it does |
 //! |---|---|---|
-//! | Resolve | [`fontcraft_model::Font::resolve`] | one master, or an instance at a master, as the compiler reads it: glyphs, contours, components, metrics, names |
+//! | Resolve | [`drawing::resolve`] | one master, or an instance at a master, as the compiler reads it: glyphs, contours, components, metrics, names; strokes expanded and masks applied |
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph order | [`order`] | the font's order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), cubic to quadratic, contour direction |
@@ -31,6 +31,7 @@
 
 mod build;
 pub mod cff;
+pub mod drawing;
 pub mod info;
 pub mod order;
 pub mod outline;
@@ -139,7 +140,7 @@ pub struct Compiled {
 /// Compiles `font` at `target` (a master, or an instance at a master) to a static font.
 pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     font.check()?;
-    let resolved = font.resolve(target)?;
+    let resolved = drawing::resolve(font, target)?;
     compile_resolved(resolved, flavour, options)
 }
 

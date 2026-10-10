@@ -1168,3 +1168,59 @@ fn hostile_cff_input_is_an_error_not_a_panic() {
     let out = compile_otf(&f);
     assert!(out.warnings.iter().any(|w| w.contains("CFF")), "{:?}", out.warnings);
 }
+
+// --- Strokes and masks ----------------------------------------------------------------------
+
+/// The glyph's outline as skrifa draws it, as Bézier paths.
+fn outline_of(out: &Compiled, name: &str) -> Vec<BezPath> {
+    #[derive(Default)]
+    struct Bez(BezPath);
+    impl OutlinePen for Bez {
+        fn move_to(&mut self, x: f32, y: f32) {
+            self.0.move_to((f64::from(x), f64::from(y)));
+        }
+        fn line_to(&mut self, x: f32, y: f32) {
+            self.0.line_to((f64::from(x), f64::from(y)));
+        }
+        fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
+            self.0.quad_to((f64::from(cx), f64::from(cy)), (f64::from(x), f64::from(y)));
+        }
+        fn curve_to(&mut self, ax: f32, ay: f32, bx: f32, by: f32, x: f32, y: f32) {
+            self.0.curve_to((f64::from(ax), f64::from(ay)), (f64::from(bx), f64::from(by)), (f64::from(x), f64::from(y)));
+        }
+        fn close(&mut self) {
+            self.0.close_path();
+        }
+    }
+    let font = FontRef::new(&out.bytes).unwrap();
+    let glyph = font.outline_glyphs().get(gid_of(out, name)).unwrap();
+    let mut pen = Bez::default();
+    glyph.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).unwrap();
+    vec![pen.0]
+}
+
+#[test]
+fn strokes_and_masks_are_compiled_as_the_canvas_draws_them() {
+    let mut f = Font::new("Stroke Sans");
+    let n = Node::new;
+    let mut a = f.glyph_mut("A").unwrap();
+    // An open stroked path, a filled square over it, and a mask that cuts both.
+    let mut stroke = Path::new(false, vec![n(100.0, 100.0, NodeKind::Line), n(500.0, 500.0, NodeKind::Line)]);
+    stroke.info.attrs.stroke_width = Some(fontcraft_model::Dimension::Number(60.0));
+    let mut mask = Path::rect(250.0, 0.0, 350.0, 600.0);
+    mask.info.attrs.mask = Some(1);
+    a.layers[0].shapes.push(Shape::Path(stroke));
+    a.layers[0].shapes.push(Shape::Path(Path::rect(350.0, 50.0, 550.0, 250.0)));
+    a.layers[0].shapes.push(Shape::Path(mask));
+    let layer = a.layers[0].clone();
+    drop(a);
+    let expected = drawing::layer_outline(&f, &layer).unwrap();
+    for flavour in [Flavour::TrueType, Flavour::Cff] {
+        let out = compile(&f, &f.default_target().unwrap(), flavour, &Options::default()).unwrap();
+        assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+        let got = outline_of(&out, "A");
+        let d = fontcraft_pathops::coverage_difference(&expected, &got).unwrap();
+        assert!(d.within(0.5, 0.005), "{flavour:?}: {d:?}");
+        assert!(d.ink > 10_000.0, "the stroke and the square are drawn");
+    }
+}

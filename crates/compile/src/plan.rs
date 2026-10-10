@@ -27,7 +27,7 @@ pub struct Plan {
 /// Plans the compile of `font` at `target`.
 pub fn plan(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     font.check()?;
-    plan_resolved(font.resolve(target)?, flavour, options)
+    plan_resolved(crate::drawing::resolve(font, target)?, flavour, options)
 }
 
 /// [`plan`] on a resolved font.

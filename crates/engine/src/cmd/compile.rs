@@ -453,7 +453,7 @@ pub(super) fn build(font: &Font, source: &str, jobs: &[Job], req: &Request, sink
             report.skipped.push(skip(job, "the destination is one file: give a folder to export every instance"));
             continue;
         }
-        let resolved = match font.resolve(&job.target) {
+        let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
                 report.skipped.push(skip(job, BETWEEN_MASTERS));
                 continue;
@@ -845,7 +845,7 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let mut warnings: Vec<String> = overlaps.map(str::to_string).into_iter().collect();
     let mut glyph_order: Option<Vec<String>> = None;
     for job in &jobs {
-        let resolved = match font.resolve(&job.target) {
+        let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
                 skipped.push(skip(job, BETWEEN_MASTERS));
                 continue;

@@ -1772,7 +1772,7 @@ milestone = "M3"
 summary = "The final outline of a layer is the composite of its shapes taken in their stored order; order matters because a mask only affects the shapes below it."
 ref = "Edit View › Compositing"
 status = "handbook"
-notes = "Built in M3.11 (`fontcraft_pathops::composite`; engine `cmd::stroke::layer_outline`): strokes are expanded, then each mask acts on everything before it, components included. Version 4's intersecting mask (value 2) keeps only what lies inside it. Export applies the composite before overlap removal. Documented, not yet observed."
+notes = "Built in M3.11 (`fontcraft_pathops::composite`; `fontcraft_compile::drawing::layer_outline`, which the canvas and export share): strokes are expanded, then each mask acts on everything before it, components included. Version 4's intersecting mask (value 2) keeps only what lies inside it. Export applies the composite before overlap removal: a glyph whose layer has a stroke or a mask is compiled as contours only; a layer whose composite cannot be made (a stroke width given as an expression) is compiled from its shapes as they are, with a warning. Documented, not yet observed."
 
 [[command]]
 id = "path.setMask"
