@@ -49,7 +49,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L2 | `components` | M6 | automatic alignment, anchor propagation, smart, corner, cap and segment components |
 | L2 | `features` | M8 | feature-code preprocessing (tokens), automatic features, compiling (on fea-rs), kern and mark writers |
 | L2 | `hinting` | M10 | PostScript and TrueType hinting models and autohinters |
-| L2 | `audit` | M3/M12 | the checks of `spec/inventory/21-qa-checks.toml` |
+| L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them |
 | L2 | `plugins` | M13 | sandboxed WebAssembly plug-ins (same manifest as the sibling apps) |
 | L3 | `format` | today | the native `.fontcraft` format, atomic writes |
 | L3 | `compile` | today (M2.1: staged pipeline) | model → OpenType binary |
