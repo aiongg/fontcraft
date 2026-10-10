@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod control_server;
+mod pickers;
 
 use std::process::ExitCode;
 
@@ -74,7 +75,8 @@ fn run() -> Result<(), String> {
         Some(path) => session.execute("file.open", &json!({"path": path})).map(|_| ()).map_err(|e| e.to_string())?,
         None => session.execute("file.new", &json!({})).map(|_| ()).map_err(|e| e.to_string())?,
     }
-    let app = FontcraftApp::new(session);
+    let mut app = FontcraftApp::new(session);
+    app.picker = Some(Box::new(pickers::SystemPicker));
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("FontCraft")

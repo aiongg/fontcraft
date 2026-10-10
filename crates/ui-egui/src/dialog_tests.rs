@@ -291,7 +291,7 @@ fn file_export_opens_the_export_dialog_which_runs_on_ok() {
     let opened = call(&mut app, "ui.dialog.inspect", json!({}));
     assert_eq!((opened["dialog"].clone(), opened["mode"].clone()), (json!("dialog.exportOtf"), json!("runOnOk")), "Cmd+E: {opened}");
     assert_eq!(opened["fields"][0]["labels"], json!(["PostScript/CFF", "TrueType"]));
-    assert_eq!(opened["captions"]["ok"], "Export");
+    assert_eq!(opened["captions"]["ok"], "Next…");
     assert!(app.session.interaction().is_none(), "nothing previews");
     for _ in 0..3 {
         frame(&ctx, &mut app, Vec::new());
@@ -307,15 +307,15 @@ fn file_export_opens_the_export_dialog_which_runs_on_ok() {
     call(&mut app, "ui.key", json!({"key": "Escape"}));
     assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false);
 
-    let ufo = fails(&mut app, "engine.execute", json!({"command": "file.export", "params": {"tab": "ufo"}}));
-    assert!(ufo.contains("not built"), "{ufo}");
+    let variable = fails(&mut app, "engine.execute", json!({"command": "file.export", "params": {"tab": "variable"}}));
+    assert!(variable.contains("not built"), "{variable}");
 }
 
 #[test]
 fn choice_labels_show_and_words_are_the_values() {
     let mut app = square_app();
     let opened = call(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"dialog": "dialog.transformations"}}));
-    let origin = &opened["fields"][0];
+    let origin = opened["fields"].as_array().unwrap().iter().find(|f| f["id"] == "origin").unwrap();
     assert_eq!(origin["choices"][0], "capHeight");
     assert_eq!(origin["labels"][0], "Cap Height");
     fails(&mut app, "ui.dialog.set", json!({"field": "origin", "value": "Cap Height"}));

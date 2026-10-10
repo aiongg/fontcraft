@@ -18,6 +18,12 @@ Rules for every export:
 - The dialog shows no live preview: exporting writes files and changes nothing in the font, so
   the export runs once, when the dialog is confirmed. It leaves no undo step.
 
+FontCraft builds the OTF and UFO tabs. Each has an Export Folder field with Choose… (the system
+folder chooser). The folder checkbox and Test Install are not built, so the folder is the only
+destination: Next… with the field empty asks for a folder, and over the control channel it is an
+error. Switching tabs keeps each tab's values. The UFO tab lists the masters as checkboxes, all
+ticked.
+
 ### 1.1 OTF tab: static fonts (`file.exportStatic`, `dialog.exportOtf`)
 
 What is exported: one font per instance defined in the font. No instances defined: one default

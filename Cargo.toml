@@ -59,6 +59,9 @@ usvg = { version = "0.47", default-features = false }
 # ui
 egui = "0.36"
 eframe = { version = "0.36", default-features = false }
+# The system file and folder choosers of the desktop app (MIT). On Linux through the desktop
+# portal only, so the build needs no GTK.
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

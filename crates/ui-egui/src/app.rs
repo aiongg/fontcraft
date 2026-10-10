@@ -29,6 +29,10 @@ pub struct FontcraftApp {
     pub tools: ToolsState,
     /// The open dialog; while it is open the rest of the app takes no editing input.
     pub dialog: Option<crate::dialogs::OpenDialog>,
+    /// The platform's file choosers; `None` where there are none (the browser, MCP, tests).
+    pub picker: Option<Box<dyn shell::pickers::Picker>>,
+    /// Text for the system clipboard, handed to the platform at the end of the frame.
+    pub(crate) clipboard_out: Option<String>,
     pub(crate) menu_cache: MenuCache,
     pub(crate) fill_cache: FillCache,
     themed: bool,
@@ -49,6 +53,8 @@ impl FontcraftApp {
             preview_tool: false,
             tools: ToolsState::default(),
             dialog: None,
+            picker: None,
+            clipboard_out: None,
             menu_cache: MenuCache::default(),
             fill_cache: FillCache::default(),
             themed: false,
@@ -167,6 +173,10 @@ impl FontcraftApp {
             if self.dialog.is_some() && !is_ui_command(id) {
                 continue;
             }
+            if shell::pickers::wants_files(id, &params) {
+                shell::pickers::import_outlines(self);
+                continue;
+            }
             let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
             if empty && let Some(dialog) = crate::dialogs::for_command(id) {
                 if let Err(e) = crate::dialogs::open(self, &dialog, &serde_json::Map::new()) {
@@ -179,6 +189,9 @@ impl FontcraftApp {
         }
         if tools_glue::dispatch_queued(self) {
             ui.ctx().request_repaint();
+        }
+        if let Some(text) = self.clipboard_out.take() {
+            ui.ctx().copy_text(text);
         }
     }
 

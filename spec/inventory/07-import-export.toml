@@ -21,7 +21,7 @@ milestone = "M2"
 summary = "Opens the export dialog for the frontmost document, with one tab per output kind (static OpenType, variable fonts, UFO, metrics). The dialog collects options and then runs the matching file.export* engine command."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: File › Export opens the dialog with the static OpenType tab set to PostScript (CFF) outlines. Not shown: Cmd+E, the other tabs. FontCraft: a shell command that opens dialog.exportOtf (`tab: \"otf\"`, the default); the other tabs are not built and answer with an error."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: File › Export opens the dialog with the static OpenType tab set to PostScript (CFF) outlines. Not shown: Cmd+E, the other tabs. FontCraft: a shell command that opens dialog.export on the OTF tab (`tab: \"otf\"`, the default) or the UFO tab (`tab: \"ufo\"`); the Variable Fonts and Metrics tabs are not built and answer with an error."
 
 [[command]]
 id = "file.exportAll"
@@ -104,7 +104,7 @@ milestone = "M3"
 summary = "The export dialog attached to the current document. Each tab is an output kind with its own options; Next… either exports straight away or first asks where to write."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
-notes = "Built: the OTF tab alone, as dialog.exportOtf. The tab switcher waits for tabs in the dialog framework; the Variable Fonts, UFO and Metrics tabs wait for their dialogs."
+notes = "Built: the tab switcher with the OTF tab (dialog.exportOtf) and the UFO tab (dialog.exportUfo). Each tab is a dialog of its own command. Switching tabs keeps each tab's values; a tab shown for the first time takes the values of the fields it shares with the tab shown before (the export folder). The Variable Fonts and Metrics tabs wait for their commands (M9, M5). Whether the reference keeps values across tabs is not observed."
 
 [[panel]]
 id = "dialog.exportOtf"
@@ -124,7 +124,7 @@ milestone = "M3"
 summary = "Options for static OpenType export: outline flavour, the container formats to write, overlap removal, autohinting and the two destinations (a folder, or direct installation into the system)."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
-notes = "Runs file.exportStatic. Built fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), removeOverlap and autohint (both off; the engine refuses either one on until overlap removal and hinting on export exist). The destination folder is a dialog.open parameter until the framework has a folder field. Not built: the File Format checkboxes (need a field for a list of words; the containers default to plain), the destination checkbox and Test Install. The dialog does not preview, as exporting writes files: OK runs the command once, journaled, and a failure keeps the dialog open with the message. The flavour menu shows PostScript/CFF and TrueType for the words cff and truetype. The handbook's button reads Next… and asks for a folder; until the dialog has a folder field, the button reads Export and writes to the given destination."
+notes = "Runs file.exportStatic. Fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), containers (File Format checkboxes OTF/TTF, WOFF, WOFF2; plain ticked), removeOverlap and autohint (both off; the engine refuses either one on until overlap removal and hinting on export exist), destination (Export Folder: a path with Choose…, see dialog.chooseExportFolder). Not built: the destination checkbox and Test Install (M14), so the folder is the only destination. The dialog does not preview, as exporting writes files: Next… runs the command once, journaled, and a failure keeps the dialog open with the message. Next… with no folder asks for one (export.promptWhenNoDestination). The flavour menu shows PostScript/CFF and TrueType for the words cff and truetype."
 
 [[panel]]
 id = "dialog.exportVariable"
@@ -157,6 +157,7 @@ milestone = "M1"
 summary = "Options for UFO export: which masters to write and how to treat glyph names and editor-only constructs. Next… asks for the destination folder."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
+notes = "Built (M3.14) as a tab of dialog.export running file.exportUfo. Masters: one checkbox per master, all ticked (the handbook's list with multiple selection). Convert Glyph Names to Production Names: off; the engine refuses it until the glyph database exists (M4). Decompose Smart Stuff: on. Export Folder: a path with Choose…; Next… with no folder opens the folder chooser, as the handbook describes. Documented, not yet observed."
 
 [[panel]]
 id = "dialog.exportMetrics"
@@ -182,7 +183,7 @@ milestone = "M3"
 summary = "Folder chooser shown when the destination path in the export dialog is clicked, when a font export starts with neither destination ticked, and after Next… on the UFO tab."
 ref = "Import & Export › Exporting Font Files › Export Destination"
 status = "handbook"
-notes = "The system folder chooser, opened by the desktop shell; the engine only takes the chosen path as the command's destination. Not built yet: it needs a folder field in the dialog framework."
+notes = "Built (M3.14): the system folder chooser, opened by the desktop shell from Choose… beside an export folder field and from Next… with that field empty; the engine only takes the chosen path as the command's destination. The browser and headless hosts (MCP, tests) have no chooser: Choose… is hidden and the folder is typed, or set with ui.dialog.set."
 
 # ───────────────────────────── Export: rules ─────────────────────────────
 
@@ -339,6 +340,7 @@ milestone = "M2"
 summary = "If neither the folder checkbox nor Test Install is ticked, pressing Next… asks for an export folder before compiling. The two destinations are separate checkboxes; whether ticking both writes files and installs in one run is not spelled out."
 ref = "Import & Export › Exporting Font Files › Export Destination"
 status = "handbook"
+notes = "Built (M3.14) in the export dialog, where the folder is the only destination until Test Install exists: Next… pressed by the person with an empty Export Folder opens dialog.chooseExportFolder; cancelling it exports nothing and leaves the dialog open. Over the control channel (ui.dialog.confirm) an empty folder is an error that names the field. Documented, not yet observed."
 
 [[behavior]]
 id = "export.instanceExportFolder"
@@ -670,7 +672,7 @@ milestone = "M3"
 summary = "Imports the vector paths of PDF, EPS or SVG files as glyph outlines. From Font View several files are matched to glyphs by file name; from Edit View one file goes into the current glyph. With an explicit glyph parameter the file-name matching is bypassed."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
-notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route. The handbook does not say how a drawing is scaled; ours reads one font unit per SVG unit with SVG y = 0 at the ascender (`scale: em` fits the drawing's box to the em) and rounds to the grid as a paste does."
+notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route. The handbook does not say how a drawing is scaled; ours reads one font unit per SVG unit with SVG y = 0 at the ascender (`scale: em` fits the drawing's box to the em) and rounds to the grid as a paste does. File › Import › Outlines… in the desktop app opens the system file chooser (SVG files, several at once) and imports them as the person's run, so dialog.importOutlinesMissingGlyph can follow; without a chooser it says to run the command with `files`. From Edit View the files are matched by name too, not put into the current glyph (not built)."
 
 [[panel]]
 id = "dialog.importOutlinesMissingGlyph"

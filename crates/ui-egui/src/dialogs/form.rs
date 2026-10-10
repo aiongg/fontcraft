@@ -15,6 +15,12 @@ pub const MAX_FIELDS: usize = 64;
 pub const MAX_CHOICES: usize = 256;
 /// Longest text a number field takes.
 pub const MAX_FIELD_TEXT: usize = 64;
+/// Longest path a folder field takes.
+pub const MAX_PATH_TEXT: usize = 4096;
+/// Most rows an order field may list.
+pub const MAX_ORDER_ROWS: usize = 4096;
+/// A folder field is this many number fields wide.
+const PATH_WIDTH_FIELDS: f32 = 4.0;
 
 /// What a field holds.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -33,6 +39,19 @@ pub enum Kind {
         #[serde(skip_serializing_if = "Vec::is_empty")]
         labels: Vec<String>,
     },
+    /// Any words of a list, as checkboxes. The value lists the ticked words in the list's order.
+    /// `labels` as for [`Kind::Choice`].
+    Multi {
+        choices: Vec<String>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        labels: Vec<String>,
+    },
+    /// A folder path, typed or picked with Choose… where the app has a folder chooser. An empty
+    /// path is no folder: the field is left out of the parameters.
+    Folder,
+    /// An order of the rows `labels`: the value lists every row index once, the first row on top
+    /// of the list. Rows are dragged into place.
+    Order { labels: Vec<String> },
 }
 
 /// One field: a parameter of the dialog's command.
@@ -74,9 +93,44 @@ impl Field {
         }
     }
 
-    /// A field that takes typed text (numbers).
+    /// Checkboxes for the `(word, label)` pairs; the words in `default` are ticked.
+    pub fn multi(key: &str, label: &str, choices: &[(&str, &str)], default: &[&str], doc: &str) -> Self {
+        Self {
+            key: key.into(),
+            label: label.into(),
+            kind: Kind::Multi {
+                choices: choices.iter().map(|(w, _)| w.to_string()).collect(),
+                labels: choices.iter().map(|(_, l)| l.to_string()).collect(),
+            },
+            default: json!(default),
+            doc: doc.into(),
+        }
+    }
+
+    /// A folder path, empty at first.
+    pub fn folder(key: &str, label: &str, doc: &str) -> Self {
+        Self { key: key.into(), label: label.into(), kind: Kind::Folder, default: json!(""), doc: doc.into() }
+    }
+
+    /// An order of the rows `labels`, at first as listed.
+    pub fn order(key: &str, label: &str, labels: Vec<String>, doc: &str) -> Self {
+        let default = json!((0..labels.len()).collect::<Vec<_>>());
+        Self { key: key.into(), label: label.into(), kind: Kind::Order { labels }, default, doc: doc.into() }
+    }
+
+    /// A field that takes typed text (numbers, paths).
     pub fn is_text(&self) -> bool {
-        matches!(self.kind, Kind::Number { .. } | Kind::Integer { .. })
+        matches!(self.kind, Kind::Number { .. } | Kind::Integer { .. } | Kind::Folder)
+    }
+
+    /// The longest text the field takes.
+    pub fn max_text(&self) -> usize {
+        if self.kind == Kind::Folder { MAX_PATH_TEXT } else { MAX_FIELD_TEXT }
+    }
+
+    /// A folder field with no folder in `value`.
+    pub fn is_empty_folder(&self, value: &Value) -> bool {
+        self.kind == Kind::Folder && value.as_str().is_none_or(str::is_empty)
     }
 
     /// `value` as this field stores it, or why it does not fit. Number fields also take the text
@@ -106,6 +160,33 @@ impl Field {
                 Some(word) if choices.iter().any(|c| c == word) => Ok(json!(word)),
                 _ => Err(format!("`{key}` must be one of {}", choices.join(", "))),
             },
+            Kind::Multi { choices, .. } => {
+                let bad = || format!("`{key}` must be a list of {}", choices.join(", "));
+                let list = value.as_array().filter(|l| l.len() <= choices.len()).ok_or_else(bad)?;
+                let words: Vec<&str> =
+                    list.iter().map(|w| w.as_str().filter(|w| choices.iter().any(|c| c == w)).ok_or_else(bad)).collect::<Result<_, _>>()?;
+                Ok(json!(choices.iter().filter(|c| words.contains(&c.as_str())).collect::<Vec<_>>()))
+            }
+            Kind::Folder => match value.as_str() {
+                Some(path) if path.len() <= MAX_PATH_TEXT && !path.contains('\0') => Ok(json!(path.trim())),
+                _ => Err(format!("`{key}` must be a folder path of at most {MAX_PATH_TEXT} bytes")),
+            },
+            Kind::Order { labels } => {
+                let count = labels.len();
+                let bad = || format!("`{key}` must list every row index from 0 to {} once", count.saturating_sub(1));
+                let list = value.as_array().filter(|l| l.len() == count).ok_or_else(bad)?;
+                let mut seen = vec![false; count];
+                let mut order = Vec::with_capacity(count);
+                for item in list {
+                    let i = item.as_u64().and_then(|n| usize::try_from(n).ok()).ok_or_else(bad)?;
+                    match seen.get_mut(i) {
+                        Some(slot) if !*slot => *slot = true,
+                        _ => return Err(bad()),
+                    }
+                    order.push(i);
+                }
+                Ok(json!(order))
+            }
         }
     }
 
@@ -185,14 +266,15 @@ pub fn widget_id(key: &str) -> egui::Id {
 }
 
 /// Draws the fields as a two-column grid of labels and widgets. What the person does becomes
-/// [`Event`]s; the dialog applies them after the frame's drawing.
-pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, events: &mut Vec<Event>) {
+/// [`Event`]s; the dialog applies them after the frame's drawing. `can_choose`: the app has a
+/// folder chooser, so folder fields show Choose….
+pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose: bool, events: &mut Vec<Event>) {
     egui::Grid::new("fontcraft-dialog-fields").num_columns(2).spacing([tokens.dialog_spacing, tokens.dialog_spacing]).show(ui, |ui| {
         for field in &dialog.fields {
             let value = dialog.values.get(&field.key).cloned().unwrap_or(Value::Null);
             ui.label(&field.label);
             let response = match &field.kind {
-                Kind::Number { .. } | Kind::Integer { .. } => text_field(ui, dialog, field, &value, tokens, events),
+                Kind::Number { .. } | Kind::Integer { .. } => text_field(ui, dialog, field, &value, tokens.dialog_field_width, events),
                 Kind::Bool => {
                     let mut on = value.as_bool().unwrap_or(false);
                     let r = ui.add(egui::Checkbox::without_text(&mut on)).on_hover_text(&field.doc);
@@ -214,6 +296,32 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, events: &mu
                         })
                         .response
                 }
+                Kind::Multi { choices, labels } => {
+                    let ticked: Vec<&str> = value.as_array().map(|l| l.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+                    ui.horizontal_wrapped(|ui| {
+                        for choice in choices {
+                            let mut on = ticked.contains(&choice.as_str());
+                            let r = ui.checkbox(&mut on, choice_label(choices, labels, choice)).on_hover_text(&field.doc);
+                            if r.changed() {
+                                let next: Vec<&String> =
+                                    choices.iter().filter(|c| if *c == choice { on } else { ticked.contains(&c.as_str()) }).collect();
+                                events.push(Event::Set(field.key.clone(), json!(next)));
+                            }
+                        }
+                    })
+                    .response
+                }
+                Kind::Folder => {
+                    ui.horizontal(|ui| {
+                        let r = text_field(ui, dialog, field, &value, tokens.dialog_field_width * PATH_WIDTH_FIELDS, events);
+                        if can_choose && ui.button("Choose…").clicked() {
+                            events.push(Event::Choose(field.key.clone()));
+                        }
+                        r
+                    })
+                    .inner
+                }
+                Kind::Order { labels } => order_list(ui, field, labels, &value, events),
             };
             // Tab or a click moved the keyboard to a widget that takes no text: the field
             // being edited is done.
@@ -230,12 +338,43 @@ fn choice_label<'a>(choices: &[String], labels: &'a [String], word: &'a str) -> 
     choices.iter().position(|c| c == word).and_then(|i| labels.get(i)).map_or(word, String::as_str)
 }
 
-/// A number field. Its text is the value, or what is being typed while it has the keyboard.
-fn text_field(ui: &mut egui::Ui, dialog: &OpenDialog, field: &Field, value: &Value, tokens: &Tokens, events: &mut Vec<Event>) -> egui::Response {
+/// The rows of an order field, the first on top; a row dropped on another takes its place.
+fn order_list(ui: &mut egui::Ui, field: &Field, labels: &[String], value: &Value, events: &mut Vec<Event>) -> egui::Response {
+    let order: Vec<usize> =
+        value.as_array().map(|l| l.iter().filter_map(Value::as_u64).filter_map(|n| usize::try_from(n).ok()).collect()).unwrap_or_default();
+    ui.vertical(|ui| {
+        for (at, &row) in order.iter().enumerate() {
+            let text = labels.get(row).map_or("", String::as_str);
+            let id = egui::Id::new(("fontcraft-dialog-order", field.key.as_str(), row));
+            let response = ui.dnd_drag_source(id, at, |ui| ui.label(text)).response.on_hover_text(&field.doc);
+            if let Some(from) = response.dnd_release_payload::<usize>()
+                && let Some(next) = moved(&order, *from, at)
+            {
+                events.push(Event::Set(field.key.clone(), json!(next)));
+            }
+        }
+    })
+    .response
+}
+
+/// `order` with the entry at `from` moved to `to`; `None` when nothing moves.
+pub fn moved(order: &[usize], from: usize, to: usize) -> Option<Vec<usize>> {
+    if from == to || from >= order.len() || to >= order.len() {
+        return None;
+    }
+    let mut next = order.to_vec();
+    let row = next.remove(from);
+    next.insert(to, row);
+    Some(next)
+}
+
+/// A number or folder field. Its text is the value, or what is being typed while it has the
+/// keyboard.
+fn text_field(ui: &mut egui::Ui, dialog: &OpenDialog, field: &Field, value: &Value, width: f32, events: &mut Vec<Event>) -> egui::Response {
     let id = widget_id(&field.key);
     let editing: Option<&Editing> = dialog.editing.as_ref().filter(|e| e.field == field.key);
     let mut text = editing.map_or_else(|| format_value(value), |e| e.text.clone());
-    let response = ui.add(egui::TextEdit::singleline(&mut text).id(id).char_limit(MAX_FIELD_TEXT).desired_width(tokens.dialog_field_width));
+    let response = ui.add(egui::TextEdit::singleline(&mut text).id(id).char_limit(field.max_text()).desired_width(width));
     let response = response.on_hover_text(&field.doc);
     if response.has_focus() {
         if dialog.blur {

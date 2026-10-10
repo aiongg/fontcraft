@@ -570,7 +570,7 @@ milestone = "M3"
 summary = "Dialog for a one-off affine transformation of the selection or of selected layers. While it is open the canvas shows the result; Cancel puts the outlines back as they were."
 ref = "Filters › Built-in Filters › Transformations › Transformations"
 status = "observed"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:49–2:24: fields Translate X and Y, an Origin pop-up (set to baseline), Scale horizontal and vertical with a lock, a Slant field whose label carries a pop-up arrow, Cancel and OK, and a round \"…\" button at the bottom left. The glyph is drawn transformed while the dialog is open and returns to its old shape after Cancel. FontCraft's dialog has the Origin pop-up, the Slant field and Cursivy as a checkbox; Translate, Scale with its lock and the \"…\" menu wait on dialog fields that hold an {x, y} object and on dialog actions (M3.14), so agents pass translate and scale to path.transformations."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:49–2:24: fields Translate X and Y, an Origin pop-up (set to baseline), Scale horizontal and vertical with a lock, a Slant field whose label carries a pop-up arrow, Cancel and OK, and a round \"…\" button at the bottom left. The glyph is drawn transformed while the dialog is open and returns to its old shape after Cancel. FontCraft's dialog has these controls in that order: Translate X and Y, Origin, Scale Horizontal and Vertical, a Lock Scale checkbox (on: the two scale fields hold the same value), a Slant Kind pop-up (Slant or Cursivy, see path.transformations.slantVsCursivy) and the Slant field. It runs path.transformations with `translate` and `scale` objects, leaving out a translation of 0 and a scale of 100 %. The \"…\" menu runs Copy Filter Parameter and Copy PreFilter Parameter and puts the text on the system clipboard (ui.click with copyFilterParameter or copyPreFilterParameter)."
 
 [[command]]
 id = "path.transformations.copyFilterParameter"
@@ -641,7 +641,7 @@ milestone = "M3"
 summary = "Slant is a plain shear with no compensation. Clicking the Slant label offers Cursivy, a shear with optical correction of the curves."
 ref = "Filters › Built-in Filters › Transformations › Transformations"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:53–2:47: the Slant label carries a pop-up arrow; the pop-up is not opened. A plain 10° slant is copied as Slant:10;SlantCorrection:0."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:53–2:47: the Slant label carries a pop-up arrow; the pop-up is not opened. A plain 10° slant is copied as Slant:10;SlantCorrection:0. FontCraft's dialog shows the choice as a Slant Kind pop-up field beside the Slant field, since its field labels are plain text."
 
 [[behavior]]
 id = "path.transformations.cursivyNeedsStems"

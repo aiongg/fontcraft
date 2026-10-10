@@ -600,8 +600,9 @@ until any edit).
 `path.setMask` writes mask value 1, which every format version reads as a subtracting mask.
 `filter.shapeOrder` takes the new order as a list of every shape index; hints that refer to a path
 by index are not renumbered.
-The Shape Order dialog is not built: it needs a reorderable list field, which the dialog framework
-does not have yet. Until then the menu item without `order` reports that `order` is required.
+The Shape Order dialog lists the layer's shapes with the bottom shape (shape 0) first; each row
+names the shape's index and kind (`2: Path (4 nodes)`, `3: Component A`). A row dragged onto
+another takes its place, the canvas previews the order, and OK is one undo step.
 
 ## 19. Anchors
 

@@ -50,7 +50,7 @@ pub const METHODS: &[(&str, &str)] = &[
     ("ui.text", "{text} type into the focused text field; with none focused, each character is a ui.key tap; returns {field} or {keys, handled}"),
     (
         "ui.dialog.inspect",
-        "{} the open dialog: {open, dialog, title, command, fields: [{id, label, kind, value, focused, min?, max?, choices?, default, doc}], editing, params (what OK runs), error, buttons}; {open: false} when none is",
+        "{} the open dialog: {open, dialog, title, command, mode, message, tabs?: [{id, tab, label, active}], fields: [{id, label, kind, value, focused, min?, max?, choices?, labels?, default, doc}], editing, params (what OK runs), error, actions?: [{id, label, command}], buttons, captions, canChooseFolder}; {open: false} when none is",
     ),
     (
         "ui.dialog.set",
@@ -60,7 +60,7 @@ pub const METHODS: &[(&str, &str)] = &[
     ("ui.dialog.cancel", "{} Cancel: the font as it was when the dialog opened; returns {cancelled}"),
     (
         "ui.click",
-        "{id} press a control of the open dialog: `ok`, `cancel`, or a field by its parameter's key (a checkbox toggles, a number field takes the keyboard for ui.text and ui.key)",
+        "{id} press a control of the open dialog: `ok`, `cancel`, a tab by its dialog id (shows it), an action of the \"…\" menu by its id (runs it: {action, command, text, result}, the text also goes to the system clipboard), or a field by its parameter's key (a checkbox toggles, a number field takes the keyboard for ui.text and ui.key, a folder field opens the folder chooser or, without one, takes the keyboard)",
     ),
     ("control.methods", "{} this list"),
 ];

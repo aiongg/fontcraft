@@ -13,6 +13,7 @@ pub mod font_view;
 pub mod keymap;
 pub mod menus;
 pub mod palette;
+pub mod pickers;
 pub mod selection;
 pub mod status_bar;
 pub mod tabs;

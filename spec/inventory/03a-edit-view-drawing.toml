@@ -1812,7 +1812,7 @@ milestone = "M3"
 summary = "Opens a dialog listing the layer's shapes for reordering by drag and drop; OK applies the new order. With an explicit order it reorders without the dialog."
 ref = "Edit View › Masking"
 status = "handbook"
-notes = "Built in M3.11 (engine form): `order` is required; the Shape Order dialog (M3.14) supplies it. Hints that refer to a path by its index are not renumbered."
+notes = "Built in M3.11 (engine form): `order` is required. Filter › Shape Order opens dialog.shapeOrder, which supplies it (M3.14). Hints that refer to a path by its index are not renumbered."
 
 [[panel]]
 id = "dialog.shapeOrder"
@@ -1824,7 +1824,7 @@ milestone = "M3"
 summary = "Dialog of Filter › Shape Order used to rearrange the shapes of a layer; this chapter describes it only as far as masking needs."
 ref = "Edit View › Masking"
 status = "handbook"
-notes = "Not built: the dialog framework has no reorderable list field yet (M3.14). Until it has, Filter › Shape Order without `order` reports that `order` is required, and agents pass `order` to filter.shapeOrder."
+notes = "Built (M3.14): a list of the layer's shapes, the first row the bottom shape (shape 0, drawn first; our choice). Each row reads `<index>: Path (<n> nodes)`, `<index>: Component <name>` or `<index>: Image`, the index from when the dialog opened. A row dragged onto another takes its place; the canvas previews the order and OK is one undo step. Agents give `order` with ui.dialog.set. What the reference's rows show and which end is the top are not observed (docs/spec/03a-edit-view-drawing.md, open question 24)."
 
 # ───────────────────────────── Anchors ─────────────────────────────
 
