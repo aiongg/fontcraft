@@ -526,6 +526,31 @@ fn measure_font_view_on_the_largest_corpus_source() {
     let start = std::time::Instant::now();
     window.frame(&mut app);
     let after_edit = start.elapsed();
+    // Frames after one glyph is renamed and after one glyph's colour is set, six of each, and
+    // the sidebar's refresh after an edit on its own.
+    let timed_frame = |app: &mut FontcraftApp| {
+        let start = std::time::Instant::now();
+        window.frame(app);
+        start.elapsed()
+    };
+    let (mut renamed, mut coloured, mut sidebar_refresh) = (Vec::new(), Vec::new(), Vec::new());
+    for i in 0..6 {
+        let (from, to) = if i % 2 == 0 { ("a", "a.renamed") } else { ("a.renamed", "a") };
+        app.run("glyph.rename", &json!({"glyph": from, "newName": to})).unwrap();
+        renamed.push(timed_frame(&mut app));
+        app.run("glyph.setColorLabel", &json!({"glyphs": ["b"], "color": i})).unwrap();
+        coloured.push(timed_frame(&mut app));
+        app.run("glyph.setColorLabel", &json!({"glyphs": ["c"], "color": i})).unwrap();
+        crate::shell::font_view::refresh(&mut app);
+        let start = std::time::Instant::now();
+        crate::shell::font_view::sidebar::refresh(&mut app);
+        sidebar_refresh.push(start.elapsed());
+        window.frame(&mut app);
+    }
+    let spread = |mut v: Vec<std::time::Duration>| {
+        v.sort();
+        format!("median {:?}, max {:?}", v[v.len() / 2], v.last().unwrap())
+    };
     app.run("fontView.setViewMode", &json!({"mode": "list"})).unwrap();
     window.frame(&mut app);
     let start = std::time::Instant::now();
@@ -551,10 +576,13 @@ fn measure_font_view_on_the_largest_corpus_source() {
     let sidebar = start.elapsed();
     queries.sort();
     println!(
-        "{} glyphs ({count} custom): effective properties {props:?}; first frame {first:?}; later frames median {:?}, max {:?}; cache refresh after an edit {refresh:?}, frame after an edit {after_edit:?}; list frame {list:?}; three-rule query ({shown} glyphs) first {first_query:?}, median {:?}, max {:?}; sidebar entries with counts {sidebar:?}",
+        "{} glyphs ({count} custom): effective properties {props:?}; first frame {first:?}; later frames median {:?}, max {:?}; cache refresh after an edit {refresh:?}, frame after an edit {after_edit:?}; frame after a rename {}; frame after a colour {}; sidebar refresh after an edit {}; list frame {list:?}; three-rule query ({shown} glyphs) first {first_query:?}, median {:?}, max {:?}; sidebar entries with counts {sidebar:?}",
         font.glyphs.len(),
         frames[frames.len() / 2],
         frames.last().unwrap(),
+        spread(renamed),
+        spread(coloured),
+        spread(sidebar_refresh),
         queries[queries.len() / 2],
         queries.last().unwrap()
     );

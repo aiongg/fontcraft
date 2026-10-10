@@ -13,7 +13,7 @@
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
-use fontcraft_glyphquery::{self as gq, GroupEntry, Groups, LanguageSet};
+use fontcraft_glyphquery::{self as gq, GroupEntry, Groups, LanguageIndex, LanguageSet};
 use fontcraft_model::glyphdata::{GlyphData, MAX_CUSTOM_FILES, Record, sets, xml};
 use fontcraft_model::{Font, param_flag};
 
@@ -197,6 +197,19 @@ impl Session {
     /// The built-in language sets the Languages section lists and its badges count.
     pub fn language_sets(&self) -> Result<Arc<Vec<LanguageSet>>> {
         language_sets()
+    }
+
+    /// The language sets named through the active document's glyph data, for the sidebar's
+    /// Languages section and badges. Built once for each glyph data.
+    pub fn language_index(&mut self) -> Result<Arc<LanguageIndex>> {
+        let data = self.glyph_data()?;
+        let languages = self.language_sets()?;
+        if let Some(index) = self.language_index.as_ref().filter(|i| i.is_for(&languages, &data)) {
+            return Ok(index.clone());
+        }
+        let index = Arc::new(LanguageIndex::new(languages, data).map_err(|e| EngineError::Internal(e.to_string()))?);
+        self.language_index = Some(index.clone());
+        Ok(index)
     }
 
     /// Sets the user's `Groups*.plist` files (name, text), in order: the app reads them from the

@@ -38,8 +38,12 @@ fn order_lines(font: &Font) -> Vec<&str> {
 /// with no existing glyph after it starts where the next one would, or after the listed glyphs.
 pub fn glyph_order_sections(font: &Font) -> Vec<(usize, String)> {
     let mut out = Vec::new();
+    let lines = order_lines(font);
+    if !lines.iter().any(|l| is_section_header(l)) {
+        return out;
+    }
     let mut placed = HashSet::new();
-    for line in order_lines(font) {
+    for line in lines {
         if is_section_header(line) {
             let title = line.trim_start_matches('*').trim_end_matches('*').trim();
             out.push((placed.len(), title.to_string()));
@@ -58,19 +62,22 @@ pub fn is_section_header(line: &str) -> bool {
 /// The glyphs' positions in `font.glyphs`, in display and export order: the glyphs the
 /// `glyphOrder` parameter names (each once, missing names skipped), then the rest in stored order.
 pub fn glyph_order(font: &Font) -> Vec<usize> {
-    let mut order = Vec::with_capacity(font.glyphs.len());
-    let mut placed = HashSet::new();
+    let n = font.glyphs.len();
+    let mut order = Vec::with_capacity(n);
+    let mut placed = vec![false; n];
     for name in glyph_order_names(font) {
         if let Some(i) = font.glyphs.position(name)
-            && placed.insert(i)
+            && let Some(p) = placed.get_mut(i)
+            && !*p
         {
+            *p = true;
             order.push(i);
         }
     }
-    if placed.is_empty() {
-        return (0..font.glyphs.len()).collect();
+    if order.is_empty() {
+        return (0..n).collect();
     }
-    order.extend((0..font.glyphs.len()).filter(|i| !placed.contains(i)));
+    order.extend(placed.iter().enumerate().filter(|(_, p)| !**p).map(|(i, _)| i));
     order
 }
 

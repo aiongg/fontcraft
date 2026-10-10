@@ -388,6 +388,22 @@ fn entries_with_a_known_set_list_their_missing_glyphs() {
     assert_eq!(find(&sidebar, "languages/latin/xx").unwrap().label, "Test");
     assert_eq!(find(&sidebar, "categories/Number/Decimal Digit").unwrap().count, 1);
     assert!(find(&sidebar, "languages/greek").is_some(), "a default script is listed without glyphs");
+
+    // A shared index gives the same entries; one built from other glyph data lends only its sets.
+    let shared = Arc::new(languages.clone());
+    let json = |items: Vec<SidebarItem>| serde_json::to_value(items).unwrap();
+    let names = |c: &Catalog, p: &str| c.missing(&c.resolve(&path(p)).unwrap()).map(|v| v.into_iter().map(|e| e.name).collect::<Vec<_>>());
+    let own_data = Arc::new(super::tests::data());
+    let own = LanguageIndex::new(shared.clone(), own_data.clone()).unwrap();
+    assert!(own.is_for(&shared, &own_data));
+    let with_own = Catalog::new(Env::new(&font, &own_data, None).unwrap()).with_filters(&items).with_language_index(&own);
+    assert_eq!(json(with_own.sidebar()), json(sidebar.clone()));
+    let renamed = GlyphData::with_custom_files(&[br#"<glyphData><glyph name="Aumlaut" unicode="00C4" category="Letter"/></glyphData>"#]).unwrap();
+    let other = LanguageIndex::new(shared.clone(), Arc::new(renamed)).unwrap();
+    assert!(!other.is_for(&shared, &data));
+    let with_other = Catalog::new(Env::new(&font, &data, None).unwrap()).with_filters(&items).with_language_index(&other);
+    assert_eq!(names(&with_other, "languages/latin/xx"), Some(vec!["Adieresis".to_string()]));
+    assert_eq!(json(with_other.sidebar()), json(sidebar));
 }
 
 #[test]

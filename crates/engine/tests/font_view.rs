@@ -160,3 +160,29 @@ fn missing_glyphs_of_a_list_filter_are_listed_and_generated() {
     assert!(s.font().unwrap().glyph("zz").is_none(), "one undo step");
     assert!(s.font().unwrap().glyph("A-cy").is_some());
 }
+
+#[test]
+fn effective_properties_are_computed_again_only_for_changed_glyphs_and_new_glyph_data() {
+    let mut s = Session::with_document();
+    let n = s.font().unwrap().glyphs.len() as u64;
+    let computed = |s: &mut Session| s.effective_props().unwrap().computed();
+    assert_eq!(computed(&mut s), n);
+    let sidebar = run(&mut s, "fontView.queryGlyphs", json!({"sidebar": true}));
+    assert_eq!(computed(&mut s), n, "a query computes nothing new");
+
+    // One glyph changed: only it is computed again, and the sidebar counts it where it went.
+    run(&mut s, "glyph.setCategory", json!({"glyphs": ["A"], "category": "Symbol"}));
+    assert_eq!(computed(&mut s), n + 1);
+    let symbols = |s: &mut Session| names(&run(s, "fontView.queryGlyphs", json!({"entries": ["categories/Symbol"]})));
+    assert!(symbols(&mut s).contains(&"A".to_string()));
+    assert_ne!(run(&mut s, "fontView.queryGlyphs", json!({"sidebar": true}))["sidebar"], sidebar["sidebar"]);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(computed(&mut s), n + 2, "the glyph undo gives back is a different value again");
+    assert!(!symbols(&mut s).contains(&"A".to_string()));
+
+    // A custom glyph data file: every glyph is computed from it.
+    let custom = br#"<glyphData><glyph name="B" unicode="0042" category="Symbol"/></glyphData>"#;
+    assert!(s.set_user_glyph_data(&[("GlyphData.xml", custom)]).is_empty());
+    assert_eq!(computed(&mut s), 2 * n + 2);
+    assert_eq!(symbols(&mut s), ["B"]);
+}

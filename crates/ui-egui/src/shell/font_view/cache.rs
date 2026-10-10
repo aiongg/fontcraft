@@ -1,14 +1,14 @@
 //! What Font View lists. The cache is rebuilt only when something it depends on changed: the
 //! document or its revision, the user settings, the glyph data, Font View's master, the query
-//! (sidebar and search) or the List View sort. Effective properties are kept across rebuilds
-//! for every glyph that did not change, so an edit of one glyph recomputes one glyph's.
+//! (sidebar and search) or the List View sort. Effective properties come from the session's
+//! cache, which computes again only the glyphs an edit changed.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Glyph, GlyphProps, glyph_order, glyph_order_sections, glyph_props, keeps_alternates};
+use fontcraft_model::{Font, Glyph, GlyphProps, PropsCache, glyph_order, glyph_order_sections, glyph_props, keeps_alternates};
 use serde_json::Value;
 
 use super::columns::{CellCx, SortValue};
@@ -19,7 +19,7 @@ pub struct Row {
     pub glyph: Arc<Glyph>,
     /// The position in glyph order: the ID column, and the export order.
     pub id: usize,
-    pub props: GlyphProps,
+    pub props: Arc<GlyphProps>,
 }
 
 /// What the rows were built from.
@@ -105,7 +105,8 @@ impl FontViewCache {
             return;
         }
         if self.key.as_ref().map(|k| &k.rows) != Some(&rows_key) {
-            self.rebuild_rows(&font, &data, &rows_key);
+            let props = session.effective_props().ok();
+            self.rebuild_rows(&font, &data, props.as_deref(), rows_key.keep_alternates);
         }
         self.data = Some(data);
         self.master = key.master.clone();
@@ -128,20 +129,14 @@ impl FontViewCache {
         self.key = Some(key);
     }
 
-    fn rebuild_rows(&mut self, font: &Font, data: &Arc<GlyphData>, key: &RowsKey) {
-        let same_data = self.key.as_ref().is_some_and(|k| k.rows.data == key.data && k.rows.keep_alternates == key.keep_alternates);
-        let mut old: HashMap<String, Row> =
-            if same_data { std::mem::take(&mut self.rows).into_iter().map(|r| (r.glyph.name.clone(), r)).collect() } else { HashMap::new() };
+    fn rebuild_rows(&mut self, font: &Font, data: &GlyphData, props: Option<&PropsCache>, keep_alternates: bool) {
+        let props = props.filter(|p| p.is_for(data, keep_alternates));
         let glyphs = font.glyphs.as_arcs();
         let order = glyph_order(font);
         let mut rows = Vec::with_capacity(order.len());
         for (id, &i) in order.iter().enumerate() {
             let Some(glyph) = glyphs.get(i) else { continue };
-            let props = match old.remove(&glyph.name) {
-                // A glyph that did not change keeps its properties.
-                Some(row) if Arc::ptr_eq(&row.glyph, glyph) => row.props,
-                _ => glyph_props(glyph, data, key.keep_alternates),
-            };
+            let props = props.and_then(|p| p.get(glyph)).cloned().unwrap_or_else(|| Arc::new(glyph_props(glyph, data, keep_alternates)));
             rows.push(Row { glyph: glyph.clone(), id, props });
         }
         self.by_name = rows.iter().enumerate().map(|(i, r)| (r.glyph.name.clone(), i)).collect();

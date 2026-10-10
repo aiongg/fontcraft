@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use fontcraft_glyphquery::{self as gq, Catalog, Env, Expected, Filter, Groups, LanguageSet, Matcher, RuleTree, Search, Selection};
+use fontcraft_glyphquery::{self as gq, Catalog, Env, Expected, Filter, Groups, LanguageIndex, Matcher, RuleTree, Search, Selection};
 use fontcraft_model::{Glyph, Layer, MAX_GLYPHS, data_props, insert_by_sort_key};
 use serde_json::{Map, Value, json};
 
@@ -212,26 +212,22 @@ fn visible_scripts(s: &Session) -> Result<Vec<String>> {
 struct Sources {
     filters: Vec<Filter>,
     scripts: Vec<String>,
-    languages: Arc<Vec<LanguageSet>>,
+    languages: Arc<LanguageIndex>,
     groups: Option<Arc<Groups>>,
 }
 
 impl Sources {
-    fn read(s: &Session, with_filters: bool) -> Result<Sources> {
+    fn read(s: &mut Session, with_filters: bool) -> Result<Sources> {
         Ok(Sources {
             filters: if with_filters { stored_filters(s)? } else { Vec::new() },
             scripts: visible_scripts(s)?,
-            languages: s.language_sets()?,
+            languages: s.language_index()?,
             groups: s.user_groups(),
         })
     }
 
     fn catalog<'a>(&'a self, env: Env<'a>) -> Result<Catalog<'a>> {
-        let catalog = Catalog::new(env)
-            .with_filters(&self.filters)
-            .with_visible_scripts(&self.scripts)
-            .with_languages(&self.languages)
-            .map_err(|e| EngineError::Internal(e.to_string()))?;
+        let catalog = Catalog::new(env).with_filters(&self.filters).with_visible_scripts(&self.scripts).with_language_index(&self.languages);
         Ok(match self.groups.as_deref() {
             Some(g) => catalog.with_groups(g),
             None => catalog,
@@ -259,9 +255,10 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
     let with_sidebar = p.bool_or("sidebar", false)?;
     let wants_filters = with_sidebar || entries.iter().any(|e| e.first().is_some_and(|s| s == "filters"));
     let sources = Sources::read(s, wants_filters)?;
+    let props = s.effective_props()?;
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let env = Env::new(font, &data, master).map_err(|e| bad(&p, "master", e))?;
+    let env = Env::new(font, &data, master).map_err(|e| bad(&p, "master", e))?.with_props(&props);
     let catalog = sources.catalog(env)?;
     let glyphs = catalog.select(&Selection { entries, rules, search }).map_err(|e| p.bad(e.to_string()))?;
     let mut out = Map::new();
@@ -276,11 +273,12 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
 }
 
 /// The glyphs an entry expects that the font lacks, and how many it expects in all.
-fn missing_of(s: &Session, p: &Params, entry: &[String]) -> Result<(Vec<Expected>, usize)> {
+fn missing_of(s: &mut Session, p: &Params, entry: &[String]) -> Result<(Vec<Expected>, usize)> {
     let sources = Sources::read(s, entry.first().is_some_and(|s| s == "filters"))?;
+    let props = s.effective_props()?;
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let env = Env::new(font, &data, None).map_err(|e| p.bad(e.to_string()))?;
+    let env = Env::new(font, &data, None).map_err(|e| p.bad(e.to_string()))?.with_props(&props);
     let catalog = sources.catalog(env)?;
     let resolved = catalog.resolve(entry).map_err(|e| bad(p, "entry", e))?;
     let expected = resolved.expected().map_or(0, <[Expected]>::len);

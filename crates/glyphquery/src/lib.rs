@@ -20,9 +20,10 @@ mod tests;
 use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::sync::Arc;
 
 use fontcraft_glyphdata::GlyphData;
-use fontcraft_model::{Font, Glyph, GlyphProps, Layer, glyph_props, keeps_alternates};
+use fontcraft_model::{Font, Glyph, GlyphProps, Layer, PropsCache, glyph_props, keeps_alternates};
 
 pub use filters::{
     Filter, add_filter, check_filter_name, filter_at, list_names, move_filter, remove_filter, rename_filter, replace_filter, validate_filters,
@@ -32,8 +33,8 @@ pub use replace::Replacement;
 pub use rules::{GroupKind, Property, Rule, RuleNode, RuleOp, RuleTree, RuleValue};
 pub use search::{Matcher, Search, SearchField};
 pub use sidebar::{
-    Catalog, DEFAULT_VISIBLE_SCRIPTS, Entry, Expected, GroupEntry, GroupRule, Groups, LanguageSet, Section, Selection, SidebarItem, check_script_id,
-    parse_groups, parse_path,
+    Catalog, DEFAULT_VISIBLE_SCRIPTS, Entry, Expected, GroupEntry, GroupRule, Groups, LanguageIndex, LanguageSet, Section, Selection, SidebarItem,
+    check_script_id, parse_groups, parse_path,
 };
 
 /// Longest predicate text accepted, in bytes.
@@ -115,6 +116,7 @@ pub struct Env<'a> {
     first_master: Option<&'a str>,
     keep_alternates: bool,
     classes: HashMap<String, HashSet<String>>,
+    props: Option<&'a PropsCache>,
 }
 
 impl<'a> Env<'a> {
@@ -128,12 +130,21 @@ impl<'a> Env<'a> {
             },
             None => first_master,
         };
-        Ok(Env { font, data, master, first_master, keep_alternates: keeps_alternates(font), classes: HashMap::new() })
+        Ok(Env { font, data, master, first_master, keep_alternates: keeps_alternates(font), classes: HashMap::new(), props: None })
     }
 
     /// Gives `name in class(X)` the members of each feature class.
     pub fn with_classes(mut self, classes: HashMap<String, HashSet<String>>) -> Self {
         self.classes = classes;
+        self
+    }
+
+    /// Reads effective properties from `cache` where it has them. A cache made from other glyph
+    /// data or another *Keep Alternates* setting is not used.
+    pub fn with_props(mut self, cache: &'a PropsCache) -> Self {
+        if cache.is_for(self.data, self.keep_alternates) {
+            self.props = Some(cache);
+        }
         self
     }
 
@@ -155,11 +166,11 @@ impl<'a> Env<'a> {
     }
 }
 
-/// One glyph under evaluation. Its effective properties are computed at most once, when a rule
-/// first needs them.
+/// One glyph under evaluation. Its effective properties are read from the environment's cache,
+/// or computed at most once, when a rule first needs them.
 pub struct Subject<'a> {
     pub glyph: &'a Glyph,
-    props: OnceCell<GlyphProps>,
+    props: OnceCell<Arc<GlyphProps>>,
 }
 
 impl<'a> Subject<'a> {
@@ -168,7 +179,9 @@ impl<'a> Subject<'a> {
     }
 
     pub(crate) fn props(&self, env: &Env) -> &GlyphProps {
-        self.props.get_or_init(|| glyph_props(self.glyph, env.data, env.keep_alternates))
+        self.props.get_or_init(|| {
+            env.props.and_then(|c| c.get(self.glyph)).cloned().unwrap_or_else(|| Arc::new(glyph_props(self.glyph, env.data, env.keep_alternates)))
+        })
     }
 }
 

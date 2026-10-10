@@ -12,7 +12,9 @@
 //! what it holds. Rules and search narrow the result further. Results follow the glyph order,
 //! except that a selected list filter shows its glyphs in list order.
 
+use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -302,8 +304,120 @@ fn group_entries(items: &[Plist], depth: usize, count: &mut usize, data: &GlyphD
 
 // ── The catalog ─────────────────────────────────────────────────────────────────────────────────
 
-/// An expected character with the category, subcategory and case the glyph data gives it.
-type Pooled = (Expected, Option<String>, Option<String>, Option<String>);
+/// A category, how many glyphs it has, and how many each of its child labels has.
+type CategoryCount<'s> = (&'s str, usize, Vec<(&'s str, usize)>);
+
+/// The category, subcategory and case the glyph data gives a character's glyph.
+type DataClass = (Option<String>, Option<String>, Option<String>);
+
+/// The language sets named through one glyph data: the glyphs each set and each script expects,
+/// and the category, subcategory and case of each of those glyphs. None of it depends on the
+/// font, so one index serves every catalog built on the same sets and glyph data. Names and
+/// classes are worked out when first asked for, so scripts the sidebar does not list cost nothing.
+pub struct LanguageIndex {
+    /// Held so the addresses [`LanguageIndex::is_for`] compares stay unique.
+    languages: Arc<Vec<LanguageSet>>,
+    data: Arc<GlyphData>,
+    named: Named,
+}
+
+impl LanguageIndex {
+    /// Fails like [`Catalog::with_languages`] on too many sets or characters.
+    pub fn new(languages: Arc<Vec<LanguageSet>>, data: Arc<GlyphData>) -> Result<LanguageIndex, QueryError> {
+        check_languages(&languages)?;
+        let named = Named::new(&languages);
+        Ok(LanguageIndex { languages, data, named })
+    }
+
+    /// Whether the index was built from these very sets and glyph data.
+    pub fn is_for(&self, languages: &Arc<Vec<LanguageSet>>, data: &GlyphData) -> bool {
+        Arc::ptr_eq(&self.languages, languages) && std::ptr::eq(Arc::as_ptr(&self.data), data)
+    }
+}
+
+/// The characters of the language sets, each code point once. An expected glyph is named by its
+/// position in `cps`.
+struct Named {
+    cps: Vec<u32>,
+    names: Vec<OnceLock<String>>,
+    class: Vec<OnceLock<DataClass>>,
+    /// Each set's characters, each once, in the order of the sets.
+    sets: Vec<Vec<usize>>,
+    /// Each script's characters over all its sets, each once, in the order of the sets.
+    scripts: HashMap<String, Vec<usize>>,
+}
+
+impl Named {
+    fn new(languages: &[LanguageSet]) -> Named {
+        let mut ids: HashMap<u32, usize> = HashMap::new();
+        let mut cps = Vec::new();
+        let mut sets = Vec::with_capacity(languages.len());
+        let mut scripts: HashMap<String, (HashSet<usize>, Vec<usize>)> = HashMap::new();
+        for set in languages {
+            let mut seen = HashSet::new();
+            let mut list = Vec::new();
+            for &cp in &set.characters {
+                let id = *ids.entry(cp).or_insert_with(|| {
+                    cps.push(cp);
+                    cps.len() - 1
+                });
+                if seen.insert(id) {
+                    list.push(id);
+                }
+            }
+            let (seen, all) = scripts.entry(set.script.clone()).or_default();
+            all.extend(list.iter().filter(|&&id| seen.insert(id)));
+            sets.push(list);
+        }
+        Named {
+            names: cps.iter().map(|_| OnceLock::new()).collect(),
+            class: cps.iter().map(|_| OnceLock::new()).collect(),
+            cps,
+            sets,
+            scripts: scripts.into_iter().map(|(k, (_, v))| (k, v)).collect(),
+        }
+    }
+
+    fn cp(&self, id: usize) -> Option<u32> {
+        self.cps.get(id).copied()
+    }
+
+    fn name(&self, id: usize, data: &GlyphData) -> &str {
+        match (self.names.get(id), self.cp(id)) {
+            (Some(cell), Some(cp)) => cell.get_or_init(|| data.nice_name(cp)),
+            _ => "",
+        }
+    }
+
+    fn class(&self, id: usize, data: &GlyphData) -> Option<&DataClass> {
+        let (cell, cp) = (self.class.get(id)?, self.cp(id)?);
+        Some(cell.get_or_init(|| {
+            let p = data_props(self.name(id, data), &[cp], data, false);
+            (p.category.value, p.sub_category.value, p.case.value)
+        }))
+    }
+
+    fn expected(&self, id: usize, data: &GlyphData) -> Expected {
+        Expected { name: self.name(id, data).to_string(), code_point: self.cp(id) }
+    }
+}
+
+/// What a catalog's font has of one expected character: whether a glyph has its name or code
+/// point, and the glyphs that do.
+struct Hit {
+    present: bool,
+    glyphs: Vec<usize>,
+}
+
+fn check_languages(languages: &[LanguageSet]) -> Result<(), QueryError> {
+    if languages.len() > MAX_LANGUAGES {
+        return fail(format!("at most {MAX_LANGUAGES} language entries are allowed"));
+    }
+    if let Some(l) = languages.iter().find(|l| l.characters.len() > MAX_LANGUAGE_CHARACTERS) {
+        return fail(format!("the language entry `{}` needs more than {MAX_LANGUAGE_CHARACTERS} characters", short(&l.id)));
+    }
+    Ok(())
+}
 
 /// A font's glyphs, ready to be sorted into sidebar entries. Each glyph's effective properties
 /// are computed at most once for everything asked of one catalog.
@@ -312,27 +426,23 @@ pub struct Catalog<'a> {
     subjects: Vec<Subject<'a>>,
     filters: &'a [Filter],
     languages: &'a [LanguageSet],
+    /// The languages named through the glyph data: shared, or built when first needed.
+    index: Option<&'a LanguageIndex>,
+    own_index: OnceCell<Named>,
+    /// By character of the index, when first asked for.
+    hits: OnceCell<Vec<OnceCell<Hit>>>,
     groups: Option<&'a Groups>,
     visible_scripts: Vec<String>,
-    codes: HashSet<u32>,
-    /// The subjects with each code point, and each subject by name, so a language entry is
-    /// counted from its own characters rather than by a pass over every glyph.
+    /// The positions in `font.glyphs` of the glyphs with each code point. With the font's index
+    /// by name, a language entry is counted from its own characters rather than by a pass over
+    /// every glyph.
     by_code: HashMap<u32, Vec<usize>>,
-    by_name: HashMap<&'a str, usize>,
 }
 
-/// A label of a category's children for a glyph: its case group, then its subcategory.
-fn child_labels(sub: Option<&str>, case: Option<&str>) -> Vec<String> {
-    let mut out = Vec::new();
-    if let Some((label, _)) = CASE_GROUPS.iter().find(|(_, c)| Some(*c) == case) {
-        out.push((*label).to_string());
-    }
-    if let Some(sub) = sub
-        && !out.iter().any(|l| l == sub)
-    {
-        out.push(sub.to_string());
-    }
-    out
+/// The labels of a category's children for a glyph: its case group, then its subcategory.
+fn child_labels<'s>(sub: Option<&'s str>, case: Option<&str>) -> impl Iterator<Item = &'s str> {
+    let case_label: Option<&'static str> = CASE_GROUPS.iter().find(|(_, c)| Some(*c) == case).map(|(l, _)| *l);
+    case_label.into_iter().chain(sub.filter(|s| Some(*s) != case_label))
 }
 
 impl<'a> Catalog<'a> {
@@ -340,12 +450,9 @@ impl<'a> Catalog<'a> {
         let font = env.font;
         let subjects: Vec<Subject<'a>> =
             glyph_order(font).into_iter().filter_map(|i| font.glyphs.as_arcs().get(i)).map(|g| Subject::new(g.as_ref())).collect();
-        let codes = font.glyphs.iter().flat_map(|g| g.unicodes.iter().copied()).collect();
-        let mut by_code: HashMap<u32, Vec<usize>> = HashMap::new();
-        let mut by_name = HashMap::new();
-        for (i, s) in subjects.iter().enumerate() {
-            by_name.insert(s.glyph.name.as_str(), i);
-            for &c in &s.glyph.unicodes {
+        let mut by_code: HashMap<u32, Vec<usize>> = HashMap::with_capacity(subjects.len());
+        for (i, g) in font.glyphs.iter().enumerate() {
+            for &c in &g.unicodes {
                 by_code.entry(c).or_default().push(i);
             }
         }
@@ -354,11 +461,12 @@ impl<'a> Catalog<'a> {
             subjects,
             filters: &[],
             languages: &[],
+            index: None,
+            own_index: OnceCell::new(),
+            hits: OnceCell::new(),
             groups: None,
             visible_scripts: DEFAULT_VISIBLE_SCRIPTS.iter().map(|s| (*s).to_string()).collect(),
-            codes,
             by_code,
-            by_name,
         }
     }
 
@@ -368,14 +476,62 @@ impl<'a> Catalog<'a> {
     }
 
     pub fn with_languages(mut self, languages: &'a [LanguageSet]) -> Result<Self, QueryError> {
-        if languages.len() > MAX_LANGUAGES {
-            return fail(format!("at most {MAX_LANGUAGES} language entries are allowed"));
-        }
-        if let Some(l) = languages.iter().find(|l| l.characters.len() > MAX_LANGUAGE_CHARACTERS) {
-            return fail(format!("the language entry `{}` needs more than {MAX_LANGUAGE_CHARACTERS} characters", short(&l.id)));
-        }
+        check_languages(languages)?;
         self.languages = languages;
+        self.index = None;
+        self.own_index = OnceCell::new();
+        self.hits = OnceCell::new();
         Ok(self)
+    }
+
+    /// The index's language sets, named as the index names them. An index built from other
+    /// glyph data than the catalog's gives only its sets; their names are worked out again.
+    pub fn with_language_index(mut self, index: &'a LanguageIndex) -> Self {
+        self.languages = index.languages.as_slice();
+        self.own_index = OnceCell::new();
+        self.hits = OnceCell::new();
+        self.index = std::ptr::eq(Arc::as_ptr(&index.data), self.env.data).then_some(index);
+        self
+    }
+
+    fn named(&self) -> &Named {
+        match self.index {
+            Some(index) => &index.named,
+            None => self.own_index.get_or_init(|| Named::new(self.languages)),
+        }
+    }
+
+    /// What the font has of the index's character `id`.
+    fn hit(&self, id: usize) -> Option<&Hit> {
+        let named = self.named();
+        let cell = self.hits.get_or_init(|| named.cps.iter().map(|_| OnceCell::new()).collect()).get(id)?;
+        Some(cell.get_or_init(|| {
+            let name = named.name(id, self.env.data);
+            let mut glyphs: Vec<usize> = named.cp(id).and_then(|cp| self.by_code.get(&cp)).cloned().unwrap_or_default();
+            if let Some(i) = self.env.font.glyphs.position(name)
+                && !glyphs.contains(&i)
+            {
+                glyphs.push(i);
+            }
+            let present = !glyphs.is_empty();
+            Hit { present, glyphs }
+        }))
+    }
+
+    /// How many glyphs one of the index's characters `ids` counts.
+    fn count_ids(&self, ids: &[usize]) -> usize {
+        let mut hit: Vec<usize> = ids.iter().filter_map(|&id| self.hit(id)).flat_map(|h| h.glyphs.iter().copied()).collect();
+        hit.sort_unstable();
+        hit.dedup();
+        hit.len()
+    }
+
+    /// Sets the badge numbers of an entry expecting the index's characters `ids`.
+    fn badge_ids(&self, item: &mut SidebarItem, ids: &[usize]) {
+        if !ids.is_empty() {
+            item.expected = Some(ids.len());
+            item.present = Some(ids.iter().filter(|&&id| self.hit(id).is_some_and(|h| h.present)).count());
+        }
     }
 
     pub fn with_groups(mut self, groups: &'a Groups) -> Self {
@@ -411,21 +567,26 @@ impl<'a> Catalog<'a> {
     }
 
     fn present(&self, e: &Expected) -> bool {
-        self.env.font.glyph(&e.name).is_some() || e.code_point.is_some_and(|c| self.codes.contains(&c))
+        self.env.font.glyph(&e.name).is_some() || e.code_point.is_some_and(|c| self.by_code.contains_key(&c))
     }
 
     fn count(&self, m: &Member) -> usize {
         if let Member::Codes { codes, names } = m {
-            let mut hit: HashSet<usize> = HashSet::new();
-            for c in codes {
-                if let Some(list) = self.by_code.get(c) {
-                    hit.extend(list.iter().copied());
-                }
-            }
-            hit.extend(names.iter().filter_map(|n| self.by_name.get(n.as_str()).copied()));
-            return hit.len();
+            return self.count_codes(codes.iter().copied(), names.iter().map(String::as_str));
         }
         self.subjects.iter().filter(|s| m.contains(s, &self.env)).count()
+    }
+
+    /// How many glyphs have one of `codes` or one of `names`.
+    fn count_codes<'n>(&self, codes: impl Iterator<Item = u32>, names: impl Iterator<Item = &'n str>) -> usize {
+        let mut hit: HashSet<usize> = HashSet::new();
+        for c in codes {
+            if let Some(list) = self.by_code.get(&c) {
+                hit.extend(list.iter().copied());
+            }
+        }
+        hit.extend(names.filter_map(|n| self.env.font.glyphs.position(n)));
+        hit.len()
     }
 
     /// The glyphs an entry expects that the font lacks; `None` when the entry does not know its
@@ -504,10 +665,13 @@ impl<'a> Catalog<'a> {
                 Ok((member, self.script_expected(&script)))
             }
             [script, id] => {
-                let Some(set) = self.languages.iter().find(|l| &l.script == script && &l.id == id) else {
+                let found = self.languages.iter().enumerate().find(|(_, l)| &l.script == script && &l.id == id);
+                let Some((i, set)) = found else {
                     return fail(format!("there is no language `{}` under `{}`", short(id), short(script)));
                 };
-                let expected = self.language_expected(&[set]);
+                let named = self.named();
+                let expected: Vec<Expected> =
+                    named.sets.get(i).map(|ids| ids.iter().map(|&id| named.expected(id, self.env.data)).collect()).unwrap_or_default();
                 let codes = set.characters.iter().copied().collect();
                 let names = expected.iter().map(|e| e.name.clone()).collect();
                 Ok((Member::Codes { codes, names }, Some(expected)))
@@ -516,49 +680,47 @@ impl<'a> Catalog<'a> {
         }
     }
 
-    /// The characters of `sets` as glyphs, each code point once.
-    fn language_expected(&self, sets: &[&LanguageSet]) -> Vec<Expected> {
-        let mut seen = HashSet::new();
+    fn script_expected(&self, script: &str) -> Option<Vec<Expected>> {
+        let named = self.named();
+        named.scripts.get(script).map(|ids| ids.iter().map(|&id| named.expected(id, self.env.data)).collect())
+    }
+
+    /// Every character the languages of the listed scripts need, each once, as the index's
+    /// characters, with the category, subcategory and case the glyph data gives its glyph.
+    fn expected_pool(&self) -> Vec<(usize, &DataClass)> {
+        let shown = self.shown_scripts();
+        let named = self.named();
+        let mut seen = vec![false; named.cps.len()];
         let mut out = Vec::new();
-        for set in sets {
-            for &cp in &set.characters {
-                if seen.insert(cp) {
-                    out.push(Expected { name: self.env.data.nice_name(cp), code_point: Some(cp) });
+        for (set, ids) in self.languages.iter().zip(&named.sets) {
+            if !shown.contains(&set.script) {
+                continue;
+            }
+            for &id in ids {
+                if let Some(s) = seen.get_mut(id)
+                    && !*s
+                {
+                    *s = true;
+                    if let Some(class) = named.class(id, self.env.data) {
+                        out.push((id, class));
+                    }
                 }
             }
         }
         out
     }
 
-    fn script_expected(&self, script: &str) -> Option<Vec<Expected>> {
-        let sets: Vec<&LanguageSet> = self.languages.iter().filter(|l| l.script == script).collect();
-        if sets.is_empty() { None } else { Some(self.language_expected(&sets)) }
-    }
-
-    /// Every character the languages of the listed scripts need, with the category, subcategory
-    /// and case the glyph data gives its glyph.
-    fn expected_pool(&self) -> Vec<Pooled> {
-        let shown = self.shown_scripts();
-        let sets: Vec<&LanguageSet> = self.languages.iter().filter(|l| shown.contains(&l.script)).collect();
-        self.language_expected(&sets)
-            .into_iter()
-            .map(|e| {
-                let p = data_props(&e.name, &e.code_point.into_iter().collect::<Vec<_>>(), self.env.data, false);
-                (e, p.category.value, p.sub_category.value, p.case.value)
-            })
-            .collect()
-    }
-
     /// A category entry's expected glyphs: those the languages of the listed scripts need that
     /// belong to it. `None` without language data.
     fn category_expected(&self, cat: &str, child: Option<&str>) -> Option<Vec<Expected>> {
+        let named = self.named();
         let out: Vec<Expected> = self
             .expected_pool()
             .into_iter()
-            .filter(|(_, c, sub, case)| {
-                c.as_deref() == Some(cat) && child.is_none_or(|ch| child_labels(sub.as_deref(), case.as_deref()).iter().any(|l| l == ch))
+            .filter(|(_, (c, sub, case))| {
+                c.as_deref() == Some(cat) && child.is_none_or(|ch| child_labels(sub.as_deref(), case.as_deref()).any(|l| l == ch))
             })
-            .map(|(e, ..)| e)
+            .map(|(id, _)| named.expected(id, self.env.data))
             .collect();
         if out.is_empty() { None } else { Some(out) }
     }
@@ -645,32 +807,57 @@ impl<'a> Catalog<'a> {
         vec![item(vec!["all".into()], "All".into(), "all", total), categories, languages, filters]
     }
 
-    fn badge(&self, item: &mut SidebarItem, expected: Option<&[Expected]>) {
-        if let Some(list) = expected.filter(|l| !l.is_empty()) {
-            item.expected = Some(list.len());
-            item.present = Some(list.iter().filter(|e| self.present(e)).count());
+    fn badge<'e>(&self, item: &mut SidebarItem, expected: impl IntoIterator<Item = &'e Expected>) {
+        let (mut all, mut present) = (0, 0);
+        for e in expected {
+            all += 1;
+            if self.present(e) {
+                present += 1;
+            }
+        }
+        if all > 0 {
+            item.expected = Some(all);
+            item.present = Some(present);
         }
     }
 
     fn category_items(&self) -> Vec<SidebarItem> {
-        let mut count: HashMap<String, usize> = HashMap::new();
-        let mut child_count: HashMap<(String, String), usize> = HashMap::new();
+        // A font has a handful of categories and labels: short lists beat hashing every glyph's.
+        let mut counts: Vec<CategoryCount> = Vec::new();
         for s in &self.subjects {
             let p = s.props(&self.env);
             let Some(cat) = p.category.as_deref() else { continue };
-            *count.entry(cat.to_string()).or_default() += 1;
+            let at = match counts.iter().position(|(c, ..)| *c == cat) {
+                Some(at) => at,
+                None => {
+                    counts.push((cat, 0, Vec::new()));
+                    counts.len() - 1
+                }
+            };
+            let Some((_, n, children)) = counts.get_mut(at) else { continue };
+            *n += 1;
             for label in child_labels(p.sub_category.as_deref(), p.case.as_deref()) {
-                *child_count.entry((cat.to_string(), label)).or_default() += 1;
+                match children.iter_mut().find(|(l, _)| *l == label) {
+                    Some((_, n)) => *n += 1,
+                    None => children.push((label, 1)),
+                }
             }
         }
+        let count_of = |cat: &str, label: Option<&str>| -> usize {
+            let Some((_, n, children)) = counts.iter().find(|(c, ..)| *c == cat) else { return 0 };
+            match label {
+                None => *n,
+                Some(label) => children.iter().find(|(l, _)| *l == label).map_or(0, |(_, n)| *n),
+            }
+        };
         let pool = self.expected_pool();
-        let mut expected: HashMap<String, Vec<Expected>> = HashMap::new();
-        let mut child_expected: HashMap<(String, String), Vec<Expected>> = HashMap::new();
-        for (e, cat, sub, case) in &pool {
-            let Some(cat) = cat else { continue };
-            expected.entry(cat.clone()).or_default().push(e.clone());
+        let mut expected: HashMap<&str, Vec<usize>> = HashMap::new();
+        let mut child_expected: HashMap<(&str, &str), Vec<usize>> = HashMap::new();
+        for (id, (cat, sub, case)) in pool {
+            let Some(cat) = cat.as_deref() else { continue };
+            expected.entry(cat).or_default().push(id);
             for label in child_labels(sub.as_deref(), case.as_deref()) {
-                child_expected.entry((cat.clone(), label)).or_default().push(e.clone());
+                child_expected.entry((cat, label)).or_default().push(id);
             }
         }
         let labels: Vec<&str> = CASE_GROUPS
@@ -680,7 +867,7 @@ impl<'a> Catalog<'a> {
             .collect();
         let mut out = Vec::new();
         for cat in Category::ALL.iter().map(|c| c.as_str()) {
-            let n = count.get(cat).copied().unwrap_or(0);
+            let n = count_of(cat, None);
             let exp = expected.get(cat);
             if n == 0 && exp.is_none() {
                 continue;
@@ -695,10 +882,10 @@ impl<'a> Catalog<'a> {
                 children: Vec::new(),
                 problem: None,
             };
-            self.badge(&mut it, exp.map(Vec::as_slice));
+            self.badge_ids(&mut it, exp.map_or(&[], Vec::as_slice));
             for label in &labels {
-                let key = (cat.to_string(), (*label).to_string());
-                let n = child_count.get(&key).copied().unwrap_or(0);
+                let key = (cat, *label);
+                let n = count_of(cat, Some(*label));
                 let exp = child_expected.get(&key);
                 if n == 0 && exp.is_none() {
                     continue;
@@ -714,7 +901,7 @@ impl<'a> Catalog<'a> {
                     children: Vec::new(),
                     problem: None,
                 };
-                self.badge(&mut child, exp.map(Vec::as_slice));
+                self.badge_ids(&mut child, exp.map_or(&[], Vec::as_slice));
                 it.children.push(child);
             }
             out.push(it);
@@ -723,10 +910,10 @@ impl<'a> Catalog<'a> {
     }
 
     fn script_items(&self) -> Vec<SidebarItem> {
-        let mut count: HashMap<String, usize> = HashMap::new();
+        let mut count: HashMap<&str, usize> = HashMap::new();
         for s in &self.subjects {
             if let Some(script) = s.props(&self.env).script.as_deref() {
-                *count.entry(script.to_string()).or_default() += 1;
+                *count.entry(script).or_default() += 1;
             }
         }
         self.shown_scripts()
@@ -736,28 +923,26 @@ impl<'a> Catalog<'a> {
                     path: vec!["languages".into(), script.clone()],
                     label: self.env.data.script_display_name(&script),
                     kind: "script",
-                    count: count.get(&script).copied().unwrap_or(0),
+                    count: count.get(script.as_str()).copied().unwrap_or(0),
                     expected: None,
                     present: None,
                     children: Vec::new(),
                     problem: None,
                 };
-                self.badge(&mut it, self.script_expected(&script).as_deref());
-                for set in self.languages.iter().filter(|l| l.script == script) {
-                    let expected = self.language_expected(&[set]);
-                    let member =
-                        Member::Codes { codes: set.characters.iter().copied().collect(), names: expected.iter().map(|e| e.name.clone()).collect() };
+                let named = self.named();
+                self.badge_ids(&mut it, named.scripts.get(&script).map_or(&[], Vec::as_slice));
+                for (set, ids) in self.languages.iter().zip(&named.sets).filter(|(l, _)| l.script == script) {
                     let mut child = SidebarItem {
                         path: vec!["languages".into(), script.clone(), set.id.clone()],
                         label: set.name.clone(),
                         kind: "language",
-                        count: self.count(&member),
+                        count: self.count_ids(ids),
                         expected: None,
                         present: None,
                         children: Vec::new(),
                         problem: None,
                     };
-                    self.badge(&mut child, Some(expected.as_slice()));
+                    self.badge_ids(&mut child, ids);
                     it.children.push(child);
                 }
                 it
@@ -779,7 +964,7 @@ impl<'a> Catalog<'a> {
             children: Vec::new(),
             problem: None,
         };
-        self.badge(&mut it, expected.as_deref());
+        self.badge(&mut it, expected.iter().flatten());
         it.children = e.children.iter().map(|c| self.group_item(c, path.clone())).collect();
         it
     }
@@ -804,7 +989,7 @@ impl<'a> Catalog<'a> {
         match f {
             Filter::List { glyphs, .. } => {
                 let expected: Vec<Expected> = glyphs.iter().map(|n| Expected { name: n.clone(), code_point: None }).collect();
-                self.badge(&mut it, Some(expected.as_slice()));
+                self.badge(&mut it, &expected);
             }
             Filter::Folder { children, .. } => it.children = children.iter().map(|c| self.filter_item(c, path.clone())).collect(),
             Filter::Smart { .. } => {}

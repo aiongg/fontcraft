@@ -32,6 +32,7 @@ pub mod io;
 pub mod params;
 pub mod settings;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -42,7 +43,7 @@ pub use fontcraft_container as container;
 pub use fontcraft_format as format;
 pub use fontcraft_model as model;
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Glyph};
+use fontcraft_model::{Font, Glyph, PropsCache};
 use serde_json::{Value, json};
 
 #[derive(Debug, thiserror::Error)]
@@ -197,6 +198,10 @@ pub struct Session {
     user_groups: Option<Arc<fontcraft_glyphquery::Groups>>,
     /// What [`Session::edit`] stamps on changed glyphs; `None` stamps nothing.
     clock: Option<Clock>,
+    /// Each open document's effective glyph properties, by document id.
+    props: HashMap<u64, Arc<PropsCache>>,
+    /// The language sets named through the glyph data last asked for.
+    language_index: Option<Arc<fontcraft_glyphquery::LanguageIndex>>,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -365,6 +370,19 @@ impl Session {
             Some(doc) => self.glyph_data_of(doc),
             None => self.user_glyph_data.merged.clone().map_or_else(glyph_data::builtin, Ok),
         }
+    }
+
+    /// The active document's effective glyph properties, up to date with its font and glyph
+    /// data. Only the glyphs that changed since the last call are computed again.
+    pub fn effective_props(&mut self) -> Result<Arc<PropsCache>> {
+        let doc = self.doc()?;
+        let (id, font) = (doc.id, doc.font.clone());
+        let data = self.glyph_data()?;
+        let open: Vec<u64> = self.docs.iter().map(|d| d.id).collect();
+        self.props.retain(|id, _| open.contains(id));
+        let cache = self.props.entry(id).or_default();
+        Arc::make_mut(cache).update(&font, &data);
+        Ok(cache.clone())
     }
 
     /// [`Session::glyph_data`] for one document.
