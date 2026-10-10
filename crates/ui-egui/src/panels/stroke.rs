@@ -8,8 +8,8 @@
 //! | height; empty means the width | `height` | with a stroke |
 //! | position in percent, and the presets −100 (left), 0 (centre), 100 (right) | `position` | with a stroke |
 //! | Fill | `fill` | with a stroke on a closed path |
-//! | join: miter, bevel, round, round full | `join` | with a stroke |
-//! | start and end caps: butt, square, round, round inset, axis-aligned | `capStart`, `capEnd` | with a stroke on an open path |
+//! | Join: icons for miter, bevel, round, round full | `join` | with a stroke |
+//! | Start and End caps: icons for butt, square, round, round inset, axis-aligned | `capStart`, `capEnd` | with a stroke on an open path |
 //!
 //! A selected path is one selected whole or with a selected node or handle. With several, a field
 //! shows a value only when every path has it. Clicking the axis-aligned cap uses the automatic
@@ -25,19 +25,24 @@ use serde_json::{Map, Value, json};
 
 use super::{Pending, edit_targets, widgets, with};
 use crate::app::FontcraftApp;
+use crate::icons::Icon;
 use crate::tools_glue;
 
 /// How long the axis-aligned cap button is held before its axis menu opens.
 const HOLD_SECONDS: f64 = 0.5;
 
-const JOINS: [(&str, &str, &str); 4] =
-    [("miter", "Miter", "Miter join"), ("bevel", "Bevel", "Bevel join"), ("round", "Round", "Round join"), ("roundFull", "Full", "Round full join")];
-const CAPS: [(&str, &str, &str); 5] = [
-    ("butt", "Butt", "Butt cap"),
-    ("square", "Square", "Square cap"),
-    ("round", "Round", "Round cap"),
-    ("roundInset", "Inset", "Round inset cap"),
-    ("axisAligned", "Axis", "Cap aligned to an axis; hold to force the X or the Y axis"),
+const JOINS: [(&str, Icon, &str); 4] = [
+    ("miter", Icon::JoinMiter, "Miter join"),
+    ("bevel", Icon::JoinBevel, "Bevel join"),
+    ("round", Icon::JoinRound, "Round join"),
+    ("roundFull", Icon::JoinRoundFull, "Round full join: round outside, and the inner corner filled round"),
+];
+const CAPS: [(&str, Icon, &str); 5] = [
+    ("butt", Icon::CapButt, "Butt cap"),
+    ("square", Icon::CapSquare, "Square cap"),
+    ("round", Icon::CapRound, "Round cap"),
+    ("roundInset", Icon::CapRoundInset, "Round inset cap: the round end stops at the end node"),
+    ("axisAligned", Icon::CapAxisAligned, "Cap aligned to an axis; hold to force the X or the Y axis"),
 ];
 const AXES: [(&str, &str); 3] = [("auto", "Automatic"), ("x", "X axis"), ("y", "Y axis")];
 
@@ -179,9 +184,11 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     }
 
     let join = values.common(|s| s.join);
-    ui.horizontal_wrapped(|ui| {
-        for (name, label, hover) in JOINS {
-            if widgets::button(ui, widgets::id(("stroke.join", name)), label, hover, true, join == Some(name)) {
+    let label_width = ui.spacing().interact_size.x;
+    ui.horizontal(|ui| {
+        ui.add_sized([label_width, ui.spacing().interact_size.y], egui::Label::new("Join"));
+        for (name, icon, hover) in JOINS {
+            if widgets::icon_button(ui, widgets::id(("stroke.join", name)), icon, hover, true, join == Some(name)) {
                 set(pending, json!({ "join": name }));
             }
         }
@@ -190,11 +197,11 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     if values.any_open {
         let axis = values.common(|s| s.cap_axis);
         for (key, title, current) in [("capStart", "Start", values.common(|s| s.cap_start)), ("capEnd", "End", values.common(|s| s.cap_end))] {
-            ui.label(title);
-            ui.horizontal_wrapped(|ui| {
-                for (name, label, hover) in CAPS {
+            ui.horizontal(|ui| {
+                ui.add_sized([label_width, ui.spacing().interact_size.y], egui::Label::new(title));
+                for (name, icon, hover) in CAPS {
                     let id = widgets::id(("stroke.cap", key, name));
-                    let clicked = widgets::button(ui, id, label, hover, true, current == Some(name));
+                    let clicked = widgets::icon_button(ui, id, icon, hover, true, current == Some(name));
                     let picked = if name == "axisAligned" { axis_hold(ui, id, axis) } else { HoldResult::None };
                     let chosen = match picked {
                         HoldResult::Axis(a) => a,

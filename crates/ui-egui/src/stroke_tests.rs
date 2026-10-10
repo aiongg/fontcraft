@@ -153,6 +153,12 @@ fn the_stroke_section_runs_set_stroke_on_the_selected_paths() {
     assert_eq!(path.info.attrs.stroke_width, Some(Dimension::Number(40.0)));
 
     w.settle(&mut app);
+    let caps: Vec<egui::Rect> = ["butt", "square", "round", "roundInset", "axisAligned"]
+        .iter()
+        .map(|name| w.ctx.read_response(widgets::id(("stroke.cap", "capEnd", *name))).expect("the cap button is drawn").rect)
+        .collect();
+    assert!(caps.iter().all(|r| r.top() == caps[0].top()), "the five end caps fit one row: {caps:?}");
+    assert!(caps.iter().all(|r| r.right() <= 1280.0), "inside the window: {caps:?}");
     w.click(&mut app, widgets::id(("stroke.cap", "capEnd", "round")));
     let (id, params) = last(&app);
     assert_eq!(id, "path.setStroke");

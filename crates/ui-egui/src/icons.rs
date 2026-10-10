@@ -55,6 +55,16 @@ pub enum Icon {
     Union,
     Subtract,
     Intersect,
+    // Palette › Stroke.
+    JoinMiter,
+    JoinBevel,
+    JoinRound,
+    JoinRoundFull,
+    CapButt,
+    CapSquare,
+    CapRound,
+    CapRoundInset,
+    CapAxisAligned,
 }
 
 /// Every icon, for tests and previews.
@@ -101,6 +111,15 @@ pub const ALL: &[Icon] = &[
     Icon::Union,
     Icon::Subtract,
     Icon::Intersect,
+    Icon::JoinMiter,
+    Icon::JoinBevel,
+    Icon::JoinRound,
+    Icon::JoinRoundFull,
+    Icon::CapButt,
+    Icon::CapSquare,
+    Icon::CapRound,
+    Icon::CapRoundInset,
+    Icon::CapAxisAligned,
 ];
 
 /// The icon of the pointer tool `id` (an id of `fontcraft_tools::TOOLS`).
@@ -234,6 +253,15 @@ impl Pen {
         let (bx, by) = (tx - dx * size, ty - dy * size);
         let half = size * 0.55;
         self.fill(&[(tx, ty), (bx + nx * half, by + ny * half), (bx - nx * half, by - ny * half)]);
+    }
+
+    /// A horizontal band from the left edge, ending in `end` (from its top edge to its bottom
+    /// edge), and its end node at (0.6, 0.5).
+    fn cap(&mut self, end: &[P]) {
+        let mut outline = vec![(0.08, 0.64), (0.08, 0.36)];
+        outline.extend_from_slice(end);
+        self.closed(&outline);
+        self.dot((0.6, 0.5), 0.06);
     }
 
     /// A straight arrow from `a` to `b`.
@@ -430,7 +458,39 @@ fn draw(pen: &mut Pen, icon: Icon) {
             pen.closed(&[(0.38, 0.38), (0.86, 0.38), (0.86, 0.86), (0.38, 0.86)]);
             pen.rect_fill((0.38, 0.38), (0.62, 0.62), 0.0);
         }
+        // Joins: a band turning a corner, filled.
+        Icon::JoinMiter => {
+            pen.rect_fill((0.16, 0.16), (0.44, 0.9), 0.0);
+            pen.rect_fill((0.16, 0.16), (0.9, 0.44), 0.0);
+        }
+        Icon::JoinBevel => {
+            pen.rect_fill((0.16, 0.3), (0.44, 0.9), 0.0);
+            pen.rect_fill((0.3, 0.16), (0.9, 0.44), 0.0);
+            pen.fill(&[(0.16, 0.3), (0.3, 0.16), (0.44, 0.16), (0.44, 0.44), (0.16, 0.44)]);
+        }
+        Icon::JoinRound | Icon::JoinRoundFull => {
+            pen.rect_fill((0.16, 0.3), (0.44, 0.9), 0.0);
+            pen.rect_fill((0.3, 0.16), (0.9, 0.44), 0.0);
+            pen.dot((0.3, 0.3), 0.14);
+            if icon == Icon::JoinRoundFull {
+                pen.dot((0.44, 0.44), 0.08);
+            }
+        }
+        // Caps: the outline of a band's end, with its end node.
+        Icon::CapButt => pen.cap(&[(0.6, 0.36), (0.6, 0.64)]),
+        Icon::CapSquare => pen.cap(&[(0.74, 0.36), (0.74, 0.64)]),
+        Icon::CapRound => pen.cap(&half_circle((0.6, 0.5), 0.14)),
+        Icon::CapRoundInset => pen.cap(&half_circle((0.46, 0.5), 0.14)),
+        Icon::CapAxisAligned => {
+            pen.closed(&[(0.05, 0.75), (0.42, 0.38), (0.82, 0.38), (0.25, 0.95)]);
+            pen.dot((0.62, 0.38), 0.06);
+        }
     }
+}
+
+/// The right half of a circle around `c`, from top to bottom.
+fn half_circle((cx, cy): P, r: f32) -> Vec<P> {
+    (0..=12).map(|i| -PI / 2.0 + PI * i as f32 / 12.0).map(|a| (cx + r * a.cos(), cy + r * a.sin())).collect()
 }
 
 /// A small filled triangle in the bottom-right corner of `rect`: the mark of a button that
