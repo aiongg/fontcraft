@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**461 guesses on 327 rows (132 of them live commands).**
+**462 guesses on 327 rows (132 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -220,6 +220,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyph.removeGlyph` | M4 | handbook | yes | Decompose replaces each component of a removed glyph with that glyph's shapes from the matching layer; components inside it that point at glyphs that stay remain components. Settled by observation. |
 | `glyph.removeGlyph` | M4 | handbook | yes | A metrics key points at a glyph when its formula starts with that glyph's name (=H, =\|H, =O-4); the longest leading name that is a glyph wins, since names may contain hyphens. Settled by observation. |
 | `glyph.removeGlyph` | M4 | handbook | yes | Pairs on a kerning group stay, even when the removed glyph was the group's last member. Settled by observation. |
+| `glyph.removeGlyph` | M4 | handbook | yes | Contextual kerning that names a removed glyph is kept, because the model stores contexts as text; observing the reference would settle it. |
 | `glyph.updateGlyphInfo` | M4 | handbook | yes | Stored overrides of category, subcategory, script, production name, case and direction are dropped, so those properties follow the database again; the sort name, tags, colour labels, note and export flag stay. Settled by observing a glyph with a custom category before and after the command (05 question 5). |
 | `glyph.updateGlyphInfo` | M4 | handbook | yes | With Use Custom Naming on, names are kept and only the other properties are updated. Settled by observation. |
 | `glyph.updateGlyphInfo` | M4 | handbook | yes | A rename the command makes goes through glyph.rename, so references follow it; a new name that is already taken (by any glyph of the font before the command, or by an earlier glyph of the batch) leaves the glyph's name and Unicode values unchanged and is reported. Settled by observation. |

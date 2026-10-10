@@ -26,7 +26,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Glyph",
             ["Glyph"],
             Some("Cmd+Delete"),
-            "{glyphs: [names], components?: \"remove\" | \"decompose\", metricsKeys?: \"dissolve\" | \"keep\", confirm?: bool (default true)} removes glyphs from the font. When glyphs that stay use a removed glyph as a component, `components` must say what happens to those components: remove deletes them, decompose turns them into outlines first. When metrics keys of glyphs that stay point at a removed glyph, `metricsKeys` must say whether those keys are dissolved or kept. Without a needed answer the command refuses and names it. Kerning pairs with a removed glyph on either side go with it, in every master; pairs on a kerning group stay. confirm: false changes nothing and reports what the answers would cover → {removed: [names], usedAsComponent: [{glyph, layer, component}], metricsKeys: [{glyph, layer?, key, value}], kerningPairs: number, needs: [\"components\" | \"metricsKeys\"]}",
+            "{glyphs: [names], components?: \"remove\" | \"decompose\", metricsKeys?: \"dissolve\" | \"keep\", confirm?: bool (default true)} removes glyphs from the font. When glyphs that stay use a removed glyph as a component, `components` must say what happens to those components: remove deletes them, decompose turns them into outlines first. When metrics keys of glyphs that stay point at a removed glyph, `metricsKeys` must say whether those keys are dissolved or kept. Without a needed answer the command refuses and names it. Kerning pairs with a removed glyph on either side go with it, in every master and direction; pairs on a kerning group and contextual kerning stay. confirm: false changes nothing and reports what the answers would cover → {removed: [names], usedAsComponent: [{glyph, layer, component}], metricsKeys: [{glyph, layer?, key, value}], kerningPairs: number, needs: [\"components\" | \"metricsKeys\"]}",
             has_doc,
             remove_glyph
         )
@@ -395,16 +395,22 @@ fn pairs_naming(table: &KernTable, doomed: &HashSet<&str>) -> usize {
         .sum()
 }
 
-/// Removes the pairs with a `doomed` glyph on either side, with first sides and masters left empty.
+/// Removes the pairs with a `doomed` glyph on either side. First sides and masters this empties
+/// go with them; entries that were empty before stay as they are.
 fn remove_pairs_naming(table: &mut KernTable, doomed: &HashSet<&str>) {
-    for m in &mut table.0 {
-        m.firsts.retain(|f| !names_doomed(&f.first, doomed));
-        for f in &mut m.firsts {
-            f.seconds.retain(|(s, _)| !names_doomed(s, doomed));
-        }
-        m.firsts.retain(|f| !f.seconds.is_empty());
-    }
-    table.0.retain(|m| !m.firsts.is_empty());
+    table.0.retain_mut(|m| {
+        let had_pairs = m.firsts.iter().any(|f| !f.seconds.is_empty());
+        m.firsts.retain_mut(|f| {
+            let had = f.seconds.len();
+            if names_doomed(&f.first, doomed) {
+                f.seconds.clear();
+            } else {
+                f.seconds.retain(|(s, _)| !names_doomed(s, doomed));
+            }
+            had == 0 || !f.seconds.is_empty()
+        });
+        !had_pairs || m.firsts.iter().any(|f| !f.seconds.is_empty())
+    });
 }
 
 fn set_unicodes(s: &mut Session, p: &Value) -> Result<Value> {
