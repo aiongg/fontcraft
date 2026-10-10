@@ -5,20 +5,28 @@
 //! [`crate::Session::set_user_glyph_data`]); the files beside the document's source, unless the
 //! font's *Ignore custom GlyphData file* parameter is on. A malformed file is skipped and
 //! reported; the others still apply.
+//!
+//! Also here: the built-in language sets that Font View's Languages section lists
+//! ([`language_sets`]), and the user's `Groups*.plist` files with extra Categories and Languages
+//! entries ([`crate::Session::set_user_groups`]).
 
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
-use fontcraft_model::glyphdata::{GlyphData, MAX_CUSTOM_FILES, Record, xml};
+use fontcraft_glyphquery::{self as gq, GroupEntry, Groups, LanguageSet};
+use fontcraft_model::glyphdata::{GlyphData, MAX_CUSTOM_FILES, Record, sets, xml};
 use fontcraft_model::{Font, param_flag};
 
-use crate::{EngineError, Result};
+use crate::{EngineError, Result, Session};
 
 /// The parameter that turns off the files beside the source.
 pub const IGNORE_PARAM: &str = "Ignore custom GlyphData file";
 /// Most custom files of one kind (the user's, or one document's); together they stay within
 /// what the database merges.
 pub const MAX_FILES: usize = MAX_CUSTOM_FILES / 2;
+
+/// Largest `Groups*.plist` file read, in bytes.
+pub const MAX_GROUPS_FILE_BYTES: usize = gq::MAX_GROUPS_BYTES;
 
 /// The built-in database, shared.
 pub(crate) fn builtin() -> Result<Arc<GlyphData>> {
@@ -112,4 +120,106 @@ pub(crate) fn source_files(path: &std::path::Path, problems: &mut Vec<String>) -
         }
     }
     out
+}
+
+// ── Languages and groups ────────────────────────────────────────────────────────────────────────
+
+/// The built-in language sets (CLDR exemplar characters grouped by script), as the sidebar takes
+/// them; decoded once and shared.
+pub fn language_sets() -> Result<Arc<Vec<LanguageSet>>> {
+    static LANGUAGES: OnceLock<std::result::Result<Arc<Vec<LanguageSet>>, String>> = OnceLock::new();
+    let built = LANGUAGES.get_or_init(|| {
+        sets::builtin()
+            .map(|s| {
+                Arc::new(
+                    s.languages
+                        .iter()
+                        .map(|l| LanguageSet { id: l.id.clone(), name: l.name.clone(), script: l.script.clone(), characters: l.characters.clone() })
+                        .collect(),
+                )
+            })
+            .map_err(|e| e.to_string())
+    });
+    match built {
+        Ok(v) => Ok(v.clone()),
+        Err(e) => Err(EngineError::Internal(e.clone())),
+    }
+}
+
+/// How many entries `entries` define at all levels.
+fn count_entries(entries: &[GroupEntry]) -> usize {
+    let mut n = 0usize;
+    let mut stack: Vec<&GroupEntry> = entries.iter().collect();
+    while let Some(e) = stack.pop() {
+        n = n.saturating_add(1);
+        stack.extend(e.children.iter());
+    }
+    n
+}
+
+/// Reads `Groups*.plist` files (name, text) into one set of entries, in file order. A file that
+/// cannot be read, one past [`MAX_FILES`], and one that would take the entries of all files past
+/// the limit of one file are skipped and reported; so are unusable entries.
+pub(crate) fn parse_groups_files(files: &[(&str, &str)], data: &GlyphData, problems: &mut Vec<String>) -> Option<Arc<Groups>> {
+    let mut all = Groups::default();
+    let mut total = 0usize;
+    for (i, (name, text)) in files.iter().enumerate() {
+        if i >= MAX_FILES {
+            problems.push(format!("groups file {name}: skipped, more than {MAX_FILES} files"));
+            continue;
+        }
+        match gq::parse_groups(text, data) {
+            Ok((groups, found)) => {
+                problems.extend(found.into_iter().map(|p| format!("groups file {name}: {p}")));
+                let n = count_entries(&groups.categories).saturating_add(count_entries(&groups.languages));
+                if total.saturating_add(n) > gq::MAX_GROUP_ENTRIES {
+                    problems
+                        .push(format!("groups file {name} is ignored: the groups files together define more than {} entries", gq::MAX_GROUP_ENTRIES));
+                    continue;
+                }
+                total += n;
+                all.categories.extend(groups.categories);
+                all.languages.extend(groups.languages);
+            }
+            Err(e) => problems.push(format!("groups file {name} is ignored: {e}")),
+        }
+    }
+    if all.categories.is_empty() && all.languages.is_empty() { None } else { Some(Arc::new(all)) }
+}
+
+impl Session {
+    /// The glyph data of a document that has no source folder (a new one): the built-in database
+    /// with the user's custom files on top.
+    pub fn glyph_data_without_document(&self) -> Result<Arc<GlyphData>> {
+        self.user_glyph_data.merged.clone().map_or_else(builtin, Ok)
+    }
+
+    /// The built-in language sets the Languages section lists and its badges count.
+    pub fn language_sets(&self) -> Result<Arc<Vec<LanguageSet>>> {
+        language_sets()
+    }
+
+    /// Sets the user's `Groups*.plist` files (name, text), in order: the app reads them from the
+    /// `Info` folder of its settings folder. A character in a `list` is named through the built-in
+    /// glyph data and the user's glyph data files, so the app sets those first
+    /// ([`Session::set_user_glyph_data`]). Files that cannot be used are skipped; the problems are
+    /// returned.
+    pub fn set_user_groups(&mut self, files: &[(&str, &str)]) -> Vec<String> {
+        let mut problems = Vec::new();
+        self.user_groups = None;
+        let data = match self.glyph_data_without_document() {
+            Ok(d) => d,
+            Err(e) => {
+                problems.push(format!("groups files are ignored: {e}"));
+                return problems;
+            }
+        };
+        self.user_groups = parse_groups_files(files, &data, &mut problems);
+        problems
+    }
+
+    /// The Categories and Languages entries of the user's `Groups*.plist` files, if there are any.
+    pub fn user_groups(&self) -> Option<Arc<Groups>> {
+        self.user_groups.clone()
+    }
 }

@@ -3,10 +3,13 @@
 //! the Languages list (kept in the user settings, so they change no document and make no undo
 //! step), and the glyphs a sidebar entry expects that the font lacks.
 //!
-//! The evaluation is `fontcraft_glyphquery`'s. Language entries and `Groups*.plist` entries are
-//! not given to it yet: the engine holds no language tables or groups files so far.
+//! The evaluation is `fontcraft_glyphquery`'s. It is given the built-in language sets (CLDR
+//! exemplar characters grouped by script, [`crate::glyph_data::language_sets`]) and the entries of
+//! the user's `Groups*.plist` files ([`crate::Session::user_groups`]).
 
-use fontcraft_glyphquery::{self as gq, Catalog, Env, Expected, Filter, Matcher, RuleTree, Search, Selection};
+use std::sync::Arc;
+
+use fontcraft_glyphquery::{self as gq, Catalog, Env, Expected, Filter, Groups, LanguageSet, Matcher, RuleTree, Search, Selection};
 use fontcraft_model::{Glyph, Layer, MAX_GLYPHS, data_props, insert_by_sort_key};
 use serde_json::{Map, Value, json};
 
@@ -186,6 +189,38 @@ fn visible_scripts(s: &Session) -> Result<Vec<String>> {
         .unwrap_or_else(|| gq::DEFAULT_VISIBLE_SCRIPTS.iter().map(|x| (*x).to_string()).collect()))
 }
 
+/// What a catalog is built from besides the font: the stored filters, the listed scripts, the
+/// language sets and the user's groups.
+struct Sources {
+    filters: Vec<Filter>,
+    scripts: Vec<String>,
+    languages: Arc<Vec<LanguageSet>>,
+    groups: Option<Arc<Groups>>,
+}
+
+impl Sources {
+    fn read(s: &Session, with_filters: bool) -> Result<Sources> {
+        Ok(Sources {
+            filters: if with_filters { stored_filters(s)? } else { Vec::new() },
+            scripts: visible_scripts(s)?,
+            languages: s.language_sets()?,
+            groups: s.user_groups(),
+        })
+    }
+
+    fn catalog<'a>(&'a self, env: Env<'a>) -> Result<Catalog<'a>> {
+        let catalog = Catalog::new(env)
+            .with_filters(&self.filters)
+            .with_visible_scripts(&self.scripts)
+            .with_languages(&self.languages)
+            .map_err(|e| EngineError::Internal(e.to_string()))?;
+        Ok(match self.groups.as_deref() {
+            Some(g) => catalog.with_groups(g),
+            None => catalog,
+        })
+    }
+}
+
 // ── Queries ─────────────────────────────────────────────────────────────────────────────────────
 
 fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
@@ -205,12 +240,11 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
     let master = p.opt_str("master")?;
     let with_sidebar = p.bool_or("sidebar", false)?;
     let wants_filters = with_sidebar || entries.iter().any(|e| e.first().is_some_and(|s| s == "filters"));
-    let filters = if wants_filters { stored_filters(s)? } else { Vec::new() };
-    let scripts = visible_scripts(s)?;
+    let sources = Sources::read(s, wants_filters)?;
     let data = s.glyph_data()?;
     let font = s.font()?;
     let env = Env::new(font, &data, master).map_err(|e| bad(&p, "master", e))?;
-    let catalog = Catalog::new(env).with_filters(&filters).with_visible_scripts(&scripts);
+    let catalog = sources.catalog(env)?;
     let glyphs = catalog.select(&Selection { entries, rules, search }).map_err(|e| p.bad(e.to_string()))?;
     let mut out = Map::new();
     out.insert("count".into(), json!(glyphs.len()));
@@ -225,12 +259,11 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
 
 /// The glyphs an entry expects that the font lacks, and how many it expects in all.
 fn missing_of(s: &Session, p: &Params, entry: &[String]) -> Result<(Vec<Expected>, usize)> {
-    let filters = if entry.first().is_some_and(|s| s == "filters") { stored_filters(s)? } else { Vec::new() };
-    let scripts = visible_scripts(s)?;
+    let sources = Sources::read(s, entry.first().is_some_and(|s| s == "filters"))?;
     let data = s.glyph_data()?;
     let font = s.font()?;
     let env = Env::new(font, &data, None).map_err(|e| p.bad(e.to_string()))?;
-    let catalog = Catalog::new(env).with_filters(&filters).with_visible_scripts(&scripts);
+    let catalog = sources.catalog(env)?;
     let resolved = catalog.resolve(entry).map_err(|e| bad(p, "entry", e))?;
     let expected = resolved.expected().map_or(0, <[Expected]>::len);
     match catalog.missing(&resolved) {

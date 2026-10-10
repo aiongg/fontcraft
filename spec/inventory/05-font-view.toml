@@ -308,7 +308,7 @@ milestone = "M4"
 summary = "For a sidebar entry that knows its full glyph set (a subcategory, language, script or list filter), returns the glyph names it expects that the font does not contain. In the UI this is the list opened by Ctrl-click or right-click on the entry."
 ref = "Font View › Adding New Glyphs › Adding From the Sidebar"
 status = "handbook"
-notes = "List filters and Groups*.plist `list` entries know their set now; scripts, languages and categories know theirs once language data is given to the evaluator. An entry without a known set is refused with a message."
+notes = "List filters, Groups*.plist `list` entries, scripts and languages know their set; a script expects the union of its languages. Categories know theirs through the languages of the listed scripts (see guesses). An entry without a known set (All, a smart filter, a Groups*.plist script or predicate entry) is refused with a message."
 guesses = [
   "A Categories entry expects the glyphs that the languages of the listed scripts need and that the glyph data puts in that category, subcategory or case group; without language data it has no expected set. Settled by observing the badge of a category in a font with one language list shown.",
 ]
@@ -788,7 +788,7 @@ status = "inferred"
 guesses = [
   "Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text.",
 ]
-notes = "Paths name the section first (all, categories/Letter/Uppercase, languages/latin/<language>, filters/<folder>/<filter>), as text or as a list of names. `master` picks the layer the layer rules read (default the first master). `sidebar: true` adds every entry with its count and, for entries that know their full set, how many of the expected glyphs the font has. The evaluator is crates/glyphquery. Language entries and Groups*.plist entries are not given to it by the engine yet (no language data or groups files are loaded)."
+notes = "Paths name the section first (all, categories/Letter/Uppercase, languages/latin/<language>, filters/<folder>/<filter>), as text or as a list of names. `master` picks the layer the layer rules read (default the first master). `sidebar: true` adds every entry with its count and, for entries that know their full set, how many of the expected glyphs the font has. The evaluator is crates/glyphquery. The engine gives it the built-in language sets (crates/glyphdata/data/sets.bin) and the entries of the user's Groups*.plist files (Session::set_user_groups; the desktop app reads them from the Info folder of its settings folder)."
 
 [[command]]
 id = "fontView.setVisibleScripts"
@@ -1095,7 +1095,13 @@ milestone = "M4"
 summary = "Filters Font View by writing script and by language coverage sets. Only a short default list of scripts is shown, plus any script present in the font; custom entries can come from Groups.plist."
 ref = "Font View › Filtering Font View › Languages; Custom Categories & Languages"
 status = "handbook"
-notes = "Languages and their characters come from the Unicode CLDR exemplar characters (Unicode License v3), grouped by script and turned into glyph names through FontCraft's glyph database; they give the missing-glyph badges. This is the owner's decision (docs/plans/M4.md § 7 question 3): the reference's language lists are app data we may not use. Hyperglot is not used (GPL-3.0)."
+notes = "Languages and their characters come from the Unicode CLDR exemplar characters (Unicode License v3), grouped by script and turned into glyph names through FontCraft's glyph database; they give the missing-glyph badges. This is the owner's decision (docs/plans/M4.md § 7 question 3): the reference's language lists are app data we may not use. Hyperglot is not used (GPL-3.0). Source: CLDR release-48-2 (commit 1129998), every common/main locale with its own main exemplar set, English names from en.xml; compiled by `cargo xtask glyphsets --generate` into crates/glyphdata/data/sets.bin (pins in xtask/glyphsets.toml). A language entry's path is languages/<script>/<locale id>, the id with `-` between subtags (de, sr-Latn, zh-Hant)."
+guesses = [
+  "A language requires its CLDR main exemplar characters only; the auxiliary, index, numbers and punctuation sets are not counted. Settled by comparing a language's badge total in the reference with its CLDR sets.",
+  "CLDR lists letters in lowercase, so each character's single-character uppercase form is added (ß gets none; Georgian gets no Mtavruli capitals). Settled by observing whether the reference's badge for a Latin-script language counts capitals.",
+  "A language is listed under the glyph database's script that most of its exemplar characters belong to, ignoring Common and Inherited characters (Japanese falls under han, Korean under hangul). Settled by observing where the reference lists Japanese and other mixed-script languages.",
+  "Every CLDR locale with its own main exemplar set is a language entry, regional and script variants included (de-CH, sr-Latn); those that inherit their parent's set are left out. Settled by observing which entries the reference lists under one script.",
+]
 
 [[panel]]
 id = "fontView.sidebar.filters"
@@ -2688,7 +2694,7 @@ milestone = "M4"
 summary = "The Languages section lists scripts, each expandable into language or subset filters, with the same counts, badges and checkmarks as categories."
 ref = "Font View › Filtering Font View › Languages"
 status = "handbook"
-notes = "Languages and their characters come from the Unicode CLDR exemplar characters (Unicode License v3), grouped by script and turned into glyph names through FontCraft's glyph database; they give the missing-glyph badges. This is the owner's decision (docs/plans/M4.md § 7 question 3): the reference's language lists are app data we may not use. Hyperglot is not used (GPL-3.0)."
+notes = "Languages and their characters come from the Unicode CLDR exemplar characters (Unicode License v3), grouped by script; the data and the choices made with it are in the notes and guesses of fontView.sidebar.languages. Each script lists its languages by English name."
 
 [[behavior]]
 id = "fontView.sidebar.scriptAutoShown"
@@ -2708,6 +2714,7 @@ milestone = "M14"
 summary = "Extra entries for the Categories and Languages sections can be defined in a Groups.plist file placed in the application's Glyphs Info folder. The file format is described in another chapter."
 ref = "Font View › Filtering Font View › Custom Categories & Languages"
 status = "handbook"
+notes = "The desktop app reads every Groups*.plist in the Info folder of its settings folder (by name, at most 32 files of 4 MB, 4,096 entries in all, 8 levels of subGroup) and hands them to the engine (Session::set_user_groups); their entries follow the built-in ones. A file that cannot be read is skipped and reported at launch."
 
 [[behavior]]
 id = "fontView.filtersDoNotAffectOrder"

@@ -144,7 +144,7 @@ fn missing_glyphs_of_a_list_filter_are_listed_and_generated() {
 
     let before = s.doc().unwrap().font.clone();
     refused(&mut s, "fontView.generateMissingGlyphs", json!({"entry": "filters/Want", "glyphs": ["A"]}), "not missing");
-    refused(&mut s, "fontView.listMissingGlyphs", json!({"entry": "categories/Letter"}), "full glyph set");
+    refused(&mut s, "fontView.listMissingGlyphs", json!({"entry": "all"}), "full glyph set");
     assert!(Arc::ptr_eq(&s.doc().unwrap().font, &before));
 
     assert_eq!(run(&mut s, "fontView.generateMissingGlyphs", json!({"entry": "filters/Want", "glyphs": ["A-cy"]}))["added"], json!(["A-cy"]));

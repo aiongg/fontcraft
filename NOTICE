@@ -27,6 +27,19 @@ without a row.
     UnicodeData.txt, Scripts.txt and extracted/DerivedBidiClass.txt. Unicode License v3,
     Copyright (c) 1991-2026 Unicode, Inc. (LICENSE-Unicode.txt).
 
+  crates/glyphdata/data/sets.bin, the built-in language and glyph-set data, is compiled from two
+  sources (pinned in xtask/glyphsets.toml); the licence texts are in the same folder:
+
+  - The Unicode Common Locale Data Repository (https://github.com/unicode-org/cldr), release
+    release-48-2 (commit 11299982335beb974c1c63c45265184e759c0f41): the main exemplar characters
+    of common/main/*.xml and the English display names of common/main/en.xml. Unicode License
+    v3, Copyright (c) 2004-2026 Unicode, Inc. (LICENSE-CLDR.txt).
+  - The Google Fonts glyph sets (https://github.com/googlefonts/glyphsets), data/results/glyphs
+    at commit 432104e3ecb119c44b3cc29d7209d7b54bf41017. Apache License 2.0
+    (LICENSE-glyphsets.txt). Their characters come from gflanguages
+    (https://github.com/googlefonts/lang, Apache License 2.0), whose exemplar characters are
+    adapted from Unicode CLDR (Unicode License v3, LICENSE-CLDR.txt).
+
 Rust dependencies (kurbo, write-fonts, read-fonts, skrifa, egui, eframe, serde, …) are fetched
 through crates.io under their own permissive licences (MIT and/or Apache-2.0 for the ones named
 here; their own dependencies also include BSD, ISC, Zlib, Unicode-3.0 and, on Windows, BSL-1.0 for

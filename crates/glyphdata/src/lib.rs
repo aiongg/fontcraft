@@ -11,6 +11,9 @@
 //! `cargo xtask glyphdata --generate` into `data/glyphdata.bin` (sources and licences:
 //! `xtask/glyphdata.toml`, `ASSETS.md`, `NOTICE`). It is loaded on first use.
 //!
+//! [`sets`] holds the language and glyph-set data: the characters each language needs and the
+//! glyph sets a new document can start from (`data/sets.bin`, from `cargo xtask glyphsets`).
+//!
 //! Custom glyph data files are untrusted input: [`xml::parse`] reads them within fixed limits
 //! and fails with an error, never a panic.
 #![forbid(unsafe_code)]
@@ -25,6 +28,7 @@ mod names;
 mod order;
 mod record;
 mod search;
+pub mod sets;
 mod tables;
 mod types;
 pub mod xml;

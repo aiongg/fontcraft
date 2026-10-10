@@ -9,7 +9,8 @@
 //! `FONTCRAFT_SETTINGS_DIR` replaces the folder (a test or a second profile).
 //!
 //! In it: `settings.json` (the store of `settings.get` and `settings.set`), and `Info/` with the
-//! user's `GlyphData*.xml` files. A missing settings file means the defaults.
+//! user's `GlyphData*.xml` files and `Groups*.plist` files (extra Categories and Languages entries
+//! for Font View's sidebar). A missing settings file means the defaults.
 //! A settings file that cannot be read is reported, moved aside as `settings.json.bad` so that
 //! saving does not overwrite it, and replaced by the defaults. Nothing here may stop the app.
 
@@ -24,6 +25,8 @@ const SETTINGS_FILE: &str = "settings.json";
 const MAX_INFO_FILES: usize = fontcraft_engine::glyph_data::MAX_FILES;
 /// Largest custom glyph data file read (the database's own limit per file).
 const MAX_GLYPH_DATA_BYTES: u64 = 16 << 20;
+/// Largest groups file read (the sidebar's own limit per file).
+const MAX_GROUPS_BYTES: u64 = fontcraft_engine::glyph_data::MAX_GROUPS_FILE_BYTES as u64;
 
 /// The settings folder, when the platform names one.
 pub fn settings_dir() -> Option<PathBuf> {
@@ -73,6 +76,20 @@ impl UserFiles {
         if !files.is_empty() {
             let named: Vec<(&str, &[u8])> = files.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
             problems.extend(session.set_user_glyph_data(&named).into_iter().map(|p| format!("{}: {p}", info.display())));
+        }
+        // After the glyph data: a character in a groups list is named through it.
+        let mut groups: Vec<(String, String)> = Vec::new();
+        for path in info_files(&info, "Groups", ".plist", &mut problems) {
+            match read_capped(&path, MAX_GROUPS_BYTES)
+                .and_then(|b| String::from_utf8(b).map_err(|_| std::io::Error::other("the file is not UTF-8 text")))
+            {
+                Ok(text) => groups.push((file_name(&path), text)),
+                Err(e) => problems.push(format!("{}: {e}", path.display())),
+            }
+        }
+        if !groups.is_empty() {
+            let named: Vec<(&str, &str)> = groups.iter().map(|(n, t)| (n.as_str(), t.as_str())).collect();
+            problems.extend(session.set_user_groups(&named).into_iter().map(|p| format!("{}: {p}", info.display())));
         }
         (UserFiles { dir, saved_revision: session.settings().revision() }, problems)
     }
@@ -183,6 +200,20 @@ mod tests {
         let (_, problems) = UserFiles::load_from(&mut again, Some(dir.clone()));
         assert_eq!(problems.len(), 1);
         assert_eq!(again.settings().get_bool("appearance.displayUnicodeValue"), Some(true));
+    }
+
+    #[test]
+    fn groups_files_load_and_a_broken_one_is_reported() {
+        let dir = folder("groups");
+        std::fs::write(dir.join("Info/Groups.plist"), "{languages = ({name = Mine; list = (a, \"\u{e4}\");});}").unwrap();
+        std::fs::write(dir.join("Info/Groups-broken.plist"), "{languages = (").unwrap();
+        let mut s = Session::new();
+        let (_, problems) = UserFiles::load_from(&mut s, Some(dir.clone()));
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("Groups-broken.plist"), "{problems:?}");
+        let groups = s.user_groups().unwrap();
+        assert_eq!(groups.languages.len(), 1);
+        assert_eq!(groups.languages[0].name, "Mine");
     }
 
     #[test]

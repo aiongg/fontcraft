@@ -124,13 +124,19 @@ label = "New from Glyph Sets…"
 menu = ["File"]
 shortcut = ""
 kind = "engine"
-params = "{scripts?: [{script: string, glyphSets?: [string]}]}"
+params = "{scripts?: [{script: string, glyphSets?: [string]}], familyName?: string}"
 area = "font-view"
 milestone = "M4"
 summary = "Opens the script and glyph-set chooser (the same one the Start Window plus button shows), preselected with the choices made last time, and creates a document holding one empty glyph for every glyph of the chosen sets. With explicit params it creates the document without showing the chooser."
 ref = "Create"
 status = "handbook"
-notes = "The scripts and glyph sets offered come from Google Fonts' glyph sets (googlefonts/glyphsets, Apache-2.0), turned into glyph names through FontCraft's glyph database. This is the owner's decision (docs/plans/M4.md § 7 question 3): the reference's lists are app data we may not use, so the sets differ from the reference's by design. The chooser's last picks live in the user settings (docs/plans/M4.md § 7 question 4)."
+notes = "The scripts and glyph sets offered come from Google Fonts' glyph sets (googlefonts/glyphsets, Apache-2.0), turned into glyph names through FontCraft's glyph database. This is the owner's decision (docs/plans/M4.md § 7 question 3): the reference's lists are app data we may not use, so the sets differ from the reference's by design. Source: glyphsets commit 432104e, the 28 built sets of data/results/glyphs (name and code point of each glyph), compiled by `cargo xtask glyphsets --generate` into crates/glyphdata/data/sets.bin; xtask/glyphsets.toml gives each set its id (latin-core), name (Latin Core) and script. The engine command is headless: scripts are glyph-database script ids, sets their ids; an unknown one is refused with the valid ids. The chooser's last picks live in the user settings (docs/plans/M4.md § 7 question 4) under start.chooserPicks, in the shape of `scripts`; a call without `scripts` repeats them."
+guesses = [
+  "Phonetics and TransLatin sets are listed under latin, Coptic and the other Greek sets under greek. Settled by observing the reference's chooser.",
+  "A script picked without naming sets takes its Core set (Latin, Cyrillic, Greek and Arabic Core); a script without a default takes its first set. Settled by observing what the reference's chooser preselects when a script is switched on.",
+  "An encoded glyph takes the glyph database's name for its code point, an unencoded one the database's nice name for its source name; the source name is kept when the database knows neither. Settled by comparing a new document from the reference's chooser with the database names.",
+  "The new document keeps New's drawn .notdef first and adds no other glyph than the sets'; glyphs follow the default sort order. Settled by observing a new document from the reference's chooser.",
+]
 
 [[behavior]]
 id = "start.scriptChooserRules"

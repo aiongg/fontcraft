@@ -9,6 +9,7 @@ mod codecs;
 mod corpus;
 mod glyphdata;
 mod glyphdata_check;
+mod glyphsets;
 mod guesses;
 mod layers;
 mod overlap;
@@ -44,6 +45,9 @@ commands:
                   --fetch downloads the pinned glyph database sources into corpus/glyphdata/ (git-ignored);
                   --generate rebuilds crates/glyphdata/data/glyphdata.bin; --check compares the database
                   with fontc's glyphs-reader and glyphsLib (known differences: crates/glyphdata/crosscheck/allow.toml)
+  glyphsets [--fetch] [--generate]
+                  --fetch downloads the pinned Unicode CLDR locale files and Google Fonts glyph sets into
+                  corpus/glyphsets/ (git-ignored); --generate rebuilds crates/glyphdata/data/sets.bin
   roundtrip [--mode plist|model|native] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
                   read every corpus source and write it back; count byte-identical results
                   (known differences with a reason: xtask/roundtrip-allow.toml)
@@ -69,6 +73,7 @@ fn main() -> ExitCode {
         Some("wasm") => cmd_wasm(),
         Some("corpus") => corpus::run(&root(), rest.contains(&"--fetch")),
         Some("glyphdata") => glyphdata::run(&root(), &rest),
+        Some("glyphsets") => glyphsets::run(&root(), &rest),
         Some("roundtrip") => roundtrip::run(&root(), &rest),
         Some("audit") => audit::run(&root(), &rest),
         Some("overlap") => overlap::run(&root(), &rest),

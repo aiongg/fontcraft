@@ -30,6 +30,7 @@ mod layer;
 mod layers;
 mod measure;
 mod meta;
+mod new_document;
 mod node;
 mod path;
 mod pathops;
@@ -192,6 +193,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(settings::specs());
         v.extend(glyph_info::specs());
         v.extend(font_view::specs());
+        v.extend(new_document::specs());
         v
     })
 }

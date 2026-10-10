@@ -193,6 +193,8 @@ pub struct Session {
     settings: settings::UserSettings,
     /// The user's custom glyph data files.
     user_glyph_data: glyph_data::CustomData,
+    /// The entries of the user's `Groups*.plist` files.
+    user_groups: Option<Arc<fontcraft_glyphquery::Groups>>,
     /// What [`Session::edit`] stamps on changed glyphs; `None` stamps nothing.
     clock: Option<Clock>,
 }

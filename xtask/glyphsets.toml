@@ -1,0 +1,200 @@
+# Sources of the built-in language and glyph-set data, crates/glyphdata/data/sets.bin.
+#
+# `cargo xtask glyphsets --fetch` downloads them into corpus/glyphsets/ (git-ignored); `--generate`
+# rebuilds the blob and the licence files beside it. A git commit names its content. `--generate`
+# also reads the built-in glyph database (crates/glyphdata/data/glyphdata.bin) to give each
+# language a script.
+
+[cldr]
+repo = "https://github.com/unicode-org/cldr"
+# The final CLDR 48.2 release (tag release-48-2, 2026-03-16). The main exemplar characters of
+# common/main/<locale>.xml give the languages; common/main/en.xml gives their English names.
+release = "release-48-2"
+commit = "11299982335beb974c1c63c45265184e759c0f41"
+licence = "Unicode-3.0 (LICENSE at this commit)"
+paths = ["/common/main/*.xml", "/LICENSE"]
+
+[glyphsets]
+repo = "https://github.com/googlefonts/glyphsets"
+# 2026-09-22, "Regenerate using latest gflanguages". The built sets in data/results/glyphs/ give
+# each glyph's name and code point.
+commit = "432104e3ecb119c44b3cc29d7209d7b54bf41017"
+licence = "Apache-2.0 (LICENSE at this commit); the characters come from gflanguages (Apache-2.0), adapted from CLDR (Unicode-3.0)"
+paths = ["/data/results/glyphs/*.glyphs", "/LICENSE"]
+
+# The glyph sets the Start Window offers, in its order. `file` is the name in
+# data/results/glyphs/ without `.glyphs`; every file there must be listed. `script` is the glyph
+# database's script id the chooser lists the set under; `default` sets are picked when a script is
+# chosen without naming its sets.
+
+[[set]]
+file = "GF_Latin_Kernel"
+id = "latin-kernel"
+name = "Latin Kernel"
+script = "latin"
+
+[[set]]
+file = "GF_Latin_Core"
+id = "latin-core"
+name = "Latin Core"
+script = "latin"
+default = true
+
+[[set]]
+file = "GF_Latin_Plus"
+id = "latin-plus"
+name = "Latin Plus"
+script = "latin"
+
+[[set]]
+file = "GF_Latin_Vietnamese"
+id = "latin-vietnamese"
+name = "Latin Vietnamese"
+script = "latin"
+
+[[set]]
+file = "GF_Latin_PriAfrican"
+id = "latin-priafrican"
+name = "Latin PriAfrican"
+script = "latin"
+
+[[set]]
+file = "GF_Latin_African"
+id = "latin-african"
+name = "Latin African"
+script = "latin"
+
+[[set]]
+file = "GF_Latin_Beyond"
+id = "latin-beyond"
+name = "Latin Beyond"
+script = "latin"
+
+[[set]]
+file = "GF_Phonetics_IPAStandard"
+id = "phonetics-ipa-standard"
+name = "Phonetics IPA Standard"
+script = "latin"
+
+[[set]]
+file = "GF_Phonetics_IPAHistorical"
+id = "phonetics-ipa-historical"
+name = "Phonetics IPA Historical"
+script = "latin"
+
+[[set]]
+file = "GF_Phonetics_APA"
+id = "phonetics-apa"
+name = "Phonetics APA"
+script = "latin"
+
+[[set]]
+file = "GF_Phonetics_DisorderedSpeech"
+id = "phonetics-disordered-speech"
+name = "Phonetics Disordered Speech"
+script = "latin"
+
+[[set]]
+file = "GF_Phonetics_SinoExt"
+id = "phonetics-sino-ext"
+name = "Phonetics Sino Ext"
+script = "latin"
+
+[[set]]
+file = "GF_TransLatin_Arabic"
+id = "translatin-arabic"
+name = "TransLatin Arabic"
+script = "latin"
+
+[[set]]
+file = "GF_TransLatin_Pinyin"
+id = "translatin-pinyin"
+name = "TransLatin Pinyin"
+script = "latin"
+
+[[set]]
+file = "GF_Cyrillic_Core"
+id = "cyrillic-core"
+name = "Cyrillic Core"
+script = "cyrillic"
+default = true
+
+[[set]]
+file = "GF_Cyrillic_Plus"
+id = "cyrillic-plus"
+name = "Cyrillic Plus"
+script = "cyrillic"
+
+[[set]]
+file = "GF_Cyrillic_Pro"
+id = "cyrillic-pro"
+name = "Cyrillic Pro"
+script = "cyrillic"
+
+[[set]]
+file = "GF_Cyrillic_Historical"
+id = "cyrillic-historical"
+name = "Cyrillic Historical"
+script = "cyrillic"
+
+[[set]]
+file = "GF_Greek_Core"
+id = "greek-core"
+name = "Greek Core"
+script = "greek"
+default = true
+
+[[set]]
+file = "GF_Greek_Plus"
+id = "greek-plus"
+name = "Greek Plus"
+script = "greek"
+
+[[set]]
+file = "GF_Greek_Pro"
+id = "greek-pro"
+name = "Greek Pro"
+script = "greek"
+
+[[set]]
+file = "GF_Greek_Expert"
+id = "greek-expert"
+name = "Greek Expert"
+script = "greek"
+
+[[set]]
+file = "GF_Greek_Archaic"
+id = "greek-archaic"
+name = "Greek Archaic"
+script = "greek"
+
+[[set]]
+file = "GF_Greek_Coptic"
+id = "greek-coptic"
+name = "Greek Coptic"
+script = "greek"
+
+[[set]]
+file = "GF_Greek_AncientMusicalSymbols"
+id = "greek-ancient-musical-symbols"
+name = "Greek Ancient Musical Symbols"
+script = "greek"
+
+[[set]]
+file = "GF_Arabic_Kernel"
+id = "arabic-kernel"
+name = "Arabic Kernel"
+script = "arabic"
+
+[[set]]
+file = "GF_Arabic_Core"
+id = "arabic-core"
+name = "Arabic Core"
+script = "arabic"
+default = true
+
+[[set]]
+file = "GF_Arabic_Plus"
+id = "arabic-plus"
+name = "Arabic Plus"
+script = "arabic"
