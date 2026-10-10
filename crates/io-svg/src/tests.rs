@@ -239,6 +239,19 @@ fn hostile_svg_fails_with_a_message() {
 }
 
 #[test]
+fn deep_markup_is_rejected_before_the_xml_parser_recurses() {
+    let deep = format!("{}{}", "<g>".repeat(10_000), "</g>".repeat(10_000));
+    let in_entity = format!(r#"<!DOCTYPE svg [<!ENTITY deep "{deep}">]><svg xmlns="http://www.w3.org/2000/svg">&deep;</svg>"#);
+    assert_eq!(read_svg(in_entity.as_bytes(), UNSCALED), Err(SvgError::TooDeep));
+    // A quote in a comment or an attribute value hides nothing from the depth check.
+    let hidden = format!(r#"<!DOCTYPE svg [<!-- don't -->]><svg xmlns="http://www.w3.org/2000/svg"><g id="/>">{deep}</g></svg>"#);
+    assert_eq!(read_svg(hidden.as_bytes(), UNSCALED), Err(SvgError::TooDeep));
+    // Markup inside comments and CDATA is not nesting.
+    let quiet = svg(&format!(r#"<!--{deep}--><g><![CDATA[{deep}]]><rect width="10" height="10"/></g>"#));
+    assert_eq!(read_svg(quiet.as_bytes(), UNSCALED).unwrap().paths.len(), 1);
+}
+
+#[test]
 fn truncated_svg_never_panics() {
     let doc = svg(r##"<g transform="matrix(1 0 0 -1 0 100)"><path d="M10 10 C 20 30 40 30 50 10 Q 60 0 70 10 A 5 5 0 1 1 80 10 Z" fill="red"/>
         <circle cx="50" cy="50" r="20"/><use href="#x"/></g><polygon id="x" points="0,0 10,0 5,8"/>"##);

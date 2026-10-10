@@ -67,6 +67,11 @@ pub(crate) struct Sanitized {
 }
 
 pub(crate) fn sanitize(text: &str) -> Result<Sanitized, SvgError> {
+    // The XML parser recurses once per open element, so nesting is checked before it runs.
+    let nesting = markup_nesting(text.as_bytes());
+    if nesting.body > MAX_SVG_DEPTH || nesting.literals > MAX_SVG_DEPTH {
+        return Err(SvgError::TooDeep);
+    }
     let options = ParsingOptions { allow_dtd: true, nodes_limit: MAX_XML_NODES, ..ParsingOptions::default() };
     let doc = Document::parse_with_options(text, options).map_err(|e| match e {
         roxmltree::Error::NodesLimitReached => SvgError::TooManyElements,
@@ -84,6 +89,103 @@ pub(crate) fn sanitize(text: &str) -> Result<Sanitized, SvgError> {
     let mut out = String::with_capacity(text.len().min(1 << 20));
     write_root(root, view_box, &survey.kept, &mut out);
     Ok(Sanitized { text: out, view_box, dropped: survey.dropped })
+}
+
+/// The deepest element nesting in the markup (`body`) and inside any quoted literal of the
+/// document type declaration (`literals`), where entity values live. The parser expands an
+/// entity by parsing its value as content, at most ten entities deep, so the two bounds together
+/// bound its recursion.
+#[derive(Debug, Default, PartialEq)]
+struct Nesting {
+    body: usize,
+    literals: usize,
+}
+
+/// A linear scan that follows the XML markup closely enough to count open elements: comments,
+/// CDATA sections, processing instructions and declarations are skipped, and quotes are honoured
+/// inside tags. An attribute value cannot contain `<`, so every `<` outside those constructs is
+/// a tag. Malformed markup may be miscounted; the parser rejects it at that point.
+fn markup_nesting(b: &[u8]) -> Nesting {
+    let mut out = Nesting::default();
+    out.body = scan_nesting(b, &mut out.literals, false);
+    out
+}
+
+fn scan_nesting(b: &[u8], literals: &mut usize, in_literal: bool) -> usize {
+    let at = |i: usize, s: &[u8]| b.get(i..).is_some_and(|t| t.starts_with(s));
+    let find = |from: usize, s: &[u8]| b.get(from..).and_then(|t| t.windows(s.len()).position(|w| w == s)).map_or(b.len(), |p| from + p + s.len());
+    let (mut i, mut depth, mut max) = (0usize, 0usize, 0usize);
+    while let Some(p) = b.get(i..).and_then(|t| t.iter().position(|&c| c == b'<')) {
+        i += p;
+        if at(i, b"<!--") {
+            i = find(i + 4, b"-->");
+        } else if at(i, b"<![CDATA[") {
+            i = find(i + 9, b"]]>");
+        } else if at(i, b"<?") {
+            i = find(i + 2, b"?>");
+        } else if at(i, b"<!") {
+            // A declaration, with an internal subset in brackets. Its quoted literals are
+            // scanned as markup, once: a literal's own literals are not entity values.
+            i += 2;
+            let mut brackets = 0usize;
+            while let Some(&c) = b.get(i) {
+                if at(i, b"<!--") {
+                    i = find(i + 4, b"-->");
+                    continue;
+                }
+                if at(i, b"<?") {
+                    i = find(i + 2, b"?>");
+                    continue;
+                }
+                i += 1;
+                match c {
+                    b'"' | b'\'' => {
+                        let end = b.get(i..).and_then(|t| t.iter().position(|&q| q == c)).map_or(b.len(), |q| i + q);
+                        if !in_literal {
+                            let inner = scan_nesting(b.get(i..end).unwrap_or_default(), literals, true);
+                            *literals = (*literals).max(inner);
+                        }
+                        i = end.saturating_add(1);
+                    }
+                    b'[' => brackets += 1,
+                    b']' => brackets = brackets.saturating_sub(1),
+                    b'>' if brackets == 0 => break,
+                    _ => {}
+                }
+            }
+        } else if at(i, b"</") {
+            depth = depth.saturating_sub(1);
+            i = find(i + 2, b">");
+        } else {
+            i += 1;
+            let mut quote = None;
+            let mut empty = false;
+            while let Some(&c) = b.get(i) {
+                i += 1;
+                match (quote, c) {
+                    (Some(q), c) if c == q => quote = None,
+                    (Some(_), _) => {}
+                    (None, b'"' | b'\'') => quote = Some(c),
+                    (None, b'>') => break,
+                    (None, b'/') if b.get(i) == Some(&b'>') => {
+                        empty = true;
+                        i += 1;
+                        break;
+                    }
+                    (None, b'<') => {
+                        i -= 1;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            if !empty {
+                depth += 1;
+                max = max.max(depth);
+            }
+        }
+    }
+    max
 }
 
 fn is_svg_element(node: Node) -> bool {
