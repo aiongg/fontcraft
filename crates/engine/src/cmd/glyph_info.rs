@@ -440,11 +440,11 @@ fn find_and_replace(s: &mut Session, v: &Value) -> Result<Value> {
     for (old, new) in &pairs {
         let exports = font.glyph(old).is_none_or(|g| g.export);
         if new.len() > MAX_NAME_LEN {
-            problems.push(format!("`{old}` → a name longer than {MAX_NAME_LEN} bytes"));
+            problems.push(format!("`{old}` to a name longer than {MAX_NAME_LEN} bytes"));
         } else if let Err(e) = validate(new, exports) {
-            problems.push(format!("`{old}` → `{new}`: {e}"));
+            problems.push(format!("`{old}` to `{new}`: {e}"));
         } else if !taken.insert(new.as_str()) {
-            problems.push(format!("`{old}` → `{new}`: the name is taken"));
+            problems.push(format!("`{old}` to `{new}`: the name is taken"));
         }
     }
     if !problems.is_empty() {

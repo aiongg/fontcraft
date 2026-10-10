@@ -358,6 +358,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         .collapsible(false)
         .resizable(true)
         .default_size(vec2(width, tokens.list_row_height * VISIBLE_ROWS))
+        .pivot(egui::Align2::CENTER_TOP)
+        .default_pos(egui::pos2(ui.ctx().content_rect().center().x, tokens.dialog_top))
         .show(ui.ctx(), |ui| {
             let mut query = gi.query.clone();
             let field = egui::TextEdit::singleline(&mut query)

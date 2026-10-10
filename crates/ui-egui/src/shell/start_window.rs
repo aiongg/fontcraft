@@ -429,17 +429,23 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let mut laid = LaidOut::default();
     let mut open = true;
     let width = tokens.list_column_unit * WINDOW_UNITS;
-    egui::Window::new("FontCraft").id(egui::Id::new("window.start")).open(&mut open).collapsible(false).resizable(false).default_width(width).show(
-        ui.ctx(),
-        |ui| {
+    let top = egui::pos2(ui.ctx().content_rect().center().x, tokens.dialog_top);
+    egui::Window::new("FontCraft")
+        .id(egui::Id::new("window.start"))
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(false)
+        .default_width(width)
+        .pivot(egui::Align2::CENTER_TOP)
+        .default_pos(top)
+        .show(ui.ctx(), |ui| {
             ui.set_width(width);
             if chooser {
                 chooser_ui(ui, st, tokens, !recent.is_empty(), &mut events, &mut laid);
             } else {
                 recent_ui(ui, st, &recent, show_at_launch, tokens, &mut events, &mut laid);
             }
-        },
-    );
+        });
     if !open {
         events.push(Event::Close);
     }

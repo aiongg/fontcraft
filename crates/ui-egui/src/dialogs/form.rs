@@ -23,6 +23,12 @@ pub const MAX_PATH_TEXT: usize = 4096;
 pub const MAX_ORDER_ROWS: usize = 4096;
 /// A folder field is this many number fields wide.
 const PATH_WIDTH_FIELDS: f32 = 4.0;
+/// A text field is this many number fields wide: room for a name or a short list of names.
+const TEXT_WIDTH_FIELDS: f32 = 3.0;
+/// A field of checkboxes is this many number fields wide…
+const MULTI_WIDTH_FIELDS: f32 = 5.0;
+/// …and scrolls past this many list rows.
+const MULTI_ROWS: f32 = 12.0;
 
 /// What a field holds.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -325,9 +331,8 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose:
                 ui.label(&field.label);
             }
             let response = match &field.kind {
-                Kind::Number { .. } | Kind::Integer { .. } | Kind::Text { .. } => {
-                    text_field(ui, dialog, field, &value, tokens.dialog_field_width, events)
-                }
+                Kind::Number { .. } | Kind::Integer { .. } => text_field(ui, dialog, field, &value, tokens.dialog_field_width, events),
+                Kind::Text { .. } => text_field(ui, dialog, field, &value, tokens.dialog_field_width * TEXT_WIDTH_FIELDS, events),
                 Kind::Bool => {
                     let mut on = value.as_bool().unwrap_or(false);
                     let r = ui.add(egui::Checkbox::without_text(&mut on)).on_hover_text(&field.doc);
@@ -360,16 +365,24 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, can_choose:
                 }
                 Kind::Multi { choices, labels } => {
                     let ticked: Vec<&str> = value.as_array().map(|l| l.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
-                    ui.horizontal_wrapped(|ui| {
-                        for choice in choices {
-                            let mut on = ticked.contains(&choice.as_str());
-                            let r = ui.checkbox(&mut on, choice_label(choices, labels, choice)).on_hover_text(&field.doc);
-                            if r.changed() {
-                                let next: Vec<&String> =
-                                    choices.iter().filter(|c| if *c == choice { on } else { ticked.contains(&c.as_str()) }).collect();
-                                events.push(Event::Set(field.key.clone(), json!(next)));
-                            }
-                        }
+                    // A block of fixed width that scrolls past a dozen rows, so a long list stays
+                    // on screen and the grid row keeps the block's height.
+                    ui.vertical(|ui| {
+                        ui.set_width(tokens.dialog_field_width * MULTI_WIDTH_FIELDS);
+                        let rows = tokens.list_row_height * MULTI_ROWS;
+                        egui::ScrollArea::vertical().id_salt(widget_id(&field.key)).max_height(rows).min_scrolled_height(rows).show(ui, |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                for choice in choices {
+                                    let mut on = ticked.contains(&choice.as_str());
+                                    let r = ui.checkbox(&mut on, choice_label(choices, labels, choice)).on_hover_text(&field.doc);
+                                    if r.changed() {
+                                        let next: Vec<&String> =
+                                            choices.iter().filter(|c| if *c == choice { on } else { ticked.contains(&c.as_str()) }).collect();
+                                        events.push(Event::Set(field.key.clone(), json!(next)));
+                                    }
+                                }
+                            });
+                        });
                     })
                     .response
                 }
@@ -436,7 +449,10 @@ fn text_field(ui: &mut egui::Ui, dialog: &OpenDialog, field: &Field, value: &Val
     let id = widget_id(&field.key);
     let editing: Option<&Editing> = dialog.editing.as_ref().filter(|e| e.field == field.key);
     let mut text = editing.map_or_else(|| format_value(value), |e| e.text.clone());
-    let response = ui.add(egui::TextEdit::singleline(&mut text).id(id).char_limit(field.max_text()).desired_width(width));
+    // Sized, not just a desired width: the dialog's area takes its width from its widest row,
+    // and a text field alone never widens it.
+    let size = egui::vec2(width, ui.spacing().interact_size.y);
+    let response = ui.add_sized(size, egui::TextEdit::singleline(&mut text).id(id).char_limit(field.max_text()).desired_width(width));
     let response = response.on_hover_text(&field.doc);
     if response.has_focus() {
         if dialog.blur {

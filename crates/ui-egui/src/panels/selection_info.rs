@@ -52,7 +52,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let tokens = app.tokens.clone();
     let mut open = true;
     let mut edits = Vec::new();
-    egui::Window::new("Selection Info").id(window_id()).open(&mut open).resizable(false).collapsible(false).show(ui.ctx(), |ui| {
+    let top = egui::pos2(ui.ctx().content_rect().center().x, tokens.dialog_top);
+    let window = egui::Window::new("Selection Info").id(window_id()).open(&mut open).resizable(false).collapsible(false);
+    window.pivot(egui::Align2::CENTER_TOP).default_pos(top).show(ui.ctx(), |ui| {
         edits = contents(ui, &tokens, &summary);
     });
     if !open {

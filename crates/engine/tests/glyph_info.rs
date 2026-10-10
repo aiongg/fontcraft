@@ -134,7 +134,7 @@ fn find_and_replace_renames_all_or_nothing() {
 
     // A clash anywhere refuses the whole batch.
     let e = refused(&mut s, "edit.findAndReplace", json!({"glyphs": ["a.ss02", "b.ss02", "c"], "find": "c", "replace": "d"}));
-    assert!(e.contains("`c` → `d`: the name is taken"), "{e}");
+    assert!(e.contains("`c` to `d`: the name is taken"), "{e}");
     let e = refused(&mut s, "edit.findAndReplace", json!({"glyphs": ["a.ss02", "b.ss02"], "find": "a", "replace": "b"}));
     assert!(e.contains("taken"), "{e}");
     let e = refused(&mut s, "edit.findAndReplace", json!({"glyphs": ["a.ss02", "b.ss02"], "find": ".", "replace": " "}));
