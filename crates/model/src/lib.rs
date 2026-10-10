@@ -19,9 +19,11 @@ mod features;
 mod font;
 mod glyph;
 mod glyph_info;
+mod glyph_props;
 mod info;
 mod kerning;
 mod layer_info;
+mod order;
 mod rare;
 mod resolve;
 mod shape_info;
@@ -34,12 +36,15 @@ pub use font::{
     AlignmentZone, Axis, AxisLabel, AxisRange, FileStore, Font, FontInfo, GlyphMut, GlyphTable, Guide, Instance, LangName, Master, MetricDef,
     MetricValue, NameParts, NumberDef, Settings, Source, SourceFormat, StemDef, StyleClass, metric,
 };
+pub use fontcraft_glyphdata as glyphdata;
 pub use fontcraft_plist as plist;
 pub use glyph::{Anchor, Component, Glyph, Layer, Node, NodeKind, Path, RawShape, Shape, Transform};
 pub use glyph_info::{ColorLabel, GlyphInfo, GlyphInfoBox, MetricsKeys, PartProperty};
+pub use glyph_props::{GlyphProps, Prop, PropSource, data_props, glyph_props};
 pub use info::{DEFAULT_LANGUAGE, LANGUAGES, Localized, Param, Params, Properties, Property, PropertyValue, UserData, language_id, param_flag};
 pub use kerning::{KernContext, KernFirst, KernGroups, KernTable, Kerning, MasterKerning, glyphs_side, side_group, ufo_side};
 pub use layer_info::{Annotation, AxisRule, Background, Hint, Image, LayerAttrs, LayerInfo, LayerInfoBox, PaletteEntry, SmartPole};
+pub use order::{GLYPH_ORDER_PARAM, Placement, glyph_order, glyph_order_names, insertion_index, is_section_header, keeps_alternates, sort_key};
 pub use rare::{Rare, RareDefault};
 pub use resolve::{Metrics, Resolved, ResolvedAxis, ResolvedComponent, ResolvedGlyph, StyleLinking, Target, blue_values, is_ufo_family};
 pub use shape_info::{

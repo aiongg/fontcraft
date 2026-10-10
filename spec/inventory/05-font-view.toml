@@ -1397,6 +1397,7 @@ milestone = "M4"
 summary = "The Last Changed column shows a timestamp refreshed whenever the glyph is modified. A font-level Write lastChange parameter set to off stops the timestamp from being updated, which keeps version-control diffs quiet."
 ref = "Font View › Glyph Properties › Last Changed"
 status = "handbook"
+notes = "Session::edit stamps every glyph whose contents an edit changed (new and renamed glyphs included) with the time of the clock the app gives the session (Session::set_clock); a session without a clock stamps nothing, and tests use a fixed clock. The Disable Last Change parameter, which glyphsLib reads, also stops it. The column itself comes with the List View."
 
 [[behavior]]
 id = "fontView.column.otherProperties"
@@ -1997,10 +1998,11 @@ milestone = "M4"
 summary = "A user-supplied GlyphData.xml changes glyph properties for all files on the machine and can teach the app custom names, so that Unicode values and categories are still assigned automatically for them. Per-file overrides on individual glyphs remain possible on top."
 ref = "Font View › Names & Unicode › Glyph Info Database; Naming Glyphs"
 status = "handbook"
-notes = "crates/glyphdata reads custom files (GlyphData::with_custom_files, M4.1): files later in the list win per record, and a malformed file fails with its line and the reason. Which files a session loads comes with M4.2."
+notes = "crates/glyphdata reads custom files (GlyphData::with_custom): files later in the list win per record. The session merges the user's files (Session::set_user_glyph_data, given by the app) and the files beside the document's source (read by file.open); a malformed file is skipped and reported, the others still apply (crates/engine/src/glyph_data.rs)."
 guesses = [
   "A custom record replaces the built-in record of the same name as a whole: fields it leaves out are empty, not taken from the built-in record. Settled by observation.",
   "A file over a limit (16 MB, 200,000 records, 1,024 bytes per attribute value, two levels of elements) or with an entity declaration or a malformed record is rejected as a whole; attributes the format does not define are skipped with a warning.",
+  "Beside a source file and in the Info folder beside it, every file named GlyphData*.xml is read, in name order, those beside the file first; at most 32 files of the user's and 32 of a document's. Settled by observation.",
 ]
 
 [[behavior]]
@@ -2881,11 +2883,12 @@ milestone = "M4"
 summary = "Without a custom order, glyphs are ordered by sort name, where a glyph's sort name is its own override, else the database value, else its glyph name. The same order is used in Font View and in exported fonts."
 ref = "Font View › Glyph Order; Sort Name; GlyphsSDK GlyphsFileFormatv3.md; tutorials \"Alter the glyph order in Font view\" and \"Roll your own glyph data\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below). The key is GlyphData::sort_key in crates/glyphdata (M4.1); the order function that uses it comes with M4.2."
+notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below). The key is GlyphData::sort_key in crates/glyphdata; fontcraft_model::glyph_order gives the order and fontcraft_model::insertion_index a new glyph's place (glyph.newGlyph uses it)."
 guesses = [
   "An opened file keeps its stored glyph order, which is the order the oracles compile; only glyphs added later, renamed, or given a sort name move to the place the sort key gives. Settled by observing where the reference puts a new glyph (05 question 2).",
   "The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2).",
   "A sort name (from custom glyph data or the glyph itself) places the glyph after the others of its category, ordered by the sort name.",
+  "In a stored order that is not sorted by the key, a new glyph goes right after the last glyph whose key is not greater than its own (first when there is none), so it follows the glyphs it would follow in a sorted font. Settled by observing where the reference puts a new glyph in a hand-ordered font.",
 ]
 
 [[behavior]]

@@ -23,7 +23,9 @@
 //! without history, and the commit makes one undo step and one journal entry.
 #![forbid(unsafe_code)]
 
+pub mod clock;
 pub mod cmd;
+pub mod glyph_data;
 pub mod guard;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
@@ -32,11 +34,13 @@ pub mod params;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+pub use clock::Clock;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use fontcraft_compile as compile;
 pub use fontcraft_container as container;
 pub use fontcraft_format as format;
 pub use fontcraft_model as model;
+use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph};
 use serde_json::{Value, json};
 
@@ -161,6 +165,8 @@ pub struct DocState {
     pub stamp: Option<io::Stamp>,
     /// The last `audit.run` on this document, which `audit.results` and `audit.fix` read.
     pub(crate) audit: Option<Arc<cmd::audit::KeptRun>>,
+    /// The glyph data files beside the source, merged with the user's.
+    pub(crate) glyph_data: glyph_data::CustomData,
 }
 
 impl DocState {
@@ -181,6 +187,10 @@ pub struct Session {
     /// While `command.batch` runs: the font of each document it changed, as it was before.
     pub(crate) batch: Option<Batch>,
     interaction: Option<Interaction>,
+    /// The user's custom glyph data files.
+    user_glyph_data: glyph_data::CustomData,
+    /// What [`Session::edit`] stamps on changed glyphs; `None` stamps nothing.
+    clock: Option<Clock>,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -270,6 +280,7 @@ impl Session {
             #[cfg(not(target_arch = "wasm32"))]
             stamp,
             audit: None,
+            glyph_data: glyph_data::CustomData::default(),
         });
         self.active = Some(self.docs.len() - 1);
     }
@@ -289,6 +300,7 @@ impl Session {
     /// `command.batch` the step is not pushed: the batch makes one step of all its edits.
     pub fn edit<T>(&mut self, label: &str, f: impl FnOnce(&mut Font) -> Result<T>) -> Result<T> {
         let i = self.active.filter(|i| *i < self.docs.len()).ok_or(EngineError::NoDocument)?;
+        let now = self.clock.as_ref().and_then(|c| c());
         let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
         let mut next = Font::clone(&doc.font);
         let out = f(&mut next)?;
@@ -297,6 +309,11 @@ impl Session {
         }
         if let Some(name) = locked_glyph_changed(&next, &doc.font) {
             return Err(EngineError::Locked(name));
+        }
+        if let Some(stamp) = now.and_then(clock::last_change_text)
+            && clock::writes_last_change(&next)
+        {
+            clock::stamp_changed(&mut next, &doc.font, &stamp);
         }
         next.check_changed(&doc.font)?;
         let before = std::mem::replace(&mut doc.font, Arc::new(next));
@@ -315,6 +332,67 @@ impl Session {
     /// No `command.batch` is running (for tests and the command sweep).
     pub fn batch_is_idle(&self) -> bool {
         self.batch.is_none()
+    }
+
+    /// Sets the clock [`Session::edit`] reads to stamp Last Changed on the glyphs an edit
+    /// changes (`fontView.column.lastChanged`). `None`, the default, stamps nothing.
+    pub fn set_clock(&mut self, clock: Option<Clock>) {
+        self.clock = clock;
+    }
+
+    /// The glyph data the active document's commands read: the built-in database with the
+    /// user's custom files and the files beside the source on top. Without a document, the
+    /// built-in database with the user's files.
+    pub fn glyph_data(&self) -> Result<Arc<GlyphData>> {
+        match self.active() {
+            Some(doc) => self.glyph_data_of(doc),
+            None => self.user_glyph_data.merged.clone().map_or_else(glyph_data::builtin, Ok),
+        }
+    }
+
+    /// [`Session::glyph_data`] for one document.
+    pub fn glyph_data_of(&self, doc: &DocState) -> Result<Arc<GlyphData>> {
+        if !glyph_data::ignores_source_files(&doc.font)
+            && let Some(d) = &doc.glyph_data.merged
+        {
+            return Ok(d.clone());
+        }
+        self.user_glyph_data.merged.clone().map_or_else(glyph_data::builtin, Ok)
+    }
+
+    /// Sets the user's custom glyph data files (name, bytes), in order: the app reads them from
+    /// its settings folder. Malformed files are skipped; the problems are returned.
+    pub fn set_user_glyph_data(&mut self, files: &[(&str, &[u8])]) -> Vec<String> {
+        let mut problems = Vec::new();
+        let parsed = glyph_data::parse_files(files, &mut problems);
+        let merged = glyph_data::merge(&[&parsed], &mut problems);
+        self.user_glyph_data = glyph_data::CustomData { files: Arc::new(parsed), merged };
+        for i in 0..self.docs.len() {
+            self.remerge_doc(i, &mut problems);
+        }
+        problems
+    }
+
+    /// Sets the glyph data files that sit beside the active document's source (name, bytes).
+    /// `file.open` reads them from disk; tests and the browser build hand them in. Malformed
+    /// files are skipped; the problems are returned.
+    pub fn set_source_glyph_data(&mut self, files: &[(&str, &[u8])]) -> Result<Vec<String>> {
+        let i = self.active.filter(|i| *i < self.docs.len()).ok_or(EngineError::NoDocument)?;
+        let mut problems = Vec::new();
+        let parsed = glyph_data::parse_files(files, &mut problems);
+        if let Some(doc) = self.docs.get_mut(i) {
+            doc.glyph_data.files = Arc::new(parsed);
+        }
+        self.remerge_doc(i, &mut problems);
+        Ok(problems)
+    }
+
+    /// Rebuilds a document's merged glyph data from the user's files and its own.
+    fn remerge_doc(&mut self, i: usize, problems: &mut Vec<String>) {
+        let user = self.user_glyph_data.files.clone();
+        let Some(doc) = self.docs.get_mut(i) else { return };
+        let own = doc.glyph_data.files.clone();
+        doc.glyph_data.merged = if own.is_empty() { None } else { glyph_data::merge(&[&user, &own], problems) };
     }
 
     /// The position of the document with this id.

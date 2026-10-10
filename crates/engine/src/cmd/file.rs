@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. warnings lists what reading a compiled font left out → {title, path, format, version?, glyphs, masters, viewOnly, warnings}",
+            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. warnings lists what reading a compiled font left out and the glyph data files that could not be used → {title, path, format, version?, glyphs, masters, viewOnly, warnings}",
             always,
             open
         ),
@@ -119,9 +119,14 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
             json!({ "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "alreadyOpen": true, "glyphs": doc.font.glyphs.len() }),
         );
     }
-    let (font, warnings) = crate::io::open(&path, face)?;
+    let (font, mut warnings) = crate::io::open(&path, face)?;
+    let glyph_data = crate::glyph_data::source_files(&path, &mut warnings);
     // Every reader checks the font it returns.
     s.push_document(font, Some(path));
+    if !glyph_data.is_empty() {
+        let files: Vec<(&str, &[u8])> = glyph_data.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
+        warnings.extend(s.set_source_glyph_data(&files)?);
+    }
     let doc = s.doc()?;
     let save_format = crate::io::SaveFormat::of_source(doc.font.source.format);
     let format = match doc.font.source.format {

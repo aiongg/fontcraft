@@ -14,7 +14,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "New Glyph",
             ["Glyph"],
             Some("Cmd+Alt+Shift+N"),
-            "{name?: string, unicodes?: [hex | number], width?: number} add an empty glyph with a layer for every master. name: at most 255 bytes, no control characters; defaults to newGlyph (newGlyph.001, .002… when taken). width: 0 to 65535, default 600 → {name}",
+            "{name?: string, unicodes?: [hex | number], width?: number} add an empty glyph with a layer for every master, at the place the default sort order gives it among the glyphs already there (the others keep their order). name: at most 255 bytes, no control characters; defaults to newGlyph (newGlyph.001, .002… when taken). unicodes: default the code point the glyph data gives the name. width: 0 to 65535, default 600 → {name, index, unicodes}",
             has_doc,
             new_glyph
         ),
@@ -71,7 +71,7 @@ fn new_glyph(s: &mut Session, p: &Value) -> Result<Value> {
     if !(0.0..=65_535.0).contains(&width) {
         return Err(p.bad(format!("`width` must be between 0 and 65535, got {width}")));
     }
-    let codes = unicodes(&p, "unicodes")?.unwrap_or_default();
+    let codes = unicodes(&p, "unicodes")?;
     let name = match p.opt_str("name")? {
         Some(name) => name.to_string(),
         None => {
@@ -85,8 +85,19 @@ fn new_glyph(s: &mut Session, p: &Value) -> Result<Value> {
             name
         }
     };
-    s.edit("New Glyph", |font| Ok(font.add_glyph(&name, codes, width)?))?;
-    Ok(json!({ "name": name }))
+    let data = s.glyph_data()?;
+    let codes = match codes {
+        Some(codes) => codes,
+        None => fontcraft_model::data_props(&name, &[], &data, false).data_unicode.into_iter().collect(),
+    };
+    let index = s.edit("New Glyph", |font| {
+        let mut probe = fontcraft_model::Glyph::new(name.as_str());
+        probe.unicodes = codes.clone();
+        let index = fontcraft_model::insertion_index(font, &data, &probe);
+        font.add_glyph_at(index, &name, codes.clone(), width)?;
+        Ok(index)
+    })?;
+    Ok(json!({ "name": name, "index": index, "unicodes": codes.iter().map(|c| format!("{c:04X}")).collect::<Vec<_>>() }))
 }
 
 fn remove_glyph(s: &mut Session, p: &Value) -> Result<Value> {

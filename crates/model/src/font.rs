@@ -627,6 +627,13 @@ impl GlyphTable {
         Arc::make_mut(&mut self.index).entry(name).or_insert(i);
     }
 
+    /// Inserts a glyph at `index` (at the end when `index` is past it).
+    pub fn insert(&mut self, index: usize, glyph: Glyph) {
+        let order = Arc::make_mut(&mut self.order);
+        order.insert(index.min(order.len()), Arc::new(glyph));
+        self.reindex();
+    }
+
     /// Removes the first glyph called `name`.
     pub fn remove(&mut self, name: &str) -> Option<Arc<Glyph>> {
         let i = self.position(name)?;
@@ -824,6 +831,12 @@ impl Font {
 
     /// Appends a glyph with an empty layer for every master.
     pub fn add_glyph(&mut self, name: &str, unicodes: Vec<u32>, width: f64) -> Result<(), ModelError> {
+        self.add_glyph_at(self.glyphs.len(), name, unicodes, width)
+    }
+
+    /// Inserts a glyph with an empty layer for every master at `index` of the stored order (at
+    /// the end when `index` is past it). [`crate::insertion_index`] gives a new glyph's place.
+    pub fn add_glyph_at(&mut self, index: usize, name: &str, unicodes: Vec<u32>, width: f64) -> Result<(), ModelError> {
         if name.is_empty() {
             return Err(ModelError::EmptyGlyphName);
         }
@@ -836,7 +849,7 @@ impl Font {
         let mut g = Glyph::new(name);
         g.unicodes = unicodes;
         g.layers = self.masters.iter().map(|m| Layer::new(&m.id, width)).collect();
-        self.glyphs.push(g);
+        self.glyphs.insert(index, g);
         Ok(())
     }
 
