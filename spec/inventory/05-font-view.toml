@@ -355,6 +355,7 @@ guesses = [
   "LSB moves the outline and keeps the right side bearing; RSB sets the width from the outline's right edge. Settled by observation.",
   "As Components adds each component at the origin, after the shapes already there, and leaves out a component that would make a glyph refer to itself. Settled by observation.",
 ]
+notes = "The shell's Paste Special (Cmd+Alt+V, Edit › Paste Special) opens dialog.pasteSpecial on the copied glyphs on the system clipboard."
 
 # ───────────────────────────── Glyph properties ─────────────────────────────
 
@@ -1214,22 +1215,27 @@ milestone = "M4"
 summary = "Dialog of Glyph → Add Glyphs… taking a free-text list of glyphs to create. Button labels are not given in the chapter."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs"
 status = "handbook"
+notes = "Generate (the tutorial's label) runs glyph.addGlyphs with the text and `onExisting: \"ask\"`; when a name is in the font already nothing is added and dialog.addGlyphsExisting follows. Nothing runs before Generate. The field is one line of text: the dialog framework has no multi-line text field yet, and spaces separate items as line breaks do. Documented, not yet observed."
 
 [[panel]]
 id = "dialog.addGlyphsExisting"
 label = "Glyphs Already in Font"
 location = "dialog"
 controls = [
-  "list of requested glyphs that already exist",
-  "Replace",
-  "Keep Existing",
-  "Cancel",
+  "list of requested glyphs that already exist (the label of the pop-up menu)",
+  "pop-up menu: Keep Existing (default) or Replace (`onExisting`)",
+  "Add Glyphs: run glyph.addGlyphs again with that choice",
+  "Cancel: add nothing",
 ]
 area = "font-view"
 milestone = "M4"
 summary = "Shown when Add Glyphs is asked for names the font already has. Replace swaps those glyphs for new empty ones, Keep Existing adds only the new names, Cancel adds nothing at all."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs"
 status = "handbook"
+notes = "Opens after the person's run of glyph.addGlyphs with `onExisting: \"ask\"` (Generate in dialog.addGlyphs, the menu, `ui.menu.invoke`) returns `existing` names; never after a control-channel or MCP run. The choice previews live; Cancel leaves the font as it was before Add Glyphs. Documented, not yet observed."
+guesses = [
+  "The three answers are a pop-up menu (Keep Existing first) with Add Glyphs and Cancel, as dialogs have two buttons; the handbook shows three buttons. Settled by observation.",
+]
 
 [[panel]]
 id = "dialog.missingGlyphs"
@@ -1268,6 +1274,10 @@ milestone = "M4"
 summary = "Dialog choosing how copied glyphs overwrite existing glyphs and which parts of them are transferred. The part checkboxes apply to the first two modes only."
 ref = "Font View › Copying Glyphs Between Files"
 status = "handbook"
+notes = "Runs edit.pasteSpecial with a live preview: the mode as a pop-up menu, the parts as checkboxes (sent in the first two modes), All Masters (sent with As Components). Cmd+Alt+V (the paste key with Option) or Edit › Paste Special opens it on the copied glyphs on the system clipboard, with the selected glyphs (Edit View: the edited glyph) as `targets` and the master shown as `master`. Clipboard text without copied glyphs opens nothing. Documented, not yet observed."
+guesses = [
+  "The dialog opens on Glyphs With Same Name with All Data ticked. Settled by observation.",
+]
 
 [[panel]]
 id = "dialog.removeGlyph"
@@ -1283,6 +1293,11 @@ milestone = "M4"
 summary = "Confirmation shown before glyphs are deleted. When other glyphs reference them, Remove also deletes those components while Decompose first turns them into outlines."
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
+notes = "Cmd+Delete and Glyph › Remove Glyph open it on the selected glyphs. It asks glyph.removeGlyph with `confirm: false` and adds a pop-up menu for each answer the command needs: `components` (Remove those components or Decompose them) and `metricsKeys` (the question of dialog.removeGlyphMetricsKeys). Remove runs the command once; Cancel changes nothing. Documented, not yet observed."
+guesses = [
+  "Remove or Decompose is a pop-up menu, Decompose first, beside Remove and Cancel, as dialogs have two buttons; the handbook shows a Decompose button. Settled by observation.",
+  "The metrics-key question is a second pop-up menu in the same dialog (Dissolve first) instead of a second dialog. Settled by observation.",
+]
 
 [[panel]]
 id = "dialog.removeGlyphMetricsKeys"
@@ -1297,6 +1312,7 @@ milestone = "M5"
 summary = "Second dialog of glyph deletion, shown when metrics keys of remaining glyphs point at a deleted glyph."
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
+notes = "FontCraft asks this as the `metricsKeys` pop-up menu of dialog.removeGlyph (Dissolve those keys, or Keep them)."
 
 [[panel]]
 id = "dialog.findAndReplaceGlyphNames"
@@ -1305,6 +1321,7 @@ location = "dialog"
 controls = [
   "Find field",
   "Replace field",
+  "Match Case checkbox",
   "Regex checkbox",
   "Replace button",
 ]
@@ -1313,6 +1330,11 @@ milestone = "M4"
 summary = "Dialog for renaming the selected glyphs by substring or regular-expression replacement."
 ref = "Font View › Batch-Processing › Batch-Renaming Glyphs"
 status = "handbook"
+notes = "Cmd+Shift+F opens it on the selected glyphs. Replace runs edit.findAndReplace once with `find`, `replace`, `matchCase` and `regex`; when a result is taken or not a valid name nothing is renamed and the dialog stays open with the problems. Documented, not yet observed."
+guesses = [
+  "A Match Case checkbox, on by default, as names are case-sensitive; the handbook names only Find, Replace and Regex. Settled by observation.",
+  "Nothing is renamed until Replace; there is no live preview. Settled by observation.",
+]
 
 [[panel]]
 id = "dialog.smartFilterEditor"

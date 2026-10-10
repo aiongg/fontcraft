@@ -1,18 +1,27 @@
-//! The system clipboard in Edit View.
+//! The system clipboard.
 //!
-//! Copy and Cut run `edit.copy` and `edit.cut` on the selection and put the `json` text of the
-//! result on the system clipboard. egui hands the platform one text per copy, and our own
-//! fragment pastes back without loss; `edit.paste` also reads the SVG other apps put there.
+//! In Edit View, Copy and Cut run `edit.copy` and `edit.cut` on the selection and put the `json`
+//! text of the result on the system clipboard. egui hands the platform one text per copy, and our
+//! own fragment pastes back without loss; `edit.paste` also reads the SVG other apps put there.
+//!
+//! In Font View, Copy runs `edit.copy` with the selected glyphs (and the master shown) and puts
+//! the copied glyphs, the `fontcraft-glyphs` text, on the clipboard; Paste runs `edit.paste` with
+//! that text, which adds the glyphs (a taken name gets the first free `.001` suffix), in this
+//! document or another. Text that holds no copied glyphs is not pasted in Font View.
 //!
 //! Paste takes the text the platform hands over with the key (`egui::Event::Paste`) and runs
 //! `edit.paste {text}` as the person's run, so the question about an outline pasted far outside
 //! the glyph can open. Edit › Paste from the menu carries no text: it asks the platform for the
-//! clipboard first, and the text arrives as a paste event in the next frame.
+//! clipboard first ([`request_text`]), and the text arrives as a paste event in the next frame.
+//!
+//! Paste Special (Option held with the paste key, or Edit › Paste Special, which asks for the
+//! text the same way) opens `dialog.pasteSpecial` on copied glyphs, with the selected glyphs as
+//! its `targets` and the master shown.
 //!
 //! Nothing here runs while a text field has the keyboard (it copies and pastes text itself) or a
 //! dialog is open.
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::app::FontcraftApp;
 use crate::tools_glue;
@@ -20,31 +29,62 @@ use crate::tools_glue;
 const COPY: &str = "edit.copy";
 const CUT: &str = "edit.cut";
 const PASTE: &str = "edit.paste";
+const PASTE_SPECIAL: &str = "edit.pasteSpecial";
+/// The `format` the engine writes into copied glyphs (`edit.copy` with `glyphs`).
+const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 
 /// Longest clipboard text a paste takes.
 pub const MAX_PASTE_BYTES: usize = 16 * 1024 * 1024;
 
-/// This frame's Copy, Cut and Paste events in Edit View, as the commands they run.
+/// The egui memory key under which Paste Special's request for the clipboard keeps the frame it
+/// was made in: the text arrives in the next frame or not at all.
+fn special_key() -> egui::Id {
+    egui::Id::new("fontcraft-paste-special")
+}
+
+/// This frame's Copy, Cut and Paste events, as the commands they run.
 pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str, Value)> {
-    if app.state.tab().is_none() || app.dialog.is_some() || ctx.egui_wants_keyboard_input() {
+    let asked = ctx.data_mut(|d| d.remove_temp::<u64>(special_key()));
+    let special_asked = asked.is_some_and(|frame| ctx.cumulative_frame_nr() <= frame.saturating_add(1));
+    if app.dialog.is_some() || ctx.egui_wants_keyboard_input() {
         return Vec::new();
     }
-    let events = ctx.input(|i| {
-        i.events.iter().filter(|e| matches!(e, egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_))).cloned().collect::<Vec<_>>()
+    let (events, alt) = ctx.input(|i| {
+        let events =
+            i.events.iter().filter(|e| matches!(e, egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_))).cloned().collect::<Vec<_>>();
+        (events, i.modifiers.alt)
     });
+    let font_view = app.state.tab().is_none();
     let mut out = Vec::new();
     for event in events {
         match event {
+            egui::Event::Copy if font_view => {
+                let params = font_view_params(app, COPY, json!({}));
+                if params.get("glyphs").is_some() {
+                    out.push((COPY, params));
+                }
+            }
+            egui::Event::Cut if font_view => {}
             egui::Event::Copy => out.push((COPY, json!({}))),
             egui::Event::Cut => out.push((CUT, json!({}))),
             egui::Event::Paste(text) if text.len() > MAX_PASTE_BYTES => {
                 app.state.status = format!("Paste: the clipboard holds more than {MAX_PASTE_BYTES} bytes");
             }
             egui::Event::Paste(text) => {
-                let mut params = tools_glue::with_targets(app, PASTE, Value::Null);
-                if let Some(m) = params.as_object_mut() {
-                    m.insert("text".into(), json!(text));
-                    out.push((PASTE, params));
+                if (special_asked || alt) && holds_glyphs(&text) {
+                    out.push(("dialog.open", paste_special(app, text)));
+                } else if font_view {
+                    if holds_glyphs(&text) {
+                        out.push((PASTE, json!({"text": text})));
+                    } else {
+                        app.state.status = "Paste: the clipboard holds no copied glyphs; open a glyph to paste an outline into it".into();
+                    }
+                } else {
+                    let mut params = tools_glue::with_targets(app, PASTE, Value::Null);
+                    if let Some(m) = params.as_object_mut() {
+                        m.insert("text".into(), json!(text));
+                        out.push((PASTE, params));
+                    }
                 }
             }
             _ => {}
@@ -53,10 +93,58 @@ pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str,
     out
 }
 
-/// A run of `id` with `params` that needs the clipboard's text first: Paste with nothing to
-/// paste.
+/// Copy's parameters in Font View, where it copies whole glyphs: the selected glyphs and the
+/// master shown, when `params` names nothing. Any other run keeps its `params`.
+pub fn font_view_params(app: &FontcraftApp, id: &str, params: Value) -> Value {
+    let empty = params.is_null() || params.as_object().is_some_and(Map::is_empty);
+    if id != COPY || !empty || app.state.tab().is_some() || app.state.selected_glyphs.is_empty() {
+        return params;
+    }
+    let mut m = Map::new();
+    m.insert("glyphs".into(), json!(app.state.selected_glyphs));
+    if let Some(master) = app.render_master() {
+        m.insert("master".into(), json!(master));
+    }
+    Value::Object(m)
+}
+
+/// Whether clipboard text holds copied glyphs rather than a drawing.
+fn holds_glyphs(text: &str) -> bool {
+    text.trim_start().starts_with('{') && text.contains(GLYPHS_FORMAT)
+}
+
+/// `dialog.open`'s parameters for Paste Special on `text`: the selected glyphs (the edited glyph
+/// in Edit View) as `targets`, and the master shown.
+fn paste_special(app: &FontcraftApp, text: String) -> Value {
+    let targets: Vec<String> = match app.state.tab() {
+        Some(tab) => tab.edited_glyph().map(str::to_string).into_iter().collect(),
+        None => app.state.selected_glyphs.clone(),
+    };
+    let mut params = Map::new();
+    params.insert("text".into(), json!(text));
+    if !targets.is_empty() {
+        params.insert("targets".into(), json!(targets));
+    }
+    if let Some(master) = app.render_master() {
+        params.insert("master".into(), json!(master));
+    }
+    json!({"dialog": "dialog.pasteSpecial", "params": params})
+}
+
+/// A run of `id` with `params` that needs the clipboard's text first: Paste or Paste Special
+/// with nothing to paste.
 pub fn wants_text(id: &str, params: &Value) -> bool {
-    id == PASTE && ["json", "svg", "text"].iter().all(|k| params.get(k).is_none_or(Value::is_null))
+    (id == PASTE || id == PASTE_SPECIAL) && ["json", "svg", "text"].iter().all(|k| params.get(k).is_none_or(Value::is_null))
+}
+
+/// Asks the platform for the clipboard's text for a run of `id` that [`wants_text`]; it arrives
+/// as a paste event in the next frame, which Paste Special's run marks as its own.
+pub fn request_text(ctx: &egui::Context, id: &str) {
+    if id == PASTE_SPECIAL {
+        let frame = ctx.cumulative_frame_nr();
+        ctx.data_mut(|d| d.insert_temp(special_key(), frame));
+    }
+    ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
 }
 
 /// After the person's run of `id`: Copy and Cut put their `json` text on the system clipboard
@@ -141,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn a_paste_far_outside_the_glyph_asks_the_question_and_font_view_ignores_the_clipboard() {
+    fn a_paste_far_outside_the_glyph_asks_the_question_and_font_view_takes_no_outline() {
         let mut app = square_app();
         let ctx = egui::Context::default();
         let far = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><rect x="5000" y="0" width="100" height="100"/></svg>"#;

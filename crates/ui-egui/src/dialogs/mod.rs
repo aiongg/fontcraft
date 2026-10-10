@@ -14,8 +14,9 @@
 //! would, and a command that fails keeps the dialog open with its message.
 //!
 //! A question asked after a command ([`Dialog::after`]) opens when the person runs that command
-//! (menu, shortcut, tool, or `ui.menu.invoke`) and its result calls for it; `engine.execute`
-//! (control channel, MCP) never opens one, as agents read the result themselves.
+//! (menu, shortcut, tool, `ui.menu.invoke`, or OK of a [`Mode::RunOnOk`] dialog that runs it) and
+//! its result calls for it; `engine.execute` (control channel, MCP) never opens one, as agents
+//! read the result themselves.
 //!
 //! The fields come from the command's parameters: a filter's from its `filter.list` schema
 //! ([`Fields::Filter`]), any other command's from a list in its dialog's file
@@ -39,7 +40,10 @@
 //! `Down` step the value by 1, by 10 with `Shift`. With no field taking the keyboard, `Return`
 //! is OK and `Escape` is Cancel. The rest of the app takes no input until the dialog closes.
 
+mod add_glyphs;
+mod add_glyphs_existing;
 mod export;
+mod find_and_replace;
 pub mod form;
 mod guide_properties;
 pub mod import_outlines_missing_glyph;
@@ -47,8 +51,10 @@ mod interpolate_with_background;
 mod languages_list;
 mod list_filter_editor;
 mod missing_glyphs;
+mod paste_special;
 pub mod pasted_outline_bounds;
 pub mod primitive_measurements;
+mod remove_glyph;
 mod round_corners;
 mod shape_order;
 mod smart_filter_editor;
@@ -185,6 +191,11 @@ pub const DIALOGS: &[Dialog] = &[
     list_filter_editor::NEW,
     languages_list::DIALOG,
     missing_glyphs::DIALOG,
+    add_glyphs::DIALOG,
+    add_glyphs_existing::DIALOG,
+    remove_glyph::DIALOG,
+    paste_special::DIALOG,
+    find_and_replace::DIALOG,
 ];
 
 /// The shell commands of this module.
@@ -675,8 +686,8 @@ pub(crate) fn confirm_by(app: &mut FontcraftApp, person: bool) -> Result<Value, 
     Ok(json!({"confirmed": true, "changed": changed, "command": command, "params": params}))
 }
 
-/// OK of a [`Mode::RunOnOk`] dialog: runs the command once. A failure keeps the dialog open
-/// with the message. An empty folder field is asked for with the folder chooser when the person
+/// OK of a [`Mode::RunOnOk`] dialog: runs the command once, then opens the question its result
+/// asks for, as after a menu item's run. A failure keeps the dialog open with the message. An empty folder field is asked for with the folder chooser when the person
 /// pressed OK (`export.promptWhenNoDestination`); over the control channel it is an error.
 fn run_on_ok(app: &mut FontcraftApp, person: bool) -> Result<Value, String> {
     let Some(d) = &app.dialog else { return Err("no dialog is open".into()) };
@@ -703,6 +714,11 @@ fn run_on_ok(app: &mut FontcraftApp, person: bool) -> Result<Value, String> {
         Ok(result) => {
             app.dialog = None;
             app.state.status = format!("{title}: done");
+            if let Some((next, given)) = after(&command, &params, &result)
+                && let Err(e) = open(app, &next, &given)
+            {
+                app.state.status = e;
+            }
             Ok(json!({"confirmed": true, "command": command, "params": params, "result": result}))
         }
         Err(e) => {

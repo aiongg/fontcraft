@@ -49,6 +49,8 @@ mod edit_background_tests;
 #[cfg(test)]
 mod font_view_tests;
 #[cfg(test)]
+mod glyph_set_dialog_tests;
+#[cfg(test)]
 mod guide_edit_tests;
 #[cfg(test)]
 mod inspector_tests;
