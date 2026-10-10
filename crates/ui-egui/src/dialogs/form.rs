@@ -513,6 +513,8 @@ fn list_rows(ui: &mut egui::Ui, field: &Field, rows: &[String], select: bool, se
     let height = row_height * shown.min(rows.len().max(1) as f32);
     ui.set_width(tokens.dialog_field_width * MULTI_WIDTH_FIELDS);
     let scroll = egui::ScrollArea::vertical().id_salt(id).max_height(height).min_scrolled_height(height).auto_shrink([false, true]);
+    // Rows touch: a selection reads as one band.
+    ui.spacing_mut().item_spacing.y = 0.0;
     scroll.show_rows(ui, row_height, rows.len(), |ui, range| {
         for at in range {
             let Some(row) = rows.get(at) else { continue };

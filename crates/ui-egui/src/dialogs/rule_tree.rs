@@ -288,9 +288,17 @@ pub fn control_id(key: &str, path: &[usize], part: &str) -> egui::Id {
     widget_id(key).with((path, part))
 }
 
+/// Levels of nesting the property column absorbs, so the comparison and value columns of
+/// rules at those levels line up.
+const ALIGNED_LEVELS: f32 = 3.0;
+
+fn indent_width(tokens: &Tokens, depth: usize) -> f32 {
+    tokens.dialog_spacing * 2.0 * depth as f32
+}
+
 fn indent(ui: &mut egui::Ui, tokens: &Tokens, depth: usize) {
     if depth > 0 {
-        ui.add_space(tokens.dialog_spacing * 2.0 * depth as f32);
+        ui.add_space(indent_width(tokens, depth));
     }
 }
 
@@ -386,7 +394,10 @@ fn rule_ui(ui: &mut egui::Ui, field: &Field, rule: &Value, path: &[usize], depth
     let width = tokens.dialog_field_width;
     ui.horizontal(|ui| {
         indent(ui, tokens, depth);
-        if let Some(p) = popup(ui, control_id(&field.key, path, "property"), width * 1.8, &PROPERTIES, property) {
+        // The property column narrows as the rule is nested deeper, keeping the next columns in line.
+        let column = width * 2.2 + indent_width(tokens, 1) * ALIGNED_LEVELS;
+        let property_width = (column - indent_width(tokens, depth)).max(width * 2.2);
+        if let Some(p) = popup(ui, control_id(&field.key, path, "property"), property_width, &PROPERTIES, property) {
             edits.push(Edit::Property(path.to_vec(), p));
         }
         let op_choices: Vec<(&'static str, &'static str)> = ops.iter().map(|o| (*o, label_of(&OPS, o))).collect();
