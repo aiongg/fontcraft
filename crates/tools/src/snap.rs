@@ -17,6 +17,9 @@ use crate::scene::Scene;
 use crate::selection::Selection;
 use crate::view::View;
 
+/// A node address: shape index, node index.
+type NodeRef = (usize, usize);
+
 /// What a point snapped to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,8 +106,8 @@ pub fn snap(scene: &Scene, view: &View, p: Point, moving: &Moving, distance: f64
 
     // Nodes, then handles: the nearest one within the distance.
     for want_on_curve in [true, false] {
-        let mut best: Option<(f64, Point, Option<(usize, usize)>)> = None;
-        let mut consider = |q: Point, node: Option<(usize, usize)>| {
+        let mut best: Option<(f64, Point, Option<NodeRef>)> = None;
+        let mut consider = |q: Point, node: Option<NodeRef>| {
             let d = dist(p, q);
             if d <= tol && best.is_none_or(|b| d < b.0) {
                 best = Some((d, q, node));
