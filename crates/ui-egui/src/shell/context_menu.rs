@@ -177,7 +177,7 @@ pub fn sections(session: &Session, state: &UiState, kinds: &[&'static str]) -> V
         .collect();
     for (id, context) in UI_CONTEXT {
         if let Some(c) = UI_COMMANDS.iter().find(|c| c.0 == *id) {
-            all.push(Candidate { id: c.0, label: c.1, context: *context, spec: None });
+            all.push(Candidate { id: c.0, label: c.1, context, spec: None });
         }
     }
     let rank = |id: &str| ORDER.iter().position(|o| *o == id).unwrap_or(ORDER.len());
