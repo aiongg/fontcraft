@@ -134,6 +134,13 @@ selected.
 - `scale {x, y}` in percent; locked means x is used for both.
 - `slant` in degrees: plain shear. Choosing Cursivy from the Slant label gives an optically
   corrected shear instead; Cursivy needs horizontal and vertical stem values in the master.
+- While the dialog is open the canvas shows the result; Cancel restores the outlines.
+- A round "…" button at the bottom left opens a menu with Copy Filter Parameter
+  (`path.transformations.copyFilterParameter`) and Copy PreFilter Parameter
+  (`path.transformations.copyPreFilterParameter`). Copy Filter Parameter puts the dialog's values
+  on the clipboard as a `Filter` custom parameter, ready to paste into an export. Slant 10° with
+  Origin baseline gives `Transformations;Slant:10;SlantCorrection:0;Origin:4;`: no spaces, a
+  semicolon after every item, and fields at their neutral value left out.
 
 ### Interpolate with Background (`path.interpolateWithBackground`, Path menu)
 
@@ -200,9 +207,13 @@ dispatches it through the registry (`filter.customParameter.sameRegistryAsComman
 - Hatch Outline: can the export string turn Offset Path off (open paths), e.g. `Offset: 0`?
 - Transformations string: meaning of the `±shift` notation (the appendix marks LSB/RSB with an
   asterisk it does not explain), whether an unsigned value is absolute, and whether `SlantCorrection`
-  is the same as Cursivy.
+  is the same as Cursivy. In the same video a plain slant (not Cursivy) is copied as
+  `SlantCorrection:0`, which fits the Cursivy reading but does not prove it.
 - The appendix places the Origin picker under "Filter › Transformations › Transform", the chapter
-  under Path › Transformations: which menu holds the dialog in the current version?
+  under Path › Transformations: which menu holds the dialog in the current version? In Glyphs 3 it
+  is Path › Transformations (tutorial video "How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners" (https://www.youtube.com/watch?v=4AJrNUWGRds), 1:49).
+- Copy PreFilter Parameter: does it copy the same string as a `PreFilter` parameter? The video
+  shows the menu item but does not run it. Do other filter dialogs carry the same "…" menu?
 - Whether Interpolate with Background leaves an incompatible glyph untouched silently or reports it.
   **Answered for M3 (our decision, 2026-10-09):** an incompatible glyph is left unchanged and listed
   in the result (`skipped`).

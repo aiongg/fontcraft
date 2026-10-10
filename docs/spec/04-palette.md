@@ -35,7 +35,7 @@ not defined in the handbook; see Open questions).
 | Control | Command | Effect |
 |---|---|---|
 | left and right fields | `fitCurve.setRange` | lower and upper percentage |
-| eight round buttons | `fitCurve.applyStep {step}` (Ctrl+Alt+1 … Ctrl+Alt+8) | step 1 = left value, step 8 = right value, steps 2 to 7 evenly between |
+| eight round buttons | `fitCurve.applyStep {step}` (Ctrl+Alt+1 … Ctrl+Alt+8; see Open questions 11) | step 1 = left value, step 8 = right value, steps 2 to 7 evenly between |
 | plus / minus | `fitCurve.increase`, `fitCurve.decrease` | lengthen or shorten uniformly |
 | scale button | `fitCurve.balanceHandles` | balance the two handles, keeping the overall curvature |
 | grey marker | `fitCurve.getHandleLength` | current length of the selected handle |
@@ -192,3 +192,13 @@ operation the Remove Overlap export option runs on every glyph.
    Correct Path Direction rule (03a question 16).
 9. Edit > Info for Selection is given with Cmd+Shift+I here and Cmd+Alt+I in the Edit View
    chapter; Cmd+Shift+I is also View > Show Info.
+10. Fit Curve default range. Question 2 takes 48 % and 74 % (the handbook's example) when the
+    `Fit Curve Panel Settings` parameter is absent. The Glyphs 3 palette in the tutorial video
+    "Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design"
+    (https://www.youtube.com/watch?v=VGe96Qjlvvc) shows 50 % and 70 % at 10:31 and 26:01. These
+    may be the presenter's own values or the Glyphs 3 default; the Glyphs 4 default is still
+    unknown.
+11. Fit Curve shortcut. `fitCurve.applyStep` gives Ctrl+Alt+1 … 8. In the same video (10:31,
+    26:06) an on-screen key overlay shows Cmd+Ctrl+Alt+1 … 8 while the handles change. Glyphs 3
+    and 4 may differ; check the current handbook and a Glyphs 4 observation before changing the
+    row.

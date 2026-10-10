@@ -21,6 +21,7 @@ milestone = "M2"
 summary = "Opens the export dialog for the frontmost document, with one tab per output kind (static OpenType, variable fonts, UFO, metrics). The dialog collects options and then runs the matching file.export* engine command."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: File › Export opens the dialog with the static OpenType tab set to PostScript (CFF) outlines. Not shown: Cmd+E, the other tabs."
 
 [[command]]
 id = "file.exportAll"
@@ -293,6 +294,7 @@ milestone = "M3"
 summary = "With Remove Overlap on, every exported glyph layer has its paths and components merged into non-overlapping outlines, using the same operation as Path › Remove Overlap. It is meant to be on for release builds and off only to speed up test exports or when the font already applies the Remove Overlap filter through custom parameters."
 ref = "Import & Export › Exporting Font Files › OpenType Export › Options"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: the export dialog has a Remove Overlap checkbox, left on. Its effect is not shown separately."
 
 [[behavior]]
 id = "export.autohintCff"
@@ -301,6 +303,7 @@ milestone = "M10"
 summary = "With Autohint on and the CFF flavour, the PostScript autohinter runs only on glyphs that carry no manual PostScript hints; manually hinted glyphs keep their hints."
 ref = "Import & Export › Exporting Font Files › OpenType Export › Options"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: the export dialog has an Autohint checkbox, left on, with CFF outlines. Its handling of manual hints is not shown."
 
 [[behavior]]
 id = "export.autohintTrueType"

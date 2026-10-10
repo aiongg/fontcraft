@@ -315,6 +315,8 @@ Equivalent manual route: set width or height to 0 in the Info box (`align.viaZer
 - An opened corner whose triangle is small relative to the adjacent visible segments is treated
   as invisible in the result, so it may also sit on the outside of a shape; above the threshold
   it shows (`openCorner.invisibleWhenSmall`).
+- `path.sharpenCorner` (context menu, below Open Corner): seen in tutorial videos with nodes, a
+  segment or a path selected; what it does is unknown (question 31).
 
 ## 14. Path direction
 
@@ -503,6 +505,7 @@ over many glyphs are one undo step each.
 Settle by observing the reference app, on our own fonts or in a tutorial video. An answer marked
 "for M3" is our decision: the row it changes is marked `inferred` when it is built, until an
 observation confirms it. Questions 25, 26 (M6) and 30 (M4) stay open; they block nothing in M3.
+Question 31 stays open and blocks only `path.sharpenCorner`.
 
 1. **Option-drag conflict**: `Alt` while moving nodes is documented both as "move only the
    selected points" and as "drag a duplicate". Which wins when (key pressed before vs after
@@ -518,6 +521,11 @@ observation confirms it. Questions 25, 26 (M6) and 30 (M4) stay open; they block
    **Answered for M3 (our decision, 2026-10-09):** a plain click on a segment inserts a node at the
    click; a click on an open end node continues that path; `Escape` or another tool ends the path. A
    tutorial video showing it would confirm or correct this.
+   **Video evidence (Glyphs 3):** "Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3
+   and Type Design" (https://www.youtube.com/watch?v=VGe96Qjlvvc) shows at 22:56–23:04 that a
+   click on the open end node of another path continues that path. At 22:57 a click on a segment
+   of another path starts the new line at that point; whether it also inserts a node into the
+   clicked path is not visible. That part stays open, and so does ending a path.
 4. **Draw tool `Shift`**: is there angle constraint while placing nodes or dragging handles?
    **Answered for M3 (our decision, 2026-10-09):** `Shift` constrains the new node or handle to 45°
    steps from the previous node.
@@ -637,3 +645,7 @@ observation confirms it. Questions 25, 26 (M6) and 30 (M4) stay open; they block
     (decision 0004 item 4, D4). No per-glyph filter in M3.
 30. **Start Window**: the list of scripts and glyph sets comes from the app's glyph data; we need
     our own data source for it.
+31. **Sharpen Corner**: what does it do, and on what selection? Tutorial videos show the item in
+    the canvas context menu with corner nodes, a segment or a path selected, below Open Corner, but
+    never run it. The handbook does not describe it. The name suggests it turns an opened or
+    rounded corner back into one sharp corner.

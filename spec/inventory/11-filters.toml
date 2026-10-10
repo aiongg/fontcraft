@@ -520,6 +520,7 @@ milestone = "M3"
 summary = "Applies an affine transform (move, scale, slant) to the selected points or to whole selected layers, around a chosen origin. scale.y defaults to scale.x (locked); cursivy switches the slant to the optically corrected variant. The origin choices come from the export parameter documentation, not from this chapter."
 ref = "Filters › Built-in Filters › Transformations › Transformations; Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:49–2:24: Path › Transformations opens the dialog and the canvas previews a 10° slant. Not shown: translate and scale results, Cursivy."
 
 [[panel]]
 id = "dialog.transformations"
@@ -527,15 +528,46 @@ label = "Transformations"
 location = "dialog"
 controls = [
   "Translate X and Y fields",
-  "Origin picker",
+  "Origin pop-up",
   "Scale horizontal and vertical fields with lock button",
-  "Slant field whose label is a pop-up: Slant | Cursivy",
+  "Slant field whose label opens a pop-up (its items: path.transformations.slantVsCursivy)",
+  "Cancel and OK buttons",
+  "round \"…\" button at the bottom left, opening a menu with Copy Filter Parameter and Copy PreFilter Parameter",
 ]
 area = "drawing"
 milestone = "M3"
-summary = "Dialog for a one-off affine transformation of the selection or of selected layers."
+summary = "Dialog for a one-off affine transformation of the selection or of selected layers. While it is open the canvas shows the result; Cancel puts the outlines back as they were."
 ref = "Filters › Built-in Filters › Transformations › Transformations"
-status = "handbook"
+status = "observed"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:49–2:24: fields Translate X and Y, an Origin pop-up (set to baseline), Scale horizontal and vertical with a lock, a Slant field whose label carries a pop-up arrow, Cancel and OK, and a round \"…\" button at the bottom left. The glyph is drawn transformed while the dialog is open and returns to its old shape after Cancel."
+
+[[command]]
+id = "path.transformations.copyFilterParameter"
+label = "Copy Filter Parameter"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{translate?: {x: number, y: number}, origin?: \"capHeight\"|\"halfCapHeight\"|\"xHeight\"|\"halfXHeight\"|\"baseline\", scale?: {x: percent, y?: percent}, slant?: degrees, cursivy?: bool} → {text: string}"
+area = "drawing"
+milestone = "M3"
+summary = "First item of the round \"…\" menu at the bottom left of the Transformations dialog. It copies the dialog's current values as a Filter custom parameter, which can be pasted into an export's custom parameters. With Slant 10° and Origin baseline the value reads Transformations;Slant:10;SlantCorrection:0;Origin:4; and fields left at their neutral value (no translation, 100 % scale) are not written."
+ref = "Transformations dialog; not described in the handbook"
+status = "observed"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:16–2:47: the \"…\" button opens a menu with this item and Copy PreFilter Parameter; after choosing this item, pasting in Font Info › Exports adds a Filter parameter with the value above."
+
+[[command]]
+id = "path.transformations.copyPreFilterParameter"
+label = "Copy PreFilter Parameter"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{translate?: {x: number, y: number}, origin?: \"capHeight\"|\"halfCapHeight\"|\"xHeight\"|\"halfXHeight\"|\"baseline\", scale?: {x: percent, y?: percent}, slant?: degrees, cursivy?: bool} → {text: string}"
+area = "drawing"
+milestone = "M3"
+summary = "Second item of the round \"…\" menu at the bottom left of the Transformations dialog, below Copy Filter Parameter."
+ref = "Transformations dialog; not described in the handbook"
+status = "observed"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:16–2:24: only the menu item is seen; it is not run. By its label it copies the same string as a PreFilter custom parameter; that is unconfirmed (11-filters open questions)."
 
 [[behavior]]
 id = "path.transformations.targets"
@@ -560,6 +592,7 @@ milestone = "M3"
 summary = "Origin is the fixed point that scaling and slanting are measured from. As an export filter it is a number 0–4: cap height, half cap height, x-height, half x-height, baseline."
 ref = "Filters › Built-in Filters › Transformations › Transformations; Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:53–2:47: the dialog's Origin pop-up is set to baseline, and Copy Filter Parameter writes it as Origin:4. The other four codes are not shown."
 
 [[behavior]]
 id = "path.transformations.scaleLock"
@@ -568,6 +601,7 @@ milestone = "M3"
 summary = "Scale has separate horizontal and vertical factors; with the lock closed the horizontal factor is used for both."
 ref = "Filters › Built-in Filters › Transformations › Transformations"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:53–1:58: the dialog has horizontal and vertical scale fields with a lock button. Its effect is not shown."
 
 [[behavior]]
 id = "path.transformations.slantVsCursivy"
@@ -576,6 +610,7 @@ milestone = "M3"
 summary = "Slant is a plain shear with no compensation. Clicking the Slant label offers Cursivy, a shear with optical correction of the curves."
 ref = "Filters › Built-in Filters › Transformations › Transformations"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 1:53–2:47: the Slant label carries a pop-up arrow; the pop-up is not opened. A plain 10° slant is copied as Slant:10;SlantCorrection:0."
 
 [[behavior]]
 id = "path.transformations.cursivyNeedsStems"
@@ -647,6 +682,7 @@ milestone = "M3"
 summary = "Unions overlapping closed paths into non-overlapping outlines. Works on the selected paths, or on all paths of the layer when nothing is selected or when several glyphs are targeted. Filter-registry entry for the Path menu command; the shortcut is given in the Font View and Reusing Shapes chapters."
 ref = "Filters › Built-in Filters › Remove Overlap; Font View chapter (shortcut)"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Remove Overlap with Cmd+Shift+O. 15:06–15:10 and 30:18–30:19: overlapping shapes are merged into one after Select All (partly visible; the command is not seen)."
 
 [[behavior]]
 id = "path.removeOverlap.selectionRule"
@@ -697,6 +733,7 @@ milestone = "M7"
 summary = "A Filter custom parameter on an instance (export) holds one filter string; at export the named filter runs on that instance's glyphs after composites have been decomposed."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:34–2:47 and 4:44–5:15: pasting in an instance's custom parameters adds a Filter entry holding the copied Transformations string, and the exported instance is slanted. Not shown: when it runs relative to decomposition."
 
 [[behavior]]
 id = "filter.customParameter.preFilter"
@@ -705,6 +742,7 @@ milestone = "M7"
 summary = "PreFilter takes the same strings as Filter but runs before decomposition, so components are still intact. It is honoured for static fonts only."
 ref = "Appendix › Custom Parameters › PreFilter"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 0:54–1:30: PreFilter entries Decompose and RemoveOverlap are added to an instance. Their timing and the static-only limit are not shown."
 
 [[behavior]]
 id = "filter.customParameter.syntax"
@@ -713,6 +751,7 @@ milestone = "M7"
 summary = "A filter string is the filter name followed by arguments, all separated by semicolons. Arguments are positional values or key: value pairs depending on the filter."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:34–2:47: the app writes Transformations;Slant:10;SlantCorrection:0;Origin:4; that is, the name, then Key:value arguments, with no spaces and a semicolon after every item. Not shown: positional arguments."
 
 [[behavior]]
 id = "filter.customParameter.booleans"

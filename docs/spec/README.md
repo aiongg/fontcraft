@@ -2,7 +2,7 @@
 
 What FontCraft is meant to do, in two forms that point at each other:
 
-- **`spec/inventory/*.toml`: the inventory.** 3,633 rows a tool can read: every command, tool,
+- **`spec/inventory/*.toml`: the inventory.** 3,636 rows a tool can read: every command, tool,
   panel, setting, custom parameter, behaviour rule, quality check, CLI subcommand, file format and
   OpenType table. `cargo xtask spec` checks it; `cargo xtask parity` compares it with the code and
   writes [`../parity.md`](../parity.md). The row schema is [`../../spec/README.md`](../../spec/README.md).
@@ -20,16 +20,16 @@ is possible, by an oracle where there is one, or by a recorded decision of ours.
 | Notes | Inventory | Source | Rows | Open questions |
 |---|---|---|---:|---:|
 | [00 Open decisions](00-open-decisions.md) | `00-app-basics.toml` | ours | 17 | – |
-| [03a Edit View: drawing](03a-edit-view-drawing.md) | `03a-edit-view-drawing.toml` | handbook ch. 1–3 | 194 | 30 |
+| [03a Edit View: drawing](03a-edit-view-drawing.md) | `03a-edit-view-drawing.toml` | handbook ch. 1–3 | 195 | 31 |
 | [03b Edit View: display, text, measuring](03b-edit-view-display.md) | `03b-edit-view-display.toml` | handbook ch. 3 | 187 | 17 |
-| [04 Palette](04-palette.md) | `04-palette.toml` | handbook ch. 4 | 75 | 9 |
+| [04 Palette](04-palette.md) | `04-palette.toml` | handbook ch. 4 | 75 | 11 |
 | [05 Font View](05-font-view.md) | `05-font-view.toml` | handbook ch. 5, GlyphData | 284 | 20 |
 | [06 Font Info](06-font-info.md) | `06-font-info.toml` | handbook ch. 6 | 200 | 29 |
 | [07 Import and export](07-import-export.md) | `07-import-export.toml` | handbook ch. 7 | 102 | 20 |
 | [08 Spacing and kerning](08-spacing-kerning.md) | `08-spacing-kerning.toml` | handbook ch. 8 | 126 | 19 |
 | [09 Reusing shapes](09-reusing-shapes.md) | `09-reusing-shapes.toml` | handbook ch. 9 | 167 | 39 |
 | [10 Interpolation](10-interpolation.md) | `10-interpolation.toml` | handbook ch. 10, designspace docs | 131 | 21 |
-| [11 Filters](11-filters.md) | `11-filters.toml` | handbook ch. 11 | 85 | 14 |
+| [11 Filters](11-filters.md) | `11-filters.toml` | handbook ch. 11 | 87 | 15 |
 | [12 Feature code](12-feature-code.md) | `12-feature-code.toml`, `12b-feature-language.toml` | handbook ch. 12 and appendix, the feature-file spec | 361 | 26 |
 | [13 PostScript hinting](13-postscript-hinting.md) | `13-postscript-hinting.toml` | handbook ch. 13, otfautohint | 93 | 12 |
 | [14 TrueType hinting](14-truetype-hinting.md) | `14-truetype-hinting.toml` | handbook ch. 14 | 121 | 18 |
@@ -48,11 +48,11 @@ is possible, by an oracle where there is one, or by a recorded decision of ours.
 
 | `status` | Rows | Means |
 |---|---:|---|
-| `handbook` | 2,114 | stated in the primary reference's public handbook |
+| `handbook` | 2,112 | stated in the primary reference's public handbook |
 | `docs` | 1,055 | stated in another public document or in permissively licensed source |
 | `inferred` | 387 | our own design: headless forms of pointer actions, queries, FontCraft-only features |
 | `memory` | 30 | recalled, not found in a source read for this work. **Verify before implementing** |
-| `observed` | 47 | checked against the running reference: the app on our own synthetic fonts, the app in a public tutorial video (decision D13), or a reference compiler's output. So far only compiled tables checked against the oracles |
+| `observed` | 52 | checked against the running reference: the app on our own synthetic fonts, the app in a public tutorial video (decision D13), or a reference compiler's output. So far: compiled tables checked against the oracles, and five editor rows confirmed by tutorial videos |
 
 A row confirmed by a tutorial video names the video in its `notes`: title, channel, URL and the
 time in the video where the behaviour shows. A row becomes `observed` when the video shows

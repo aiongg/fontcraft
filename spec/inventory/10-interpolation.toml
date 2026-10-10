@@ -746,6 +746,7 @@ milestone = "M9"
 summary = "A Rename Glyphs parameter on an instance or variable font setting lists one swap per line as name=othername, e.g. cent=cent.simple; the two glyphs trade places in that export. Adding Remove Glyphs with the names that now hold the unwanted normal outlines turns the swap into a replacement."
 ref = "Interpolation › Switching Shapes › Replacing Glyphs at Export"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 3:35–4:11 and 4:44–5:15: a Rename Glyphs parameter on an instance holds one rule per line (a=a.ss01, g=g.ss01) and the exported instance shows the alternate shapes as a and g. Not shown: Remove Glyphs."
 
 [[behavior]]
 id = "switching.conditionalSubstitution"

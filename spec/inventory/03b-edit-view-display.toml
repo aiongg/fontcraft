@@ -63,6 +63,7 @@ milestone = "M3"
 summary = "Part of the Info box that reports the current selection: position and size of its bounding box, or exact coordinates when one node is selected, plus offset and length when the selected point is a handle. Every number is an editable field. Selecting two nodes shows their distance in the width or height field, which is the quick way to read a stem width."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:06–5:08: with a new rectangle selected the Info box shows X and Y, width and height (146 × 700) and, in Glyphs 3, a node count of 4. Not shown: single-node coordinates, handle offset and length, the reference-point grid."
 
 [[panel]]
 id = "infoBox.component"
@@ -243,6 +244,7 @@ milestone = "M3"
 summary = "Clicking a number in the Info box turns it into a text field. Return or leaving the field commits; Escape cancels the edit and leaves no field focused; Tab commits and moves to the next value, Shift+Tab to the previous one."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:36–6:40: typing a new width into the W field resizes the selected rectangle; X appears to stay the same (partly visible)."
 
 [[behavior]]
 id = "infoBox.arrowKeyStepping"
@@ -311,6 +313,7 @@ milestone = "M3"
 summary = "Pointer tool that scrolls the Edit View canvas by dragging. While it is active the current glyph is drawn filled if Fill Preview is on."
 ref = "Edit View › Glyph Display › Panning"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:48, 14:48 and 19:34: with the Hand tool highlighted, a drag pans and the edited glyph is drawn filled. Not shown: the H key, Space, Cmd+Space."
 
 [[command]]
 id = "view.zoomIn"
@@ -623,6 +626,7 @@ milestone = "M3"
 summary = "Toggles filling closed paths with the foreground colour. The glyph being edited is filled only while one of the Text, Hand and Zoom tools is active."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:48, 14:48 and 19:34: while the Hand tool pans, the edited glyph is drawn solid black without nodes, and its outline view returns afterwards. Not shown: the menu toggle, the Text and Zoom tools."
 
 [[command]]
 id = "view.getDisplayOptions"
@@ -677,6 +681,7 @@ milestone = "M4"
 summary = "Menu opened by Ctrl-clicking or right-clicking the canvas of the active glyph. This section documents only its colour label part."
 ref = "Edit View › Glyph Display › Glyph & Layer Colors"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:12: the context menu with a path selected offers Set Glyph Color swatches. In Glyphs 3 it also lists Sharpen Corner, Reverse Selected Contours, Focus on Selected Paths, Component from Selection, Add Component…, Add Anchor, Add Horizontal Hint, Add Vertical Hint, Add Guide, Autohint, Export, Locked, Show Glyph in Font View and Copy Glyph Names. Not shown: Option for layer colours."
 
 [[command]]
 id = "path.editBackground"
@@ -690,6 +695,7 @@ milestone = "M3"
 summary = "Toggles between editing the layer's foreground and its background. While the background is the active side the canvas is drawn slightly darker."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Edit Background with Cmd+B. Not run."
 
 [[command]]
 id = "path.selectionToBackground"
@@ -703,6 +709,7 @@ milestone = "M3"
 summary = "Replaces the whole content of the background with a copy of the current selection. When the background is the active side it works the other way and replaces the foreground. Run on glyphs selected in Font View it copies each layer into its own background."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Selection to Background with Cmd+J. Not run."
 
 [[command]]
 id = "path.addSelectionToBackground"
@@ -729,6 +736,7 @@ milestone = "M3"
 summary = "Exchanges the full contents of the foreground and the background of the layer."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Swap with Background with Cmd+Ctrl+J. Not run."
 
 [[command]]
 id = "path.clearBackground"
@@ -755,6 +763,7 @@ milestone = "M3"
 summary = "Copies outlines from another font file into the background of every selected glyph; we assume glyphs are matched by name, which the handbook does not say. Choosing the font itself as the source snapshots the current outlines so later edits can be compared against them."
 ref = "Edit View › Background"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Assign Background… without a shortcut. Not run."
 
 [[behavior]]
 id = "background.everyLayerHasOne"
@@ -1327,6 +1336,7 @@ milestone = "M3"
 summary = "Read-only tool for coordinates and distances. It labels all points of every glyph visible in the tab and measures along a dragged ruler, showing the ruler's angle at its end."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: with the Measurement tool active, every node and handle is labelled with its X and Y, and the deltas between consecutive on-curve nodes appear in red as dx, dy pairs. Not shown: the ruler drag, Shift, G, the temporary-tool keys."
 
 [[command]]
 id = "measure.ruler"
@@ -1353,6 +1363,7 @@ milestone = "M3"
 summary = "Query returning every on-curve node, off-curve point and anchor of a layer with coordinates, plus the X and Y deltas between consecutive on-curve nodes with X corrected for the italic angle. Headless form of the labels the Measurement tool draws."
 ref = "Edit View › Measuring › Measurement Tool"
 status = "inferred"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31 and 29:27: the Measurement tool labels every node and handle with X and Y and shows dx, dy deltas between consecutive on-curve nodes, the data this query returns. The query itself is our design."
 
 [[command]]
 id = "guide.toggleMeasurement"

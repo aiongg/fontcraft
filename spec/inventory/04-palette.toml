@@ -23,6 +23,7 @@ milestone = "M3"
 summary = "Right-hand sidebar of the font window made of collapsible sections. Four sections are built in and plug-ins can add more."
 ref = "Palette"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:08: the Palette shows Alignment, Dimensions, Fit Curve, Layers and Transformations, plus Stroke while a path is selected. The Alignment section is not in this row's built-in list; it may come from a plug-in or be Glyphs 3 only. Not shown: collapsing sections, the sidebar button."
 
 [[command]]
 id = "window.palette"
@@ -145,6 +146,7 @@ milestone = "M3"
 summary = "Section for setting the handle lengths of curve segments as a percentage, to get evenly curved outlines. Every action treats both handles of a segment together even if only one is selected."
 ref = "Palette › Fit Curve"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31–10:35 and 26:01: two percentage fields, reading 50% and 70%, with eight round buttons between a minus and a plus button. Not shown: the grey marker, the balance button. The 50/70 values are 04 open question 10."
 
 [[command]]
 id = "fitCurve.applyStep"
@@ -159,6 +161,7 @@ milestone = "M3"
 summary = "Sets the handles of the selected curve segments to one of eight lengths. Step 1 is the value of the left field, step 8 the value of the right field, and steps 2 to 7 divide the range between them evenly. Ctrl+Alt+1 through Ctrl+Alt+8 run steps 1 to 8."
 ref = "Palette › Fit Curve"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31–10:35 and 26:01–26:16: handle lengths change step by step while an on-screen key overlay reads Ctrl, Cmd and Opt with 1 to 8 (Cmd+Ctrl+Alt+1 … 8), not this row's Ctrl+Alt; see 04 open question 11."
 
 [[command]]
 id = "fitCurve.setHandleLength"
@@ -517,6 +520,7 @@ milestone = "M3"
 summary = "Section for numeric transformations of whatever is selected: points, segments, paths, components, anchors, guides and images in Edit View, or whole layers of the glyphs selected in Font View. The button on each side of a field performs the opposite operation with the same value."
 ref = "Palette › Transformations"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Glyphs 3 section shows a 3×3 origin picker, a crosshair, a metrics-origin picker, two mirror buttons, a scale percentage with a lock and a greyed second percentage, a rotate field with buttons on each side, two slant rows each with its own angle field, six align buttons and three boolean buttons. The two separate slant angle fields differ from this row's single slant field."
 
 [[command]]
 id = "transform.setOrigin"
@@ -530,6 +534,7 @@ milestone = "M3"
 summary = "Chooses the fixed point for Palette transformations: a point of the selection bounding box, the reference point set with the Scale or Rotate tool, a vertical metric of the master, or (for CJK glyphs) the centre of the layer. Alignment ignores this setting, except through Path > Align Selection."
 ref = "Palette › Transformations › Transformation Origin"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Transformations section shows the 3×3 box picker, a reference-point crosshair and a metrics-origin picker. Choosing an origin is not shown."
 
 [[command]]
 id = "transform.mirrorHorizontal"
@@ -543,6 +548,7 @@ milestone = "M3"
 summary = "Flips the selection left to right across a vertical axis through the transformation origin. With a metrics point as origin the axis is the horizontal centre of the layer (half the advance width). A mirrored corner component changes handedness, left corner becoming right corner."
 ref = "Palette › Transformations › Mirroring"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07 and 19:23–19:50: the Palette button with the tooltip \"flip horizontal\" mirrors the selected copy in place. Not shown: a metrics origin, corner components."
 
 [[command]]
 id = "transform.mirrorVertical"
@@ -556,6 +562,7 @@ milestone = "M3"
 summary = "Flips the selection top to bottom across a horizontal axis through the transformation origin. With the origin set to half x-height or half cap height, overshoots are kept, so an overshooting arch ends up overshooting the baseline."
 ref = "Palette › Transformations › Mirroring"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 29:36–29:42: a copy of an arch is flipped top to bottom and moved down (partly visible; the button is not seen). Not shown: the overshoot rule."
 
 [[command]]
 id = "transform.scale"

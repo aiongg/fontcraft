@@ -1294,6 +1294,7 @@ milestone = "M7"
 summary = "Adds a static instance, named Regular unless a name is given. First entry of the plus menu at the bottom-left of the Exports tab."
 ref = "Font Info › Exports"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 0:24–0:50: the plus button in the Exports tab adds a second instance, which is then named Regular Italic. Not shown: the default name, the rest of the plus menu."
 
 [[command]]
 id = "font.instance.addForEachMaster"
@@ -1398,6 +1399,7 @@ milestone = "M7"
 summary = "Declares an instance to be the bold, the italic or the bold italic of another instance by setting the two checkboxes and the style name of the base instance. The link only works between fonts that share a family name."
 ref = "Font Info › Exports › Style Linking"
 status = "handbook"
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 0:24–0:50: under Style Linking the Italic checkbox is ticked with Regular as the base style. Not shown: Bold, the shared-family-name condition."
 
 [[command]]
 id = "font.instance.setWeightClass"

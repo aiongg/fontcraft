@@ -309,6 +309,7 @@ milestone = "M3"
 summary = "Pen tool for building Bézier outlines node by node. Clicks give straight joins, drags give curve handles whose length sets the curvature; it also opens paths at a node and inserts nodes at extremes and inflections."
 ref = "Edit View › Draw Tool"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 22:56–23:12 and 29:57–30:03: clicks place corner nodes joined by straight segments, a drag places a node with two handles and a curved segment, and a click on the first node closes the path, which then fills. Not shown: the Alt, Cmd and Space drag variants, opening a closed path at a node, Shift+click on a segment. At 22:57 a click on another path's segment starts the new line there; whether that also inserts a node into the clicked path is not visible (03a open question 3)."
 
 [[tool]]
 id = "pencil"
@@ -342,6 +343,7 @@ milestone = "M3"
 summary = "Rectangle mode of the Primitives tool, which adds a closed rectangular path either by dragging or from typed measurements."
 ref = "Edit View › Primitives"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:06–5:08 and 6:22–6:28: a drag creates a closed four-node rectangle, selected afterwards; during the drag a grey badge near the pointer shows the live width × height. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F."
 
 [[tool]]
 id = "ellipse"
@@ -361,6 +363,7 @@ milestone = "M3"
 summary = "Ellipse mode of the Primitives tool, which adds a closed elliptical path either by dragging or from typed measurements."
 ref = "Edit View › Primitives"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 9:06–9:11: a drag creates a closed ellipse with four smooth nodes at its extremes (top, bottom, left, right), with a size badge during the drag. At 12:21 the toolbar button opens a menu listing Rectangle and Circle. Not shown: the click dialog, Shift, Alt, Shift+F."
 
 [[command]]
 id = "tool.drawRectangle"
@@ -486,6 +489,7 @@ milestone = "M3"
 summary = "Tools that share one toolbar button (Select/Lasso, the two Primitives modes, Erase/Knife) have one shortcut letter; pressing Shift plus that letter switches to the other tool of the group, and click-and-hold on the button opens a menu listing the group's tools."
 ref = "Edit View › Cutting Paths"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. Not shown: Shift plus the letter."
 
 [[behavior]]
 id = "points.terminology"
@@ -603,6 +607,7 @@ milestone = "M3"
 summary = "A marquee picks up both nodes and handles that fall inside it; with Option held it picks up on-curve nodes only."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:28: a marquee over a whole glyph selects its nodes and its handles. Not shown: the Option variant."
 
 [[behavior]]
 id = "selection.slantedMarquee"
@@ -635,6 +640,7 @@ milestone = "M3"
 summary = "A segment is treated as selected when both of its end nodes are selected or when at least one of its handles is selected."
 ref = "Edit View › Deleting Nodes"
 status = "handbook"
+notes = "Video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.5: with the two end nodes of a segment selected, the segment between them is drawn highlighted. Not shown: the case of a selected handle."
 
 [[command]]
 id = "edit.selectAll"
@@ -743,6 +749,7 @@ milestone = "M3"
 summary = "Moves the selected nodes, handles, anchors or guides by an offset in font units. It is what the arrow keys run: one unit per press, 10 with Shift, 100 with Cmd; the mode mirrors the Option (points only) and Ctrl+Option (nudge) modifiers."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:42–13:45: dragging the two selected top nodes of a rectangle moves only them, which slants the stem. Arrow-key steps: see move.arrowKeyIncrements."
 
 [[behavior]]
 id = "move.arrowKeyIncrements"
@@ -751,6 +758,7 @@ milestone = "M3"
 summary = "Each arrow key press moves the selection by 1 unit, by 10 units with Shift and by 100 units with Cmd. The same steps apply to selected handles, anchors and guides."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:48–6:51 and 8:02–8:06: with the pointer still, a selected shape moves in steps of exactly 10 units and a selected node in steps of 1 unit. The keys are not visible."
 
 [[behavior]]
 id = "move.nodesCarryHandles"
@@ -872,6 +880,7 @@ milestone = "M3"
 summary = "Heuristically sets each node to smooth or corner and removes redundant points: handles lying on a straight segment, on-curve nodes sitting exactly on the line between their neighbours, and adjacent nodes with identical coordinates (which get merged). Works on the selected nodes, or on all nodes when nothing is selected."
 ref = "Edit View › Converting Nodes and Segments"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Tidy up Paths with Cmd+Shift+T. Not run."
 
 [[command]]
 id = "path.tidyUpPathsForAllMasters"
@@ -954,6 +963,7 @@ milestone = "M3"
 summary = "Rotates the current selection freehand about an origin the user places with a click."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 12:25–12:30: with the Rotate tool, a drag rotates the selected rectangle about a pivot at the selection's centre, with a line drawn from the pivot to the pointer. Not shown: setting the origin with a click, Shift."
 
 [[tool]]
 id = "scale"
@@ -991,6 +1001,7 @@ milestone = "M3"
 summary = "When more than one node is selected a bounding box with eight knobs (four sides, four corners) is drawn. Dragging a knob scales the selected points with the opposite knob as fixed point; Shift keeps proportions and Option uses the box centre as fixed point."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 23:51: with several nodes selected, dragging the top or bottom knob scales them vertically, with a badge showing the percentage and new height. 9:24–9:31: a corner-knob drag shrinks an ellipse about its centre with its proportions kept, which fits Shift+Option, but the keys are not visible."
 
 [[behavior]]
 id = "boundingBox.rotateOutside"
@@ -1038,6 +1049,7 @@ milestone = "M3"
 summary = "Lines up all selected nodes, handles and anchors on one coordinate. It picks the axis on its own, collapsing whichever of the selection's width or height is smaller, and the coordinate they land on follows the transformation origin set in the Palette's transformations section. Special cases apply for anchors, components and single nodes (see the align.* behaviours)."
 ref = "Edit View › Aligning"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Align Selection with Cmd+Shift+A. Not run."
 
 [[behavior]]
 id = "align.viaZeroDimension"
@@ -1088,6 +1100,7 @@ milestone = "M3"
 summary = "Dragging a selection with Option held leaves the original in place and drags a copy to the new position. If only part of a path is selected, the selected segments are copied as a new open path (useful for repeating serifs and similar parts). Copy (Cmd+C) and paste (Cmd+V) is the alternative."
 ref = "Edit View › Duplicating Paths"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 6:42–6:44 and 18:36–18:38: dragging a selected shape leaves the original and moves a copy, drawn darker during the drag, with a badge showing the offset. The modifier key is not visible."
 
 [[command]]
 id = "edit.delete"
@@ -1206,6 +1219,7 @@ milestone = "M3"
 summary = "Cuts outlines along a straight line dragged across them and closes the resulting pieces along that line. Shares the toolbar button and the E key with the Erase tool."
 ref = "Edit View › Cutting Paths"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:54–12:05: tooltip \"Knife (E)\"; a line dragged across both contours of an O cuts them, and after a second cut the piece between the two lines is its own closed shape. Not shown: cuts across several overlapping paths, Shift+E."
 
 [[tool]]
 id = "erase"
@@ -1248,6 +1262,7 @@ milestone = "M3"
 summary = "Context-menu command that replaces a selected corner node by two nodes whose segments cross in a small triangular overlap, so the two segments can be edited independently. Does nothing on smooth nodes; with a segment selected it opens the nodes at both ends of that segment."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30–15:36 and 28:34–28:45, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75–0:31: offered in the context menu of a selected corner node and of a selected segment; the corner becomes two nodes whose segments cross, leaving a small loop, and the nodes are then edited independently. Not shown: the no-op on smooth nodes, and that a selected segment opens the nodes at both of its ends."
 
 [[command]]
 id = "path.reconnectNodes"
@@ -1262,6 +1277,22 @@ milestone = "M3"
 summary = "Context-menu command with two uses: on the two nodes of an open corner it restores the single corner node; on any even number of selected nodes it pairs each node with its nearest selected neighbour and rewires the outline through those pairs, creating overlapping corners."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 28:34–28:35, and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75: listed as the first item of the context menu, above Open Corner, with nodes selected. Its effect is not shown."
+
+[[command]]
+id = "path.sharpenCorner"
+label = "Sharpen Corner"
+menu = []
+context = ["canvas.node", "canvas.segment", "canvas.path"]
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, points?: [[shape, node]], shapes?: [index]} → {selection}"
+area = "path-ops"
+milestone = "M3"
+summary = "Context-menu command offered with selected nodes, a selected segment or a selected path, listed below Open Corner when that item is offered. What it does to the outline is not described in the handbook and has not been observed (03a open question 31)."
+ref = "Edit View context menu; not described in the handbook"
+status = "observed"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:12 (path selected) and 15:30 (corner node selected), and video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:06.75 (segment selected): the item appears in the canvas context menu each time. It is never run. The name suggests it turns an opened or rounded corner back into one sharp corner; that is unconfirmed."
 
 [[behavior]]
 id = "openCorner.overlapSize"
@@ -1278,6 +1309,7 @@ milestone = "M3"
 summary = "An opened corner whose triangular overlap is small compared with the visible segments next to it is treated as invisible and does not show in the final outline, which allows opened corners on the outside of a shape. Once the overlap exceeds the threshold it becomes visible. The threshold is not specified."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
+notes = "Video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:24.5: in the filled preview the join is clean and the overlap loop of an opened corner does not show. The threshold is not visible."
 
 # ───────────────────────────── Path direction ─────────────────────────────
 
@@ -1310,6 +1342,7 @@ milestone = "M3"
 summary = "Node context-menu command that makes the clicked on-curve node the start node of its closed path, rotating the stored point order without changing the shape."
 ref = "Edit View › Controlling Path Direction"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30: Make Node First is listed in the context menu of a selected corner node, followed by a Reverse Contour item. Its effect is not shown."
 
 [[command]]
 id = "path.reverseContours"
@@ -1324,6 +1357,7 @@ milestone = "M3"
 summary = "Reverses the point order of the selected paths, or of every path on the layer when no path is selected. The shortcut is stated in the Font View chapter. The context menu offers the same action as Reverse Selected Contours or Reverse All Contours depending on whether a path is selected."
 ref = "Edit View › Controlling Path Direction"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:57–11:30: the Path menu lists Reverse Contours with Cmd+Ctrl+Alt+R; with a path selected the context menu offers Reverse Selected Contours, and running it on an inner contour drawn in the same direction as the outer one turns it into a counter. Not shown: the case with no path selected and the Reverse All Contours label."
 
 [[command]]
 id = "path.reverseContoursForAllMasters"
@@ -1350,6 +1384,7 @@ milestone = "M3"
 summary = "Works out the proper direction of every path on the current layer (or on each selected glyph layer) from how the paths nest, and applies it. As side effects it reorders the layer's shapes and moves each path's start node to its bottom-left node."
 ref = "Edit View › Controlling Path Direction"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30 and 30:21–30:23: the Path menu lists Correct Path Direction with Cmd+Shift+R, and it is run. The reordering and the start-node change are not visible."
 
 [[command]]
 id = "path.correctPathDirectionForAllMasters"
@@ -1478,6 +1513,7 @@ milestone = "M3"
 summary = "Context-menu command on a node (right-click or Ctrl-click) that locks the node's path: its points can no longer be selected or changed in Edit View, though filters, plug-ins and scripts can still alter it."
 ref = "Edit View › Focusing & Locking"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 15:30: Lock Path is listed in the context menu of a selected corner node. Its effect is not shown."
 
 [[command]]
 id = "path.unlockPath"
@@ -1535,6 +1571,7 @@ milestone = "M3"
 summary = "Palette section at the bottom right holding the live stroke attributes of the selected path. It is available only while Show Info is on and a path is selected."
 ref = "Edit View › Strokes"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 5:08: a Stroke section appears at the bottom of the Palette while a path is selected and is absent with nothing selected (partly visible). Its fields are not shown."
 
 [[command]]
 id = "path.setStroke"

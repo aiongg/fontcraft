@@ -62,6 +62,7 @@ milestone = "M6"
 summary = "Appends one component to the current layer. In the UI it opens the component picker, where the base glyph is found by glyph name or Unicode value; headless callers pass the base glyph directly."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:42–11:51: the canvas context menu offers Add Component…, which opens a search field titled Choose Component at the bottom of the window; typing O and confirming adds O as a component, drawn filled without nodes. Not shown: the Glyph menu, Cmd+Shift+C, lookup by Unicode value."
 
 [[command]]
 id = "glyph.addComponentAllMasters"
@@ -88,6 +89,7 @@ milestone = "M6"
 summary = "Moves the selected paths and components of a layer into a new glyph with the given name and puts a component referencing that glyph in their place. In the UI it first asks for the name, then appends the new glyph to the current Edit View tab and makes it the active glyph. Also offered in the canvas context menu."
 ref = "Reusing Shapes › Components › Turning Paths into Components"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: offered in the canvas context menu; it asks for a name and then the selected paths are replaced by a component. Not shown: the Glyph menu entry, the new glyph being added to the tab."
 
 [[panel]]
 id = "dialog.componentPicker"
@@ -104,12 +106,17 @@ status = "handbook"
 id = "dialog.componentFromSelection"
 label = "Component from Selection"
 location = "dialog"
-controls = ["glyph name field, pre-filled with a suggested name", "OK button"]
+controls = [
+  "glyph name field, pre-filled with a suggested name",
+  "line stating that the change applies to all master layers",
+  "Cancel and OK buttons",
+]
 area = "components"
 milestone = "M6"
 summary = "Asks for the name of the glyph that will hold the selected shapes. The field starts with a name suggested from context and accepts any other name; an underscore-prefixed name makes the new glyph a non-exporting part."
 ref = "Reusing Shapes › Components › Turning Paths into Components"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: the dialog is titled Name of the Component Glyph, says that it applies to all master layers, and has a text field with Cancel and OK. Not shown: whether the field is pre-filled, an underscore name."
 
 [[behavior]]
 id = "components.liveUpdateFromBaseGlyph"
@@ -266,7 +273,8 @@ area = "components"
 milestone = "M6"
 summary = "Context-menu item on an auto-aligned component that turns alignment off for it, so the component can be positioned by hand."
 ref = "Reusing Shapes › Components › Automatic Alignment"
-status = "handbook"
+status = "observed"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: the context menu of a component lists Disable Automatic Alignment, and after choosing it the component is dragged freely."
 
 [[command]]
 id = "component.enableAutomaticAlignment"
@@ -332,6 +340,7 @@ milestone = "M6"
 summary = "Context-menu item that turns only the selected components into their contents, one level deep: components nested inside them are kept as components."
 ref = "Reusing Shapes › Components › Decomposing"
 status = "handbook"
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: Decompose is listed in the context menu of a component. Its effect is not shown."
 
 [[behavior]]
 id = "components.tabCyclesComponents"
