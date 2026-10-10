@@ -363,7 +363,7 @@ fn find(name: &str) -> Option<Entry> {
     COMMAND_FILTERS
         .iter()
         .find(|(n, id, ..)| (n.eq_ignore_ascii_case(name) || *id == name) && find_command(id).is_some())
-        .map(|(n, id, ..)| Entry::Command(*n, *id))
+        .map(|(n, id, ..)| Entry::Command(n, id))
 }
 
 fn names() -> Vec<&'static str> {
@@ -644,4 +644,18 @@ fn repeat(s: &mut Session, v: &Value) -> Result<Value> {
         o.insert("repeated".into(), json!({"command": id, "params": params}));
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A filter past the last slot would get no command.
+    #[test]
+    fn every_registered_filter_has_a_command_slot() {
+        assert!(filters::registry().len() <= SLOTS.len(), "add slots to SLOTS");
+        for f in filters::registry() {
+            assert!(find_command(f.id()).is_some(), "{} has no command", f.id());
+        }
+    }
 }
