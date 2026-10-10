@@ -530,13 +530,13 @@ label = "Set Transformation Origin"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{mode: 'box'|'reference'|'metrics'|'layer', boxPoint?: 'topLeft'|'top'|'topRight'|'left'|'center'|'right'|'bottomLeft'|'bottom'|'bottomRight', metric?: 'baseline'|'halfXHeight'|'xHeight'|'halfCapHeight'|'capHeight', point?: [x, y]}"
+params = "{mode?: 'box'|'reference'|'metrics'|'layer', boxPoint?: 'topLeft'|'top'|'topRight'|'left'|'center'|'right'|'bottomLeft'|'bottom'|'bottomRight', metric?: 'baseline'|'halfXHeight'|'xHeight'|'halfCapHeight'|'capHeight', point?: [x, y]}"
 area = "drawing"
 milestone = "M3"
 summary = "Chooses the fixed point for Palette transformations: a point of the selection bounding box, the reference point set with the Scale or Rotate tool, a vertical metric of the master, or (for CJK glyphs) the centre of the layer. Alignment ignores this setting, except through Path > Align Selection."
 ref = "Palette › Transformations › Transformation Origin"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Transformations section shows the 3×3 box picker, a reference-point crosshair and a metrics-origin picker. Choosing an origin is not shown."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Transformations section shows the 3×3 box picker, a reference-point crosshair and a metrics-origin picker. Choosing an origin is not shown. Built in M3.5: `point` without `mode` places the reference point and keeps the mode (what a click with the Rotate or Scale tool sends); `boxPoint` and `metric` are kept for their modes; mode `reference` needs a placed point."
 
 [[command]]
 id = "transform.mirrorHorizontal"
@@ -604,6 +604,7 @@ milestone = "M3"
 summary = "Toggles the lock between the two scale fields. Locked, the top (horizontal) field drives both axes; unlocked, the horizontal and vertical factors are independent."
 ref = "Palette › Transformations › Scaling"
 status = "handbook"
+notes = "Built in M3.5 as a shell command; the lock starts closed."
 
 [[command]]
 id = "transform.rotateClockwise"
@@ -815,6 +816,7 @@ milestone = "M3"
 summary = "Query returning the Transformations section's state: origin mode and point, scale percentages and lock, rotate angle and slant angle."
 ref = "Palette › Transformations"
 status = "inferred"
+notes = "Built in M3.5: {origin: {mode, boxPoint, metric, point}, scale: {x, y, locked}, rotateAngle, slantAngle}. The handbook gives no starting values; ours are the box centre, 100 % with the lock closed, 90° and 10°."
 
 [[behavior]]
 id = "transform.targetsBySelection"

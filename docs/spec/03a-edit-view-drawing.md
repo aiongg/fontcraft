@@ -295,6 +295,18 @@ A per-node state whose effect depends on the neighbouring segments:
   knob; `Alt` about the selection centre (`boundingBox.rotateOutside`).
 - **Rotate tool** (`rotate`, `R`) and **Scale tool** (`scale`, `S`): click sets the origin, drag
   transforms the selection. `Shift` = 90° steps (rotate) or proportional (scale).
+
+How FontCraft does it (our design):
+
+| Part | Behaviour |
+|---|---|
+| box | the box a box origin uses (`04-palette` › Transformations), drawn 6 screen points outside the selection with the knobs on it, so knobs do not cover nodes; shown with the Select tool for more than one item or a whole shape |
+| rotate band | 16 screen points around the drawn box, outside the knobs and away from any object the Select tool could hit; the side of the box the press is on names the grabbed knob |
+| drags | one interaction each; every preview runs `transform.scale` or `transform.rotateCounterclockwise` with the fixed point as `origin: [x, y]`, measured from the press |
+| proportional | both axes take the factor that differs more from 1 |
+| tool origin | the reference point (`transform.setOrigin {point}`, which keeps the origin mode), else the centre of the selection's box; drawn as a red ring with a crosshair |
+| Scale tool factors | the pointer's distance from the origin over the press's, per axis; an axis on which the press lies within the drag threshold of the origin keeps its size |
+| nothing selected | the tools transform the whole layer, as the Palette does |
 - **Info box** with several nodes selected (`infoBox.selectionGeometryFields`,
   `infoBox.pointCounts`): X, Y, width, height; a reference-point grid choosing the origin; a lock
   linking width and height; counts of selected points and of all points on the layer.

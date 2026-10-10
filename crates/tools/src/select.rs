@@ -15,6 +15,8 @@
 //! | double-click a node | `path.toggleNodeType` (`Alt`: `path.toggleNodeTypeKeepingOutline`) |
 //! | double-click a segment | select its whole path |
 //! | `Escape` during a gesture | cancel it |
+//!
+//! Presses on the bounding box's knobs and just outside it go to [`crate::bbox`] first.
 
 use fontcraft_geom::Point;
 use serde_json::{Value, json};
@@ -166,6 +168,8 @@ enum State {
 pub struct SelectTool {
     state: State,
     hover: Option<HitResult>,
+    /// A press or drag on the bounding box's knobs ([`crate::bbox`]).
+    knobs: Option<crate::bbox::BoxDrag>,
 }
 
 impl SelectTool {
@@ -372,6 +376,9 @@ impl Tool for SelectTool {
         if !finite(ev.pos) {
             return Output::default();
         }
+        if let Some(out) = crate::bbox::route(&mut self.knobs, cx, ev) {
+            return out;
+        }
         match ev.kind {
             PointerKind::Move => {
                 if matches!(self.state, State::Idle) {
@@ -396,6 +403,9 @@ impl Tool for SelectTool {
     }
 
     fn modifiers(&mut self, cx: &Context<'_>, mods: Modifiers) -> Output {
+        if let Some(knobs) = &mut self.knobs {
+            return knobs.modifiers(cx, mods);
+        }
         let mut out = Output::default();
         match &mut self.state {
             State::Dragging(drag) => {
@@ -416,7 +426,7 @@ impl Tool for SelectTool {
     }
 
     fn cancel(&mut self) -> Output {
-        let mut out = Output::default();
+        let mut out = crate::bbox::cancel(&mut self.knobs);
         match std::mem::take(&mut self.state) {
             State::Dragging(_) => out.push(Action::Cancel),
             State::Marquee(m) => {
@@ -431,7 +441,7 @@ impl Tool for SelectTool {
     }
 
     fn busy(&self) -> bool {
-        !matches!(self.state, State::Idle)
+        self.knobs.is_some() || !matches!(self.state, State::Idle)
     }
 
     fn overlays(&self) -> Vec<Overlay> {

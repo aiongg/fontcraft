@@ -15,11 +15,13 @@
 //! | [`hit`] | what lies under the pointer: nodes, handles, segments, anchors, components, guides |
 //! | [`selection`] | the selection and the commands' target object built from it |
 //! | [`snap`] | where a dragged point lands: nodes, then handles, guides, metric lines, alignment |
-//! | [`select`], [`lasso`], [`hand`], [`zoom`] | the tools, as state machines |
+//! | [`select`], [`lasso`], [`hand`], [`zoom`], [`rotate`], [`scale`] | the tools, as state machines |
+//! | [`bbox`] | the selection's bounding box, its knobs, and the freehand transform drags |
 //! | [`keymap`] | the Edit View keys these tools answer |
 //! | [`toolbox`] | the active tool, temporary tools (Space, Cmd+Space) and key routing |
 #![forbid(unsafe_code)]
 
+pub mod bbox;
 pub mod event;
 pub mod geometry;
 pub mod hand;
@@ -28,6 +30,8 @@ pub mod keymap;
 pub mod knife;
 pub mod lasso;
 pub mod output;
+pub mod rotate;
+pub mod scale;
 pub mod scene;
 pub mod segment;
 pub mod select;
@@ -58,3 +62,5 @@ pub const MAX_COMPONENT_POINTS: usize = 200_000;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod transform_tests;

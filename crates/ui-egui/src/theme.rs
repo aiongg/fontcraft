@@ -111,6 +111,13 @@ pub struct Tokens {
     pub cell_gap: f32,
     /// Size of the glyph name under a cell.
     pub cell_label_size: f32,
+    /// The selection's bounding box and its knobs.
+    pub bounding_box: Color32,
+    /// Side of a bounding-box knob.
+    pub knob_size: f32,
+    /// The transformation origin: ring and crosshair under the Rotate and Scale tools.
+    pub transform_origin: Color32,
+    pub transform_origin_radius: f32,
 }
 
 impl Tokens {
@@ -180,6 +187,10 @@ impl Tokens {
             cell_label_height: 16.0,
             cell_gap: 4.0,
             cell_label_size: 10.0,
+            bounding_box: Color32::from_rgb(0x5a, 0x6e, 0x8c),
+            knob_size: 6.0,
+            transform_origin: Color32::from_rgb(0xe8, 0x40, 0x40),
+            transform_origin_radius: 6.0,
         }
     }
 

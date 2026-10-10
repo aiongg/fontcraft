@@ -12,6 +12,7 @@ pub mod palette;
 pub mod selection;
 pub mod status_bar;
 pub mod tabs;
+pub mod transform;
 pub mod view;
 
 use std::sync::LazyLock;
@@ -34,6 +35,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (palette::COMMANDS, palette::run),
     (selection::COMMANDS, selection::run),
     (crate::dialogs::COMMANDS, crate::dialogs::run),
+    (transform::COMMANDS, transform::run),
 ];
 
 /// Every shell command, in module order.

@@ -38,6 +38,8 @@ pub struct UiState {
     pub status: String,
     /// The id the next new tab gets.
     pub next_tab_id: u64,
+    /// The Transformations section's origin, fields and lock.
+    pub transform: crate::shell::transform::TransformSettings,
 }
 
 impl Default for UiState {
@@ -52,6 +54,7 @@ impl Default for UiState {
             canvas_size: [960.0, 720.0],
             status: String::new(),
             next_tab_id: 1,
+            transform: Default::default(),
         }
     }
 }

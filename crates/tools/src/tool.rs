@@ -1,5 +1,6 @@
 //! The tool interface and the list of tools.
 
+use fontcraft_geom::Point;
 use fontcraft_model::Font;
 use serde::Serialize;
 
@@ -8,7 +9,7 @@ use crate::output::{Output, Overlay};
 use crate::scene::Scene;
 use crate::selection::Selection;
 use crate::view::View;
-use crate::{hand::HandTool, lasso::LassoTool, select::SelectTool, zoom::ZoomTool};
+use crate::{hand::HandTool, lasso::LassoTool, rotate::RotateTool, scale::ScaleTool, select::SelectTool, zoom::ZoomTool};
 
 /// Distances and steps the tools use. The shell fills the screen distances from `theme::Tokens`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -21,11 +22,15 @@ pub struct ToolSettings {
     pub drag_threshold: f64,
     /// Arrow-key steps in font units: plain, with `Shift`, with `Cmd` (`move.arrowKeyIncrements`).
     pub increments: [f64; 3],
+    /// The selection's bounding box and its knobs are showing (`view.showBoundingBox`).
+    pub bounding_box: bool,
+    /// The reference point placed with the Rotate or Scale tool (`transform.setOrigin`).
+    pub reference: Option<Point>,
 }
 
 impl Default for ToolSettings {
     fn default() -> Self {
-        Self { hit_tolerance: 6.0, snap_distance: 4.0, drag_threshold: 3.0, increments: [1.0, 10.0, 100.0] }
+        Self { hit_tolerance: 6.0, snap_distance: 4.0, drag_threshold: 3.0, increments: [1.0, 10.0, 100.0], bounding_box: false, reference: None }
     }
 }
 
@@ -106,6 +111,8 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "hand", label: "Hand", shortcut: "H", group: "" },
     ToolInfo { id: "zoom", label: "Zoom", shortcut: "Z", group: "" },
     ToolInfo { id: "knife", label: "Knife", shortcut: "E", group: "erase" },
+    ToolInfo { id: "rotate", label: "Rotate", shortcut: "R", group: "" },
+    ToolInfo { id: "scale", label: "Scale", shortcut: "S", group: "" },
 ];
 
 /// A new tool by id, or `None` for an unknown id.
@@ -116,6 +123,8 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "hand" => Box::new(HandTool::default()),
         "zoom" => Box::new(ZoomTool::default()),
         "knife" => Box::new(crate::knife::KnifeTool::default()),
+        "rotate" => Box::new(RotateTool::default()),
+        "scale" => Box::new(ScaleTool::default()),
         _ => return None,
     };
     Some(tool)

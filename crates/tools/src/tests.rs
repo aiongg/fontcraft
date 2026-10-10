@@ -648,7 +648,13 @@ fn hostile_input_never_panics() {
                     h.key(&mut toolbox, key, mods);
                 }
             }
-            h.settings = ToolSettings { hit_tolerance: nan, snap_distance: huge, drag_threshold: -1.0, increments: [nan, huge, 0.0] };
+            h.settings = ToolSettings {
+                hit_tolerance: nan,
+                snap_distance: huge,
+                drag_threshold: -1.0,
+                increments: [nan, huge, 0.0],
+                ..ToolSettings::default()
+            };
             let mut t = SelectTool::default();
             for kind in [Down, Drag, Drag, Up] {
                 h.pointer(&mut t, kind, 1.0, 1.0, NONE);

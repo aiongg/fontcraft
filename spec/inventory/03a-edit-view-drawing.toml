@@ -975,7 +975,7 @@ milestone = "M3"
 summary = "Rotates the current selection freehand about an origin the user places with a click."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 12:25–12:30: with the Rotate tool, a drag rotates the selected rectangle about a pivot at the selection's centre, with a line drawn from the pivot to the pointer. Not shown: setting the origin with a click, Shift."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 12:25–12:30: with the Rotate tool, a drag rotates the selected rectangle about a pivot at the selection's centre, with a line drawn from the pivot to the pointer. Not shown: setting the origin with a click, Shift. Built in M3.5: a click sends transform.setOrigin {point}, which places the reference point and keeps the Palette's origin mode; a drag runs transform.rotateCounterclockwise in one interaction about the reference point, or about the centre of the selection's box while none is placed (as the video shows). With nothing selected the drag turns the whole layer, as the Palette does. Setting the origin with a click and Shift follow the handbook and are not yet observed."
 
 [[tool]]
 id = "scale"
@@ -992,6 +992,7 @@ milestone = "M3"
 summary = "Scales the current selection freehand about an origin the user places with a click."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
+notes = "Built in M3.5: a click places the reference point as for the Rotate tool; a drag runs transform.scale about it (or about the centre of the selection's box while none is placed). Each axis scales by the pointer's distance from the origin over the press's; an axis on which the press lies within the drag threshold of the origin keeps its size. Shift gives both axes the factor that differs more from 1. With nothing selected, the whole layer. Documented in the handbook, not yet observed."
 
 [[command]]
 id = "view.showBoundingBox"
@@ -1005,6 +1006,7 @@ milestone = "M3"
 summary = "Toggles the selection bounding box with its scale knobs in Edit View."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
+notes = "Drawing built in M3.5: with the Select tool, a rectangle 6 screen points outside the selection's box and eight square knobs on its corners and side centres."
 
 [[behavior]]
 id = "boundingBox.scaleKnobs"
@@ -1013,7 +1015,7 @@ milestone = "M3"
 summary = "When more than one node is selected a bounding box with eight knobs (four sides, four corners) is drawn. Dragging a knob scales the selected points with the opposite knob as fixed point; Shift keeps proportions and Option uses the box centre as fixed point."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 23:51: with several nodes selected, dragging the top or bottom knob scales them vertically, with a badge showing the percentage and new height. 9:24–9:31: a corner-knob drag shrinks an ellipse about its centre with its proportions kept, which fits Shift+Option, but the keys are not visible."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 23:51: with several nodes selected, dragging the top or bottom knob scales them vertically, with a badge showing the percentage and new height. 9:24–9:31: a corner-knob drag shrinks an ellipse about its centre with its proportions kept, which fits Shift+Option, but the keys are not visible. Built in M3.5: the box shows when more than one item or a whole shape is selected; the knobs sit 6 screen points outside the selection so they do not cover its nodes. A drag runs transform.scale in one interaction with the fixed point as origin; Shift gives both axes the factor that differs more from 1. Shift and Option follow the handbook and are not yet observed."
 
 [[behavior]]
 id = "boundingBox.rotateOutside"
@@ -1022,6 +1024,7 @@ milestone = "M3"
 summary = "Dragging from just outside the bounding box rotates the selection about the knob opposite the grab position; with Option it rotates about the centre of the selection."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
+notes = "Built in M3.5: \"just outside\" is a band 16 screen points wide around the drawn box, outside the knobs; the grab position picks the nearest of the eight knobs by the side of the box it is on. A node, segment or other object under the pointer there stays the Select tool's to click or drag. A drag runs transform.rotateCounterclockwise in one interaction; a click in the band clears the selection, as a click on empty canvas does. Documented in the handbook, not yet observed."
 
 [[behavior]]
 id = "infoBox.selectionGeometryFields"

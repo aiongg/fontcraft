@@ -134,7 +134,8 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     let tab = state.tab().ok_or("no Edit View tab is showing (open a glyph first)")?;
     let scene = scene(font, tab).ok_or("the edited glyph has no layer in the active master")?;
     let view = view::tools_view(&tab.view, view::edited_offset(font, tab), center);
-    let cx = Context { scene: &scene, view, selection: &tab.selection, settings: settings(tokens, font) };
+    let settings = ToolSettings { bounding_box: state.display.bounding_box, reference: state.transform.reference(), ..settings(tokens, font) };
+    let cx = Context { scene: &scene, view, selection: &tab.selection, settings };
     Ok(f(&mut tools.toolbox, &cx))
 }
 

@@ -33,3 +33,5 @@ mod dialog_tests;
 mod tests;
 #[cfg(test)]
 mod tools_tests;
+#[cfg(test)]
+mod transform_tests;
