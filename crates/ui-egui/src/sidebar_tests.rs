@@ -216,6 +216,18 @@ fn the_search_field_narrows_the_grid_and_hidden_glyphs_are_deselected() {
     app.run("fontView.setSearch", &json!({"query": "", "fields": []})).unwrap();
     let s = state(&mut app);
     assert_eq!((s["search"].clone(), s["counts"]["visible"].as_u64()), (Value::Null, Some(54)));
+
+    // fontView.focusSearch, the command behind Cmd+F: the field takes the keyboard back from
+    // wherever it went; in Edit View the command does nothing.
+    w.ctx.memory_mut(|m| m.surrender_focus(search::field_id()));
+    w.frame(&mut app);
+    assert_ne!(w.ctx.memory(|m| m.focused()), Some(search::field_id()));
+    assert_eq!(app.run("fontView.focusSearch", &json!({})).unwrap(), json!({"focused": true}));
+    w.frame(&mut app);
+    w.frame(&mut app);
+    assert_eq!(w.ctx.memory(|m| m.focused()), Some(search::field_id()));
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["A"]})).unwrap();
+    assert_eq!(app.run("fontView.focusSearch", &json!({})).unwrap(), json!({"focused": false}));
 }
 
 #[test]

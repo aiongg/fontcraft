@@ -400,9 +400,8 @@ fn key(app: &mut FontcraftApp, name: &str, mods: Modifiers, action: KeyAction) -
         if !handled && let Some(k) = egui_key {
             let m = egui::Modifiers { alt: mods.alt, ctrl: mods.ctrl, shift: mods.shift, mac_cmd: false, command: mods.cmd };
             if let Some((id, params)) = keymap::command_for(k, m) {
-                let params = tools_glue::with_targets(app, id, params);
                 handled = true;
-                command = Some((id, app.run(id, &params)));
+                command = Some((id, app.run_menu_command(id, params)));
             }
         }
     }

@@ -531,11 +531,32 @@ fn measure_font_view_on_the_largest_corpus_source() {
     let start = std::time::Instant::now();
     window.frame(&mut app);
     let list = start.elapsed();
+    // A three-rule smart filter: lowercase letters whose names have no suffix.
+    let rules = json!({"all": [
+        {"property": "category", "value": "Letter"},
+        {"property": "case", "value": "lower"},
+        {"property": "glyphName", "op": "doesNotContain", "value": "."},
+    ]});
+    let mut queries = Vec::new();
+    let mut shown = 0;
+    for _ in 0..10 {
+        let start = std::time::Instant::now();
+        let r = app.run("fontView.queryGlyphs", &json!({"rules": rules})).unwrap();
+        queries.push(start.elapsed());
+        shown = r["count"].as_u64().unwrap();
+    }
+    let first_query = queries[0];
+    let start = std::time::Instant::now();
+    app.run("fontView.queryGlyphs", &json!({"sidebar": true})).unwrap();
+    let sidebar = start.elapsed();
+    queries.sort();
     println!(
-        "{} glyphs ({count} custom): effective properties {props:?}; first frame {first:?}; later frames median {:?}, max {:?}; cache refresh after an edit {refresh:?}, frame after an edit {after_edit:?}; list frame {list:?}",
+        "{} glyphs ({count} custom): effective properties {props:?}; first frame {first:?}; later frames median {:?}, max {:?}; cache refresh after an edit {refresh:?}, frame after an edit {after_edit:?}; list frame {list:?}; three-rule query ({shown} glyphs) first {first_query:?}, median {:?}, max {:?}; sidebar entries with counts {sidebar:?}",
         font.glyphs.len(),
         frames[frames.len() / 2],
-        frames.last().unwrap()
+        frames.last().unwrap(),
+        queries[queries.len() / 2],
+        queries.last().unwrap()
     );
 }
 

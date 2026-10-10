@@ -77,6 +77,14 @@ fn rename_follows_references_like_a_font_built_under_the_new_name() {
     // One undo step brings every reference back.
     run(&mut renamed, "edit.undo", json!({}));
     assert_eq!(*renamed.font().unwrap(), *built("part").font().unwrap());
+
+    // Find and Replace renames through the same path.
+    let mut replaced = built("part");
+    let r = run(&mut replaced, "edit.findAndReplace", json!({"glyphs": ["part", "B"], "find": "part", "replace": "piece"}));
+    assert_eq!(r["renamed"], json!([{"from": "part", "to": "piece"}]), "{r}");
+    assert_eq!(*replaced.font().unwrap(), *expected.font().unwrap());
+    let c = compile_ttf(replaced.font().unwrap(), &Options::default()).unwrap();
+    assert_eq!(c.bytes, b.bytes, "Find and Replace exports the font built with the new name");
 }
 
 #[test]

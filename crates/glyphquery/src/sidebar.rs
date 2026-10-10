@@ -315,6 +315,10 @@ pub struct Catalog<'a> {
     groups: Option<&'a Groups>,
     visible_scripts: Vec<String>,
     codes: HashSet<u32>,
+    /// The subjects with each code point, and each subject by name, so a language entry is
+    /// counted from its own characters rather than by a pass over every glyph.
+    by_code: HashMap<u32, Vec<usize>>,
+    by_name: HashMap<&'a str, usize>,
 }
 
 /// A label of a category's children for a glyph: its case group, then its subcategory.
@@ -337,6 +341,14 @@ impl<'a> Catalog<'a> {
         let subjects: Vec<Subject<'a>> =
             glyph_order(font).into_iter().filter_map(|i| font.glyphs.as_arcs().get(i)).map(|g| Subject::new(g.as_ref())).collect();
         let codes = font.glyphs.iter().flat_map(|g| g.unicodes.iter().copied()).collect();
+        let mut by_code: HashMap<u32, Vec<usize>> = HashMap::new();
+        let mut by_name = HashMap::new();
+        for (i, s) in subjects.iter().enumerate() {
+            by_name.insert(s.glyph.name.as_str(), i);
+            for &c in &s.glyph.unicodes {
+                by_code.entry(c).or_default().push(i);
+            }
+        }
         Catalog {
             env,
             subjects,
@@ -345,6 +357,8 @@ impl<'a> Catalog<'a> {
             groups: None,
             visible_scripts: DEFAULT_VISIBLE_SCRIPTS.iter().map(|s| (*s).to_string()).collect(),
             codes,
+            by_code,
+            by_name,
         }
     }
 
@@ -401,6 +415,16 @@ impl<'a> Catalog<'a> {
     }
 
     fn count(&self, m: &Member) -> usize {
+        if let Member::Codes { codes, names } = m {
+            let mut hit: HashSet<usize> = HashSet::new();
+            for c in codes {
+                if let Some(list) = self.by_code.get(c) {
+                    hit.extend(list.iter().copied());
+                }
+            }
+            hit.extend(names.iter().filter_map(|n| self.by_name.get(n.as_str()).copied()));
+            return hit.len();
+        }
         self.subjects.iter().filter(|s| m.contains(s, &self.env)).count()
     }
 

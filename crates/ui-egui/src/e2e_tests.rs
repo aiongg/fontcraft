@@ -479,3 +479,119 @@ fn an_agent_draws_h_o_n_over_the_control_channel_and_exports_them() {
         let _ = std::fs::remove_dir_all(&scratch);
     }
 }
+
+/// Names as plain strings.
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array().unwrap_or_else(|| panic!("not a list: {v}")).iter().map(|n| n.as_str().unwrap().to_string()).collect()
+}
+
+/// The glyph set's glyphs that `phonetics-sino-ext` adds, by production name, in glyph order.
+const SINO: [&str; 11] = ["uni0221", "uni0234", "uni0235", "uni0236", "uni027F", "uni0285", "uni02AE", "uni02AF", "uni1D00", "uni1D07", "uniAB65"];
+
+/// The `post` names of the M4 end-to-end export: the glyph set and the added glyphs in the
+/// default sort order, then the stylistic-set copies of the lowercase letters (all but `q`,
+/// made a Symbol), then the renamed ligature and its copy.
+fn m4_post_fixture() -> Vec<String> {
+    let letters: Vec<String> = ('a'..='z').map(String::from).collect();
+    let mut out = vec![".notdef".to_string()];
+    out.extend(letters.iter().cloned());
+    out.push("adieresis".into());
+    out.extend(SINO.iter().map(|s| s.to_string()));
+    out.extend(letters.iter().filter(|l| *l != "q").map(|l| format!("{l}.ss01")));
+    out.push("adieresis.ss01".into());
+    out.extend(SINO.iter().map(|s| format!("{s}.ss01")));
+    out.extend(["f_f_l.liga".to_string(), "f_f_l.liga.ss01".to_string()]);
+    out
+}
+
+/// The M4 end-to-end measure (`docs/plans/M4.md` § 5): an agent that uses only control methods
+/// creates a font from a glyph set, adds glyphs, renames one, sets a category, makes a smart
+/// filter, selects what it shows, duplicates it, renames the copies with Find and Replace and
+/// exports. The `post` names and the `cmap` equal the fixtures. The fontTools read-back runs
+/// outside the test, as for the M3 measure above:
+///
+/// ```text
+/// FONTCRAFT_E2E_OUT=$PWD/target/e2e-m4.ttf cargo test -p fontcraft-ui-egui an_agent_builds
+/// ~/.local/share/uv/tools/fontmake/bin/python -I -c '
+/// import sys
+/// from fontTools.ttLib import TTFont
+/// f = TTFont(sys.argv[1]); order = f.getGlyphOrder(); cmap = f.getBestCmap()
+/// assert len(order) == 78 and order[:2] == [".notdef", "a"] and order[-1] == "f_f_l.liga.ss01", order
+/// assert len(cmap) == 38 and cmap[0xE4] == "adieresis" and cmap[0xAB65] == "uniAB65", cmap
+/// assert sum(n.endswith(".ss01") for n in order) == 38
+/// print("fontTools read-back: ok,", len(order), "glyphs,", len(cmap), "code points")
+/// ' target/e2e-m4.ttf
+/// ```
+#[test]
+fn an_agent_builds_and_exports_a_glyph_set_over_the_control_channel() {
+    let mut app = FontcraftApp::new(Session::new());
+    let created = execute(
+        &mut app,
+        "file.newFromGlyphSets",
+        json!({"familyName": "Control Sets", "scripts": [{"script": "latin", "glyphSets": ["phonetics-sino-ext"]}]}),
+    );
+    assert_eq!(created["glyphs"], 12, "{created}");
+
+    let added = execute(&mut app, "glyph.addGlyphs", json!({"text": "a:z uni00E4 f_f_l"}));
+    let mut expected: Vec<String> = ('a'..='z').map(String::from).collect();
+    expected.extend(["adieresis".to_string(), "f_f_l".to_string()]);
+    assert_eq!(strings(&added["added"]), expected, "a code-point name becomes the nice name: {added}");
+
+    let renamed = execute(&mut app, "glyph.rename", json!({"glyph": "f_f_l", "newName": "f_f_l.liga"}));
+    assert_eq!(renamed["glyph"], "f_f_l.liga");
+    execute(&mut app, "glyph.setCategory", json!({"glyphs": ["q"], "category": "Symbol"}));
+    let rules = json!({"all": [{"property": "category", "value": "Letter"}, {"property": "case", "value": "lower"}]});
+    execute(&mut app, "fontView.addSmartFilter", json!({"name": "Lowercase letters", "rules": rules}));
+
+    // The filter shows the lowercase letters; Select All takes what it shows.
+    let shown = execute(&mut app, "fontView.selectSidebarEntries", json!({"entries": ["filters/Lowercase letters"]}));
+    assert_eq!(shown["count"], 38, "{shown}");
+    shortcut(&mut app, json!({"key": "a", "cmd": true}), "edit.selectAll");
+    let selected = strings(&execute(&mut app, "fontView.getState", json!({}))["selected"]);
+    assert_eq!(selected.len(), 38);
+    assert!(!selected.contains(&"q".to_string()) && selected.contains(&"f_f_l.liga".to_string()), "{selected:?}");
+
+    // Duplicate Glyph: the copies become the selection.
+    let duplicated = shortcut(&mut app, json!({"key": "d", "cmd": true}), "glyph.duplicateGlyph");
+    let copies = strings(&duplicated["glyphs"]);
+    assert_eq!(copies, selected.iter().map(|n| format!("{n}.001")).collect::<Vec<_>>());
+    assert_eq!(strings(&execute(&mut app, "fontView.getState", json!({}))["selected"]), copies);
+
+    // Find and Replace opens on the selection; Replace renames all of them.
+    let opened = key(&mut app, json!({"key": "f", "cmd": true, "shift": true}));
+    assert_eq!(opened["result"]["dialog"], "dialog.findAndReplaceGlyphNames", "{opened}");
+    assert_eq!(strings(&opened["result"]["params"]["glyphs"]), copies);
+    call(&mut app, "ui.dialog.set", json!({"field": "find", "value": ".001"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "replace", "value": ".ss01"}));
+    let replaced = call(&mut app, "ui.dialog.confirm", json!({}));
+    assert_eq!(replaced["result"]["renamed"].as_array().map(Vec::len), Some(38), "{replaced}");
+
+    let given = std::env::var_os("FONTCRAFT_E2E_OUT").map(PathBuf::from);
+    let scratch = std::env::temp_dir().join(format!("fontcraft-e2e-m4-{}", std::process::id()));
+    let out = given.clone().unwrap_or_else(|| scratch.join("ControlSets.ttf"));
+    if let Some(dir) = out.parent() {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    let exported = execute(&mut app, "file.exportStatic", json!({"outlines": "truetype", "destination": out.to_string_lossy(), "timestamp": 0}));
+    assert_eq!(exported["skipped"], json!([]), "{exported}");
+    assert_eq!(exported["warnings"], json!([]), "{exported}");
+
+    let bytes = std::fs::read(&out).unwrap();
+    let font = FontRef::new(&bytes).unwrap();
+    let post = font.post().unwrap();
+    let count = font.maxp().unwrap().num_glyphs();
+    let names: Vec<String> =
+        (0..count).map(|g| post.glyph_name(skrifa::GlyphId16::new(g)).unwrap_or_else(|| panic!("glyph {g} has no name")).to_string()).collect();
+    assert_eq!(names, m4_post_fixture());
+    let cmap: Vec<(u32, String)> = font.charmap().mappings().map(|(c, g)| (c, names[g.to_u32() as usize].clone())).collect();
+    let mut fixture: Vec<(u32, String)> = ('a'..='z').map(|c| (c as u32, c.to_string())).collect();
+    fixture.push((0xE4, "adieresis".into()));
+    fixture.extend(
+        [0x221, 0x234, 0x235, 0x236, 0x27F, 0x285, 0x2AE, 0x2AF, 0x1D00, 0x1D07, 0xAB65].into_iter().zip(SINO).map(|(c, n)| (c, n.to_string())),
+    );
+    assert_eq!(cmap, fixture);
+
+    if given.is_none() {
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+}

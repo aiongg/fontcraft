@@ -80,6 +80,17 @@ impl FontcraftApp {
             for (old, new) in renames(id, params, r) {
                 self.follow_rename(&old, &new);
             }
+            // In Font View the copies Duplicate Glyph makes become the selection.
+            if id == "glyph.duplicateGlyph"
+                && self.state.tab().is_none()
+                && let Some(copies) = r.get("glyphs").and_then(Value::as_array)
+            {
+                let copies: Vec<String> = copies.iter().filter_map(Value::as_str).map(str::to_string).collect();
+                if !copies.is_empty() {
+                    self.state.font_view.anchor = copies.last().cloned();
+                    self.state.selected_glyphs = copies;
+                }
+            }
         }
         self.after_command();
         shell::start_window::after_run(self, id, &result);
@@ -108,6 +119,18 @@ impl FontcraftApp {
             self.state.status = e;
         }
         Ok(result)
+    }
+
+    /// What a menu item or shortcut does with its command: one that has a dialog and no
+    /// parameters opens the dialog (the result is the dialog's state); any other runs on the
+    /// selection's targets through [`Self::run_from_shell`].
+    pub(crate) fn run_menu_command(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
+        if empty && let Some(dialog) = crate::dialogs::for_command(id) {
+            return crate::dialogs::open(self, &dialog, &serde_json::Map::new());
+        }
+        let params = tools_glue::with_targets(self, id, shell::clipboard::font_view_params(self, id, params));
+        self.run_from_shell(id, &params)
     }
 
     /// Points the UI's references to a renamed glyph at its new name: the Font View selection,
@@ -234,15 +257,9 @@ impl FontcraftApp {
             if shell::start_window::opens_chooser(self, id, &params) {
                 continue;
             }
-            let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
-            if empty && let Some(dialog) = crate::dialogs::for_command(id) {
-                if let Err(e) = crate::dialogs::open(self, &dialog, &serde_json::Map::new()) {
-                    self.state.status = e;
-                }
-                continue;
+            if let Err(e) = self.run_menu_command(id, params) {
+                self.state.status = e;
             }
-            let params = tools_glue::with_targets(self, id, shell::clipboard::font_view_params(self, id, params));
-            let _ = self.run_from_shell(id, &params);
         }
         if tools_glue::dispatch_queued(self) {
             ui.ctx().request_repaint();

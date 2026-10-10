@@ -81,7 +81,10 @@ tools keeps the one in use, else picks the one used last, and `Shift` with it st
 `ArrowLeft`, `Return`, `Delete`, `Backspace`, `Tab`, `Escape`, `Space`. `action` is `tap`
 (default: press and release), `press` or `release`; hold `Space` with `press`, send pointer
 events, then `release`. The reply is the `ui.pointer` reply plus `handled` (whether anything
-took the key), and `command` and `result` (or `error`) when a menu shortcut ran.
+took the key), and `command` and `result` (or `error`) when a menu shortcut ran. A shortcut
+whose command has a dialog opens it, as the keyboard does: `result` is then the
+`ui.dialog.inspect` reply. Other shortcuts act on the selection (Font View's selected glyphs, or
+Edit View's edited glyph and selection).
 
 ### Dialogs
 

@@ -191,6 +191,18 @@ fn hostile_and_empty_inputs_are_harmless() {
     assert!(GlyphData::with_custom(vec![Vec::new(); crate::MAX_CUSTOM_FILES + 1]).is_err());
 }
 
+/// The § 5 measure "first glyph-database lookup", in a process that has not loaded the tables
+/// yet. Run it alone: `cargo test -p fontcraft-glyphdata measure_first_lookup -- --ignored --nocapture`.
+#[test]
+#[ignore = "must run alone to start cold; prints the time"]
+fn measure_first_lookup() {
+    let start = std::time::Instant::now();
+    let info = data().lookup("adieresis", &[]);
+    let elapsed = start.elapsed();
+    assert_eq!(info.production_name.value, "adieresis");
+    println!("first lookup, tables loaded on the way: {elapsed:?}");
+}
+
 #[test]
 fn the_built_in_tables_load_quickly_and_say_where_they_come_from() {
     let start = std::time::Instant::now();
