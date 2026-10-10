@@ -8,10 +8,15 @@ use fontcraft_model::MAX_COORDINATE;
 use serde_json::{Map, Value, json};
 
 use super::form::Field;
-use super::{Dialog, Fields};
+use super::{After, Dialog, Fields};
 
-pub const DIALOG: Dialog =
-    Dialog { id: "dialog.pastedOutlineBounds", title: "Move Pasted Outline", command: "selection.move", fields: Fields::Fixed(fields) };
+pub const DIALOG: Dialog = Dialog {
+    follow_up: true,
+    after: Some(After { command: "edit.paste", params: follow_up }),
+    buttons: ["Move", "Keep Position"],
+    message: "The pasted outline lies outside the glyph box.",
+    ..Dialog::new("dialog.pastedOutlineBounds", "Move Pasted Outline", "selection.move", Fields::Fixed(fields))
+};
 
 fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
     let max = 2.0 * MAX_COORDINATE;
@@ -23,7 +28,7 @@ fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
 
 /// The parameters to open the dialog with after `edit.paste` returned `result`: its
 /// `selection` and its `correction` as `dx`, `dy`. `None` unless the paste is out of bounds.
-pub fn follow_up(result: &Value) -> Option<Map<String, Value>> {
+pub fn follow_up(_request: &Value, result: &Value) -> Option<Map<String, Value>> {
     if result.get("outOfBounds").and_then(Value::as_bool) != Some(true) {
         return None;
     }
@@ -68,7 +73,7 @@ mod tests {
     #[test]
     fn ok_moves_the_pasted_outline_into_the_glyph_and_cancel_keeps_it() {
         let (mut app, result) = pasted(5000.0);
-        let params = follow_up(&result).unwrap();
+        let params = follow_up(&Value::Null, &result).unwrap();
         assert_eq!((params["dx"].clone(), params["dy"].clone()), (json!(-5000.0), json!(100.0)), "{result}");
         assert_eq!(params["shapes"], json!([1]), "the pasted square");
         let opened =
@@ -89,6 +94,6 @@ mod tests {
         assert!(Arc::ptr_eq(&font(&app), &original), "Cancel keeps the pasted position");
 
         let (_, near) = pasted(0.0);
-        assert!(follow_up(&near).is_none(), "a paste inside the glyph box asks nothing");
+        assert!(follow_up(&Value::Null, &near).is_none(), "a paste inside the glyph box asks nothing");
     }
 }

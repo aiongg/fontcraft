@@ -5,27 +5,28 @@
 
 use serde_json::{Map, Value, json};
 
-use super::form::{Field, Kind};
-use super::{Dialog, Fields};
+use super::form::Field;
+use super::{After, Dialog, Fields};
 
 /// Most files the question lists (the engine imports at most this many in one call).
 const MAX_FILES: usize = 4096;
 
 pub const DIALOG: Dialog = Dialog {
-    id: "dialog.importOutlinesMissingGlyph",
-    title: "Import Outlines: no matching glyph",
-    command: "file.importOutlines",
-    fields: Fields::Fixed(fields),
+    follow_up: true,
+    after: Some(After { command: "file.importOutlines", params: follow_up }),
+    buttons: ["Add Glyphs", "Skip"],
+    message: "Some files have no glyph of the same name in the font.",
+    ..Dialog::new("dialog.importOutlinesMissingGlyph", "Import Outlines: no matching glyph", "file.importOutlines", Fields::Fixed(fields))
 };
 
 fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
-    vec![Field {
-        key: "onMissingGlyph".into(),
-        label: "Files with no glyph".into(),
-        kind: Kind::Choice { choices: vec!["add".into(), "skip".into()] },
-        default: json!("add"),
-        doc: "add creates a glyph named after each file and imports into it; skip leaves the files out".into(),
-    }]
+    vec![Field::choice(
+        "onMissingGlyph",
+        "Files with no glyph",
+        &[("add", "Add a glyph for each"), ("skip", "Leave them out")],
+        "add",
+        "add creates a glyph named after each file and imports into it; skip leaves the files out",
+    )]
 }
 
 /// The parameters to open the dialog with after `file.importOutlines` ran with `request` and

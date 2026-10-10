@@ -233,3 +233,94 @@ fn the_window_takes_clicks_typing_return_and_escape() {
     frame(&ctx, &mut app, vec![key(egui::Key::Escape, egui::Modifiers::NONE)]);
     assert!(app.dialog.is_none());
 }
+
+/// An SVG file named `name`.svg holding one square, in a fresh directory.
+fn svg_file(name: &str) -> (std::path::PathBuf, String) {
+    let dir = std::env::temp_dir().join(format!("fontcraft-follow-up-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(format!("{name}.svg"));
+    std::fs::write(&path, r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><rect x="0" y="0" width="100" height="800"/></svg>"#)
+        .unwrap();
+    let file = path.to_string_lossy().into_owned();
+    (dir, file)
+}
+
+#[test]
+fn follow_up_questions_open_after_the_persons_run_only() {
+    // A question is never the dialog of its command's menu item.
+    assert!(dialogs::for_command("file.importOutlines").is_none());
+    assert!(dialogs::for_command("selection.move").is_none());
+    assert_eq!(dialogs::find("dialog.importOutlinesMissingGlyph").map(|d| d.command), Some("file.importOutlines"));
+
+    let far = json!({"glyph": "A", "svg": r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><rect x="5000" y="0" width="100" height="100"/></svg>"#});
+    let mut app = square_app();
+    let r = call(&mut app, "engine.execute", json!({"command": "edit.paste", "params": far}));
+    assert_eq!(r["outOfBounds"], true);
+    assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false, "an agent's run asks nothing");
+
+    call(&mut app, "ui.menu.invoke", json!({"command": "edit.paste", "params": far}));
+    let asked = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(asked["dialog"], "dialog.pastedOutlineBounds");
+    assert_eq!(asked["captions"], json!({"ok": "Move", "cancel": "Keep Position"}));
+    assert!(asked["message"].is_string(), "{asked}");
+    assert_eq!((asked["params"]["dx"].clone(), asked["params"]["shapes"].clone()), (json!(-5000.0), json!([2])), "{asked}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+
+    let (dir, file) = svg_file("newglyph");
+    let mut app = square_app();
+    let r = call(&mut app, "engine.execute", json!({"command": "file.importOutlines", "params": {"files": [file]}}));
+    assert_eq!(r["unmatched"], json!([file]));
+    assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false);
+    app.run_from_shell("file.importOutlines", &json!({"files": [file]})).unwrap();
+    let asked = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!(asked["dialog"], "dialog.importOutlinesMissingGlyph");
+    assert_eq!(asked["captions"], json!({"ok": "Add Glyphs", "cancel": "Skip"}));
+    assert_eq!(asked["fields"][0]["labels"], json!(["Add a glyph for each", "Leave them out"]));
+    assert_eq!(asked["params"]["files"], json!([file]));
+    call(&mut app, "ui.dialog.confirm", json!({}));
+    assert!(font(&app).glyph("newglyph").is_some(), "OK added the glyph");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn file_export_opens_the_export_dialog_which_runs_on_ok() {
+    let mut app = FontcraftApp::default();
+    app.run("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut app, vec![key(egui::Key::E, egui::Modifiers::COMMAND)]);
+    let opened = call(&mut app, "ui.dialog.inspect", json!({}));
+    assert_eq!((opened["dialog"].clone(), opened["mode"].clone()), (json!("dialog.exportOtf"), json!("runOnOk")), "Cmd+E: {opened}");
+    assert_eq!(opened["fields"][0]["labels"], json!(["PostScript/CFF", "TrueType"]));
+    assert_eq!(opened["captions"]["ok"], "Export");
+    assert!(app.session.interaction().is_none(), "nothing previews");
+    for _ in 0..3 {
+        frame(&ctx, &mut app, Vec::new());
+    }
+    assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], true, "the dialog stays open without an interaction");
+
+    // A failing OK keeps the dialog with the message; changing a field clears it.
+    call(&mut app, "ui.click", json!({"id": "autohint"}));
+    fails(&mut app, "ui.dialog.confirm", json!({}));
+    assert!(call(&mut app, "ui.dialog.inspect", json!({}))["error"].is_string());
+    call(&mut app, "ui.click", json!({"id": "autohint"}));
+    assert!(call(&mut app, "ui.dialog.inspect", json!({}))["error"].is_null());
+    call(&mut app, "ui.key", json!({"key": "Escape"}));
+    assert_eq!(call(&mut app, "ui.dialog.inspect", json!({}))["open"], false);
+
+    let ufo = fails(&mut app, "engine.execute", json!({"command": "file.export", "params": {"tab": "ufo"}}));
+    assert!(ufo.contains("not built"), "{ufo}");
+}
+
+#[test]
+fn choice_labels_show_and_words_are_the_values() {
+    let mut app = square_app();
+    let opened = call(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"dialog": "dialog.transformations"}}));
+    let origin = &opened["fields"][0];
+    assert_eq!(origin["choices"][0], "capHeight");
+    assert_eq!(origin["labels"][0], "Cap Height");
+    fails(&mut app, "ui.dialog.set", json!({"field": "origin", "value": "Cap Height"}));
+    call(&mut app, "ui.dialog.set", json!({"field": "origin", "value": "capHeight"}));
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut app, Vec::new());
+    call(&mut app, "ui.dialog.cancel", json!({}));
+}

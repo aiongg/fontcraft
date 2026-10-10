@@ -12,14 +12,15 @@ use serde_json::{Map, Value};
 use super::form::Field;
 use super::{Dialog, Fields};
 
+/// What the Primitives tool's click asks for: the shell opens [`for_click`]'s dialog.
+pub const CLICK: &str = "dialog.primitiveMeasurements";
+
 /// The size the fields open with, in font units.
 const DEFAULT_SIZE: f64 = 100.0;
 
-pub const RECTANGLE: Dialog =
-    Dialog { id: "dialog.primitiveMeasurements", title: "Add Rectangle", command: "path.addRectangle", fields: Fields::Fixed(fields) };
+pub const RECTANGLE: Dialog = Dialog::new("dialog.primitiveMeasurements", "Add Rectangle", "path.addRectangle", Fields::Fixed(fields));
 
-pub const ELLIPSE: Dialog =
-    Dialog { id: "dialog.primitiveMeasurements", title: "Add Ellipse", command: "path.addEllipse", fields: Fields::Fixed(fields) };
+pub const ELLIPSE: Dialog = Dialog::new("dialog.primitiveMeasurements", "Add Ellipse", "path.addEllipse", Fields::Fixed(fields));
 
 fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
     let max = 2.0 * MAX_COORDINATE;

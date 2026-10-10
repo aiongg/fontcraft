@@ -25,6 +25,7 @@ use serde_json::{Map, Value, json};
 
 use crate::app::FontcraftApp;
 use crate::canvas::view;
+use crate::dialogs;
 use crate::state::{Tab, TabView};
 use crate::theme::Tokens;
 
@@ -247,7 +248,12 @@ pub fn apply(app: &mut FontcraftApp, out: Output) -> Vec<String> {
                 cancel(app);
                 Ok(())
             }
-            Action::Run { invocation } => app.run(&invocation.id, &invocation.params).map(|value| adopt(app, &value)),
+            Action::Run { invocation } if invocation.id == dialogs::primitive_measurements::CLICK => {
+                dialogs::primitive_measurements::for_click(&invocation.params)
+                    .ok_or_else(|| format!("{}: the click names no glyph", invocation.id))
+                    .and_then(|(dialog, given)| dialogs::open(app, &dialog, &given).map(drop))
+            }
+            Action::Run { invocation } => app.run_from_shell(&invocation.id, &invocation.params).map(|value| adopt(app, &value)),
             Action::Select { selection } => {
                 if let Some(tab) = app.state.tab_mut() {
                     tab.selection = selection;

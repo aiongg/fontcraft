@@ -76,6 +76,19 @@ impl FontcraftApp {
         result
     }
 
+    /// Runs a command the person started (menu item, shortcut, tool) as [`Self::run`] does, then
+    /// opens the follow-up dialog its result asks for (`dialogs::after`).
+    pub fn run_from_shell(&mut self, id: &str, params: &Value) -> Result<Value, String> {
+        let result = self.run(id, params)?;
+        if self.dialog.is_none()
+            && let Some((dialog, given)) = crate::dialogs::after(id, params, &result)
+            && let Err(e) = crate::dialogs::open(self, &dialog, &given)
+        {
+            self.state.status = e;
+        }
+        Ok(result)
+    }
+
     /// Drops UI references to glyphs a command removed (or to a closed document). A tab whose
     /// glyphs are all gone closes.
     fn after_command(&mut self) {
@@ -159,7 +172,7 @@ impl FontcraftApp {
                 continue;
             }
             let params = tools_glue::with_targets(self, id, params);
-            let _ = self.run(id, &params);
+            let _ = self.run_from_shell(id, &params);
         }
         if tools_glue::dispatch_queued(self) {
             ui.ctx().request_repaint();

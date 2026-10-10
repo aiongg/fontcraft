@@ -21,7 +21,7 @@ milestone = "M2"
 summary = "Opens the export dialog for the frontmost document, with one tab per output kind (static OpenType, variable fonts, UFO, metrics). The dialog collects options and then runs the matching file.export* engine command."
 ref = "Import & Export › Exporting Font Files"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: File › Export opens the dialog with the static OpenType tab set to PostScript (CFF) outlines. Not shown: Cmd+E, the other tabs."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 4:28–4:39: File › Export opens the dialog with the static OpenType tab set to PostScript (CFF) outlines. Not shown: Cmd+E, the other tabs. FontCraft: a shell command that opens dialog.exportOtf (`tab: \"otf\"`, the default); the other tabs are not built and answer with an error."
 
 [[command]]
 id = "file.exportAll"
@@ -124,7 +124,7 @@ milestone = "M3"
 summary = "Options for static OpenType export: outline flavour, the container formats to write, overlap removal, autohinting and the two destinations (a folder, or direct installation into the system)."
 ref = "Import & Export › Exporting Font Files › OpenType Export"
 status = "handbook"
-notes = "Runs file.exportStatic. Built fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), removeOverlap and autohint (both off; the engine refuses either one on until overlap removal and hinting on export exist). The destination folder is a dialog.open parameter until the framework has a folder field. Not built: the File Format checkboxes (need a field for a list of words; the containers default to plain), the destination checkbox and Test Install. The dialog must not preview: exporting writes files, so OK runs the command once."
+notes = "Runs file.exportStatic. Built fields: outlines (cff or truetype; opens on cff, as the video named in file.export shows it; whether that is the default or a remembered setting is not observed), removeOverlap and autohint (both off; the engine refuses either one on until overlap removal and hinting on export exist). The destination folder is a dialog.open parameter until the framework has a folder field. Not built: the File Format checkboxes (need a field for a list of words; the containers default to plain), the destination checkbox and Test Install. The dialog does not preview, as exporting writes files: OK runs the command once, journaled, and a failure keeps the dialog open with the message. The flavour menu shows PostScript/CFF and TrueType for the words cff and truetype. The handbook's button reads Next… and asks for a folder; until the dialog has a folder field, the button reads Export and writes to the given destination."
 
 [[panel]]
 id = "dialog.exportVariable"
@@ -682,7 +682,7 @@ milestone = "M3"
 summary = "Prompt shown once per imported file whose base name matches no glyph in the font."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
-notes = "The handbook asks once per file, with OK (skip) and Add Glyph. FontCraft asks once for all the files `file.importOutlines` lists as `unmatched`: OK runs it again on them with `onMissingGlyph` (add creates each glyph), with a live preview; Cancel skips them. Documented but not yet observed."
+notes = "The handbook asks once per file, with OK (skip) and Add Glyph. FontCraft asks once for all the files `file.importOutlines` lists as `unmatched`: OK runs it again on them with `onMissingGlyph` (add creates each glyph), with a live preview; Cancel skips them. It opens after the person runs the import (menu, shortcut), not after a control-channel or MCP run. The buttons read Add Glyphs and Skip, as one question covers every file; the handbook's per-file question has Add Glyph and OK (skip). Documented but not yet observed."
 
 [[behavior]]
 id = "import.outlinesBatchByFileName"
@@ -847,7 +847,7 @@ milestone = "M3"
 summary = "Offer shown when pasted outlines land far outside the glyph box. The handbook shows the dialog only as a picture, so button captions and the exact correction (translate only, or also scale) are unknown."
 ref = "Import & Export › Vector Drawing Applications"
 status = "handbook"
-notes = "Opened after `edit.paste` returns `outOfBounds`. OK runs `selection.move` on the paste's `selection` by its `correction` (dx, dy: the pasted box's bottom left to the origin), with a live preview; the correction only translates. Our choices; documented but not yet observed."
+notes = "Opened after `edit.paste` returns `outOfBounds`. OK runs `selection.move` on the paste's `selection` by its `correction` (dx, dy: the pasted box's bottom left to the origin), with a live preview; the correction only translates. It opens after the person pastes (menu, shortcut), not after a control-channel or MCP paste. The buttons read Move and Keep Position, with the line \"The pasted outline lies outside the glyph box.\" above the fields. Our choices; documented but not yet observed."
 
 [[behavior]]
 id = "paste.outOfBoundsCorrection"

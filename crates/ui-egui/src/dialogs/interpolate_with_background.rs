@@ -6,12 +6,8 @@ use super::{Dialog, Fields};
 /// The engine's cap on the amount, in percent.
 const MAX_AMOUNT: f64 = 100_000.0;
 
-pub const DIALOG: Dialog = Dialog {
-    id: "dialog.interpolateWithBackground",
-    title: "Interpolate with Background",
-    command: "path.interpolateWithBackground",
-    fields: Fields::Fixed(fields),
-};
+pub const DIALOG: Dialog =
+    Dialog::new("dialog.interpolateWithBackground", "Interpolate with Background", "path.interpolateWithBackground", Fields::Fixed(fields));
 
 fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
     vec![Field::number(

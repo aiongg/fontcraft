@@ -36,7 +36,7 @@ for the next frame and replies when the frame arrives.
 | `document.inspect` | | `{documents: [{index, active, title, path, modified, revision, familyName, glyphs, masters, undo, redo}], active}` |
 | `ui.inspect` | | the UI state: `selected_glyphs`, `tabs` (each `{id, glyphs, edited, view: {scale, center}, selection, focus, selection_glyph}`: `selection` and the path `focus` belong to the glyph `selection_glyph`), `active_tab` (an index into `tabs`; `null` while Font View shows), `editing` (the edited glyph's name), `closed_tabs`, `display` (the View toggles), `show_palette`, `canvas_size`, `status` |
 | `ui.menu.list` | | the menu tree: `[{title, items: [{command, label, path, shortcut, enabled, disabled_reason?}]}]` |
-| `ui.menu.invoke` | `{command, params?}` | runs a menu item; an id that is in no menu is an error |
+| `ui.menu.invoke` | `{command, params?}` | runs a menu item as a click on it does: the follow-up question its result asks (a pasted outline outside the glyph, imported files without a glyph) opens as a dialog; an id that is in no menu is an error |
 | `ui.screenshot` | `{path?}` | captures the window as PNG, written to `path` or returned as base64 `png`; `{width, height, pixelsPerPoint, path?, png?}`. Sizes are in pixels. The reply comes after the next frame is drawn. Headless hosts (tests, MCP) answer with an error |
 | `ui.render` | `{path?, glyphs?, text?, layer?, size?, scale?}` | draws glyphs filled by the nonzero rule, black on white, without a window; `{width, height, glyphs, path?, png?}`. `glyphs` names them, `text` maps characters to glyphs; neither: the edited glyph, else the Font View selection. `size` is pixels per em (default 256), `scale` pixels per font unit instead. `layer` draws that layer of the one glyph named. The same request gives the same bytes |
 | `ui.tool.select` | `{tool}` | makes a pointer tool active (the command `tool.select`): `{tool, previous}`. A gesture in progress is cancelled |
@@ -44,9 +44,9 @@ for the next frame and replies when the frame arrives.
 | `ui.pointer` | `{events: [{kind, x, y, space?, mods?}]}` | drives the active tool like the mouse; see below |
 | `ui.key` | `{key, shift?, alt?, cmd?, ctrl?, action?}` | a key as the keyboard gives it; see below |
 | `ui.text` | `{text}` | types into the focused text field at the next frame (`{field: true}`); with none focused, each character is a `ui.key` tap (`{keys, handled}`) |
-| `ui.dialog.inspect` | | the open dialog: `{open, dialog, title, command, fields: [{id, label, kind, value, focused, min?, max?, choices?, default, doc}], editing, params, error, buttons}`; `{open: false}` when none is |
+| `ui.dialog.inspect` | | the open dialog: `{open, dialog, title, command, mode: "preview" \| "runOnOk", message, fields: [{id, label, kind, value, focused, min?, max?, choices?, labels?, default, doc}], editing, params, error, buttons, captions: {ok, cancel}}`; `{open: false}` when none is |
 | `ui.dialog.set` | `{field, value}` | gives a field of the open dialog a value and previews it; a number field also takes text. The `ui.dialog.inspect` reply |
-| `ui.dialog.confirm` | | OK: the preview becomes one undo step; `{confirmed, changed, command, params}` |
+| `ui.dialog.confirm` | | OK: the preview becomes one undo step, `{confirmed, changed, command, params}`; in a `runOnOk` dialog the command runs once, `{confirmed, command, params, result}`, and a failure keeps the dialog open |
 | `ui.dialog.cancel` | | Cancel: the font as it was when the dialog opened; `{cancelled}` |
 | `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, or a field by its parameter's key (a checkbox toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`) |
 | `control.methods` | | this table |
@@ -94,6 +94,13 @@ in `ui.dialog.inspect` is what OK runs: the same command with those parameters g
 font. While a dialog is open, `ui.key` goes to it (`Return`, `Escape`, `Tab`, `ArrowUp`,
 `ArrowDown`, the rules of `dialog.fieldKeys`), `ui.text` types into its focused field, and
 editing commands fail with "an interaction is running".
+
+A dialog in `runOnOk` mode (`dialog.exportOtf`, opened by `file.export`) previews nothing,
+because its command writes files: `ui.dialog.confirm` runs the command once, and a failure keeps
+the dialog open with the message in `error`. Follow-up questions (`dialog.pastedOutlineBounds`,
+`dialog.importOutlinesMissingGlyph`) open after a person's run of their command, or after
+`ui.menu.invoke`; `engine.execute` never opens one. Open one yourself with `dialog.open
+{dialog}` and the parameters from the command's result.
 
 `revision` in `document.inspect` grows with every change to a document, whoever made it. Compare
 it to learn whether the font changed since you last looked.

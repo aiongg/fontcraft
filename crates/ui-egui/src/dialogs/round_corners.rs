@@ -3,4 +3,4 @@
 
 use super::{Dialog, Fields};
 
-pub const DIALOG: Dialog = Dialog { id: "dialog.filterRoundCorners", title: "Round Corners", command: "filter.roundCorners", fields: Fields::Filter };
+pub const DIALOG: Dialog = Dialog::new("dialog.filterRoundCorners", "Round Corners", "filter.roundCorners", Fields::Filter);

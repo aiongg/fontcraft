@@ -4,29 +4,33 @@
 //! Translate and Scale take `{x, y}` objects, which a field cannot hold yet; agents pass them to
 //! the command directly.
 
-use serde_json::json;
-
-use super::form::{Field, Kind};
+use super::form::Field;
 use super::{Dialog, Fields};
 
-pub const DIALOG: Dialog =
-    Dialog { id: "dialog.transformations", title: "Transformations", command: "path.transformations", fields: Fields::Fixed(fields) };
+pub const DIALOG: Dialog = Dialog::new("dialog.transformations", "Transformations", "path.transformations", Fields::Fixed(fields));
 
 /// The command refuses ±90° and beyond, where the shear has no finite factor.
 const MAX_SLANT: f64 = 89.9;
 
-/// The origins in the order of their export-string codes (0 cap height … 4 baseline).
-const ORIGINS: [&str; 5] = ["capHeight", "halfCapHeight", "xHeight", "halfXHeight", "baseline"];
+/// The origins with their menu labels, in the order of their export-string codes (0 cap height
+/// … 4 baseline).
+const ORIGINS: [(&str, &str); 5] = [
+    ("capHeight", "Cap Height"),
+    ("halfCapHeight", "Half Cap Height"),
+    ("xHeight", "x-Height"),
+    ("halfXHeight", "Half x-Height"),
+    ("baseline", "Baseline"),
+];
 
 fn fields(_: &fontcraft_engine::Session) -> Vec<Field> {
     vec![
-        Field {
-            key: "origin".into(),
-            label: "Origin".into(),
-            kind: Kind::Choice { choices: ORIGINS.iter().map(|o| o.to_string()).collect() },
-            default: json!("baseline"),
-            doc: "The fixed point of the scale and slant: a metric height of the master, at half the advance width".into(),
-        },
+        Field::choice(
+            "origin",
+            "Origin",
+            &ORIGINS,
+            "baseline",
+            "The fixed point of the scale and slant: a metric height of the master, at half the advance width",
+        ),
         Field::number("slant", "Slant", -MAX_SLANT, MAX_SLANT, 0.0, "Degrees of a plain shear about the origin"),
         Field::bool("cursivy", "Cursivy", false, "Slant with optical correction of the curves; needs the master's horizontal and vertical stems"),
     ]

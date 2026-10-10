@@ -26,8 +26,13 @@ pub enum Kind {
     Integer { min: f64, max: f64 },
     /// A checkbox.
     Bool,
-    /// One word of a list, as a pop-up menu.
-    Choice { choices: Vec<String> },
+    /// One word of a list, as a pop-up menu. `labels`, when given, holds the text the menu shows
+    /// for each word, in the same order.
+    Choice {
+        choices: Vec<String>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        labels: Vec<String>,
+    },
 }
 
 /// One field: a parameter of the dialog's command.
@@ -53,6 +58,20 @@ impl Field {
     /// A checkbox.
     pub fn bool(key: &str, label: &str, default: bool, doc: &str) -> Self {
         Self { key: key.into(), label: label.into(), kind: Kind::Bool, default: json!(default), doc: doc.into() }
+    }
+
+    /// A pop-up menu of `(word, label)` pairs: the value is the word, the menu shows the label.
+    pub fn choice(key: &str, label: &str, choices: &[(&str, &str)], default: &str, doc: &str) -> Self {
+        Self {
+            key: key.into(),
+            label: label.into(),
+            kind: Kind::Choice {
+                choices: choices.iter().map(|(w, _)| w.to_string()).collect(),
+                labels: choices.iter().map(|(_, l)| l.to_string()).collect(),
+            },
+            default: json!(default),
+            doc: doc.into(),
+        }
     }
 
     /// A field that takes typed text (numbers).
@@ -83,7 +102,7 @@ impl Field {
                 Ok(if whole { json!(n as i64) } else { json!(n) })
             }
             Kind::Bool => value.as_bool().map(Value::Bool).ok_or_else(|| format!("`{key}` must be true or false")),
-            Kind::Choice { choices } => match value.as_str() {
+            Kind::Choice { choices, .. } => match value.as_str() {
                 Some(word) if choices.iter().any(|c| c == word) => Ok(json!(word)),
                 _ => Err(format!("`{key}` must be one of {}", choices.join(", "))),
             },
@@ -124,7 +143,7 @@ fn filter_field(p: &Value) -> Result<Field, String> {
             if list.is_empty() || list.len() > MAX_CHOICES {
                 return Err(format!("`{key}` must have 1 to {MAX_CHOICES} choices"));
             }
-            Kind::Choice { choices: list.iter().filter_map(Value::as_str).map(str::to_string).collect() }
+            Kind::Choice { choices: list.iter().filter_map(Value::as_str).map(str::to_string).collect(), labels: Vec::new() }
         }
         other => return Err(format!("`{key}` has an unknown kind {other:?}")),
     };
@@ -182,13 +201,13 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, events: &mu
                     }
                     r
                 }
-                Kind::Choice { choices } => {
+                Kind::Choice { choices, labels } => {
                     let current = value.as_str().unwrap_or_default();
                     egui::ComboBox::from_id_salt(widget_id(&field.key))
-                        .selected_text(current)
+                        .selected_text(choice_label(choices, labels, current))
                         .show_ui(ui, |ui| {
                             for choice in choices {
-                                if ui.selectable_label(choice == current, choice).clicked() {
+                                if ui.selectable_label(choice == current, choice_label(choices, labels, choice)).clicked() {
                                     events.push(Event::Set(field.key.clone(), json!(choice)));
                                 }
                             }
@@ -204,6 +223,11 @@ pub fn draw(ui: &mut egui::Ui, dialog: &OpenDialog, tokens: &Tokens, events: &mu
             ui.end_row();
         }
     });
+}
+
+/// The text a pop-up menu shows for `word`: its label, else the word.
+fn choice_label<'a>(choices: &[String], labels: &'a [String], word: &'a str) -> &'a str {
+    choices.iter().position(|c| c == word).and_then(|i| labels.get(i)).map_or(word, String::as_str)
 }
 
 /// A number field. Its text is the value, or what is being typed while it has the keyboard.

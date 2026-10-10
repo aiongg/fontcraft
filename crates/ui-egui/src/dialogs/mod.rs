@@ -6,6 +6,14 @@
 //! the dialog opened on. Agents can skip the dialog and run the command with the same
 //! parameters: the result is the same font.
 //!
+//! A dialog whose command acts outside the font (exporting writes files) has
+//! [`Mode::RunOnOk`]: nothing runs while it is open, OK runs the command once as a menu item
+//! would, and a command that fails keeps the dialog open with its message.
+//!
+//! A question asked after a command ([`Dialog::after`]) opens when the person runs that command
+//! (menu, shortcut, tool, or `ui.menu.invoke`) and its result calls for it; `engine.execute`
+//! (control channel, MCP) never opens one, as agents read the result themselves.
+//!
 //! The fields come from the command's parameters: a filter's from its `filter.list` schema
 //! ([`Fields::Filter`]), any other command's from a list in its dialog's file
 //! ([`Fields::Fixed`]). Every filter with parameters gets a dialog generated from its schema;
@@ -43,6 +51,44 @@ pub struct Dialog {
     /// The command OK runs.
     pub command: &'static str,
     pub fields: Fields,
+    pub mode: Mode,
+    /// Asked only after another command (see `after`): never the dialog of its own command's
+    /// menu item or of `dialog.open {command}`.
+    pub follow_up: bool,
+    /// The command whose result can ask this dialog, and the parameters to open it with.
+    pub after: Option<After>,
+    /// The captions of the confirm and cancel buttons.
+    pub buttons: [&'static str; 2],
+    /// A line above the fields; empty for none.
+    pub message: &'static str,
+}
+
+impl Dialog {
+    /// A previewing dialog with OK and Cancel and no message.
+    pub const fn new(id: &'static str, title: &'static str, command: &'static str, fields: Fields) -> Self {
+        Self { id, title, command, fields, mode: Mode::Preview, follow_up: false, after: None, buttons: ["OK", "Cancel"], message: "" }
+    }
+}
+
+/// How OK applies the dialog's command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Mode {
+    /// Every change previews the command; OK keeps the last preview as one undo step.
+    Preview,
+    /// Nothing runs until OK, which runs the command once (journaled, as a menu item runs it).
+    RunOnOk,
+}
+
+/// The parameters of a follow-up dialog from the request and the result of the command that
+/// asks it; `None` when the result asks nothing.
+pub type FollowUp = fn(&Value, &Value) -> Option<Map<String, Value>>;
+
+/// The command that asks a follow-up dialog.
+#[derive(Clone, Copy, Debug)]
+pub struct After {
+    pub command: &'static str,
+    pub params: FollowUp,
 }
 
 /// Where a dialog's fields come from.
@@ -68,13 +114,22 @@ pub const DIALOGS: &[Dialog] = &[
 ];
 
 /// The shell commands of this module.
-pub const COMMANDS: &[UiCommand] = &[(
-    "dialog.open",
-    "Open Dialog",
-    &[],
-    "",
-    "{dialog: id (e.g. \"dialog.filterRoundCorners\") | command: the id of the command it runs, params?: {…}} opens a command's dialog with a live preview. Parameters of its fields set their first values; the rest (glyph, glyphs, layer, points…) say what it acts on, else the selection does. Then ui.dialog.set, ui.dialog.confirm, ui.dialog.cancel → ui.dialog.inspect's reply",
-)];
+pub const COMMANDS: &[UiCommand] = &[
+    (
+        "dialog.open",
+        "Open Dialog",
+        &[],
+        "",
+        "{dialog: id (e.g. \"dialog.filterRoundCorners\") | command: the id of the command it runs, params?: {…}} opens a command's dialog with a live preview. Parameters of its fields set their first values; the rest (glyph, glyphs, layer, points…) say what it acts on, else the selection does. Then ui.dialog.set, ui.dialog.confirm, ui.dialog.cancel → ui.dialog.inspect's reply",
+    ),
+    (
+        "file.export",
+        "Export…",
+        &["File"],
+        "Cmd+E",
+        "{tab?: \"otf\", params?: {…}} opens the export dialog of the active document on its static OpenType tab (the only tab so far); params set its first values and the destination. Nothing is written until OK → ui.dialog.inspect's reply",
+    ),
+];
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
     match id {
@@ -91,6 +146,18 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             };
             open(app, &dialog, &params).map_err(|e| args.err(e))
         }
+        "file.export" => {
+            let params = match args.get("params") {
+                None => Map::new(),
+                Some(Value::Object(m)) => m.clone(),
+                Some(_) => return Err(args.err("`params` must be a JSON object")),
+            };
+            match args.string("tab")?.unwrap_or("otf") {
+                "otf" => open(app, &export::DIALOG, &params).map_err(|e| args.err(e)),
+                tab @ ("variable" | "ufo" | "metrics") => Err(args.err(format!("the `{tab}` tab is not built yet"))),
+                tab => Err(args.err(format!("unknown tab `{tab}`: otf, variable, ufo or metrics"))),
+            }
+        }
         other => Err(format!("unknown command `{other}`")),
     }
 }
@@ -101,6 +168,9 @@ pub struct OpenDialog {
     pub id: String,
     pub title: String,
     pub command: String,
+    pub mode: Mode,
+    pub buttons: [&'static str; 2],
+    pub message: &'static str,
     pub fields: Vec<Field>,
     /// Each field's value, by key.
     pub values: Map<String, Value>,
@@ -108,7 +178,8 @@ pub struct OpenDialog {
     pub targets: Map<String, Value>,
     /// The number field taking the keyboard.
     pub editing: Option<Editing>,
-    /// Why the last preview failed; OK waits until a preview succeeds.
+    /// Why the last preview failed (OK waits until a preview succeeds), or, in
+    /// [`Mode::RunOnOk`], why OK's run failed (until a field changes).
     pub error: Option<String>,
     /// A key took the keyboard away from a field: the next frame unfocuses its widget.
     #[serde(skip)]
@@ -184,16 +255,25 @@ pub fn find(id: &str) -> Option<Dialog> {
     filters().into_iter().find(|(command, _)| generated_id(command) == id).map(|(command, title)| generated(command, title))
 }
 
-/// The dialog of the command `command`, if it has one.
+/// The dialog of the command `command`, if it has one. Follow-up questions are not.
 pub fn for_command(command: &str) -> Option<Dialog> {
-    if let Some(d) = DIALOGS.iter().find(|d| d.command == command) {
+    if let Some(d) = DIALOGS.iter().find(|d| d.command == command && !d.follow_up) {
         return Some(*d);
     }
     filters().into_iter().find(|(c, _)| *c == command).map(|(command, title)| generated(command, title))
 }
 
 fn generated(command: &'static str, title: &'static str) -> Dialog {
-    Dialog { id: "", title, command, fields: Fields::Filter }
+    Dialog::new("", title, command, Fields::Filter)
+}
+
+/// The follow-up dialog that `command`, run with `request` and returning `result`, asks, with
+/// the parameters to open it with.
+pub fn after(command: &str, request: &Value, result: &Value) -> Option<(Dialog, Map<String, Value>)> {
+    DIALOGS.iter().find_map(|d| {
+        let after = d.after.filter(|a| a.command == command)?;
+        (after.params)(request, result).map(|given| (*d, given))
+    })
 }
 
 /// The id of a generated filter dialog: the command's, with `filter.` turned into
@@ -248,15 +328,22 @@ pub fn open(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>)
     if targets.is_empty() {
         targets = selection_targets(app, dialog.command);
     }
-    if targets.is_empty() {
-        return Err(format!("{}: select a glyph first", dialog.title));
+    match dialog.mode {
+        Mode::Preview if targets.is_empty() => return Err(format!("{}: select a glyph first", dialog.title)),
+        Mode::Preview => app.session.begin(dialog.title).map_err(|e| e.to_string())?,
+        // The command acts on the active document as a whole.
+        Mode::RunOnOk => {
+            app.session.doc().map_err(|e| e.to_string())?;
+        }
     }
-    app.session.begin(dialog.title).map_err(|e| e.to_string())?;
     let id = if dialog.id.is_empty() { generated_id(dialog.command) } else { dialog.id.to_string() };
     app.dialog = Some(OpenDialog {
         id,
         title: dialog.title.to_string(),
         command: dialog.command.to_string(),
+        mode: dialog.mode,
+        buttons: dialog.buttons,
+        message: dialog.message,
         fields,
         values,
         targets,
@@ -283,9 +370,14 @@ fn selection_targets(app: &FontcraftApp, command: &str) -> Map<String, Value> {
     }
 }
 
-/// Runs the dialog's command on the font as it was when the dialog opened.
+/// Runs the dialog's command on the font as it was when the dialog opened. A dialog that runs on
+/// OK only forgets the failure of the last OK.
 fn preview(app: &mut FontcraftApp) {
-    let Some(d) = &app.dialog else { return };
+    let Some(d) = app.dialog.as_mut() else { return };
+    if d.mode == Mode::RunOnOk {
+        d.error = None;
+        return;
+    }
     let (command, params) = (d.command.clone(), d.params());
     let result = app.session.preview(&command, &params);
     if let Some(d) = app.dialog.as_mut() {
@@ -324,13 +416,17 @@ fn commit_edit(app: &mut FontcraftApp) -> Result<(), String> {
     Ok(())
 }
 
-/// `ui.dialog.confirm` and OK: the last preview becomes one undo step.
+/// `ui.dialog.confirm` and OK: the last preview becomes one undo step, or, in
+/// [`Mode::RunOnOk`], the command runs.
 pub fn confirm(app: &mut FontcraftApp) -> Result<Value, String> {
     if app.dialog.is_none() {
         return Err("no dialog is open".into());
     }
     commit_edit(app)?;
     let Some(d) = &app.dialog else { return Err("no dialog is open".into()) };
+    if d.mode == Mode::RunOnOk {
+        return run_on_ok(app);
+    }
     if let Some(e) = &d.error {
         return Err(format!("{}: the preview failed, so OK has nothing to keep: {e}", d.title));
     }
@@ -341,10 +437,31 @@ pub fn confirm(app: &mut FontcraftApp) -> Result<Value, String> {
     Ok(json!({"confirmed": true, "changed": changed, "command": command, "params": params}))
 }
 
+/// OK of a [`Mode::RunOnOk`] dialog: runs the command once. A failure keeps the dialog open
+/// with the message.
+fn run_on_ok(app: &mut FontcraftApp) -> Result<Value, String> {
+    let Some(d) = &app.dialog else { return Err("no dialog is open".into()) };
+    let (title, command, params) = (d.title.clone(), d.command.clone(), d.params());
+    match app.run(&command, &params) {
+        Ok(result) => {
+            app.dialog = None;
+            app.state.status = format!("{title}: done");
+            Ok(json!({"confirmed": true, "command": command, "params": params, "result": result}))
+        }
+        Err(e) => {
+            if let Some(d) = app.dialog.as_mut() {
+                d.error = Some(e.clone());
+            }
+            app.state.status = e.clone();
+            Err(format!("{title}: {e}"))
+        }
+    }
+}
+
 /// `ui.dialog.cancel` and Cancel: the font as it was when the dialog opened.
 pub fn cancel(app: &mut FontcraftApp) -> Result<Value, String> {
     let d = app.dialog.take().ok_or("no dialog is open")?;
-    if app.session.interaction().is_some() {
+    if d.mode == Mode::Preview && app.session.interaction().is_some() {
         app.session.cancel().map_err(|e| e.to_string())?;
     }
     app.state.status = format!("{}: cancelled", d.title);
@@ -372,11 +489,14 @@ pub fn inspect(app: &FontcraftApp) -> Value {
         "dialog": d.id,
         "title": d.title,
         "command": d.command,
+        "mode": d.mode,
+        "message": if d.message.is_empty() { Value::Null } else { json!(d.message) },
         "fields": fields,
         "editing": d.editing,
         "params": d.params(),
         "error": d.error,
         "buttons": ["ok", "cancel"],
+        "captions": {"ok": d.buttons[0], "cancel": d.buttons[1]},
     })
 }
 
@@ -519,8 +639,12 @@ pub fn frame_keys(app: &mut FontcraftApp, ctx: &egui::Context) {
 /// Draws the open dialog over the window and applies what was done in it.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
     let Some(d) = &app.dialog else { return };
-    if app.session.interaction().is_none() {
-        // The document closed under the dialog: nothing is left to preview.
+    let gone = match d.mode {
+        Mode::Preview => app.session.interaction().is_none(),
+        Mode::RunOnOk => app.session.doc().is_err(),
+    };
+    if gone {
+        // The document closed under the dialog: nothing is left to act on.
         app.dialog = None;
         return;
     }
@@ -532,6 +656,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
         .resizable(false)
         .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, tokens.dialog_top))
         .show(ui.ctx(), |ui| {
+            if !d.message.is_empty() {
+                ui.label(d.message);
+                ui.add_space(tokens.dialog_spacing);
+            }
             form::draw(ui, d, tokens, &mut events);
             if let Some(e) = &d.error {
                 ui.colored_label(tokens.error_text, e);
@@ -541,10 +669,12 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui) {
                 ui,
                 |_| {},
                 |ui| {
-                    if ui.add_enabled(d.error.is_none(), egui::Button::new("OK")).clicked() {
+                    let [ok, cancel] = d.buttons;
+                    let can_confirm = d.error.is_none() || d.mode == Mode::RunOnOk;
+                    if ui.add_enabled(can_confirm, egui::Button::new(ok)).clicked() {
                         events.push(Event::Confirm);
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(cancel).clicked() {
                         events.push(Event::Cancel);
                     }
                 },

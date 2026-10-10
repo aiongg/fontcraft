@@ -5,22 +5,26 @@
 //! containers keep the command's default (plain .otf or .ttf).
 
 use fontcraft_engine::Session;
-use serde_json::json;
 
-use super::form::{Field, Kind};
-use super::{Dialog, Fields};
+use super::form::Field;
+use super::{Dialog, Fields, Mode};
 
-pub const DIALOG: Dialog = Dialog { id: "dialog.exportOtf", title: "Export", command: "file.exportStatic", fields: Fields::Fixed(fields) };
+/// Exporting writes files, so nothing runs until OK.
+pub const DIALOG: Dialog = Dialog {
+    mode: Mode::RunOnOk,
+    buttons: ["Export", "Cancel"],
+    ..Dialog::new("dialog.exportOtf", "Export", "file.exportStatic", Fields::Fixed(fields))
+};
 
 fn fields(_: &Session) -> Vec<Field> {
     vec![
-        Field {
-            key: "outlines".into(),
-            label: "Outline Flavor".into(),
-            kind: Kind::Choice { choices: vec!["cff".into(), "truetype".into()] },
-            default: json!("cff"),
-            doc: "cff: PostScript outlines in a .otf file; truetype: quadratic outlines in a .ttf file".into(),
-        },
+        Field::choice(
+            "outlines",
+            "Outline Flavor",
+            &[("cff", "PostScript/CFF"), ("truetype", "TrueType")],
+            "cff",
+            "cff: PostScript outlines in a .otf file; truetype: quadratic outlines in a .ttf file",
+        ),
         Field::bool("removeOverlap", "Remove Overlap", false, "Merge overlapping paths and components in every exported glyph"),
         Field::bool("autohint", "Autohint", false, "Add automatic hints to the exported fonts"),
     ]
@@ -106,9 +110,8 @@ mod tests {
     }
 
     /// Exporting writes files, so the dialog must not preview: nothing is written until OK, and
-    /// OK runs the command once, journaled. Needs the run-on-OK dialog mode.
+    /// OK runs the command once, journaled.
     #[test]
-    #[ignore = "needs the run-on-OK dialog mode: the preview writes files"]
     fn the_export_dialog_writes_nothing_before_ok() {
         let dir = temp("ok");
         let mut app = drawn();

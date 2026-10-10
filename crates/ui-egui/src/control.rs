@@ -28,7 +28,10 @@ pub const METHODS: &[(&str, &str)] = &[
     ("document.inspect", "{} the open documents: title, path, modified, revision, glyph count, history"),
     ("ui.inspect", "{} the UI state: selection, the glyph being edited, zoom, visible aids, status text"),
     ("ui.menu.list", "{} the menu tree with enablement"),
-    ("ui.menu.invoke", "{command, params?} run a menu item (the same as engine.execute; an id that is in no menu is an error)"),
+    (
+        "ui.menu.invoke",
+        "{command, params?} run a menu item as a click on it does: engine.execute, then the follow-up question its result asks opens as a dialog (an id that is in no menu is an error)",
+    ),
     ("ui.screenshot", "{path?} capture the window as PNG: written to `path`, else returned as base64 `png`; returns {width, height, pixelsPerPoint}"),
     (
         "ui.render",
@@ -236,7 +239,7 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
             if !menus::menu_tree(&app.session).iter().any(|m| m.items.iter().any(|i| i.command == id)) {
                 return Err(format!("{method}: `{id}` is not a menu item"));
             }
-            app.run(id, &inner())
+            app.run_from_shell(id, &inner())
         }
         "ui.render" => render(app, params),
         "ui.tool.select" => app.run("tool.select", params),

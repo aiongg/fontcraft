@@ -306,10 +306,14 @@ fn primitives_drag_with_shift_and_alt_and_a_click_asks_for_the_dialog() {
     }
     let (a, b) = (paths(&app, "r"), paths(&headless, "r"));
     assert_eq!(a.iter().map(nodes).collect::<Vec<_>>(), b.iter().map(nodes).collect::<Vec<_>>());
-    // A click asks for the measurements dialog at the click.
+    // A click opens the measurements dialog of the tool's mode at the click.
     let r = call(&mut app, "ui.pointer", json!({"events": [{"kind": "down", "x": 700, "y": 100}, {"kind": "up", "x": 700, "y": 100}]}));
-    let errors = r["result"]["errors"].to_string();
-    assert!(errors.contains("dialog.primitiveMeasurements"), "{r}");
+    assert_eq!(r["result"]["errors"], json!([]), "{r}");
+    let dialog = call(&mut app, "ui.dialog.inspect", json!({}))["result"].clone();
+    assert_eq!((dialog["dialog"].clone(), dialog["command"].clone()), (json!("dialog.primitiveMeasurements"), json!("path.addEllipse")), "{dialog}");
+    assert_eq!(dialog["params"]["glyph"], "r");
+    assert_eq!(paths(&app, "r").len(), 4, "the preview shows the ellipse");
+    call(&mut app, "ui.dialog.cancel", json!({}));
     assert_eq!(paths(&app, "r").len(), 3);
     app.run("tool.drawRectangle", &json!({})).unwrap();
     assert_eq!(app.tools.toolbox.active_id(), "rectangle");
