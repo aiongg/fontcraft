@@ -340,8 +340,10 @@ How FontCraft stores and edits them (our decisions where the handbook is silent)
 How the Annotation tool draws and edits them (our decisions; the handbook shows the marks but
 gives no sizes):
 
-- Each sub-tool is a tool of its own (`annotationSelect` … `annotationMinus`); `A` returns to
-  the sub-tool in use, or picks Annotation Selection. `annotation` names Annotation Selection.
+- Each sub-tool is a tool of its own (`annotationSelect` … `annotationMinus`); `A` keeps the
+  sub-tool in use, else returns to the one used last (Annotation Selection before any), and
+  `Shift+A` steps to the next, as for every shared button. `annotation` names Annotation
+  Selection.
 - A note's position is the top-left corner of its box; its handle is the box's top-right
   corner. The text wraps to the box width; the box grows with the text.
 - An arrow's position is its tip. Its angle runs counter-clockwise from the x axis and points

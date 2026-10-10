@@ -1519,7 +1519,7 @@ milestone = "M3"
 summary = "Tool for attaching notes and correction marks to a glyph layer. What a click does depends on the sub-tool chosen in the annotation palette. The shortcut is stated in the TrueType hinting chapter, where the same key does something else while the instructor tool is active."
 ref = "Edit View › Annotating"
 status = "handbook"
-notes = "Built in M3.16 (our design): each sub-tool is a tool of its own (`annotationSelect` … `annotationMinus`); A returns to the sub-tool in use, else Annotation Selection, and `tool.select` with `annotation` picks Annotation Selection. The tool takes Cmd+A, the arrow keys and Delete before the menu shortcuts. Handles show and work on selected annotations only."
+notes = "Built in M3.16 (our design): each sub-tool is a tool of its own (`annotationSelect` … `annotationMinus`); A keeps the sub-tool in use, else returns to the one used last (Annotation Selection before any; Shift+A steps to the next, as for every shared button), and `tool.select` with `annotation` picks Annotation Selection. The tool takes Cmd+A, the arrow keys and Delete before the menu shortcuts. Handles show and work on selected annotations only."
 
 [[tool]]
 id = "annotationSelect"

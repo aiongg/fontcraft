@@ -60,6 +60,8 @@ pub struct Tokens {
     pub locked_point: Color32,
     /// The Knife tool's cutting line while it is dragged.
     pub knife_line: Color32,
+    /// What the next click of a drawing tool would add, and a freehand stroke while it is drawn.
+    pub draw_preview: Color32,
     /// Messages that say what went wrong (a dialog's failed preview).
     pub error_text: Color32,
     pub radius: u8,
@@ -210,6 +212,7 @@ impl Tokens {
             hover_point: Color32::from_rgb(0x2d, 0x8c, 0xeb),
             locked_point: Color32::from_rgb(0xe0, 0x28, 0x28),
             knife_line: Color32::from_rgb(0xe0, 0x28, 0x28),
+            draw_preview: Color32::from_rgba_unmultiplied(0x20, 0x20, 0x20, 0x90),
             error_text: Color32::from_rgb(0xe0, 0x50, 0x50),
             radius: 3,
             font_size: 12.0,

@@ -99,6 +99,9 @@ pub fn overlay_shapes(overlays: &[Overlay], view: View, tokens: &Tokens) -> Vec<
                         OverlayKind::KnifeLine => Stroke::new(tokens.selection_width, tokens.knife_line),
                         // Its angle and crossings come from `guides::draw_measurement`.
                         OverlayKind::Ruler => Stroke::new(tokens.measure_ruler_width, tokens.measure_ruler),
+                        OverlayKind::DrawPreview => Stroke::new(tokens.outline_width, tokens.draw_preview),
+                        // A handle being pulled out looks like the handles of the outline.
+                        OverlayKind::DrawHandle => Stroke::new(tokens.handle_line_width, tokens.handle_line),
                         _ => Stroke::new(tokens.snap_line_width, tokens.snap_line),
                     };
                     out.push(Shape::line_segment([a, b], stroke));
@@ -107,6 +110,10 @@ pub fn overlay_shapes(overlays: &[Overlay], view: View, tokens: &Tokens) -> Vec<
             Overlay::Marker { kind, at } => {
                 let at = pos(view.to_screen(*at));
                 if !usable(at) {
+                    continue;
+                }
+                if *kind == OverlayKind::DrawHandle {
+                    out.push(Shape::circle_filled(at, tokens.handle_radius, tokens.node_handle));
                     continue;
                 }
                 let color = match kind {
