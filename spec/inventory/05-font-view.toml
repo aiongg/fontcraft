@@ -769,7 +769,11 @@ milestone = "M4"
 summary = "Sets the search query that narrows the visible glyphs. By default the text is matched against glyph name, Unicode value, the literal character and the glyph note; the magnifier menu restricts the fields and toggles Match Case and Regex. An empty query removes the restriction."
 ref = "Font View › Filtering Font View › Search Field"
 status = "handbook"
-notes = "The matching is crates/glyphquery (Matcher), reachable headless through fontView.queryGlyphs `search`; the search field and this command, which hold UI state, come with the sidebar and search UI (M4.9)."
+notes = "The matching is crates/glyphquery (Matcher), the same as fontView.queryGlyphs `search`. The search lives in Font View's query with the sidebar entries; options a call leaves out keep their value."
+guesses = [
+  "Glyphs that a new search hides are deselected, so batch commands never act on glyphs the view does not show. Settled by observing whether the reference keeps hidden glyphs selected after a search.",
+  "A term the matcher refuses (a regular expression that does not compile yet) is refused and the view stays as it was; the field keeps the typed text while it has the keyboard. Settled by typing an unfinished regular expression in the reference's field.",
+]
 
 [[command]]
 id = "fontView.selectSidebarEntries"
@@ -783,6 +787,12 @@ milestone = "M4"
 summary = "Selects the sidebar entries that filter Font View: All, categories and subcategories, scripts and languages, smart filters, list filters and folders. Cmd-click toggles one entry, Shift-click selects a range of filters; selecting All shows every glyph."
 ref = "Font View › Filtering Font View"
 status = "handbook"
+guesses = [
+  "Shift-click selects every entry listed between the last entry selected in the clicked entry's section and the clicked one, in any section (the handbook names filters only), and keeps the other sections' entries. Settled by Shift-clicking categories and languages in the reference.",
+  "Without a selected entry in its section, a Shift-clicked entry is added as Cmd-click adds it. Settled by Shift-clicking an entry of an unused section in the reference.",
+  "Glyphs that a new sidebar selection hides are deselected. Settled by observing whether the reference keeps hidden glyphs selected after choosing a sidebar entry.",
+  "A selected entry that disappears (a removed or renamed filter, a category with no glyph left) is deselected. Settled by removing a selected filter in the reference.",
+]
 
 [[command]]
 id = "fontView.queryGlyphs"
@@ -1094,6 +1104,11 @@ milestone = "M4"
 summary = "Left column of Font View that restricts which glyphs are shown. Entries can be combined by Cmd-clicking, and entries with a known full glyph set offer the missing glyphs for creation."
 ref = "Font View › Filtering Font View"
 status = "handbook"
+notes = "Entries, counts and badges come from fontView.queryGlyphs with sidebar: true. The actions menu at the sidebar's foot holds Add Smart Filter, Add List Filter, Add Folder, Edit Filter, Remove Filter and Edit Languages List; an entry's context menu offers Show Missing Glyphs, and for filters Edit Filter and Remove Filter."
+guesses = [
+  "The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference.",
+  "The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View.",
+]
 
 [[panel]]
 id = "fontView.sidebar.categories"
@@ -1148,6 +1163,7 @@ milestone = "M4"
 summary = "User-defined filters: rule-based smart filters, fixed-name list filters and folders that group them. Managed from the actions menu in the window's bottom-left corner."
 ref = "Font View › Filtering Font View › Smart Filters; List Filters; Managing Filters"
 status = "handbook"
+notes = "Renaming in place and dragging are not built yet: the name is edited in the filter's editor, and fontView.renameFilter and fontView.moveFilter work headless."
 
 [[panel]]
 id = "fontView.searchField"
@@ -1164,6 +1180,9 @@ milestone = "M4"
 summary = "Text filter at the top left of Font View (Cmd+F) that further narrows the glyphs shown by the sidebar selection."
 ref = "Font View › Filtering Font View › Search Field"
 status = "handbook"
+guesses = [
+  "The magnifier menu offers All Fields, Name Only, Unicode Value Only and Note Only as one choice, then Match Case and Regex. Settled by opening the reference's magnifier menu.",
+]
 
 [[panel]]
 id = "fontView.statusBar"
@@ -1225,6 +1244,10 @@ milestone = "M4"
 summary = "List opened from the context menu of a sidebar entry that has a known total; the chosen names are created as new glyphs."
 ref = "Font View › Adding New Glyphs › Adding From the Sidebar"
 status = "handbook"
+notes = "FontCraft lists at most 256 names, each with a checkbox (the dialog framework has no scrolling list yet); fontView.generateMissingGlyphs without `glyphs` adds every missing glyph. Each change previews the new glyphs; Generate is one undo step."
+guesses = [
+  "Every missing glyph starts chosen, so Generate right away adds them all. Settled by opening the reference's list and pressing Generate.",
+]
 
 [[panel]]
 id = "dialog.pasteSpecial"
@@ -1306,6 +1329,10 @@ milestone = "M4"
 summary = "Window editing the name and the rule tree of a smart filter. A new filter starts with one rule."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
+notes = "FontCraft shows six rule rows (property, comparison, value) under one Match choice of all, any or none. A nested group is a row whose property is Nested Group and whose value is the group as rule-tree JSON; a filter with more top-level rules opens with the rest in its last row as a nested group, which matches the same glyphs. The dialog framework has no rule-tree control yet. The editor of a stored filter opens with {filter, name, rules}, as the sidebar passes them."
+guesses = [
+  "A new smart filter is named New Filter, or New Filter 2 and so on when the name is taken. Settled by adding a smart filter in the reference.",
+]
 
 [[panel]]
 id = "dialog.listFilterEditor"
@@ -1322,6 +1349,10 @@ milestone = "M4"
 summary = "Window editing the name and the ordered glyph-name list of a list filter."
 ref = "Font View › Filtering Font View › List Filters"
 status = "handbook"
+notes = "The names are one line of text in FontCraft's dialog: the dialog framework has no multi-line field yet. The editor of a stored filter reads its name and names by its `filter` path."
+guesses = [
+  "A new list filter is named New List, or New List 2 and so on when the name is taken. Settled by adding a list filter in the reference.",
+]
 
 [[panel]]
 id = "dialog.languagesList"
@@ -1333,6 +1364,9 @@ milestone = "M4"
 summary = "Checklist opened from the plus button beside the Languages heading, setting the default set of scripts in the sidebar."
 ref = "Font View › Filtering Font View › Languages"
 status = "handbook"
+guesses = [
+  "The checklist offers every script the language data lists and the default ones, alphabetically. Settled by opening the reference's list.",
+]
 
 # ═════════════════════════════ Behaviours ═════════════════════════════
 

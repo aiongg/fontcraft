@@ -2568,7 +2568,10 @@ milestone = "M4"
 summary = "A global guide appears on all glyphs by default. Running Edit › Info for Selection (Cmd+Alt+I) on a selected global guide opens rules, built like Smart Filter rules, that limit the guide to the glyphs matching them."
 ref = "Edit View › Local & Global Guides"
 status = "handbook"
-notes = "The evaluation is fontcraft_glyphquery::guide_in_scope: a guide's rules compile like a smart filter's, and a guide without rules shows in every glyph. Storing the rules on a guide and drawing by them come with the Edit View and sidebar work (M4.9)."
+notes = "The evaluation is fontcraft_glyphquery::guide_in_scope. Edit View draws a global guide only in the glyphs its `filter` (a glyph predicate, as files store it; guide.setProperties sets it) matches, read against the edited layer's master. Editing the rules through Info for Selection is not built yet."
+guesses = [
+  "A filter that does not read as a predicate leaves the guide shown in every glyph. Settled by opening a file whose guide filter the reference cannot read.",
+]
 
 [[behavior]]
 id = "undo.perGlyphHistory"

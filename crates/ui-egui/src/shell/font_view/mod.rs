@@ -10,6 +10,8 @@
 //! | [`status`] | the mode buttons and the status area: counts and the cell size slider |
 //! | [`images`] | cell outlines rasterised once per glyph and cell size |
 //! | [`inspector`] | the glyph inspector at the bottom left: the selected glyphs' properties |
+//! | [`sidebar`] | the sidebar: entries with counts and badges, Cmd and Shift selection, filter actions |
+//! | [`search`] | the search field and its options |
 //!
 //! Everything here is view state (`UI_COMMANDS`). Font changes go through engine commands.
 
@@ -19,6 +21,8 @@ pub mod grid;
 pub mod images;
 pub mod inspector;
 pub mod list;
+pub mod search;
+pub mod sidebar;
 pub mod status;
 
 use std::collections::{BTreeMap, HashSet};
@@ -186,6 +190,7 @@ pub struct FontViewUi {
     /// rectangle in the window: tests check that only the rows in view are laid out, and click
     /// them.
     pub laid_out: Vec<(String, egui::Rect)>,
+    pub sidebar: sidebar::SidebarUi,
 }
 
 /// A name or a List View cell being edited in place.
@@ -446,6 +451,7 @@ pub fn remember_node_selection(app: &mut FontcraftApp) {
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
     refresh(app);
     status::show(app, ui, pending);
+    sidebar::show(app, ui, pending);
     let frame = egui::Frame::NONE.fill(app.tokens.panel_darker).inner_margin(app.tokens.font_view_margin);
     if app.session.font().is_err() {
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {

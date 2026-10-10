@@ -4,7 +4,7 @@
 //! | Item | Drawn as |
 //! |---|---|
 //! | local guide | line across the canvas, `guide_local` (or the guide's own colour) |
-//! | global guide | the same, `guide_global` |
+//! | global guide | the same, `guide_global`; only in the glyphs its filter takes in |
 //! | guide knob | ring at the guide's position; filled when selected; a padlock when locked |
 //! | guide name | at the guide's left end |
 //! | measurement guide | dots where it crosses the outline, the distance between neighbouring dots |
@@ -16,13 +16,18 @@
 //! The lines, crossings and coordinates come from engine queries (`guide.displayLines`,
 //! `measure.ruler`, `measure.coordinates`), run once per frame by [`Extras::query`] before the
 //! frame borrows the font.
+//!
+//! A global guide with a filter (a glyph predicate) shows only in the glyphs it matches
+//! (`guides.globalScopeFilter`, evaluated by `fontcraft_glyphquery::guide_in_scope`). A filter
+//! that does not read as a predicate leaves the guide shown everywhere.
 
 use std::collections::BTreeMap;
 
 use egui::{Align2, Color32, FontId, Pos2, Rect, Shape, Stroke};
 use fontcraft_engine::Session;
 use fontcraft_geom::Point;
-use fontcraft_model::{Font, Guide, Layer};
+use fontcraft_model::glyphdata::GlyphData;
+use fontcraft_model::{Font, Glyph, Guide, Layer};
 use fontcraft_tools::{GuideRef, GuideScope, Overlay, OverlayKind, Selection};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -152,6 +157,8 @@ pub struct Extras {
     coordinates: Option<Coordinates>,
     /// The Measurement tool's ruler and where it crosses the outline.
     ruler: Option<(Point, Point, Ruler)>,
+    /// The global guides, by index, whose filter leaves out the edited glyph.
+    pub(crate) out_of_scope: Vec<usize>,
 }
 
 fn query_as<T: DeserializeOwned>(session: &mut Session, id: &str, params: Value) -> Option<T> {
@@ -172,14 +179,26 @@ impl Extras {
     pub fn query(session: &mut Session, tab: &Tab, display: &DisplayOptions, tool: &str, overlays: &[Overlay]) -> Extras {
         let mut out = Extras::default();
         let Some(glyph) = tab.edited_glyph() else { return out };
+        let data = session.glyph_data().ok();
         let (layer, measured) = {
             let Ok(font) = session.font() else { return out };
             let Some(layer) = super::view::edited_layer(font, tab) else { return out };
             let Some(master) = font.masters.iter().find(|m| m.id == layer.master) else { return out };
             let mut measured = Vec::new();
             if display.guides {
+                if let (Some(data), Some(edited)) = (data.as_deref(), font.glyph(glyph)) {
+                    out.out_of_scope = master
+                        .guides
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, g)| !in_scope(g, edited, font, data, &master.id))
+                        .map(|(index, _)| index)
+                        .collect();
+                }
+                let hidden = &out.out_of_scope;
                 let local = layer.info.guides.iter().enumerate().map(|(index, g)| (GuideScope::Local, index, g));
-                let global = master.guides.iter().enumerate().map(|(index, g)| (GuideScope::Global, index, g));
+                let global =
+                    master.guides.iter().enumerate().filter(|(index, _)| !hidden.contains(index)).map(|(index, g)| (GuideScope::Global, index, g));
                 measured = local
                     .chain(global)
                     .filter(|(_, _, g)| g.show_measurement)
@@ -219,6 +238,15 @@ impl Extras {
         }
         out
     }
+}
+
+/// Whether a global guide shows in `glyph`: always without a filter, or with one that does not
+/// read as a predicate.
+fn in_scope(guide: &Guide, glyph: &Glyph, font: &Font, data: &GlyphData, master: &str) -> bool {
+    let Some(text) = guide.filter.as_deref().map(str::trim).filter(|t| !t.is_empty()) else { return true };
+    let Ok(scope) = fontcraft_glyphquery::parse_predicate(text) else { return true };
+    let Ok(env) = fontcraft_glyphquery::Env::new(font, data, Some(master)) else { return true };
+    fontcraft_glyphquery::guide_in_scope(Some(&scope), glyph, &env)
 }
 
 /// A number as a label: at most two decimals, without trailing zeros.
@@ -406,7 +434,11 @@ pub fn draw_guides(c: &Painting, font: &Font, layer: &Layer, selection: &Selecti
     let tokens = c.tokens;
     let global: &[Guide] = font.master(&layer.master).map(|m| m.guides.as_slice()).unwrap_or_default();
     let local = layer.info.guides.iter().enumerate().map(|(index, g)| (GuideRef { scope: GuideScope::Local, index }, g));
-    let global = global.iter().enumerate().map(|(index, g)| (GuideRef { scope: GuideScope::Global, index }, g));
+    let global = global
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !extras.out_of_scope.contains(index))
+        .map(|(index, g)| (GuideRef { scope: GuideScope::Global, index }, g));
     let color_of = |r: GuideRef, g: &Guide| {
         g.color.as_deref().and_then(parse_color).unwrap_or(match r.scope {
             GuideScope::Local => tokens.guide_local,

@@ -44,10 +44,14 @@ pub mod form;
 mod guide_properties;
 pub mod import_outlines_missing_glyph;
 mod interpolate_with_background;
+mod languages_list;
+mod list_filter_editor;
+mod missing_glyphs;
 pub mod pasted_outline_bounds;
 pub mod primitive_measurements;
 mod round_corners;
 mod shape_order;
+mod smart_filter_editor;
 mod transformations;
 
 use serde::Serialize;
@@ -174,6 +178,13 @@ pub const DIALOGS: &[Dialog] = &[
     export::OTF,
     export::UFO,
     guide_properties::DIALOG,
+    // The editors of stored filters come before those of new ones: `find` gives the first.
+    smart_filter_editor::DIALOG,
+    smart_filter_editor::NEW,
+    list_filter_editor::DIALOG,
+    list_filter_editor::NEW,
+    languages_list::DIALOG,
+    missing_glyphs::DIALOG,
 ];
 
 /// The shell commands of this module.
