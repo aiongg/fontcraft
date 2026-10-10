@@ -618,6 +618,23 @@ impl GlyphData {
         self.tables.script_for_code_point(cp)
     }
 
+    /// A script id as people read it: the Unicode Script property value it stands for
+    /// (`tibet` → `Tibetan`, `canadian` → `Canadian Aboriginal`), or, for an id that stands for
+    /// several or none (`kana`, `math`), the id with capitals (`phaistosDisc` → `Phaistos Disc`).
+    pub fn script_display_name(&self, script: &str) -> String {
+        let candidates: Vec<&str> =
+            self.tables.unicode_scripts_of(script).into_iter().filter(|u| !matches!(*u, "Common" | "Inherited" | "Unknown")).collect();
+        let squash = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
+        let pick = candidates.iter().find(|u| squash(u) == squash(script)).or(match candidates.as_slice() {
+            [one] => Some(one),
+            _ => None,
+        });
+        match pick {
+            Some(u) => u.replace('_', " "),
+            None => title_case(script),
+        }
+    }
+
     /// Whether a code point is assigned in the Unicode version of the tables.
     pub fn is_assigned(&self, cp: u32) -> bool {
         self.tables.general_category(cp) != GeneralCategory::Cn
@@ -635,4 +652,29 @@ impl GlyphData {
     pub fn is_aglfn_name(&self, name: &str) -> bool {
         self.tables.aglfn(name).is_some()
     }
+}
+
+/// `old-italic`, `old_italic` and `oldItalic` → `Old Italic`.
+fn title_case(id: &str) -> String {
+    let mut words: Vec<String> = Vec::new();
+    let mut word = String::new();
+    for c in id.chars() {
+        if c == '-' || c == '_' || c == ' ' || (c.is_uppercase() && !word.is_empty()) {
+            if !word.is_empty() {
+                words.push(std::mem::take(&mut word));
+            }
+            if !c.is_alphanumeric() {
+                continue;
+            }
+        }
+        if word.is_empty() {
+            word.extend(c.to_uppercase());
+        } else {
+            word.push(c);
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words.join(" ")
 }

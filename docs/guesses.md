@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**388 guesses on 266 rows (131 of them live commands).**
+**390 guesses on 267 rows (132 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -34,6 +34,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `file.newFromGlyphSets` | M4 | handbook | yes | A script picked without naming sets takes its Core set (Latin, Cyrillic, Greek and Arabic Core); a script without a default takes its first set. Settled by observing what the reference's chooser preselects when a script is switched on. |
 | `file.newFromGlyphSets` | M4 | handbook | yes | An encoded glyph takes the glyph database's name for its code point, an unencoded one the database's nice name for its source name; the source name is kept when the database knows neither. Settled by comparing a new document from the reference's chooser with the database names. |
 | `file.newFromGlyphSets` | M4 | handbook | yes | The new document keeps New's drawn .notdef first and adds no other glyph than the sets'; glyphs follow the default sort order. Settled by observing a new document from the reference's chooser. |
+| `glyphData.glyphSets` | M4 | inferred | yes | A script id that stands for several Unicode scripts (`kana`) or none (`math`) reads as the id with a capital (`Kana`, `Math`). Settled by observing the reference's script names in its chooser. |
 | `view.editSelectedGlyphs` | M4 | handbook | yes | An open tab that holds exactly these glyphs is shown instead of a new tab. |
 | `view.showNextTab` | M3 | handbook | yes | After the last tab comes Font View, and before Font View the last tab. |
 | `view.closeTab` | M3 | handbook | yes | The tab to the left of a closed showing tab shows next. |
@@ -327,6 +328,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `fontView.glyphContextMenu` (panel) | M4 | handbook | – | With Alt held the swatches set the layer colour of Font View's master. Settled by observation. |
 | `fontView.sidebar` (panel) | M4 | handbook | – | The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference. |
 | `fontView.sidebar` (panel) | M4 | handbook | – | The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View. |
+| `fontView.sidebar` (panel) | M4 | handbook | – | A script entry shows the Unicode Script property value its glyph-data id stands for (`Latin`, `Tibetan`, `Canadian Aboriginal`), not the id; paths and parameters keep the id. Settled by a screenshot of the reference's Languages section. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | A language requires its CLDR main exemplar characters only; the auxiliary, index, numbers and punctuation sets are not counted. Settled by comparing a language's badge total in the reference with its CLDR sets. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | CLDR lists letters in lowercase, so each character's single-character uppercase form is added (ß gets none; Georgian gets no Mtavruli capitals). Settled by observing whether the reference's badge for a Latin-script language counts capitals. |
 | `fontView.sidebar.languages` (panel) | M4 | handbook | – | A language is listed under the glyph database's script that most of its exemplar characters belong to, ignoring Common and Inherited characters (Japanese falls under han, Korean under hangul). Settled by observing where the reference lists Japanese and other mixed-script languages. |

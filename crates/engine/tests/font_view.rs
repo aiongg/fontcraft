@@ -134,7 +134,7 @@ fn set_visible_scripts_chooses_the_languages_list() {
     assert_eq!(run(&mut s, "fontView.setVisibleScripts", json!({"hide": ["latin"]}))["scripts"], json!(["cyrillic", "arabic"]));
     let r = run(&mut s, "fontView.queryGlyphs", json!({"sidebar": true}));
     let languages: Vec<&str> = r["sidebar"][2]["children"].as_array().unwrap().iter().map(|e| e["label"].as_str().unwrap()).collect();
-    assert_eq!(languages, vec!["cyrillic", "arabic", "latin"], "a script the font uses is listed anyway");
+    assert_eq!(languages, vec!["Cyrillic", "Arabic", "Latin"], "a script the font uses is listed anyway, by its readable name");
     refused(&mut s, "fontView.setVisibleScripts", json!({"show": ["Latin!"]}), "script id");
     refused(&mut s, "fontView.setVisibleScripts", json!({}), "show");
 }

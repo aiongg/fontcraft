@@ -22,7 +22,6 @@ use std::path::Path;
 use egui::{Rect, Sense, Stroke, vec2};
 use fontcraft_engine::Session;
 use fontcraft_engine::settings::Reserved;
-use fontcraft_model::glyphdata::sets::{self, Sets};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -99,6 +98,24 @@ pub struct ScriptPick {
     pub glyph_sets: Vec<String>,
 }
 
+/// A script of `glyphData.glyphSets`, with its glyph sets.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+pub struct ScriptSets {
+    pub script: String,
+    /// The script's readable name.
+    pub name: String,
+    pub sets: Vec<SetInfo>,
+}
+
+/// A glyph set of `glyphData.glyphSets`.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+pub struct SetInfo {
+    pub id: String,
+    pub name: String,
+    pub default: bool,
+    pub glyphs: usize,
+}
+
 /// The window's state.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -112,6 +129,9 @@ pub struct StartState {
     pub search: String,
     /// Every script with glyph sets, in the built-in order; filled when the window opens.
     pub picks: Vec<ScriptPick>,
+    /// What `glyphData.glyphSets` lists; read when the window opens.
+    #[serde(skip)]
+    pub catalog: Vec<ScriptSets>,
     /// The recent document clicked last.
     pub selected_recent: Option<String>,
     /// Why the last Create Document failed.
@@ -152,32 +172,42 @@ struct Stored {
     glyph_sets: Option<Vec<String>>,
 }
 
+/// The glyph sets `glyphData.glyphSets` lists, by script. Empty when the query fails.
+fn catalog(session: &mut Session) -> Vec<ScriptSets> {
+    let listed = session.execute("glyphData.glyphSets", &json!({})).ok().and_then(|v| v.get("scripts").cloned());
+    listed.and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default()
+}
+
+fn sets_of<'c>(catalog: &'c [ScriptSets], script: &str) -> &'c [SetInfo] {
+    catalog.iter().find(|s| s.script == script).map_or(&[], |s| s.sets.as_slice())
+}
+
 /// The sets a script takes when none are named: its default sets, else its first.
-fn default_sets(data: &Sets, script: &str) -> Vec<String> {
-    let of_script: Vec<&sets::GlyphSet> = data.glyph_sets.iter().filter(|g| g.script == script).collect();
+fn default_sets(catalog: &[ScriptSets], script: &str) -> Vec<String> {
+    let of_script = sets_of(catalog, script);
     let defaults: Vec<String> = of_script.iter().filter(|g| g.default).map(|g| g.id.clone()).collect();
     if defaults.is_empty() { of_script.first().map(|g| vec![g.id.clone()]).unwrap_or_default() } else { defaults }
 }
 
 /// `ids` that are glyph sets of `script`, in the built-in order.
-fn in_order(data: &Sets, script: &str, ids: &[String]) -> Vec<String> {
-    data.glyph_sets.iter().filter(|g| g.script == script && ids.contains(&g.id)).map(|g| g.id.clone()).collect()
+fn in_order(catalog: &[ScriptSets], script: &str, ids: &[String]) -> Vec<String> {
+    sets_of(catalog, script).iter().filter(|g| ids.contains(&g.id)).map(|g| g.id.clone()).collect()
 }
 
 /// The chooser's picks as the last `file.newFromGlyphSets` left them: every script with glyph
 /// sets, the ones it named included with their sets. A script left out shows its default sets,
 /// which it takes when it is switched on. Without last picks, Latin is included.
-pub fn last_picks(session: &Session) -> Vec<ScriptPick> {
-    let Ok(data) = sets::builtin() else { return Vec::new() };
+pub fn last_picks(session: &Session, catalog: &[ScriptSets]) -> Vec<ScriptPick> {
     let stored: Option<Vec<Stored>> = session.settings().reserved::<Vec<Stored>>(Reserved::ChooserPicks).ok().flatten();
-    data.glyph_set_scripts()
-        .into_iter()
-        .map(|script| {
-            let defaults = default_sets(data, script);
+    catalog
+        .iter()
+        .map(|entry| {
+            let script = entry.script.as_str();
+            let defaults = default_sets(catalog, script);
             let (included, glyph_sets) = match &stored {
                 None => (script == FIRST_SCRIPT, defaults),
                 Some(list) => match list.iter().find(|p| p.script == script) {
-                    Some(p) => (true, p.glyph_sets.as_deref().map_or(defaults, |ids| in_order(data, script, ids))),
+                    Some(p) => (true, p.glyph_sets.as_deref().map_or(defaults, |ids| in_order(catalog, script, ids))),
                     None => (false, defaults),
                 },
             };
@@ -200,19 +230,20 @@ pub fn set_included(st: &mut StartState, script: &str, on: bool) {
 
 /// Checks or clears one glyph set of `script` (its checkbox).
 pub fn set_glyph_set(st: &mut StartState, script: &str, set: &str, on: bool) {
-    let Ok(data) = sets::builtin() else { return };
-    let Some(p) = st.picks.iter_mut().find(|p| p.script == script) else { return };
-    let mut ids: Vec<String> = p.glyph_sets.iter().filter(|id| *id != set).cloned().collect();
-    if on {
-        ids.push(set.to_string());
+    let catalog = std::mem::take(&mut st.catalog);
+    if let Some(p) = st.picks.iter_mut().find(|p| p.script == script) {
+        let mut ids: Vec<String> = p.glyph_sets.iter().filter(|id| *id != set).cloned().collect();
+        if on {
+            ids.push(set.to_string());
+        }
+        p.glyph_sets = in_order(&catalog, script, &ids);
     }
-    p.glyph_sets = in_order(data, script, &ids);
+    st.catalog = catalog;
 }
 
-/// A script id as the chooser lists it.
-pub fn script_label(script: &str) -> String {
-    let mut chars = script.chars();
-    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
+/// A script's readable name, as the chooser lists it.
+pub fn script_label(st: &StartState, script: &str) -> String {
+    st.catalog.iter().find(|s| s.script == script).map_or_else(|| script.to_string(), |s| s.name.clone())
 }
 
 // ── Commands ──
@@ -227,9 +258,12 @@ fn quoted(s: &str) -> String {
 
 /// Opens or closes the window. Opening it restores the last picks.
 fn open_window(app: &mut FontcraftApp, open: bool, chooser: Option<bool>) {
+    if open && !app.state.start.open {
+        app.state.start.catalog = catalog(&mut app.session);
+    }
     let st = &mut app.state.start;
     if open && !st.open {
-        st.picks = last_picks(&app.session);
+        st.picks = last_picks(&app.session, &st.catalog);
         st.script = st.picks.iter().find(|p| p.included).or(st.picks.first()).map(|p| p.script.clone());
         st.search.clear();
         st.error = None;
@@ -489,10 +523,10 @@ fn column_rule(ui: &mut egui::Ui, tokens: &Tokens) {
 /// The chooser: the script list on the left, the clicked script's toggle and glyph sets on the
 /// right, the search field at the top right, Create Document at the lower right.
 fn chooser_ui(ui: &mut egui::Ui, st: &StartState, tokens: &Tokens, has_recent: bool, events: &mut Vec<Event>, laid: &mut LaidOut) {
-    let Ok(data) = sets::builtin() else {
+    if st.catalog.is_empty() {
         ui.colored_label(tokens.error_text, "The glyph sets cannot be read");
         return;
-    };
+    }
     ui.horizontal(|ui| {
         if has_recent && ui.button("Recent Documents").clicked() {
             events.push(Event::Back);
@@ -515,7 +549,7 @@ fn chooser_ui(ui: &mut egui::Ui, st: &StartState, tokens: &Tokens, has_recent: b
         ui.vertical(|ui| {
             ui.set_width(tokens.list_column_unit * SCRIPT_LIST_UNITS);
             egui::ScrollArea::vertical().id_salt("start.scripts").max_height(height).show(ui, |ui| {
-                for pick in st.picks.iter().filter(|p| needle.is_empty() || script_label(&p.script).to_lowercase().contains(&needle)) {
+                for pick in st.picks.iter().filter(|p| needle.is_empty() || script_label(st, &p.script).to_lowercase().contains(&needle)) {
                     ui.horizontal(|ui| {
                         let size = tokens.badge_size;
                         let (dot, _) = ui.allocate_exact_size(vec2(size, size), Sense::hover());
@@ -526,7 +560,7 @@ fn chooser_ui(ui: &mut egui::Ui, st: &StartState, tokens: &Tokens, has_recent: b
                             ui.painter().circle_stroke(dot.center(), radius, Stroke::new(1.0, tokens.text_dim));
                         }
                         let focused = st.script.as_deref() == Some(pick.script.as_str());
-                        let response = ui.selectable_label(focused, script_label(&pick.script));
+                        let response = ui.selectable_label(focused, script_label(st, &pick.script));
                         laid.scripts.push((pick.script.clone(), response.rect));
                         if response.clicked() {
                             events.push(Event::Focus(pick.script.clone()));
@@ -542,7 +576,7 @@ fn chooser_ui(ui: &mut egui::Ui, st: &StartState, tokens: &Tokens, has_recent: b
                 return;
             };
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(script_label(&pick.script)).strong());
+                ui.label(egui::RichText::new(script_label(st, &pick.script)).strong());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Right to left: Yes is placed first so it ends up on the right.
                     let yes = ui.selectable_label(pick.included, "Yes");
@@ -558,9 +592,9 @@ fn chooser_ui(ui: &mut egui::Ui, st: &StartState, tokens: &Tokens, has_recent: b
                 });
             });
             ui.add_space(tokens.dialog_spacing);
-            for set in data.glyph_sets.iter().filter(|g| g.script == pick.script) {
+            for set in sets_of(&st.catalog, &pick.script) {
                 let mut on = pick.glyph_sets.contains(&set.id);
-                let label = format!("{} ({} glyphs)", set.name, set.glyphs.len());
+                let label = format!("{} ({} glyphs)", set.name, set.glyphs);
                 let response = ui.add_enabled(pick.included, egui::Checkbox::new(&mut on, label));
                 laid.sets.push((set.id.clone(), response.rect));
                 if response.changed() {

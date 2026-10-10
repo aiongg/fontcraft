@@ -35,7 +35,7 @@ fn a_language_lists_the_characters_the_font_lacks() {
     assert!(latin["expected"].as_u64().unwrap() > 59);
     let sidebar = run(&mut s, "fontView.queryGlyphs", json!({"sidebar": true}));
     let scripts = sidebar["sidebar"][2]["children"].as_array().unwrap();
-    let latin_item = scripts.iter().find(|e| e["label"] == "latin").unwrap();
+    let latin_item = scripts.iter().find(|e| e["label"] == "Latin").unwrap();
     assert!(latin_item["expected"].as_u64().unwrap() > 0, "the script shows a badge: {latin_item}");
 
     run(&mut s, "fontView.generateMissingGlyphs", json!({"entry": "languages/latin/de"}));
@@ -125,4 +125,29 @@ fn new_from_glyph_sets_makes_a_sorted_font_with_database_names() {
 
     let mut fresh = Session::new();
     refused(&mut fresh, "file.newFromGlyphSets", json!({}), "scripts");
+}
+
+#[test]
+fn glyph_sets_lists_what_new_from_glyph_sets_takes() {
+    let mut s = Session::new();
+    let all = run(&mut s, "glyphData.glyphSets", json!({}));
+    let scripts = all["scripts"].as_array().unwrap();
+    let ids: Vec<&str> = scripts.iter().map(|x| x["script"].as_str().unwrap()).collect();
+    assert!(ids.contains(&"latin") && ids.contains(&"cyrillic"), "{ids:?}");
+    let cyrillic = run(&mut s, "glyphData.glyphSets", json!({"script": "cyrillic"}));
+    assert_eq!(cyrillic["scripts"].as_array().unwrap().len(), 1);
+    let entry = &cyrillic["scripts"][0];
+    assert_eq!(entry["name"], "Cyrillic");
+    // Every listed set builds a font of its size plus .notdef, and a script without sets named
+    // takes the ones marked default.
+    let sets = entry["sets"].as_array().unwrap();
+    let defaults: Vec<&str> = sets.iter().filter(|x| x["default"] == true).map(|x| x["id"].as_str().unwrap()).collect();
+    assert!(!defaults.is_empty());
+    let made = run(&mut s, "file.newFromGlyphSets", json!({"scripts": [{"script": "cyrillic"}]}));
+    assert_eq!(made["sets"], json!(defaults));
+    let first = &sets[0];
+    let made = run(&mut s, "file.newFromGlyphSets", json!({"scripts": [{"script": "cyrillic", "glyphSets": [first["id"]]}]}));
+    let skipped = made["skipped"].as_array().unwrap().len() as u64;
+    assert_eq!(made["glyphs"].as_u64().unwrap() + skipped, first["glyphs"].as_u64().unwrap() + 1);
+    refused(&mut s, "glyphData.glyphSets", json!({"script": "klingon"}), "latin");
 }

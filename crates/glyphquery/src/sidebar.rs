@@ -710,7 +710,7 @@ impl<'a> Catalog<'a> {
             .map(|script| {
                 let mut it = SidebarItem {
                     path: vec!["languages".into(), script.clone()],
-                    label: script.clone(),
+                    label: self.env.data.script_display_name(&script),
                     kind: "script",
                     count: count.get(&script).copied().unwrap_or(0),
                     expected: None,

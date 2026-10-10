@@ -38,15 +38,54 @@ pub struct Pick {
 }
 
 pub fn specs() -> Vec<CommandSpec> {
-    vec![cmd!(
-        "file.newFromGlyphSets",
-        "New from Glyph Sets…",
-        ["File"],
-        None,
-        "{scripts?: [{script, glyphSets?: [ids]}], familyName?: string} a new untitled font with one Regular master, its .notdef, and an empty glyph for every glyph of the chosen glyph sets, named and encoded through the glyph data and placed in the default sort order. Scripts are glyph data script ids (latin, cyrillic, greek, arabic); glyph set ids look like latin-core. A script without glyphSets takes its default sets; a call without scripts repeats the last picks, which are kept in the user settings. An unknown script or set is refused with the valid ids → {title, glyphs, sets: [ids], skipped: [{glyph, reason}]}",
-        always,
-        new_from_glyph_sets
-    )]
+    vec![
+        cmd!(
+            "file.newFromGlyphSets",
+            "New from Glyph Sets…",
+            ["File"],
+            None,
+            "{scripts?: [{script, glyphSets?: [ids]}], familyName?: string} a new untitled font with one Regular master, its .notdef, and an empty glyph for every glyph of the chosen glyph sets, named and encoded through the glyph data and placed in the default sort order. Scripts are glyph data script ids (latin, cyrillic, greek, arabic); glyph set ids look like latin-core. A script without glyphSets takes its default sets; a call without scripts repeats the last picks, which are kept in the user settings. An unknown script or set is refused with the valid ids → {title, glyphs, sets: [ids], skipped: [{glyph, reason}]}",
+            always,
+            new_from_glyph_sets
+        ),
+        cmd!(
+            query "glyphData.glyphSets",
+            "List Glyph Sets",
+            [],
+            None,
+            "{script?: string} the built-in glyph sets file.newFromGlyphSets takes, by script in the built-in order: each script's id, its readable name, and its sets with their id, name, whether a script picked without naming sets takes it (default) and their number of glyphs. With script, only that script; an unknown one is refused with the valid ids → {scripts: [{script, name, sets: [{id, name, default, glyphs}]}]}",
+            always,
+            glyph_sets
+        ),
+    ]
+}
+
+/// The Start Window's chooser lists what this returns.
+fn glyph_sets(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("glyphData.glyphSets", v)?;
+    let builtin = sets::builtin().map_err(|e| EngineError::Internal(e.to_string()))?;
+    let scripts = builtin.glyph_set_scripts();
+    let wanted = p.opt_str("script")?;
+    if let Some(w) = wanted
+        && !scripts.contains(&w)
+    {
+        return Err(p.bad(format!("`script`: no glyph sets for `{}`; scripts with glyph sets: {}", clip(w), scripts.join(", "))));
+    }
+    let data = s.glyph_data_without_document()?;
+    let out: Vec<Value> = scripts
+        .into_iter()
+        .filter(|script| wanted.is_none_or(|w| w == *script))
+        .map(|script| {
+            let sets: Vec<Value> = builtin
+                .glyph_sets
+                .iter()
+                .filter(|g| g.script == script)
+                .map(|g| json!({ "id": g.id, "name": g.name, "default": g.default, "glyphs": g.glyphs.len() }))
+                .collect();
+            json!({ "script": script, "name": data.script_display_name(script), "sets": sets })
+        })
+        .collect();
+    Ok(json!({ "scripts": out }))
 }
 
 /// At most 64 characters of untrusted text, for a message.

@@ -218,3 +218,21 @@ fn unicode_properties() {
     assert_eq!(d.script_for_code_point(0x4E00), Some("han"));
     assert!(d.is_assigned(0x41) && !d.is_assigned(0x0378));
 }
+
+#[test]
+fn script_ids_have_readable_names() {
+    let d = data();
+    for (id, name) in [
+        ("latin", "Latin"),
+        ("cyrillic", "Cyrillic"),
+        ("han", "Han"),
+        ("tibet", "Tibetan"),
+        ("canadian", "Canadian Aboriginal"),
+        ("kana", "Kana"),
+        ("phaistosDisc", "Phaistos Disc"),
+        ("Black Letter", "Black Letter"),
+        ("old-italic", "Old Italic"),
+    ] {
+        assert_eq!(d.script_display_name(id), name, "{id}");
+    }
+}

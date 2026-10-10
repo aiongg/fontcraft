@@ -28,18 +28,6 @@ pub fn scripts() -> Vec<String> {
     out
 }
 
-/// A script id as the list shows it: `old-italic` → `Old Italic`.
-fn label(id: &str) -> String {
-    id.split(['-', '_'])
-        .filter(|w| !w.is_empty())
-        .map(|w| {
-            let mut chars = w.chars();
-            chars.next().map_or_else(String::new, |c| c.to_uppercase().chain(chars).collect())
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn fields(s: &fontcraft_engine::Session) -> Vec<Field> {
     let choices = scripts();
     let shown: Vec<String> = s
@@ -49,6 +37,8 @@ fn fields(s: &fontcraft_engine::Session) -> Vec<Field> {
         .and_then(|v| v.as_array().map(|l| l.iter().filter_map(Value::as_str).map(str::to_string).collect()))
         .unwrap_or_else(|| DEFAULT_SCRIPTS.iter().map(|x| (*x).to_string()).collect());
     let ticked: Vec<&String> = choices.iter().filter(|c| shown.contains(*c)).collect();
+    let data = s.glyph_data().ok();
+    let label = |id: &str| data.as_ref().map_or_else(|| id.to_string(), |d| d.script_display_name(id));
     vec![Field {
         key: "scripts".into(),
         label: "Scripts".into(),

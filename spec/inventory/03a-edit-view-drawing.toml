@@ -153,6 +153,23 @@ guesses = [
   "The new document keeps New's drawn .notdef first and adds no other glyph than the sets'; glyphs follow the default sort order. Settled by observing a new document from the reference's chooser.",
 ]
 
+[[command]]
+id = "glyphData.glyphSets"
+label = "List Glyph Sets"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{script?: string}"
+area = "font-view"
+milestone = "M4"
+summary = "Our query behind the Start Window's chooser: the built-in glyph sets by script, each script with its readable name and each set with its id, name, default flag and number of glyphs."
+ref = "Create"
+status = "inferred"
+notes = "Not a reference command: it backs the Start Window's script and glyph-set chooser (crates/ui-egui/src/shell/start_window.rs), so the chooser and an agent see the same lists, and it tells an agent which ids file.newFromGlyphSets takes. The sets are those of file.newFromGlyphSets's row; a script's readable name is the Unicode Script property value its id stands for (glyphData script ids such as `tibet` and `canadian` read `Tibetan` and `Canadian Aboriginal`)."
+guesses = [
+  "A script id that stands for several Unicode scripts (`kana`) or none (`math`) reads as the id with a capital (`Kana`, `Math`). Settled by observing the reference's script names in its chooser.",
+]
+
 [[behavior]]
 id = "start.scriptChooserRules"
 area = "font-view"

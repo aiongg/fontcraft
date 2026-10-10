@@ -483,6 +483,16 @@ impl Tables {
         self.str_ref(self.bytes(&self.uscv), usize::from(i) * 4)
     }
 
+    /// The Unicode Script property values whose code points take the data's script id `script`
+    /// when they have no record.
+    pub fn unicode_scripts_of(&self, script: &str) -> Vec<&str> {
+        let map = self.bytes(&self.ucsm);
+        (0..map.len())
+            .filter(|i| u8_at(map, *i).filter(|v| *v != NONE_U8).and_then(|v| self.script_name(v)) == Some(script))
+            .filter_map(|i| self.str_ref(self.bytes(&self.uscv), i * 4))
+            .collect()
+    }
+
     /// The data's script id that most records of `cp`'s Unicode script carry.
     pub fn script_for_code_point(&self, cp: u32) -> Option<&str> {
         let i = self.run_value(&self.uscr, cp)?;
