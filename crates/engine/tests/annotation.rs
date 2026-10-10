@@ -1,7 +1,7 @@
 //! Annotations (M3.16): `annotation.add`, `update`, `move`, `delete` and `list`, their refusals,
 //! a drag as one undo step, and annotations surviving a save in both `.glyphs` versions.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use fontcraft_engine::Session;
 use fontcraft_testkit::snapshot;
@@ -57,6 +57,10 @@ fn each_type_is_added_with_its_defaults_and_listed() {
     assert_eq!((a[0].kind.as_str(), a[2].kind.as_str(), a[2].width), ("Text", "Circle", 100.0));
     // Positions are not rounded to the grid.
     assert_eq!(layer.info.annotations[0].y, 20.5);
+    // layer.inspect spells the types as annotation.list does.
+    let inspected = run(&mut s, "layer.inspect", json!({"glyph": "A"}));
+    let types: Vec<&str> = inspected["annotations"].as_array().unwrap().iter().map(|a| a["type"].as_str().unwrap()).collect();
+    assert_eq!(types, ["text", "arrow", "circle", "plus", "minus"]);
 
     // Values given replace the defaults; the type is read without regard to case.
     run(&mut s, "annotation.add", json!({"glyph": "A", "type": "Text", "position": [1, 2], "text": "too narrow", "width": 120}));
@@ -185,13 +189,14 @@ fn rotating_an_arrow_by_drag_is_one_undo_step() {
 fn annotations_survive_saving_in_both_glyphs_versions() {
     let dir = std::env::temp_dir().join(format!("fontcraft-annotations-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let mut s = session();
-    run(&mut s, "annotation.update", json!({"glyph": "A", "annotation": 0, "text": "the bar \"is\" short", "width": 150.25}));
-    run(&mut s, "annotation.update", json!({"glyph": "A", "annotation": 1, "angle": 312.5}));
-    run(&mut s, "annotation.add", json!({"glyph": "A", "side": "background", "type": "circle", "position": [-3.5, 700]}));
     let list = |s: &mut Session, side: &str| run(s, "annotation.list", json!({"glyph": "A", "side": side}))["annotations"].clone();
-    let (fg, bg) = (list(&mut s, "foreground"), list(&mut s, "background"));
+    // A new session per version: a document saved in one version is not converted to the other.
     for version in [2, 3] {
+        let mut s = session();
+        run(&mut s, "annotation.update", json!({"glyph": "A", "annotation": 0, "text": "the bar \"is\" short", "width": 150.25}));
+        run(&mut s, "annotation.update", json!({"glyph": "A", "annotation": 1, "angle": 312.5}));
+        run(&mut s, "annotation.add", json!({"glyph": "A", "side": "background", "type": "circle", "position": [-3.5, 700]}));
+        let (fg, bg) = (list(&mut s, "foreground"), list(&mut s, "background"));
         let path = dir.join(format!("Notes{version}.glyphs"));
         run(&mut s, "file.saveAs", json!({"path": path, "version": version}));
         let mut back = Session::new();

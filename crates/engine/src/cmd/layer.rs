@@ -13,7 +13,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Inspect Layer",
             [],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\"} one layer with the address of every shape, node, anchor, guide and annotation, in the form the editing commands' targets use → {glyph, layer, master, side, locked, width, shapes: [{index, kind: \"path\" | \"component\" | \"image\" | \"other\", closed?, locked?, nodes?: [{index, x, y, type: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\", smooth}], component?: name, transform?: [xx, xy, yx, yy, dx, dy]}], anchors: [{name, x, y}], guides: [{scope: \"local\" | \"global\", index, x, y, angle, locked}], annotations: [{index, type, x, y, text?}]}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\"} one layer with the address of every shape, node, anchor, guide and annotation, in the form the editing commands' targets use → {glyph, layer, master, side, locked, width, shapes: [{index, kind: \"path\" | \"component\" | \"image\" | \"other\", closed?, locked?, nodes?: [{index, x, y, type: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\", smooth}], component?: name, transform?: [xx, xy, yx, yy, dx, dy]}], anchors: [{name, x, y}], guides: [{scope: \"local\" | \"global\", index, x, y, angle, locked}], annotations: [{index, type: \"text\" | \"arrow\" | \"circle\" | \"plus\" | \"minus\" (another type as stored), x, y, text?}]}",
             has_doc,
             inspect
         )
@@ -75,7 +75,7 @@ fn inspect(s: &mut Session, p: &Value) -> Result<Value> {
         .iter()
         .enumerate()
         .map(|(index, a)| {
-            let mut v = json!({"index": index, "type": a.kind, "x": a.x, "y": a.y});
+            let mut v = json!({"index": index, "type": super::annotation::type_name(a), "x": a.x, "y": a.y});
             if let (Some(text), Some(o)) = (&a.text, v.as_object_mut()) {
                 o.insert("text".into(), json!(text));
             }

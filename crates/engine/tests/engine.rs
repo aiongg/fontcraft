@@ -35,9 +35,11 @@ fn registry_is_well_formed() {
             assert!(mods.windows(2).all(|w| w[0] < w[1]), "{}: modifiers are written Cmd+Ctrl+Alt+Shift+Key, got {sc}", c.id);
         }
     }
-    let shortcuts: Vec<&str> = specs.iter().filter_map(|c| c.shortcut).collect();
-    let unique: std::collections::HashSet<&&str> = shortcuts.iter().collect();
-    assert_eq!(shortcuts.len(), unique.len(), "two commands share a default shortcut");
+    // A shortcut may repeat when the copies work in different places (`when`).
+    let mut seen = std::collections::HashSet::new();
+    for c in specs.iter().filter(|c| c.shortcut.is_some()) {
+        assert!(seen.insert((c.shortcut, c.when)), "{}: another command has the default shortcut {:?} where {:?}", c.id, c.shortcut, c.when);
+    }
     assert!(find_command("file.new").is_some() && find_command("no.such").is_none());
 }
 

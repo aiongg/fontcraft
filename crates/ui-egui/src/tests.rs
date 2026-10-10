@@ -63,10 +63,14 @@ fn ui_and_engine_command_ids_do_not_clash() {
     for id in command_specs().iter().map(|c| c.id).chain(UI_COMMANDS.iter().map(|c| c.0)) {
         assert!(seen.insert(id), "{id} is registered twice");
     }
-    let shortcuts: Vec<&str> =
-        command_specs().iter().filter_map(|c| c.shortcut).chain(UI_COMMANDS.iter().map(|c| c.3).filter(|s| !s.is_empty())).collect();
-    let unique: std::collections::HashSet<&&str> = shortcuts.iter().collect();
-    assert_eq!(shortcuts.len(), unique.len(), "two commands share a default shortcut");
+    // A shortcut may repeat when the copies work in different places (`when`); UI commands work
+    // everywhere.
+    let engine = command_specs().iter().filter_map(|c| Some((c.shortcut?, c.when, c.id)));
+    let ui = UI_COMMANDS.iter().filter(|c| !c.3.is_empty()).map(|c| (c.3, None, c.0));
+    let mut shortcuts = std::collections::HashSet::new();
+    for (shortcut, when, id) in engine.chain(ui) {
+        assert!(shortcuts.insert((shortcut, when)), "{id}: another command has the default shortcut {shortcut} where {when:?}");
+    }
 }
 
 #[test]

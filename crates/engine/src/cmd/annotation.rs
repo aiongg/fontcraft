@@ -345,13 +345,18 @@ fn list(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "glyph": r.glyph.name, "layer": r.layer.id, "side": t.side.as_str(), "annotations": notes }))
 }
 
+/// The type name commands report: lower-case for the types FontCraft knows, as stored otherwise.
+pub(crate) fn type_name(a: &Annotation) -> &str {
+    Kind::of(a).map_or(a.kind.as_str(), |k| k.param())
+}
+
 /// One annotation with the values its type uses. A type FontCraft does not know is given as
 /// stored, with every value the file holds.
 fn describe(index: usize, a: &Annotation) -> Value {
     let kind = Kind::of(a);
     let mut m = Map::new();
     m.insert("index".into(), json!(index));
-    m.insert("type".into(), json!(kind.map_or(a.kind.as_str(), |k| k.param())));
+    m.insert("type".into(), json!(type_name(a)));
     m.insert("x".into(), json!(a.x));
     m.insert("y".into(), json!(a.y));
     match kind {
