@@ -1876,6 +1876,7 @@ summary = "When a glyph to be deleted is referenced by components elsewhere, the
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
 notes = "Moved from M6 to M4: glyph.removeGlyph takes the answer as `components`, and decomposing needs only the layers, not M6's component editing. Documented, not yet observed."
+guesses = ["Decompose reverses each path that a mirroring component transform (negative determinant) places, as export decomposition does, so the outline keeps its direction. Settled by decomposing a mirrored component in the reference app and checking the path direction."]
 
 [[behavior]]
 id = "removeGlyph.linkedMetricsKeys"

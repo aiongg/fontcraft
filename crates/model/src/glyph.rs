@@ -393,6 +393,45 @@ impl Path {
         Self { closed, nodes, info: PathInfoBox::default(), extra: Extra::new() }
     }
 
+    /// Reverses a path's direction. A closed path keeps its last node, which is where it starts in a
+    /// `.glyphs` file, as glyphsLib's `GSPath.reverse` does (a closed path that ends in off-curve
+    /// nodes is first turned to end on an on-curve node); each on-curve node takes the kind of the
+    /// segment that now ends at it.
+    pub fn reverse(&mut self) {
+        let p = self;
+        if p.closed
+            && p.nodes.last().is_some_and(|n| n.kind == NodeKind::OffCurve)
+            && let Some(first_on) = p.nodes.iter().position(|n| n.kind != NodeKind::OffCurve)
+        {
+            p.nodes.rotate_left(first_on + 1);
+        }
+        let on: Vec<NodeKind> = p.nodes.iter().filter(|n| n.kind != NodeKind::OffCurve).map(|n| n.kind).collect();
+        let (Some(last_on), Some(last)) = (on.len().checked_sub(1), p.nodes.len().checked_sub(1)) else {
+            p.nodes.reverse();
+            return;
+        };
+        // The original on-curve index of each on-curve node of the reversed path.
+        let order: Vec<usize> = if p.closed {
+            if let Some(head) = p.nodes.get_mut(..last) {
+                head.reverse();
+            }
+            (0..last_on).rev().chain([last_on]).collect()
+        } else {
+            p.nodes.reverse();
+            (0..=last_on).rev().collect()
+        };
+        // The segment that ends at an on-curve node of the reversed path is the one that ended at the
+        // next on-curve node of the original path. An open path's first node starts no segment.
+        let skip = usize::from(!p.closed);
+        let ons = p.nodes.iter_mut().filter(|n| n.kind != NodeKind::OffCurve);
+        for (n, &orig) in ons.zip(&order).skip(skip) {
+            let next = if p.closed && orig == last_on { 0 } else { orig + 1 };
+            if let Some(&kind) = on.get(next) {
+                n.kind = kind;
+            }
+        }
+    }
+
     /// A closed rectangle, counter-clockwise from the bottom left.
     pub fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Self {
         let n = |x, y| Node::new(x, y, NodeKind::Line);

@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Component, Glyph, Shape};
+use fontcraft_engine::model::{Component, Glyph, Shape, Transform};
 use fontcraft_testkit::{Fixture, rect};
 use serde_json::{Value, json};
 
@@ -186,6 +186,40 @@ fn remove_glyph_asks_about_components_and_metrics_keys() {
     // Nothing to ask: no answer needed.
     run(&mut s, "glyph.removeGlyph", json!({"glyphs": ["Z"]}));
     assert!(s.font().unwrap().glyph("Z").is_none());
+}
+
+/// Twice the signed area of each path of `name`'s first layer (positive: counter-clockwise).
+fn path_areas(s: &Session, name: &str) -> Vec<f64> {
+    let g = glyph(s, name);
+    g.layers[0]
+        .shapes
+        .iter()
+        .filter_map(|sh| if let Shape::Path(p) = sh { Some(p) } else { None })
+        .map(|p| {
+            let n = &p.nodes;
+            (0..n.len()).map(|i| n[i].x * n[(i + 1) % n.len()].y - n[(i + 1) % n.len()].x * n[i].y).sum()
+        })
+        .collect()
+}
+
+#[test]
+fn decomposing_a_mirrored_component_keeps_the_outline_direction() {
+    let mut s = Fixture::Drawn.session();
+    s.edit("mirrored", |f| {
+        let mut mirrored = Component::new("A", 0.0, 0.0);
+        mirrored.transform = Transform::Matrix([-1.0, 0.0, 0.0, 1.0, 600.0, 0.0]);
+        f.glyph_mut("E")?.layers[0].shapes = vec![Shape::Component(Component::new("A", 0.0, 0.0)), Shape::Component(mirrored)];
+        Ok(())
+    })
+    .unwrap();
+    let a = path_areas(&s, "A");
+    assert!(!a.is_empty());
+    run(&mut s, "glyph.removeGlyph", json!({"glyphs": ["A"], "components": "decompose"}));
+    let e = path_areas(&s, "E");
+    assert_eq!(e.len(), 2 * a.len());
+    for (area, original) in e.iter().zip(a.iter().chain(a.iter())) {
+        assert!(area.signum() == original.signum() && (area.abs() - original.abs()).abs() < 1e-6, "{e:?} from {a:?}");
+    }
 }
 
 #[test]

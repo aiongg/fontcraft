@@ -14,7 +14,7 @@
 
 use fontcraft_geom::variation::{VariationModel, normalize_value};
 
-use crate::{Component, Font, Glyph, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, NodeKind, Path, Shape, Transform};
+use crate::{Component, Font, Glyph, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Shape, Transform};
 
 /// Most pole layers one smart glyph may have for one master.
 pub const MAX_SMART_POLE_LAYERS: usize = 64;
@@ -218,7 +218,7 @@ impl<'a> Ctx<'a> {
                         return Err("the interpolated outline lies beyond the coordinate limit".into());
                     }
                     if flip {
-                        reverse(p);
+                        p.reverse();
                     }
                 }
                 Shape::Component(inner) => inner.transform = Transform::Matrix((affine * inner.affine()).as_coeffs()),
@@ -233,49 +233,11 @@ fn too_large() -> String {
     format!("the outline with its smart components drawn has more than {MAX_OUTLINE_ELEMENTS} nodes")
 }
 
-/// Reverses a path's direction. A closed path keeps its last node, which is where it starts in a
-/// `.glyphs` file, as glyphsLib's `GSPath.reverse` does (a closed path that ends in off-curve
-/// nodes is first turned to end on an on-curve node); each on-curve node takes the kind of the
-/// segment that now ends at it.
-fn reverse(p: &mut Path) {
-    if p.closed
-        && p.nodes.last().is_some_and(|n| n.kind == NodeKind::OffCurve)
-        && let Some(first_on) = p.nodes.iter().position(|n| n.kind != NodeKind::OffCurve)
-    {
-        p.nodes.rotate_left(first_on + 1);
-    }
-    let on: Vec<NodeKind> = p.nodes.iter().filter(|n| n.kind != NodeKind::OffCurve).map(|n| n.kind).collect();
-    let (Some(last_on), Some(last)) = (on.len().checked_sub(1), p.nodes.len().checked_sub(1)) else {
-        p.nodes.reverse();
-        return;
-    };
-    // The original on-curve index of each on-curve node of the reversed path.
-    let order: Vec<usize> = if p.closed {
-        if let Some(head) = p.nodes.get_mut(..last) {
-            head.reverse();
-        }
-        (0..last_on).rev().chain([last_on]).collect()
-    } else {
-        p.nodes.reverse();
-        (0..=last_on).rev().collect()
-    };
-    // The segment that ends at an on-curve node of the reversed path is the one that ended at the
-    // next on-curve node of the original path. An open path's first node starts no segment.
-    let skip = usize::from(!p.closed);
-    let ons = p.nodes.iter_mut().filter(|n| n.kind != NodeKind::OffCurve);
-    for (n, &orig) in ons.zip(&order).skip(skip) {
-        let next = if p.closed && orig == last_on { 0 } else { orig + 1 };
-        if let Some(&kind) = on.get(next) {
-            n.kind = kind;
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
-    use crate::Node;
+    use crate::{Node, NodeKind, Path};
 
     fn kinds(p: &Path) -> Vec<(f64, NodeKind)> {
         p.nodes.iter().map(|n| (n.x, n.kind)).collect()
@@ -378,11 +340,11 @@ mod tests {
         // A(line) c1 c2 B(curve) C(line), closed: glyphsLib gives B(line) c2 c1 A(curve) C(line).
         let n = |x: f64, k| Node::new(x, 0.0, k);
         let mut p = Path::new(true, vec![n(1.0, Line), n(2.0, OffCurve), n(3.0, OffCurve), n(4.0, Curve), n(5.0, Line)]);
-        reverse(&mut p);
+        p.reverse();
         assert_eq!(kinds(&p), [(4.0, Line), (3.0, OffCurve), (2.0, OffCurve), (1.0, Curve), (5.0, Line)]);
         // Open: P0 c1 c2 P1(curve) P2(line) gives P2 P1(line) c2 c1 P0(curve).
         let mut p = Path::new(false, vec![n(0.0, Line), n(1.0, OffCurve), n(2.0, OffCurve), n(3.0, Curve), n(4.0, Line)]);
-        reverse(&mut p);
+        p.reverse();
         assert_eq!(kinds(&p), [(4.0, Line), (3.0, Line), (2.0, OffCurve), (1.0, OffCurve), (0.0, Curve)]);
     }
 }

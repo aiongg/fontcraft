@@ -171,8 +171,9 @@ fn references(font: &Font, doomed: &HashSet<&str>) -> (Vec<ComponentUse>, Vec<Ke
 }
 
 /// Adds to `out` the shapes of `base`'s layer that matches `layer` (the same id, else the
-/// master layer), moved by `affine`. Components of other removed glyphs are decomposed too;
-/// components of glyphs that stay are kept, with the transforms combined.
+/// master layer), moved by `affine` (a path under a mirroring `affine` is reversed). Components
+/// of other removed glyphs are decomposed too; components of glyphs that stay are kept, with the
+/// transforms combined.
 #[allow(clippy::too_many_arguments)]
 fn expand(
     font: &Font,
@@ -201,6 +202,11 @@ fn expand(
                     let at = affine * Point::new(n.x, n.y);
                     n.x = at.x;
                     n.y = at.y;
+                }
+                // A mirroring transform would turn the contour the other way; export
+                // decomposition reverses it too, so the outline keeps its direction.
+                if affine.determinant() < 0.0 {
+                    path.reverse();
                 }
                 out.push(Shape::Path(path));
             }
