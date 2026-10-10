@@ -39,9 +39,9 @@ const MAX_SHIFTS: usize = 16;
 /// What the markers would be read for now.
 fn current_key(session: &Session, tab: Option<&Tab>, live: bool) -> Option<Key> {
     let doc = session.active()?;
-    let glyph = tab?.edited_glyph()?;
-    let master = view::active_master(&doc.font)?;
-    let layer = doc.font.glyph(glyph)?.layer(&master.id)?;
+    let tab = tab?;
+    let glyph = tab.edited_glyph()?;
+    let layer = view::active_layer(&doc.font, tab)?;
     Some(Key { doc: doc.id, revision: doc.revision, glyph: glyph.to_string(), layer: layer.id.clone(), live })
 }
 

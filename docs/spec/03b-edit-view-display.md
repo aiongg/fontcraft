@@ -387,6 +387,9 @@ their image. Images are skipped at export unless a bitmap colour font (sbix) is 
 **Masters.** Edit View draws in the selected master. `view.selectMaster`: Cmd+1 to Cmd+9 or
 the master icons in the toolbar. Picking a master layer in the Layers palette changes only the
 edited or selected glyphs.
+FontCraft: the master belongs to the tab, and a new tab takes the master of the tab it was
+opened from. Selecting a master drops the per-glyph layers chosen in the Layers section. The
+toolbar icons wait for M9. See `docs/spec/04-palette.md` › Layers for the active layer.
 
 **Features menu** (`editView.featuresMenu`, bottom left):
 

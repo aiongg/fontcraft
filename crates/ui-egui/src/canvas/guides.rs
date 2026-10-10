@@ -174,8 +174,8 @@ impl Extras {
         let Some(glyph) = tab.edited_glyph() else { return out };
         let (layer, measured) = {
             let Ok(font) = session.font() else { return out };
-            let Some(master) = super::view::active_master(font) else { return out };
-            let Some(layer) = font.glyph(glyph).and_then(|g| g.layer(&master.id)) else { return out };
+            let Some(layer) = super::view::active_layer(font, tab) else { return out };
+            let Some(master) = font.masters.iter().find(|m| m.id == layer.master) else { return out };
             let mut measured = Vec::new();
             if display.guides {
                 let local = layer.info.guides.iter().enumerate().map(|(index, g)| (GuideScope::Local, index, g));

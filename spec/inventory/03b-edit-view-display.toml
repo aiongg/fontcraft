@@ -1923,10 +1923,11 @@ shortcut = "Cmd+1"
 kind = "ui"
 params = "{tab?: id, master: index|id|name}"
 area = "interpolation"
-milestone = "M9"
+milestone = "M3"
 summary = "Makes a master the one Edit View draws all glyphs in. Cmd+1 to Cmd+9 select the first nine masters; clicking a master's icon in the toolbar selects any of them."
 ref = "Edit View › Previewing & Testing › Previewing Masters"
 status = "handbook"
+notes = "Built in M3.10 without the toolbar icons (`preview.masterIconsInToolbar`, M9). The master belongs to the tab; a new tab takes the master of the tab it was opened from. `master` as an index counts from 0. Selecting a master drops the per-glyph layers `layers.select` chose."
 
 [[behavior]]
 id = "preview.masterIconsInToolbar"
@@ -1939,10 +1940,11 @@ status = "handbook"
 [[behavior]]
 id = "preview.masterPerGlyphViaLayers"
 area = "layers"
-milestone = "M9"
+milestone = "M3"
 summary = "Choosing a master layer in the Layers palette changes the master of only the glyph being edited, or of the glyphs selected in the text, so one tab can mix masters."
 ref = "Edit View › Previewing & Testing › Previewing Masters"
 status = "handbook"
+notes = "Built in M3.10 for the edited glyph (`layers.select`, or its `glyphs` parameter); a text selection in the tab waits for Text mode."
 
 [[panel]]
 id = "editView.featuresMenu"

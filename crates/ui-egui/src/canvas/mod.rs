@@ -63,8 +63,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         state.canvas_size = [f64::from(rect.width()), f64::from(rect.height())];
         let extras = guides::Extras::query(session, &tab, &state.display, tools.toolbox.active_id(), &tools.toolbox.overlays());
         let Ok(font) = session.font() else { return };
-        let Some(master) = view::active_master(font) else { return };
-        let line = view::layout(font, &master.id, &tab.glyphs);
+        let Some(master) = view::active_master(font, &tab) else { return };
+        let line = view::layout(font, &tab);
         let (offset, width) = line.get(tab.edited).copied().unwrap_or((0.0, 0.0));
         let center = Point::new(f64::from(rect.center().x), f64::from(rect.center().y));
         let v = view::tools_view(&tab.view, offset, center);
@@ -79,24 +79,25 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             metrics::draw(&c, &lines, &marks, width, view::vertical_span(font, master), state.display.metrics_names);
         }
         guides::draw_lines(&c, &extras, &state.display);
+        let active = view::active_layer(font, &tab);
         if let Some(glyph) = tab.edited_glyph().and_then(|g| font.glyph(g))
-            && let Some(layer) = glyph.layer(&master.id)
+            && let Some(layer) = active
         {
             background::draw(&c, font, glyph, layer, &state.display);
         }
         let doc = session.active().map(|d| (d.id, d.revision)).unwrap_or_default();
         let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && *preview_tool };
-        fill::draw(&c, fill_cache, font, &master.id, &tab, &line, what);
-        let Some(layer) = tab.edited_glyph().and_then(|g| font.glyph(g)).and_then(|g| g.layer(&master.id)) else { return };
+        fill::draw(&c, fill_cache, font, &tab, &line, what);
+        let Some(layer) = active else { return };
         // The composite in black; under it, when strokes or masks make it differ, the paths as
         // drawn in light grey: centre lines of strokes and the parts masks cut away
         // (`stroke.display`, `mask.display`).
         if let Some(glyph) = tab.edited_glyph()
-            && let Some(composite) = fill_cache.outlines.get(doc, font, glyph, &master.id)
+            && let Some(composite) = fill_cache.outlines.get(doc, font, glyph, layer)
         {
             let to_screen = Affine::translate(v.origin.to_vec2()) * Affine::scale_non_uniform(v.scale(), -v.scale());
             if composite.styled
-                && let Ok(source) = font.outline(glyph, &master.id)
+                && let Some(source) = composite::plain_outline(font, glyph, layer)
             {
                 for contour in flatten(&(to_screen * source)) {
                     painter.add(egui::Shape::line(contour, Stroke::new(tokens.source_outline_width, tokens.source_outline)));

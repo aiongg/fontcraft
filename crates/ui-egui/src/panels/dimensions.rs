@@ -1,4 +1,4 @@
-//! Palette › Dimensions: the measurement notepad of the first master, one field per key of the
+//! Palette › Dimensions: the measurement notepad of the active master (Font View: the first), one field per key of the
 //! current glyph's script (`dimensions.getValues`). Typing a number notes it, emptying a field
 //! clears it (`dimensions.setValue`). The values change nothing in the font.
 
@@ -14,6 +14,11 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let mut query = Map::new();
     if let Some(glyph) = current_glyph(app) {
         query.insert("glyph".into(), json!(glyph));
+    }
+    if let (Ok(font), Some(tab)) = (app.session.font(), app.state.tab())
+        && let Some(master) = crate::canvas::view::active_master(font, tab)
+    {
+        query.insert("master".into(), json!(master.id));
     }
     let Ok(result) = app.session.execute("dimensions.getValues", &Value::Object(query)) else {
         palette::note(app, ui, "No font master");

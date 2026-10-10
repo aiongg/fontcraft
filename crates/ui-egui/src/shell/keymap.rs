@@ -73,13 +73,26 @@ pub fn pressed(ctx: &egui::Context) -> Vec<(&'static str, Value)> {
             }
         }
         for (id, shortcut) in KEYMAP.iter() {
-            if *id != "view.showTab" && input.consume_shortcut(shortcut) {
+            if !NUMBERED.contains(id) && input.consume_shortcut(shortcut) {
                 out.push((*id, json!({})));
+            }
+        }
+        // `Cmd+1` … `Cmd+9` select the first nine masters; after the keymap, so that a shortcut
+        // with more modifiers on the same digit wins.
+        for (n, key) in (0u64..).zip(MASTER_DIGITS) {
+            if input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, key)) {
+                out.push(("view.selectMaster", json!({"master": n})));
             }
         }
     });
     out
 }
+
+/// Commands whose shortcut stands for a numbered series and carries the number as a parameter.
+const NUMBERED: &[&str] = &["view.showTab", "view.selectMaster"];
+
+/// The digit keys of `Cmd+1` … `Cmd+9`.
+const MASTER_DIGITS: [Key; 9] = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
 
 /// The command a key with these modifiers runs as a menu shortcut, matched as [`pressed`] matches
 /// it (`ui.key` on the control channel).
@@ -90,8 +103,17 @@ pub fn command_for(key: Key, modifiers: Modifiers) -> Option<(&'static str, Valu
     {
         return Some(("view.showTab", json!({"index": n})));
     }
-    KEYMAP
+    let found = KEYMAP
         .iter()
-        .find(|(id, s)| *id != "view.showTab" && s.logical_key == key && modifiers.matches_logically(s.modifiers))
-        .map(|(id, _)| (*id, json!({})))
+        .find(|(id, s)| !NUMBERED.contains(id) && s.logical_key == key && modifiers.matches_logically(s.modifiers))
+        .map(|(id, _)| (*id, json!({})));
+    if found.is_some() {
+        return found;
+    }
+    if modifiers.matches_logically(Modifiers::COMMAND)
+        && let Some(n) = (0u64..).zip(MASTER_DIGITS).find(|(_, k)| *k == key).map(|(n, _)| n)
+    {
+        return Some(("view.selectMaster", json!({"master": n})));
+    }
+    None
 }

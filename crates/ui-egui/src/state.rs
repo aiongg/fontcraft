@@ -1,6 +1,8 @@
 //! UI state: plain serializable data, so the control channel can read it (`ui.inspect`) and tests
 //! can set it. Document state lives in the engine, never here.
 
+use std::collections::BTreeMap;
+
 use fontcraft_tools::Selection;
 use serde::{Deserialize, Serialize};
 
@@ -103,6 +105,17 @@ pub struct Tab {
     pub focus: Option<Vec<usize>>,
     /// The glyph `selection` and `focus` belong to. Both are cleared when another glyph is edited.
     pub selection_glyph: Option<String>,
+    /// The master the tab draws its glyphs in (`view.selectMaster`). `None`, or a master the font
+    /// no longer has: the first master.
+    pub master: Option<String>,
+    /// Glyphs drawn in another layer than their layer of `master` (`layers.select`): glyph name →
+    /// layer id. A layer the glyph no longer has falls back to `master`.
+    pub layers: BTreeMap<String, String>,
+    /// The rows selected in the Layers section for the edited glyph (layer ids, in the order they
+    /// were picked). A plain click selects the active layer alone.
+    pub layer_selection: Vec<String>,
+    /// The layer `selection` and `focus` belong to. Both are cleared when another layer is edited.
+    pub selection_layer: Option<String>,
 }
 
 impl Tab {
@@ -110,14 +123,18 @@ impl Tab {
         self.glyphs.get(self.edited).map(String::as_str)
     }
 
-    /// Clears the selection and the path focus when they belong to another glyph than the edited
-    /// one.
-    pub fn sync_selection(&mut self) {
+    /// Clears the selection and the path focus when they belong to another glyph or layer than
+    /// the edited one (`layer`: the active layer's id), and the layer rows when the glyph changed.
+    pub fn sync_selection(&mut self, layer: Option<&str>) {
         let edited = self.edited_glyph().map(str::to_string);
         if self.selection_glyph != edited {
+            self.layer_selection.clear();
+        }
+        if self.selection_glyph != edited || self.selection_layer.as_deref() != layer {
             self.selection.clear();
             self.focus = None;
             self.selection_glyph = edited;
+            self.selection_layer = layer.map(str::to_string);
         }
     }
 

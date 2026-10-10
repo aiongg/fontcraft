@@ -126,7 +126,7 @@ pub fn edit_view_key(cx: &Context<'_>, ev: &KeyEvent) -> Option<Action> {
             } else if m.alt {
                 let all = sel.targets(scene);
                 let mut params = Map::new();
-                for key in ["glyph", "points", "shapes"] {
+                for key in ["glyph", "layer", "points", "shapes"] {
                     if let Some(v) = all.get(key) {
                         params.insert(key.into(), v.clone());
                     }

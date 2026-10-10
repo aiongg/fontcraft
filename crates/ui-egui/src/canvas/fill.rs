@@ -42,12 +42,13 @@ pub struct Fill {
 }
 
 /// Draws the tab's glyphs (`line` holds their offsets and widths) as `what` says.
-pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, master: &str, tab: &Tab, line: &[(f64, f64)], what: Fill) {
+pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, tab: &Tab, line: &[(f64, f64)], what: Fill) {
     let offset = line.get(tab.edited).map_or(0.0, |(x, _)| *x);
     let mut filled = BezPath::new();
     for (i, (name, (x, _))) in tab.glyphs.iter().zip(line).enumerate() {
         let edited = i == tab.edited;
-        let Some(composite) = cache.outlines.get(what.doc, font, name, master) else { continue };
+        let Some(layer) = super::view::shown_layer(font, tab, name) else { continue };
+        let Some(composite) = cache.outlines.get(what.doc, font, name, layer) else { continue };
         let mut outline = composite.outline.clone();
         outline.apply_affine(Affine::translate((x - offset, 0.0)));
         if (edited && what.edited) || (!edited && what.others) {
@@ -65,7 +66,7 @@ pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, master: &str, tab:
     let ppp = c.painter.ctx().pixels_per_point();
     let (w, h) = ((c.rect.width() * ppp).round(), (c.rect.height() * ppp).round());
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    (what, &tab.glyphs, tab.edited).hash(&mut hasher);
+    (what, &tab.glyphs, tab.edited, &tab.master, &tab.layers).hash(&mut hasher);
     for v in [
         c.view.scale(),
         c.view.origin.x,

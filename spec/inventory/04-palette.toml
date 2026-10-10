@@ -302,7 +302,7 @@ milestone = "M3"
 summary = "Lists every layer of the current glyph: one master layer per font master plus any backup and special layers beneath it. It is where layers are switched, shown, added, renamed, reordered and promoted."
 ref = "Palette › Layers"
 status = "handbook"
-notes = "Built in M3.15 without `layers.select` (the canvas always edits the layer of the first master) and without dragging to reorder or to use as master: a click picks the row the buttons act on."
+notes = "Built in M3.15 and M3.10 without dragging to reorder or to use as master. In Edit View a click runs `layers.select`; in Font View, where no layer is active, a click picks the row the buttons act on. Documented, not yet observed: the minus button deletes every selected row that is not a master layer."
 
 [[command]]
 id = "layers.select"
@@ -310,12 +310,13 @@ label = "Select Layer"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyphs: [names], layer: id, extend?: range|toggle}"
+params = "{tab?: id, glyphs?: [names], layer: id, extend?: range|toggle}"
 area = "layers"
 milestone = "M3"
 summary = "Makes a layer of the current glyph the active one, or extends the layer selection as Shift+click and Cmd+click do. Choosing a master layer changes the master shown for the edited or text-selected glyphs only."
 ref = "Palette › Layers"
 status = "handbook"
+notes = "Built in M3.10. The tab keeps the layer per glyph name, so a glyph that appears twice in the line shows the same layer in both places. The active layer is what the canvas draws and the tools and shell commands edit; metric lines and zones are its master's. A range runs from the active layer to the clicked row in the order the section lists them, after its filters. Documented, not yet observed: whether a range or Cmd+click also changes the active layer; we keep it."
 
 [[command]]
 id = "layers.toggleVisibility"

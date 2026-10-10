@@ -3,7 +3,7 @@
 //! The canvas fills it and draws it in black.
 //!
 //! Strokes and masks take boolean operations and the canvas draws every frame, so composites are
-//! cached per glyph and master. An entry stays valid while the document revision is unchanged,
+//! cached per glyph and layer. An entry stays valid while the document revision is unchanged,
 //! and across edits to other glyphs while its own layer's shapes are unchanged and hold no
 //! component (a component's outline depends on another glyph).
 
@@ -16,7 +16,7 @@ use fontcraft_model::{Font, Layer, Shape};
 /// Most glyphs the cache holds; past this it starts again empty.
 const MAX_ENTRIES: usize = 1024;
 
-/// One glyph's composite on one master.
+/// One glyph's composite in one layer.
 #[derive(Debug)]
 pub struct Composite {
     pub outline: BezPath,
@@ -39,13 +39,12 @@ pub struct CompositeCache {
 }
 
 impl CompositeCache {
-    /// The composite of `glyph` on `master` in document `doc` (id, revision); `None` when the glyph
-    /// has no layer there or its outline cannot be built. A composite that fails (a stroke size
-    /// given as an expression, say) falls back to the plain outline.
-    pub fn get(&mut self, doc: (u64, u64), font: &Font, glyph: &str, master: &str) -> Option<&Composite> {
-        let layer = font.glyph(glyph)?.layer(master)?;
+    /// The composite of `layer` of `glyph` in document `doc` (id, revision); `None` when its
+    /// outline cannot be built. A composite that fails (a stroke size given as an expression,
+    /// say) falls back to the plain outline.
+    pub fn get(&mut self, doc: (u64, u64), font: &Font, glyph: &str, layer: &Layer) -> Option<&Composite> {
         let version = format_version(font);
-        let key = (glyph.to_string(), master.to_string());
+        let key = (glyph.to_string(), layer.id.clone());
         let fresh = self
             .entries
             .get(&key)
@@ -56,7 +55,7 @@ impl CompositeCache {
                     all.extend(p.elements().iter().copied());
                     all
                 }),
-                Err(_) => font.outline(glyph, master).ok()?,
+                Err(_) => plain_outline(font, glyph, layer)?,
             };
             if self.entries.len() >= MAX_ENTRIES && !self.entries.contains_key(&key) {
                 self.entries.clear();
@@ -69,6 +68,14 @@ impl CompositeCache {
         entry.doc = doc;
         Some(&entry.composite)
     }
+}
+
+/// The outline of `layer` of `glyph` with its components resolved, without strokes or masks.
+pub fn plain_outline(font: &Font, glyph: &str, layer: &Layer) -> Option<BezPath> {
+    if layer.is_master_layer() {
+        return font.outline(glyph, &layer.master).ok();
+    }
+    Some(super::background::outline(font, &layer.shapes, &layer.master))
 }
 
 /// Whether `layer` has a stroked path or a mask shape.

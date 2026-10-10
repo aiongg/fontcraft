@@ -157,7 +157,9 @@ pub(crate) fn open(app: &mut FontcraftApp, args: &Args, glyphs: Vec<String>) -> 
     }
     let id = app.state.next_tab_id;
     app.state.next_tab_id += 1;
-    let mut tab = Tab { id, glyphs, ..Default::default() };
+    // A new tab draws in the master of the tab it was opened from.
+    let master = app.state.tab().and_then(|t| t.master.clone());
+    let mut tab = Tab { id, glyphs, master, ..Default::default() };
     tab.view = view::fit(font, &tab, app.state.canvas_size, f64::from(app.tokens.fit_margin));
     app.state.tabs.push(tab);
     let index = app.state.tabs.len() - 1;
@@ -168,7 +170,12 @@ pub(crate) fn open(app: &mut FontcraftApp, args: &Args, glyphs: Vec<String>) -> 
 /// What tab commands return about the tab at `index` (into the tabs).
 pub(crate) fn describe(app: &FontcraftApp, index: usize) -> Value {
     match app.state.tabs.get(index) {
-        Some(tab) => json!({"tab": tab.id, "position": index + 2, "glyphs": tab.glyphs, "editing": tab.edited_glyph()}),
+        Some(tab) => {
+            let font = app.session.font().ok();
+            let master = font.and_then(|f| view::active_master(f, tab)).map(|m| m.id.clone());
+            let layer = font.and_then(|f| view::active_layer(f, tab)).map(|l| l.id.clone());
+            json!({"tab": tab.id, "position": index + 2, "glyphs": tab.glyphs, "editing": tab.edited_glyph(), "master": master, "layer": layer})
+        }
         None => json!({}),
     }
 }

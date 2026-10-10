@@ -122,6 +122,17 @@ backup layer is deleted. Dragging a backup row onto a master row does the same.
   restored layer's place in the list. A glyph without a master layer for that master gets the
   backup as its master layer and no new backup.
 - Visibility is stored with the layer and saved.
+- The active layer belongs to the Edit View tab. The tab draws every glyph in its master
+  (`view.selectMaster`, the first master until one is chosen); `layers.select` shows single glyphs
+  in another layer, keyed by glyph name. The edited glyph's shown layer is the active layer: the
+  canvas draws it, the tools and every command the shell runs target it (`layer` in the target
+  object), and the metric lines, zones and Dimensions values are its master's.
+- A plain click makes the row active and the only selected row. Shift+click selects the rows
+  from the active layer to the clicked one, in the order the section lists them; Cmd+click adds
+  or removes one row. Neither changes the active layer. Minus deletes the selected rows that are
+  not master layers; Use as Master needs exactly one selected backup.
+- Plus copies the active layer into a backup of the active layer's master.
+- In Font View there is no active layer: a click picks the row the buttons act on.
 
 ## Transformations (`palette.transformations`)
 

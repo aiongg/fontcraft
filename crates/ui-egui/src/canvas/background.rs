@@ -21,7 +21,7 @@ const MAX_ELEMENTS: usize = 200_000;
 
 /// The outline of `shapes` on `master`, components resolved. Shapes that cannot be resolved
 /// (a missing component glyph, a cycle, bad coordinates) are left out.
-fn outline(font: &Font, shapes: &[Shape], master: &str) -> BezPath {
+pub(crate) fn outline(font: &Font, shapes: &[Shape], master: &str) -> BezPath {
     let mut out = BezPath::new();
     for shape in shapes {
         let part = match shape {

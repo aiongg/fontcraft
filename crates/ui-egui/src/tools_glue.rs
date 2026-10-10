@@ -66,9 +66,18 @@ enum Queued {
 /// The interaction a tool began, and what to put back if it is cancelled.
 #[derive(Clone, Debug)]
 struct Running {
-    tab: u64,
-    glyph: String,
+    target: Target,
     before: Selection,
+}
+
+/// What the tools work on: a tab, its edited glyph and the active layer's id.
+type Target = (u64, String, String);
+
+/// The showing tab's [`Target`].
+fn target(app: &FontcraftApp) -> Option<Target> {
+    let tab = app.state.tab()?;
+    let layer = app.session.font().ok().and_then(|f| view::active_layer(f, tab)).map(|l| l.id.clone()).unwrap_or_default();
+    Some((tab.id, tab.edited_glyph()?.to_string(), layer))
 }
 
 /// The tools' side of the shell. Not part of [`crate::state::UiState`]: tools are state
@@ -84,8 +93,8 @@ pub struct ToolsState {
     mods: Modifiers,
     running: Option<Running>,
     queued: Vec<Queued>,
-    /// The tab and glyph the tools last worked on.
-    target: Option<(u64, String)>,
+    /// The tab, glyph and layer the tools last worked on.
+    target: Option<Target>,
     /// The document revision the selection was last checked against.
     checked: Option<(u64, u64)>,
     /// A text field had the keyboard at the last frame.
@@ -121,11 +130,10 @@ pub fn settings(tokens: &Tokens, font: &Font) -> ToolSettings {
     .with_font(font)
 }
 
-/// The scene of a tab's edited glyph: its layer in the active master, with the tab's path focus.
+/// The scene of a tab's edited glyph: its active layer, with the tab's path focus.
 pub fn scene<'a>(font: &'a Font, tab: &Tab) -> Option<Scene<'a>> {
     let glyph = tab.edited_glyph()?;
-    let master = view::active_master(font)?;
-    let layer = font.glyph(glyph)?.layer(&master.id)?;
+    let layer = view::active_layer(font, tab)?;
     let mut scene = Scene::from_font(font, glyph, Some(&layer.id))?;
     scene.focus = tab.focus.clone();
     Some(scene)
@@ -156,18 +164,18 @@ fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
 
 /// Brings the tools in line with the app before they see an event or a frame.
 pub fn sync(app: &mut FontcraftApp) {
+    let target = target(app);
     if let Some(tab) = app.state.tab_mut() {
-        tab.sync_selection();
+        tab.sync_selection(target.as_ref().map(|t| t.2.as_str()));
     }
-    let target = app.state.tab().and_then(|t| Some((t.id, t.edited_glyph()?.to_string())));
     if target != app.tools.target {
-        // Another tab or glyph: a gesture in progress ends without touching the new one.
+        // Another tab, glyph or layer: a gesture in progress ends without touching the new one.
         let _ = app.tools.toolbox.cancel();
         app.tools.pressed = false;
         app.tools.target = target.clone();
     }
     if let Some(r) = &app.tools.running {
-        let same = target.as_ref().is_some_and(|(id, glyph)| *id == r.tab && *glyph == r.glyph);
+        let same = target.as_ref() == Some(&r.target);
         if !same || app.session.interaction().is_none() {
             let _ = app.tools.toolbox.cancel();
             cancel(app);
@@ -283,11 +291,11 @@ pub fn apply(app: &mut FontcraftApp, out: Output) -> Vec<String> {
 }
 
 fn begin(app: &mut FontcraftApp, label: &str) -> Result<(), String> {
-    let Some((tab, Some(glyph), before)) = app.state.tab().map(|t| (t.id, t.edited_glyph().map(str::to_string), t.selection.clone())) else {
+    let (Some(target), Some(before)) = (target(app), app.state.tab().map(|t| t.selection.clone())) else {
         return Err("no glyph is being edited".into());
     };
     app.session.begin(label).map_err(|e| e.to_string())?;
-    app.tools.running = Some(Running { tab, glyph, before });
+    app.tools.running = Some(Running { target, before });
     Ok(())
 }
 
@@ -307,8 +315,8 @@ fn cancel(app: &mut FontcraftApp) {
     if app.session.interaction().is_some() {
         let _ = app.session.cancel();
     }
-    if let Some(tab) = app.state.tab_index(r.tab).and_then(|i| app.state.tabs.get_mut(i))
-        && tab.edited_glyph() == Some(r.glyph.as_str())
+    if let Some(tab) = app.state.tab_index(r.target.0).and_then(|i| app.state.tabs.get_mut(i))
+        && tab.edited_glyph() == Some(r.target.1.as_str())
     {
         tab.selection = r.before;
     }
@@ -562,6 +570,10 @@ pub fn selection_targets(session: &Session, state: &UiState, spec: &CommandSpec)
     }
     if spec.targets.contains(&TargetKind::Glyphs) && !m.contains_key("glyph") {
         m.insert("glyphs".into(), json!([scene.glyph]));
+        // A whole-glyph command that also takes a layer acts on the active one.
+        if spec.params.split('→').next().is_some_and(|input| input.contains("layer?")) {
+            m.insert("layer".into(), json!(scene.layer_id));
+        }
     }
     Some(m)
 }

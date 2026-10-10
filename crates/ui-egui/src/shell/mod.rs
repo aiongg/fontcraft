@@ -13,6 +13,7 @@ pub mod drawing;
 pub mod font_view;
 pub mod item_state;
 pub mod keymap;
+pub mod masters;
 pub mod menus;
 pub mod palette;
 pub mod pickers;
@@ -48,6 +49,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (annotation::COMMANDS, annotation::run),
     (drawing::COMMANDS, drawing::run),
     (audit::COMMANDS, audit::run),
+    (masters::COMMANDS, masters::run),
 ];
 
 /// Every shell command, in module order.

@@ -1,13 +1,13 @@
 //! Palette › Layers: the layers of the current glyph in palette order (`layers.list`), master
-//! layers in bold, the others indented under their master with their kind. The eye shows or
-//! hides a layer (`layers.toggleVisibility`); a click picks the row the buttons act on;
-//! double-clicking a non-master name renames it (`layers.rename`). Plus adds a backup of the
-//! active layer (`layers.addBackupLayer`), minus deletes the picked row (`layers.delete`), Use as
-//! Master restores a picked backup (`layers.useAsMaster`). The filter menu runs
+//! layers in bold, the others indented under their master with their kind, the active layer in
+//! the accent colour. The eye shows or hides a layer (`layers.toggleVisibility`). In Edit View a
+//! click makes a row the active layer (`layers.select`), Shift+click selects a range of rows and
+//! Cmd+click adds or removes one; in Font View a click picks the row the buttons act on.
+//! Double-clicking a non-master name renames it (`layers.rename`). Plus adds a backup of the
+//! active layer (`layers.addBackupLayer`), minus deletes the selected rows (`layers.delete`), Use
+//! as Master restores a selected backup (`layers.useAsMaster`). The filter menu runs
 //! `layers.onlyShowLayersFromCurrentMaster` and `layers.hideBackupLayers`. A right-click on a
 //! row opens its context menu: the commands whose row names `layers.row`, acting on that row.
-//!
-//! The active layer is the edited glyph's layer of the first master, as in the canvas.
 
 use serde_json::{Value, json};
 
@@ -20,12 +20,12 @@ use crate::shell::context_menu;
 const MAX_ROWS: usize = 500;
 
 /// One row of `layers.list`.
-struct Row {
-    id: String,
-    name: String,
-    kind: String,
-    master: String,
-    visible: bool,
+pub struct Row {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub master: String,
+    pub visible: bool,
 }
 
 fn rows(result: &Value) -> Vec<Row> {
@@ -43,7 +43,32 @@ fn rows(result: &Value) -> Vec<Row> {
         .collect()
 }
 
-/// The id of the row picked by a click (egui memory: widget state, not document state).
+/// The rows of `glyph` the section lists, after its filters. `tab` (an index into the tabs) is the
+/// tab whose active master "Only Show Layers from Current Master" means; without one, the first
+/// master.
+pub fn shown_rows(app: &mut FontcraftApp, tab: Option<usize>, glyph: &str) -> Vec<Row> {
+    let Ok(result) = app.session.execute("layers.list", &json!({ "glyph": glyph })) else { return Vec::new() };
+    let current = current_master(app, tab);
+    let panels = &app.state.panels;
+    rows(&result)
+        .into_iter()
+        .filter(|r| !panels.layers_current_master_only || Some(&r.master) == current.as_ref())
+        .filter(|r| !panels.hide_backup_layers || r.kind != "backup")
+        .collect()
+}
+
+/// The id of the current master: the active master of tab `tab`, else the first master.
+fn current_master(app: &FontcraftApp, tab: Option<usize>) -> Option<String> {
+    let font = app.session.font().ok()?;
+    match tab.and_then(|i| app.state.tabs.get(i)) {
+        Some(tab) => view::active_master(font, tab),
+        None => font.masters.first(),
+    }
+    .map(|m| m.id.clone())
+}
+
+/// The id of the row picked by a click in Font View (egui memory: widget state, not document
+/// state).
 fn picked_id() -> egui::Id {
     widgets::id("layers.picked")
 }
@@ -89,26 +114,35 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         palette::note(app, ui, "No glyph selected");
         return;
     };
-    let Ok(result) = app.session.execute("layers.list", &json!({ "glyph": glyph })) else {
+    let ctx = ui.ctx().clone();
+    // In Edit View the rows belong to the showing tab; in Font View to the first master.
+    let tab = app.state.active_tab;
+    let Some((active_master, active_layer)) = app.session.font().ok().and_then(|font| {
+        let layer = match app.state.tab() {
+            Some(tab) => view::active_layer(font, tab)?,
+            None => font.glyph(&glyph)?.layer(&font.masters.first()?.id)?,
+        };
+        Some((layer.master.clone(), layer.id.clone()))
+    }) else {
         palette::note(app, ui, "No glyph selected");
         return;
     };
-    let Some((active_master, active_layer)) = app.session.font().ok().and_then(|font| {
-        let master = view::active_master(font)?;
-        let layer = font.glyph(&glyph)?.layer(&master.id)?;
-        Some((master.id.clone(), layer.id.clone()))
-    }) else {
-        return;
+    let all = match app.session.execute("layers.list", &json!({ "glyph": glyph })) {
+        Ok(result) => rows(&result),
+        Err(_) => Vec::new(),
     };
-    let panels = &app.state.panels;
-    let all = rows(&result);
-    let shown: Vec<&Row> = all
-        .iter()
-        .filter(|r| !panels.layers_current_master_only || r.master == active_master)
-        .filter(|r| !panels.hide_backup_layers || r.kind != "backup")
-        .collect();
-    let ctx = ui.ctx().clone();
-    let picked: Option<String> = ctx.data(|d| d.get_temp(picked_id()));
+    let shown_ids: Vec<String> = shown_rows(app, tab, &glyph).into_iter().map(|r| r.id).collect();
+    let shown: Vec<&Row> = all.iter().filter(|r| shown_ids.contains(&r.id)).collect();
+    // Rows a command removed drop out; an Edit View tab with none selected shows the active one.
+    let mut selected: Vec<String> = match app.state.tab() {
+        Some(t) => t.layer_selection.clone(),
+        None => ctx.data(|d| d.get_temp::<String>(picked_id())).into_iter().collect(),
+    };
+    selected.retain(|id| all.iter().any(|r| r.id == *id));
+    if selected.is_empty() && tab.is_some() {
+        selected.push(active_layer.clone());
+    }
+    let editing = tab.is_some();
     let renaming: Option<String> = ctx.data(|d| d.get_temp(renaming_id()));
     let tokens = app.tokens.clone();
     let row_menu = context_menu::sections(&app.session, &app.state, &[ROW_CONTEXT]);
@@ -141,12 +175,22 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             if row.id == active_layer {
                 text = text.color(tokens.accent);
             }
-            let label = ui.add(egui::Button::selectable(picked.as_deref() == Some(row.id.as_str()), text).frame(false));
+            let label = ui.add(egui::Button::selectable(selected.contains(&row.id), text).frame(false));
             if !master_row && row.kind != "backup" {
                 ui.label(egui::RichText::new(&row.kind).strong().color(tokens.text_dim));
             }
             if label.clicked() {
-                ctx.data_mut(|d| d.insert_temp(picked_id(), row.id.clone()));
+                if editing {
+                    let m = ui.input(|i| i.modifiers);
+                    let params = match (m.shift, m.command) {
+                        (true, _) => json!({"layer": row.id, "extend": "range"}),
+                        (false, true) => json!({"layer": row.id, "extend": "toggle"}),
+                        _ => json!({"layer": row.id}),
+                    };
+                    pending.push(("layers.select", params));
+                } else {
+                    ctx.data_mut(|d| d.insert_temp(picked_id(), row.id.clone()));
+                }
             }
             if label.double_clicked() && !master_row {
                 start_renaming(&ctx, &row.id);
@@ -164,7 +208,6 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
                             None => response,
                         };
                         if response.clicked() {
-                            ctx.data_mut(|d| d.insert_temp(picked_id(), row.id.clone()));
                             match item.command {
                                 "layers.rename" => start_renaming(&ctx, &row.id),
                                 id => pending.push((id, row_params(id, &glyph, &row.id))),
@@ -176,17 +219,18 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             });
         });
     }
-    let picked_row = picked.as_ref().and_then(|p| all.iter().find(|r| &r.id == p));
-    let deletable = picked_row.is_some_and(|r| r.kind != "master");
-    let backup = picked_row.filter(|r| r.kind == "backup");
+    let selected_rows: Vec<&Row> = all.iter().filter(|r| selected.contains(&r.id)).collect();
+    let deletable: Vec<&str> = selected_rows.iter().filter(|r| r.kind != "master").map(|r| r.id.as_str()).collect();
+    let backup = match selected_rows.as_slice() {
+        [one] if one.kind == "backup" => Some(*one),
+        _ => None,
+    };
     ui.horizontal(|ui| {
         if widgets::button(ui, widgets::id("layers.add"), "+", "New Backup Layer", true, false) {
-            pending.push(("layers.addBackupLayer", json!({"glyphs": [glyph], "master": active_master})));
+            pending.push(("layers.addBackupLayer", json!({"glyphs": [glyph], "master": active_master, "from": active_layer})));
         }
-        if widgets::button(ui, widgets::id("layers.delete"), "−", "Delete Layer", deletable, false)
-            && let Some(r) = picked_row
-        {
-            pending.push(("layers.delete", json!({"glyphs": [glyph], "layers": [r.id]})));
+        if widgets::button(ui, widgets::id("layers.delete"), "−", "Delete Layer", !deletable.is_empty(), false) {
+            pending.push(("layers.delete", json!({"glyphs": [glyph], "layers": deletable})));
             ctx.data_mut(|d| d.remove::<String>(picked_id()));
         }
         if widgets::button(ui, widgets::id("layers.useAsMaster"), "Use as Master", "Use as Master", backup.is_some(), false)
