@@ -132,9 +132,8 @@ Add Glyphs, Remove Glyphs, Paste Special and Find and Replace dialogs, and the S
 recent documents and a chooser that builds a new font from 28 open glyph sets. User settings
 persist between runs. A frame after the first takes under 1 ms on Inter's 3,017 glyphs. A second
 end-to-end test builds a font from glyph sets over the control channel, renames, filters,
-duplicates and exports it. Removing a glyph removes the kerning pairs keyed by its name in the
-same undo step, and when other glyphs use it as a component the dialog's default answer is
-Decompose.
+duplicates and exports it. When other glyphs use a removed glyph as a component, the Remove Glyph
+dialog's default answer is Decompose.
 
 **What is not.** Nothing in the editor has been compared with the running reference app. M3's
 and M4's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where

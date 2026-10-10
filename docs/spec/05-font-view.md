@@ -213,10 +213,8 @@ glyph in Edit View, or the Text-tool selection. Sequence:
 Headless parameters `components` and `metricsKeys` pick the answers; without them the command
 refuses when either situation arises.
 
-Kerning pairs whose side is a doomed glyph's name are removed with it, in every master and
-direction, in the same undo step. Pairs on a kerning group stay. The handbook keeps both kinds as
-obsolete pairs until Clean Up (`kerning.obsoletePairs`); FontCraft departs from it for the
-glyph-keyed pairs by the owner's choice.
+Kerning pairs that name a doomed glyph stay. They are obsolete pairs until Clean Up
+(`kerning.obsoletePairs`).
 
 ## 4. Glyph data
 

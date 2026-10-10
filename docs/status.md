@@ -348,8 +348,7 @@ Append one terse entry per session: what landed, numbers, what is still open.
   Rust. Next: the owner's review of M4, then M5's planning pass.
 - **2026-10-10, M4 review and M5 planning.** The owner's answers to M4's guesses: hidden selected
   glyphs are deselected; a rename takes the database's Unicode value; generated glyphs are 600
-  units wide. M4.13: Remove Glyph removes the kerning pairs keyed by a removed glyph's name, in
-  every master and direction and in one undo step; group pairs stay until Clean Up. M4.14: Remove
-  Glyph's dialog defaults to Decompose. M4.15: that removal leaves contextual kerning and
-  unrelated empty entries alone. M5.0: the planning pass (222 rows, 97 commands; 27 rows
+  units wide; removing a glyph keeps the kerning pairs that name it, as the handbook says
+  (M4.13 to M4.16 built removal first and then took it out). M4.14: Remove Glyph's dialog defaults
+  to Decompose. M5.0: the planning pass (222 rows, 97 commands; 27 rows
   moved; 19 packages; 462 guesses on 327 rows). Next: the owner's acceptance of the M5 plan.

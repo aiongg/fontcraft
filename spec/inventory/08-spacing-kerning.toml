@@ -1466,7 +1466,7 @@ milestone = "M5"
 summary = "Stored pairs are not removed automatically when a glyph is deleted or a group loses its last member; they stay as obsolete pairs until Clean Up is run."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
 status = "handbook"
-notes = "The handbook keeps every pair naming a deleted glyph until Clean Up. FontCraft removes the glyph-keyed pairs with the glyph, in the same undo step, by the owner's choice; group pairs follow the handbook."
+notes = "glyph.removeGlyph leaves every pair in place, as the handbook says. Documented, not yet observed."
 
 [[behavior]]
 id = "kerning.compressRules"
