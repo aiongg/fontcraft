@@ -87,7 +87,9 @@ mod tests {
     fn frame(ctx: &egui::Context, app: &mut FontcraftApp, events: Vec<Event>) -> egui::FullOutput {
         let input =
             egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
-        ctx.run_ui(input, |ui| app.ui(ui))
+        let mut output = ctx.run_ui(input, |ui| app.ui(ui));
+        output.textures_delta.clear();
+        output
     }
 
     fn copied(output: &egui::FullOutput) -> Vec<String> {
@@ -114,7 +116,7 @@ mod tests {
         let expected = app.run("edit.copy", &json!({"glyph": "A"})).unwrap()["json"].as_str().unwrap().to_string();
 
         let output = frame(&ctx, &mut app, vec![Event::Copy]);
-        assert_eq!(copied(&output), [expected.clone()], "Copy puts edit.copy's json on the clipboard");
+        assert_eq!(copied(&output), std::slice::from_ref(&expected), "Copy puts edit.copy's json on the clipboard");
 
         let output = frame(&ctx, &mut app, vec![Event::Paste(expected.clone())]);
         assert!(copied(&output).is_empty());
