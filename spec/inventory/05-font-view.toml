@@ -1664,7 +1664,7 @@ status = "handbook"
 id = "pasteSpecial.partMetricsKeys"
 area = "spacing-kerning"
 milestone = "M5"
-summary = "Metric Keys transfers only the sidebearing and width formulas. The numeric metrics are not recomputed until Update Metrics (Cmd+Ctrl+M) or Update Metrics for all Masters (Cmd+Ctrl+Alt+M) is run."
+summary = "Metric Keys transfers only the sidebearing and width formulas. The numeric metrics are not recomputed until Update Metrics (Cmd+Ctrl+M) or Update Metrics for All Masters (Cmd+Ctrl+Alt+M) is run."
 ref = "Font View › Copying Glyphs Between Files"
 status = "handbook"
 

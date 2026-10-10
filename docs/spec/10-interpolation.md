@@ -178,7 +178,7 @@ layer pair.
 | Fix | Command | Notes |
 |---|---|---|
 | Correct Path Direction, Cmd+Shift+R | `path.correctPathDirection` | sets directions from path nesting, moves each start node to a canonical node (normally leftmost of the lowest), sorts shapes (normally bottom-left to top-right) |
-| … for all Masters, Cmd+Alt+Shift+R | `path.correctPathDirectionForAllMasters` | Option-key alternate; all master, intermediate and alternate layers of the selected glyphs |
+| … for All Masters, Cmd+Alt+Shift+R | `path.correctPathDirectionForAllMasters` | Option-key alternate; all master, intermediate and alternate layers of the selected glyphs |
 | Filter › Shape Order | `filter.shapeOrder`, panel `window.shapeOrder`, headless `glyph.setShapeOrder` | drag shapes until every layer has the same order |
 | Drag a connecting-line end in Master Compatibility view | `glyph.swapShapes` | swaps two correspondences on a non-current layer |
 

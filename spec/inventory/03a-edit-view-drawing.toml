@@ -914,7 +914,7 @@ notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 
 
 [[command]]
 id = "path.tidyUpPathsForAllMasters"
-label = "Tidy up Paths for all Masters"
+label = "Tidy up Paths for All Masters"
 menu = ["Path"]
 shortcut = "Cmd+Alt+Shift+T"
 kind = "engine"
@@ -1441,7 +1441,7 @@ notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 
 
 [[command]]
 id = "path.correctPathDirectionForAllMasters"
-label = "Correct Path Direction for all Masters"
+label = "Correct Path Direction for All Masters"
 menu = ["Path"]
 shortcut = "Cmd+Alt+Shift+R"
 kind = "engine"
@@ -1921,7 +1921,7 @@ status = "handbook"
 
 [[command]]
 id = "glyph.setAnchorsForAllMasters"
-label = "Set Anchors for all Masters"
+label = "Set Anchors for All Masters"
 menu = ["Glyph"]
 shortcut = "Cmd+Alt+U"
 kind = "engine"

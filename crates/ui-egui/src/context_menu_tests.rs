@@ -246,3 +246,33 @@ fn items_follow_the_state_of_what_is_selected() {
     let glyph_locked = open_menu(&mut app, json!([]));
     assert_eq!(glyph_locked.item("glyph.toggleLocked").unwrap().checked, Some(true));
 }
+
+#[test]
+fn a_layers_row_has_a_context_menu_that_acts_on_that_row() {
+    let mut app = edit_app();
+    app.run("layers.addBackupLayer", &json!({"glyphs": ["A"], "name": "Sketch"})).unwrap();
+    let w = Window::new();
+    let layers = |app: &FontcraftApp| app.session.font().unwrap().glyph("A").unwrap().layers.len();
+    let before = layers(&app);
+    let shapes = w.idle(&mut app);
+    let row = text_at(&shapes, "Sketch").expect("the backup layer's row is drawn");
+
+    let pick = |app: &mut FontcraftApp, row: Pos2, item: &str| {
+        w.right_click(app, row);
+        w.idle(app);
+        let shapes = w.idle(app);
+        let at = text_at(&shapes, item).unwrap_or_else(|| panic!("the row menu shows {item}"));
+        w.frame(app, vec![Event::PointerMoved(at), button(at, PointerButton::Primary, true, EguiMods::NONE)]);
+        w.frame(app, vec![button(at, PointerButton::Primary, false, EguiMods::NONE)]);
+        w.idle(app);
+    };
+
+    // The master row refuses Delete Layer: picking it changes nothing.
+    let master = text_at(&shapes, "Regular").expect("the master row is drawn");
+    pick(&mut app, master, "Delete Layer");
+    assert_eq!(layers(&app), before, "a master layer is not deleted");
+
+    pick(&mut app, row, "Delete Layer");
+    assert_eq!(layers(&app), before - 1, "the backup row's Delete Layer deletes that layer");
+    assert_eq!(app.session.journal().last().map(|(id, _)| id.as_str()), Some("layers.delete"));
+}

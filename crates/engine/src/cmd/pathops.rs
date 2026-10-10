@@ -106,7 +106,7 @@ pub fn specs() -> Vec<CommandSpec> {
         .targets(&[K::Glyphs, K::Layer]),
         cmd!(
             "path.correctPathDirectionForAllMasters",
-            "Correct Path Direction for all Masters",
+            "Correct Path Direction for All Masters",
             ["Path"],
             Some("Cmd+Alt+Shift+R"),
             "{glyphs: [names] | glyph: name} path.correctPathDirection on every master layer and every intermediate and alternate layer of the glyphs; other layers are left alone. A locked glyph is skipped (an error with one `glyph`) → {glyphs, skipped: [{glyph, layer?, reason}]}",
@@ -146,7 +146,7 @@ pub fn specs() -> Vec<CommandSpec> {
         .targets(&[K::Glyphs, K::Layer, K::Points, K::Shapes]),
         cmd!(
             "path.tidyUpPathsForAllMasters",
-            "Tidy up Paths for all Masters",
+            "Tidy up Paths for All Masters",
             ["Path"],
             Some("Cmd+Alt+Shift+T"),
             "{glyphs: [names] | glyph: name} path.tidyUpPaths on every path of every master layer of the glyphs. A locked glyph is skipped (an error with one `glyph`) → {glyphs, skipped: [{glyph, layer?, reason}]}",
@@ -795,7 +795,7 @@ fn correct_path_direction(s: &mut Session, v: &Value) -> Result<Value> {
 fn correct_path_direction_for_all_masters(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.correctPathDirectionForAllMasters", v)?;
     let outlines = component_outlines(s.font()?, &named_glyphs(&p, s.font()?));
-    run_all_masters(s, &p, "Correct Path Direction for all Masters", master_or_special_layer, |layer, side, _| {
+    run_all_masters(s, &p, "Correct Path Direction for All Masters", master_or_special_layer, |layer, side, _| {
         correct_direction_in(layer, side, &outlines)
     })
 }
@@ -840,7 +840,7 @@ fn tidy_up_paths(s: &mut Session, v: &Value) -> Result<Value> {
 
 fn tidy_up_paths_for_all_masters(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.tidyUpPathsForAllMasters", v)?;
-    run_all_masters(s, &p, "Tidy up Paths for all Masters", master_layer, |layer, side, t| each_contour(layer.parts_mut(side).shapes, t, po::tidy_up))
+    run_all_masters(s, &p, "Tidy up Paths for All Masters", master_layer, |layer, side, t| each_contour(layer.parts_mut(side).shapes, t, po::tidy_up))
 }
 
 // ── Open Corner, Reconnect Nodes, Cut with Line ─────────────────────────────────────────────────

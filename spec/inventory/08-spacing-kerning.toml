@@ -393,7 +393,7 @@ status = "handbook"
 
 [[command]]
 id = "glyph.updateMetricsForAllMasters"
-label = "Update Metrics for all Masters"
+label = "Update Metrics for All Masters"
 menu = ["Glyph"]
 shortcut = "Cmd+Ctrl+Alt+M"
 kind = "engine"
