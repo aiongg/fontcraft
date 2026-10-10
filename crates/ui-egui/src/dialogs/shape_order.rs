@@ -102,7 +102,7 @@ mod tests {
         call(&mut app, "ui.dialog.set", json!({"field": "order", "value": [2, 0, 1]}));
         assert!(!font(&app).same_as(&original), "the canvas shows the new order");
         let ctx = egui::Context::default();
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| app.ui(ui));
+        ctx.run_ui(egui::RawInput::default(), |ui| app.ui(ui)).textures_delta.clear();
         call(&mut app, "ui.dialog.confirm", json!({}));
 
         let mut direct = three_shapes();

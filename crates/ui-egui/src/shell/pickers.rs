@@ -51,10 +51,13 @@ mod tests {
     use super::{Picker, import_outlines, wants_files};
     use crate::FontcraftApp;
 
+    /// Each question a chooser was asked: its title and its file extensions.
+    type Asked = Arc<Mutex<Vec<(String, Vec<String>)>>>;
+
     /// A chooser that answers `files` and records what it was asked.
     struct FakePicker {
         files: Vec<PathBuf>,
-        asked: Arc<Mutex<Vec<(String, Vec<String>)>>>,
+        asked: Asked,
     }
 
     impl Picker for FakePicker {

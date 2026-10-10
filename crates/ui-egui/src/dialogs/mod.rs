@@ -137,6 +137,9 @@ pub struct After {
 }
 
 /// Where a dialog's fields come from.
+/// Builds the fields of [`Fields::Targeted`] from the session and the dialog's targets.
+pub type TargetedFields = fn(&mut fontcraft_engine::Session, &Map<String, Value>) -> Result<Vec<Field>, String>;
+
 #[derive(Clone, Copy, Debug)]
 pub enum Fields {
     /// The parameters of the filter `command`, as `filter.list` describes them.
@@ -146,7 +149,7 @@ pub enum Fields {
     Fixed(fn(&fontcraft_engine::Session) -> Vec<Field>),
     /// A list that depends on what the command acts on: the targets the dialog opens with (the
     /// given ones, else the selection). The session answers queries such as `layer.inspect`.
-    Targeted(fn(&mut fontcraft_engine::Session, &Map<String, Value>) -> Result<Vec<Field>, String>),
+    Targeted(TargetedFields),
     /// Fields the dialog shapes into the command's parameters.
     Shaped(Shaped),
     /// One dialog per tab; the dialog opens on the first.

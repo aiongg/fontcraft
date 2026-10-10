@@ -187,7 +187,8 @@ mod tests {
         let copied = call(&mut app, "ui.click", json!({"id": "copyFilterParameter"}));
         assert_eq!(copied["text"], "Transformations;Slant:10;SlantCorrection:0;Origin:4;");
         let ctx = egui::Context::default();
-        let output = ctx.run_ui(egui::RawInput::default(), |ui| app.ui(ui));
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| app.ui(ui));
+        output.textures_delta.clear();
         assert!(
             output.platform_output.commands.contains(&egui::OutputCommand::CopyText("Transformations;Slant:10;SlantCorrection:0;Origin:4;".into())),
             "{:?}",
