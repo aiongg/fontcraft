@@ -5,10 +5,15 @@
 //! ```
 //! `--control PORT` listens on `127.0.0.1:PORT` for the JSON control protocol
 //! (`docs/control-protocol.md`), so agents can drive the window.
+//!
+//! The app gives the engine the system clock (Last Changed stamps), the user's settings and the
+//! user's custom glyph data from the settings folder ([`user_files`]), and saves the settings
+//! whenever they change.
 #![forbid(unsafe_code)]
 
 mod control_server;
 mod pickers;
+mod user_files;
 
 use std::process::ExitCode;
 
@@ -27,11 +32,15 @@ USAGE:
                    enable it only while you use it)
   -h, --help       this text
   -V, --version    the version
+
+  Settings and custom glyph data are read from the settings folder (FONTCRAFT_SETTINGS_DIR
+  replaces it).
 ";
 
 struct Shell {
     app: FontcraftApp,
     control: Option<control_server::Inbox>,
+    user_files: user_files::UserFiles,
 }
 
 impl eframe::App for Shell {
@@ -44,6 +53,10 @@ impl eframe::App for Shell {
         // A bug in drawing costs one frame, not the session.
         if let Err(panic) = fontcraft_engine::guard::catch_panic(|| self.app.ui(ui)) {
             self.app.state.status = format!("internal error (please report it): {panic}");
+        }
+        if let Some(problem) = self.user_files.save_if_changed(self.app.session.settings()) {
+            eprintln!("fontcraft: {problem}");
+            self.app.state.status = problem;
         }
     }
 }
@@ -71,12 +84,20 @@ fn run() -> Result<(), String> {
         }
     }
     let mut session = Session::new();
+    session.set_clock(Some(fontcraft_engine::clock::system_clock()));
+    let (user_files, problems) = user_files::UserFiles::load(&mut session);
+    for p in &problems {
+        eprintln!("fontcraft: {p}");
+    }
     match file {
         Some(path) => session.execute("file.open", &json!({"path": path})).map(|_| ()).map_err(|e| e.to_string())?,
         None => session.execute("file.new", &json!({})).map(|_| ()).map_err(|e| e.to_string())?,
     }
     let mut app = FontcraftApp::new(session);
     app.picker = Some(Box::new(pickers::SystemPicker));
+    if let Some(first) = problems.first() {
+        app.state.status = first.clone();
+    }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("FontCraft")
@@ -99,7 +120,7 @@ fn run() -> Result<(), String> {
                 },
                 None => None,
             };
-            Ok(Box::new(Shell { app, control }))
+            Ok(Box::new(Shell { app, control, user_files }))
         }),
     )
     .map_err(|e| format!("cannot open the window: {e}"))

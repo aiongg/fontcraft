@@ -448,8 +448,15 @@ fn mcp(args: &[String]) -> Outcome {
     if headless && connect.is_some() {
         return Err(usage("use either --connect or --headless"));
     }
+    // A headless session is an editing session like the app's: changed glyphs get Last Changed
+    // stamps. The other subcommands leave them out, so their output does not depend on the time.
+    let headless_session = || {
+        let mut h = Headless::with_document();
+        h.0.set_clock(Some(fontcraft_engine::clock::system_clock()));
+        h
+    };
     let backend: Box<dyn Backend> = if headless {
-        Box::new(Headless::with_document())
+        Box::new(headless_session())
     } else if let Some(addr) = connect {
         // An explicit address: fail loudly if the app is not there.
         Box::new(Remote::connect(&addr).map_err(|e| Failure::Failed(format!("cannot connect to {addr}: {e}")))?)
@@ -458,7 +465,7 @@ fn mcp(args: &[String]) -> Outcome {
             Ok(remote) => Box::new(remote),
             Err(_) => {
                 eprintln!("fontcraft-cli: no app at {DEFAULT_ADDR}; running a headless session");
-                Box::new(Headless::with_document())
+                Box::new(headless_session())
             }
         }
     };
