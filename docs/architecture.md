@@ -60,7 +60,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L3 | `oracle` | M2 | compiled fonts compared table by table with a reference compiler's build (the oracle harness behind `fontcraft-cli oracle`); runs the reference tools as subprocesses |
 | L3 | `tables` | M1/M12 | dump, table edit, subset, merge, instance: the engine behind the CLI tools |
 | L3 | `render` | M3 | glyph and text rasterising for the canvas, previews, proofs, headless screenshots |
-| L4 | `tools` | M3 | pointer tools: events in, commands and overlays out |
+| L4 | `tools` | today (M3.3: Select, Lasso Select, Hand, Zoom) | pointer tools: events in, commands and overlays out; hit testing, snapping, the selection and the Edit View keys |
 | L5 | `engine` | today | sessions, history, the command registry |
 | L6 | `ui-egui` | today (shell) | the UI |
 | L6 | `mcp` | today | the MCP server |
@@ -144,7 +144,7 @@ Rules for writing one ([decision 0004](decisions/0004-commands.md)):
 - Nested commands share the outer command's transaction. `command.batch` runs a list of commands
   as one transaction and one undo step per document it changed; actions and scripts build on it.
 
-## Tools (L4, planned for M3)
+## Tools (L4)
 
 A pointer tool turns events into commands and overlays; it never edits the document. A drag is
 `begin` (snapshot), any number of `preview`s (the command re-run on the snapshot), and `commit`
@@ -152,6 +152,12 @@ A pointer tool turns events into commands and overlays; it never edits the docum
 (`ui.pointer`, `ui.key`), so an agent can drive the Draw tool exactly as a hand does, and every
 tool gesture also has a headless command (`path.addPath`, `selection.move`…) with explicit
 coordinates. The gestures are specified in `[[tool]]` rows.
+
+**Today:** `crates/tools` has the Select, Lasso Select, Hand and Zoom tools as state machines,
+the toolbox (active tool, temporary tools on Space and Cmd+Space, key routing), hit testing,
+snapping and the selection model. Events arrive in font units with the view they were measured
+in, so tolerances given in screen points hold at every zoom. A tool sees the document as a
+`Scene`: one layer, its master's guides and metric lines, and its components' outlines.
 
 ## History
 
