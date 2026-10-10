@@ -2,12 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M3 wave 1 and M3.1 integrated._
+_Updated: 2026-10-10, M3 waves 1 and 2, M3.1 and M3.2 integrated._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all nine steps (584 tests; about 68,600 lines of Rust in 19 crates).
-  Built and run on Linux x86-64 with Rust 1.97.
+- `cargo xtask ci` passes all nine steps (679 tests; about 83,000 lines of Rust in 20 crates,
+  two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
+- 142 of the 929 inventory commands exist (`docs/parity.md`); M3 has 181 commands, 114 of them
+  live. Feature parity is about 7% (ROADMAP.md › Parity estimate).
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at. macOS and Windows have **not** been built.
 - The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
@@ -15,14 +17,38 @@ _Updated: 2026-10-10, M3 wave 1 and M3.1 integrated._
 
 ## Where to start
 
-**M3, Edit View drawing**, following `docs/plans/M3.md` § 6. Done: M3.0 (spec pass), the M3.6
-spike (linesweeper 0.5.0 chosen; its rare hang and failed assertion are in § M3.6 "Spike
-result"), and wave 1's crates without commands: `tools` (M3.3 core), `audit` (M3.17, 34 of 36
-outline checks), `io-svg` (M3.8); M3.1 engine foundations (`params::Targets`, `Session::begin`/`preview`/
-`commit`/`cancel`, `layer.inspect`, the glyph lock, `geom` segments). linesweeper is kept with
-the time limit and not reported upstream (owner's decision, plan § M3.6). Next: the rest of the
-`pathops` crate (M3.6 step 2), M3.2 canvas, then wave 2 (M3.4, M3.5 engine, M3.8 commands, M3.9 engine, M3.10, M3.16
-engine). Static export keeps overlaps with a warning until M3.7.
+**M3, Edit View drawing**, following `docs/plans/M3.md` § 6.
+
+| Done | What it gave |
+|---|---|
+| M3.0, M3.0b | spec pass: targets in every M3 command's params, `when` and `context` fields, D13 answered; 5 editor rows confirmed by tutorial videos |
+| M3.1 | engine foundations: `params::Targets`, `Session::begin`/`preview`/`commit`/`cancel`, `layer.inspect`, the glyph lock, `geom` segments, grid rounding |
+| M3.2 | the canvas split (`shell/`, `canvas/`), display conventions, zoom and scroll, View toggles, tabs, keymap, cached menus; `crates/render`, `ui.screenshot`, `ui.render` |
+| Wave 1 | crates without commands: `tools` (M3.3 core), `audit` (M3.17, 34 of 36 outline checks), `io-svg` (M3.8), `pathops` (M3.6) |
+| Wave 2 | engine commands: M3.4 nodes and Fit Curve, M3.5 transformations, M3.8 clipboard and SVG import, M3.9 guides, measuring and Dimensions, M3.10 background and layers, M3.16 annotations |
+
+Next, in this order:
+
+1. **M3.3 wiring: pointer editing.** Wire `crates/tools` into the canvas, with `ui.pointer`,
+   `ui.key`, `ui.text`, `ui.tool.select` and `ui.tool.list` (builder, main checkout).
+2. **Wave 3** (worktrees): the path-operation commands and the Knife tool on `pathops` (M3.6
+   step 3), strokes and masks (M3.11), filters (M3.12, one worktree each).
+3. **M3.7, overlap removal at export** (builder). Static export keeps overlaps with a warning
+   until then.
+4. **Wave 4**: drawing tools (M3.13), the tool files of M3.5, M3.9 and M3.16, Palette sections
+   and Info box (M3.15), audit commands and markers (M3.17).
+5. **Wave 5**: the dialog framework (builder), then one dialog per worktree (M3.14).
+6. **M3.18**: the measures of `docs/plans/M3.md` § 5, then close the milestone.
+
+Decisions that hold for the rest of M3:
+
+- linesweeper 0.5.0 stays, from crates.io, and its rare hang and failed assertion are not
+  reported upstream for now (owner's decision, plan § M3.6 "Spike result"). Callers that run
+  without a person waiting (export, batch commands) must run each glyph under a time limit.
+- Behaviour not yet seen in the reference app or a video follows the handbook and is the
+  default; the row's `notes` say it is documented but not observed. Example: Remove Overlap
+  deletes open paths and stray nodes.
+- Points a command creates or moves round to the font's grid (`path.addPath` included).
 
 M1 and M2 are done (`docs/plans/M1.md`, `docs/plans/M2.md`). M2 left on purpose: instances
 between masters (M9), CFF subroutines (before M12), production names (M4), the compile plan's
@@ -33,7 +59,8 @@ measures the compiler; `crates/oracle/allow.toml` holds every accepted differenc
 
 Before you start: `cargo xtask corpus --fetch` (about 300 MB) if `corpus/` is missing, and the
 oracles in `docs/testing.md` (fontc via cargo, fontmake via a Python tool installer).
-`cargo xtask roundtrip` shows where the round trips stand.
+`cargo xtask roundtrip` shows where the round trips stand; `cargo xtask overlap` measures
+overlap removal on the corpus.
 
 ## What the planning session decided
 
@@ -48,12 +75,16 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
   (209 handbook rows re-read by a second reader: 1 wrong, 14 imprecise, all corrected; patterns in
   `docs/spec/README.md`). Duplicated meaning across files is likely (open decision D2 lists known
   pairs).
-- **33 rows are from memory** (`grep -c '^status = "memory"' spec/inventory/*.toml`): 12 TrueType
-  autohinter options in `14-…`, 9 Edit-menu basics in `00-…`, 5 secondary-reference rows in
-  `90-…`, 2 each in `05-…` and `30-…`, 1 each in `09-…`, `10-…` and `16-…`. Verify or drop them
-  before implementing.
-- **Nothing has been observed in the reference app.** About 440 open questions are listed at the
-  ends of the notes.
+- **30 rows are from memory** (`docs/parity.md` › By source): 12 TrueType autohinter options in
+  `14-…`, 5 each in `00-…` and `90-…`, 2 each in `05-…` and `30-…`, 1 each in `07-…`, `09-…`,
+  `10-…` and `16-…`. Verify or drop them before implementing.
+- **The reference app has not been run.** 52 rows are `observed`: 47 compiled-output rows
+  checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos.
+  About 450 open questions are listed at the ends of the notes.
+- **The M3 commands work only headless.** They run from the CLI, the control channel and MCP;
+  in the window a person can look at a glyph but not edit its outline until the M3.3 wiring lands.
+- **linesweeper can hang** on rare inputs (plan § M3.6 "Spike result"); a thread cannot stop it,
+  so the 10,000-case random-path test in `crates/pathops` is ignored in the gate.
 - **The compiler writes static fonts only.** TrueType and CFF, plain, WOFF and WOFF2; the core
   tables match fontc and fontmake over the corpus (with allow-listed causes: variable references,
   bracket and colour glyphs, the glyph database, smart components); no features, variations,
@@ -66,13 +97,11 @@ atomic failure; WebAssembly plug-ins and no Python; no compiled fonts in the rep
 An adversarial review of the skeleton reported 31 findings. Most were fixed in the same session
 (coordinate and point-count bounds before the glyph writer, glyph-name sanitising for `post`,
 style linking, bounded reads on every channel, protocol id checks, the indexing lints, a
-virtualised Font View). These were left, on purpose, for the milestone that reshapes the code
-around them. None can lose data; most are about scale.
+virtualised Font View). These were left on purpose. None can lose data.
 
 | Limit | Where | Fix it in |
 |---|---|---|
-| The history list is copied for each command's result | `crates/engine` | M1 |
-| The menu tree is rebuilt every frame | `crates/ui-egui/src/menus.rs` | M3 |
+| Each command's rollback snapshot copies every document's history list (pointers and labels, no glyph data) | `crates/engine` | when it matters |
 | The vendor-names scanner does not see through `concat!` or string escapes | `xtask/src/brands.rs` | when it matters |
 
 ## Waiting on the owner
@@ -218,3 +247,12 @@ Append one terse entry per session: what landed, numbers, what is still open.
   `when` on every shortcut without `Cmd` or `Ctrl`. D13: a row a tutorial video confirms is
   `observed`. The § 3 answers are in the notes' open questions. M3 now holds 447 rows (176
   commands, 7 live). Next: the M3.6 spike, then M3.1.
+- **2026-10-10, M3 waves 1 and 2, M3.1, M3.2.** M3.6 spike: linesweeper 0.5.0 unions all 2,368
+  corpus layers with closed paths to skia-pathops' coverage; kept from crates.io with input
+  rules and a per-glyph time limit, no upstream report (owner). Wave 1 crates: `tools`,
+  `audit` (34 of 36 outline checks), `io-svg` (deep nesting fenced before the XML parser),
+  `pathops`. M3.1: targets, interactions, `layer.inspect`, glyph lock, segment geometry.
+  M3.2: `render`, `ui.screenshot`, `ui.render`, canvas and shell split, tabs, zoom, cached
+  menus. Wave 2: node, transform, clipboard, guide, measure, Dimensions, background, layer and
+  annotation commands. Remove Overlap deletes open paths and stray nodes, as the handbook says.
+  679 tests; 142 of 929 commands live (M3: 114 of 181). Next: the M3.3 wiring.
