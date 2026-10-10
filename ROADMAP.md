@@ -161,9 +161,9 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 ### What to build next (in priority order)
 
-1. **M4's planning pass, Font View and glyph management**, as `docs/execution-plan.md` § 3
-   describes it: list the milestone's rows, answer the open questions of its notes, verify or
-   drop its `memory` rows, and write `docs/plans/M4.md` for the owner to accept.
+1. **M4, Font View and glyph management**: the plan (`docs/plans/M4.md`) is proposed and waits
+   for the owner's acceptance and its § 7 questions. It starts with M4.0 (spec pass) and M4.1
+   (the glyph database).
 
 Then M5–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
 orders them. Left from M3 for later milestones: text mode (M5), Font View's master choice
@@ -380,9 +380,9 @@ measured by what works (the parity table below and the measures in each mileston
 |---|---|---|---:|
 | M0 | Skeleton and vertical slice | ✅ done | 5 (5) |
 | M1 | Source model and file I/O (native, UFO, designspace, `.glyphs`, binary import) | ✅ done: every format read and written back byte for byte; the typed model (M1.7) with glyphsLib's lib keys, intermediate and alternate layers in a designspace, and its measures met; the gaps left on purpose are in `docs/plans/M1.md` (M1.4 and M1.7) | 10 (10) |
-| M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 6 (5) |
+| M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 5 (5) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ✅ every measure met: every package M3.0 to M3.18 built; 184 of 184 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner`, which no source describes, moved to `fidelity` | 184 (184) |
-| M4 | Font View and glyph management | ⬜ | 57 (6) |
+| M4 | Font View and glyph management | ⬜ plan proposed (`docs/plans/M4.md`) | 61 (6) |
 | M5 | Spacing, kerning and text mode | ⬜ | 109 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
 | M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) |
@@ -392,7 +392,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M11 | Colour fonts and images | ⬜ | 50 (0) |
 | M12 | Command-line tool suite (61 of the 70 subcommand rows) and quality checks (263 of 300) | ⬜ | 71 (0) |
 | M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 114 (0) |
-| M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 31 (0) |
+| M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 28 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
 | | **Total** | | 932 (213) |

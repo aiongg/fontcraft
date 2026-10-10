@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M3 closed; M4's planning pass next._
+_Updated: 2026-10-10, M3 closed; the M4 plan is proposed._
 
 ## State of the tree
 
@@ -18,9 +18,10 @@ _Updated: 2026-10-10, M3 closed; M4's planning pass next._
 
 ## Where to start
 
-1. **M4's planning pass, Font View and glyph management** (`docs/execution-plan.md` § 3): list
-   the milestone's rows (57 commands, 6 live), answer the open questions of its notes, verify or
-   drop its `memory` rows, and write `docs/plans/M4.md` for the owner to accept.
+1. **M4, Font View and glyph management.** `docs/plans/M4.md` is proposed: 244 rows (61
+   commands, 6 live), 13 packages, 15 measures. Wait for the owner's acceptance and answers to
+   its § 7 before M4.0 (spec pass) and M4.1 (glyph database). GlyphsInfo's licence was MIT
+   until 2024-11-22 and is BSD-3-Clause since; the pinned commit decides the notice.
 
 M3, Edit View drawing (`docs/plans/M3.md`), as built:
 
@@ -301,3 +302,7 @@ Append one terse entry per session: what landed, numbers, what is still open.
   does is a row's `guesses` entry; `cargo xtask guesses` writes `docs/guesses.md` (203 on 160
   rows) and fails when a live `inferred` or `memory` command has none; `own = true` marks rows
   with no reference counterpart. 934 tests. Next: M4's planning pass.
+- **2026-10-10, M4 planning pass.** `docs/plans/M4.md` proposed: 244 rows (61 commands, 6
+  live; 155 behaviours, 24 panels); 19 rows moved in (production names from M2, `glyphOrder`
+  from M7, settings and recent documents from M14); no `memory` rows left; 16 of the Font View
+  note's 20 open questions answered. Waits for the owner.
