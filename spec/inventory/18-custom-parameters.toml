@@ -621,9 +621,11 @@ effect = "other"
 summary = "Adds an old-style kern table alongside GPOS kerning, for TrueType-flavoured output only. Group kerning is expanded to every glyph pair, so an unsubsetted font can overflow the table; intended only for legacy software."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.11."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. Built in compile/src/kern_table.rs from the master's kerning after the export's glyph renames and removals. M7 plan § 4: M7.11."
 guesses = [
   "The table is version 0 with one format 0 subtable per run of at most 10,920 pairs (the subtable's 16-bit length), class pairs expanded to every member pair, exceptions overriding, zero pairs left out, only the default (horizontal) kerning of the exported master; pairs past 65,535 in total are dropped with a warning; an export with the parameter in the reference app settles it.",
+  "When the table is full, the pairs kept are those found first in lookup order (glyph–glyph exceptions, then glyph–group, group–glyph, group–group), so exceptions survive; an export of a font past the limit in the reference app settles it.",
+  "A CFF export with the parameter on writes no kern table and reports it in a warning; an OTF export with the parameter in the reference app settles it.",
 ]
 observe = [
   "In font C (m7-export), export with Export kern Table on, including the A/V class pair; read the exported TTF with ttx: note the kern table's format and its pairs.",
@@ -1406,9 +1408,11 @@ effect = "other"
 summary = "Number of font units equal to one point, which sets the scale of exported PDFs and of artwork copied to the clipboard for use in drawing applications. The source labels it a float but describes an integer."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. FontCraft has no PDF export; the ratio scales the SVG that edit.copy puts on the clipboard. M7 plan § 4: M7.11. 2 corpus sources use it."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. FontCraft has no PDF export; the ratio scales the SVG flavour that edit.copy and edit.cut return. M7 plan § 4: M7.11. 2 corpus sources use it."
 guesses = [
-  "The copied SVG gives coordinates in points, font units divided by the ratio, and declares its width and height in pt; without the parameter one unit is one point; copying into a drawing application from the reference app settles the scale.",
+  "The copied SVG gives coordinates in points, font units divided by the ratio, and declares its width and height in pt; without the parameter the SVG keeps one font unit per user unit with no unit on its size; copying into a drawing application from the reference app settles the scale.",
+  "The master's parameter wins over the font's, and a ratio that is not a number from 0.001 to 1,000,000 is ignored; copying from a font with the parameter on a master in the reference app settles it.",
+  "Only the SVG flavour is scaled: the clipboard fragment that edit.paste reads keeps font units, so copy and paste inside the app keeps the size; pasting a drawing copied from the reference app back into it settles what its own paste does.",
 ]
 observe = [
   "In font A (m7-one), set Point To Unit Ratio 10, copy glyph A and paste into a drawing application: note the pasted size.",

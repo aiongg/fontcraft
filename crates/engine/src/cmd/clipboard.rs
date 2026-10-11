@@ -193,6 +193,7 @@ fn gather(font: &Font, p: &Params) -> Result<Copied> {
     let shapes: Vec<Shape> = fragment.shapes.iter().cloned().map(FragmentShape::into_shape).collect();
     let master = r.layer.master.as_str();
     let svg = shapes_to_svg(&shapes, &|c: &Component| font.component_outline(c, master).ok(), None).map_err(|e| p.bad(e.to_string()))?;
+    let svg = super::clipboard_scale::scale_copy(font, master, &shapes, svg).map_err(|e| p.bad(e.to_string()))?;
     Ok(Copied { targets: copied, skipped, json, svg })
 }
 
