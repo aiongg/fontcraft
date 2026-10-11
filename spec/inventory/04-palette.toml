@@ -171,6 +171,9 @@ summary = "Sets the handles of the selected curve segments to one of eight lengt
 ref = "Palette › Fit Curve"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 10:31–10:35 and 26:01–26:16: handle lengths change step by step while an on-screen key overlay reads Ctrl, Cmd and Opt with 1 to 8 (Cmd+Ctrl+Alt+1 … 8), not this row's Ctrl+Alt; see 04 open question 11."
+observe = [
+  "Select a curve segment, press Ctrl+Alt+1, then Cmd+Ctrl+Alt+1, and note which of the two changes the handle lengths; then read the Fit Curve entries in Settings › Shortcuts.",
+]
 
 [[command]]
 id = "fitCurve.setHandleLength"
@@ -280,6 +283,9 @@ ref = "Palette › Fit Curve"
 status = "handbook"
 guesses = [
   "Without the `Fit Curve Panel Settings` parameter the range is 48 to 74 %, the handbook's example, and values beyond the range are clamped to it (Palette question 2).",
+]
+observe = [
+  "In a new font without the Fit Curve Panel Settings parameter, open the Palette's Fit Curve section and read the two percentage fields.",
 ]
 
 [[behavior]]

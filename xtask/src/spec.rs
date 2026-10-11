@@ -52,6 +52,11 @@ impl Row {
     pub fn guesses(&self) -> Vec<&str> {
         self.fields.get("guesses").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default()
     }
+
+    /// The row's `observe` steps: what to do in the running reference app and what to look for.
+    pub fn observe(&self) -> Vec<&str> {
+        self.fields.get("observe").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default()
+    }
 }
 
 pub struct Inventory {
@@ -256,11 +261,16 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                 if !absent_or_str("notes") {
                     err("`notes` must be a string".into());
                 }
-                let guesses_ok = fields.get("guesses").is_none_or(|v| {
-                    v.as_array().is_some_and(|a| !a.is_empty() && a.iter().all(|g| g.as_str().is_some_and(|g| !g.trim().is_empty())))
-                });
-                if !guesses_ok {
+                let sentences_ok = |k: &str| {
+                    fields.get(k).is_none_or(|v| {
+                        v.as_array().is_some_and(|a| !a.is_empty() && a.iter().all(|g| g.as_str().is_some_and(|g| !g.trim().is_empty())))
+                    })
+                };
+                if !sentences_ok("guesses") {
                     err("`guesses` must be a non-empty list of sentences".into());
+                }
+                if !sentences_ok("observe") {
+                    err("`observe` must be a non-empty list of steps".into());
                 }
                 if fields.contains_key("own") && !flag("own") {
                     err("`own` must be true or false".into());

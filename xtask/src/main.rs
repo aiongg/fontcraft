@@ -12,6 +12,7 @@ mod glyphdata_check;
 mod glyphsets;
 mod guesses;
 mod layers;
+mod observe;
 mod overlap;
 mod parity;
 mod roundtrip;
@@ -25,8 +26,8 @@ const USAGE: &str = "\
 usage: cargo xtask <command>
 
 commands:
-  ci              the gate: fmt, clippy -D warnings, test, spec, parity --check, guesses --check, assets,
-                  brands, layers, wasm
+  ci              the gate: fmt, clippy -D warnings, test, spec, parity --check, guesses --check,
+                  observe --check, assets, brands, layers, wasm
                   (stops at the first failure; run it before every commit)
   spec            check spec/*.toml and spec/inventory/*.toml against the rules in spec/README.md
   parity [--check]
@@ -35,6 +36,9 @@ commands:
   guesses [--check]
                   list every row's `guesses` in docs/guesses.md; fail when a live command whose status
                   is inferred or memory records none (--check: fail if the file is out of date)
+  observe [--check]
+                  list every row the running reference app could settle (guesses, memory and inferred
+                  rows, `observe` steps) in docs/observe.md (--check: fail if the file is out of date)
   assets          check that every asset has a row in ASSETS.md and that no font binary is in the repository
   brands          check that user-visible text names no other vendor's products
   layers          enforce the crate dependency layering (docs/architecture.md)
@@ -67,6 +71,7 @@ fn main() -> ExitCode {
         Some("spec") => spec::run(&root()),
         Some("parity") => parity::run(&root(), rest.contains(&"--check")),
         Some("guesses") => guesses::run(&root(), rest.contains(&"--check")),
+        Some("observe") => observe::run(&root(), rest.contains(&"--check")),
         Some("assets") => assets::run(&root()),
         Some("brands") => brands::run(&root()),
         Some("layers") => cmd_layers(),
@@ -211,6 +216,7 @@ fn cmd_ci() -> Result<(), String> {
         ("spec", Box::new(|| spec::run(&root()))),
         ("parity", Box::new(|| parity::run(&root(), true))),
         ("guesses", Box::new(|| guesses::run(&root(), true))),
+        ("observe", Box::new(|| observe::run(&root(), true))),
         ("assets", Box::new(|| assets::run(&root()))),
         ("brands", Box::new(|| brands::run(&root()))),
         ("layers", Box::new(cmd_layers)),

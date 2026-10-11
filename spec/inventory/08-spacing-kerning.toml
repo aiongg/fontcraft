@@ -640,6 +640,9 @@ guesses = [
   "On its layer a local key wins over the glyph-level key of the same field.",
   "A plain number typed into a field removes the key the field showed: a local key from the layer, a glyph-level key from the glyph.",
 ]
+observe = [
+  "In a font with two masters, give n the key =o in its left sidebearing field, type the plain number 40 into that field and look at the field and at the other master: is the key gone on both masters, gone on this master only, or kept?",
+]
 
 [[behavior]]
 id = "metricsKey.baselineOffset"
@@ -873,6 +876,9 @@ status = "handbook"
 notes = "Documented, not yet observed: with the Text tool and the cursor between the pair, Ctrl+Alt+Left increases the kerning with the glyph on the left, and Shift gives steps of 10. The handbook does not say which way the number moves; reading \"increase\" as a more positive value is our inference (guess on kerning.increaseLeft)."
 guesses = [
   "Increase adds to the kerning value (more space) and decrease subtracts; the handbook names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair. The Info box kern value after one keypress, in the running app or a video, settles it.",
+]
+observe = [
+  "In a new font, type AV with the Text tool, put the cursor between A and V, press Ctrl+Alt+Left once and read the kern value in the Info box: +1 or -1.",
 ]
 
 [[command]]
@@ -1191,6 +1197,10 @@ guesses = [
   "Closing one lock while both are open keeps the other lock open: the glyph–glyph pair is replaced by the closed side's group against the open side's glyph, at the value that applied, unless that pair is already stored. Closing one lock of such a pair in the running app settles it.",
   "Closing the left lock alone of a glyph–glyph pair is refused when the left glyph's pair with the right glyph's group exists, because that pair would apply before the group–glyph pair and the left lock would stay open. The owner chose the refusal over deleting that exception. Closing the left lock in that situation in the running app settles it.",
 ]
+observe = [
+  "In a font with two masters, kern A's group against V's group to -60, open the lock on A's side, type -20, close the lock again and read the kern field: back to -60, or still -20.",
+  "After closing that lock, switch to the other master and look in the Kerning window for the exception pair of A with V's group.",
+]
 
 [[command]]
 id = "kerning.addException"
@@ -1460,6 +1470,9 @@ guesses = [
   "The buttons read All Pairs, This Pair and Cancel; the handbook gives no captions, and a screenshot or video of the dialog settles them.",
   "All Pairs (scope font) is the default button that Return presses, since editing a group name most often means renaming the group; the dialog in the reference app settles it.",
 ]
+observe = [
+  "In the Kerning window, edit the group name of a group pair, note the button captions of the question that appears, then press Return and note which choice it took.",
+]
 
 [[command]]
 id = "kerning.copyPairs"
@@ -1588,6 +1601,9 @@ guesses = [
   "Does not contain keeps a pair only when no searched side contains the term; a search for a letter that occurs on one side of a pair settles it.",
   "The term is compared with the bare name of a group, and with its @ spelling when the term starts with @; searching for @ in the reference settles it.",
   "The search is case-sensitive, since glyph names are; searching for t in a font with T settles it.",
+]
+observe = [
+  "Open the Kerning window in a new font, open the menu under the search field's icon before changing anything, and note which match mode, entry kinds, sides and selection option are on.",
 ]
 
 [[behavior]]

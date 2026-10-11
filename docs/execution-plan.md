@@ -40,8 +40,8 @@ lists the decision as the owner's.
       the parameter; the command sweep passes without special-casing.
 - [ ] If the junk-parameter generator has no value that could break your parameter kind, add one
       to `fontcraft_testkit::junk_values`.
-- [ ] `cargo xtask parity` and `cargo xtask guesses` (commit the regenerated `docs/parity.md` and
-      `docs/guesses.md`).
+- [ ] `cargo xtask parity`, `cargo xtask guesses` and `cargo xtask observe` (commit the regenerated
+      `docs/parity.md`, `docs/guesses.md` and `docs/observe.md`).
 
 ## 3. Planning a milestone
 

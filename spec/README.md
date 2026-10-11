@@ -2,7 +2,8 @@
 
 Everything FontCraft is meant to do, as rows a tool can read. `cargo xtask spec` checks the files;
 `cargo xtask parity` compares them with the live command registry and writes `docs/parity.md`;
-`cargo xtask guesses` writes every row's `guesses` to `docs/guesses.md`.
+`cargo xtask guesses` writes every row's `guesses` to `docs/guesses.md`; `cargo xtask observe` writes
+the checklist of rows the running reference app could settle to `docs/observe.md`.
 Prose that explains *how* a feature behaves lives in `docs/spec/*.md`; rows here point at it.
 
 | File | Holds |
@@ -194,6 +195,7 @@ status = "docs"
 | `ref` | `[[format]]` | where the format is described for our purposes, besides its `spec` URL |
 | `notes` | any row | facts about the row that are not behaviour: why it is deferred, which tutorial video confirmed it (title, channel, URL, time in the video), which parts wait for a later milestone |
 | `guesses` | any row | a list of sentences, one per choice of ours where no source says what the reference does: what we chose and, when useful, what would settle it (an observation, an oracle). Behaviour that follows the handbook but is not yet observed is not a guess. `cargo xtask guesses` lists them all in `docs/guesses.md` |
+| `observe` | any row | a list of steps to carry out in the running reference app, one per string: what to do and what to look for. `cargo xtask observe` lists them in `docs/observe.md` with the row's guesses. Remove a step once it is done and its result is in `notes` |
 | `own` | any row | `true` when the row has no counterpart in the reference app (an agent query, a headless form, a FontCraft-only rule), so nothing about the reference is guessed. It may still carry `guesses` |
 | `when` | `[[command]]`, `[[tool]]` | where the shortcut works (decision 0004): `editView`, `textMode`, `fontView`, `dialog`, `tool:<tool id>` or `panel:<panel id>`. Without it the shortcut is global. A tool's letter always works in Edit View |
 | `context` | `[[command]]` | the context menus that show the command: `canvas` (empty canvas), `canvas.node`, `canvas.segment`, `canvas.path`, `canvas.guide`, `canvas.anchor`, `canvas.component`, `layers.row` (a row of the Palette's layer list), `toolbar` (a tool button) |
@@ -211,7 +213,7 @@ tables list`.
   a `when`, so it never fires while a text field has focus. A `when` names a known scope, tool or
   panel.
 - `context` lists only the context menus above; `notes` is a string; `guesses` is a non-empty list of
-  sentences.
+  sentences; `observe` is a non-empty list of steps.
 - `own` is a boolean.
 - `cargo xtask guesses`: a live command whose `status` is `inferred` or `memory` has at least one
   `guesses` entry or `own = true`.
