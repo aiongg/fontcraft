@@ -1710,7 +1710,7 @@ milestone = "M5"
 summary = "Kerning data is compiled into an OpenType kern feature that is generated implicitly at export: it is not listed in Font Info › Features and has no editable code there. The chapter gives no rules for how the lookups are built."
 ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
 status = "handbook"
-notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8."
+notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8. Built in M5.17: export writes each master's kerning to GPOS for a source without feature code (`crates/features`); vertical kerning is not written. Documented, not yet observed."
 guesses = [
   "The generated lookups follow fontc's kern writer (split by script and direction, glyph pairs before class pairs, values rounded half up); the handbook gives no rules, and the GPOS of a font the reference app exports from a test source settles it.",
 ]

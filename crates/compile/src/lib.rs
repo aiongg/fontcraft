@@ -9,8 +9,9 @@
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
 //! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
+//! | Pair kerning | `kern` | the master's kerning as `GPOS` (`fontcraft_features`), for a source without feature code |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
-//! | Table builders and assembly | `build`, [`cff`], [`names`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, then the font file |
+//! | Table builders and assembly | `build`, [`cff`], [`names`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning, then the font file |
 //!
 //! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
 //! as fontc builds it) or CFF outlines ([`Flavour::Cff`], as fontmake builds it: `maxp` 0.5, `post`
@@ -34,6 +35,7 @@ mod build;
 pub mod cff;
 pub mod drawing;
 pub mod info;
+mod kern;
 pub mod names;
 pub mod order;
 pub mod outline;
@@ -183,7 +185,7 @@ pub struct Compiled {
 pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     font.check()?;
     let resolved = drawing::resolve(font, target)?;
-    compile_resolved(resolved, flavour, options)
+    compile_resolved_from(font, resolved, flavour, options)
 }
 
 /// Compiles the first master of `font` to a static TrueType font.
@@ -191,14 +193,28 @@ pub fn compile_ttf(font: &Font, options: &Options) -> Result<Compiled, CompileEr
     compile(font, &font.default_target()?, Flavour::TrueType, options)
 }
 
-/// The stages after resolving, on a resolved font.
-pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
+/// The stages after resolving, on a resolved font, without kerning: the resolved font holds none.
+pub fn compile_resolved(resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
+    compile_stages(None, resolved, flavour, options)
+}
+
+/// The stages after resolving, on `resolved`, which was resolved from `font`; `font` gives the
+/// kerning.
+pub fn compile_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
+    compile_stages(Some(font), resolved, flavour, options)
+}
+
+fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
+    let gpos = match font {
+        Some(font) => kern::generate(font, &resolved, &glyphs, &mut warnings)?,
+        None => None,
+    };
     let upm = f64::from(resolved.units_per_em);
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
@@ -211,7 +227,7 @@ pub fn compile_resolved(mut resolved: Resolved, flavour: Flavour, options: &Opti
         overlap_time_limit: options.overlap_time_limit,
     };
     let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
-    let bytes = build::assemble(&resolved, &glyphs, &outlines, flavour, synthesised_notdef, options, &mut warnings)?;
+    let bytes = build::assemble(&resolved, &glyphs, &outlines, flavour, synthesised_notdef, gpos.as_ref(), options, &mut warnings)?;
     Ok(Compiled { bytes, glyph_order: glyphs.into_iter().map(|g| g.name).collect(), warnings })
 }
 

@@ -64,6 +64,7 @@
 //! KernIndex::glyph_id(&self, name: &str) -> Option<usize>;  KernIndex::group(&self, glyph: &str, GroupSide) -> Option<&str>
 //! KernIndex::members(&self, GroupSide, group: &str) -> impl Iterator<Item = &str>
 //! Table::lookup(&self, first: usize, second: usize) -> Option<Applied<'_>>
+//! Table::pairs(&self) -> impl Iterator<Item = (first: &str, second: &str, value: f64)>  (stored spellings)
 //! Applied { value: f64, step: Step, first: &str, second: &str, master: &str }
 //! stored_pair<'a>(font: &'a Font, Direction, master: &str, first: &Side, second: &Side) -> Option<StoredPair<'a>>
 //! locks(index: &KernIndex, Direction, master: &str, first: &str, second: &str) -> Result<Locks, KernError>

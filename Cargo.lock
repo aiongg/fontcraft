@@ -886,6 +886,7 @@ name = "fontcraft-compile"
 version = "0.0.1"
 dependencies = [
  "fontcraft-cff",
+ "fontcraft-features",
  "fontcraft-geom",
  "fontcraft-model",
  "fontcraft-pathops",
@@ -944,6 +945,18 @@ dependencies = [
  "serde_json",
  "skrifa 0.48.0",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "fontcraft-features"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-model",
+ "fontcraft-spacing",
+ "icu_properties",
+ "read-fonts 0.45.0",
+ "thiserror 2.0.21",
+ "write-fonts 0.54.0",
 ]
 
 [[package]]
@@ -1044,9 +1057,11 @@ version = "0.0.1"
 dependencies = [
  "fontcraft-compile",
  "fontcraft-engine",
+ "fontcraft-features",
  "fontcraft-geom",
  "fontcraft-model",
  "fontcraft-pathops",
+ "fontcraft-spacing",
  "serde",
  "skrifa 0.48.0",
  "toml",

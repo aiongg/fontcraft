@@ -44,7 +44,7 @@ Rust dependencies (kurbo, write-fonts, read-fonts, skrifa, egui, eframe, serde, 
 through crates.io under their own permissive licences (MIT and/or Apache-2.0 for the ones named
 here; their own dependencies also include BSD, ISC, Zlib, Unicode-3.0 and, on Windows, BSL-1.0 for
 clipboard-win and error-code). The container crate uses brotli and brotli-decompressor
-(BSD-3-Clause and MIT, both licence texts required) and miniz_oxide (MIT, Zlib or Apache-2.0). egui's default fonts,
+(BSD-3-Clause and MIT, both licence texts required) and miniz_oxide (MIT, Zlib or Apache-2.0). The features crate reads Unicode script and bidi data through icu_properties and its compiled data, icu_properties_data (Unicode-3.0). egui's default fonts,
 compiled into the desktop app through the epaint_default_fonts crate, are Ubuntu Light (Ubuntu
 Font Licence 1.0), Hack (MIT and the Bitstream Vera licence), Noto Emoji (SIL Open Font License 1.1) and emoji-icon-font (MIT);
 their licence texts ship with that crate.
@@ -170,6 +170,17 @@ bundled, the file says so in its header and the project is listed here with its 
   them from glyphsLib's glyphdata.py (Apache License 2.0); the Adobe Glyph List name parsing
   (crates/glyphdata/src/agl.rs) from fontdrasil/src/agl.rs, which ports fontTools' agl.toUnicode
   (MIT License).
+
+  The generated pair kerning (crates/features, M5.17) is ported from fontc at commit
+  4504578c3f74c2739f7e55cae133bbfe773f6d8c: the kern writer (fontbe/src/features/kern.rs: value
+  lookup, script and direction splitting, mark splitting, feature assignment, lookup pruning),
+  the script and direction properties and OpenType script tags (fontbe/src/features/properties.rs
+  and ot_tags.rs, which follow fontTools' unicodedata, MIT License), the Unicode 18 overlay of
+  the ICU4X data (fontdrasil/src/unicode18.rs), the joining of right-to-left kerning and the kern
+  groups of a Glyphs source (glyphs2fontir/src/source.rs, which follows glyphsLib's
+  builder/kerning.py and builder/groups.py), and the script, language system and feature records
+  (fea-rs/src/compile/lookups.rs). fontc's kern writer follows ufo2ft's kernFeatureWriter.py (MIT
+  License).
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

@@ -137,6 +137,16 @@ last (`compile.feaTableOverrides`).
 
 `--skip-features` style preview builds stop before this stage (`compile.skipFeatures`).
 
+Built so far (M5.17, `crates/features`): step 3 for one master of a static build whose source has
+no feature code, ported from fontc's kern writer (`fontbe/src/features/kern.rs`). The master's
+left-to-right and right-to-left pairs (those of the master it follows when its metrics are
+linked) are resolved into rules in lookup order, rounded half up, split into one lookup per group
+of scripts (rules with marks in lookups of their own), and assigned to `kern`, or to `dist` for
+the Indic and Universal Shaping Engine scripts, Khmer and Myanmar. Glyph pairs come before class
+pairs in each lookup; write-fonts splits subtables and moves lookups to extension lookups when
+offsets overflow. Vertical kerning is not written: neither reference writes `vkrn`. A source with
+feature code gets no `GPOS` until M8, with a warning when its master has kerning.
+
 ### 1.7 Variation tables
 
 Only when at least one axis has a range (`compile.variableOnlyTables`).
@@ -514,6 +524,9 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | `openTypeNameRecords` of a UFO | written as English records whatever their language | each in its own language | the records state their language |
 | *Use Custom Naming* (`disablesNiceNames`) | ignored: production names are written | the source names are written | the handbook gives it the effect of *Don't use Production Names*; glyphsLib also ignores it (allow-listed for `CornerComponents.glyphs`) |
 | A UFO that glyphsLib wrote, with a non-spacing mark's width as 0 in the GLIF and the drawn width in `com.schriftgestaltung.Glyphs.originalWidth` | advance 0 | the drawn width | the model reads the drawn width so the UFO converts back to the reference's format unchanged, and the compiler takes a UFO's widths as they are (allow-listed for the two `designspace_from_glyphs` sources) |
+| Generated pair kerning of a source with feature code | compiled next to the feature code | not written, with a warning | feature code is compiled from M8; where the generated lookups go depends on the code (`compile.featureWriterModes`) |
+| Lookups of the generated kerning that skip marks | `IgnoreMarks`, or a mark filtering set of the spacing marks when the font has any; `GDEF` written | `IgnoreMarks`; no `GDEF` | `GDEF` comes with the mark writer (M8); without it neither flag changes what a shaper does |
+| Marks of a UFO source in the kern writer's split | from `public.openTypeCategories` | from the glyph's stored category and subcategory | the compiler does not fill a UFO's categories from the glyph database (`compile.nonSpacingMarkWidth`); the rules with marks land in other lookups, with the same values |
 | Yes-or-no custom parameters of a `.glyphs` source (`Use Typo Metrics`, `Has WWS Names`, `isFixedPitch`, `postscriptForceBold`) | on only when the value is exactly 1 | on for any number, or text that reads as a number, other than 0 (`fontcraft_model::param_flag`) | glyphsLib applies `bool(value)`, so fontmake builds a hand-written 2 as on; the reference app writes only 0 and 1. No corpus source has another value, so this row has no allow-list entry |
 
 The readers follow fontc where a source leaves a value out (`docs/spec/30-source-formats.md` ›

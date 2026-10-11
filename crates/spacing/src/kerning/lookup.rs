@@ -302,6 +302,13 @@ impl<'a> Table<'a> {
         self.entry(a?, b?, step)
     }
 
+    /// Every stored pair of this table that can apply, in its stored spelling, with its value:
+    /// one per pair of sides (the first in stored order when two spellings name the same sides),
+    /// in no particular order. The compiler's kern writer reads them.
+    pub fn pairs(&self) -> impl Iterator<Item = (&'a str, &'a str, f64)> + 'a {
+        self.pairs.into_iter().flat_map(|p| p.values()).map(|e| (e.first.as_str(), e.second.as_str(), e.value))
+    }
+
     /// The side keys each step looks up, in lookup order.
     fn steps(&self, first: usize, second: usize) -> Option<[StepKeys; 4]> {
         let f = u32::try_from(first).ok().filter(|id| *id < GROUP_BIT)?;

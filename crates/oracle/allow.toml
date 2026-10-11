@@ -11,7 +11,15 @@
 table = "OS/2"
 key = "OS/2.usMaxContext"
 oracle = "fontmake"
-reason = "usMaxContext is the longest context of the GSUB and GPOS lookups. FontCraft compiles features from M8 (plan M2 § 1, Deferred); fontc builds are made without features, fontmake's cannot be."
+reason = "usMaxContext is the longest context of the GSUB and GPOS lookups. FontCraft compiles feature code from M8 (plan M2 § 1, Deferred) and before then writes only the generated pair kerning (context 2); fontmake builds the feature code too."
+
+[[allow]]
+table = "OS/2"
+key = "OS/2.usMaxContext"
+oracle = "fontc"
+ours = "2"
+theirs = "0"
+reason = "FontCraft writes the generated pair kerning of a source without feature code (M5.17), whose lookups look at two glyphs; the fontc builds of this comparison are made without features (`--skip-features`). The kerning itself is compared by the kern measure (crates/oracle/tests/kern.rs)."
 
 # --- The reference builds a variable font (M9) -------------------------------------------------
 # fontc has no option for a static build of one master: from a multi-master source it builds a

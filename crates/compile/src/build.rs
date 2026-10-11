@@ -25,6 +25,7 @@ use fontcraft_model::{MAX_OUTLINE_ELEMENTS, ModelError, Resolved, ResolvedGlyph}
 use write_fonts::FontBuilder;
 use write_fonts::tables::cmap::Cmap;
 use write_fonts::tables::glyf::{Anchor, Bbox, Component, ComponentFlags, CompositeGlyph, GlyfLocaBuilder, Glyph as TtGlyph, SimpleGlyph, Transform};
+use write_fonts::tables::gpos::Gpos;
 use write_fonts::tables::head::{Flags, Head, MacStyle};
 use write_fonts::tables::hhea::Hhea;
 use write_fonts::tables::hmtx::{Hmtx, LongMetric};
@@ -345,6 +346,7 @@ pub fn assemble(
     outlines: &[Prepared],
     flavour: Flavour,
     synthesised_notdef: bool,
+    gpos: Option<&Gpos>,
     options: &Options,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
@@ -430,7 +432,9 @@ pub fn assemble(
         caret_offset: i16_of(m.caret_offset),
         number_of_h_metrics: u16::try_from(h_metrics.len()).unwrap_or(u16::MAX),
     };
-    let os2 = os2(&info, &horizontal.metrics, &code_points);
+    // Pair positioning looks at two glyphs; nothing else is compiled before M8.
+    let max_context = if gpos.is_some() { 2 } else { 0 };
+    let os2 = os2(&info, &horizontal.metrics, &code_points, max_context);
 
     // Glyph names: in `post` 2.0 for TrueType when there are few enough; CFF keeps them in its
     // charset and has `post` 3.0 (`compile.postFormat`).
@@ -458,6 +462,9 @@ pub fn assemble(
     builder.add_table(&cmap).map_err(table("cmap"))?;
     builder.add_table(&name).map_err(table("name"))?;
     builder.add_table(&post).map_err(table("post"))?;
+    if let Some(gpos) = gpos {
+        builder.add_table(gpos).map_err(table("GPOS"))?;
+    }
     if info.vertical {
         let (vhea, vmtx) = vertical(order, &boxes, &info);
         builder.add_table(&vhea).map_err(table("vhea"))?;
@@ -467,7 +474,7 @@ pub fn assemble(
 }
 
 /// `OS/2` version 4 (`compile.os2*`).
-fn os2(info: &Info, metrics: &[LongMetric], code_points: &BTreeSet<u32>) -> Os2 {
+fn os2(info: &Info, metrics: &[LongMetric], code_points: &BTreeSet<u32>, max_context: u16) -> Os2 {
     let m = &info.metrics;
     // The mean of the advances that are not zero, in single precision as fontc computes it.
     let (count, total) = metrics.iter().filter(|l| l.advance > 0).fold((0u64, 0u64), |(c, t), l| (c + 1, t + u64::from(l.advance)));
@@ -516,8 +523,9 @@ fn os2(info: &Info, metrics: &[LongMetric], code_points: &BTreeSet<u32>) -> Os2 
         us_default_char: Some(0),
         // The space, whether the font has one or not, as ufo2ft and fontc write it.
         us_break_char: Some(32),
-        // Layout tables are compiled from M8; until then no lookup has a context.
-        us_max_context: Some(0),
+        // The longest context of a lookup: 2 with generated kerning, else 0 (feature code is
+        // compiled from M8).
+        us_max_context: Some(max_context),
         ..Default::default()
     }
 }

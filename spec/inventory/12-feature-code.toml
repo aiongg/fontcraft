@@ -1325,7 +1325,10 @@ milestone = "M5"
 summary = "kern (Kerning). Trigger: Kerning values exist in a master (defined in Edit View or the Kerning window). Generated: Built at export per master or instance and never listed in the Features tab: pair positioning rules using group classes named `@MMK_L_<group>` and `@MMK_R_<group>`; glyph pairs before class pairs is the expected order (inferred)."
 ref = "Font Info › Features › Implicit Features"
 status = "handbook"
-notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8."
+notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8. Built in M5.17 for sources without feature code: kern lookups per group of scripts, glyph pairs before class pairs (`compile.kernFeatureWriter`). Documented, not yet observed."
+guesses = [
+  "The kern lookups are split by script and direction as fontc splits them; the GPOS of a font with Latin and Cyrillic kerning exported from the reference app settles it.",
+]
 
 [[behavior]]
 id = "autoFeature.dist"
@@ -1334,7 +1337,10 @@ milestone = "M5"
 summary = "dist (Distances). Trigger: Same data as kerning for scripts that use dist instead of kern; the user cannot steer it. Generated: Built at export like kern and never listed in the Features tab; which scripts are routed to dist is not documented."
 ref = "Font Info › Features › Implicit Features"
 status = "handbook"
-notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8. The scripts that get dist are fontc's (compile.kernFeatureWriter)."
+notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8. The scripts that get dist are fontc's (compile.kernFeatureWriter). Built in M5.17: the kerning of the Indic and Universal Shaping Engine scripts, Khmer and Myanmar goes to dist instead of kern, as fontc writes it. Documented, not yet observed."
+guesses = [
+  "The scripts whose kerning goes to dist are fontc's (Indic, Universal Shaping Engine, Khmer, Myanmar); a font with Devanagari kerning exported from the reference app settles it.",
+]
 
 [[behavior]]
 id = "autoFeature.curs"

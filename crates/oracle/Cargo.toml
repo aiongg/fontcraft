@@ -24,4 +24,6 @@ toml = "1"
 [dev-dependencies]
 fontcraft-compile.workspace = true
 fontcraft-engine.workspace = true
+fontcraft-features.workspace = true
 fontcraft-model.workspace = true
+fontcraft-spacing.workspace = true

@@ -20,7 +20,7 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
               │
    L4   tools: pointer and key events → commands (begin / preview / commit)        (4 tools today)
    L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (8 of 9 today)
-   L2   pathops · interp · spacing · textlayout · components · features · hinting · audit · glyphquery · plugins   (pathops, spacing, textlayout, audit, glyphquery today)
+   L2   pathops · interp · spacing · textlayout · components · features · hinting · audit · glyphquery · plugins   (pathops, spacing, textlayout, features, audit, glyphquery today)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
    L0   geom (kurbo)  ·  standalone crates: plist, cff, ttinstr, container, glyphdata  (all but ttinstr today)
 ```
@@ -48,7 +48,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L2 | `spacing` | metrics keys and sidebearings built (M5.1); kerning by M5.2 | metrics keys, sidebearings, kerning lookup, groups, locks, Clean Up and Compress, the kerning-text and AFM formats. Depends on `model` and `geom` |
 | L2 | `textlayout` | built (M5.6) | text as a list of items (glyph, missing character, placeholder, line break) with a cursor, a selection and the current glyph; display strings read and written with `/name` escapes and `/Placeholder`; the layout of those items with advances from the linked metrics source, kerning by mode, the three writing directions, line breaks and wrapping at the line width, and hit testing. Edit View, the previews, Text Preview, `ui.render` and hit testing use it. Depends on `model` and `spacing` (a same-layer chain in `xtask/src/layers.rs`) |
 | L2 | `components` | M6 | automatic alignment, anchor propagation, smart, corner, cap and segment components |
-| L2 | `features` | the pair-kerning writer in M5.17; the rest M8 | feature-code preprocessing (tokens), automatic features, compiling (on fea-rs), kern and mark writers |
+| L2 | `features` | partly built (M5.17: pair kerning); the rest M8 | the generated pair kerning as `GPOS`, ported from fontc's kern writer: pairs resolved per master in lookup order, split into lookups by script and direction, `kern` and `dist`; a reader of the pair kerning of compiled fonts for tests and the oracle. Depends on `model` and `spacing` (a same-layer chain in `xtask/src/layers.rs`). Later (M8): feature-code preprocessing (tokens), automatic features, compiling (on fea-rs), the mark writer |
 | L2 | `hinting` | M10 | PostScript and TrueType hinting models and autohinters |
 | L2 | `glyphquery` | today (M4.5) | which glyphs Font View shows: the search matcher, smart-filter rule trees compiled to the glyph predicate language (the Custom rule, global-guide filters and, in M8, the feature-code glyph tokens), list filters and folders, sidebar entries (categories, scripts and languages, `Groups*.plist` entries) and how a selection of them combines, and the glyphs an entry expects that the font lacks. Rule trees, predicates and patterns are read within depth, length and regex size limits |
 | L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them |

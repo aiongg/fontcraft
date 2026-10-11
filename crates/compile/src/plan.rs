@@ -31,16 +31,29 @@ pub struct Plan {
 /// Plans the compile of `font` at `target`.
 pub fn plan(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     font.check()?;
-    plan_resolved(crate::drawing::resolve(font, target)?, flavour, options)
+    plan_stages(Some(font), crate::drawing::resolve(font, target)?, flavour, options)
 }
 
-/// [`plan`] on a resolved font.
-pub fn plan_resolved(mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
+/// [`plan`] on a resolved font, without kerning: the resolved font holds none.
+pub fn plan_resolved(resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
+    plan_stages(None, resolved, flavour, options)
+}
+
+/// [`plan`] on `resolved`, which was resolved from `font`; `font` gives the kerning.
+pub fn plan_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
+    plan_stages(Some(font), resolved, flavour, options)
+}
+
+fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
+    let gpos = match font {
+        Some(font) => crate::kern::generate(font, &resolved, &glyphs, &mut warnings)?.is_some(),
+        None => false,
+    };
     let final_names = if flavour == Flavour::Cff || glyphs.len() <= crate::MAX_POST_NAMES {
         names::final_names(&resolved, &glyphs, &mut warnings)
     } else {
@@ -51,7 +64,7 @@ pub fn plan_resolved(mut resolved: Resolved, flavour: Flavour, options: &Options
     Ok(Plan {
         glyph_order: glyphs.into_iter().map(|g| g.name).collect(),
         final_names,
-        tables: tables(flavour, names.vertical),
+        tables: tables(flavour, names.vertical, gpos),
         postscript_name: names.name(6),
         style_name,
         warnings,
@@ -72,7 +85,7 @@ pub fn file_stem(resolved: &Resolved, options: &Options, source: &str) -> Option
 }
 
 /// The tables `build::assemble` writes for `flavour`, sorted by tag as the table directory is.
-fn tables(flavour: Flavour, vertical: bool) -> Vec<String> {
+fn tables(flavour: Flavour, vertical: bool, gpos: bool) -> Vec<String> {
     let mut tags: Vec<&str> = vec!["OS/2", "cmap", "head", "hhea", "hmtx", "maxp", "name", "post"];
     match flavour {
         Flavour::TrueType => tags.extend(["glyf", "loca"]),
@@ -80,6 +93,9 @@ fn tables(flavour: Flavour, vertical: bool) -> Vec<String> {
     }
     if vertical {
         tags.extend(["vhea", "vmtx"]);
+    }
+    if gpos {
+        tags.push("GPOS");
     }
     tags.sort_unstable();
     tags.into_iter().map(str::to_string).collect()

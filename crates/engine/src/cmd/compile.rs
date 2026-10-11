@@ -475,7 +475,7 @@ pub(super) fn build(
         };
         let stem = stem(&resolved, &options, source);
         for &flavour in &req.flavours {
-            let compiled = fontcraft_compile::compile_resolved(resolved.clone(), flavour, &options)?;
+            let compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &options)?;
             let mut files = Vec::with_capacity(req.containers.len());
             for &container in &req.containers {
                 let data = container.wrap(&compiled.bytes)?;
@@ -868,7 +868,7 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
         let stem = stem(&resolved, &req.options, source);
         instances.push(json!({ "instance": job.label, "source": job.source, "master": resolved.master, "location": resolved.location }));
         for &flavour in &req.flavours {
-            let plan = fontcraft_compile::plan::plan_resolved(resolved.clone(), flavour, &req.options)?;
+            let plan = fontcraft_compile::plan::plan_resolved_from(font, resolved.clone(), flavour, &req.options)?;
             let files: Vec<Value> = req
                 .containers
                 .iter()

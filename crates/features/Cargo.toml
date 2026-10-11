@@ -1,0 +1,19 @@
+[package]
+name = "fontcraft-features"
+description = "FontCraft features: the generated pair kerning of a compiled font, as fontc writes it (L2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-model.workspace = true
+fontcraft-spacing.workspace = true
+icu_properties.workspace = true
+read-fonts.workspace = true
+thiserror.workspace = true
+write-fonts.workspace = true

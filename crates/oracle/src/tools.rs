@@ -186,20 +186,30 @@ pub struct Built {
     pub alternatives: Vec<PathBuf>,
 }
 
-/// Builds `req.source` with the reference compiler.
+/// Builds `req.source` with the reference compiler. fontc leaves the layout tables out.
 pub fn build(req: &Request) -> Result<Built, String> {
+    build_as(req, false)
+}
+
+/// Builds `req.source` with the reference compiler, layout tables included: fontc compiles
+/// features too, for the comparison of the generated kerning. fontmake always does.
+pub fn build_with_features(req: &Request) -> Result<Built, String> {
+    build_as(req, true)
+}
+
+fn build_as(req: &Request, features: bool) -> Result<Built, String> {
     let kind = SourceKind::of(req.source).ok_or_else(|| format!("{} is not a source the reference compilers read", req.source.display()))?;
     if !req.oracle.builds(req.flavour) {
         return Err(format!("{} cannot build .{} fonts", req.oracle.name(), req.flavour.extension()));
     }
     let source = std::fs::canonicalize(req.source).map_err(|e| format!("{}: {e}", req.source.display()))?;
     match req.oracle {
-        Oracle::Fontc => build_fontc(req, kind, &source),
+        Oracle::Fontc => build_fontc(req, kind, &source, features),
         Oracle::Fontmake => build_fontmake(req, kind, &source),
     }
 }
 
-fn build_fontc(req: &Request, kind: SourceKind, source: &Path) -> Result<Built, String> {
+fn build_fontc(req: &Request, kind: SourceKind, source: &Path, features: bool) -> Result<Built, String> {
     let mut notes = Vec::new();
     // fontc builds a variable font from a designspace with several sources. FontCraft compiles the
     // first master, which is the first source: give fontc that source's UFO, a static build.
@@ -219,12 +229,16 @@ fn build_fontc(req: &Request, kind: SourceKind, source: &Path) -> Result<Built, 
     // them out of the reference build too, so a feature file only fontc rejects does not stop the
     // comparison of the other tables.
     let mut cmd = Command::new(req.tool);
-    cmd.arg("--skip-features").arg("-b").arg(req.work_dir.join("fontc-build")).arg("-o").arg(&out).arg(&input);
+    if !features {
+        cmd.arg("--skip-features");
+    }
+    cmd.arg("-b").arg(req.work_dir.join("fontc-build")).arg("-o").arg(&out).arg(&input);
     run(req, cmd)?;
     if !out.is_file() {
         return Err(format!("fontc finished but wrote no {}", out.display()));
     }
-    Ok(Built { path: out, command: format!("fontc --skip-features -o OUT {}", input.display()), notes, alternatives: Vec::new() })
+    let skip = if features { "" } else { "--skip-features " };
+    Ok(Built { path: out, command: format!("fontc {skip}-o OUT {}", input.display()), notes, alternatives: Vec::new() })
 }
 
 fn build_fontmake(req: &Request, kind: SourceKind, source: &Path) -> Result<Built, String> {

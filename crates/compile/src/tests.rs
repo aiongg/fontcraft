@@ -1470,3 +1470,66 @@ fn strokes_and_masks_are_compiled_as_the_canvas_draws_them() {
         assert!(d.ink > 10_000.0, "the stroke and the square are drawn");
     }
 }
+
+#[test]
+fn kerning_is_written_to_gpos_with_the_values_that_apply() {
+    use fontcraft_features::evaluate::PairEvaluator;
+    use fontcraft_spacing::kerning::{Direction, GroupSide, KernIndex};
+
+    let mut f = Font::new("Kern Sans");
+    f.add_glyph("Aacute", vec![0xC1], 600.0).unwrap();
+    f.add_glyph("oacute", vec![0xF3], 500.0).unwrap();
+    f.add_glyph("period", vec![0x2E], 250.0).unwrap();
+    for (glyph, side, group) in [
+        ("A", GroupSide::Right, "A"),
+        ("Aacute", GroupSide::Right, "A"),
+        ("V", GroupSide::Left, "V"),
+        ("W", GroupSide::Left, "V"),
+        ("o", GroupSide::Left, "o"),
+        ("oacute", GroupSide::Left, "o"),
+    ] {
+        let mut g = f.glyph_mut(glyph).unwrap();
+        match side {
+            GroupSide::Left => g.kern_groups.left = Some(group.into()),
+            _ => g.kern_groups.right = Some(group.into()),
+        }
+    }
+    let kerning = Arc::make_mut(&mut f.kerning);
+    for (first, second, value) in [
+        ("A", "@MMK_R_V", -30.0),
+        ("@MMK_L_A", "V", -40.0),
+        ("@MMK_L_A", "@MMK_R_V", -50.0),
+        ("T", "@MMK_R_o", -60.0),
+        ("T", "oacute", 0.0),
+        ("V", "period", -10.5),
+    ] {
+        kerning.ltr.set("m01", first, second, value);
+    }
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    assert!(font.gpos().is_ok(), "a GPOS");
+    assert_eq!(font.os2().unwrap().us_max_context(), Some(2));
+    let plan = plan::plan(&f, &f.default_target().unwrap(), Flavour::TrueType, &Options::default()).unwrap();
+    assert!(plan.tables.iter().any(|t| t == "GPOS"), "{:?}", plan.tables);
+
+    let index = KernIndex::new(&f);
+    let eval = PairEvaluator::new(&out.bytes).unwrap();
+    let gid = |name: &str| out.glyph_order.iter().position(|n| n == name).unwrap() as u16;
+    let glyphs = ["A", "Aacute", "T", "V", "W", "o", "oacute", "period", "space"];
+    for a in glyphs {
+        for b in glyphs {
+            let want = index.lookup(Direction::Ltr, "m01", a, b).unwrap().map_or(0, |p| ot_round(p.value) as i32);
+            assert_eq!(eval.value(skrifa::raw::types::Tag::new(b"latn"), gid(a), gid(b)), want, "{a} {b}");
+        }
+    }
+
+    // Feature code is compiled from M8: until then its font gets no kerning, and is told so.
+    Arc::make_mut(&mut f.features).features.push(fontcraft_model::Snippet {
+        name: "liga".into(),
+        code: "sub f i by f_i;".into(),
+        ..Default::default()
+    });
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert!(FontRef::new(&out.bytes).unwrap().gpos().is_err());
+    assert!(out.warnings.iter().any(|w| w.contains("feature code")), "{:?}", out.warnings);
+}

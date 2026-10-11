@@ -1493,7 +1493,7 @@ milestone = "M5"
 summary = "The kerning value for a pair is resolved per master in this order: the exact pair; then for each side a glyph is tried both as itself and as its group; then zero. This is the UFO kerning lookup, applied against each master's own groups."
 ref = "fontc fontbe/src/features/kern.rs (lookup_kerning_value)"
 status = "docs"
-notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8. The same order serves kerning.getPair (kerning.pairLookupOrder)."
+notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8. The same order serves kerning.getPair (kerning.pairLookupOrder). Built in M5.17 (`crates/features`, ported from fontc at commit 4504578): one master of a static build. Right-to-left pairs join the left-to-right ones as fontc and glyphsLib join them: in logical order, a glyph with right-to-left kerning given by its left group as the first glyph of a pair and by its right group as the second. A glyph–group pair becomes one glyph pair per member with the value that applies to it; group–group pairs of 0 are left out, zero exceptions kept, values rounded half up."
 
 [[behavior]]
 id = "compile.kernGroupReconciliation"
@@ -1510,7 +1510,7 @@ milestone = "M5"
 summary = "Generated kerning is split into lookups by script and writing direction using Unicode data for each glyph (through cmap and substitution closure); scripts that need it get the dist feature and the others kern. Common-script glyphs are added to every script's lookups, pairs mixing strong left-to-right and right-to-left glyphs are dropped, and lookups nobody references are pruned. Lookups ignore marks by default; pairs involving marks go to separate lookups, and a mark with an advance width turns the flag into a mark filtering set."
 ref = "fontc fontbe/src/features/kern.rs; fontmake USAGE.md (KernFeatureWriter)"
 status = "docs"
-notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8."
+notes = "Moved from M8 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 3): M5.17 ports fontc's kern writer (fontbe/src/features/kern.rs) to write pair kerning to GPOS at export. A hand-written kern feature and `# Automatic Code` stay in M8. Built in M5.17 (`crates/features`, ported from fontc at commit 4504578) for sources without feature code: the substitution closure and feature-code language systems are not used, since such sources get no generated kerning before M8. Lookups that skip marks get the IgnoreMarks flag and no GDEF is written (fontc uses a mark filtering set when the font has spacing marks); without GDEF neither changes shaping. Marks are the glyphs of category Mark with subcategory Nonspacing or Spacing Combining; a UFO's are its stored categories, not public.openTypeCategories. Unicode data: ICU4X 2.1.2 with fontc's Unicode 18 overlay."
 
 [[behavior]]
 id = "compile.kernQuantisation"
