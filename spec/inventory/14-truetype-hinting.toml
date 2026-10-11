@@ -36,6 +36,19 @@ milestone = "M10"
 summary = "Glyph-level TrueType instructions are defined on one master only, the main master: the first in the masters list, or the one named by a Get Hints From Master custom parameter on the font. The same parameter controls PostScript hints."
 ref = "TrueType Hinting › introduction"
 status = "handbook"
+notes = "M10.2 reads and writes the instruction forms of the format samples (crates/hinting/src/tt.rs): horizontal = 1 for vertical hinting, the rounding in the low bits of options (0 round, 1 up, 2 down, 4 no rounding, as the reference's scripting constants name them), bit 128 for triple hints, stem −2 automatic and −1 none, the moved point in origin for Snap and Delta, settings.deltaV for deltas; format 2's Anchor, Align, Interpolate and Delta names are read too. An unchanged instruction is written back byte for byte. Documented, not yet observed."
+guesses = [
+  "Rounding only in GDI ClearType is stored as options 3, which no source shows; a file saved by the reference app with that rounding mode would show the value.",
+  "A Snap stores its zone in the stem key (−2 automatic, −1 none, else the index), as a Stem stores its stem; a file with a Snap set to a named zone would show the key.",
+  "Stem instructions flagged as triple form groups of three in list order; a file with two triple hints in one glyph would show how they are kept apart.",
+  "A delta cell is stored as 8 (up) or −8 (down) under its PPM, in a column keyed by the instance's axis values in braces padded to six, as the one format sample shows; a file with deltas set for two instances would confirm both.",
+  "An instruction of a TrueType type that lacks a point its type needs (the corpus has place-only Snap and Stem hints and a Stem without target) is detached: kept as stored, never listed or compiled; the reference app's export of such a glyph would settle it.",
+]
+observe = [
+  "T3: give n one Stem of each rounding mode, including Round only in GDI ClearType, save as .glyphs and note each options value.",
+  "T3: set a Snap of n to a named zone and make one triple hint in E; save as .glyphs and note the keys each stores.",
+  "T3: set one Delta of n up at 12 PPM in one instance and down at 13 PPM in another; save as .glyphs and note the deltaV keys and values.",
+]
 
 [[behavior]]
 id = "hinting.tt.replicateToOtherMasters"
@@ -52,6 +65,7 @@ milestone = "M10"
 summary = "Get Hints From Master is a font-level custom parameter (Font Info › Font) whose value names the master whose layers supply glyph-level hints, overriding the first-master default."
 ref = "TrueType Hinting › introduction"
 status = "handbook"
+notes = "Read from the font only; its value is matched to a master id, else a master name, and an unknown value falls back to the first master. Documented, not yet observed."
 
 # ---------------------------------------------------------------------------------------------
 # Autohinting at export
@@ -242,6 +256,9 @@ milestone = "M10"
 summary = "A master without a TTFZones custom parameter uses its ordinary alignment zones (Font Info › Masters › Metrics) for TrueType hinting. Adding TTFZones to the master replaces them for TrueType purposes only."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
+notes = "Documented, not yet observed. The derived zones keep their metric's filter."
+guesses = ["Zones derived from alignment zones are named after their metric (ascender, capHeight, xHeight, baseline, descender, or a named metric's name), the master's other zones zone 1, zone 2…; Get PS zones in the reference app would show its names."]
+observe = ["T3: in the TTFZones editor choose Get PS zones and note the name given to each zone."]
 
 [[behavior]]
 id = "hinting.tt.param.ttfZones"
@@ -250,6 +267,9 @@ milestone = "M10"
 summary = "TTFZones is a per-master custom parameter holding a list of zones of any length. Each zone has a unique name, a position, a size, an optional alignment to another zone, and (on the main master only) per-PPM deltas and a glyph filter."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
+notes = "Read per master (crates/hinting/src/settings.rs); a TTFZones parameter on the font is read as the family zones. Each entry is a dictionary with name, position (pos also read), size, align (a zone name), deltas and filter. Documented, not yet observed."
+guesses = ["No source holds a TTFZones value, so its entries are read as {name, position, size, align, deltas = {column: {PPM: shift}}, filter = predicate text}, the stem form of the corpus's TTFStems extended; a file saved by the reference app with zones, an alignment, a delta and a filter would show the real keys."]
+observe = ["T3: add two TT zones, align one to the other, set one delta and one filter, save as .glyphs and note how the TTFZones value is stored."]
 
 [[panel]]
 id = "dialog.ttfZones"
@@ -395,6 +415,7 @@ milestone = "M10"
 summary = "TT stems give strokes of similar thickness an identical pixel count when rendered. A master without a TTFStems custom parameter uses its standard stems; adding TTFStems to the master replaces them for TrueType purposes only."
 ref = "TrueType Hinting › TrueType Stems"
 status = "handbook"
+notes = "Documented, not yet observed. Both directions are used, with the stem definitions' names and filters; unnamed format 2 stems are called stem 1, stem 2… (our choice)."
 
 [[behavior]]
 id = "hinting.tt.param.ttfStems"
@@ -522,6 +543,7 @@ milestone = "M10"
 summary = "TTFBlueFuzz widens every TT zone by the given number of units both above and below; the default is 1. It may be set on the font (applies to all instances), on masters (the values are interpolated at export), or on an export instance (overrides font and master values). Its main use is catching extremes that drop out of a zone through rounding in interpolated instances."
 ref = "TrueType Hinting › TrueType BlueFuzz"
 status = "handbook"
+notes = "Read from the instance, else the master, else the font, default 1 (crates/hinting/src/settings.rs). Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.param.overshootSuppressionBelowPpm"
@@ -598,6 +620,7 @@ milestone = "M10"
 summary = "gasp Table is a custom parameter on the font or on an export instance (the font value applies to instances without their own) holding a pair of PPM thresholds, each a size where the rendering behaviour that the font recommends switches; the defaults are 8 and 20. The table carries recommendations for both grayscale and ClearType renderers, which a renderer is free to ignore."
 ref = "TrueType Hinting › Advanced TrueType Hinting › gasp Table"
 status = "handbook"
+notes = "Read as the corpus stores it, a dictionary from maximum PPM to flags (instance, then master, then font); a size above 65535 is left out, as fontc does, and at most 256 ranges are read. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.tt.gasp.ranges"

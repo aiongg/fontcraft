@@ -100,6 +100,9 @@ milestone = "M10"
 summary = "Validity rules for a master's zones: at most 6 top zones, at most 5 bottom zones, plus the baseline zone; the baseline zone sits at position 0; zones never overlap and keep at least one unit between them; no zone is larger than 25 units, and none is larger than 240 / (240 x blueScale - 0.98). A font-info check should report each violated rule."
 ref = "PostScript Hinting › Alignment Zones"
 status = "handbook"
+notes = "hint.ps.validateFontHints reports each rule (crates/hinting/src/validate.rs): overlap, a gap below 2 × blueFuzz + 1 (at least one unit), more than 6 top or 5 bottom zones besides the baseline zone, no zone at 0, a zone above 25 units or above 240 ÷ (240 × blueScale − 0.98), blueScale not positive. Documented, not yet observed."
+guesses = ["Overlapping zones and values that are not positive are errors and every other broken rule a warning, and the export still writes what fits the CFF limits; the reference app's font-info check would show how it ranks them."]
+observe = ["T5: give master 1 two overlapping zones and a 30-unit zone, open Font Info and export as CFF; note every warning or error shown and whether the export goes ahead."]
 
 [[behavior]]
 id = "hinting.ps.alignmentZones.gridCompensation"
@@ -108,6 +111,8 @@ milestone = "M10"
 summary = "When the font uses a non-default grid (grid spacing or subdivision), zones should be widened by one unit at each end to absorb coordinate rounding: move the position one unit away from the zone and grow the size by two units. The baseline zone is the exception: its position stays 0 and only its size grows by one unit."
 ref = "PostScript Hinting › Alignment Zones"
 status = "handbook"
+guesses = ["The check flags a zone whose size is a whole number of grid steps when the grid is coarser than one unit (it was not widened), and says nothing for finer or fractional grids, where a widened zone cannot be told apart; whether the reference app checks this at all would settle it."]
+observe = ["T1 with a grid spacing of 10 and a zone of size 20: open Font Info and export as CFF; note any warning about the zone."]
 
 [[behavior]]
 id = "hinting.ps.alignmentZones.blueValuesMapping"
@@ -149,6 +154,9 @@ milestone = "M10"
 summary = "blueShift is an optional custom parameter (set in Font Info › Font) written to the Private dict as BlueShift. For flex hints to work it must be at least the depth of the shallow curve plus one unit, e.g. 6 or more for serifs cupped 5 units deep. The CFF default of 7 is recalled, not confirmed here."
 ref = "PostScript Hinting › Custom Parameters; Flex Hints"
 status = "handbook"
+notes = "The default 7 is documented in the parameter description (Appendix › Custom Parameters) and not yet observed."
+guesses = ["blueShift, blueScale, blueFuzz and the other hinting parameters whose scope the handbook does not give are read from the instance, else the master, else the font, as FontCraft reads every other parameter; a reference export with a master-level and a font-level blueShift that differ would settle it."]
+observe = ["T5: set blueShift 9 on the font and 11 on master 1, export master 1 as CFF and note the BlueShift in the Private dict."]
 
 [[behavior]]
 id = "hinting.ps.blueFuzz"
@@ -507,6 +515,9 @@ milestone = "M10"
 summary = "A glyph-level hint is either a stem hint, which brackets a horizontal or vertical stroke-like feature (stem, serif, crossbar) with an origin and a size, or a ghost hint, which marks only a top or a bottom edge where no horizontal stem exists (top and bottom of a sans-serif I, top of a sans L, bottom of a sans P). Ghost hints exist only in the horizontal-hint direction."
 ref = "PostScript Hinting › Manual hinting; Ghost Hints"
 status = "handbook"
+notes = "M10.2 reads every stored form of the format samples and the corpus: node-linked edges (origin, target), numeric edges in place = (position, width), ghosts with target down or up in both forms, format 2 brace strings, and glyphsLib's dictionaries in a UFO glyph's lib; an unchanged hint is written back byte for byte (crates/hinting/src/ps.rs). Documented, not yet observed in the reference app."
+guesses = ["A stem with one edge on a node and the other a number (left when a linked node is deleted) is stored with the number as place = (number, 0); a file saved by the reference app after deleting one linked node of a stem hint would show its form."]
+observe = ["T1: link a stem hint of I to two nodes, delete one of the nodes, save as .glyphs and note the keys the hint is stored with (origin, target, place)."]
 
 [[behavior]]
 id = "hinting.ps.manual.horizontalHintsNeedExactY"
@@ -589,6 +600,7 @@ milestone = "M10"
 summary = "Glyph-level hints are read from one master only, the main master, which is the first master in the list unless the font has a Get Hints From Master custom parameter (Font Info › Font) naming another. The same rule and the same parameter govern TrueType hints."
 ref = "PostScript Hinting › Hinting Multiple Masters"
 status = "handbook"
+notes = "Get Hints From Master is read from the font and matched to a master id, else a master name (the corpus's Inter stores an id); an unknown value falls back to the first master. Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.ps.masters.transferByNodeLink"
@@ -617,6 +629,7 @@ milestone = "M10"
 summary = "Where a glyph uses Alternate or Intermediate layers, hints must also be put on the special layer that stands in for the hint-carrying master layer; the master layer's own hints do not apply to the part of the design space where the special layer takes over."
 ref = "PostScript Hinting › Hinting Multiple Masters"
 status = "handbook"
+notes = "A special layer that is exported uses its own hints and, without any, is left to the autohinter (ps_hint_layer in crates/hinting/src/ps.rs). Documented, not yet observed."
 
 [[behavior]]
 id = "hinting.ps.cff2.sharedHintStructure"
