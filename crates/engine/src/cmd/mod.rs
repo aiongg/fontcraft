@@ -27,6 +27,7 @@ mod glyph_set;
 mod guide;
 mod inspect;
 mod kerning;
+mod kerning_groups;
 mod layer;
 mod layers;
 mod measure;
@@ -177,6 +178,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(metrics_keys::specs());
         v.extend(transform_metrics::specs());
         v.extend(kerning::specs());
+        v.extend(kerning_groups::specs());
         v.extend(font::specs());
         v.extend(compile::specs());
         v.extend(meta::specs());
