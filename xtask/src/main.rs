@@ -223,7 +223,7 @@ fn cmd_ci() -> Result<(), String> {
         ("fmt", cargo_step(&["fmt", "--all", "--", "--check"])),
         ("clippy", cargo_step(&["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])),
         ("test", cargo_step(&["test", "--workspace"])),
-        ("spec", Box::new(|| spec::run(&root()))),
+        ("spec", Box::new(|| spec::run(&root()).and_then(|()| paramcatalog::run(&root(), true)))),
         ("parity", Box::new(|| parity::run(&root(), true))),
         ("guesses", Box::new(|| guesses::run(&root(), true))),
         ("observe", Box::new(|| observe::run(&root(), true))),
