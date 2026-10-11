@@ -5,7 +5,9 @@
 //! module lists its own commands ([`MODULES`]), so a package adds a module instead of editing a
 //! shared list.
 
+pub mod actions;
 pub mod annotation;
+pub mod attach;
 pub mod audit;
 pub mod clipboard;
 pub mod compare_family;
@@ -13,20 +15,26 @@ pub mod compare_fonts;
 pub mod context_menu;
 pub mod drawing;
 pub mod font_info;
+pub mod command_console;
+pub mod edit_aids;
+pub mod extensions;
 pub mod font_view;
 pub mod glyph_info;
 pub mod item_state;
+pub mod kerning_review;
 pub mod kerning_window;
 pub mod keymap;
 pub mod master_switcher;
 pub mod masters;
 pub mod measurement;
 pub mod menus;
+pub mod menus_dynamic;
 pub mod palette;
 pub mod pickers;
 pub mod preview;
 pub mod preview_panel;
 pub mod selection;
+pub mod space_center;
 pub mod start_window;
 pub mod status_bar;
 pub mod tabs;
@@ -76,6 +84,13 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::dialogs::sample_strings::COMMANDS, crate::dialogs::sample_strings::run),
     (crate::dialogs::find_glyphs::COMMANDS, crate::dialogs::find_glyphs::run),
     (font_info::COMMANDS, font_info::run),
+    (extensions::COMMANDS, extensions::run),
+    (command_console::COMMANDS, command_console::run),
+    (actions::COMMANDS, actions::run),
+    (space_center::COMMANDS, space_center::run),
+    (kerning_review::COMMANDS, kerning_review::run),
+    (edit_aids::COMMANDS, edit_aids::run),
+    (attach::COMMANDS, attach::run),
 ];
 
 /// Every shell command, in module order.
@@ -92,6 +107,11 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     crate::dialogs::sample_strings::show(app, ui, pending);
     crate::dialogs::find_glyphs::show(app, ui, pending);
     font_info::show(app, ui, pending);
+    extensions::show(app, ui, pending);
+    command_console::show(app, ui, pending);
+    actions::show(app, ui, pending);
+    space_center::show(app, ui, pending);
+    kerning_review::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {

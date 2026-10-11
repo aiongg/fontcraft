@@ -358,6 +358,7 @@ impl FontcraftApp {
                                 None => menu_items(ui, &items, pending),
                             }
                         }
+                        shell::menus_dynamic::draw(ui, &menu.dynamic, pending);
                     });
                 }
             });

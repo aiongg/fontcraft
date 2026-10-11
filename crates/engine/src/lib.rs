@@ -28,12 +28,16 @@ pub mod clock;
 pub mod cmd;
 pub(crate) mod export_steps;
 pub mod feature_state;
+pub mod extension_index;
+pub mod extensions;
 pub mod glyph_data;
 pub mod guard;
 pub mod interp_cache;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
 pub(crate) mod linked;
+pub mod log;
+pub mod macros;
 pub mod params;
 pub mod settings;
 
@@ -238,6 +242,8 @@ pub struct Session {
     feature_state: HashMap<u64, Arc<feature_state::FeatureState>>,
     /// The file cache and in-memory files behind [`Session::assets`].
     assets: assets::SessionAssets,
+    /// Installed modules, macros, recording, the command log (`extensions`).
+    extensions: extensions::ExtensionState,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -390,6 +396,17 @@ impl Session {
     /// The user's settings (`settings.get`).
     pub fn settings(&self) -> &settings::UserSettings {
         &self.settings
+    }
+
+    /// Installed modules, macros, the recording and the command log.
+    pub fn extensions(&self) -> &extensions::ExtensionState {
+        &self.extensions
+    }
+
+    /// The extension state, for the commands and the app (folder sync, safe mode). It is not
+    /// part of the rollback snapshot: a command that changes it does so only after it succeeds.
+    pub fn extensions_mut(&mut self) -> &mut extensions::ExtensionState {
+        &mut self.extensions
     }
 
     /// The user's settings, for the app (loading) and for the commands that own reserved ids.
@@ -572,6 +589,9 @@ impl Session {
             }
             Err(panic) => Err(EngineError::Internal(format!("`{id}` failed unexpectedly: {panic}"))),
         };
+        if record {
+            self.extensions.after_command(id, params, spec.journal, &result);
+        }
         match result {
             Ok(value) => {
                 if spec.journal && record {

@@ -13,9 +13,11 @@
 #![forbid(unsafe_code)]
 
 mod address;
+pub mod attach;
 pub mod axes;
 pub mod corner;
 mod extra;
+pub mod fc_keys;
 mod features;
 mod font;
 mod glyph;

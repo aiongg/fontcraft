@@ -24,7 +24,9 @@
 #![forbid(unsafe_code)]
 
 pub mod align;
+pub mod auto_layer;
 pub mod compose;
+pub mod construction;
 pub mod default_anchors;
 pub mod error;
 pub mod index;

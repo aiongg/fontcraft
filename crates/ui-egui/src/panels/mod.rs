@@ -24,19 +24,27 @@
 
 pub mod attributes;
 pub mod bottom_bar;
+pub mod command_console;
 pub mod dimensions;
 pub mod fit_curve;
 pub mod hinting_waterfall;
 pub mod info_box;
+pub mod info_box_attach;
 pub mod info_box_kerning;
 pub mod info_box_metrics;
 pub mod info_box_ps_hint;
 pub mod info_box_tt;
 pub mod layers;
 pub mod layers_color;
+pub mod measurements;
+pub mod pairs_and_phrases;
 pub mod palette;
+pub mod palette_modules;
+pub mod reference_font;
+pub mod related_glyphs;
 pub mod selection_info;
 pub mod special_layer_popover;
+pub mod selections;
 pub mod stroke;
 pub mod transformations;
 pub mod widgets;
@@ -95,6 +103,13 @@ pub struct PanelState {
     pub find_glyphs: crate::dialogs::find_glyphs::FindGlyphsState,
     /// The Font Info window.
     pub font_info: crate::shell::font_info::FontInfoState,
+    pub extensions: crate::shell::extensions::ExtensionsState,
+    pub command_console: crate::shell::command_console::CommandConsoleState,
+    pub actions: crate::shell::actions::ActionsState,
+    pub space_center: crate::shell::space_center::SpaceCenterState,
+    pub kerning_review: crate::shell::kerning_review::KerningReviewState,
+    pub edit_aids: crate::shell::edit_aids::EditAidsState,
+    pub attach: crate::shell::attach::AttachState,
 }
 
 impl Default for PanelState {
@@ -117,6 +132,13 @@ impl Default for PanelState {
             sample_strings: Default::default(),
             find_glyphs: Default::default(),
             font_info: Default::default(),
+            extensions: Default::default(),
+            command_console: Default::default(),
+            actions: Default::default(),
+            space_center: Default::default(),
+            kerning_review: Default::default(),
+            edit_aids: Default::default(),
+            attach: Default::default(),
         }
     }
 }

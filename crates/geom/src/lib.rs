@@ -7,8 +7,10 @@
 #![forbid(unsafe_code)]
 
 pub mod cu2qu_multi;
+pub mod expr;
 pub mod fit;
 pub mod segment;
+pub mod spiro;
 pub mod variation;
 
 pub use kurbo::{

@@ -1,0 +1,22 @@
+[package]
+name = "fontcraft-plugins"
+description = "FontCraft modules: a resource-limited WebAssembly host for filter, reporter and check modules (L2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-geom.workspace = true
+fontcraft-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+wasmi.workspace = true
+
+[dev-dependencies]
+wat.workspace = true
