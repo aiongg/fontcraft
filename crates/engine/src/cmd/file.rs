@@ -174,6 +174,7 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
         }
     }
     let mut font = Font::clone(&doc.font);
+    crate::assets::rebase_image_paths(&mut font, doc.path.as_deref(), &path);
     // The version a format family is written in: the one asked for, else the one read, else the
     // newest that is not a draft (3 for both). Converting between versions is not supported yet.
     let pick = |have: Option<u32>, range: std::ops::RangeInclusive<u32>| -> Result<u32> {

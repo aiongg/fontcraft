@@ -1176,6 +1176,7 @@ milestone = "M11"
 summary = "Recommended file naming is the glyph name, a space and the pixel size, such as sun 48.png. It is a convention for people only; the chapter does not say the app matches files by name."
 ref = "Color Fonts › sbix Fonts › Preparing Images"
 status = "handbook"
+notes = "Advice only: Add Image matches a file to the glyph named like the whole file name without extension, so `sun 48.png` matches only a glyph named `sun 48`."
 
 [[behavior]]
 id = "color.images.referencedNotEmbedded"
@@ -1317,6 +1318,7 @@ milestone = "M11"
 summary = "Recommended naming for SVG sources is the glyph name plus .svg (A.svg) in a folder called Images. As with bitmaps this is advice, not a lookup rule."
 ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files"
 status = "handbook"
+notes = "Advice only: `A.svg` given to Add Image goes on glyph A by the general file-name rule, wherever the file is."
 
 [[behavior]]
 id = "color.svg.imageTransform"

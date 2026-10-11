@@ -634,6 +634,7 @@ milestone = "M11"
 summary = "Placed as a tracing template or as the bitmap of a colour glyph. A Glyphs source stores only a path relative to the document, with position, scale, slant, rotation, crop and alpha; a UFO requires the file itself inside `images/` and allows PNG only, so other image types are converted to PNG when saving to UFO. Images are left out of exports except for bitmap colour fonts."
 ref = "Edit View › Images; UFO 3 images directory, GLIF image element; Color Fonts › Standard Bitmap Graphics"
 status = "docs"
+notes = "Read by sniffing the header first (size and resolution), then decoded to RGBA within 64 MiB per file, 16,384 pixels per side and 2^26 pixels."
 
 [[format]]
 id = "image-jpeg"
@@ -647,6 +648,7 @@ milestone = "M11"
 summary = "Placed by reference like PNG and used as a tracing template or as bitmap colour-glyph data. Not valid inside a UFO, so it is re-encoded as PNG there and the original relative path is remembered in the glyph lib."
 ref = "Edit View › Images; Color Fonts › Standard Bitmap Graphics"
 status = "handbook"
+notes = "Decoded to RGBA within the same limits as PNG; the resolution comes from the JFIF density or the Exif resolution."
 
 [[format]]
 id = "image-tiff"
@@ -660,6 +662,7 @@ milestone = "M11"
 summary = "Placed by reference like PNG; baseline TIFF (uncompressed, LZW, PackBits, 8-bit grey, RGB and RGBA) is decoded for display and for bitmap colour fonts. Other variants show the missing-image marker but keep their reference."
 ref = "Edit View › Images; Color Fonts › Standard Bitmap Graphics"
 status = "handbook"
+notes = "The first page of classic TIFF and BigTIFF is decoded, with at most 1,024 directory entries read; the size is checked before decoding."
 
 [[format]]
 id = "image-pdf"

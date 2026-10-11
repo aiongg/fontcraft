@@ -1980,16 +1980,21 @@ label = "Add Image…"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{files: [path], glyphs?: [names], layer?: id}"
+params = "{files: [path], glyphs?: [names], layer?: id, side?: \"foreground\" | \"background\"}"
 area = "color"
 milestone = "M11"
 summary = "Places an image file on a glyph layer. With one file it goes on the given (or selected) glyph's layer; with several files each is matched to the glyph of the same name without extension and goes on that glyph's current-master layer. The image is put at the layer origin and sized so that one typographic point of the image equals one font unit. Only a path relative to the document is stored, not the image data."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
+notes = "Documented, not yet observed. With `glyphs`, one file goes on each named glyph; without, every file is matched by name, so one file with no glyph named works like a batch of one. A relative path in `files` is relative to the document's folder (to the working directory for a document never saved). The whole call is one undo step, and a file that cannot be read, is not an image or would replace a locked image refuses it."
 guesses = [
+  "Two files that name the same glyph (A.png and A.jpg) refuse the call instead of one winning. Settled by Add Image with both files in the reference.",
   "A layer holds one placed image, as the version 3 format stores one: Add Image on a layer that has an image replaces it. Image shapes of the version 4 format are read, drawn and written back but not created. Settled by adding a second image to a glyph in the reference and reading the saved file.",
 ]
-observe = ["Image font: add a second image to H; note whether it replaces the first or both stay, and how the file stores them."]
+observe = [
+  "Image font: add a second image to H; note whether it replaces the first or both stay, and how the file stores them.",
+  "Image font: in Font View, Add Image with H.png and H.jpg together; note which one H receives and any message.",
+]
 
 [[command]]
 id = "image.setTransform"
@@ -1997,16 +2002,21 @@ label = "Set Image Transform"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, x?: number, y?: number, width?: number, height?: number, rotation?: degrees}"
+params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", x?: number, y?: number, width?: number, height?: number, rotation?: degrees}"
 area = "color"
 milestone = "M11"
 summary = "Sets position, displayed size and rotation of the layer's image, as the image fields of the Info box do. The same values change when the image is dragged, resized with the bounding box or Scale tool, turned with the Rotate tool or transformed from the Palette."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. The glyph is a required parameter, as commands take explicit targets; `side` addresses the background's image. A transform stored as a matrix with shear can only be moved."
 guesses = [
+  "Width and height are the size of the whole image, so a crop does not change them. Settled by cropping an image in the reference and reading the Info box.",
   "Width and height are the displayed size in font units; rotation turns the image about its position point (its bottom-left corner before rotation), as the stored `pos`, `scale` and `angle` suggest. Settled by rotating an image in the reference's Info box and reading the saved file.",
 ]
-observe = ["Image font: type a rotation in the image Info box and save; note the pivot of the rotation and the stored pos, scale and angle values."]
+observe = [
+  "Image font: type a rotation in the image Info box and save; note the pivot of the rotation and the stored pos, scale and angle values.",
+  "Image font: crop H's image, then read the width and height in the Info box; note whether they are the whole image's or the cropped part's.",
+]
 
 [[command]]
 id = "image.revealFile"
@@ -2027,12 +2037,13 @@ label = "Lock Image"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id}"
+params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"}"
 area = "color"
 milestone = "M11"
 summary = "Locks the layer's image so it can no longer be selected, moved or transformed. Bound to the lock icon in the image Info box."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. Locking a locked image changes nothing and makes no undo step."
 
 [[command]]
 id = "image.unlock"
@@ -2040,7 +2051,7 @@ label = "Unlock Image"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id}"
+params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"}"
 area = "color"
 milestone = "M11"
 summary = "Makes a locked image selectable and editable again. Since selection is impossible for a locked image, the reference offers this only in the context menu opened by right-clicking the image."
@@ -2053,12 +2064,13 @@ label = "Crop Image"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, rect: [x, y, width, height]}"
+params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", rect: [x, y, width, height]}"
 area = "color"
 milestone = "M11"
 summary = "Limits the visible part of the image to a rectangle. In the reference this is done by dragging one of the image's handles with Ctrl+Alt held; the coordinate space of the stored crop is not documented."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. The rectangle must lie within the image when its file can be read; an image whose file cannot be read keeps the rectangle as given."
 guesses = [
   "The crop rectangle is in image pixels, measured from the image's bottom-left corner, as origin and size. Settled by cropping an image in the reference and reading `crop` in the saved file.",
 ]
@@ -2070,12 +2082,13 @@ label = "Set Crop to Layer Bounds"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id}"
+params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"}"
 area = "color"
 milestone = "M11"
 summary = "Trims the image so that it ends at the layer bounds. Offered in the image's context menu; what exactly counts as the layer bounds (advance width by vertical metrics, or outline bounds) is not spelled out."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. The bounds are mapped into the image's pixels through its transform; a rotated image is cropped to the box around the mapped bounds. Refused when the image lies outside the bounds or its pixel size cannot be read."
 guesses = [
   "The layer bounds are the rectangle from 0 to the advance width and from the master's descender to its ascender. Settled by Set Crop to Layer Bounds on an image larger than the glyph in the reference.",
 ]
@@ -2087,7 +2100,7 @@ label = "Reset Crop"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id}"
+params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"}"
 area = "color"
 milestone = "M11"
 summary = "Removes the crop so the whole image is shown again. Offered in the image's context menu."
@@ -2100,7 +2113,7 @@ label = "Get Image Info"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id}"
+params = "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"}"
 area = "color"
 milestone = "M11"
 summary = "Query returning the layer image's stored path, whether the file resolves, its position, size, rotation, crop and lock state."
@@ -2147,10 +2160,15 @@ milestone = "M11"
 summary = "The document records only the image's path relative to the font file. If the file has moved or the path no longer resolves, the canvas shows a missing-image symbol in its place."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
+notes = "Documented, not yet observed. Every save into another folder, the first save included, rewrites the image paths relative to the new file. The missing-image marker is M11.13's."
 guesses = [
+  "A file outside the document's folder is stored with a path that climbs out of it (`../scans/A.png`), as the handbook says only a relative path is stored. Settled by adding an image from another folder in the reference and reading the saved path.",
   "An image added to a document that has never been saved keeps its absolute path until the first save, which rewrites it relative to the new file. Settled by adding an image to an untitled document in the reference and saving it.",
 ]
-observe = ["Image font: save, move H.png away and reopen the file; note how the missing image is drawn and whether a message appears."]
+observe = [
+  "Image font: save, move H.png away and reopen the file; note how the missing image is drawn and whether a message appears.",
+  "Image font: add an image from a folder beside the document's folder, save, and read the stored imagePath.",
+]
 
 [[behavior]]
 id = "image.alwaysShownForEmptyGlyphs"
@@ -2175,6 +2193,7 @@ milestone = "M11"
 summary = "A newly placed image sits at the layer origin, scaled so that one DTP point of the image maps to one font unit."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. The resolution is read from PNG `pHYs`, JPEG JFIF density (else its Exif resolution) and the TIFF resolution tags; an image without one is placed at 72 pixels per inch."
 guesses = [
   "The image's size in points comes from the resolution stored in the file (PNG pHYs, JPEG JFIF or Exif, TIFF resolution tags); a file without one counts as 72 pixels per inch, one pixel per unit. Settled by adding a 144 dpi PNG in the reference.",
 ]
@@ -2195,6 +2214,7 @@ milestone = "M11"
 summary = "A locked image ignores clicks and drags and is skipped by selection and transformation; only the context menu's Unlock Image reaches it."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+notes = "Documented, not yet observed. On the command side: every image command except `image.unlock`, and Add Image on that layer, refuses a locked image. The canvas gestures are M11.13's."
 
 # ───────────────────────────── Previewing & testing ─────────────────────────────
 
