@@ -12,6 +12,10 @@
 //! right-to-left kerning of any master, by name or through a group, is given by its left group
 //! when it is the first glyph of a pair and by its right group when it is the second; every other
 //! glyph the other way round.
+//!
+//! Joining the tables as fontc does has two effects on left-to-right kerning, which the writer
+//! reports with counts: a right-to-left pair replaces a left-to-right pair of the same sides, and
+//! a glyph with right-to-left kerning has its groups swapped in left-to-right pairs too.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -21,7 +25,7 @@ use read_fonts::collections::IntSet;
 use write_fonts::tables::gpos::builders::ValueRecordBuilder;
 use write_fonts::types::GlyphId16;
 
-use crate::{Budget, FeatureError, KernRequest, MAX_KERN_RULES};
+use crate::{Budget, FeatureError, KernRequest};
 
 /// A kerning group by the pair side it serves: `Side1` for the first glyph of a pair, `Side2`
 /// for the second.
@@ -200,6 +204,23 @@ fn glyphs_with_rtl_kerning(req: &KernRequest, budget: &mut Budget) -> Result<Has
     Ok(glyphs)
 }
 
+/// How many glyphs with right-to-left kerning have a group that a left-to-right pair of the
+/// master names (`ltr_groups`, as stored): those pairs see the glyph by its other group.
+fn flipped_ltr_glyphs(req: &KernRequest, rtl_glyphs: &HashSet<String>, ltr_groups: &HashSet<KernGroup>) -> usize {
+    if rtl_glyphs.is_empty() || ltr_groups.is_empty() {
+        return 0;
+    }
+    req.glyphs
+        .iter()
+        .filter(|g| rtl_glyphs.contains(g.name))
+        .filter(|g| {
+            let right = req.index.group(g.name, GroupSide::Right).map(|n| KernGroup::Side1(n.to_string()));
+            let left = req.index.group(g.name, GroupSide::Left).map(|n| KernGroup::Side2(n.to_string()));
+            [right, left].into_iter().flatten().any(|group| ltr_groups.contains(&group))
+        })
+        .count()
+}
+
 /// The kerning groups by pair side, with their members.
 fn derive_kern_groups(req: &KernRequest, rtl_glyphs: &HashSet<String>) -> BTreeMap<KernGroup, BTreeSet<String>> {
     let mut groups: BTreeMap<KernGroup, BTreeSet<String>> = BTreeMap::new();
@@ -261,17 +282,37 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
 
     // The master's left-to-right pairs, then its right-to-left pairs in left-to-right spelling.
     let mut kerns: BTreeMap<IrPair, f64> = BTreeMap::new();
+    let mut ltr_groups: HashSet<KernGroup> = HashSet::new();
+    let mut replaced = 0usize;
     for (direction, flip) in [(Direction::Ltr, false), (Direction::Rtl, true)] {
         let table = req.index.table(direction, req.master).map_err(|e| FeatureError::Kerning(e.to_string()))?;
         for (first, second, value) in table.pairs() {
             budget.spend(1)?;
+            if !flip {
+                ltr_groups.extend([first, second].into_iter().filter_map(parse_kern_group));
+            }
             let (first, second) = if flip { (flip_class_side(first), flip_class_side(second)) } else { (first.to_string(), second.to_string()) };
             let side1 = kern_participant(&first, first_side, &groups, &gids);
             let side2 = kern_participant(&second, second_side, &groups, &gids);
-            if let (Some(side1), Some(side2)) = (side1, side2) {
-                kerns.insert((side1, side2), value);
+            if let (Some(side1), Some(side2)) = (side1, side2)
+                && let Some(old) = kerns.insert((side1, side2), value)
+                && flip
+                && old != value
+            {
+                replaced = replaced.saturating_add(1);
             }
         }
+    }
+    if replaced > 0 {
+        warnings.push(format!(
+            "{replaced} right-to-left kerning pairs have the same sides as a left-to-right pair with another value: the right-to-left value is written for both"
+        ));
+    }
+    let flipped = flipped_ltr_glyphs(req, &rtl_glyphs, &ltr_groups);
+    if flipped > 0 {
+        warnings.push(format!(
+            "{flipped} glyphs with right-to-left kerning are also in left-to-right group kerning: their groups serve the other side of the pair there too"
+        ));
     }
     if kerns.is_empty() {
         return Ok(Vec::new());
@@ -306,8 +347,8 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
             }
             adjustments.insert(key.clone(), value);
         }
-        if adjustments.len() > MAX_KERN_RULES {
-            return Err(FeatureError::TooMany { what: "kerning rules", limit: MAX_KERN_RULES });
+        if adjustments.len() > req.limits.rules {
+            return Err(FeatureError::TooMany { what: "kerning rules", limit: req.limits.rules });
         }
     }
 
@@ -329,6 +370,12 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
     let mut out = Vec::with_capacity(adjustments.len());
     let mut clamped = 0usize;
     for ((first, second), value) in &adjustments {
+        // Each group side is copied: its members count as work.
+        let group_len = |s: &IrSide| match s {
+            IrSide::Glyph(_) => 0,
+            IrSide::Group(group) => sets.get(group).map_or(0, IntSet::len),
+        };
+        budget.spend_glyphs(group_len(first).saturating_add(group_len(second)))?;
         let (Some(side1), Some(side2)) = (side(first), side(second)) else { continue };
         let rounded = if value.is_finite() { (value + 0.5).floor() } else { 0.0 };
         let x_advance = rounded.clamp(f64::from(i16::MIN), f64::from(i16::MAX));

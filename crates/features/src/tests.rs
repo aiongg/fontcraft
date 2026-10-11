@@ -11,7 +11,7 @@ use write_fonts::FontBuilder;
 use write_fonts::types::Tag;
 
 use crate::evaluate::PairEvaluator;
-use crate::{KernGlyph, KernRequest, KernTags, MarkSpacing, kern_feature};
+use crate::{FeatureError, KernFeature, KernGlyph, KernLimits, KernRequest, KernTags, MarkSpacing, kern_feature};
 
 const LATN: Tag = Tag::new(b"latn");
 const CYRL: Tag = Tag::new(b"cyrl");
@@ -45,18 +45,30 @@ fn set(f: &mut Font, direction: Direction, first: &str, second: &str, value: f64
 /// The compiled kerning: the font file holding only the `GPOS`, the glyph names by id, and the
 /// writer's warnings. `marks` names the glyphs of the mark class.
 fn build(f: &Font, marks: &[(&str, MarkSpacing)]) -> (Vec<u8>, Vec<String>, Vec<String>) {
-    let index = KernIndex::new(f);
     let names: Vec<String> = f.glyphs.iter().map(|g| g.name.clone()).collect();
-    let unicodes: Vec<Vec<u32>> = f.glyphs.iter().map(|g| g.unicodes.clone()).collect();
-    let glyphs: Vec<KernGlyph> = names
-        .iter()
-        .zip(&unicodes)
-        .map(|(n, u)| KernGlyph { name: n, codepoints: u, mark: marks.iter().find(|(m, _)| m == n).map(|(_, s)| *s) })
-        .collect();
-    let out = kern_feature(&KernRequest { font: f, index: &index, master: "m01", glyphs: &glyphs, tags: KernTags::ALL }).unwrap();
+    let out = build_with(f, marks, KernLimits::default()).unwrap();
     let gpos = out.gpos.expect("a GPOS");
     let bytes = FontBuilder::new().add_table(&gpos).unwrap().build();
     (bytes, names, out.warnings)
+}
+
+/// The writer's output for `f` under `limits`.
+fn build_with(f: &Font, marks: &[(&str, MarkSpacing)], limits: KernLimits) -> Result<KernFeature, FeatureError> {
+    let index = KernIndex::new(f);
+    let glyphs: Vec<KernGlyph> = f
+        .glyphs
+        .iter()
+        .map(|g| KernGlyph { name: &g.name, codepoints: &g.unicodes, mark: marks.iter().find(|(m, _)| *m == g.name).map(|(_, s)| *s) })
+        .collect();
+    kern_feature(&KernRequest { font: f, index: &index, master: "m01", glyphs: &glyphs, tags: KernTags::ALL, limits })
+}
+
+/// The cap `result` was refused by, by its description.
+fn refused(result: Result<KernFeature, FeatureError>) -> &'static str {
+    match result {
+        Err(FeatureError::TooMany { what, .. }) => what,
+        other => panic!("refused by a cap, got {other:?}"),
+    }
 }
 
 fn gid(names: &[String], name: &str) -> u16 {
@@ -233,7 +245,9 @@ fn a_font_without_pairs_gets_no_table() {
     let f = font(&[("A", Some(0x41))]);
     let index = KernIndex::new(&f);
     let glyphs: Vec<KernGlyph> = f.glyphs.iter().map(|g| KernGlyph { name: &g.name, codepoints: &[], mark: None }).collect();
-    let out = kern_feature(&KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs, tags: KernTags::ALL }).unwrap();
+    let out =
+        kern_feature(&KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs, tags: KernTags::ALL, limits: KernLimits::default() })
+            .unwrap();
     assert!(out.gpos.is_none());
 }
 
@@ -259,8 +273,102 @@ fn the_feature_writer_setting_decides_which_kern_features_are_written() {
     set(&mut f, Direction::Ltr, "A", "V", -80.0);
     let index = KernIndex::new(&f);
     let glyphs: Vec<KernGlyph> = f.glyphs.iter().map(|g| KernGlyph { name: &g.name, codepoints: &g.unicodes, mark: None }).collect();
-    let request = |tags| KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs, tags };
+    let request = |tags| KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs, tags, limits: KernLimits::default() };
     assert!(kern_feature(&request(KernTags::NONE)).unwrap().gpos.is_none());
     assert!(kern_feature(&request(KernTags { kern: false, dist: true })).unwrap().gpos.is_none(), "Latin kerning goes to kern only");
     assert!(kern_feature(&request(KernTags::ALL)).unwrap().gpos.is_some());
+}
+
+#[test]
+fn each_cap_refuses_kerning_that_multiplies_past_it() {
+    let limits = KernLimits::default();
+    // 26 capitals in one group: one group–glyph rule becomes 26 glyph pairs, one glyph–group rule
+    // 26 rules.
+    let capitals: Vec<String> = (b'A'..=b'Z').map(|c| char::from(c).to_string()).collect();
+    let mut f = font(&[("period", Some(0x2E))]);
+    for c in &capitals {
+        group(&mut f, c, GroupSide::Right, "caps");
+        group(&mut f, c, GroupSide::Left, "caps");
+    }
+    set(&mut f, Direction::Ltr, "@MMK_L_caps", "period", -10.0);
+    assert!(build_with(&f, &[], KernLimits { glyph_pairs: 26, ..limits }).is_ok());
+    assert_eq!(refused(build_with(&f, &[], KernLimits { glyph_pairs: 25, ..limits })), "glyph pairs in the kerning lookups");
+    assert_eq!(refused(build_with(&f, &[], KernLimits { work: 20, ..limits })), "steps of work");
+
+    let mut g = f.clone();
+    set(&mut g, Direction::Ltr, "period", "@MMK_R_caps", -10.0);
+    assert_eq!(refused(build_with(&g, &[], KernLimits { rules: 20, ..limits })), "kerning rules");
+
+    // Two first classes and two second classes: (2 + 1) × (2 + 1) cells.
+    let mut f = font(&[]);
+    for (glyph, right, left) in [("A", "A", "A"), ("V", "V", "V"), ("o", "o", "o"), ("e", "e", "e")] {
+        group(&mut f, glyph, GroupSide::Right, right);
+        group(&mut f, glyph, GroupSide::Left, left);
+    }
+    set(&mut f, Direction::Ltr, "@MMK_L_A", "@MMK_R_V", -50.0);
+    set(&mut f, Direction::Ltr, "@MMK_L_o", "@MMK_R_e", -5.0);
+    assert!(build_with(&f, &[], KernLimits { class_cells: 9, ..limits }).is_ok());
+    assert_eq!(refused(build_with(&f, &[], KernLimits { class_cells: 8, ..limits })), "kerning class cells in one lookup");
+    assert_eq!(refused(build_with(&f, &[], KernLimits { classes_per_lookup: 1, ..limits })), "kerning classes on one side of a lookup");
+
+    // A Latin and a Cyrillic lookup of one class pair each: 4 cells each, 8 together.
+    let mut f = font(&[("A-cy", Some(0x410)), ("U-cy", Some(0x423))]);
+    for glyph in ["A", "V", "A-cy", "U-cy"] {
+        group(&mut f, glyph, GroupSide::Right, glyph);
+        group(&mut f, glyph, GroupSide::Left, glyph);
+    }
+    set(&mut f, Direction::Ltr, "@MMK_L_A", "@MMK_R_V", -50.0);
+    set(&mut f, Direction::Ltr, "@MMK_L_A-cy", "@MMK_R_U-cy", -50.0);
+    assert!(build_with(&f, &[], KernLimits { class_cells: 4, total_class_cells: 8, ..limits }).is_ok());
+    assert_eq!(refused(build_with(&f, &[], KernLimits { class_cells: 4, total_class_cells: 7, ..limits })), "kerning class cells");
+    assert_eq!(refused(build_with(&f, &[], KernLimits { script_sets: 1, ..limits })), "script combinations in the kerning");
+}
+
+#[test]
+fn a_feature_lists_each_lookup_once_when_private_use_glyphs_are_kerned() {
+    // Private-use glyphs have the Unknown script, whose OpenType tag is the default script's.
+    let mut f = font(&[("uniE000", Some(0xE000)), ("uniE001", Some(0xE001))]);
+    set(&mut f, Direction::Ltr, "uniE000", "uniE001", -40.0);
+    set(&mut f, Direction::Ltr, "A", "uniE000", -30.0);
+    let (bytes, names, _) = build(&f, &[]);
+    let font = FontRef::new(&bytes).unwrap();
+    let gpos = font.gpos().unwrap();
+    let features = gpos.feature_list().unwrap();
+    for record in features.feature_records() {
+        let indices: Vec<u16> = record.feature(features.offset_data()).unwrap().lookup_list_indices().iter().map(|i| i.get()).collect();
+        let mut once = indices.clone();
+        once.sort_unstable();
+        once.dedup();
+        assert_eq!(indices, once, "{}", record.feature_tag());
+    }
+    let eval = PairEvaluator::new(&bytes).unwrap();
+    assert_eq!(eval.value(DFLT, gid(&names, "uniE000"), gid(&names, "uniE001")), -40);
+    assert_eq!(eval.value(DFLT, gid(&names, "A"), gid(&names, "uniE000")), -30);
+}
+
+#[test]
+fn joining_right_to_left_kerning_into_left_to_right_is_reported() {
+    // The same group sides in both directions: the right-to-left value is written for both, and
+    // A and V, which take part in right-to-left kerning, have their groups swapped.
+    let mut f = font(&[("alef", Some(0x05D0))]);
+    for glyph in ["A", "V"] {
+        group(&mut f, glyph, GroupSide::Right, glyph);
+        group(&mut f, glyph, GroupSide::Left, glyph);
+    }
+    set(&mut f, Direction::Ltr, "@MMK_L_A", "@MMK_R_V", -50.0);
+    set(&mut f, Direction::Rtl, "@MMK_R_A", "@MMK_L_V", -20.0);
+    let (_, _, warnings) = build(&f, &[]);
+    assert!(warnings.iter().any(|w| w.starts_with("1 right-to-left kerning pairs")), "{warnings:?}");
+    assert!(warnings.iter().any(|w| w.starts_with("2 glyphs with right-to-left kerning")), "{warnings:?}");
+
+    // Separate groups: nothing to report.
+    let mut f = font(&[("alef", Some(0x05D0)), ("bet", Some(0x05D1))]);
+    group(&mut f, "A", GroupSide::Right, "A");
+    group(&mut f, "V", GroupSide::Left, "V");
+    group(&mut f, "alef", GroupSide::Left, "alef");
+    group(&mut f, "bet", GroupSide::Right, "bet");
+    set(&mut f, Direction::Ltr, "@MMK_L_A", "@MMK_R_V", -50.0);
+    set(&mut f, Direction::Rtl, "@MMK_R_alef", "@MMK_L_bet", -77.0);
+    let (_, _, warnings) = build(&f, &[]);
+    assert!(warnings.is_empty(), "{warnings:?}");
 }

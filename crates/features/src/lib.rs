@@ -27,8 +27,9 @@
 //! [`evaluate::PairEvaluator`] reads the pair kerning of a compiled font back, for tests and the
 //! oracle comparison.
 //!
-//! Every count the work grows with is capped: [`MAX_KERN_RULES`], [`MAX_CLASS_CELLS`],
-//! [`MAX_SCRIPT_SETS`], and the work as a whole by [`MAX_KERN_WORK`].
+//! Every count the work grows with is capped ([`KernLimits`]): the rules, the glyph pairs and
+//! class cells handed to the table builder, the classes of a lookup, the groups of scripts, and
+//! the work as a whole. Each cap is checked before the work it bounds.
 #![forbid(unsafe_code)]
 
 pub mod evaluate;
@@ -50,14 +51,49 @@ pub use writers::{FEATURE_WRITERS_KEY, KernTags, kern_tags};
 /// Most rules the kerning of one master may resolve to, glyph–group pairs expanded to their
 /// members.
 pub const MAX_KERN_RULES: usize = 2_000_000;
+/// Most glyph pairs the lookups of one master may hold, group–glyph rules expanded to their
+/// members. The table builder keeps a few hundred bytes for each.
+pub const MAX_GLYPH_PAIRS: usize = 4_000_000;
 /// Most cells of the class tables of one lookup: first classes times second classes, each plus
 /// one. A class-pair subtable holds a record for every cell.
 pub const MAX_CLASS_CELLS: usize = 4_000_000;
+/// Most class-table cells of all the lookups of one master together.
+pub const MAX_TOTAL_CLASS_CELLS: usize = 8_000_000;
+/// Most first classes, and most second classes, of one lookup: a class definition numbers its
+/// classes with 16 bits, class 0 included.
+pub const MAX_CLASSES_PER_LOOKUP: usize = 65_534;
 /// Most groups of scripts the rules may fall into before they are merged.
 pub const MAX_SCRIPT_SETS: usize = 1_000;
-/// Most steps (pairs read, group members visited, rules added) the writer may take for one
-/// master.
+/// Most steps (pairs read, group members visited or copied, rules added, class cells) the
+/// writer may take for one master.
 pub const MAX_KERN_WORK: usize = 100_000_000;
+
+/// The caps [`kern_feature`] works under. The default is the `MAX_…` constants; smaller caps
+/// are for tests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KernLimits {
+    pub rules: usize,
+    pub glyph_pairs: usize,
+    pub class_cells: usize,
+    pub total_class_cells: usize,
+    pub classes_per_lookup: usize,
+    pub script_sets: usize,
+    pub work: usize,
+}
+
+impl Default for KernLimits {
+    fn default() -> Self {
+        Self {
+            rules: MAX_KERN_RULES,
+            glyph_pairs: MAX_GLYPH_PAIRS,
+            class_cells: MAX_CLASS_CELLS,
+            total_class_cells: MAX_TOTAL_CLASS_CELLS,
+            classes_per_lookup: MAX_CLASSES_PER_LOOKUP,
+            script_sets: MAX_SCRIPT_SETS,
+            work: MAX_KERN_WORK,
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum FeatureError {
@@ -94,6 +130,7 @@ pub struct KernRequest<'a> {
     pub glyphs: &'a [KernGlyph<'a>],
     /// The features the source's feature-writer setting asks for ([`kern_tags`]).
     pub tags: KernTags,
+    pub limits: KernLimits,
 }
 
 /// The generated kerning.
@@ -107,25 +144,31 @@ pub struct KernFeature {
     pub warnings: Vec<String>,
 }
 
-/// What the writer may still do ([`MAX_KERN_WORK`]).
+/// What the writer may still do ([`KernLimits::work`]).
 pub(crate) struct Budget {
     left: usize,
+    limit: usize,
 }
 
 impl Budget {
     pub(crate) fn new(limit: usize) -> Self {
-        Self { left: limit }
+        Self { left: limit, limit }
     }
 
     pub(crate) fn spend(&mut self, n: usize) -> Result<(), FeatureError> {
-        self.left = self.left.checked_sub(n).ok_or(FeatureError::TooMany { what: "steps of work", limit: MAX_KERN_WORK })?;
+        self.left = self.left.checked_sub(n).ok_or(FeatureError::TooMany { what: "steps of work", limit: self.limit })?;
         Ok(())
+    }
+
+    /// Spends one step for each glyph of a side.
+    pub(crate) fn spend_glyphs(&mut self, n: u64) -> Result<(), FeatureError> {
+        self.spend(usize::try_from(n).unwrap_or(usize::MAX))
     }
 }
 
 /// The `GPOS` table of `req.master`'s kerning.
 pub fn kern_feature(req: &KernRequest) -> Result<KernFeature, FeatureError> {
-    let mut budget = Budget::new(MAX_KERN_WORK);
+    let mut budget = Budget::new(req.limits.work);
     let mut warnings = Vec::new();
     if !req.tags.any() {
         return Ok(KernFeature { gpos: None, lookups: 0, warnings });
@@ -150,7 +193,7 @@ pub fn kern_feature(req: &KernRequest) -> Result<KernFeature, FeatureError> {
     }
 
     let mut skipped = kern::Skipped::default();
-    let kerns = kern::finalize_kerning(&pairs, &char_map, marks, req.tags, &mut budget, &mut skipped)?;
+    let kerns = kern::finalize_kerning(&pairs, &char_map, marks, req.tags, &req.limits, &mut budget, &mut skipped)?;
     if skipped.ambiguous_direction > 0 {
         warnings.push(format!(
             "{} kerning rules were left out: their glyphs mix left-to-right and right-to-left characters",

@@ -25,7 +25,7 @@ use crate::properties::{
     guess_font_scripts, script_to_ot_tags, scripts_by_glyph,
 };
 use crate::resolve::{KernPair, KernSide};
-use crate::{Budget, FeatureError, KernTags, MAX_CLASS_CELLS, MAX_SCRIPT_SETS, MarkSpacing};
+use crate::{Budget, FeatureError, KernLimits, KernTags, MarkSpacing};
 
 pub(crate) const KERN: Tag = Tag::new(b"kern");
 pub(crate) const DIST: Tag = Tag::new(b"dist");
@@ -73,6 +73,7 @@ pub(crate) fn finalize_kerning(
     char_map: &HashMap<u32, GlyphId16>,
     marks: HashMap<GlyphId16, MarkSpacing>,
     tags: KernTags,
+    limits: &KernLimits,
     budget: &mut Budget,
     skipped: &mut Skipped,
 ) -> Result<Kerns, FeatureError> {
@@ -80,16 +81,27 @@ pub(crate) fn finalize_kerning(
         return Ok(Kerns::default());
     }
     let known_scripts = guess_font_scripts(char_map);
-    let split_ctx = KernSplitContext::new(char_map, &known_scripts, marks);
+    let split_ctx = KernSplitContext::new(char_map, &known_scripts, marks, *limits);
     let lookups = split_ctx.make_lookups(pairs, budget, skipped)?;
     let (lookups_by_script, lookups) = split_lookups_by_script(lookups);
-    let features: BTreeMap<FeatureKey, Vec<usize>> = assign_lookups_to_scripts(lookups_by_script.clone(), KERN)
+    let mut features: BTreeMap<FeatureKey, Vec<usize>> = assign_lookups_to_scripts(lookups_by_script.clone(), KERN)
         .into_iter()
         .chain(assign_lookups_to_scripts(lookups_by_script, DIST))
         .filter(|(key, _)| if key.feature == KERN { tags.kern } else { tags.dist })
         .collect();
+    dedupe_lookups(&mut features);
     let (lookups, features) = prune_unreferenced_lookups(lookups, features);
     Ok(Kerns { lookups, features })
+}
+
+/// Each feature's lookups once and in order, as fea-rs leaves them (`dedupe_lookups` in
+/// `fea-rs/src/compile/features.rs`). A script whose OpenType tag is the default script's
+/// (Unknown, for private-use glyphs) adds its lookups to those the default script already has.
+fn dedupe_lookups(features: &mut BTreeMap<FeatureKey, Vec<usize>>) {
+    for lookups in features.values_mut() {
+        lookups.sort_unstable();
+        lookups.dedup();
+    }
 }
 
 /// Drops the lookups no feature refers to, renumbering those that remain.
@@ -199,23 +211,44 @@ struct KernSplitContext {
     bidi_glyphs: BTreeMap<Bidi, IntSet<GlyphId16>>,
     dflt_scripts: HashSet<ScriptCode>,
     common_scripts: HashSet<ScriptCode>,
+    limits: KernLimits,
 }
 
-/// What one lookup holds, for the class-table size limit.
+/// What one lookup holds, for the class-table limits.
 #[derive(Default)]
 struct LookupSize {
     first_classes: HashSet<IntSet<GlyphId16>>,
     second_classes: HashSet<IntSet<GlyphId16>>,
 }
 
+impl LookupSize {
+    fn cells(&self) -> usize {
+        self.first_classes.len().saturating_add(1).saturating_mul(self.second_classes.len().saturating_add(1))
+    }
+}
+
+/// What the lookups made so far hand the table builder.
+#[derive(Default)]
+struct Totals {
+    glyph_pairs: usize,
+    /// The class-table cells of the lookups already closed.
+    class_cells: usize,
+}
+
 impl KernSplitContext {
-    fn new(char_map: &HashMap<u32, GlyphId16>, known_scripts: &HashSet<ScriptCode>, mark_glyphs: HashMap<GlyphId16, MarkSpacing>) -> Self {
+    fn new(
+        char_map: &HashMap<u32, GlyphId16>,
+        known_scripts: &HashSet<ScriptCode>,
+        mark_glyphs: HashMap<GlyphId16, MarkSpacing>,
+        limits: KernLimits,
+    ) -> Self {
         Self {
             mark_glyphs,
             glyph_scripts: scripts_by_glyph(char_map, known_scripts),
             bidi_glyphs: glyphs_by_bidi_class(char_map),
             dflt_scripts: HashSet::from([COMMON_SCRIPT, INHERITED_SCRIPT]),
             common_scripts: HashSet::from([COMMON_SCRIPT]),
+            limits,
         }
     }
 
@@ -223,11 +256,12 @@ impl KernSplitContext {
     fn make_lookups(&self, pairs: &[KernPair], budget: &mut Budget, skipped: &mut Skipped) -> Result<LookupsByScripts, FeatureError> {
         let (base_pairs, mark_pairs) = self.split_base_and_mark_pairs(pairs, budget)?;
         let mut result = BTreeMap::new();
+        let mut totals = Totals::default();
         if !base_pairs.is_empty() {
-            result = self.make_split_script_kern_lookups(&base_pairs, false, budget, skipped)?;
+            result = self.make_split_script_kern_lookups(&base_pairs, false, &mut totals, budget, skipped)?;
         }
         if !mark_pairs.is_empty() {
-            for (scripts, lookups) in self.make_split_script_kern_lookups(&mark_pairs, true, budget, skipped)? {
+            for (scripts, lookups) in self.make_split_script_kern_lookups(&mark_pairs, true, &mut totals, budget, skipped)? {
                 result.entry(scripts).or_default().extend(lookups);
             }
         }
@@ -239,6 +273,7 @@ impl KernSplitContext {
         &self,
         pairs: &[Cow<KernPair>],
         are_marks: bool,
+        totals: &mut Totals,
         budget: &mut Budget,
         skipped: &mut Skipped,
     ) -> Result<LookupsByScripts, FeatureError> {
@@ -264,12 +299,11 @@ impl KernSplitContext {
                 if script_is_rtl && !bidi_buf.contains(&Bidi::LeftToRight) {
                     pair.make_rtl_compatible();
                 }
-                add_to(pair, &mut builder, &mut size, budget)?;
+                self.add_to(pair, &mut builder, &mut size, totals, budget)?;
             }
-            let cells = size.first_classes.len().saturating_add(1).saturating_mul(size.second_classes.len().saturating_add(1));
-            if cells > MAX_CLASS_CELLS {
-                return Err(FeatureError::TooMany { what: "kerning class cells in one lookup", limit: MAX_CLASS_CELLS });
-            }
+            let cells = size.cells();
+            budget.spend(cells)?;
+            totals.class_cells = totals.class_cells.saturating_add(cells);
             let lookup = self.make_lookup(builder, !are_marks);
             lookups_by_script.insert(scripts, vec![lookup]);
         }
@@ -300,8 +334,8 @@ impl KernSplitContext {
             for (scripts, pair) in self.partition_by_script(pair, budget, skipped)? {
                 kerning_per_script.entry(scripts).or_default().push(pair);
             }
-            if kerning_per_script.len() > MAX_SCRIPT_SETS {
-                return Err(FeatureError::TooMany { what: "script combinations in the kerning", limit: MAX_SCRIPT_SETS });
+            if kerning_per_script.len() > self.limits.script_sets {
+                return Err(FeatureError::TooMany { what: "script combinations in the kerning", limit: self.limits.script_sets });
             }
         }
         Ok(merge_scripts(kerning_per_script))
@@ -314,7 +348,7 @@ impl KernSplitContext {
         budget: &mut Budget,
         skipped: &mut Skipped,
     ) -> Result<Vec<(BTreeSet<ScriptCode>, KernPair)>, FeatureError> {
-        budget.spend(usize::try_from(pair.side1.len().saturating_add(pair.side2.len())).unwrap_or(usize::MAX))?;
+        budget.spend_glyphs(pair.side1.len().saturating_add(pair.side2.len()))?;
         let mut resolved_scripts: HashMap<GlyphId16, &HashSet<ScriptCode>> = HashMap::new();
         let mut directions = [BTreeMap::<ScriptDirection, IntSet<GlyphId16>>::new(), BTreeMap::new()];
         for (side, dirs) in [&pair.side1, &pair.side2].into_iter().zip(directions.iter_mut()) {
@@ -395,7 +429,7 @@ impl KernSplitContext {
                 }
                 (KernSide::Glyph(_), KernSide::Glyph(_)) => mark_pairs.push(Cow::Borrowed(pair)),
                 (side1, side2) => {
-                    budget.spend(usize::try_from(side1.len().saturating_add(side2.len())).unwrap_or(usize::MAX))?;
+                    budget.spend_glyphs(side1.len().saturating_add(side2.len()))?;
                     match (classify(side1, &self.mark_glyphs), classify(side2, &self.mark_glyphs)) {
                         (Content::Empty, _) | (_, Content::Empty) => continue,
                         (Content::BasesOnly, Content::BasesOnly) => base_pairs.push(Cow::Borrowed(pair)),
@@ -424,37 +458,68 @@ impl KernSplitContext {
         }
         Ok((base_pairs, mark_pairs))
     }
-}
 
-/// Adds a rule to a lookup's builder; a rule between a glyph and a group becomes one glyph pair
-/// per member of the group.
-fn add_to(pair: KernPair, builder: &mut PairPosBuilder, size: &mut LookupSize, budget: &mut Budget) -> Result<(), FeatureError> {
-    let KernPair { side1, side2, value } = pair;
-    match (side1, side2) {
-        (KernSide::Glyph(side1), KernSide::Glyph(side2)) => {
-            budget.spend(1)?;
-            builder.insert_pair(side1, value, side2, Default::default());
-        }
-        (KernSide::Group(side1), KernSide::Group(side2)) => {
-            budget.spend(1)?;
-            size.first_classes.insert(side1.clone());
-            size.second_classes.insert(side2.clone());
-            builder.insert_classes(side1, value, side2, Default::default());
-        }
-        (KernSide::Glyph(side1), KernSide::Group(side2)) => {
-            budget.spend(usize::try_from(side2.len()).unwrap_or(usize::MAX))?;
-            for side2 in side2.iter() {
-                builder.insert_pair(side1, value.clone(), side2, Default::default());
+    /// Adds a rule to a lookup's builder; a rule between a glyph and a group becomes one glyph
+    /// pair per member of the group. The caps are checked before the builder is given anything.
+    fn add_to(
+        &self,
+        pair: KernPair,
+        builder: &mut PairPosBuilder,
+        size: &mut LookupSize,
+        totals: &mut Totals,
+        budget: &mut Budget,
+    ) -> Result<(), FeatureError> {
+        let limits = &self.limits;
+        let mut add_glyph_pairs = |n: u64| -> Result<(), FeatureError> {
+            budget.spend_glyphs(n)?;
+            let n = usize::try_from(n).unwrap_or(usize::MAX);
+            totals.glyph_pairs = totals.glyph_pairs.saturating_add(n);
+            if totals.glyph_pairs > limits.glyph_pairs {
+                return Err(FeatureError::TooMany { what: "glyph pairs in the kerning lookups", limit: limits.glyph_pairs });
+            }
+            Ok(())
+        };
+        let KernPair { side1, side2, value } = pair;
+        match (side1, side2) {
+            (KernSide::Glyph(side1), KernSide::Glyph(side2)) => {
+                add_glyph_pairs(1)?;
+                builder.insert_pair(side1, value, side2, Default::default());
+            }
+            (KernSide::Glyph(side1), KernSide::Group(side2)) => {
+                add_glyph_pairs(side2.len())?;
+                for side2 in side2.iter() {
+                    builder.insert_pair(side1, value.clone(), side2, Default::default());
+                }
+            }
+            (KernSide::Group(side1), KernSide::Glyph(side2)) => {
+                add_glyph_pairs(side1.len())?;
+                for side1 in side1.iter() {
+                    builder.insert_pair(side1, value.clone(), side2, Default::default());
+                }
+            }
+            (KernSide::Group(side1), KernSide::Group(side2)) => {
+                budget.spend_glyphs(side1.len().saturating_add(side2.len()).saturating_add(1))?;
+                if !size.first_classes.contains(&side1) {
+                    size.first_classes.insert(side1.clone());
+                }
+                if !size.second_classes.contains(&side2) {
+                    size.second_classes.insert(side2.clone());
+                }
+                if size.first_classes.len().max(size.second_classes.len()) > limits.classes_per_lookup {
+                    return Err(FeatureError::TooMany { what: "kerning classes on one side of a lookup", limit: limits.classes_per_lookup });
+                }
+                let cells = size.cells();
+                if cells > limits.class_cells {
+                    return Err(FeatureError::TooMany { what: "kerning class cells in one lookup", limit: limits.class_cells });
+                }
+                if totals.class_cells.saturating_add(cells) > limits.total_class_cells {
+                    return Err(FeatureError::TooMany { what: "kerning class cells", limit: limits.total_class_cells });
+                }
+                builder.insert_classes(side1, value, side2, Default::default());
             }
         }
-        (KernSide::Group(side1), KernSide::Glyph(side2)) => {
-            budget.spend(usize::try_from(side1.len()).unwrap_or(usize::MAX))?;
-            for side1 in side1.iter() {
-                builder.insert_pair(side1, value.clone(), side2, Default::default());
-            }
-        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Merges the sets of scripts that share a script, with their rules; each list of rules sorted.
