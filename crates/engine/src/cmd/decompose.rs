@@ -237,6 +237,29 @@ fn decompose_shapes(font: &Font, layer: &Layer, which: Option<&BTreeSet<usize>>,
     Ok(Decomposed { shapes, map, added, components, warnings: ex.warnings })
 }
 
+/// `shapes` (one side of `layer`) with every component of a glyph `doomed` accepts decomposed,
+/// including those that decomposing brings in from nested glyphs; other components are kept,
+/// with the transforms combined (glyph.removeGlyph with `components: "decompose"`).
+pub(crate) fn decompose_where(
+    font: &Font,
+    layer: &Layer,
+    shapes: &[Shape],
+    doomed: impl Fn(&str) -> bool,
+) -> std::result::Result<Vec<Shape>, String> {
+    let mut side = layer.clone();
+    side.shapes = shapes.to_vec();
+    // Each pass descends one level of nesting.
+    for _ in 0..=MAX_COMPONENT_DEPTH {
+        let which: BTreeSet<usize> =
+            side.shapes.iter().enumerate().filter(|(_, s)| matches!(s, Shape::Component(c) if doomed(&c.glyph))).map(|(i, _)| i).collect();
+        if which.is_empty() {
+            return Ok(side.shapes);
+        }
+        side.shapes = decompose_shapes(font, &side, Some(&which), false)?.shapes;
+    }
+    Err(format!("components nest more than {MAX_COMPONENT_DEPTH} deep, or a glyph uses itself"))
+}
+
 /// `layer` with the decomposed shapes and its hints renumbered.
 fn with_shapes(layer: &Layer, d: Decomposed) -> Layer {
     let mut out = layer.clone();

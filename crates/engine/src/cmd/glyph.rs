@@ -2,8 +2,7 @@
 
 use std::collections::HashSet;
 
-use fontcraft_geom::{Affine, Point};
-use fontcraft_model::{Font, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, MetricsKeys, Shape, Transform};
+use fontcraft_model::{Font, Layer, MAX_OUTLINE_ELEMENTS, MetricsKeys, Shape};
 use serde_json::{Value, json};
 
 use super::*;
@@ -176,60 +175,6 @@ fn references(font: &Font, doomed: &HashSet<&str>) -> (Vec<ComponentUse>, Vec<Ke
     (uses, keys)
 }
 
-/// Adds to `out` the shapes of `base`'s layer that matches `layer` (the same id, else the
-/// master layer), moved by `affine` (a path under a mirroring `affine` is reversed). Components
-/// of other removed glyphs are decomposed too; components of glyphs that stay are kept, with the
-/// transforms combined.
-#[allow(clippy::too_many_arguments)]
-fn expand(
-    font: &Font,
-    doomed: &HashSet<&str>,
-    base: &str,
-    layer: &Layer,
-    affine: Affine,
-    depth: usize,
-    budget: &mut usize,
-    out: &mut Vec<Shape>,
-) -> Result<()> {
-    if depth > MAX_COMPONENT_DEPTH {
-        return Err(fontcraft_model::ModelError::ComponentCycle(base.to_string()).into());
-    }
-    let Some(g) = font.glyph(base) else { return Ok(()) };
-    let Some(from) = g.layers.iter().find(|l| l.id == layer.id).or_else(|| g.layer(&layer.master)) else { return Ok(()) };
-    for shape in &from.shapes {
-        match shape {
-            Shape::Path(path) => {
-                *budget = budget.checked_sub(path.nodes.len()).ok_or_else(|| crate::EngineError::BadParams {
-                    command: "glyph.removeGlyph".into(),
-                    message: format!("decomposing would add more than {MAX_OUTLINE_ELEMENTS} nodes"),
-                })?;
-                let mut path = path.clone();
-                for n in &mut path.nodes {
-                    let at = affine * Point::new(n.x, n.y);
-                    n.x = at.x;
-                    n.y = at.y;
-                }
-                // A mirroring transform would turn the contour the other way; export
-                // decomposition reverses it too, so the outline keeps its direction.
-                if affine.determinant() < 0.0 {
-                    path.reverse();
-                }
-                out.push(Shape::Path(path));
-            }
-            Shape::Component(c) if doomed.contains(c.glyph.as_str()) => {
-                expand(font, doomed, &c.glyph, layer, affine * c.affine(), depth + 1, budget, out)?;
-            }
-            Shape::Component(c) => {
-                let mut c = c.clone();
-                c.transform = Transform::Matrix((affine * c.affine()).as_coeffs());
-                out.push(Shape::Component(c));
-            }
-            Shape::Image(_) | Shape::Raw(_) => {}
-        }
-    }
-    Ok(())
-}
-
 /// `shapes` without the components of `doomed` glyphs, which are decomposed into their shapes
 /// with `decompose`; `None` when there are none.
 fn without_doomed(
@@ -243,17 +188,15 @@ fn without_doomed(
     if !shapes.iter().any(|s| matches!(s, Shape::Component(c) if doomed.contains(c.glyph.as_str()))) {
         return Ok(None);
     }
-    let mut out = Vec::with_capacity(shapes.len());
-    for shape in shapes {
-        match shape {
-            Shape::Component(c) if doomed.contains(c.glyph.as_str()) => {
-                if decompose {
-                    expand(font, doomed, &c.glyph, layer, c.affine(), 1, budget, &mut out)?;
-                }
-            }
-            other => out.push(other.clone()),
-        }
+    if !decompose {
+        return Ok(Some(shapes.iter().filter(|s| !matches!(s, Shape::Component(c) if doomed.contains(c.glyph.as_str()))).cloned().collect()));
     }
+    let refuse = |message: String| crate::EngineError::BadParams { command: "glyph.removeGlyph".into(), message };
+    let out = super::decompose::decompose_where(font, layer, shapes, |g| doomed.contains(g)).map_err(refuse)?;
+    // One budget for every layer the removal rewrites.
+    let nodes = |shapes: &[Shape]| shapes.iter().map(|s| if let Shape::Path(p) = s { p.nodes.len() } else { 0 }).sum::<usize>();
+    let added = nodes(&out).saturating_sub(nodes(shapes));
+    *budget = budget.checked_sub(added).ok_or_else(|| refuse(format!("decomposing would add more than {MAX_OUTLINE_ELEMENTS} nodes")))?;
     Ok(Some(out))
 }
 

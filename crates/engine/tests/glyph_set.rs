@@ -394,3 +394,29 @@ fn paste_special_modes_and_parts() {
     assert!(s.execute("edit.pasteSpecial", &json!({"mode": "sameName", "json": "{}"})).is_err());
     assert!(Arc::ptr_eq(&s.doc().unwrap().font, &before));
 }
+
+#[test]
+fn removing_nested_glyphs_decomposes_them_with_their_corner_components() {
+    use fontcraft_engine::model::{Node, NodeKind, Path};
+    let mut s = Fixture::Drawn.session();
+    s.edit("corner and nesting", |f| {
+        f.add_glyph("_corner.x", Vec::new(), 0.0)?;
+        let corner = [(0.0, 50.0), (-50.0, 50.0), (-50.0, 0.0), (25.0, 0.0)];
+        f.glyph_mut("_corner.x")?.layers[0].shapes =
+            vec![Shape::Path(Path::new(false, corner.iter().map(|&(x, y)| Node::new(x, y, NodeKind::Line)).collect()))];
+        f.glyph_mut("A")?.layers[0].shapes = vec![Shape::Path(Path::rect(100.0, 0.0, 400.0, 500.0))];
+        f.glyph_mut("B")?.layers[0].shapes = vec![Shape::Component(Component::new("A", 10.0, 0.0))];
+        f.glyph_mut("E")?.layers[0].shapes = vec![Shape::Component(Component::new("B", 0.0, 0.0)), Shape::Component(Component::new("O", 0.0, 0.0))];
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "cornerComponent.add", json!({"glyph": "A", "points": [[0, 0]], "corner": "_corner.x"}));
+    run(&mut s, "glyph.removeGlyph", json!({"glyphs": ["A", "B"], "components": "decompose", "metricsKeys": "keep"}));
+    let shapes = &glyph(&s, "E").layers[0].shapes;
+    // B and, inside it, A are drawn as paths; O stays a component.
+    assert!(matches!(shapes.last(), Some(Shape::Component(c)) if c.glyph == "O"), "{shapes:?}");
+    let paths: Vec<&Path> = shapes.iter().filter_map(|sh| if let Shape::Path(p) = sh { Some(p) } else { None }).collect();
+    assert_eq!(paths.len(), 1);
+    assert!(paths[0].nodes.len() > 4, "the corner component is part of the outline: {:?}", paths[0].nodes);
+    assert!(paths[0].nodes.iter().all(|n| n.x >= 50.0), "moved with B's component");
+}
