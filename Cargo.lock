@@ -934,6 +934,7 @@ dependencies = [
  "fontcraft-io-ufo",
  "fontcraft-model",
  "fontcraft-pathops",
+ "fontcraft-spacing",
  "fontcraft-testkit",
  "log",
  "serde",

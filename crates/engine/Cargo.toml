@@ -14,6 +14,7 @@ workspace = true
 fontcraft-audit.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-pathops.workspace = true
+fontcraft-spacing.workspace = true
 fontcraft-model.workspace = true
 fontcraft-format.workspace = true
 fontcraft-compile.workspace = true

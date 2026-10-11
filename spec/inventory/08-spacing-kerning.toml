@@ -74,15 +74,20 @@ label = "Set Left Sidebearing"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, value: number|string}'
+params = '{glyphs: [names], layer?: id, value: number|string}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Sets the left sidebearing of a glyph layer to a number, or stores a metrics key (a string such as 'l', '=h+8' or '==u') for it. A number changes the space left of the outline and, we assume, the advance width with it (as the spacing shortcuts do); a key is stored and evaluated. This is what typing into the Info box field does."
 ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
 status = "handbook"
+notes = "Documented, not yet observed."
 guesses = [
-  "A numeric left sidebearing moves the outline, components and anchors sideways and changes the width by the same amount, so the right sidebearing stays.",
+  "A numeric left sidebearing moves the outline, components, anchors, guides, annotations, placed image and background sideways and changes the width by the same amount, so the right sidebearing stays.",
   "A key is evaluated and applied as soon as it is stored.",
+  "A glyph-level key is applied to the edited layer only; the glyph's other layers keep their numbers, out of sync, until Update Metrics runs.",
+  "A key that cannot be evaluated (a missing glyph, division by zero, an empty referenced glyph, a result out of range) is refused and nothing is stored.",
+  "A key typed with one `=` into a field that shows a layer key removes that layer key, so the new glyph-level key applies on that layer.",
+  "The sidebearing setters skip a layer without an outline and report it, since such a layer has no sidebearings.",
 ]
 
 [[command]]
@@ -91,12 +96,13 @@ label = "Set Right Sidebearing"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, value: number|string}'
+params = '{glyphs: [names], layer?: id, value: number|string}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Sets the right sidebearing of a glyph layer to a number (changing the width) or stores a metrics key for it. This is what typing into the Info box field does."
 ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
 status = "handbook"
+notes = "Documented, not yet observed."
 guesses = [
   "A key is evaluated and applied as soon as it is stored.",
 ]
@@ -107,12 +113,13 @@ label = "Set Width"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, value: number|string}'
+params = '{glyphs: [names], layer?: id, value: number|string}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Sets the advance width of a glyph layer to a number or stores a metrics key for it; the handbook names the width as the third metric a key can link. A numeric width change moves the right sidebearing; the left one stays."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
+notes = "Documented, not yet observed."
 guesses = [
   "A numeric width change is absorbed by the right sidebearing; the handbook does not say how it is split.",
   "A width key may be a glyph name, a constant or a calculation; `|` and `@` are refused in the width field.",
@@ -124,7 +131,7 @@ label = "Set Top Sidebearing"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, value: number|string}'
+params = '{glyphs: [names], layer?: id, value: number|string}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Sets the top sidebearing (the T field of the vertical Info box). The chapter only says the field is shown for top-to-bottom text; editing it and its effect on the vertical origin and height are assumed by analogy with the horizontal fields."
@@ -141,7 +148,7 @@ label = "Set Bottom Sidebearing"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, value: number|string}'
+params = '{glyphs: [names], layer?: id, value: number|string}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Sets the bottom sidebearing (the B field of the vertical Info box). As with the top sidebearing, the chapter documents the display only; the editing behaviour is assumed."
@@ -173,12 +180,14 @@ label = "Increase Left Sidebearing"
 menu = []
 shortcut = "Ctrl+Left"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, amount?: number}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id, amount?: number}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: adds 1 unit (or amount) of space on the left side of the current glyph, widening it."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.increaseLeftSidebearingBy10"
@@ -186,12 +195,14 @@ label = "Increase Left Sidebearing by 10"
 menu = []
 shortcut = "Ctrl+Shift+Left"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: adds 10 units of space on the left side of the current glyph."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.decreaseLeftSidebearing"
@@ -199,12 +210,14 @@ label = "Decrease Left Sidebearing"
 menu = []
 shortcut = "Ctrl+Right"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, amount?: number}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id, amount?: number}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: removes 1 unit (or amount) of space from the left side of the current glyph, narrowing it."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.decreaseLeftSidebearingBy10"
@@ -212,12 +225,14 @@ label = "Decrease Left Sidebearing by 10"
 menu = []
 shortcut = "Ctrl+Shift+Right"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: removes 10 units of space from the left side of the current glyph."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.increaseRightSidebearing"
@@ -225,12 +240,14 @@ label = "Increase Right Sidebearing"
 menu = []
 shortcut = "Cmd+Right"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, amount?: number}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id, amount?: number}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: adds 1 unit (or amount) of space on the right side of the current glyph, widening it."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.increaseRightSidebearingBy10"
@@ -238,12 +255,14 @@ label = "Increase Right Sidebearing by 10"
 menu = []
 shortcut = "Cmd+Shift+Right"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: adds 10 units of space on the right side of the current glyph."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.decreaseRightSidebearing"
@@ -251,12 +270,14 @@ label = "Decrease Right Sidebearing"
 menu = []
 shortcut = "Cmd+Left"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, amount?: number}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id, amount?: number}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: removes 1 unit (or amount) of space from the right side of the current glyph, narrowing it."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.decreaseRightSidebearingBy10"
@@ -264,12 +285,14 @@ label = "Decrease Right Sidebearing by 10"
 menu = []
 shortcut = "Cmd+Shift+Left"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: removes 10 units of space from the right side of the current glyph."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.shiftOutlineLeft"
@@ -277,12 +300,14 @@ label = "Shift Outline Left"
 menu = []
 shortcut = "Cmd+Ctrl+Left"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, amount?: number}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id, amount?: number}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: moves the glyph's content 1 unit (or amount) to the left inside an unchanged advance width, so the left sidebearing shrinks and the right one grows by the same amount."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.shiftOutlineLeftBy10"
@@ -290,12 +315,14 @@ label = "Shift Outline Left by 10"
 menu = []
 shortcut = "Cmd+Ctrl+Shift+Left"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: moves the glyph's content 10 units to the left inside an unchanged advance width."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.shiftOutlineRight"
@@ -303,12 +330,14 @@ label = "Shift Outline Right"
 menu = []
 shortcut = "Cmd+Ctrl+Right"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id, amount?: number}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id, amount?: number}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: moves the glyph's content 1 unit (or amount) to the right inside an unchanged advance width, so the left sidebearing grows and the right one shrinks by the same amount."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "spacing.shiftOutlineRightBy10"
@@ -316,12 +345,14 @@ label = "Shift Outline Right by 10"
 menu = []
 shortcut = "Cmd+Ctrl+Shift+Right"
 kind = "engine"
-params = '{glyphs?: [names], layer?: id}'
+when = "textMode"
+params = '{glyphs: [names], layer?: id}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Text tool: moves the glyph's content 10 units to the right inside an unchanged advance width."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "spacing.shortcutsNeedTextTool"
@@ -352,6 +383,7 @@ milestone = "M5"
 summary = "Shifting the outline changes both sidebearings by equal and opposite amounts and never changes the advance width, which is why it is the spacing tool for monospaced designs."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "spacing.ctrlArrowSystemConflict"
