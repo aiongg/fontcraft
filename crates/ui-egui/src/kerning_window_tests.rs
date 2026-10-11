@@ -431,3 +431,35 @@ fn kerning_window_on_inter_scrolls_with_only_visible_rows_laid_out() {
     frames.sort();
     println!("{count} pairs; listed in {listed:?}; median frame while stepping {:?}", frames.get(10).unwrap());
 }
+
+#[test]
+fn edit_menu_copy_and_paste_reach_the_list_that_had_the_keyboard() {
+    let mut app = kern_app();
+    add_master(&mut app);
+    app.run("view.newTab", &json!({"glyphs": ["H"]})).unwrap();
+    app.run("window.kerning", &json!({})).unwrap();
+    let w = Window::new();
+    w.frame(&mut app, Vec::new());
+    let at = row_rect(&app, "A", "V").center();
+    w.click(&mut app, at, Modifiers::NONE);
+    // A press on the menu bar takes the focus; Copy and Paste stay the list's.
+    let bar = app.menu_bar_rect.right_center() - egui::vec2(8.0, 0.0);
+    w.click(&mut app, bar, Modifiers::NONE);
+    let menu = |app: &mut FontcraftApp, command: &str| {
+        let r = crate::control::handle(app, &json!({"id": 1, "method": "ui.menu.invoke", "params": {"command": command}}));
+        assert_eq!(r["ok"], true, "{r}");
+        r["result"].clone()
+    };
+    assert_eq!(menu(&mut app, "edit.copy")["kerningPairs"], true);
+    let text = app.clipboard_out.take().expect("the pairs are on the clipboard");
+    assert!(text.contains("A\tV\t-100"), "{text}");
+    app.run("view.selectMaster", &json!({"master": "m02"})).unwrap();
+    w.frame(&mut app, Vec::new());
+    w.frame(&mut app, vec![Event::Paste(text)]);
+    assert_eq!(value(&mut app, "A", "V", Some("m02")), json!(-100.0), "the pasted text went to the list");
+
+    // A press on the canvas gives Copy back to the Edit View.
+    w.click(&mut app, Pos2::new(640.0, 600.0), Modifiers::NONE);
+    let r = crate::control::handle(&mut app, &json!({"id": 1, "method": "ui.menu.invoke", "params": {"command": "edit.copy"}}));
+    assert!(r["error"].as_str().is_some_and(|e| e.contains("nothing to copy")), "the empty glyph selection is copied: {r}");
+}

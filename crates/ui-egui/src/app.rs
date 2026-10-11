@@ -33,6 +33,8 @@ pub struct FontcraftApp {
     pub picker: Option<Box<dyn shell::pickers::Picker>>,
     /// Text for the system clipboard, handed to the platform at the end of the frame.
     pub(crate) clipboard_out: Option<String>,
+    /// Where the menu bar was drawn in the last frame.
+    pub(crate) menu_bar_rect: egui::Rect,
     pub(crate) menu_cache: MenuCache,
     pub(crate) fill_cache: FillCache,
     /// The tabs' text layouts.
@@ -59,6 +61,7 @@ impl FontcraftApp {
             dialog: None,
             picker: None,
             clipboard_out: None,
+            menu_bar_rect: egui::Rect::NOTHING,
             menu_cache: MenuCache::default(),
             fill_cache: FillCache::default(),
             layouts: Default::default(),
@@ -161,6 +164,9 @@ impl FontcraftApp {
     /// parameters opens the dialog (the result is the dialog's state); any other runs on the
     /// selection's targets through [`Self::run_from_shell`].
     pub(crate) fn run_menu_command(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if let Some(result) = shell::clipboard::kerning_window_copy(self, id) {
+            return result;
+        }
         let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
         if empty && let Some(result) = shell::text::menu_command(self, id) {
             return result;
@@ -302,6 +308,11 @@ impl FontcraftApp {
             if self.dialog.is_some() && !is_ui_command(id) {
                 continue;
             }
+            // The Kerning window takes the clipboard's text when it arrives.
+            if id == "edit.paste" && shell::kerning_window::takes_clipboard(self) {
+                shell::clipboard::request_text(ui.ctx(), id);
+                continue;
+            }
             // Paste Special in text mode is refused before it asks for the clipboard.
             if shell::clipboard::wants_text(id, &params) && !(id == "edit.pasteSpecial" && shell::text::in_text_mode(self)) {
                 shell::clipboard::request_text(ui.ctx(), id);
@@ -332,7 +343,7 @@ impl FontcraftApp {
     fn menu_bar(&mut self, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
         let tree = self.menu_cache.tree(&self.session, &self.state);
         let frame = egui::Frame::NONE.fill(self.tokens.app_bar).inner_margin(4.0);
-        egui::Panel::top("menu_bar").frame(frame).show(ui, |ui| {
+        let bar = egui::Panel::top("menu_bar").frame(frame).show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 for menu in tree {
                     ui.menu_button(menu.title, |ui| {
@@ -348,6 +359,7 @@ impl FontcraftApp {
                 }
             });
         });
+        self.menu_bar_rect = bar.response.rect;
     }
 }
 

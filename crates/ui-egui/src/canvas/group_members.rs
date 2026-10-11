@@ -35,8 +35,8 @@ pub const COMMANDS: &[UiCommand] = &[(
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
     match id {
         "view.showGroupMembers" => {
-            let on = args.toggle(app.state.panels.group_members)?;
-            app.state.panels.group_members = on;
+            let on = args.toggle(app.state.display.group_members)?;
+            app.state.display.group_members = on;
             Ok(json!({"on": on}))
         }
         other => Err(format!("unknown command `{other}`")),

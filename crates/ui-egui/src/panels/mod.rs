@@ -71,8 +71,6 @@ pub struct PanelState {
     pub inspector_details: bool,
     /// The Selection Info window is open (`edit.infoForSelection`).
     pub selection_info: bool,
-    /// Show Group Members is on (`view.showGroupMembers`).
-    pub group_members: bool,
     /// The Kerning window: open, the search, the sort and the selected rows.
     pub kerning_window: crate::shell::kerning_window::KerningWindowState,
     /// The inspector shows the vertical metric fields (`fontView.toggleMetricsOrientation`).
@@ -91,7 +89,6 @@ impl Default for PanelState {
             inspector_hidden: false,
             inspector_details: false,
             selection_info: false,
-            group_members: false,
             kerning_window: Default::default(),
             inspector_vertical: false,
         }

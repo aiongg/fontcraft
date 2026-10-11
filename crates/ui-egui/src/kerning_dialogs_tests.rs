@@ -227,6 +227,7 @@ fn view_show_group_members_draws_the_facing_groups_of_the_edited_pair() {
     assert_eq!(member_lines(&mut app), 0, "off at first");
     assert_eq!(call(&mut app, "engine.execute", json!({"command": "view.showGroupMembers", "params": {}}))["on"], true, "omitted: toggle");
     assert_eq!(app.run("view.showGroupMembers", &json!({"on": true})).unwrap()["on"], true);
+    assert_eq!(app.run("view.getDisplayOptions", &json!({})).unwrap()["groupMembers"], true, "a display option like the others");
 
     // kerning.groupMembersDisplayScope: T shows its right group, o its left group.
     let shown = members(&mut app);

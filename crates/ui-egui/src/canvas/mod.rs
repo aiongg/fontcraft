@@ -108,7 +108,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         if text_mode && let Some(layout) = layout.as_deref() {
             text::draw_behind(&tc, layout, &tab, span.0);
         }
-        if state.panels.group_members {
+        if state.display.group_members {
             group_members::draw(&c, fill_cache, font, &tab, layout.as_deref(), origin, doc);
         }
         let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && (*preview_tool || text_mode) };

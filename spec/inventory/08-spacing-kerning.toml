@@ -1652,9 +1652,10 @@ milestone = "M5"
 summary = "Kerning is transferred between masters, and between font files, by selecting pairs in the Kerning window, copying, switching to the other master and pasting. This is also the route for kerning values that metrics import cannot take from a Glyphs file."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs; Import & Export › Importing Metrics"
 status = "handbook"
-notes = "Documented, not yet observed. Copy, Paste and Select All act on the window while its list has the keyboard: kerning.copyPairs puts kerning-text on the clipboard and kerning.pastePairs asks first (dialog.pasteKerningConflict) when a pasted pair clashes."
+notes = "Documented, not yet observed. Copy, Paste and Select All act on the window while its list has the keyboard, and Edit › Copy and Edit › Paste do too while the list had the keyboard last: kerning.copyPairs puts kerning-text on the clipboard and kerning.pastePairs asks first (dialog.pasteKerningConflict) when a pasted pair clashes."
 guesses = [
   "A paste goes into the writing direction the window shows, whatever direction the copied text names; copying from a left-to-right list and pasting into a right-to-left one in the reference settles it.",
+  "The list keeps Copy and Paste from the Edit menu until another field takes the keyboard or a click lands outside the window and the menus; choosing Edit › Copy in the reference after clicking the list, then after clicking the canvas, settles it.",
 ]
 
 [[behavior]]

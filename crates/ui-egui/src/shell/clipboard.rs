@@ -22,6 +22,10 @@
 //! character as `/name`, and Paste types the clipboard's text at the cursor (`text.clipboard`).
 //! Paste Special is refused there.
 //!
+//! While the Kerning window's pair list has the keyboard, or had it when the menu was opened,
+//! Copy and Paste, from the keys or the Edit menu, copy and paste the selected pairs there
+//! ([`kerning_window_copy`]).
+//!
 //! Nothing here runs while a text field has the keyboard (it copies and pastes text itself) or a
 //! dialog is open.
 
@@ -50,7 +54,7 @@ fn special_key() -> egui::Id {
 pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str, Value)> {
     let asked = ctx.data_mut(|d| d.remove_temp::<u64>(special_key()));
     let special_asked = asked.is_some_and(|frame| ctx.cumulative_frame_nr() <= frame.saturating_add(1));
-    if app.dialog.is_some() || ctx.egui_wants_keyboard_input() {
+    if app.dialog.is_some() || ctx.egui_wants_keyboard_input() || super::kerning_window::takes_clipboard(app) {
         return Vec::new();
     }
     let (events, alt) = ctx.input(|i| {
@@ -137,6 +141,17 @@ fn paste_special(app: &FontcraftApp, text: String) -> Value {
         params.insert("master".into(), json!(master));
     }
     json!({"dialog": "dialog.pasteSpecial", "params": params})
+}
+
+/// Edit › Copy while the Kerning window takes the clipboard: the selected pairs go on it as
+/// kerning-text. `None`: the run is not the window's. (Edit › Paste asks for the clipboard's text
+/// as everywhere, and the window takes the text when it arrives.)
+pub fn kerning_window_copy(app: &mut FontcraftApp, id: &str) -> Option<Result<Value, String>> {
+    if id != COPY || !super::kerning_window::takes_clipboard(app) {
+        return None;
+    }
+    super::kerning_window::copy(app);
+    Some(Ok(json!({"kerningPairs": true, "status": app.state.status})))
 }
 
 /// A run of `id` with `params` that needs the clipboard's text first: Paste or Paste Special

@@ -217,6 +217,10 @@ pub struct KerningWindowState {
     pub laid_out: Vec<(String, Rect)>,
     #[serde(skip)]
     pub minus_button: Option<Rect>,
+    /// The pair list had the keyboard last, so Copy and Paste are the list's even after a click
+    /// on the menu bar took the focus away.
+    #[serde(skip)]
+    pub clipboard: bool,
 }
 
 /// A cell being edited in place.
@@ -748,7 +752,14 @@ fn scope(app: &FontcraftApp) -> Map<String, Value> {
 }
 
 /// Puts the selected pairs on the clipboard as kerning-text.
-fn copy(app: &mut FontcraftApp) {
+/// Copy and Paste go to the open window's pair list (see [`KerningWindowState::clipboard`]).
+pub fn takes_clipboard(app: &FontcraftApp) -> bool {
+    let kw = &app.state.panels.kerning_window;
+    kw.open && kw.clipboard && kw.editing.is_none()
+}
+
+/// Puts the selected pairs on the clipboard as kerning-text.
+pub(crate) fn copy(app: &mut FontcraftApp) {
     let pairs = selected_pairs(app);
     if pairs.is_empty() {
         return;
@@ -848,6 +859,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     }
     refresh(app);
     let has_doc = app.session.active().is_some();
+    let menu_bar = app.menu_bar_rect;
     let FontcraftApp { state, tokens, .. } = &mut *app;
     let kw = &mut state.panels.kerning_window;
     let columns = placed(tokens);
@@ -859,6 +871,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let mut minus_button = None;
     let mut open = true;
     let focused = ui.memory(|m| m.has_focus(list_id()));
+    let clipboard = (focused || kw.clipboard) && kw.editing.is_none();
     if focused && kw.editing.is_none() {
         ui.memory_mut(|m| {
             m.set_focus_lock_filter(list_id(), egui::EventFilter { vertical_arrows: true, horizontal_arrows: true, ..Default::default() })
@@ -873,6 +886,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             if i.consume_key(Modifiers::COMMAND, Key::A) {
                 events.push(Event::SelectAll);
             }
+        });
+    }
+    if clipboard {
+        ui.input(|i| {
             for e in &i.events {
                 match e {
                     egui::Event::Copy => events.push(Event::Copy),
@@ -894,7 +911,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             offset
         }
     });
-    egui::Window::new("Kerning")
+    let shown = egui::Window::new("Kerning")
         .id(egui::Id::new("window.kerning"))
         .open(&mut open)
         .collapsible(false)
@@ -1030,6 +1047,16 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         });
     if !open {
         events.push(Event::Close);
+    }
+    // The list keeps the clipboard until another field takes the keyboard or a press lands
+    // outside the window, the menu bar and the menus.
+    let window = shown.map_or(Rect::NOTHING, |r| r.response.rect);
+    let press = ui.input(|i| if i.pointer.any_pressed() { i.pointer.press_origin() } else { None });
+    let on_menu = |p: egui::Pos2| menu_bar.contains(p) || ui.ctx().layer_id_at(p).is_some_and(|l| l.order >= egui::Order::Foreground);
+    if ui.memory(|m| m.has_focus(list_id())) {
+        kw.clipboard = true;
+    } else if ui.memory(|m| m.focused().is_some()) || press.is_some_and(|p| !window.contains(p) && !on_menu(p)) {
+        kw.clipboard = false;
     }
     let order: Vec<String> = kw.listing.rows.iter().map(Row::id).collect();
     let mut copy_now = false;
