@@ -21,7 +21,7 @@ mod checks;
 mod context;
 mod contour;
 mod contours;
-mod data;
+pub mod data;
 mod handles;
 mod metrics;
 mod points;

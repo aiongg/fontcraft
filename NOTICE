@@ -207,5 +207,15 @@ bundled, the file says so in its header and the project is listed here with its 
   reports (report.py) and options (autohint.py). otfautohint uses fontTools' bezierTools (MIT
   License) for its curve maths, which crates/autohint/src/bezier.rs ports with it.
 
+  The audit's data sets (crates/audit/src/data, M12.45): the OS/2 Unicode range blocks and bit
+  search are ported from fontTools 4.66.1 (ttLib/tables/O_S_2f_2.py, MIT License); the expected
+  contour counts (glyphdata.py), the cached list of registered vendor IDs, and the character lists
+  of its case_mapping, whitespace_ink, empty_letters, legacy_accents, arabic_spacing_symbols,
+  math_signs_width, soft_dotted and is_indic_font code and constants.py are ported from FontBakery
+  1.1.0 (https://github.com/fonttools/fontbakery, Apache License 2.0); the registered script,
+  language and feature tags come from opentypespec 1.9.2
+  (https://github.com/simoncozens/opentypespec-py, Apache License 2.0), which types the OpenType
+  tag registry.
+
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.
