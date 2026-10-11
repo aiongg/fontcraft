@@ -1713,9 +1713,9 @@ summary = "abvs (Above-base Substitutions). Trigger: Certain pairings of a base 
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the base and mark pairs it joins; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists abvs in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the abvs entry: compare it with FontCraft's generator for the same font, or note that no abvs entry is created.",
 ]
@@ -1728,9 +1728,9 @@ summary = "akhn (Akhands). Trigger: South Asian scripts only: a particular group
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "The akhands are k_ssa and j_nya in every Indic script, written as consonant, halant, consonant; Update on a Devanagari font with those glyphs would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub ka-S halant-S ssa-S by k_ssa-S;` line for `k_ssa-S` and the same for `j_nya-S`, when their letters and the halant exist."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the akhn entry: compare it with FontCraft's generator for the same font, or note that no akhn entry is created.",
 ]
@@ -1743,9 +1743,9 @@ summary = "blwf (Below Base Forms). Trigger: South Asian scripts: a halant, glyp
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "The rakar mark (`rakar-deva`) is formed in blwf from halant and ra, as Indic shaping expects, besides the `.below` glyphs the handbook names; Update on a Devanagari font with rakar-deva would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub halant-S X-S by X-S.below;` line per `X-S.below` whose `X-S` and halant exist, and `sub halant-S ra-S by rakar-S;` for a `rakar-S` glyph unless `ra-S.below` exists."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blwf entry: compare it with FontCraft's generator for the same font, or note that no blwf entry is created.",
 ]
@@ -1758,9 +1758,9 @@ summary = "blws (Below-base Substitutions). Trigger: South Asian scripts: partic
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the script-specific sequences it substitutes; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists blws in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blws entry: compare it with FontCraft's generator for the same font, or note that no blws entry is created.",
 ]
@@ -1773,9 +1773,9 @@ summary = "cjct (Conjunct Forms). Trigger: Conjunct cluster glyphs in South Asia
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Conjunct rules read the half forms the half feature has made, falling back to consonant and halant; Update on a Devanagari font with k_ya-deva would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one line per conjunct `X_Ya-S` (not an akhand, not a rakar ligature): each leading part as its half form `X-S` when the font has it, else as `Xa-S halant-S`, then the last consonant."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the cjct entry: compare it with FontCraft's generator for the same font, or note that no cjct entry is created.",
 ]
@@ -1788,9 +1788,9 @@ summary = "half (Half Forms). Trigger: Glyphs whose names end in `Halfform`, tog
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Half forms are recognised by the name (the full form with a final `a` exists) rather than by the Halfform subcategory alone; Update on a Devanagari font would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub Xa-S halant-S by X-S;` line per glyph `X-S` (not a mark, not ending in `a`) whose full form `Xa-S` and halant exist, the glyph database's half-form naming (`k-deva`, `j_ny-deva`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the half entry: compare it with FontCraft's generator for the same font, or note that no half entry is created.",
 ]
@@ -1803,9 +1803,9 @@ summary = "nukt (Nukta Forms). Trigger: Nukta ligatures whose names end in `Nukt
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "The rule is `sub base nukta by baseNukta;` in glyph order; Update in the reference app on a Devanagari font with kaNukta-deva would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub X-S nukta-S by XNukta-S;` line per glyph named `XNukta-S` whose `X-S` and `nukta-S` exist, in glyph order (S is the script suffix, such as `deva`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the nukt entry: compare it with FontCraft's generator for the same font, or note that no nukt entry is created.",
 ]
@@ -1818,9 +1818,9 @@ summary = "pref (Pre-base Forms). Trigger: South and Southeast Asian scripts: pa
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the letter combinations it forms; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists pref in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pref entry: compare it with FontCraft's generator for the same font, or note that no pref entry is created.",
 ]
@@ -1833,9 +1833,9 @@ summary = "pres (Pre-base Substitutions). Trigger: South Asian scripts: particul
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document how a numbered matra width is matched to each conjunct; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists pres in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pres entry: compare it with FontCraft's generator for the same font, or note that no pres entry is created.",
 ]
@@ -1848,9 +1848,9 @@ summary = "psts (Post-base Substitutions). Trigger: A halant together with base 
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the script-specific base and matra arrangements it substitutes; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists psts in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the psts entry: compare it with FontCraft's generator for the same font, or note that no psts entry is created.",
 ]
@@ -1863,9 +1863,9 @@ summary = "rkrf (Rakar Forms). Trigger: Devanagari, Gujarati and Malayalam only:
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Rakar ligatures are recognised by the names `X_ra-S` and `Xa_rakar-S`, as the handbook gives no naming; Update on a Devanagari font with k_ra-deva would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): For Devanagari, Gujarati and Malayalam: one `sub Xa-S halant-S ra-S by X_ra-S;` line per glyph named `X_ra-S` or `Xa_rakar-S` whose letters and halant exist; other scripts treat such names as conjuncts."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rkrf entry: compare it with FontCraft's generator for the same font, or note that no rkrf entry is created.",
 ]
@@ -1878,9 +1878,9 @@ summary = "rphf (Reph Forms). Trigger: The trio ra-deva, halant-deva, reph-deva,
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Generated from the glyph names alone, in glyph order, with no lookup or flag; Update in the reference app on a Devanagari font would settle the form.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub ra-S halant-S by reph-S;` line per script whose ra, halant and reph glyphs exist."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rphf entry: compare it with FontCraft's generator for the same font, or note that no rphf entry is created.",
 ]
@@ -1893,9 +1893,9 @@ summary = "vatu (Vattu Variants). Trigger: The rkrf feature contains particular 
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the rkrf lookups it is derived from; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists vatu in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the vatu entry: compare it with FontCraft's generator for the same font, or note that no vatu entry is created.",
 ]
@@ -1907,9 +1907,12 @@ milestone = "M8"
 summary = "ccmp (Glyph Composition and Decomposition). Trigger: Many constellations across scripts. Documented example: i and j, their dotless forms idotless and jdotless, and combining marks that sit on top. Generated: For the Latin case, a lookup that swaps the dotted letter for its dotless form when a top mark follows; other scripts add their own lookups, which are not documented."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (5 sources): a lookup `ccmp_DFLT_1` with `lookupflag 0;` and ligatures of stacked marks (`sub brevecomb acutecomb by brevecomb_acutecomb;`), and lookups `ccmp_Other_N` with an inline `@CombiningTopAccents = [...]`, `lookupflag UseMarkFilteringSet @CombiningTopAccents;` and `sub i' @CombiningTopAccents by idotless;` (M8 planning pass)."
+notes = "The reference's stored output in the corpus (5 sources): a lookup `ccmp_DFLT_1` with `lookupflag 0;` and ligatures of stacked marks (`sub brevecomb acutecomb by brevecomb_acutecomb;`), and lookups `ccmp_Other_N` with an inline `@CombiningTopAccents = [...]`, `lookupflag UseMarkFilteringSet @CombiningTopAccents;` and `sub i' @CombiningTopAccents by idotless;` (M8 planning pass). Generated by `features::auto::ccmp`; against the 5 automatic ccmp entries of the corpus: Markow (version 4) and Oswald-glyph-categories (version 3.2) match; Oswald-Italic (version 3.2) differs only in naming its dotless lookup `ccmp_Other_1`; Oswald_Heavy (version 1) and fontc's Fea_Feature fixture hold older forms (a `[i j]` class rule, the `@Markscomb` case-mark lookups) or hand-edited code."
 guesses = [
   "Latin ccmp is generated in the corpus's form: mark-ligature lookup first, then the dotless lookups with the top-accent filtering set; scripts other than Latin get no ccmp until a source shows their form.",
+  "Lookups are numbered `ccmp_DFLT_1`, `ccmp_DFLT_2` in that order, as the newest corpus sources name a lone mark-ligature or dotless lookup `ccmp_DFLT_1`; Update in the reference app on a font with both would settle it.",
+  "`@CombiningTopAccents` holds the encoded marks of canonical combining class 230, sorted by name, which matches every stored list in the corpus; a font with an unencoded top mark in the reference app would settle whether anchors count too.",
+  "The Latin split lookup `ccmp_latn_1` (fi, fl, the lj, nj and dž digraphs into their letters, in a fixed order) is kept from a version 3 source, as no newer source has those glyphs; Update in the reference app on a font with fi would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the ccmp entry: compare it with FontCraft's generator for the same font, or note that no ccmp entry is created.",

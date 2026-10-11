@@ -2271,7 +2271,10 @@ milestone = "M8"
 summary = "When the mark feature is generated and glyphs such as idotless and jdotless exist, the ccmp feature is generated as well."
 ref = "Edit View › Mark to Base Positioning"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Update writes ccmp from the glyph names (`features::auto::ccmp`): i or j with its dotless form and at least one encoded top mark."
+guesses = [
+  "ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.",
+]
 
 [[behavior]]
 id = "anchors.markToMark"

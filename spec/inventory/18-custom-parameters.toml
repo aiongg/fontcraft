@@ -1149,7 +1149,10 @@ effect = "features"
 summary = "Changes the generated cjct feature so conjuncts do not stack vertically, for user-interface fonts with limited vertical room. The source says it is only implemented for Oriya."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft's cjct writes ligature rules onto named conjunct glyphs only and never stacks below forms, so the parameter changes nothing (`features::auto::indic`)."
+guesses = [
+  "The parameter has no effect because the generated cjct never stacks conjuncts; Update in the reference app on an Oriya font with and without the parameter would show what it changes.",
+]
 
 [[parameter]]
 name = "licenses"
