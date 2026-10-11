@@ -22,6 +22,7 @@ mod context;
 mod contour;
 mod contours;
 pub mod data;
+pub mod export;
 mod handles;
 mod metrics;
 mod points;
