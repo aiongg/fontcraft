@@ -18,7 +18,10 @@ struct Window {
 
 impl Window {
     fn new() -> Self {
-        Self { ctx: egui::Context::default() }
+        let ctx = egui::Context::default();
+        // A new window fades in, which would scale the colours a test compares.
+        ctx.global_style_mut(|s| s.animation_time = 0.0);
+        Self { ctx }
     }
 
     /// One frame; the shapes it drew, nested lists flattened.

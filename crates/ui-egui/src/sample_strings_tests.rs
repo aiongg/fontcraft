@@ -198,7 +198,7 @@ fn find_glyphs_inserts_what_glyph_search_finds() {
     let r = app.run("edit.find", &json!({"query": "Ш", "insert": true})).unwrap();
     assert_eq!(r["inserted"], json!(["Sha-cy"]));
     assert_eq!(text(&mut app), json!(["H", "Ha-cy", "Sha-cy"]));
-    let r = app.run("edit.find", &json!({"query": "cy", "select": ["sha-cy.loclBGR", "Ha-cy"], "insert": true})).unwrap();
+    let r = app.run("edit.find", &json!({"query": "cy", "mode": "name", "select": ["sha-cy.loclBGR", "Ha-cy"], "insert": true})).unwrap();
     assert_eq!(r["inserted"], json!(["Ha-cy", "sha-cy.loclBGR"]), "in list order");
 
     // Refused parameters change nothing.

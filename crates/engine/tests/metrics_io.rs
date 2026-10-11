@@ -338,7 +338,7 @@ fn hostile_files_and_bad_requests_fail_with_a_message_and_change_nothing() {
         (json!({"text": "A\tV\t-50", "file": "x"}), "only one"),
         (json!({}), "give `file`"),
         (json!({"sourceDocument": 7}), "no open document"),
-        (json!({"sourceDocument": 0}), "goes into"),
+        (json!({"sourceDocument": 0}), "go into"),
         (json!({"text": "A\tV\t-50", "importMetrics": "sideways"}), "importMetrics"),
         (json!({"text": "A\tV\t-50", "sourceMaster": "m01"}), "font source"),
         (json!({"text": "A\tV\t-50", "master": "m09"}), "m09"),
