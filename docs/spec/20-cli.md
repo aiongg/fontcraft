@@ -21,7 +21,7 @@ several operations on one kind of object (`tables`, `glyphs`, `outlines`, `check
 |---|---|---|---|---|
 | `compile` | `font.compile` | compile | M2 | makeotf, addfeatures, buildmasterotfs, buildcff2vf, varLib, fontmake, fontc, ttx |
 | `oracle` | (shell) | compile | M2 | ttx_diff, fontc_crater |
-| `dump` | `font.dumpTables` | cli-tools | M1 | ttx, ttxn, spot, tx, detype1, otl-normalizer, varLib.avar.unbuild, ttLib, pyftsubset |
+| `dump` | `font.dumpTables` | cli-tools | M12 | ttx, ttxn, spot, tx, detype1, otl-normalizer, varLib.avar.unbuild, ttLib, pyftsubset |
 | `info` | `font.inspect` | cli-tools | M1 | spot, ttx, tx, otc2otf, makeinstancesufo |
 | `tables` | (shell) | cli-tools | M12 | sfntedit |
 | `tables list` | `tables.list` | cli-tools | M1 | sfntedit, spot, ttx |
@@ -33,6 +33,7 @@ several operations on one kind of object (`tables`, `glyphs`, `outlines`, `check
 | `tables checksum` | `tables.checksum` | cli-tools | M12 | sfntedit |
 | `tables import` | `tables.importTtx` | cli-tools | M12 | ttx, pyftmerge |
 | `tables reorder` | `tables.reorder` | cli-tools | M12 | pyftsubset, sfntedit |
+| `tables show` | `tables.show` | cli-tools | M12 | — (our own; the reference vendor's table-viewer tool) |
 | `glyphs` | (shell) | cli-tools | M12 | spot |
 | `glyphs list` | `font.listGlyphs` | cli-tools | M1 | spot, tx |
 | `glyphs rename` | `font.renameGlyphs` | cli-tools | M12 | tx, makeotf |
@@ -52,6 +53,9 @@ several operations on one kind of object (`tables`, `glyphs`, `outlines`, `check
 | `woff compress` | `woff.compress` | cli-tools | M12 | ttLib.woff2, ttx, pyftsubset |
 | `woff decompress` | `woff.decompress` | cli-tools | M12 | ttLib.woff2, pyftsubset |
 | `diff` | `font.diff` | cli-tools | M12 | sfntdiff, fonttools diff, ttxn, ttx_diff |
+| `sources` | (shell) | cli-tools | M12 | — |
+| `sources diff` | `source.diff` | cli-tools | M12 | — (our own; the reference vendor's source-comparison tool) |
+| `sources merge` | `source.merge` | cli-tools | M12 | — (our own) |
 | `outlines` | (shell) | cli-tools | M12 | checkoutlinesufo |
 | `outlines remove-overlaps` | `outlines.removeOverlaps` | cli-tools | M12 | ttLib.removeOverlaps, tx, checkoutlinesufo, fontmake |
 | `outlines direction` | `outlines.correctDirection` | cli-tools | M12 | fontmake, cu2qu |
@@ -764,6 +768,27 @@ Engine command: `tables.reorder`.
 |---|---|---|---|
 | pyftsubset | `--canonical-order / --no-canonical-order` | tables reorder (subset --canonical-order does the same in one step) |  |
 | sfntedit | -f (copies tables in recommended order) | tables reorder |  |
+
+#### `tables show`
+
+Shows the decoded fields of tables as a tree, following each table's structure in the OpenType
+specification: record and field names, values, offsets followed to their records, glyph indices
+with their names. It is our own subcommand, after the reference vendor's free table viewer; the
+Table Viewer window shows the same tree and compares two fonts through `diff`.
+
+```
+fontcraft-cli tables show FONT [TAG...] [--path PATH] [--depth N] [--offsets] [--format json|text]
+```
+
+- `--path GPOS.lookupList.lookups[3]` narrows the output to one record or field.
+- `--depth N` (default 3) limits how many levels of nested records are expanded; deeper records
+  are counted, not shown.
+- A table the reader cannot decode is listed with its error; its bytes stay reachable through
+  `tables extract`.
+
+Engine command: `tables.show`. Unlike `dump`, which reproduces the reference tools' formats,
+`tables show` has no oracle: its tree is read-fonts' traversal of the table, checked by tests on
+fonts built in code.
 
 ### `glyphs`
 
@@ -1478,6 +1503,31 @@ Engine command: `font.diff`.
 | ttx_diff | `--unwrap_extensions` | --unwrap-extensions |  |
 | ttx_diff | `--json` | --json (with --similarity semantics per table) |  |
 | ttx_diff | `--outdir` | --output-dir |  |
+
+### `sources`
+
+Two actions on source files (`.glyphs`, `.glyphspackage`, `.fontcraft`, UFO, designspace), after
+the reference vendor's free source-comparison tool. Sources of different formats can be compared.
+
+```
+fontcraft-cli sources diff A B [--parts LIST] [--glyphs LIST] [--tolerance UNITS] [--format text|json]
+fontcraft-cli sources merge BASE OTHER (--take ID,... | --take-all) [--parts LIST] [--glyphs LIST] (-o OUT | --in-place)
+```
+
+- Parts: `glyphs`, `info` (Font Info fields), `masters`, `instances`, `axes`, `kerning` (pairs and
+  groups), `features` (feature code, classes, prefixes).
+- Glyphs match by name; masters and instances by axis location, then by name. A glyph whose
+  outlines and code points are unchanged under a new name is reported as renamed.
+- Per glyph and master, `diff` reports outlines (with `--tolerance`), components, anchors,
+  metrics, code points and glyph properties; for the other parts, each field with both values.
+- Every change has an id. `merge` applies the chosen ids from OTHER to BASE and writes BASE's
+  format. A change whose place in BASE no longer matches what `diff` saw refuses the whole merge.
+  The merge is two-way: there is no common ancestor.
+- Exit status of `diff`: 1 when the sources differ.
+
+Engine commands: `source.diff` (the glyph part is `font.compareGlyphs`) and `source.merge`. The
+window that does the same for the open document (`window.sourceDiff`,
+`document.compareWithFile`, `document.mergeFromFile`) is M13.
 
 ### `outlines`
 
@@ -2497,6 +2547,8 @@ differences that do not matter. The comparison methods are described after the t
 | `glyphs rename`, `reorder` | AFDKO `tx -gf`; fontTools `ttLib.reorderGlyphs` | Normalised dump (which is glyph-order independent) plus the expected glyph order |
 | `variations …` | fontTools `varLib.avar`, `avar.map`, `avar.plan`, `hvar`, `models` | `avar` / `HVAR` table dumps equal; coordinates and supports numerically equal |
 | `oracle`, `run`, `commands`, `mcp`, `bench`, `completion`, `help` | none | Own tests |
+| `tables show` | none | Tests on fonts built in code: every field of the tables we model appears with its name and value |
+| `sources diff`, `sources merge` | none | Round trip: merging every change of A → B gives a document equal to B; a source compared with itself gives no change |
 
 ### Method: compiler normalisation (fontc's `ttx_diff`)
 
@@ -2614,53 +2666,73 @@ before implementation.
 1. **GOADB column order.** The MakeOTF user guide says the first column is the final name and the second
    the source name; the `tx` help text describes the first as the development name and the second as the
    final name. We follow the user guide. Confirm by running both tools on one file.
+   **Answered (M12 plan, 2026-10-11):** the user guide is right. Running tx 5.0.1 with the line `finalA devA` renames the glyph `devA` to `finalA`: first column final name, second source name, third override. tx's help text describes the columns the other way round.
 2. **makeotf options present in the guide but not in the current help** (`-addn`, `-adds`, `-serif`,
    `-sans`, `-dcs`, `-cv`): confirm which still work in the current release. `-cv` is in the
    `addfeatures` help, so it is kept; `-addn` is mapped to a generated box `.notdef`.
+   **Answered (M12 plan):** makeotf 5.0.1 has none of `-addn`, `-adds`, `-serif`, `-sans`, `-dcs` in its help or its option table; they are not carried over. `-cv` is the vertical CMap path of addfeatures, used only for CID fonts.
 3. **Exact effect of several `tx` switches**: which Top DICT keys `+E` removes; which charstring
    optimisations `+T` and `-no_opt` toggle; what distinguishes dump levels "short", "medium" and "long".
    Needs observing output.
+   **Partly answered (M12 plan):** `tx -cff -h` gives the defaults `-E +F -O -S +T -V -Z -b +W`; `+E` removes purely descriptive keys, `+T` turns on charstring optimisations, `-no_opt` keeps operators unshortened. Dump levels `-0` to `-6` are global data and glyph data in short, medium and long form. The exact keys `+E` removes are observed by package M12.30.
 4. **`spot` details**: the meaning of dump levels below 4 for tables without a usage entry, the proof
    options `-a`, `-c`, `-R` in practice, the undocumented `-A`, and what the `=7`/`=8` glyph synopses
    contain. Needs running `spot` on sample fonts.
+   **Deferred to package M12.10 (M12 plan):** observed by running spot on corpus fonts while the text views are built.
 5. **`otfautohint` default glyph selection for non-UFO input.** The help marks `-a/--all` as UFO-only;
    whether already hinted glyphs of an OTF are skipped by default must be observed.
+   **Answered (M12 plan):** in otfautohint 5.0.1 an OTF input has every glyph hinted again and its old hints replaced; `--all` only changes UFO runs, where unchanged glyphs are skipped by stored hashes.
 6. **`checkoutlinesufo -e`**: the exact list of repairs and their order, and how contour order is
    restored after overlap removal.
+   **Answered (M12 plan, from the Apache-2.0 source of AFDKO 5.0.1):** coincident points, flat curves, collinear lines, overlap removal repeated until the rounded point list stops changing, tiny contours, collinear lines again; coordinates rounded (three decimals with `-d`); points closer than one unit merged; then unchanged contours are put back at their old index and the others sorted.
 7. **`comparefamily` tests** are specified here only by title. Each needs its rule extracted from the
    source into a `[[check]]` row (single test 29 is an empty placeholder in the reference).
+   **Answered (M12 plan):** AFDKO 5.0.1 has single-face tests 1 to 34 and family tests 1 to 21; every one maps to `[[check]]` rows (`21-qa.md` § 6). Package M12.58 reads each rule from the source.
 8. **`pyftsubset` default feature list** includes "features required for script shaping"; the full list
    must be taken from the source (`--layout-features=?` prints it).
+   **Answered (M12 plan):** fontTools 4.66.1 keeps 64 layout features by default (listed in the `subset` row's notes) plus four internal pseudo-tags we do not carry over.
 9. **`varLib.interpolatable` thresholds.** What `--tolerance` and `--kinkiness` measure precisely, and
    how master pairs are chosen, is recorded in `docs/spec/21-qa.md` from the implementation; the illustrated
    PDF/HTML report of the reference has no counterpart yet.
+   **Answered:** recorded in `21-qa.md` § 6; the illustrated report stays out of M12 (`21-qa.md` question 10).
 10. **Adobe CMap resources.** makeotf finds default CMap files in its installed shared data. Decide
     whether FontCraft bundles the cmap-resources files or requires `--cmap-*` paths.
+   **For the owner:** `docs/plans/M12.md` § 7, question 6 (recommendation: CMap files given by path in M12; bundled data decided with M7's ROS row).
 11. **Type 1 output.** PFA/PFB writing is kept for parity with `tx` and `mergefonts` workflows. Decide
     whether it is in scope for 1.0 or reading alone suffices.
+   **For the owner:** `docs/plans/M12.md` § 7, question 5 (recommendation: read only).
 12. **Resource-fork fonts.** Reading `.dfont` (data-fork suitcases) is listed as not carried over along
     with the other Mac containers; reconsider if users still need it.
+   **Answered (M12 plan, our decision):** not carried over; nothing in the corpus or the rows needs it.
 13. **TrueType autohinter options.** fontmake passes a ttfautohint argument string. Whether
     `--tt-options` accepts that syntax unchanged depends on the TrueType autohinter design.
+   **Open, for M10:** depends on the TrueType autohinter's design; it blocks only `autohint --tt-options` (package M12.39).
 14. **fontmake output layout.** `--output-layout by-format` must reproduce fontmake's folder and file
     naming exactly to be a drop-in; the rules need to be observed for each format.
+   **Not M12:** `--output-layout` belongs to the `compile` row (M2); the rules are observed when that option is built.
 15. **Filter and feature-writer names.** The built-in names accepted by `--filter` and
     `--feature-writer` must be defined so that the specs found in existing UFO libs
     (`com.github.googlei18n.ufo2ft.filters`, `…featureWriters`) can be translated.
+   **Not M12:** belongs to `compile` (M2) and the feature writers (M8).
 16. **Compatibility shims.** Should the binary react to being invoked as `makeotf`, `tx`, `ttx`,
     `pyftsubset` and translate the old option syntax? Not designed here; the mapping tables would make
     it mechanical.
+   **Answered (M12 plan, our decision):** no shims in M12; the mapping tables keep them possible later.
 17. **Schema.** `[[cli]]` ids of action rows contain a space (`tables list`); the README does not say
     whether that is allowed. The `command` field holds one id although `check`, `autohint` and `stems`
     dispatch a small family of commands (listed in their sections). Subcommands that reuse commands from
     other inventory files (`autohint.*`, `audit.*`) rely on those ids staying as they are.
+   **Answered:** ids with a space pass `cargo xtask spec`; `command` names the main command and the sections list the others.
 18. **Overlap between editor and whole-font commands.** `outlines.*`, `font.transform` and
     `audit.checkInterpolation` do for files what `path.removeOverlap`, `path.correctPathDirection`,
     `path.addExtremes`, `glyph.decomposeGlyph`, `path.transformations`, `font.info.scaleToUnitsPerEm`
     and `interpolation.checkCompatibility` do for an open document. Decide whether each pair should be
     one command with a `target` parameter.
+   **Answered (decision D2):** one implementation per action. For a source, the whole-file command runs the document command on each glyph; for a binary, it decodes the glyph, runs the same routine and writes the glyph back.
 19. **Additional oracles.** HarfBuzz's subsetter and shaper and the OpenType Sanitizer are not among the
     reference checkouts but would strengthen the `subset`, `optimize` and `features` tests.
+   **Answered (M12 plan):** HarfBuzz's subsetter and shaper are used through uharfbuzz (installed with FontBakery) as second oracles for `subset` and the layout checks; the OpenType Sanitizer runs only when installed and asked for (`check.files.sanitiser`).
 20. **Exit status.** `ttx_diff` uses 2 for "different"; ours uses 1 for findings and 2 for usage errors;
     the oracle harness translates. The QA inventory (`audit.exitStatus`) uses 2 for unreadable targets as
     well as usage errors, where this document uses 3. Settle one scheme before scripts depend on it.
+   **Answered (M12 plan, our decision):** 3 for an unreadable input everywhere, `check` included; `audit.exitStatus` says the same. The oracle harness translates `ttx_diff`'s 2.

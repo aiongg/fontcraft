@@ -988,11 +988,12 @@ notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary
 [[behavior]]
 id = "audit.fontViewCellMarks"
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "After an audit run, every Font View cell whose glyph has outline findings carries a small mark in its top-right corner, so problem glyphs can be spotted in the grid without opening the results panel."
 ref = "FontLab 7 manual › FontAudit (Showing problems); FontAudit panel (Checking multiple glyphs)"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[setting]]
 id = "audit.irregularStemTolerance"
@@ -1013,11 +1014,12 @@ severity = "info"
 scope = "source"
 fixable = true
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "An explicit straight segment duplicates the implicit closing segment of the contour, leaving a zero-length close that can upset PostScript rasterisers."
 ref = "FontLab 7 manual › FontAudit › Vectors on ClosePaths"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.outlines.weakExtremum"
@@ -1025,11 +1027,12 @@ severity = "info"
 scope = "source"
 fixable = true
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A curve reaches a horizontal or vertical extreme only marginally beyond its end nodes, with no node there."
 ref = "FontLab 7 manual › FontAudit › Weak extremum points"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.outlines.closedButFlaggedOpen"
@@ -1037,11 +1040,12 @@ severity = "warn"
 scope = "source"
 fixable = true
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A contour's first and last nodes coincide, so it looks closed, but it is stored as open."
 ref = "FontLab 7 manual › FontAudit › Contour is not closed"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.outlines.irregularStem"
@@ -1049,11 +1053,12 @@ severity = "info"
 scope = "source"
 fixable = true
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A stem's measured width is close to one of the master's common stem widths, within the irregular-stem tolerance, without matching it."
 ref = "FontLab 8 What's new since VI › FontAudit stem and segment checks; Consistency & precision › Automatic stem adjustment"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 # =====================================================================================================
 # FontLab — actions and action sets
@@ -1278,11 +1283,12 @@ shortcut = ""
 kind = "engine"
 params = "{masters?: [id], pairs?: [[left, right]], threshold?: number, fix?: bool}"
 area = "spacing-kerning"
-milestone = "M12"
+milestone = "M13"
 summary = "Expands class kerning to glyph pairs and reports the pairs whose outlines collide or come closer than the threshold under the class value. With fix it adds a corrective exception for each."
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Audit Exceptions)"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[command]]
 id = "kerning.removePairsByRule"
@@ -1751,20 +1757,22 @@ shortcut = ""
 kind = "ui"
 params = "{check: checkId, masters?: [id]}"
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Selects in Font View every glyph that currently has a result of the given check, so the whole set can be opened, filtered or batch-fixed. In the reference this is a context-menu item of the validation list, next to one that fixes every glyph with that error."
 ref = "FontForge dialogs › Font Validation window (context menu)"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[behavior]]
 id = "audit.nearTolerance"
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Checks of the almost-but-not-quite kind share one tolerance: a value is near a target when it lies within the tolerance of it without being equal. The reference default is 3 units, and the parameterised checks (a target x or y, an expected advance, a bounding-box limit, a standard stem width, a point limit) take their value from the same dialog."
 ref = "FontForge dialogs › Finding common font problems automagically (Near field)"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[setting]]
 id = "export.validateBeforeExport"
@@ -1773,11 +1781,12 @@ section = "Export"
 kind = "bool"
 values = ""
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "When on, an export first validates the font; a clean font exports without further prompts and a failing one offers to open the validation window instead."
 ref = "FontForge dialogs › Generate Font › Validate Before Saving"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.outlines.handleBeyondSegment"
@@ -1785,11 +1794,12 @@ severity = "warn"
 scope = "source"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A handle projects well outside the span between the two end points of its segment."
 ref = "FontForge Find Problems › Control points beyond spline"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.outlines.negligibleHandle"
@@ -1797,11 +1807,12 @@ severity = "info"
 scope = "source"
 fixable = true
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A handle is so short relative to its segment that it barely affects the curve; the ratio is a parameter."
 ref = "FontForge Find Problems › Irrelevant control points"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.metrics.advanceDiffersFrom"
@@ -1809,11 +1820,12 @@ severity = "info"
 scope = "source"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A glyph's advance width (or vertical advance) differs from a given value; used to verify tabular sets and monospaced fonts."
 ref = "FontForge Find Problems › Check Advance, Check Vertical Advance"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.metrics.boundsBeyond"
@@ -1821,11 +1833,12 @@ severity = "info"
 scope = "source"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A glyph's bounding box extends past a given limit above, below, left or right."
 ref = "FontForge Find Problems › Glyph BB Above / Below / Right Of / Left Of"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.outlines.pointCountLimit"
@@ -1833,11 +1846,12 @@ severity = "warn"
 scope = "source"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A glyph has more points than a limit; the reference cites 1500 as the guaranteed PostScript minimum."
 ref = "FontForge Find Problems › More Points Than; Font Validation window"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.hinting.stemNearStandardWidth"
@@ -1845,11 +1859,12 @@ severity = "info"
 scope = "source"
 fixable = true
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A stem hint's width is near a given standard width without matching it, or a point sits slightly off a hint edge."
 ref = "FontForge Find Problems › Hint width near; Points near hint edges"
 status = "docs"
 origin = "fontforge"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.bitmaps.missingGlyph"
@@ -2151,6 +2166,7 @@ summary = "Glyph-level comparison of two fonts, sources or binaries, complementi
 ref = "FontForge Element menu › Compare Fonts"
 status = "docs"
 origin = "fontforge"
+notes = "Kept in M12 by the M12 planning pass: it is the glyph part of source.diff, behind `fontcraft-cli sources diff` (package M12.37)."
 
 [[command]]
 id = "font.compareLayers"
@@ -2910,11 +2926,12 @@ shortcut = ""
 kind = "ui"
 params = "{on?: bool}"
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "A lightweight always-on display that highlights only two things while drawing: overlapping points and segments that are almost, but not exactly, horizontal, vertical or at the italic angle. A cheaper sibling of the full audit overlay."
 ref = "RoboFont reference › Display options (Outline Errors)"
 status = "docs"
 origin = "robofont"
+notes = "Moved from M12 to M13 by the M12 planning pass: a secondary-reference feature goes to M13, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3); docs/plans/M12.md § 7, question 2."
 
 [[command]]
 id = "view.showIndexes"

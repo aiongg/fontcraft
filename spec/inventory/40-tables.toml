@@ -930,6 +930,7 @@ milestone = "M12"
 summary = "makeotf's GlyphOrderAndAliasDB has one glyph per line: final name, source name, optional Unicode override (uniXXXX or uXXXX[XX], uppercase hex only, comma-separated for several). Renaming and ordering apply only with -r or -ga; with -gf alone only the Unicode column is used; -gs additionally drops glyphs not listed. Source font and feature file must use the same names as each other."
 ref = "AFDKO docs/MakeOTFUserGuide.md (GlyphOrderAndAliasDB, -ga, -gs, -gf)"
 status = "docs"
+notes = "Column order checked by running AFDKO 5.0.1's tx on a synthetic CFF font: with the line `finalA devA`, the glyph devA is written as finalA. The first column is the final name, as the MakeOTF user guide says; tx's own help text describes the columns the other way round (20-cli.md question 1)."
 
 [[behavior]]
 id = "compile.unicodeFromGlyphNames"
@@ -1680,6 +1681,7 @@ milestone = "M12"
 summary = "makeotf -adds synthesises missing Euro, Apple symbol and a few standard glyphs from built-in multiple master designs matched to the font's zero width and stem weight (needs zero and O; -serif or -sans picks the design). We do not synthesise designed glyphs at compile time; a missing-glyph report covers it."
 ref = "AFDKO docs/MakeOTFUserGuide.md (Synthetic Glyphs)"
 status = "docs"
+notes = "makeotf 5.0.1 has no -adds, -addn, -serif, -sans or -dcs options (its help and option table, checked locally), so there is nothing to carry over (20-cli.md question 2)."
 
 [[behavior]]
 id = "compile.kernClassOptimisation"

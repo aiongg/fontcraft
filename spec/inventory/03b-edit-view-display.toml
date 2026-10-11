@@ -2622,18 +2622,20 @@ notes = "Built in M5.11a: while Font View shows, the panel draws its ground and 
 [[behavior]]
 id = "proofing.systemFontCache"
 area = "proofing"
-milestone = "M12"
+milestone = "M14"
 summary = "Operating systems and apps cache installed fonts, so a re-exported font may not show up until the testing app is quit and reopened. The reference's remedy is a Test Install option in the OTF export dialog, which activates the font from memory without writing a file; a restart of the testing app can still be needed."
 ref = "Edit View › Previewing & Testing › Previewing on macOS"
 status = "handbook"
+notes = "Moved from M12 to M14 by the M12 planning pass: testing advice that belongs with Test Install and the export destination (export.testInstall, M14), not with the command-line tools; docs/plans/M12.md § 7, question 2."
 
 [[behavior]]
 id = "proofing.adobeFontsFolder"
 area = "proofing"
-milestone = "M12"
+milestone = "M14"
 summary = "Exporting OTFs into /Library/Application Support/Adobe/Fonts (created by hand if absent) makes them available at once in Adobe apps only, bypassing the system font cache and showing all positioning features and the style menu order. Each export overwrites the previous file; the apps may need one restart the first time the folder is used."
 ref = "Edit View › Previewing & Testing › Previewing in Adobe Applications"
 status = "handbook"
+notes = "Moved from M12 to M14 by the M12 planning pass: testing advice that belongs with Test Install and the export destination (export.testInstall, M14), not with the command-line tools; docs/plans/M12.md § 7, question 2."
 
 [[behavior]]
 id = "proofing.webfontPreview"
@@ -2642,11 +2644,40 @@ milestone = "M12"
 summary = "Checking .woff2 (and optionally .woff for old browsers) in the export dialog writes webfonts that can be tested from a small HTML page with an @font-face rule. Reloading shows the new export, and a Shift-reload skips most browsers' font cache."
 ref = "Edit View › Previewing & Testing › Previewing in Web Browsers"
 status = "handbook"
+notes = "In M12 the test page is the HTML proof (format proof-html, `fontcraft-cli proof --format html`), which embeds the exported WOFF2 (package M12.35). Documented, not yet observed."
 
 [[behavior]]
 id = "proofing.composerDifferences"
 area = "proofing"
-milestone = "M12"
+milestone = "M14"
 summary = "Layout engines differ: the handbook warns that the same OpenType features can be applied differently by the different text composers of one layout application, so proofing must happen in the target software."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
+notes = "Moved from M12 to M14 by the M12 planning pass: testing advice that belongs with Test Install and the export destination (export.testInstall, M14), not with the command-line tools; docs/plans/M12.md § 7, question 2."
+
+# ───────────────────── Preview of exported fonts (M12 planning pass, our own rows) ─────────────────────
+
+[[behavior]]
+id = "textPreview.exportedFonts"
+area = "proofing"
+milestone = "M14"
+summary = "Text Preview can show the compiled fonts of the last export, or every font file in a chosen folder, instead of the open document, without installing them. The files are read again when they change on disk, and the text is laid out from the compiled tables (cmap, metrics, kerning and, once shaping exists, the layout features)."
+ref = "Our design, after the reference vendor's free font-preview companion tool"
+status = "inferred"
+own = true
+guesses = ["A watched file is read again when its modification time changes, at most once a second; a user report of missed or slow updates would settle it."]
+
+[[command]]
+id = "textPreview.showExportedFonts"
+label = "Preview Exported Fonts"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{source: \"lastExport\"|\"folder\"|\"document\", folder?: path, font?: string}"
+area = "proofing"
+milestone = "M14"
+summary = "Switches Text Preview between the open document, the fonts of the last export and the fonts in a folder; font picks one of them by PostScript name."
+ref = "Our design"
+status = "inferred"
+own = true
+guesses = ["The switch is a pop-up in the Text Preview window with no menu item; nothing in the reference app settles a place."]

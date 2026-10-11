@@ -1001,6 +1001,7 @@ milestone = "M12"
 summary = "The monospace markers disagree with the advances. A font is taken as monospaced when at least 80% of its ASCII glyphs share one width; then post.isFixedPitch must be non-zero and PANOSE must say monospaced, with numberOfHMetrics 3 recommended and odd-width glyphs listed. Otherwise the markers must be clear. Also covers CFF isFixedPitch against post."
 ref = "fontbakery opentype/monospace; comparefamily single-face test 13; comparefamily family test 10"
 status = "docs"
+guesses = ["One rule decides monospacing: at least 80% of the ASCII glyphs share one width, as the conformance checker of the opentype profile does; comparefamily's all-glyph hint is not reported separately (21-qa.md question 8)."]
 
 [[check]]
 id = "check.metrics.fontBBox"
@@ -3164,10 +3165,11 @@ severity = "info"
 scope = "family"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the 47 catalogue-metadata checks of the Google Fonts profile (METADATA.pb parses, names, weights, subsets, axes, designer, category and dates agree with the font files). Not built in: they test a sidecar file of one distributor. Candidate for a plug-in profile."
 ref = "fontbakery googlefonts/metadata/* (47 checks: 44 in the profile's metadata section, 3 in its licensing section)"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.googleFontsDescription"
@@ -3175,10 +3177,11 @@ severity = "info"
 scope = "family"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the description and article checks of the Google Fonts profile (HTML validity, links, length, images, git URL). Not built in."
 ref = "fontbakery googlefonts/description/* (9 checks); fontbakery googlefonts/article/images"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.googleFontsRepository"
@@ -3186,10 +3189,11 @@ severity = "info"
 scope = "family"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the repository-layout checks of the Google Fonts profile (directory name, sample image, upstream.yaml, zip files, stored reports, static fonts next to variable ones). Not built in."
 ref = "fontbakery googlefonts/repo/* (6 checks)"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.googleFontsLicensing"
@@ -3197,10 +3201,11 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the licence checks of the Google Fonts profile (licence file present, OFL text and copyright line, name IDs 13 and 14, Reserved Font Name, copyright notice format). A generic licence-record check may be derived later."
 ref = "fontbakery googlefonts/family/has_license; fontbakery googlefonts/font_copyright; fontbakery googlefonts/license/OFL_body_text; fontbakery googlefonts/license/OFL_copyright; fontbakery googlefonts/name/license; fontbakery googlefonts/name/license_url; fontbakery googlefonts/name/rfn"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.googleFontsNaming"
@@ -3208,10 +3213,11 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the Google Fonts naming policy (family name spelling rules, the full static and variable naming scheme, unitsPerEm limited to a short list). Not built in."
 ref = "fontbakery googlefonts/family_name_compliance; fontbakery googlefonts/font_names; fontbakery googlefonts/unitsperem"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.googleFontsAxisRegistry"
@@ -3219,10 +3225,11 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the checks against the Google Fonts axis registry (axis defaults registered, STAT names and values match the registry, instance coordinates follow the catalogue rules). Not built in."
 ref = "fontbakery googlefonts/axisregistry/fvar_axis_defaults; fontbakery googlefonts/STAT/axisregistry; fontbakery googlefonts/fvar_instances"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.googleFontsRegressions"
@@ -3230,10 +3237,11 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the checks that compare a font with the version already published (version raised, same axes, vertical metrics unchanged, glyphs similar, no glyphs lost). The general idea is covered by the compare tools, not by the auditor."
 ref = "fontbakery googlefonts/version_bump; fontbakery googlefonts/axes_match; fontbakery googlefonts/vertical_metrics_regressions; fontbakery googlefonts/cjk_vertical_metrics_regressions; fontbakery googlefonts/production_glyphs_similarity; fontbakery googlefonts/production_encoded_glyphs"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.notoFonts"
@@ -3241,10 +3249,11 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the Noto-only identity checks (fixed manufacturer, designer and trademark strings, vendor ID GOOG). Not built in; the generally useful Noto checks have their own rows."
 ref = "fontbakery notofonts/name/manufacturer; fontbakery notofonts/name/designer; fontbakery notofonts/name/trademark; fontbakery notofonts/vendor_id"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.microsoft"
@@ -3252,10 +3261,11 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the Microsoft-only delivery checks (vendor URL on microsoft.com, fixed licence description, WGL4 and OGL2 character-set compliance). Not built in; the character-set tests can be expressed with check.glyphset.minimumCoverage."
 ref = "fontbakery microsoft/vendor_url; fontbakery microsoft/license_description; fontbakery microsoft/wgl4; fontbakery microsoft/ogl2"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.fontwerk"
@@ -3263,10 +3273,11 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the Fontwerk-only identity check (vendor ID WERK). Expressed with check.tables.vendorId and the `vendorId` setting."
 ref = "fontbakery fontwerk/vendor_id"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 [[check]]
 id = "check.vendor.iso15008"
@@ -3274,10 +3285,11 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Placeholder for the five in-vehicle display legibility checks: width-to-height proportion of H (0.65-0.80), stem width relative to ascender height, spacing between character pairs, space width, and line spacing, each against the limits of ISO 15008. Candidate for an optional legibility profile."
 ref = "fontbakery iso15008/proportions; fontbakery iso15008/stem_width; fontbakery iso15008/intercharacter_spacing; fontbakery iso15008/interword_spacing; fontbakery iso15008/interline_spacing"
 status = "docs"
+notes = "Moved from M12 to M13 by the M12 planning pass: a placeholder for a vendor's checks, which 21-qa.md § 9 plans as a plug-in profile, not as built-in behaviour; docs/plans/M12.md § 7, question 2."
 
 # ---------------------------------------------------------------------------
 # Commands
@@ -3527,6 +3539,7 @@ milestone = "M12"
 summary = "Shortcut for the classic outline check: runs overlap, coincident points, flat curves, collinear lines, tiny contours and empty glyphs, and repairs them when `fix` is set. Defaults: minArea 25, tolerance 0, integer rounding, both check families on, fixed outlines written with the original kept in a backup layer."
 ref = "AFDKO checkoutlinesufo (all options)"
 status = "docs"
+notes = "Repair order read from AFDKO 5.0.1's checkoutlinesufo (Apache-2.0): coincident points, flat curves, collinear lines, overlap removal repeated until the rounded point list stops changing, tiny contours, collinear lines again; coordinates rounded (three decimals with decimal), points closer than one unit merged, then the original contour order restored for contours that did not change."
 
 [[command]]
 id = "audit.checkInterpolation"
@@ -3543,7 +3556,7 @@ status = "docs"
 
 [[command]]
 id = "audit.compareFamily"
-label = "Compare Family"
+label = "Check Family"
 menu = []
 shortcut = ""
 kind = "engine"
@@ -3553,6 +3566,8 @@ milestone = "M12"
 summary = "Shortcut for the family comparison: groups the given fonts into style-linked groups (same name ID 1) and typographic families (same name ID 16) and runs the single-face and family checks derived from the reference's numbered tests, optionally only the listed numbers. `tolerance` (default 0) relaxes the metric comparisons; `noHints` skips stem-hint checks."
 ref = "AFDKO comparefamily (-d, -st, -ft, -tolerance, -nohints)"
 status = "docs"
+guesses = ["The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13)."]
+notes = "Test numbers checked against AFDKO 5.0.1, run locally: comparefamily has single-face tests 1 to 34 and family tests 1 to 21, as 21-qa.md § 6 maps them; single-face test 29 is empty."
 
 [[command]]
 id = "audit.report.menuNames"
@@ -3609,7 +3624,7 @@ status = "docs"
 [[command]]
 id = "audit.showPanel"
 label = "Font Audit"
-menu = []
+menu = ["Window"]
 shortcut = ""
 kind = "ui"
 params = "{visible?: bool}"
@@ -3618,6 +3633,7 @@ milestone = "M12"
 summary = "Shows or hides the Font Audit panel."
 ref = "Our design"
 status = "inferred"
+guesses = ["The Font Audit panel opens from the Window menu with no shortcut, because the reference app has no audit panel; a later decision on shortcuts would settle it (21-qa.md question 1)."]
 
 [[command]]
 id = "audit.revealIssue"
@@ -3644,6 +3660,7 @@ milestone = "M12"
 summary = "Reveals the next result after the current one, within the current glyph or across the font, wrapping at the end."
 ref = "Our design"
 status = "inferred"
+guesses = ["No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1)."]
 
 [[command]]
 id = "audit.previousIssue"
@@ -3657,6 +3674,7 @@ milestone = "M12"
 summary = "Reveals the result before the current one, within the current glyph or across the font, wrapping at the start."
 ref = "Our design"
 status = "inferred"
+guesses = ["No menu item and no shortcut: the panel's arrow buttons and the Edit View marker badges run it, because the reference app has no audit panel (21-qa.md question 1)."]
 
 [[command]]
 id = "audit.toggleLiveAudit"
@@ -3881,6 +3899,7 @@ milestone = "M12"
 summary = "Family checks work on two groupings: style-linked groups, fonts with the same family name (name ID 1), and typographic families, fonts with the same typographic family name (name ID 16, falling back to ID 1). Each family check states which grouping it uses."
 ref = "AFDKO comparefamily (compatible family vs preferred family groups)"
 status = "docs"
+guesses = ["On a compiled font without its source the style comes from name IDs 2 and 17 and the fsSelection bits, never from the file name; only check.files.canonicalFileName reads the file name (21-qa.md question 9)."]
 
 [[behavior]]
 id = "audit.metricTolerance"
@@ -3939,6 +3958,7 @@ milestone = "M12"
 summary = "On the command line the check command exits with 0 when no result reaches the `--fail-on` severity (default fail), 1 when one does, 2 for usage errors and 3 for targets that cannot be read (the statuses every subcommand shares: cli.global.exitCodes). Skipped and ignored results never affect the status."
 ref = "fontbakery exit codes and --error-code-on; fontTools varLib.interpolatable --quiet"
 status = "docs"
+notes = "Settled by the M12 planning pass (20-cli.md question 20): 3 for an unreadable target, as every subcommand uses."
 
 [[behavior]]
 id = "audit.networkOptIn"

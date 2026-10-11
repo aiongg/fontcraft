@@ -253,6 +253,7 @@ milestone = "M12"
 summary = "Subcommands and long options may be shortened to any unambiguous prefix when typed interactively; scripts should spell them out, and --json output always uses full names."
 ref = "afdko invoker abbreviations (mo, ah, se …)"
 status = "inferred"
+guesses = ["A subcommand or long option may be shortened to any prefix that names exactly one subcommand, or one option of that subcommand; an ambiguous prefix is a usage error listing the candidates. No source fixes the rule; a user complaint about a clash would settle it."]
 
 [[behavior]]
 id = "cli.global.commandDispatch"
@@ -618,6 +619,7 @@ milestone = "M12"
 summary = "Copies the named tables from one font into another without an intermediate file; it is tables add with the bytes read from the first font. The written font is TO (or OUT)."
 ref = "AFDKO sfntedit help (extract from one font, add to another); AFDKO-Overview.md › sfntedit"
 status = "inferred"
+guesses = ["Copying a table the target already has replaces it without a prompt, as tables add does; a test against the reference workflow (sfntedit extract then add) shows the same result."]
 
 [[cli]]
 id = "tables checksum"
@@ -918,6 +920,7 @@ milestone = "M12"
 summary = "Reduces a font to chosen glyphs and removes everything that becomes unreachable: cmap entries, layout rules, variation data, names, hint tables. The kept set starts from glyph names, glyph indices, code points or text, and is closed over components and over the substitutions of the retained layout features. Defaults follow pyftsubset, which aims at small web fonts; each trimming step can be switched off."
 ref = "fontTools subset (pyftsubset) documentation; AFDKO tx help › Subsetting, mergefonts usage, makeotf -gs; fontmake --subset"
 status = "docs"
+notes = "Default layout features checked with fontTools 4.66.1 (`Options().layout_features`): abvf abvm abvs akhn blwf blwm blws calt ccmp cfar chws cjct clig cswh curs dist dnom fin2 fin3 fina frac half haln halt init isol jalt kern liga ljmo locl ltra ltrm mark med2 medi mkmk mset nukt numr palt pref pres pstf psts rand rclt rkrf rlig rphf rtla rtlm rvrn stch tjmo valt vatu vchw vert vhal vjmo vkrn vpal vrt2 (64 tags, plus four internal pseudo-tags that are not carried over). Default name IDs 0 to 6; dropped tables JSTF DSIG EBDT EBLC EBSC PCLT LTSH Feat Glat Gloc Silf Sill (20-cli.md question 8)."
 
 [[cli]]
 id = "instance"
@@ -1444,6 +1447,7 @@ milestone = "M12"
 summary = "Adds hints automatically. For CFF, CFF2, Type 1 and cubic UFO input it runs the PostScript autohinter, which derives stem hints, hint masks, counter hints and flex from each glyph and the font's alignment zones and standard stems. For TrueType fonts it runs the TrueType autohinter with the given option string. Several masters can be hinted together so that their hints stay compatible."
 ref = "AFDKO otfautohint __main__.py (options, --info, --doc-fontinfo), otfautohint_Notes.md; fontmake -a / -A (ttfautohint)"
 status = "docs"
+notes = "Checked in AFDKO 5.0.1's otfautohint source: for OTF input every glyph is hinted again and existing hints are replaced; --all only matters for UFO input, where unchanged glyphs are skipped by their stored hashes (20-cli.md question 5)."
 
 [[cli]]
 id = "stems"
@@ -2719,5 +2723,229 @@ area = "cli-tools"
 milestone = "M0"
 summary = "Read-only query over the command registry returning id, label, kind, menu path, shortcut, parameter documentation and summary for each matching command, or the CLI subcommand table with the command each subcommand dispatches."
 ref = "docs/spec/20-cli.md › commands"
+status = "inferred"
+own = true
+
+# ============================================================ companion tools (M12 planning pass)
+# Our own rows for what the reference vendor's free companion tools do: a table viewer with a
+# font comparison, and a source comparison with merging. The windows' rows sit here with the
+# commands they show, because they hold no logic of their own.
+
+[[cli]]
+id = "tables show"
+usage = "fontcraft-cli tables show FONT [TAG...] [--path PATH] [--depth N] [--offsets] [--format json|text]"
+options = [
+  "TAG...: the tables to show (default: every table the reader decodes; the others are listed with their size only)",
+  "--path PATH: show one record or field, for example GPOS.lookupList.lookups[3]",
+  "--depth N: how many levels of nested records to expand (default 3)",
+  "--offsets: also show each record's offset in the table and its size",
+  "--format json|text: a JSON tree (default with --json) or an indented listing",
+  "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
+]
+command = "tables.show"
+equivalents = [
+  "ttx: -t TAG (decoded XML of the named tables)",
+  "spot: -t TAG (the raw view)",
+]
+area = "cli-tools"
+milestone = "M12"
+summary = "Shows the decoded fields of a font's tables as a tree: each record with its field names and values, offsets followed to the records they point to, and glyph indices shown with their names, down to the requested depth. It follows each table's own structure from the OpenType specification rather than a dump format of a reference tool; the Table Viewer window shows the same tree. Two fonts are compared table by table with diff."
+ref = "Our design, after the reference vendor's free table-viewer companion tool; OpenType specification table layouts"
+status = "inferred"
+own = true
+guesses = ["Records are expanded three levels deep unless --depth says otherwise; a user's need to see deeper by default would settle it."]
+
+[[cli]]
+id = "sources"
+usage = "fontcraft-cli sources (diff | merge) ..."
+options = [
+  "ACTION: diff or merge",
+  "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
+]
+command = ""
+equivalents = []
+area = "cli-tools"
+milestone = "M12"
+summary = "Group of two actions on source files (.glyphs, .glyphspackage, .fontcraft, UFO, designspace): compare two sources glyph by glyph and field by field, and merge chosen changes from one into the other."
+ref = "Our design, after the reference vendor's free source-comparison companion tool"
+status = "inferred"
+own = true
+
+[[cli]]
+id = "sources diff"
+usage = "fontcraft-cli sources diff A B [--parts glyphs,info,masters,instances,axes,kerning,features] [--glyphs LIST] [--tolerance UNITS] [--format text|json]"
+options = [
+  "A, B: the two sources; they may be in different formats",
+  "--parts LIST: which parts to compare (default all)",
+  "--glyphs LIST, --glyph-file PATH: compare only these glyphs (glyph list syntax)",
+  "--tolerance UNITS: coordinates closer than this count as equal (default 0)",
+  "--format text|json: one line per change (default) or the change list as JSON",
+  "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
+]
+command = "source.diff"
+equivalents = []
+area = "cli-tools"
+milestone = "M12"
+summary = "Compares two sources and lists every difference: glyphs added, removed or renamed; per glyph and master the outlines, components, anchors, metrics, code points and properties that changed; Font Info fields, masters, instances, axes, kerning and groups, and feature code, field by field. Masters are matched by axis location, then by name. Each change has an id that sources merge accepts. Exit status 1 when the sources differ."
+ref = "Our design, after the reference vendor's free source-comparison companion tool"
+status = "inferred"
+own = true
+guesses = ["Masters and instances are matched by axis location first and by name second, and glyphs by name; a renamed glyph is reported as a rename when its outlines and code points are unchanged. A comparison with the companion tool on two versions of one font would settle it."]
+
+[[cli]]
+id = "sources merge"
+usage = "fontcraft-cli sources merge BASE OTHER (--take ID,... | --take-all) [--parts LIST] [--glyphs LIST] (-o OUT | --in-place)"
+options = [
+  "BASE: the source the changes are applied to; OTHER: the source they are taken from",
+  "--take ID,...: the change ids printed by sources diff",
+  "--take-all: every change of the selected parts and glyphs",
+  "--parts LIST, --glyphs LIST: limit --take-all",
+  "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
+]
+command = "source.merge"
+equivalents = []
+area = "cli-tools"
+milestone = "M12"
+summary = "Applies chosen changes from OTHER to BASE and writes the result in BASE's format: the change ids printed by sources diff, or every change of some parts or glyphs. A change whose place in BASE no longer matches what the diff saw is refused, and then nothing is written. BASE is replaced only with --in-place."
+ref = "Our design, after the reference vendor's free source-comparison companion tool"
+status = "inferred"
+own = true
+guesses = ["Merging is two-way only (base and other), with no common ancestor; a three-way merge needs version history, which FontCraft does not keep. A user workflow that needs three-way merging would settle it."]
+
+[[command]]
+id = "tables.show"
+label = "Show Tables"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: int|name, tables?: [tag], path?: string, depth?: int, offsets?: bool} → {tables: [{tag, length, checksum, decoded: bool, tree?: node, error?: string}]}, node = {name, type, value?, offset?, length?, children?: [node], more?: int}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Returns the decoded fields of a font's tables as a tree of named records and values, following offsets, with glyph indices named. A table that cannot be decoded is returned with its error and its bytes stay listable through tables.extract. Nothing is written."
+ref = "Our design (docs/spec/20-cli.md › tables show)"
+status = "inferred"
+own = true
+
+[[command]]
+id = "source.diff"
+label = "Compare Sources"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{a: path, b: path, parts?: [\"glyphs\"|\"info\"|\"masters\"|\"instances\"|\"axes\"|\"kerning\"|\"features\"], glyphs?: [name], tolerance?: number} → {same: bool, changes: [{id, part, kind: \"added\"|\"removed\"|\"renamed\"|\"changed\", glyph?, master?, field?, a?, b?}], summary: {part: count}}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Compares two source files and returns the list of changes from A to B, each with a stable id, its part, the glyph, master or field it concerns and both values. The glyph comparison is font.compareGlyphs. Nothing is written."
+ref = "Our design (docs/spec/20-cli.md › sources)"
+status = "inferred"
+own = true
+
+[[command]]
+id = "source.merge"
+label = "Merge Sources"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{base: path, other: path, take: [id] | \"all\", parts?: [string], glyphs?: [name], output: path} → {applied: [id], output: path}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Applies the chosen changes of source.diff from OTHER to BASE and writes the result to output in BASE's format. All or nothing: a change that no longer applies refuses the whole merge."
+ref = "Our design (docs/spec/20-cli.md › sources)"
+status = "inferred"
+own = true
+
+[[panel]]
+id = "window.tableViewer"
+label = "Table Viewer"
+location = "window"
+controls = [
+  "font field with Open button, or the fonts of the last export",
+  "table list: tag, size, checksum and whether the reader decodes it",
+  "tree of the selected table's records and fields (tables.show), with glyph names for glyph indices",
+  "hex pane for the selected record, with its offset and size",
+  "Compare With… button: a second font; tables and fields that differ are marked (font.diff)",
+  "search field over field names and values",
+]
+area = "cli-tools"
+milestone = "M12"
+summary = "Shows a compiled font's tables as a tree of decoded fields with a hex pane, and compares two fonts table by table. Every control calls tables.list, tables.show or font.diff, so the window holds no logic of its own."
+ref = "Our design, after the reference vendor's free table-viewer companion tool"
+status = "inferred"
+own = true
+
+[[command]]
+id = "tableViewer.show"
+label = "Table Viewer"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{font?: path, compareWith?: path}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Opens the Table Viewer window, optionally on a font file and with a second font to compare."
+ref = "Our design"
+status = "inferred"
+own = true
+guesses = ["The Table Viewer opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place."]
+
+[[panel]]
+id = "window.sourceDiff"
+label = "Compare Sources"
+location = "window"
+controls = [
+  "two source fields (the open document and a file, or two files)",
+  "part filter: glyphs, Font Info, masters, instances, axes, kerning, features",
+  "change list grouped by part and glyph, with a check box per change",
+  "side-by-side glyph drawing of both versions for the selected glyph change, differences highlighted",
+  "field table for Font Info, master and instance changes, both values side by side",
+  "Merge Selected button (one undo step on the open document)",
+]
+area = "cli-tools"
+milestone = "M13"
+summary = "Compares the open document with another source, or two sources, and merges the checked changes into the open document. Every control calls document.compareWithFile, document.mergeFromFile or source.diff."
+ref = "Our design, after the reference vendor's free source-comparison companion tool"
+status = "inferred"
+own = true
+
+[[command]]
+id = "sourceDiff.show"
+label = "Compare with File…"
+menu = ["File"]
+shortcut = ""
+kind = "ui"
+params = "{path?: path}"
+area = "cli-tools"
+milestone = "M13"
+summary = "Opens the Compare Sources window for the open document and a chosen source file."
+ref = "Our design"
+status = "inferred"
+own = true
+guesses = ["Compare with File… sits in the File menu with no shortcut; nothing in the reference app settles a menu place."]
+
+[[command]]
+id = "document.compareWithFile"
+label = "Compare Document with File"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{path: path, parts?: [string], glyphs?: [name], tolerance?: number} → the result of source.diff, with the open document as A"
+area = "cli-tools"
+milestone = "M13"
+summary = "Compares the open document with a source file, as source.diff compares two files. Changes nothing."
+ref = "Our design"
+status = "inferred"
+own = true
+
+[[command]]
+id = "document.mergeFromFile"
+label = "Merge Changes from File"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{path: path, take: [id] | \"all\", parts?: [string], glyphs?: [name]} → {applied: [id]}"
+area = "cli-tools"
+milestone = "M13"
+summary = "Applies chosen changes from a source file to the open document as one undo step. All or nothing, as source.merge."
+ref = "Our design"
 status = "inferred"
 own = true

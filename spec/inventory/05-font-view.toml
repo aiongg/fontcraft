@@ -3337,3 +3337,97 @@ guesses = [
   "New off-curve points are rounded to the grid.",
   "With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible.",
 ]
+
+# ───────────────────── Glyph Data Editor (M12 planning pass, our own rows) ─────────────────────
+# What the reference vendor's free glyph-data companion tool does, folded into FontCraft: a
+# window over crates/glyphdata that creates and edits custom GlyphData.xml files.
+
+[[panel]]
+id = "window.glyphDataEditor"
+label = "Glyph Data Editor"
+location = "window"
+controls = [
+  "file field with New, Open and Save buttons; New starts empty or from chosen built-in records",
+  "entry table: name, Unicode, category, subcategory, script, production name, alternative names, description",
+  "entry detail: every attribute of the glyph element, including decompose, anchors, marks and sortName",
+  "Add, Remove and Duplicate buttons; search field",
+  "Compare With… button: a second file; added, removed and changed entries are marked",
+  "problems list: duplicate names or code points, unknown categories, invalid names",
+]
+area = "font-view"
+milestone = "M14"
+summary = "Creates and edits custom glyph data files in the GlyphData.xml format that Glyph Info reads, and compares two such files. Every control calls a glyphData.* command; the window holds no logic of its own."
+ref = "Our design, after the reference vendor's free glyph-data companion tool; GlyphsInfo GlyphData.xml (DTD)"
+status = "inferred"
+own = true
+
+[[command]]
+id = "glyphDataEditor.show"
+label = "Glyph Data Editor"
+menu = ["Window"]
+shortcut = ""
+kind = "ui"
+params = "{path?: path}"
+area = "font-view"
+milestone = "M14"
+summary = "Opens the Glyph Data Editor, optionally on a glyph data file."
+ref = "Our design"
+status = "inferred"
+own = true
+guesses = ["The editor opens from the Window menu with no shortcut; the companion tool is a separate application, so nothing settles a menu place."]
+
+[[command]]
+id = "glyphData.readFile"
+label = "Read Glyph Data File"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{path: path} → {entries: [{name, unicode?, category, subCategory?, script?, production?, altNames?, description?, decompose?, anchors?, marks?, sortName?, sortNameKeep?}], problems: [{name?, line?, message}]}"
+area = "font-view"
+milestone = "M14"
+summary = "Reads a glyph data file within the glyph database's limits and returns its entries and the problems found (duplicate names or code points, unknown categories, invalid names). Changes nothing."
+ref = "Our design; crates/glyphdata custom-file reader"
+status = "inferred"
+own = true
+
+[[command]]
+id = "glyphData.writeFile"
+label = "Write Glyph Data File"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{path: path, entries: [entry], from?: \"empty\"|\"builtin\", names?: [name]} → {path, count}"
+area = "font-view"
+milestone = "M14"
+summary = "Writes a glyph data file from a list of entries, or from the built-in records of the named glyphs. Refuses entries with problems and then writes nothing; the file is replaced atomically."
+ref = "Our design"
+status = "inferred"
+own = true
+
+[[command]]
+id = "glyphData.setEntries"
+label = "Edit Glyph Data Entries"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{path: path, add?: [entry], remove?: [name], change?: [{name, fields: object}], output?: path} → {path, count}"
+area = "font-view"
+milestone = "M14"
+summary = "Adds, removes and changes entries of a glyph data file in one step and writes it back (or to output). All or nothing: an edit that leaves a problem refuses the whole call."
+ref = "Our design"
+status = "inferred"
+own = true
+
+[[command]]
+id = "glyphData.compareFiles"
+label = "Compare Glyph Data Files"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{a: path, b: path} → {added: [name], removed: [name], changed: [{name, fields: {field: [a, b]}}]}"
+area = "font-view"
+milestone = "M14"
+summary = "Compares two glyph data files entry by entry, matched by name. Changes nothing."
+ref = "Our design"
+status = "inferred"
+own = true
