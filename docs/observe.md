@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**911 rows to check: 1007 guesses and 364 observe steps.**
+**911 rows to check: 1008 guesses and 364 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -438,6 +438,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A non-master layer whose base glyph has no layer with the same id reads the base's master layer of the same master, where glyphsLib interpolates the base's anchors at the layer's axis location; a brace layer in the reference app whose base lacks it settles it.
   - Guess: A base glyph without a layer for the composite's master passes no anchors on, where glyphsLib stops with an error; the reference app with such a font settles it.
   - Guess: A component pinned to another master (`masterId`) passes on the anchors of that master's layer of its base, the layer alignment places it from; a composite with a pinned component in the reference app, read through a mark attached to it, settles it.
+  - Guess: A smart component whose glyph's pole layers hold components passes on the anchors its base layer propagates, not anchors interpolated at its values; glyphsLib on a smart glyph whose pole layers are composites settles what the reference compilers do.
 - [ ] `components.underscoreAnchorSnapsToPlainAnchor` (behavior, M6, handbook): A component whose base glyph has an anchor with a leading underscore…
   - Guess: A component whose underscore anchors find no plain anchor among the components before it is set after them as another base, as if typed; a mark added to a base without the matching anchor in the reference app settles it.
 - [ ] `components.alternativeAnchorSuffix` (behavior, M6, handbook): A layer may carry several anchors of one type, told apart by…
