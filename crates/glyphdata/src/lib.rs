@@ -7,7 +7,8 @@
 //! Glyph List). The rules are those of `docs/spec/05-font-view.md` § 4.
 //!
 //! The built-in data is GlyphsInfo's `GlyphData.xml` and `GlyphData_Ideographs.xml`, the Adobe
-//! Glyph List with AGLFN, and Unicode's general categories, bidi classes and scripts, compiled by
+//! Glyph List with AGLFN, and Unicode's general categories, bidi classes, scripts, canonical
+//! decompositions and combining classes, compiled by
 //! `cargo xtask glyphdata --generate` into `data/glyphdata.bin` (sources and licences:
 //! `xtask/glyphdata.toml`, `ASSETS.md`, `NOTICE`). It is loaded on first use.
 //!
@@ -35,7 +36,7 @@ pub mod xml;
 
 use std::fmt;
 
-pub use data::{Found, GlyphData, Info, MAX_CODE_POINTS, MAX_CUSTOM_FILES, MAX_NAME_BYTES, Source, Sourced, Via};
+pub use data::{Found, GlyphData, Info, MAX_CODE_POINTS, MAX_CUSTOM_FILES, MAX_DECOMPOSITION_DEPTH, MAX_NAME_BYTES, Source, Sourced, Via};
 pub use names::{NameError, NameProblem, code_point_name, parse_code_point_name, validate};
 pub use order::SortKey;
 pub use record::Record;

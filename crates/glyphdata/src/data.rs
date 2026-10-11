@@ -23,6 +23,8 @@ pub const MAX_NAME_BYTES: usize = 1024;
 pub const MAX_CODE_POINTS: usize = 64;
 /// Most custom glyph data files merged into one database.
 pub const MAX_CUSTOM_FILES: usize = 64;
+/// Most levels [`GlyphData::full_canonical_decomposition`] expands.
+pub const MAX_DECOMPOSITION_DEPTH: usize = 8;
 
 /// Where a property's value came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -601,11 +603,44 @@ impl GlyphData {
 
     /// The Unicode canonical decomposition mapping of `cp`, one level (the mapping in
     /// `UnicodeData.txt` without a compatibility tag): U+00C0 → [U+0041, U+0300]. `None` when the
-    /// code point has none.
+    /// code point has none. Hangul syllables, which Unicode decomposes by formula rather than by
+    /// table, have none here.
     pub fn canonical_decomposition(&self, cp: u32) -> Option<Vec<u32>> {
-        // M6.3: generate the mappings into the tables and read them here.
-        let _ = cp;
-        None
+        self.tables.canonical_decomposition(cp)
+    }
+
+    /// The full canonical decomposition of `cp`: [`GlyphData::canonical_decomposition`] applied
+    /// again to each resulting code point until none decomposes further (U+1EA6 → [U+0041,
+    /// U+0302, U+0300]). `None` when `cp` has no decomposition. Unicode's mappings nest at most
+    /// four deep; the expansion stops at [`MAX_DECOMPOSITION_DEPTH`] levels and
+    /// [`MAX_CODE_POINTS`] code points whatever the tables say.
+    pub fn full_canonical_decomposition(&self, cp: u32) -> Option<Vec<u32>> {
+        let mut out = self.canonical_decomposition(cp)?;
+        for _ in 1..MAX_DECOMPOSITION_DEPTH {
+            let mut next = Vec::with_capacity(out.len() + 1);
+            let mut changed = false;
+            for c in &out {
+                match self.canonical_decomposition(*c) {
+                    Some(parts) => {
+                        next.extend(parts);
+                        changed = true;
+                    }
+                    None => next.push(*c),
+                }
+            }
+            next.truncate(MAX_CODE_POINTS);
+            out = next;
+            if !changed {
+                break;
+            }
+        }
+        Some(out)
+    }
+
+    /// The Unicode canonical combining class of `cp` (`UnicodeData.txt` field 3): 0 for a
+    /// starter, 230 for a mark above, 220 for a mark below, 202 for one attached below…
+    pub fn canonical_combining_class(&self, cp: u32) -> u8 {
+        self.tables.combining_class(cp)
     }
 
     // ── Unicode properties and the Adobe Glyph List ──

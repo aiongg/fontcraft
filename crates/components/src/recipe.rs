@@ -14,9 +14,10 @@
 //!   the font, else in the glyph database.
 
 use fontcraft_glyphdata::GlyphData;
-use fontcraft_model::Font;
+use fontcraft_model::{Font, MAX_NAME_LEN};
 
-use crate::ComponentsError;
+use crate::compose::is_mark;
+use crate::{ComponentsError, MAX_RECIPE_BYTES, MAX_RECIPE_PARTS};
 
 /// One parsed recipe.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,16 +42,53 @@ pub fn is_recipe(text: &str) -> bool {
     text.contains('=')
 }
 
-/// The recipe in `text`; see the module doc.
+/// The recipe in `text`; see the module doc. Leading and trailing white space is ignored; a
+/// recipe holds no other white space, because spaces separate items in the Add Glyphs field.
 pub fn parse_recipe(text: &str) -> Result<Recipe, ComponentsError> {
-    // M6.3
-    let _ = text;
-    Err(ComponentsError::NotYetImplemented("recipes"))
+    if text.len() > MAX_RECIPE_BYTES {
+        return Err(ComponentsError::LimitExceeded { what: "bytes in a recipe", limit: MAX_RECIPE_BYTES });
+    }
+    let text = text.trim();
+    if text.chars().any(char::is_whitespace) {
+        return Err(ComponentsError::BadRecipe("a recipe has no spaces".into()));
+    }
+    let Some((left, target)) = text.split_once('=') else {
+        return Err(ComponentsError::BadRecipe("a recipe needs `=` before the new glyph's name".into()));
+    };
+    if target.contains('=') {
+        return Err(ComponentsError::BadRecipe("a recipe has one `=`".into()));
+    }
+    if target.contains('+') {
+        return Err(ComponentsError::BadRecipe("the new glyph's name after `=` cannot contain `+`".into()));
+    }
+    check_name(target, "the new glyph's name")?;
+    let mut parts = Vec::new();
+    for part in left.split('+') {
+        if parts.len() == MAX_RECIPE_PARTS {
+            return Err(ComponentsError::LimitExceeded { what: "components in a recipe", limit: MAX_RECIPE_PARTS });
+        }
+        check_name(part, "a component name")?;
+        if part == target {
+            return Err(ComponentsError::BadRecipe(format!("`{target}` cannot be a component of itself")));
+        }
+        parts.push(part.to_string());
+    }
+    Ok(Recipe { parts, target: target.to_string() })
 }
 
-/// The role of each part of `recipe`, parallel to `recipe.parts`.
+fn check_name(name: &str, what: &str) -> Result<(), ComponentsError> {
+    if name.is_empty() {
+        return Err(ComponentsError::BadRecipe(format!("{what} is empty")));
+    }
+    if name.len() > MAX_NAME_LEN {
+        return Err(ComponentsError::LimitExceeded { what: "bytes in a glyph name", limit: MAX_NAME_LEN });
+    }
+    fontcraft_glyphdata::validate(name, false).map_err(|e| ComponentsError::BadRecipe(format!("{what} `{name}`: {e}")))
+}
+
+/// The role of each part of `recipe`, parallel to `recipe.parts`: a part whose glyph has the
+/// category Mark (stored in the font, else in the glyph database) is a mark, except the first,
+/// which has no base before it to attach to; every other part is a base.
 pub fn classify(font: &Font, data: &GlyphData, recipe: &Recipe) -> Vec<PartRole> {
-    // M6.3
-    let _ = (font, data);
-    vec![PartRole::Base; recipe.parts.len()]
+    recipe.parts.iter().enumerate().map(|(i, part)| if i > 0 && is_mark(font, data, part) { PartRole::Mark } else { PartRole::Base }).collect()
 }

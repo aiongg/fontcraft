@@ -30,6 +30,11 @@
 //! | `AGLN` | 8: name (string reference), first code point in `AGLC` (u16), count (u8), padding | by name |
 //! | `AGLC` | 3: code point | |
 //! | `AGLF` | 8: name (string reference), code point (u24), padding | by name |
+//! | `DECM` | 9: code point, first and second code point of its canonical decomposition (u24, second `FFFFFF` for a singleton) | by code point |
+//! | `CCCL` | 4: first code point of a run (u24), canonical combining class (u8) | by code point |
+//!
+//! `DECM` and `CCCL` may be absent (a blob from before they existed): every code point then has
+//! no decomposition and class 0.
 
 use std::ops::Range;
 use std::sync::OnceLock;
@@ -44,6 +49,7 @@ pub const HANR_SIZE: usize = 7;
 pub const RUN_SIZE: usize = 4;
 pub const AGLN_SIZE: usize = 8;
 pub const AGLF_SIZE: usize = 8;
+pub const DECM_SIZE: usize = 9;
 pub const NONE_U24: u32 = 0xFF_FFFF;
 pub const NONE_U8: u8 = 0xFF;
 pub const FLAG_CODE_POINT_PRODUCTION: u8 = 1;
@@ -108,6 +114,8 @@ pub struct Tables {
     agln: Range<usize>,
     aglc: Range<usize>,
     aglf: Range<usize>,
+    decm: Range<usize>,
+    cccl: Range<usize>,
     han_script: Option<u8>,
 }
 
@@ -162,6 +170,11 @@ impl Tables {
             (b"AGLF", AGLF_SIZE),
         ] {
             need(tag, size)?;
+        }
+        for (tag, size) in [(b"DECM", DECM_SIZE), (b"CCCL", RUN_SIZE)] {
+            if payload.section(tag).is_some() {
+                need(tag, size)?;
+            }
         }
         let strs = payload.section(b"STRS").ok_or_else(|| Error::Blob("missing section STRS".into()))?;
         let strs = String::from_utf8(strs.to_vec()).map_err(|_| Error::Blob("string pool is not UTF-8".into()))?;
@@ -226,6 +239,8 @@ impl Tables {
             agln: range(b"AGLN"),
             aglc: range(b"AGLC"),
             aglf: range(b"AGLF"),
+            decm: range(b"DECM"),
+            cccl: range(b"CCCL"),
             han_script: None,
             data,
         };
@@ -498,6 +513,35 @@ impl Tables {
         let i = self.run_value(&self.uscr, cp)?;
         let s = u8_at(self.bytes(&self.ucsm), usize::from(i)).filter(|v| *v != NONE_U8)?;
         self.script_name(s)
+    }
+
+    // ── Unicode canonical decomposition ──
+
+    /// The one-level canonical decomposition of `cp`.
+    pub fn canonical_decomposition(&self, cp: u32) -> Option<Vec<u32>> {
+        let decm = self.bytes(&self.decm);
+        let (mut lo, mut hi) = (0usize, decm.len() / DECM_SIZE);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            let at = mid * DECM_SIZE;
+            match u24_at(decm, at)?.cmp(&cp) {
+                std::cmp::Ordering::Equal => {
+                    let first = u24_at(decm, at + 3)?;
+                    return Some(match u24_at(decm, at + 6)? {
+                        NONE_U24 => vec![first],
+                        second => vec![first, second],
+                    });
+                }
+                std::cmp::Ordering::Less => lo = mid + 1,
+                std::cmp::Ordering::Greater => hi = mid,
+            }
+        }
+        None
+    }
+
+    /// The canonical combining class of `cp` (0 for a starter).
+    pub fn combining_class(&self, cp: u32) -> u8 {
+        self.run_value(&self.cccl, cp).unwrap_or(0)
     }
 
     // ── Adobe Glyph List ──

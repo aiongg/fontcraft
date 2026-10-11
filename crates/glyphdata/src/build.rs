@@ -1,7 +1,8 @@
 //! Writes the built-in tables from the source files (used by `cargo xtask glyphdata --generate`).
 //!
 //! The sources are GlyphsInfo's `GlyphData.xml` and `GlyphData_Ideographs.xml`, the Adobe Glyph
-//! List with AGLFN, and three files of the Unicode Character Database. The layout of each section
+//! List with AGLFN, and three files of the Unicode Character Database (`UnicodeData.txt` also gives
+//! the canonical decompositions and combining classes). The layout of each section
 //! is described in `tables.rs`. Building is deterministic: the same sources give the same bytes.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -10,7 +11,7 @@ use crate::blob::{Writer, push_u16, push_u24};
 
 use crate::names::code_point_name;
 use crate::record::Record;
-use crate::tables::{FLAG_CODE_POINT_PRODUCTION, NONE_U8, NONE_U24};
+use crate::tables::{DECM_SIZE, FLAG_CODE_POINT_PRODUCTION, NONE_U8, NONE_U24};
 use crate::types::{BidiClass, Category, GeneralCategory};
 
 const CODE_POINTS: usize = 0x11_0000;
@@ -166,6 +167,40 @@ fn general_categories(text: &str) -> Result<Vec<u8>, String> {
     Ok(gc)
 }
 
+/// The canonical decomposition mappings of `UnicodeData.txt` (field 5 without a `<tag>`), one
+/// level, sorted by code point, and the canonical combining class of every code point (field 3;
+/// code points it does not list have class 0). A canonical mapping has one or two code points.
+fn decompositions(text: &str) -> Result<(Vec<(u32, u32, Option<u32>)>, Vec<u8>), String> {
+    let mut map = Vec::new();
+    let mut ccc = vec![0u8; CODE_POINTS];
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        let fields: Vec<&str> = line.split(';').collect();
+        let (Some(cp), Some(class), Some(decomposition)) = (fields.first(), fields.get(3), fields.get(5)) else {
+            return Err(format!("UnicodeData.txt: short line `{line}`"));
+        };
+        let cp = u32::from_str_radix(cp, 16).map_err(|e| format!("UnicodeData.txt: {e}"))?;
+        let class: u8 = class.parse().map_err(|e| format!("UnicodeData.txt: combining class of U+{cp:04X}: {e}"))?;
+        if let Some(slot) = ccc.get_mut(cp as usize) {
+            *slot = class;
+        }
+        if decomposition.is_empty() || decomposition.starts_with('<') {
+            continue;
+        }
+        let parts = decomposition
+            .split(' ')
+            .map(|c| u32::from_str_radix(c, 16))
+            .collect::<Result<Vec<u32>, _>>()
+            .map_err(|e| format!("UnicodeData.txt: decomposition of U+{cp:04X}: {e}"))?;
+        match parts.as_slice() {
+            [a] => map.push((cp, *a, None)),
+            [a, b] => map.push((cp, *a, Some(*b))),
+            _ => return Err(format!("UnicodeData.txt: U+{cp:04X} has a canonical decomposition of {} code points", parts.len())),
+        }
+    }
+    map.sort_unstable();
+    Ok((map, ccc))
+}
+
 /// Run-length form of a per-code-point table: (first code point, value) where the value changes.
 fn runs(values: &[u8]) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
@@ -281,6 +316,13 @@ pub fn build(s: &Sources) -> Result<Built, String> {
 
     // Unicode properties.
     let gc = general_categories(&s.unicode_data)?;
+    let (decomposition, ccc) = decompositions(&s.unicode_data)?;
+    let mut decm = Vec::with_capacity(decomposition.len() * DECM_SIZE);
+    for (cp, a, b) in &decomposition {
+        push_u24(&mut decm, *cp)?;
+        push_u24(&mut decm, *a)?;
+        push_u24(&mut decm, b.unwrap_or(NONE_U24))?;
+    }
     let mut bidi = vec![BidiClass::L.index(); CODE_POINTS];
     for (a, b, v) in parse_property_file(&s.bidi, true)? {
         let class = bidi_alias(&v).ok_or_else(|| format!("DerivedBidiClass.txt: unknown class `{v}`"))?;
@@ -465,6 +507,7 @@ pub fn build(s: &Sources) -> Result<Built, String> {
     stats.push(("stored production names".into(), stored_production.len()));
     stats.push(("AGL names".into(), agl.len()));
     stats.push(("AGLFN names".into(), aglfn.len()));
+    stats.push(("canonical decompositions".into(), decomposition.len()));
     stats.push(("string pool bytes".into(), pool.bytes.len()));
 
     let mut w = Writer::default();
@@ -484,6 +527,8 @@ pub fn build(s: &Sources) -> Result<Built, String> {
     w.add(b"AGLN", agln);
     w.add(b"AGLC", aglc);
     w.add(b"AGLF", aglf);
+    w.add(b"DECM", decm);
+    w.add(b"CCCL", runs(&ccc)?);
     let blob = w.finish()?;
     Ok(Built { blob, stats, notes })
 }

@@ -40,6 +40,11 @@ pub use index::ComponentIndex;
 pub use propagate::{AnchorCache, AnchorSource, EffectiveAnchor};
 
 #[cfg(test)]
+mod compose_tests;
+#[cfg(test)]
+mod recipe_tests;
+
+#[cfg(test)]
 mod tests {
     use fontcraft_model::{Font, GlyphTable};
 

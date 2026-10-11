@@ -145,6 +145,13 @@ milestone = "M6"
 summary = "When a glyph that the glyph info database describes as a composite is added to the font, it is created already filled with its components (adding eacute yields e plus acutecomb). The database is the only source for which components go into which glyph."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
+notes = "Documented, not yet observed. The published glyph database has no composition column; `components::compose` (M6.3) takes a custom GlyphData.xml `decompose` list first, then our table for i and j, then the Unicode canonical decomposition mapped to glyph names (U+0301 to acutecomb), then a ligature's name parts (open decision D6, answered (a) in the M6 plan § 7 question 3). Rules in `crates/components/src/compose.rs`."
+guesses = [
+  "The Unicode decomposition is expanded fully (Aringacute is A, ringcomb, acutecomb), except that a letter with a horn stays whole when the font has it (Ohornacute is Ohorn, acutecomb); the composites stored in corpus sources saved by the reference app measure it (M6 plan § 5).",
+  "Our exceptions to Unicode: a name containing commaaccent takes commaaccentcomb where Unicode has the cedilla, gcommaaccent takes commaturnedabovecomb, and dcaron, lcaron, Lcaron and tcaron prefer caroncomb.alt; composing these in the reference app settles it.",
+  "Two marks in a row become their mark ligature (circumflexcomb_gravecomb, with the same suffix preferences) when the font has it; composing Acircumflexgrave in the reference app with the mark ligature present settles it.",
+  "A base of a decomposition takes the composite's suffix and is required (agrave.sc needs a.sc), while a ligature part takes the suffix only when the font has the suffixed glyph (f_f_l.ss01 from f.ss01 and l); composing suffixed glyphs in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.autoComposeNeedsAllParts"
@@ -153,6 +160,10 @@ milestone = "M6"
 summary = "Automatic composition is all-or-nothing: if any one of the components the database calls for is missing from the font, no components are inserted."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
+notes = "Documented, not yet observed. `components::compose` returns the missing parts and builds nothing (M6.3)."
+guesses = [
+  "The refusal names every missing part once: a mark by its plain name, a base by the name it needed (a.sc for agrave.sc); the message of the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.preferMarkWithSameSuffix"
@@ -161,6 +172,10 @@ milestone = "M6"
 summary = "While composing a glyph automatically, a mark glyph carrying the same dot suffix as the composite wins over the plain mark when it exists (agrave.sc takes gravecomb.sc before gravecomb)."
 ref = "Reusing Shapes › Components › Preferred Marks for Glyph Composition"
 status = "handbook"
+notes = "Documented, not yet observed. Implemented in `components::compose` (M6.3)."
+guesses = [
+  "For an uppercase composite with a suffix the marks are tried as the suffixed mark, the .case mark, then the plain mark (Agrave.ss01: gravecomb.ss01, gravecomb.case, gravecomb); composing it in the reference app with all three present settles it.",
+]
 
 [[behavior]]
 id = "components.preferCaseMarksForUppercase"
@@ -169,6 +184,7 @@ milestone = "M6"
 summary = "While composing an uppercase letter automatically, a mark with the suffix .case is used in place of the plain mark when the font has one (Agrave takes gravecomb.case before gravecomb)."
 ref = "Reusing Shapes › Components › Preferred Marks for Glyph Composition"
 status = "handbook"
+notes = "Documented, not yet observed. Implemented in `components::compose` (M6.3); uppercase is the case the font stores for the composite, else the glyph database's."
 
 [[behavior]]
 id = "components.preferNarrowMarksForIJ"
@@ -177,6 +193,10 @@ milestone = "M6"
 summary = "Composites built on i or j (imacron, jcircumflex and the like) prefer mark glyphs whose names end in .i or .narrow when such marks exist."
 ref = "Reusing Shapes › Components › Preferred Marks for Glyph Composition"
 status = "handbook"
+notes = "Documented, not yet observed. Implemented in `components::compose` (M6.3)."
+guesses = [
+  "A mark ending in .i is tried before one ending in .narrow, and both only on the dotless lowercase i and j, not on I or J; composing imacron in the reference app with both marks present settles it.",
+]
 
 [[behavior]]
 id = "components.ijBuiltFromDotless"
@@ -185,6 +205,10 @@ milestone = "M6"
 summary = "The default composition of i and j is the dotless letter (idotless, jdotless) plus a dotaccentcomb component."
 ref = "Reusing Shapes › Components › Preferred Marks for Glyph Composition"
 status = "handbook"
+notes = "Documented, not yet observed. Implemented in `components::compose` (M6.3). Corpus: sources saved by the reference app hold i and j as idotless or jdotless plus dotaccentcomb, and iacute, imacron and jcircumflex on the dotless letters."
+guesses = [
+  "Composites lose the dot of i and j only before a mark above (Unicode combining class 230), so iogonek is i plus ogonekcomb; a suffixed i or j is composed only when the font has the suffixed dotless letter; composing iogonek and i.sc in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.recipeSingleComponent"
@@ -193,7 +217,7 @@ milestone = "M6"
 summary = "Add Glyphs accepts the recipe form component=glyph: the glyph named on the right of the equals sign is created holding the glyph on the left as its only component (Delta=increment makes increment from one Delta component)."
 ref = "Reusing Shapes › Components › Recipes"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Parsing and part roles: `components::recipe` (M6.3); Add Glyphs uses it in M6.14."
 
 [[behavior]]
 id = "components.recipeBasePlusMarks"
@@ -202,9 +226,10 @@ milestone = "M6"
 summary = "Add Glyphs accepts the recipe form base+mark=glyph: names joined by plus signs become the components, in that order, of the glyph named after the equals sign, and the mark components are positioned on the base through anchors (q+tildecomb=qtilde)."
 ref = "Reusing Shapes › Components › Recipes"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Parsing and part roles: `components::recipe` (M6.3); Add Glyphs uses it in M6.14."
 guesses = [
   "A part whose glyph has category Mark is a mark and attaches to the base before it; any other part is a base; a recipe holds only glyph names, no spaces (spaces separate items in Add Glyphs) and any number of plus signs; typing recipes with code points or spaces into the reference app settles it.",
+  "The first part of a recipe is a base even when its glyph is a mark (dotaccentcomb+dotaccentcomb=dieresiscomb sets the second on the first), and the category stored in the font wins over the database's; typing such a recipe in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -214,7 +239,7 @@ milestone = "M6"
 summary = "A recipe may join several base glyphs with plus signs (t+s.join=ts); they become base components set side by side, which is the usual way to build ligatures."
 ref = "Reusing Shapes › Components › Recipes"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Parsing and part roles: `components::recipe` (M6.3); Add Glyphs uses it in M6.14."
 
 [[behavior]]
 id = "components.underscoreNameNotExported"
@@ -1538,7 +1563,7 @@ milestone = "M13"
 summary = "The start and end anchors belong on the first and last node of the open path; Glyph › Set Anchors (Cmd+U) puts them there. If they sit elsewhere, the fitted component will not span the full length of the host segment. The path's two end nodes should both be on the baseline or both at one equal distance from it."
 ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed."
 
 [[behavior]]
 id = "segment.appliesToStraightAndCurved"
@@ -1676,7 +1701,10 @@ milestone = "M13"
 summary = "Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end anchors at the left and right of the layer. They normally sit on the baseline or at one equal distance from it."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed."
+guesses = [
+  "Set Anchors puts a brush glyph's start at (0, 0) and its end at (advance width, 0); Set Anchors on a brush glyph in the reference app settles it.",
+]
 
 [[behavior]]
 id = "brush.stretchZoneBetweenAnchors"

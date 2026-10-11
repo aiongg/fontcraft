@@ -1888,7 +1888,7 @@ milestone = "M6"
 summary = "The Add Glyphs text field also accepts glyph recipes. The three forms are those of the Components page: component=glyph, base+mark=glyph and base+base=glyph (components.recipeSingleComponent, components.recipeBasePlusMarks, components.recipeMultipleBases). A recipe item builds the glyph named after the equals sign from the listed components."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs; Reusing Shapes › Components › Recipes"
 status = "handbook"
-notes = "Verified by the M6 planning pass against the handbook pages Glyph Set (the field accepts recipes) and Components › Recipes (the three forms); the recalled forms were right, the examples differ. Documented, not yet observed. The M4 parser already splits recipe items (`glyphdata` `Item::Recipe`) and skips them with a message until M6."
+notes = "Verified by the M6 planning pass against the handbook pages Glyph Set (the field accepts recipes) and Components › Recipes (the three forms); the recalled forms were right, the examples differ. Documented, not yet observed. The M4 parser already splits recipe items (`glyphdata` `Item::Recipe`) and skips them with a message until M6. M6.3 parses recipes and classifies their parts (`components::recipe`); a recipe longer than 4,096 bytes or with more than 64 parts is refused with a message."
 
 [[behavior]]
 id = "addGlyphs.existingNotDuplicated"

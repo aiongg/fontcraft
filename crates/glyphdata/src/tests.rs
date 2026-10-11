@@ -248,3 +248,28 @@ fn script_ids_have_readable_names() {
         assert_eq!(d.script_display_name(id), name, "{id}");
     }
 }
+
+#[test]
+fn canonical_decompositions_come_from_the_unicode_data() {
+    let d = data();
+    // One level, and the full expansion.
+    assert_eq!(d.canonical_decomposition(0x00C0), Some(vec![0x41, 0x0300]));
+    assert_eq!(d.canonical_decomposition(0x1EA6), Some(vec![0x00C2, 0x0300]));
+    assert_eq!(d.full_canonical_decomposition(0x1EA6), Some(vec![0x41, 0x0302, 0x0300]));
+    // Singletons, marks that decompose, and what has none.
+    assert_eq!(d.canonical_decomposition(0x212B), Some(vec![0x00C5]));
+    assert_eq!(d.full_canonical_decomposition(0x212B), Some(vec![0x41, 0x030A]));
+    assert_eq!(d.canonical_decomposition(0x0344), Some(vec![0x0308, 0x0301]));
+    assert_eq!(d.canonical_decomposition(0x41), None);
+    assert_eq!(d.canonical_decomposition(0x0141), None, "Lslash has no canonical decomposition");
+    assert_eq!(d.canonical_decomposition(0xFB01), None, "compatibility mappings are left out");
+    assert_eq!(d.canonical_decomposition(0xAC00), None, "Hangul syllables decompose by formula");
+    assert_eq!(d.canonical_decomposition(0x11_0000), None);
+    // Combining classes.
+    assert_eq!(d.canonical_combining_class(0x41), 0);
+    assert_eq!(d.canonical_combining_class(0x0301), 230);
+    assert_eq!(d.canonical_combining_class(0x0323), 220);
+    assert_eq!(d.canonical_combining_class(0x0327), 202);
+    assert_eq!(d.canonical_combining_class(0x031B), 216);
+    assert_eq!(d.canonical_combining_class(0x10_FFFF), 0);
+}
