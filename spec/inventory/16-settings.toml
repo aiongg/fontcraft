@@ -672,9 +672,9 @@ milestone = "M5"
 summary = "Ordered list of named groups, each holding sample strings, one per line. Stored as structured data (list of {name, strings}); the schema's kind list has no list type, hence string."
 ref = "Settings › Sample Strings"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Select Sample Text (M5) reads it from the user settings store of M4. The settings section and its group commands stay M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Select Sample Text (M5) reads it from the user settings store of M4. The settings section and its group commands stay M14. Built in M5.13 as the reserved settings id `sampleStrings.groups` (`[{name, strings}]`, at most 256 groups and 10,000 strings of 4,096 bytes); nothing writes it before M14's commands, and while it holds nothing or something unreadable the built-in groups stand in."
 guesses = [
-  "The built-in default holds groups of our own writing: Latin spacing strings built around n and o, and a pangram per script the glyph sets of M4 cover; no source lists the reference defaults we may copy.",
+  "The built-in default holds groups of our own choosing: spacing strings built around n, o, H and O with placeholders, figures, and traditional pangrams for Latin, Greek and Cyrillic; no source lists the reference defaults we may copy.",
 ]
 
 [[command]]

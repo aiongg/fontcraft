@@ -71,6 +71,8 @@ mod panels_tests;
 #[cfg(test)]
 mod preview_tests;
 #[cfg(test)]
+mod sample_strings_tests;
+#[cfg(test)]
 mod sidebar_tests;
 #[cfg(test)]
 mod spacing_dialogs_tests;

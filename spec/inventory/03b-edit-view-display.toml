@@ -1017,12 +1017,18 @@ label = "Find…"
 menu = ["Edit", "Find"]
 shortcut = "Cmd+F"
 kind = "ui"
-params = "{query?: string, mode?: 'name'|'unicode'|'all', insert?: bool}"
+params = "{tab?: id, query?: string, mode?: 'name'|'unicode'|'all', select?: [names], insert?: bool, open?: bool}"
 area = "edit-text"
 milestone = "M5"
 summary = "In Edit View, opens a live glyph search and inserts the chosen glyphs into the text on Return. A query with spaces matches glyphs whose name contains every term; a typed character finds its glyph. The same shortcut searches text in the Text Preview window."
 ref = "Edit View › Entering Text › Find Glyphs to Insert"
 status = "handbook"
+notes = "Built in M5.13 (`dialogs/find_glyphs.rs`): the pop-up searches with `glyph.search` and inserts with `editView.insertText`. Cmd+F stays with Font View's search field until the shortcut is shared between the two views; in Font View, `edit.find` runs `fontView.focusSearch`. Documented, not yet observed."
+guesses = [
+  "The pop-up opens with an empty search field each time; whether the reference keeps the last query would settle it.",
+  "Up and Down in the search field move the selection to the result above or below; the handbook names only clicks.",
+  "The selected results go into the text in list order, not in the order they were picked.",
+]
 
 [[panel]]
 id = "editView.findGlyphs"
@@ -1041,6 +1047,7 @@ milestone = "M5"
 summary = "Search pop-up for inserting glyphs by name or code point. Name mode matches substrings of glyph names with all space-separated terms required, Unicode mode matches the query against hexadecimal code points, All does both."
 ref = "Edit View › Entering Text › Find Glyphs to Insert"
 status = "handbook"
+notes = "Built in M5.13 (`dialogs/find_glyphs.rs`): the mode menu sits left of the field and shows the mode's name; each result shows its first code point at the right. Escape closes the pop-up. Documented, not yet observed."
 
 [[command]]
 id = "glyph.search"
@@ -1055,6 +1062,13 @@ summary = "Query returning the glyph names the Find Glyphs pop-up would list for
 ref = "Edit View › Entering Text › Find Glyphs to Insert"
 status = "inferred"
 own = true
+notes = "Built in M5.13 (`cmd/glyph_search.rs`); returns `{results: [{name, unicodes}], count, total}`, at most 1,000 results. The handbook's examples (`ha cy`, `228E` in Unicode mode, a typed character) are its tests."
+guesses = [
+  "The default mode is Name; the handbook does not say which mode the pop-up starts in.",
+  "For a query of one term, the glyph encoded with it or named exactly by it comes first, then names that differ only in case, then the rest in glyph order; the reference's order of results is not documented.",
+  "An empty query lists nothing.",
+  "A Unicode term may start with U+.",
+]
 
 [[command]]
 id = "editView.previousGlyph"
@@ -1335,12 +1349,13 @@ label = "Select Sample Text…"
 menu = ["Edit"]
 shortcut = "Cmd+Alt+F"
 kind = "ui"
-params = "{index?: number, text?: string}"
+params = "{tab?: id, index?: number, text?: string}"
 area = "edit-text"
 milestone = "M5"
 summary = "Opens the list of stored sample strings; choosing one with a click or the arrow keys puts it into the Edit View text. Whether it replaces the whole text or inserts at the cursor is not stated."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
+notes = "Built in M5.13 (`dialogs/sample_strings.rs`): `index` counts the strings of all groups in order; the two characters `\\n` become a line break. Documented, not yet observed."
 guesses = [
   "Choosing a sample string replaces the whole text of the tab; the handbook says the string goes into the text without saying where.",
 ]
@@ -1357,8 +1372,10 @@ milestone = "M5"
 summary = "Switches the Edit View text to the sample string after the current one without opening the list. No default shortcut; one can be assigned in the settings."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
+notes = "Built in M5.13. Documented, not yet observed."
 guesses = [
   "Next and Previous wrap around at the ends of the list.",
+  "Next and Previous step through the strings of all groups as one list, from the string chosen last in any tab; with none chosen yet, Next takes the first string and Previous the last.",
 ]
 
 [[command]]
@@ -1373,6 +1390,7 @@ milestone = "M5"
 summary = "Switches the Edit View text to the sample string before the current one without opening the list. No default shortcut; one can be assigned in the settings."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
+notes = "Built in M5.13; wraps around as Next does. Documented, not yet observed."
 
 [[panel]]
 id = "editView.sampleStrings"
@@ -1388,6 +1406,10 @@ milestone = "M5"
 summary = "Chooser for stored sample strings. Unpinned it behaves as a transient picker; pinned it stays open so strings can be switched repeatedly."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
+notes = "Built in M5.13 (`dialogs/sample_strings.rs`): each group's name heads its strings; the string chosen last is highlighted. Documented, not yet observed."
+guesses = [
+  "Up and Down put the previous or next string into the text at once and keep the window open; a click closes it unless it is pinned; Return and Escape close it.",
+]
 
 [[command]]
 id = "sampleStrings.togglePinned"
@@ -1401,6 +1423,7 @@ milestone = "M5"
 summary = "Toggles whether the sample strings window stays open after a string is chosen."
 ref = "Edit View › Entering Text › Sample Strings"
 status = "handbook"
+notes = "Built in M5.13: a Pin button at the top of the window. Documented, not yet observed."
 
 [[behavior]]
 id = "text.lineWidth"
@@ -1471,6 +1494,7 @@ milestone = "M5"
 summary = "In the glyph search, a query containing spaces is split into terms and only glyphs whose names contain all of them are listed. Searching `ha cy` therefore lists every name containing both fragments, including suffixed variants."
 ref = "Edit View › Entering Text › Find Glyphs to Insert"
 status = "handbook"
+notes = "Built in M5.13 in `glyph.search`. Matching ignores case: the handbook's example finds `Ha-cy` for the term `ha`. Documented, not yet observed."
 
 [[behavior]]
 id = "text.findUnicodeMode"
@@ -1479,6 +1503,10 @@ milestone = "M5"
 summary = "In Unicode mode the glyph search compares the query with the hexadecimal code points of the glyphs. In any mode, a literal character as query finds the glyph encoded with it."
 ref = "Edit View › Entering Text › Find Glyphs to Insert"
 status = "handbook"
+notes = "Built in M5.13 in `glyph.search`. Documented, not yet observed."
+guesses = [
+  "A Unicode term matches when a code point's hexadecimal form contains it, so `228` finds U+228E; whether the reference needs the whole code point would settle it.",
+]
 
 [[behavior]]
 id = "text.placeholdersMirrorCurrentGlyph"

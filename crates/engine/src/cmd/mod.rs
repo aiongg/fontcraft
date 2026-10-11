@@ -23,6 +23,7 @@ mod font;
 mod font_view;
 mod glyph;
 mod glyph_info;
+mod glyph_search;
 mod glyph_set;
 mod guide;
 mod inspect;
@@ -209,6 +210,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(glyph_info::specs());
         v.extend(font_view::specs());
         v.extend(new_document::specs());
+        v.extend(glyph_search::specs());
         v
     })
 }

@@ -69,6 +69,8 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (preview::COMMANDS, preview::run),
     (measurement::COMMANDS, measurement::run),
     (text_preview::COMMANDS, text_preview::run),
+    (crate::dialogs::sample_strings::COMMANDS, crate::dialogs::sample_strings::run),
+    (crate::dialogs::find_glyphs::COMMANDS, crate::dialogs::find_glyphs::run),
 ];
 
 /// Every shell command, in module order.
@@ -82,6 +84,8 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     kerning_window::show(app, ui, pending);
     preview_panel::show(app, ui, pending);
     text_preview::show(app, ui, pending);
+    crate::dialogs::sample_strings::show(app, ui, pending);
+    crate::dialogs::find_glyphs::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {

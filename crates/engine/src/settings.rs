@@ -7,8 +7,9 @@
 //!   with a kind that `settings.set` checks and a default that `settings.get` returns while
 //!   nothing is stored.
 //! - **Reserved ids** ([`Reserved`]): structured data that belongs to other commands (filters,
-//!   visible scripts, recent documents, the Start Window's picks). `settings.get` reads them;
-//!   only their own commands write them, through [`UserSettings::set_reserved`].
+//!   visible scripts, recent documents, the Start Window's picks, sample strings).
+//!   `settings.get` reads them; only their own commands write them, through
+//!   [`UserSettings::set_reserved`].
 //!
 //! The store is untrusted input twice over: from the settings file and from command parameters.
 //! Every id, value and file is checked against the limits below; a corrupt file loads as the
@@ -110,10 +111,13 @@ pub enum Reserved {
     RecentDocuments,
     /// The Start Window's last choice of scripts and glyph sets.
     ChooserPicks,
+    /// The groups of sample strings Edit View offers, `[{name, strings}]`.
+    SampleStrings,
 }
 
 impl Reserved {
-    pub const ALL: [Reserved; 4] = [Reserved::Filters, Reserved::VisibleScripts, Reserved::RecentDocuments, Reserved::ChooserPicks];
+    pub const ALL: [Reserved; 5] =
+        [Reserved::Filters, Reserved::VisibleScripts, Reserved::RecentDocuments, Reserved::ChooserPicks, Reserved::SampleStrings];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -121,6 +125,7 @@ impl Reserved {
             Reserved::VisibleScripts => "fontView.visibleScripts",
             Reserved::RecentDocuments => "file.recentDocuments",
             Reserved::ChooserPicks => "start.chooserPicks",
+            Reserved::SampleStrings => "sampleStrings.groups",
         }
     }
 
@@ -131,6 +136,7 @@ impl Reserved {
             Reserved::VisibleScripts => "fontView.setVisibleScripts",
             Reserved::RecentDocuments => "opening and saving documents",
             Reserved::ChooserPicks => "the Start Window",
+            Reserved::SampleStrings => "the Sample Strings settings",
         }
     }
 

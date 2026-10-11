@@ -81,6 +81,10 @@ pub struct PanelState {
     pub measurement: crate::shell::measurement::MeasurementLine,
     /// The Text Preview window (`window.textPreview`).
     pub text_preview: crate::shell::text_preview::TextPreviewState,
+    /// The Select Sample Text window.
+    pub sample_strings: crate::dialogs::sample_strings::SampleStringsState,
+    /// The Find Glyphs pop-up.
+    pub find_glyphs: crate::dialogs::find_glyphs::FindGlyphsState,
 }
 
 impl Default for PanelState {
@@ -100,6 +104,8 @@ impl Default for PanelState {
             preview: Default::default(),
             measurement: Default::default(),
             text_preview: Default::default(),
+            sample_strings: Default::default(),
+            find_glyphs: Default::default(),
         }
     }
 }
