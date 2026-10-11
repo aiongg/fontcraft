@@ -65,10 +65,12 @@ struct LayoutKey {
     master: String,
     direction: WritingDirection,
     kerning: KerningMode,
+    /// The layers picked for glyphs (`Tab::layers`).
+    layers: std::collections::BTreeMap<String, String>,
 }
 
 /// The tabs' text layouts, each kept while its document revision, text revision, master,
-/// direction and kerning mode stay the same, so a frame lays text out only after a change. It
+/// direction, kerning mode and picked layers stay the same, so a frame lays text out only after a change. It
 /// also keeps the kerning index the layouts read.
 #[derive(Default)]
 pub struct LayoutCache {
@@ -102,12 +104,20 @@ impl LayoutCache {
 fn key(session: &Session, font: &Font, tab: &Tab) -> Option<LayoutKey> {
     let doc = session.active().map(|d| (d.id, d.revision))?;
     let master = tab_master(font, tab)?.id.clone();
-    Some(LayoutKey { tab: tab.id, doc, text: tab.text.revision(), master, direction: tab.direction, kerning: tab.kerning })
+    Some(LayoutKey {
+        tab: tab.id,
+        doc,
+        text: tab.text.revision(),
+        master,
+        direction: tab.direction,
+        kerning: tab.kerning,
+        layers: tab.layers.clone(),
+    })
 }
 
-/// The layout of a tab's text in the tab's master, with its direction and kerning mode, and the
-/// line height of the master (`EditView Line Height`, else the computed one). Cached in `cache`;
-/// `None` without a document or a master.
+/// The layout of a tab's text in the tab's master and the layers picked for its glyphs, with its
+/// direction and kerning mode, and the line height of the master (`EditView Line Height`, else
+/// the computed one). Cached in `cache`; `None` without a document or a master.
 pub fn text_layout(session: &Session, cache: &LayoutCache, tab: &Tab) -> Option<Arc<Layout>> {
     let font = session.font().ok()?;
     let key = key(session, font, tab)?;
@@ -129,6 +139,7 @@ pub fn text_layout(session: &Session, cache: &LayoutCache, tab: &Tab) -> Option<
         kerning: tab.kerning,
         line_width: DEFAULT_LINE_WIDTH,
         index: index.as_deref(),
+        layers: Some(&tab.layers),
         ..Default::default()
     };
     let layout = Arc::new(fontcraft_textlayout::layout(font, &key.master, &tab.text, &options).ok()?);

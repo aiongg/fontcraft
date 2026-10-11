@@ -192,3 +192,24 @@ fn edits_stay_within_the_item_limit() {
     assert!(layout(&f, "m01", &t, &Options { line_width: f64::NAN, ..Options::default() }).is_err());
     assert!(layout(&f, "nope", &t, &Options::default()).is_err());
 }
+
+#[test]
+fn a_picked_layer_gives_its_glyph_its_width() {
+    let mut f = font();
+    f.glyph_mut("A").unwrap().layers.push(fontcraft_model::Layer::new("alt", 900.0));
+    let t = text(&f, "AB");
+    let picked = std::collections::BTreeMap::from([("A".to_string(), "alt".to_string()), ("B".to_string(), "none".to_string())]);
+    let l = layout(&f, "m01", &t, &Options { layers: Some(&picked), ..Options::default() }).unwrap();
+    assert_eq!((l.placed[0].advance, l.placed[1].advance), (900.0, 600.0), "a layer the glyph lacks is ignored");
+}
+
+#[test]
+fn a_prefix_reads_the_first_items_only() {
+    let f = font();
+    let map = Charmap::new(&f);
+    let bad = format!("/{}", "n".repeat(300));
+    assert_eq!(parse_prefix(&map, &format!("AB{bad}"), 2).unwrap().0.len(), 2);
+    assert!(parse_prefix(&map, &format!("AB{bad}"), 2).unwrap().1);
+    assert!(!parse_prefix(&map, "AB", 2).unwrap().1);
+    assert!(parse_prefix(&map, &format!("A{bad}"), 2).is_err());
+}

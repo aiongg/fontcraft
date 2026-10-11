@@ -1,6 +1,7 @@
 //! Placing the items of a text: advances, kerning, lines and wrapping, the writing direction,
 //! and hit testing.
 
+use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -66,6 +67,9 @@ pub struct Options<'a> {
     pub missing_advance: Option<f64>,
     /// The kerning index of this font revision; `None` builds one when kerning is shown.
     pub index: Option<&'a KernIndex>,
+    /// Glyphs shown in another layer than their layer of the master: glyph name → layer id. The
+    /// width and vertical metrics come from that layer; a layer the glyph lacks is ignored.
+    pub layers: Option<&'a BTreeMap<String, String>>,
 }
 
 impl Default for Options<'_> {
@@ -78,6 +82,7 @@ impl Default for Options<'_> {
             single_line: false,
             missing_advance: None,
             index: None,
+            layers: None,
         }
     }
 }
@@ -210,8 +215,9 @@ fn finite_or_zero(v: f64) -> f64 {
     if v.is_finite() { v } else { 0.0 }
 }
 
-/// Lays `text` out in `master`. Widths and vertical metrics come from the master whose metrics
-/// `master` shows (linked metrics); placeholders show the text's current glyph.
+/// Lays `text` out in `master`. Widths and vertical metrics come from the layer
+/// `options.layers` picks for a glyph, else from the master whose metrics `master` shows (linked
+/// metrics); placeholders show the text's current glyph.
 pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> Result<Layout, LayoutError> {
     let drawn = font.masters.iter().find(|m| m.id == master).ok_or_else(|| LayoutError::UnknownMaster(master.to_string()))?;
     let source = metrics_source(font, master).unwrap_or(drawn);
@@ -238,7 +244,8 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
 
     let current = text.current_glyph().and_then(|n| font.glyph(n).map(|g| (Arc::<str>::from(n), g)));
     let metrics_of = |name: Arc<str>, glyph: &Glyph| {
-        let layer = glyph.layer(&source.id).or_else(|| glyph.layer(master));
+        let picked = options.layers.and_then(|l| l.get(&*name)).and_then(|id| glyph.layers.iter().find(|l| l.id == *id));
+        let layer = picked.or_else(|| glyph.layer(&source.id)).or_else(|| glyph.layer(master));
         let width = finite_or_zero(layer.map_or(0.0, |l| l.width));
         let vo = finite_or_zero(layer.and_then(|l| l.info.vert_origin).unwrap_or(0.0));
         let vw = finite_or_zero(layer.and_then(|l| l.info.vert_width).unwrap_or(asc - desc));

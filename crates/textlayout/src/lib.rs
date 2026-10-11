@@ -42,7 +42,8 @@
 //! Text::to_display_string(&self, font: &Font) -> String;  Text::to_plain_text(&self, font: &Font) -> String
 //! KerningMode::{None, Kerning, Locked}: name, from_name, shows_kerning
 //! Options<'a> { direction: Direction, kerning: KerningMode, line_width: f64, line_height: Option<f64>,
-//!               single_line: bool, missing_advance: Option<f64>, index: Option<&'a KernIndex> }  (Default)
+//!               single_line: bool, missing_advance: Option<f64>, index: Option<&'a KernIndex>,
+//!               layers: Option<&'a BTreeMap<String, String>> (glyph → layer id) }  (Default)
 //! layout(font: &Font, master: &str, text: &Text, options: &Options) -> Result<Layout, LayoutError>
 //! line_height(font: &Font, master: &Master) -> f64
 //! Layout { placed: Vec<Placed>, lines: Vec<Line>, direction, line_height: f64, ascender: f64 }

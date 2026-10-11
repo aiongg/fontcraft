@@ -293,3 +293,22 @@ fn closed_tabs_lose_removed_glyphs() {
     assert_eq!(app.state.tab().unwrap().shown_glyphs().collect::<Vec<_>>(), ["B"]);
     assert!(app.run("view.reopenLastClosedTab", &json!({})).is_err(), "the tab that held only A is gone");
 }
+
+#[test]
+fn the_layout_follows_a_layer_picked_for_a_glyph() {
+    let mut app = FontcraftApp::default();
+    let master = app.session.font().unwrap().default_master().unwrap().id.clone();
+    let backup = app.run("layers.addBackupLayer", &json!({"glyphs": ["A"], "master": master})).unwrap()["layer"].as_str().unwrap().to_string();
+    app.session
+        .edit("wide backup", |font| {
+            font.glyph_mut("A")?.layers.iter_mut().find(|l| l.id == backup).unwrap().width = 900.0;
+            Ok(())
+        })
+        .unwrap();
+    app.run("view.newTab", &json!({"glyphs": ["A", "V"]})).unwrap();
+    app.run("kerning.setMode", &json!({"mode": "none"})).unwrap();
+    let v = |app: &FontcraftApp| view::text_layout(&app.session, &app.layouts, app.state.tab().unwrap()).unwrap().placed[1].x;
+    assert_ne!(v(&app), 900.0);
+    app.run("layers.select", &json!({"layer": backup})).unwrap();
+    assert_eq!(v(&app), 900.0, "V follows the width of A's picked layer");
+}
