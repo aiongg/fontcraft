@@ -2,16 +2,15 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-11, M6 wave A built and reviewed; plans M7 to M13 accepted (their questions answered in the inventory) and their interface skeletons merged; the first waves of M6 to M13 come next._
+_Updated: 2026-10-12, the first waves of M6, M7 and M8 integrated and gated; the first waves of M9, M10, M11 and M12 written and waiting for integration._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (1,444 tests, 22 ignored).
-  About 204,000 lines of Rust in 38 library crates, two apps and `xtask`. Built and run on Linux
-  x86-64 with Rust 1.97.
-- 365 of the 947 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
-  commands are all live, M6 to M13 have none yet. Feature parity is about 18% (ROADMAP.md ›
-  Parity estimate). About 1,050 guesses on 780 rows are listed in `docs/guesses.md`.
+- `cargo xtask ci` passes all eleven steps (1,898 tests, 24 ignored).
+  Built and run on Linux x86-64 with Rust 1.97.
+- 476 of the 949 inventory commands exist (`docs/parity.md`); M3's, M4's and M5's are all live,
+  M6 has 38 of 46, M7 50 of 62, M8 25 of 41. Feature parity is about 20% (ROADMAP.md › Parity
+  estimate). 1,209 guesses on 856 rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed. macOS and
   Windows have **not** been built.
@@ -20,11 +19,10 @@ _Updated: 2026-10-11, M6 wave A built and reviewed; plans M7 to M13 accepted (th
 
 ## Where to start
 
-1. **The first wave of each plan, M6 to M13** (`docs/plans/M<n>.md` § 6). Every package compiles
-   against the merged interface skeletons: M6.1a and M7.1 to M13.1 fixed the public signatures
-   of new crates and command modules, so the packages are written in parallel and built and
-   tested together. A skeleton file marks each placeholder with the package that fills it
-   (`// M8.5`); keep the signatures.
+1. **Integrate the written first waves of M9, M10, M11 and M12**, then each plan's builder
+   packages (M8.9, the automatic feature framework, first) and M13's first wave. Every package
+   compiles against the merged interface skeletons (M6.1a, M7.1 to M13.1); a skeleton file
+   marks each placeholder with the package that fills it (`// M8.5`).
 2. **The M6 measures** (`docs/plans/M6.md` § 5): mark attachment against both oracles
    (`cargo test -p fontcraft-oracle --features oracle --test marks -- --ignored`), propagation
    against glyphsLib (`crates/engine/tests/corpus_propagation.rs`, which reads a JSON file of
