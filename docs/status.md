@@ -6,13 +6,13 @@ _Updated: 2026-10-11, M5 closed (M5.18): every § 5 measure met but the two out-
 
 ## State of the tree
 
-- `cargo xtask ci` (ten steps) was not run in M5.18: it ran `cargo fmt`, clippy on the crates
+- `cargo xtask ci` (ten steps) was not run in M5.18 or M5.fix5: each ran `cargo fmt`, clippy on the crates
   it changed, `xtask spec`, `parity` and `guesses`, and the tests it changed. Run the gate once
   before the next push.
   About 168,000 lines of Rust in 25 library crates, two apps and `xtask`. Built and run on Linux
   x86-64 with Rust 1.97.
 - 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
-  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 625 guesses on 394
+  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 626 guesses on 394
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed. macOS and
@@ -440,13 +440,28 @@ Append one terse entry per session: what landed, numbers, what is still open.
   `docs/spec/40-compile.md` § 4a). Sources with feature code (21 kerned ones) get no generated
   kerning until M8.
 - **2026-10-11, M5.18, M5's close.** The kerning lookup against both oracles
-  (`index_lookup_equals_both_references`): 54 sources without a hand-written `kern` feature,
+  (`index_lookup_equals_both_references`): 54 sources without `kern` feature code,
   506,285 pairs per oracle, 1 difference (`FeatureWritersEmpty.glyphs` turns its kern writer
-  off); 5 sources with one, 5 pairs, 1 difference (`FeaInc-Bold.ufo`'s included feature). Round
+  off); 5 sources with one, 5 pairs, 1 difference (the `kern` feature in `FeaInc-Bold.ufo`'s `features.fea`). Round
   trips equal the M4 baselines (glyphs 122/1/118/4, packages 22/0/7/0, UFO 125/15, designspace
-  59/53). New sweep: 45 undo runs over 42 spacing and kerning commands, 11 refusals pointer-equal.
+  59/53). New sweep: 45 undo runs over 43 spacing and kerning commands, 11 refusals pointer-equal.
   The end-to-end test reaches the Kerning window, Compress and the import into a second master.
   Speed on Inter (load 14 to 19): out-of-sync full scan 53.5 ms (50), after editing `n` 7.4 ms
   (2), both missed; every other target met. Inter's `Tcommaaccent` (U+0162) and `uni021A`:
   the references write `uni021A` and `uni021A.1` because they ignore Inter's `disablesNiceNames`;
   FontCraft keeps the source names as documented. M5 is done but those two speed targets.
+- **2026-10-11, M5.fix4 and M5.fix5, review fixes on M5's close.** M5.fix4: generated kerning
+  unless the source has a hand-written `kern` feature; a dialog that does not open leaves the
+  drag running. M5.fix5: a `kern` feature is found with `useExtension`, and a kern block with only
+  comments does not count; a top-level `include` in enabled feature code leaves the generated
+  kerning out with a warning naming the file (a guess on `kerning.implicitKernFeature`, a row in
+  `docs/spec/40-compile.md` § 4a); class-table cells are counted per subtable from the builder;
+  the writer's caps are 500,000 glyph pairs and 1,000,000 class cells per lookup, 2,000,000 in
+  all (Inter, the largest corpus font: 11,442 and 25,317); Targeted dialogs build their fields
+  with the drag left running; both measures fail when a known difference's count changes.
+  Measures rerun in release: export half, 54 sources (5 with `kern` feature code not compared,
+  the same as before), 506,285 pairs per oracle, 27 known differences (fontc 1 `hebr` in
+  `KerningRtlOnlyMaster.glyphs` and 13 `cyrl` in `Oswald.glyphs`, fontmake the same 13), none
+  other. Lookup half, 59 sources: 54 without `kern` feature code, 506,285 pairs per oracle, 1
+  differs per oracle (`FeatureWritersEmpty.glyphs`); 5 with it, 5 pairs, 1 differs per oracle
+  (`FeaInc-Bold.ufo`).
