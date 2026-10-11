@@ -26,6 +26,7 @@ mod compare;
 pub(crate) mod compile;
 mod component;
 mod custom_params;
+mod decompose;
 mod dimensions;
 mod edit;
 mod features;
@@ -277,6 +278,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(edit::specs());
         v.extend(clipboard::specs());
         v.extend(glyph::specs());
+        v.extend(decompose::specs());
         v.extend(glyph_set::specs());
         v.extend(path::specs());
         v.extend(spacing::specs());

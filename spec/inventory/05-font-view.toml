@@ -3323,6 +3323,7 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "The shortcut is Cmd+Alt+Shift+D, Decompose with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.",
+  "Only master layers are decomposed; intermediate and alternate layers keep their components. A composite with a brace layer in the reference app settles it.",
 ]
 
 [[command]]

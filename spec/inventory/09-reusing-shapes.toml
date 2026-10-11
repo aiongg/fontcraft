@@ -94,7 +94,8 @@ label = "Component from Selection"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, shapes?: [indices], name: string}"
+params = "{glyph?: name, layer?: id, shapes?: [indices], name?: string}"
+context = ["canvas"]
 area = "components"
 milestone = "M6"
 summary = "Moves the selected paths and components of a layer into a new glyph with the given name and puts a component referencing that glyph in their place. In the UI it first asks for the name, then appends the new glyph to the current Edit View tab and makes it the active glyph. Also offered in the canvas context menu."
@@ -106,6 +107,9 @@ guesses = [
   "A name that is already a glyph is refused with a message; the reference app settles it.",
   "The new glyph keeps the shapes at their coordinates and the component sits at offset zero; anchors stay on the original layer; the reference app settles it.",
   "On each other master the shapes with the same indices move into the new glyph's layer of that master, and a master whose layer lacks them gets an empty layer; a two-master font in the reference app settles it.",
+  "Without a name the command takes the suggested one; each layer of the new glyph takes the width of the original glyph's layer of its master; the reference app's new glyph settles it.",
+  "Only master layers are split: a non-master layer is refused, and images in the selection are refused; the reference app with a brace layer or an image selected settles it.",
+  "Hints move with the paths they point at, and a hint that links a moved and a kept path is removed; a hinted glyph in the reference app settles it.",
 ]
 
 [[panel]]
@@ -410,6 +414,8 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "The anchors that decomposition brings in are the propagated anchors the layer lacks, so mark attachment is unchanged; decomposing a composite with propagated anchors in the reference app settles it.",
+  "Decomposed paths take the component's place in the shape order and the layer's hints are renumbered to keep their nodes; a hinted composite in the reference app settles it.",
+  "A base glyph whose corner components cannot be fitted is decomposed without them, as the editor draws it, with a warning; the reference app with a broken corner settles it.",
 ]
 
 [[command]]
@@ -419,6 +425,7 @@ menu = []
 shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, components?: [indices]}"
+context = ["canvas.component"]
 area = "components"
 milestone = "M6"
 summary = "Context-menu item that turns only the selected components into their contents, one level deep: components nested inside them are kept as components."
@@ -427,6 +434,7 @@ status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: Decompose is listed in the context menu of a component. Its effect is not shown. Documented, not yet observed."
 guesses = [
   "Decomposing one level adds no anchors to the layer; a smart component becomes its interpolated outline; corner, cap, segment and brush components inside the base glyph are applied before its paths are copied. Decomposing such components in the reference app settles it.",
+  "A smart component that cannot be interpolated is decomposed from its base layer, as the editor draws it, with a warning; the reference app with incompatible pole layers settles it.",
 ]
 
 [[behavior]]
@@ -1245,6 +1253,10 @@ milestone = "M6"
 summary = "Context-menu item that bakes a corner component into the host path: the fitted corner outline replaces the node and the component is removed."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. `corners` are positions in the layer's hint list. Shares the corner fitting of outline resolution (`model/corner.rs`)."
+guesses = [
+  "A corner on an extra node, or one whose corner glyph does not exist, is refused instead of being removed without a trace; the reference app settles it.",
+]
 
 [[command]]
 id = "cornerComponent.setGlyph"
