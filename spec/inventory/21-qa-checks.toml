@@ -1999,6 +1999,7 @@ milestone = "M12"
 summary = "A glyph exists in some masters but not in others. Sparse masters can be exempted with `ignoreMissing`."
 ref = "fontTools varLib.interpolatable missing (--ignore-missing)"
 status = "docs"
+notes = "Reported only for a glyph that at least two masters have, as the reference does; the result names the default master first. `ignoreMissing` is a threshold where 1 turns the check off. Read from the compatibility report of the audit services."
 
 [[check]]
 id = "check.variations.openPathInMaster"
@@ -2010,6 +2011,7 @@ milestone = "M12"
 summary = "A contour is open in a master, so the glyph cannot be compared or interpolated; the remaining compatibility tests are skipped for that glyph."
 ref = "fontTools varLib.interpolatable open_path"
 status = "docs"
+notes = "A path whose closed flag is off counts as open; the reference calls a contour open when it ends away from its start. The heuristic tests skip the glyph; the structural tests still run."
 
 [[check]]
 id = "check.variations.pathCount"
@@ -2021,6 +2023,8 @@ milestone = "M12"
 summary = "A glyph has a different number of contours in two masters. Each master is compared with its parent master along the designspace, not with every other master."
 ref = "fontTools varLib.interpolatable path_count"
 status = "docs"
+notes = "Counts paths only. The reference counts components among the contours, so a component added in one master is a path-count result there and check.variations.componentMismatch here. Masters are paired along the minimum spanning tree of their normalised locations, as the reference pairs them when SciPy is installed (without it, it pairs each master with the previous one)."
+guesses = ["An intermediate layer is compared with the nearest master layer of its glyph; running the reference tool on a designspace that holds intermediate layers as sparse sources would settle whether its pairs agree."]
 observe = [
   "Incompatible font (two masters; O has two paths in one master and one in the other; n has a different node count): export a variable font; note the message about O, whether it names the glyph, the path or both, and whether the export stops.",
 ]
@@ -2035,6 +2039,7 @@ milestone = "M12"
 summary = "Matching contours have a different number of nodes in two masters."
 ref = "fontTools varLib.interpolatable node_count"
 status = "docs"
+notes = "Counts nodes, on- and off-curve. The reference counts segments, so a line against a curve at the same place is a node-count result here and a node-type result there."
 observe = [
   "Incompatible font (two masters; O has two paths in one master and one in the other; n has a different node count): export a variable font; note the message about n, whether it names the glyph, the path or the node, and whether the export stops.",
 ]
@@ -2049,6 +2054,7 @@ milestone = "M12"
 summary = "Matching contours have the same number of nodes but a node differs in kind (line, curve or off-curve) between two masters."
 ref = "fontTools varLib.interpolatable node_incompatibility"
 status = "docs"
+notes = "One result per node whose kind (line, curve, quadratic curve, off-curve) differs; the reference compares segment kinds."
 
 [[check]]
 id = "check.variations.contourOrder"
@@ -2060,6 +2066,7 @@ milestone = "M12"
 summary = "The contours of a glyph appear in a different order in two masters: a cheaper matching by shape exists than the stored order, by a margin above `tolerance` (default 0.95). The fix reorders the contours to the proposed matching."
 ref = "fontTools varLib.interpolatable contour_order (--tolerance); fontbakery interpolation_issues"
 status = "docs"
+notes = "Ported from fontTools 4.66.1 varLib.interpolatable: the same contour statistics, matching and score; on our test outlines the score equals the reference's. Components take part with the statistics of their outline. The fix command reorders the shapes."
 
 [[check]]
 id = "check.variations.wrongStartPoint"
@@ -2071,6 +2078,7 @@ milestone = "M12"
 summary = "A contour starts at a different node, or runs in the opposite direction, in two masters; the result carries the proposed start node and whether to reverse. The fix applies both."
 ref = "fontTools varLib.interpolatable wrong_start_point (--tolerance); fontbakery interpolation_issues"
 status = "docs"
+notes = "Ported from fontTools 4.66.1; the proposed node and the score equal the reference's on our test outlines. The fix makes the proposed node first; a result that also needs the path reversed is report-only."
 
 [[check]]
 id = "check.variations.kink"
@@ -2082,6 +2090,7 @@ milestone = "M12"
 summary = "A node that is smooth in both masters turns into a visible corner halfway between them, because the handle length ratios differ. Sensitivity is set by `kinkiness` (default 0.5); deviations under 0.2% of the em are ignored."
 ref = "fontTools varLib.interpolatable kink (--kinkiness); fontbakery interpolation_issues"
 status = "docs"
+notes = "Ported from fontTools 4.66.1, with the reference's defaults (kinkiness 0.5, 0.2% of the em); the node and score equal the reference's on our test outline."
 
 [[check]]
 id = "check.variations.underweight"
@@ -2093,6 +2102,7 @@ milestone = "M12"
 summary = "The contour halfway between two masters encloses clearly less area than the geometric mean of the two masters' areas (by more than `tolerance`), a sign that points are matched to the wrong partners."
 ref = "fontTools varLib.interpolatable underweight"
 status = "docs"
+notes = "Ported from fontTools 4.66.1; the score equals the reference's on our test outlines."
 
 [[check]]
 id = "check.variations.overweight"
@@ -2104,6 +2114,7 @@ milestone = "M12"
 summary = "The contour halfway between two masters encloses more area than either master. Defined in the reference but switched off there; kept as an opt-in check."
 ref = "fontTools varLib.interpolatable overweight (disabled upstream)"
 status = "docs"
+notes = "The reference defines the test but skips it; ours runs in the strict profile with the condition the reference would apply (halfway area above the larger master area divided by `tolerance`)."
 
 [[check]]
 id = "check.variations.componentMismatch"
@@ -2115,6 +2126,7 @@ milestone = "M12"
 summary = "A composite glyph has a different number of components, different base glyphs or a different component order in two masters."
 ref = "Editor audit convention (incompatible masters); fontbakery interpolation_issues rationale"
 status = "inferred"
+notes = "One result per master pair: different component counts, or different base glyphs in the same order."
 
 [[check]]
 id = "check.variations.anchorMismatch"
@@ -2126,6 +2138,7 @@ milestone = "M12"
 summary = "A glyph's anchors differ in name or number between masters, so mark positioning cannot be interpolated."
 ref = "Editor audit convention (incompatible masters)"
 status = "inferred"
+notes = "Compares the sorted anchor names of each master pair; anchor positions may differ."
 
 [[check]]
 id = "check.variations.mastersShareLocation"
@@ -2137,6 +2150,7 @@ milestone = "M12"
 summary = "Two masters, or a master and an intermediate layer of the same glyph, sit at the same designspace location."
 ref = "Editor audit convention (designspace)"
 status = "inferred"
+notes = "Locations are compared in design coordinates; an intermediate layer is compared with the masters its glyph has and with the glyph's other intermediate layers."
 
 [[check]]
 id = "check.variations.instanceOutsideAxisRange"
@@ -2148,6 +2162,8 @@ milestone = "M12"
 summary = "An instance lies outside the range spanned by the masters on some axis and would need extrapolation."
 ref = "Editor audit convention (designspace)"
 status = "inferred"
+notes = "Compares each exported instance's design location with the range of the masters on each axis; variable-font settings are left out."
+guesses = ["Instances that do not export are left out; whether the reference app's own audit counts them would be settled by an inactive instance placed beyond the masters."]
 
 [[check]]
 id = "check.variations.axisRanges"

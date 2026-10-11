@@ -35,6 +35,7 @@ use fontcraft_geom::{Point, Rect};
 use fontcraft_model::{Font, Glyph, Layer, Master, NodeKind, Shape};
 use serde::Serialize;
 
+pub use checks::compat::structural_report;
 pub use context::{BinaryCtx, FamilyCtx, GlyphCtx, SourceCtx, SourceMap};
 pub use registry::CHECKS;
 pub use scope::{CheckGroup, CheckScope, Precondition};
