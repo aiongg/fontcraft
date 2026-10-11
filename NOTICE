@@ -121,6 +121,7 @@ bundled, the file says so in its header and the project is listed here with its 
   designspace writer follows the element order of designspaceLib. crates/io-ufo/src/designspace/rules.rs
   ports varLib's overlayFeatureVariations, overlayBox and cleanupBox (featureVars.py), and
   crates/io-glyphs/src/lib.rs (quadratic_roots) the quadratic solver of misc/bezierTools.py.
+  crates/tables/src/ttx (mod.rs, core.rs, core/) ports ttLib's TTX writer for the core tables, ttProgram's opcode table and disassembly, and agl.UV2AGL (AGLFN data, Adobe, BSD-3-Clause).
   crates/geom/src/variation.rs ports varLib's normalizeValue, supportScalar and VariationModel
   (models.py). The CFF writer (crates/cff) ports cffLib: the table layout and offset passes, INDEX, charset
   and DICT compilers, the standard strings and predefined charsets (data from Adobe Technical

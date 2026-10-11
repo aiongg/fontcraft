@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="glyph00001"/>
+    <GlyphID id="2" name="glyph00002"/>
+    <GlyphID id="3" name="glyph00003"/>
+    <GlyphID id="4" name="glyph00004"/>
+    <GlyphID id="5" name="glyph00005"/>
+    <GlyphID id="6" name="glyph00006"/>
+    <GlyphID id="7" name="glyph00007"/>
+  </GlyphOrder>
+
+  <hhea ERROR="decompilation error" raw="True">
+    <hexdata>
+      00010000   
+    </hexdata>
+  </hhea>
+
+  <maxp>
+    <tableVersion value="0x10000"/>
+    <numGlyphs value="8"/>
+    <maxPoints value="10"/>
+    <maxContours value="2"/>
+    <maxCompositePoints value="12"/>
+    <maxCompositeContours value="3"/>
+    <maxZones value="2"/>
+    <maxTwilightPoints value="0"/>
+    <maxStorage value="1"/>
+    <maxFunctionDefs value="1"/>
+    <maxInstructionDefs value="0"/>
+    <maxStackElements value="64"/>
+    <maxSizeOfInstructions value="40"/>
+    <maxComponentElements value="2"/>
+    <maxComponentDepth value="1"/>
+  </maxp>
+
+  <gasp ERROR="decompilation error" raw="True">
+    <hexdata>
+      00020001 00080002  
+    </hexdata>
+  </gasp>
+
+</ttFont>

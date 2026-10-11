@@ -1,0 +1,434 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ttFont sfntVersion="\x00\x01\x00\x00" ttLibVersion="4.66">
+
+  <GlyphOrder>
+    <GlyphID id="0" name=".notdef"/>
+    <GlyphID id="1" name="A"/>
+    <GlyphID id="2" name="B"/>
+    <GlyphID id="3" name="C"/>
+    <GlyphID id="4" name="space"/>
+    <GlyphID id="5" name="a"/>
+    <GlyphID id="6" name="a.1"/>
+    <GlyphID id="7" name="glyph00007"/>
+  </GlyphOrder>
+
+  <head>
+    <tableVersion value="1.0"/>
+    <fontRevision value="1.5"/>
+    <checkSumAdjustment value="0x12345678"/>
+    <magicNumber value="0x5f0f3cf5"/>
+    <flags value="00000000 00001011"/>
+    <unitsPerEm value="1000"/>
+    <created value="Thu Aug 10 11:12:00 2017"/>
+    <modified value="Thu Jan  1 00:00:00 1970"/>
+    <xMin value="-1000"/>
+    <yMin value="-400"/>
+    <xMax value="600"/>
+    <yMax value="700"/>
+    <macStyle value="00000000 00000001"/>
+    <lowestRecPPEM value="9"/>
+    <fontDirectionHint value="2"/>
+    <indexToLocFormat value="0"/>
+    <glyphDataFormat value="0"/>
+  </head>
+
+  <hhea>
+    <tableVersion value="0x00010000"/>
+    <ascent value="800"/>
+    <descent value="-200"/>
+    <lineGap value="90"/>
+    <advanceWidthMax value="650"/>
+    <minLeftSideBearing value="-1000"/>
+    <minRightSideBearing value="-50"/>
+    <xMaxExtent value="600"/>
+    <caretSlopeRise value="1"/>
+    <caretSlopeRun value="0"/>
+    <caretOffset value="0"/>
+    <reserved0 value="0"/>
+    <reserved1 value="0"/>
+    <reserved2 value="0"/>
+    <reserved3 value="0"/>
+    <metricDataFormat value="0"/>
+    <numberOfHMetrics value="6"/>
+  </hhea>
+
+  <maxp>
+    <tableVersion value="0x10000"/>
+    <numGlyphs value="8"/>
+    <maxPoints value="10"/>
+    <maxContours value="2"/>
+    <maxCompositePoints value="12"/>
+    <maxCompositeContours value="3"/>
+    <maxZones value="2"/>
+    <maxTwilightPoints value="0"/>
+    <maxStorage value="1"/>
+    <maxFunctionDefs value="1"/>
+    <maxInstructionDefs value="0"/>
+    <maxStackElements value="64"/>
+    <maxSizeOfInstructions value="40"/>
+    <maxComponentElements value="2"/>
+    <maxComponentDepth value="1"/>
+  </maxp>
+
+  <OS_2>
+    <version value="4"/>
+    <xAvgCharWidth value="512"/>
+    <usWeightClass value="400"/>
+    <usWidthClass value="5"/>
+    <fsType value="00000000 00001000"/>
+    <ySubscriptXSize value="650"/>
+    <ySubscriptYSize value="600"/>
+    <ySubscriptXOffset value="0"/>
+    <ySubscriptYOffset value="75"/>
+    <ySuperscriptXSize value="650"/>
+    <ySuperscriptYSize value="600"/>
+    <ySuperscriptXOffset value="0"/>
+    <ySuperscriptYOffset value="350"/>
+    <yStrikeoutSize value="50"/>
+    <yStrikeoutPosition value="300"/>
+    <sFamilyClass value="2053"/>
+    <panose>
+      <bFamilyType value="2"/>
+      <bSerifStyle value="11"/>
+      <bWeight value="6"/>
+      <bProportion value="3"/>
+      <bContrast value="0"/>
+      <bStrokeVariation value="0"/>
+      <bArmStyle value="0"/>
+      <bLetterForm value="0"/>
+      <bMidline value="0"/>
+      <bXHeight value="0"/>
+    </panose>
+    <ulUnicodeRange1 value="10000000 00000000 00000000 00000011"/>
+    <ulUnicodeRange2 value="00010000 00000000 00000000 00000000"/>
+    <ulUnicodeRange3 value="00000000 00000000 00000000 00000000"/>
+    <ulUnicodeRange4 value="00000000 00000000 00000000 00000000"/>
+    <achVendID value="TE&quot;T"/>
+    <fsSelection value="00000000 01000000"/>
+    <usFirstCharIndex value="32"/>
+    <usLastCharIndex value="65535"/>
+    <sTypoAscender value="800"/>
+    <sTypoDescender value="-200"/>
+    <sTypoLineGap value="90"/>
+    <usWinAscent value="1000"/>
+    <usWinDescent value="400"/>
+    <ulCodePageRange1 value="00000000 00000000 00000000 00000001"/>
+    <ulCodePageRange2 value="00000000 00000000 00000000 00000000"/>
+    <sxHeight value="500"/>
+    <sCapHeight value="700"/>
+    <usDefaultChar value="0"/>
+    <usBreakChar value="32"/>
+    <usMaxContext value="2"/>
+  </OS_2>
+
+  <hmtx>
+    <mtx name=".notdef" width="500" lsb="50"/>
+    <mtx name="A" width="600" lsb="0"/>
+    <mtx name="B" width="600" lsb="-20"/>
+    <mtx name="C" width="600" lsb="0"/>
+    <mtx name="a" width="500" lsb="100"/>
+    <mtx name="a.1" width="500" lsb="0"/>
+    <mtx name="glyph00007" width="500" lsb="-1000"/>
+    <mtx name="space" width="250" lsb="0"/>
+  </hmtx>
+
+  <hdmx>
+    <hdmxData>
+            ppem:   9  12 ;
+
+         .notdef:  10   2 ;
+               A:   2  14 ;
+               B:  11   9 ;
+               C:   3   4 ;
+               a:   4  11 ;
+             a.1:  13   6 ;
+      glyph00007:   5   1 ;
+           space:  12  16 ;
+    </hdmxData>
+  </hdmx>
+
+  <cmap>
+    <tableVersion version="0"/>
+    <cmap_format_4 platformID="0" platEncID="3" language="0">
+      <map code="0x20" name="space"/>
+      <map code="0x41" name="A"/>
+      <map code="0x42" name="B"/>
+      <map code="0x43" name="C"/>
+      <map code="0x61" name="a.1"/>
+    </cmap_format_4>
+    <cmap_format_14 platformID="0" platEncID="5">
+      <map uv="0x41" uvs="0xfe00"/>
+      <map uv="0x42" uvs="0xfe00"/>
+      <map uv="0x61" uvs="0xfe00" name="a.1"/>
+      <map uv="0x41" uvs="0xfe01" name="C"/>
+    </cmap_format_14>
+    <cmap_format_6 platformID="1" platEncID="0" language="0">
+      <map code="0x41" name="A"/>
+      <map code="0x42" name="B"/>
+      <map code="0x43" name="C"/>
+    </cmap_format_6>
+    <cmap_format_10 platformID="1" platEncID="1">
+      000a0000 00000018 00000000 00002000
+      00000002 00010002  
+    </cmap_format_10>
+    <cmap_format_4 platformID="3" platEncID="1" language="0">
+      <map code="0x20" name="space"/>
+      <map code="0x41" name="A"/>
+      <map code="0x42" name="B"/>
+      <map code="0x43" name="C"/>
+      <map code="0x61" name="a.1"/>
+    </cmap_format_4>
+    <cmap_format_12 platformID="3" platEncID="10" format="12" reserved="0" length="52" language="0" nGroups="3">
+      <map code="0x31" name="A"/>
+      <map code="0x41" name="A"/>
+      <map code="0x42" name="B"/>
+      <map code="0x43" name="C"/>
+      <map code="0x1f600" name="a"/>
+    </cmap_format_12>
+  </cmap>
+
+  <fpgm>
+    <assembly>
+      PUSHB[ ]	/* 1 value pushed */
+      0
+      FDEF[ ]	/* FunctionDefinition */
+        PUSHB[ ]	/* 2 values pushed */
+        1 2
+        IF[ ]	/* If */
+          DUP[ ]	/* DuplicateTopStack */
+          IF[ ]	/* If */
+            POP[ ]	/* PopTopStack */
+          EIF[ ]	/* EndIf */
+        ELSE[ ]	/* Else */
+          CLEAR[ ]	/* ClearStack */
+        EIF[ ]	/* EndIf */
+      ENDF[ ]	/* EndFunctionDefinition */
+    </assembly>
+  </fpgm>
+
+  <prep>
+    <assembly>
+      PUSHW[ ]	/* 2 values pushed */
+      -32768 32767
+      SVTCA[0]	/* SetFPVectorToAxis */
+      MDRP[00000]	/* MoveDirectRelPt */
+      SCVTCI[ ]	/* SetCVTCutIn */
+      NPUSHW[ ]	/* 2 values pushed */
+      256 -2
+      MIRP[00101]	/* MoveIndirectRelPt */
+      INSTR146[ ]
+    </assembly>
+  </prep>
+
+  <cvt>
+    <cv index="0" value="0"/>
+    <cv index="1" value="-10"/>
+    <cv index="2" value="700"/>
+    <cv index="3" value="32767"/>
+  </cvt>
+
+  <loca>
+  </loca>
+
+  <glyf>
+
+
+    <TTGlyph name=".notdef" xMin="50" yMin="0" xMax="450" yMax="700">
+      <contour>
+        <pt x="50" y="0" on="1"/>
+        <pt x="50" y="700" on="1"/>
+        <pt x="450" y="700" on="1"/>
+        <pt x="450" y="0" on="1"/>
+      </contour>
+      <instructions>
+        <assembly>
+          PUSHB[ ]	/* 2 values pushed */
+          1 2
+          MDAP[0]	/* MoveDirectAbsPt */
+          SVTCA[1]	/* SetFPVectorToAxis */
+        </assembly>
+      </instructions>
+    </TTGlyph>
+
+    <TTGlyph name="A" xMin="0" yMin="0" xMax="600" yMax="700">
+      <contour>
+        <pt x="0" y="0" on="1" overlap="1"/>
+        <pt x="300" y="700" on="1"/>
+        <pt x="600" y="0" on="1"/>
+        <pt x="500" y="0" on="1"/>
+        <pt x="300" y="600" on="1"/>
+        <pt x="100" y="0" on="1"/>
+      </contour>
+      <contour>
+        <pt x="200" y="200" on="1"/>
+        <pt x="250" y="260" on="0"/>
+        <pt x="350" y="260" on="0"/>
+        <pt x="400" y="200" on="1"/>
+      </contour>
+      <instructions/>
+    </TTGlyph>
+
+    <TTGlyph name="B" xMin="-20" yMin="-300" xMax="620" yMax="1000">
+      <component glyphName="A" x="10" y="-20" scale="0.5" flags="0x204"/>
+      <component glyphName=".notdef" x="-20" y="100" scalex="1.25" scaley="-0.75" flags="0x800"/>
+      <instructions>
+        <assembly>
+          RTG[ ]	/* RoundToGrid */
+          ROFF[ ]	/* RoundOff */
+          INSTR40[ ]
+        </assembly>
+      </instructions>
+    </TTGlyph>
+
+    <TTGlyph name="C" xMin="0" yMin="0" xMax="600" yMax="700">
+      <component glyphName="A" x="5" y="6" scalex="0.7071" scale01="0.7071" scale10="-0.7071" scaley="0.7071" flags="0x400"/>
+      <component glyphName=".notdef" firstPt="1" secondPt="2" flags="0x1000"/>
+    </TTGlyph>
+
+    <TTGlyph name="a" xMin="100" yMin="0" xMax="400" yMax="500">
+      <contour>
+        <pt x="100" y="0" on="1"/>
+        <pt x="100" y="500" on="1"/>
+        <pt x="400" y="500" on="1"/>
+        <pt x="400" y="0" on="1"/>
+      </contour>
+      <instructions>
+        <assembly>
+          NPUSHB[ ]	/* 30 values pushed */
+          0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24
+          25 26 27 28 29
+          IF[ ]	/* If */
+            PUSHB[ ]	/* 1 value pushed */
+            7
+          ELSE[ ]	/* Else */
+            PUSHW[ ]	/* 1 value pushed */
+            -100
+            SVTCA[0]	/* SetFPVectorToAxis */
+            ABS[ ]	/* Absolute */
+          EIF[ ]	/* EndIf */
+          MIRP[01101]	/* MoveIndirectRelPt */
+          IUP[0]	/* InterpolateUntPts */
+          IUP[1]	/* InterpolateUntPts */
+        </assembly>
+      </instructions>
+    </TTGlyph>
+
+    <TTGlyph name="a.1" xMin="0" yMin="0" xMax="10" yMax="10">
+      <contour>
+        <pt x="0" y="0" on="1"/>
+        <pt x="0" y="10" on="1"/>
+        <pt x="10" y="10" on="1"/>
+      </contour>
+      <instructions/>
+    </TTGlyph>
+
+    <TTGlyph name="glyph00007" xMin="-1000" yMin="-400" xMax="0" yMax="0">
+      <contour>
+        <pt x="0" y="0" on="1"/>
+        <pt x="0" y="-400" on="0"/>
+        <pt x="-1000" y="-400" on="1"/>
+      </contour>
+      <instructions/>
+    </TTGlyph>
+
+    <TTGlyph name="space"/>
+
+  </glyf>
+
+  <name>
+    <namerecord nameID="3" platformID="0" platEncID="3" langID="0x0">
+      Test:Unique
+    </namerecord>
+    <namerecord nameID="1" platformID="1" platEncID="0" langID="0x0" unicode="True">
+      Test Fém
+    </namerecord>
+    <namerecord nameID="2" platformID="1" platEncID="0" langID="0x0" unicode="True">
+      Bold • &lt;&amp;&gt;
+    </namerecord>
+    <namerecord nameID="1" platformID="3" platEncID="1" langID="0x409">
+      Test Family
+    </namerecord>
+    <namerecord nameID="2" platformID="3" platEncID="1" langID="0x409">
+      Regular
+    </namerecord>
+    <namerecord nameID="5" platformID="3" platEncID="1" langID="0x409">
+      Version 1.500; "q" &amp; &lt;x&gt;&#13;
+    </namerecord>
+    <namerecord nameID="256" platformID="3" platEncID="1" langID="0x409">
+      Smile 😀 é
+    </namerecord>
+    <namerecord nameID="257" platformID="3" platEncID="1" langID="0x409" unicode="False">
+      &#216;&#0;&#0;A
+    </namerecord>
+    <namerecord nameID="258" platformID="3" platEncID="1" langID="0x409">
+      AB
+    </namerecord>
+    <namerecord nameID="259" platformID="3" platEncID="1" langID="0x40c">
+      AB
+    </namerecord>
+  </name>
+
+  <post>
+    <formatType value="2.0"/>
+    <italicAngle value="-12.5"/>
+    <underlinePosition value="-100"/>
+    <underlineThickness value="50"/>
+    <isFixedPitch value="0"/>
+    <minMemType42 value="0"/>
+    <maxMemType42 value="0"/>
+    <minMemType1 value="0"/>
+    <maxMemType1 value="0"/>
+    <psNames>
+      <psName name="a.1" psName="a"/>
+      <psName name="glyph00007" psName=""/>
+    </psNames>
+    <extraNames>
+      <psName name="a"/>
+      <psName name=""/>
+    </extraNames>
+  </post>
+
+  <gasp>
+    <gaspRange rangeMaxPPEM="8" rangeGaspBehavior="10"/>
+    <gaspRange rangeMaxPPEM="65535" rangeGaspBehavior="15"/>
+  </gasp>
+
+  <vhea>
+    <tableVersion value="0x00011000"/>
+    <ascent value="500"/>
+    <descent value="-500"/>
+    <lineGap value="0"/>
+    <advanceHeightMax value="1000"/>
+    <minTopSideBearing value="0"/>
+    <minBottomSideBearing value="0"/>
+    <yMaxExtent value="1000"/>
+    <caretSlopeRise value="0"/>
+    <caretSlopeRun value="1"/>
+    <caretOffset value="0"/>
+    <reserved1 value="0"/>
+    <reserved2 value="0"/>
+    <reserved3 value="0"/>
+    <reserved4 value="0"/>
+    <metricDataFormat value="0"/>
+    <numberOfVMetrics value="8"/>
+  </vhea>
+
+  <vmtx>
+    <mtx name=".notdef" height="1000" tsb="100"/>
+    <mtx name="A" height="1000" tsb="101"/>
+    <mtx name="B" height="1000" tsb="102"/>
+    <mtx name="C" height="1000" tsb="103"/>
+    <mtx name="a" height="1000" tsb="105"/>
+    <mtx name="a.1" height="1000" tsb="106"/>
+    <mtx name="glyph00007" height="1000" tsb="107"/>
+    <mtx name="space" height="1000" tsb="104"/>
+  </vmtx>
+
+  <zzzz raw="True">
+    <hexdata>
+      756e6b6e 6f776e20 7461626c 65206461
+      74612c20 6b657074 20617320 686578
+    </hexdata>
+  </zzzz>
+
+</ttFont>
