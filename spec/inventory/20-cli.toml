@@ -1287,7 +1287,7 @@ id = "outlines remove-overlaps"
 usage = "fontcraft-cli outlines remove-overlaps INPUT [GLYPH...] [--keep-hinting] [--ignore-errors] [--keep-unused-subroutines] [-o OUT]"
 options = [
   "GLYPH...: glyphs to process; default all",
-  "--keep-hinting: keep TrueType instructions or CFF hints of glyphs that did not change, and the font-wide hint tables; default drops all hinting of a TrueType font",
+  "--keep-hinting: keep TrueType instructions or CFF hints of glyphs that did not change; by default every processed glyph loses its instructions and the font-wide hint tables stay",
   "--ignore-errors: leave a glyph unchanged when its overlaps cannot be resolved instead of failing",
   "--keep-unused-subroutines: do not remove CFF subroutines that became unused",
   "--min-area N: delete resulting contours whose bounding box is smaller than N square units; default 25",
@@ -1306,6 +1306,11 @@ milestone = "M12"
 summary = "Merges overlapping contours and overlapping components of each glyph into a single non-overlapping outline. Composite glyphs whose components overlap are decomposed first. In a binary font, hints of glyphs that changed are dropped unless told otherwise."
 ref = "fontTools ttLib.removeOverlaps; AFDKO checkoutlinesufo (overlap removal), tx +V; fontTools varLib.instancer --remove-overlaps"
 status = "docs"
+notes = "Built in M12.28 (`fontcraft_tables::outlines`, `outlines.removeOverlaps`). TrueType fonts follow fontTools 4.66 `ttLib.removeOverlaps`, checked on a font built in code: simple glyphs first, then composites by depth; a composite is merged only when two of its components intersect; a glyph is replaced only when the merged contours differ, keeping its winding; replaced glyphs get lsb = xMin. Without --keep-hinting every processed glyph loses its instructions, while fpgm, prep and cvt stay, as in the oracle. CFF-flavoured and variable fonts are refused for now. Sources run path.removeOverlapForAllMasters, which leaves components alone."
+guesses = [
+  "--min-area (default 25) only drops contours of glyphs whose overlaps were merged, so glyphs without overlaps match the fontTools result; checkoutlinesufo's behaviour on tiny contours of unmerged glyphs would settle it.",
+  "--keep-contour-order has no effect: the editor's merge always keeps the order and start points of the contours it can match; checkoutlinesufo --ignore-contour-order output on a corpus font would show whether the difference matters.",
+]
 
 [[cli]]
 id = "outlines direction"
@@ -1324,6 +1329,10 @@ milestone = "M12"
 summary = "Sets the winding of every contour from how contours nest: outer contours counter-clockwise and inner ones clockwise for PostScript outlines, the opposite for TrueType, or simply reverses every contour."
 ref = "fontmake --keep-direction, cu2qu --keep-direction (direction is otherwise reversed for TrueType); AFDKO checkoutlinesufo (restores direction after overlap removal)"
 status = "inferred"
+notes = "Built in M12.28 with path.correctPathDirection's geometry; the TrueType convention reverses its result keeping each start point, reverse only reverses. Composites are left alone. TrueType fonts only among compiled fonts."
+guesses = [
+  "The default flavour of a source is the PostScript convention (the editor's); a source written for TrueType outlines would need --flavour truetype.",
+]
 
 [[cli]]
 id = "outlines extremes"
@@ -1339,6 +1348,7 @@ milestone = "M12"
 summary = "Inserts on-curve points where curves reach a horizontal or vertical extreme, without changing the shape, skipping extremes that would leave a segment shorter than the threshold."
 ref = "AFDKO comparefamily / otfautohint expectations (hinting needs points at extremes); editor command path.addExtremes"
 status = "inferred"
+notes = "Built in M12.28 with path.addExtremes (and path.forceExtremes for --min-segment 0). The editor's threshold is fixed at 3 units, so --min-segment accepts 3 or 0 only."
 
 [[cli]]
 id = "outlines round"
@@ -1357,6 +1367,10 @@ milestone = "M12"
 summary = "Rounds point coordinates, component offsets, anchors and advance widths to integers or to a coarser grid. The reference tools round by default and offer options to keep decimals; this action applies the rounding as a separate step."
 ref = "AFDKO checkoutlinesufo -d, otfautohint -d, makeinstancesufo -r (all: do not round); fontmake --round-instances, --cff-round-tolerance"
 status = "inferred"
+notes = "Built in M12.28. On compiled fonts point coordinates, component offsets and advance widths are rounded; instructions stay because no point changes index. On sources path.roundCoordinatesForAllMasters runs with the grid asked for (advance widths stay, as in the editor command); --tolerance is for compiled fonts only."
+guesses = [
+  "Halfway values round away from zero to the grid (Rust's rounding); fontTools' otRound rounds them up, which only differs for negative halves on a grid coarser than 1 unit.",
+]
 
 [[cli]]
 id = "outlines to-quadratic"
@@ -1439,6 +1453,7 @@ milestone = "M12"
 summary = "Replaces component references with the contours they stand for. In a TrueType font the decomposed glyphs lose their instructions. Options restrict the action to nested components (flattening to one level) or to components with a transform."
 ref = "AFDKO ttfdecomponentizer.py; fontmake -f; fontc --decompose-components, --decompose-transformed-components"
 status = "docs"
+notes = "Built in M12.28. Full decomposition matches ttfdecomponentizer (AFDKO 5.0.1) on a font built in code: contours start at their first on-curve point, decomposed glyphs have no instructions. --transformed-only decomposes a whole glyph when a direct component has a 2x2 transform (a glyf glyph cannot mix contours and components); --nested-only rewrites composites of composites as composites of simple glyphs with composed transforms, offsets rounded. Sources call glyph.decomposeGlyphForAllMasters (M6), whose options are not offered on sources yet."
 
 [[cli]]
 id = "autohint"
@@ -2493,6 +2508,7 @@ milestone = "M12"
 summary = "Applies the geometry of path.removeOverlap to every selected glyph of a source or binary font, decomposing composites with overlapping components first, and for a binary font rewrites only the outline table and its dependants. Returns the glyphs changed and the glyphs that failed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "docs"
+notes = "Built in M12.28. TrueType fonts follow fontTools 4.66 `ttLib.removeOverlaps`, checked on a font built in code: simple glyphs first, then composites by depth; a composite is merged only when two of its components intersect; a glyph is replaced only when the merged contours differ, keeping its winding; replaced glyphs get lsb = xMin. Without --keep-hinting every processed glyph loses its instructions, while fpgm, prep and cvt stay, as in the oracle. CFF-flavoured and variable fonts are refused for now. Sources run path.removeOverlapForAllMasters, which leaves components alone."
 
 [[command]]
 id = "outlines.correctDirection"
@@ -2506,6 +2522,7 @@ milestone = "M12"
 summary = "Applies path.correctPathDirection to every selected glyph of a source or binary font for the chosen winding convention, or reverses all contours, and returns the glyphs changed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
+notes = "Built in M12.28; see the `outlines direction` row."
 
 [[command]]
 id = "outlines.addExtremes"
@@ -2519,6 +2536,7 @@ milestone = "M12"
 summary = "Applies path.addExtremes to every selected glyph of a source or binary font and returns the number of points added per glyph."
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
+notes = "Built in M12.28; see the `outlines extremes` row."
 
 [[command]]
 id = "outlines.roundCoordinates"
@@ -2532,6 +2550,7 @@ milestone = "M12"
 summary = "Rounds point coordinates, component offsets, anchors and advances of every selected glyph to the grid and returns the number of values changed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "inferred"
+notes = "Built in M12.28; see the `outlines round` row."
 
 [[command]]
 id = "outlines.convertCurves"
@@ -2571,6 +2590,7 @@ milestone = "M12"
 summary = "Applies glyph.decomposeGlyph to every selected composite of sources or binary fonts, optionally only to nested or transformed components, dropping the instructions of decomposed TrueType glyphs. Returns the glyphs decomposed."
 ref = "docs/spec/20-cli.md › outlines"
 status = "docs"
+notes = "Built in M12.28; see the `outlines decompose` row. On a source it needs glyph.decomposeGlyphForAllMasters, which M6 builds."
 
 [[command]]
 id = "hints.remove"
