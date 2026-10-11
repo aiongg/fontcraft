@@ -38,6 +38,8 @@ use fontcraft_model::{Features, Font};
 use crate::FeatureError;
 use crate::source_map::{EntryKind, EntryRef};
 
+pub use locl::locl_languages;
+
 /// Most bytes of code one generated entry may hold.
 pub const MAX_GENERATED_BYTES: usize = 4 << 20;
 

@@ -1328,9 +1328,10 @@ summary = "cpsp (Capital Spacing). Trigger: Uppercase letters exist and the user
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "The amount is a number value named after the feature if the font has one, else 5 units per side, written `pos @Uppercase <5 0 10 0>;`; adding Capital Spacing in the reference app would settle the amount.",
+  "The amount is 5 units per side, written `pos @Uppercase <5 0 10 0>;`; adding Capital Spacing in the reference app would settle the amount.",
+  "Without an Uppercase class entry the rule lists the capitals inline (`pos [A B] <5 0 10 0>;`); a capital is a glyph whose subcategory is Uppercase, or without category data one whose code point is an uppercase letter; adding Capital Spacing to a font without the class would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Update writes the entry only when the font already has one."
 observe = [
   "In F1 (Latin features), add Capital Spacing from the plus menu in Font Info › Features: copy its code and note the spacing amount.",
 ]
@@ -1342,9 +1343,14 @@ milestone = "M8"
 summary = "locl (Localized Forms). Trigger: Glyphs ending in `.loclXXX` where XXX is an OpenType language tag (`.loclENG`, `.loclSVE`). Built-in triggers: idotaccent, i.TRK or i.loclTRK with i (TRK, AZE, CRT, KAZ, TAT); Scommaaccent, Tcommaaccent and their lowercase with the cedilla forms present (ROM, MOL); periodcentered.loclCAT (plus `.case`), L_periodcentered_L.loclCAT, l_periodcentered_l.loclCAT or legacy Ldot, ldot with L, l and periodcentered (CAT); Iacute_J.loclNLD, iacute_j.loclNLD or Jacute, jacute with Iacute, iacute, J, j (NLD); six-ar and `.urdu` figures such as four-persian.urdu (URD). Generated: Per script and language, a `script`/`language` section holding single substitutions to the localised glyphs (ligature or contextual rules for the Catalan and Dutch cases); languages sharing rules are listed together (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (6 sources) differs by version: per-script `script`/`language` sections with named lookups referenced from each further language, or one lookup holding several languages, or the non-standard `language AZE CRT KAZ TAT TRK;` in a version 4 file (M8 planning pass)."
+notes = "The reference's stored output in the corpus (6 sources) differs by version: a flat list of `language` sections in a version 1 file (Oswald Heavy); per-script `script`/`language` sections with lookups named locl_latn_N referenced from each further language (Oswald, Oswald Italic, version 3); one lookup holding several languages with the script and language statements inside it (Inter, version 3); and `language AZE CRT KAZ TAT TRK;` with lookups named idotaccent, commaaccent and puntvolat in the version 4 file (Markow). The generator writes the version 4 form; the rules and languages are the same in all six. Missing pairs are left out (Inter has no Tcedilla rule)."
 guesses = [
-  "One named lookup per rule set (`locl_latn_0`) inside `script latn; language XXX;`, referenced from each further language that shares it, as the Oswald files have it; Update on a font with idotaccent and Scommaaccent would settle the current form.",
+  "The code takes the form of the version 4 file in the corpus (Markow): one `script` section per script, one named lookup per rule set (idotaccent, commaaccent, puntvolat) after a `language` statement listing every language that shares it; Update on a font with idotaccent and Scommaaccent would settle the current form.",
+  "When several Turkish i glyphs exist, idotaccent is used before i.TRK and i.loclTRK, the order the handbook lists them; Update on a font with idotaccent and i.loclTRK would settle it.",
+  "The Catalan and Dutch rules use, in order of preference, the `.loclCAT` middle dot, the `.loclCAT` or `.loclNLD` ligature, then the legacy Ldot, ldot or Jacute, jacute in context, lowercase rule first; the ligature and Jacute forms have no corpus example and Update on fonts with each would settle them.",
+  "The Dutch lookup is named ijacute and the Urdu lookup urdu; Urdu writes `sub X by X.urdu;` under `script arab; language URD;` for each `.urdu` glyph whose base exists, and six-ar alone writes nothing; Update on a font with Jacute and on one with four-persian.urdu would settle them.",
+  "Other `.loclXXX` glyphs (XXX three or four capitals or digits) get `sub base by base.loclXXX;` in a lookup named locl_<script>_<XXX>, under the script of the base glyph's code point, else of the stored script, else DFLT, after the built-in sets; Update on a font with be-cy.loclSRB would settle the shape.",
+  "Suffixed forms of the built-in glyphs (i.sc and idotaccent.sc) get no built-in rule; Update on a font with small caps would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the locl entry: compare it with FontCraft's generator for the same font, or note that no locl entry is created.",

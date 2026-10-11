@@ -2302,6 +2302,9 @@ summary = "Enables language-specific substitutions for the tab's text and picks 
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The menu offers the script and language pairs that the font's enabled locl entries name in their `script` and `language` statements, in order of appearance; the menu's entries in the reference app would settle it.",
+]
 observe = [
   "In F1 (Latin features), turn on Localized Forms in Edit View, choose Turkish and type i: write down the menu's script and language entries and note the glyph shown.",
 ]
