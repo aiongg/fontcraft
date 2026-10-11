@@ -24,9 +24,6 @@ pub(super) enum Mode {
     Nudge,
 }
 
-/// Most copies of an anchor name tried when a duplicate needs a free name.
-const MAX_NAME_TRIES: usize = 10_000;
-
 /// The target's points grouped by shape, with each segment's two end nodes added, leaving out
 /// shapes that are moved whole.
 pub(super) fn points_by_shape(t: &Targets, parts: LayerParts) -> BTreeMap<usize, BTreeSet<usize>> {
@@ -211,11 +208,6 @@ fn shift(x: &mut f64, y: &mut f64, d: Vec2, step: f64) {
     *y = round_to_grid(*y + d.y, step);
 }
 
-/// A free anchor name based on `name` (`top.1`, `top.2`…).
-fn free_name(taken: &[String], name: &str) -> Option<String> {
-    (1..=MAX_NAME_TRIES).map(|k| format!("{name}.{k}")).find(|c| !taken.iter().any(|t| t == c))
-}
-
 /// Moves (or, with `duplicate`, copies and moves the copies of) what `t` names in `font` by
 /// `d`. Returns the selection afterwards: the same targets, or the copies.
 pub(super) fn apply(font: &mut Font, t: &Targets, d: Vec2, mode: Mode, duplicate: bool, step: f64) -> Result<Targets> {
@@ -332,14 +324,13 @@ fn duplicate_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize,
         }
         parts.shapes.push(shape);
     }
-    let mut taken: Vec<String> = parts.anchors.iter().map(|a| a.name.clone()).collect();
     for name in &t.anchors {
         let Some(a) = parts.anchors.iter().find(|a| a.name == *name) else { continue };
-        let Some(fresh) = free_name(&taken, name) else { continue };
+        // The anchor rule: underscores appended until the name is free (`top_`).
+        let Some(fresh) = crate::cmd::anchor::unique_anchor_name(&parts.anchors, name) else { continue };
         let mut copy = a.clone();
         copy.name = fresh.clone();
         shift(&mut copy.x, &mut copy.y, d, step);
-        taken.push(fresh.clone());
         copies.anchors.push(fresh);
         parts.anchors.push(copy);
     }

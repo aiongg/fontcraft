@@ -161,7 +161,7 @@ fn moving_shapes_anchors_and_guides_and_duplicating() {
     assert!(!closed(&mut s, "A", 2));
     // Duplicating an anchor gives the copy a free name.
     let r = run(&mut s, "selection.move", json!({"glyph": "A", "anchors": ["top"], "dx": 10, "dy": 0, "duplicate": true}));
-    assert_eq!(r["selection"]["anchors"], json!(["top.1"]));
+    assert_eq!(r["selection"]["anchors"], json!(["top_"]));
 
     // Bad input changes nothing.
     let before = snapshot(&s);
