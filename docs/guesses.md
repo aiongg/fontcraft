@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**521 guesses on 346 rows (162 of them live commands).**
+**526 guesses on 348 rows (162 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -136,7 +136,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `path.swapWithBackground` | M3 | handbook | yes | Swap exchanges shapes, anchors, guides, hints and annotations but not the placed image, and removes a background the swap leaves empty. |
 | `path.clearBackground` | M3 | handbook | yes | Clear Background is its own Path menu item and acts on the active layer of the targeted glyphs, image included (03b question 2). |
 | `path.assignBackground` | M3 | handbook | yes | Glyphs are matched by name and masters by name, then by position; a source with fewer masters gives its first (03b question 3). |
-| `editView.toggleTextMode` | M5 | handbook | yes | Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either, and the toolbar after Escape, in the running app or a video, settles it. |
+| `editView.toggleTextMode` | M5 | handbook | yes | Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited (at the end of the text, when the last glyph was edited, the cursor stays at the end); no source names either, and the toolbar after Escape, in the running app or a video, settles it. |
 | `editView.insertText` | M5 | handbook | yes | A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends. |
 | `editView.setCursor` | M5 | inferred | yes | Shift+click extends the selection to the click, keeping the end of the selection away from it; the reference app settles it. |
 | `editView.setCursor` | M5 | inferred | yes | A double-click on a glyph in text mode also makes the Select tool active; the reference app settles it. |
@@ -156,6 +156,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `text.lineWidth` (behavior) | M5 | handbook | – | A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | In top-to-bottom text the lines are columns, placed from right to left one line height apart; a vertical tab in the reference app settles it. |
 | `text.currentGlyphAfterCursor` (behavior) | M5 | handbook | – | At the end of the text or of a line the current glyph is the glyph before the cursor, and next to a placeholder or a missing character it stays what it was; moving the cursor there in the reference app settles it. |
+| `text.clipboard` (behavior) | M5 | handbook | – | A glyph without a character is copied as `/name`, as display strings write it, and pasted text reads `/name` as that glyph, so a copy pastes back unchanged; copying unencoded glyphs from the reference app into a plain-text editor settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | Changing a tab's text is not an undo step and does not mark the document modified; no source says, and the window's edited mark after typing in a tab of the reference app settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | A `/` with an empty name is the slash character, and a glyph is written as the character it was typed as only while the font still maps that character to it; saving such a string in the reference app settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | A `/name` the font lacks and a character no glyph encodes are kept in the text and take half the em with nothing drawn; opening such a string in the reference app settles it. |
@@ -171,6 +172,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `infoBox.glyph` (panel) | M5 | handbook | – | With several glyphs selected in the text, the Info box describes the glyph after the cursor only, and the Unicode value is shown, not edited. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The swatch row opens the glyph section of the menu, under a Glyph Color caption (Layer Color while Alt is held). Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation. |
+| `text` (tool) | M5 | handbook | – | Return types a line break; the handbook allows several lines but does not name the key. |
+| `text` (tool) | M5 | handbook | – | Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it. |
+| `text` (tool) | M5 | handbook | – | Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them. |
 | `measurement` (tool) | M3 | handbook | – | The ruler's ends snap unless Ctrl is held, and Shift keeps it horizontal or vertical, whichever is nearer. |
 | `measurement` (tool) | M3 | handbook | – | The ruler stays until the next press, Escape or a tool change (03b question 9). |
 | `measurement` (tool) | M3 | handbook | – | G with any modifiers adds the measurement guide. |
@@ -442,6 +446,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `spacing.metricsOverlayInTextMode` (behavior) | M5 | handbook | – | Under the descender, the left sidebearing sits at the glyph's left edge, the right one at its right edge and the width centred below them; in vertical text they run along the column's left edge; a screenshot of the reference app settles it. |
 | `spacing.metricsOverlayInTextMode` (behavior) | M5 | handbook | – | A label keeps to the part of the advance a negatively kerned neighbour does not cover, so neighbouring labels do not overlap; a tightly kerned pair in the reference app settles it. |
 | `spacing.metricsOverlayInTextMode` (behavior) | M5 | handbook | – | Glyphs less than 24 screen points wide get no labels; the reference app zoomed out settles it. |
+| `spacing.metricsOverlayInTextMode` (behavior) | M5 | handbook | – | A glyph whose advance on screen is too narrow for its two sidebearing labels side by side shows only its width label; the labels of a narrow glyph such as `i` at a small zoom in the reference app settle it. |
 | `spacing.infoBoxArrowSteps` (behavior) | M5 | handbook | – | Up and Down in a field that holds a metrics key leave the key unchanged; no source says what they do there, and pressing Up in such a field in the reference app settles it. |
 | `spacing.shortcutsNeedTextTool` (behavior) | M5 | handbook | – | A spacing shortcut on a metric that holds a metrics key changes the number and keeps the key, which then shows as out of sync; no source says whether the reference keeps the key, removes it or ignores the keypress. |
 | `spacing.shortcutModifierScheme` (behavior) | M5 | handbook | – | In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text; in top-to-bottom text they do nothing in M5. No source says. |

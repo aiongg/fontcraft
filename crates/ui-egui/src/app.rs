@@ -163,6 +163,9 @@ impl FontcraftApp {
     /// selection's targets through [`Self::run_from_shell`].
     pub(crate) fn run_menu_command(&mut self, id: &str, params: Value) -> Result<Value, String> {
         let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
+        if empty && let Some(result) = shell::text::menu_command(self, id) {
+            return result;
+        }
         if empty && let Some(dialog) = crate::dialogs::for_command(id) {
             return crate::dialogs::open(self, &dialog, &serde_json::Map::new());
         }

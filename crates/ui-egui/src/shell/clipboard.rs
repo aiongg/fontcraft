@@ -168,12 +168,8 @@ pub fn after_run(app: &mut FontcraftApp, id: &str, result: &Value) {
 fn text_mode_events(app: &mut FontcraftApp, events: Vec<egui::Event>) {
     for event in events {
         let result = match event {
-            egui::Event::Copy | egui::Event::Cut => {
-                if let Some(text) = super::text::selected_text(app) {
-                    app.clipboard_out = Some(text);
-                }
-                if matches!(event, egui::Event::Cut) { super::text::delete_selection(app) } else { Ok(()) }
-            }
+            egui::Event::Copy => super::text::menu_command(app, COPY).unwrap_or(Ok(Value::Null)).map(|_| ()),
+            egui::Event::Cut => super::text::menu_command(app, CUT).unwrap_or(Ok(Value::Null)).map(|_| ()),
             egui::Event::Paste(text) if text.len() > MAX_PASTE_BYTES => Err(format!("Paste: the clipboard holds more than {MAX_PASTE_BYTES} bytes")),
             egui::Event::Paste(text) if holds_glyphs(&text) => {
                 Err("Paste: the clipboard holds copied glyphs, not text; leave text mode to paste them".into())

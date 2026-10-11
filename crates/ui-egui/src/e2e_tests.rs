@@ -595,3 +595,117 @@ fn an_agent_builds_and_exports_a_glyph_set_over_the_control_channel() {
         let _ = std::fs::remove_dir_all(&scratch);
     }
 }
+
+/// Width, left and right sidebearing of `glyph` on the first master, from `spacing.getMetrics`.
+fn metrics(app: &mut FontcraftApp, glyph: &str) -> (f64, f64, f64) {
+    let m = execute(app, "spacing.getMetrics", json!({ "glyph": glyph }));
+    let n = |k: &str| m[k].as_f64().unwrap_or(f64::NAN);
+    (n("width"), n("left"), n("right"))
+}
+
+fn text(app: &mut FontcraftApp) -> Value {
+    execute(app, "editView.getText", json!({}))
+}
+
+/// `n` taps of `key` with the modifiers of `mods` (an object of `shift`, `alt`, `cmd`, `ctrl`).
+fn taps(app: &mut FontcraftApp, key_name: &str, mods: Value, n: usize) {
+    for _ in 0..n {
+        let mut params = mods.clone();
+        params["key"] = json!(key_name);
+        key(app, params);
+    }
+}
+
+/// The M5 end-to-end measure (`docs/plans/M5.md` § 5) up to the Kerning window step: an agent on
+/// the control channel types in text mode, links `o`'s sidebearings to `n` with `=|n` keys,
+/// spaces `n` with the spacing keys and runs Update Metrics, sets kerning groups, and kerns `To`
+/// in group mode and `Tö` as an exception with the kerning keys. `engine.execute` only draws the
+/// test outlines, sets the keys and groups (the Info box fields of M5.8) and opens the lock.
+///
+/// The fixtures: every outline is one rectangle from x = 0, so a glyph's left sidebearing is
+/// where the rectangle starts and its right sidebearing the width after it. `=|n` gives `o` the
+/// opposite side of `n`: left = n's right (30), right = n's left.
+#[test]
+fn an_agent_spaces_and_kerns_text_over_the_control_channel() {
+    let mut app = FontcraftApp::new(Session::new());
+    execute(&mut app, "file.new", json!({"familyName": "Control Text"}));
+    execute(&mut app, "glyph.addGlyphs", json!({"text": "odieresis"}));
+    for (glyph, w, left, right) in [
+        ("H", 400, 60, 60),
+        ("O", 500, 40, 40),
+        ("Q", 500, 40, 40),
+        ("n", 360, 50, 30),
+        ("o", 400, 0, 0),
+        ("odieresis", 400, 30, 30),
+        ("T", 500, 20, 20),
+    ] {
+        execute(&mut app, "path.addRectangle", json!({"glyph": glyph, "x": 0, "y": 0, "width": w, "height": 500}));
+        execute(&mut app, "spacing.setLeftSidebearing", json!({"glyphs": [glyph], "value": left}));
+        execute(&mut app, "spacing.setRightSidebearing", json!({"glyphs": [glyph], "value": right}));
+    }
+    execute(&mut app, "view.newTab", json!({"glyphs": ["H"]}));
+
+    // Text mode: the Text tool, then typing over the tab's `H`.
+    tool(&mut app, "text");
+    key(&mut app, json!({"key": "a", "cmd": true}));
+    let typed = call(&mut app, "ui.text", json!({"text": "HOHOHO nnonno"}));
+    assert_eq!(typed["handled"], 13, "every key typed: {typed}");
+    let t = text(&mut app);
+    assert_eq!((t["textMode"].clone(), t["text"].clone(), t["cursor"].clone()), (json!(true), json!("HOHOHO nnonno"), json!(13)), "{t}");
+    assert_eq!(t["items"][6], "space", "{t}");
+
+    // `o` takes its sidebearings from `n`, mirrored.
+    for command in ["spacing.setLeftSidebearing", "spacing.setRightSidebearing"] {
+        execute(&mut app, command, json!({"glyphs": ["o"], "value": "=|n"}));
+    }
+    assert_eq!(metrics(&mut app, "o"), (480.0, 30.0, 50.0));
+
+    // The cursor before the first `n`; Ctrl+Shift+Left and Ctrl+Left twice: 12 units more on its
+    // left. `o` keeps its right sidebearing until Update Metrics runs on it.
+    taps(&mut app, "ArrowLeft", json!({}), 6);
+    assert_eq!(text(&mut app)["current"], "n");
+    taps(&mut app, "ArrowLeft", json!({"ctrl": true, "shift": true}), 1);
+    taps(&mut app, "ArrowLeft", json!({"ctrl": true}), 2);
+    assert_eq!(metrics(&mut app, "n"), (452.0, 62.0, 30.0));
+    assert_eq!(metrics(&mut app, "o"), (480.0, 30.0, 50.0));
+    taps(&mut app, "ArrowRight", json!({}), 2);
+    assert_eq!(text(&mut app)["current"], "o");
+    let updated = shortcut(&mut app, json!({"key": "m", "cmd": true, "ctrl": true}), "glyph.updateMetrics");
+    assert_eq!(updated["glyphs"], json!(["o"]), "{updated}");
+    assert_eq!(metrics(&mut app, "o"), (492.0, 30.0, 62.0));
+
+    // Kerning groups: O and Q share both groups; o and ö share a left group, T has a right one.
+    for (command, glyphs, group) in [
+        ("kerning.setLeftGroup", json!(["O", "Q"]), "O"),
+        ("kerning.setRightGroup", json!(["O", "Q"]), "O"),
+        ("kerning.setLeftGroup", json!(["o", "odieresis"]), "o"),
+        ("kerning.setRightGroup", json!(["T"]), "T"),
+    ] {
+        execute(&mut app, command, json!({"glyphs": glyphs, "group": group}));
+    }
+
+    // `To` in group mode: the cursor between T and o, Ctrl+Alt+Shift+Right four times.
+    key(&mut app, json!({"key": "a", "cmd": true}));
+    call(&mut app, "ui.text", json!({"text": "ToTö"}));
+    assert_eq!(text(&mut app)["items"], json!(["T", "o", "T", "odieresis"]));
+    taps(&mut app, "ArrowLeft", json!({}), 3);
+    taps(&mut app, "ArrowRight", json!({"ctrl": true, "alt": true, "shift": true}), 4);
+    let pair = |app: &mut FontcraftApp, right: &str| execute(app, "kerning.getPair", json!({"left": "T", "right": right}))["value"].clone();
+    assert_eq!((pair(&mut app, "o"), pair(&mut app, "odieresis")), (json!(-40.0), json!(-40.0)), "the group pair kerns both");
+
+    // `Tö` as an exception: open ö's lock, then Ctrl+Alt+Shift+Left and Ctrl+Alt+Left twice.
+    taps(&mut app, "ArrowRight", json!({}), 2);
+    execute(&mut app, "kerning.addException", json!({"left": "T", "right": "odieresis", "side": "right"}));
+    taps(&mut app, "ArrowLeft", json!({"ctrl": true, "alt": true, "shift": true}), 1);
+    taps(&mut app, "ArrowLeft", json!({"ctrl": true, "alt": true}), 2);
+    assert_eq!((pair(&mut app, "o"), pair(&mut app, "odieresis")), (json!(-40.0), json!(-28.0)));
+
+    let pairs = execute(&mut app, "kerning.listPairs", json!({}));
+    // Group to group for `To`; T's group (its lock stays closed) against ö alone for `Tö`.
+    let fixture = json!([
+        {"index": 0, "left": "@T", "right": "@o", "value": -40.0},
+        {"index": 1, "left": "@T", "right": "odieresis", "value": -28.0},
+    ]);
+    assert_eq!(pairs["pairs"], fixture, "{pairs}");
+    assert_eq!(text(&mut app)["text"], "ToTö", "the kerning keys leave the text as it is");
+}

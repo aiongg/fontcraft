@@ -127,7 +127,14 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
                 Some(other) => return Err(args.err(format!("`mode` must be \"text\" or \"edit\", got \"{other}\""))),
             };
             if next.text_mode && !tab.text_mode {
-                let before = tab.edited_index().unwrap_or(tab.text.cursor());
+                // At the end of the text the glyph before the cursor is the edited one, and the
+                // cursor stays there.
+                let cursor = tab.text.cursor();
+                let before = match tab.edited_index() {
+                    Some(i) if i + 1 == cursor && cursor == len => cursor,
+                    Some(i) => i,
+                    None => cursor,
+                };
                 let current = tab.edited_glyph().map(str::to_string);
                 let text = next.text.edit();
                 text.set_cursor(before);
@@ -604,6 +611,26 @@ fn shortcut(app: &mut FontcraftApp, id: &'static str) -> Result<(), String> {
         json!({ "glyphs": [glyph], "layer": master })
     };
     app.run_menu_command(id, params).map(|_| ())
+}
+
+/// Edit › Copy, Cut and Select All from the menu in text mode, which act on the tab's text as
+/// their keys do. `None` outside text mode or for another command, so it runs as usual.
+/// Replies with `editView.getText`'s reply.
+pub(crate) fn menu_command(app: &mut FontcraftApp, id: &str) -> Option<Result<Value, String>> {
+    if !in_text_mode(app) {
+        return None;
+    }
+    let result = match id {
+        "edit.copy" | "edit.cut" => {
+            if let Some(text) = selected_text(app) {
+                app.clipboard_out = Some(text);
+            }
+            if id == "edit.cut" { delete_selection(app) } else { Ok(()) }
+        }
+        "edit.selectAll" => select_all(app),
+        _ => return None,
+    };
+    Some(result.and_then(|()| app.run("editView.getText", &json!({}))))
 }
 
 /// The selected items as text for the clipboard: characters, a glyph without one as `/name`,

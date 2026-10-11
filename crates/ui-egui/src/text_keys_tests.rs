@@ -265,7 +265,7 @@ fn a_spacing_key_in_text_mode_spaces_the_glyph_after_the_cursor_in_the_tabs_mast
 
     // Cmd+Right: one more unit on the right of O, in the tab's master only.
     let r = key(&mut app, json!({"key": "ArrowRight", "cmd": true}));
-    assert_eq!(r["handled"], json!(true), "{r}");
+    assert_eq!(r["result"]["handled"], json!(true), "{r}");
     assert_eq!((width(&app, "O", "m02"), width(&app, "O", &first), width(&app, "H", "m02")), (o + 1.0, o_first, h));
     assert_eq!(get(&mut app)["cursor"], json!(1), "the cursor stays");
     // Cmd+Shift+Right: ten units more.
@@ -319,4 +319,27 @@ fn a_kerning_key_kerns_the_pair_at_the_cursor_and_does_nothing_without_kerning()
     key(&mut app, json!({"key": "ArrowLeft", "ctrl": true, "alt": true}));
     assert_eq!(pair(&mut app, "V", "A", "rtl"), 1.0);
     assert_eq!(get(&mut app)["text"], json!("AVA"), "the text is unchanged");
+}
+
+#[test]
+fn the_edit_menu_copies_cuts_and_selects_the_text_in_text_mode() {
+    let w = Window::new();
+    let mut app = text_app(&w);
+    app.run("editView.setText", &json!({"chars": "HOn"})).unwrap();
+    let before = app.session.font().unwrap().clone();
+
+    // Edit › Copy and Cut over the control channel, as a click on the menu item.
+    app.run("editView.setCursor", &json!({"index": 0, "selectionLength": 2})).unwrap();
+    let r = call(&mut app, "ui.menu.invoke", json!({"command": "edit.copy"}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    assert_eq!(copied(&w.frame(&mut app, Vec::new())), ["HO"]);
+    call(&mut app, "ui.menu.invoke", json!({"command": "edit.cut"}));
+    assert_eq!(copied(&w.frame(&mut app, Vec::new())), ["HO"]);
+    assert_eq!(items(&mut app), json!(["n"]), "Cut removes the selected text");
+
+    // Edit › Select All from the menu bar selects the whole text, not the outline.
+    app.run("editView.setText", &json!({"chars": "HOH"})).unwrap();
+    app.run_menu_command("edit.selectAll", json!({})).unwrap();
+    assert_eq!(cursor(&mut app), (json!(3), json!([0, 3])));
+    assert!(app.session.font().unwrap().same_as(&before), "the font is unchanged");
 }

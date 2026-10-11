@@ -86,6 +86,13 @@ whose command has a dialog opens it, as the keyboard does: `result` is then the
 `ui.dialog.inspect` reply. Other shortcuts act on the selection (Font View's selected glyphs, or
 Edit View's edited glyph and selection).
 
+In text mode (the Text tool), `ui.key` and `ui.text` type into the tab's text at the cursor, as
+the keyboard does: characters, `Space`, `Return`, `Backspace`, `Delete` and the arrows (with
+`Shift` to select); `Home` and `End` step to the previous and next glyph of the font; `Escape`
+leaves text mode. The spacing and kerning shortcuts act on the glyphs at the cursor in the
+tab's master. A character with `cmd` or `ctrl` goes to the menu shortcuts; `Cmd+A`, and
+`ui.menu.invoke` of `edit.copy`, `edit.cut` and `edit.selectAll`, act on the text.
+
 ### Dialogs
 
 A dialog is a form over one command's parameters. Open it with the UI command `dialog.open`

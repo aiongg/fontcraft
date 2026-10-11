@@ -217,6 +217,7 @@ fn clicks_place_the_cursor_drags_select_and_a_double_click_edits() {
     );
     let t = get(&mut app);
     assert_eq!((&t["textMode"], &t["cursor"], &t["current"]), (&json!(false), &json!(1), &json!("V")));
+    assert_eq!(app.tools.toolbox.active_id(), "select", "the Select tool edits the glyph");
     // In edit mode a click goes to the active tool and leaves the cursor alone.
     click(&mut app, 100.0, json!([]));
     assert_eq!(get(&mut app)["cursor"], 1);

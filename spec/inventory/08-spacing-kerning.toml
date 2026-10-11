@@ -43,6 +43,7 @@ guesses = [
   "Under the descender, the left sidebearing sits at the glyph's left edge, the right one at its right edge and the width centred below them; in vertical text they run along the column's left edge; a screenshot of the reference app settles it.",
   "A label keeps to the part of the advance a negatively kerned neighbour does not cover, so neighbouring labels do not overlap; a tightly kerned pair in the reference app settles it.",
   "Glyphs less than 24 screen points wide get no labels; the reference app zoomed out settles it.",
+  "A glyph whose advance on screen is too narrow for its two sidebearing labels side by side shows only its width label; the labels of a narrow glyph such as `i` at a small zoom in the reference app settle it.",
 ]
 
 [[behavior]]

@@ -210,8 +210,15 @@ fn labels(c: &Painting, layout: &Layout, tab: &Tab, overlay: &Overlay, sidebeari
                 let (left, right) = if direction == Direction::Rtl { (after, before) } else { (before, after) };
                 let base = layout.lines.get(p.line).map_or(0.0, |l| l.baseline);
                 let y = v.to_screen(Point::new(0.0, base + overlay.descender)).y as f32 + pad;
-                text(Pos2::new(r.left() + left + pad, y), Align2::LEFT_TOP, &first);
-                text(Pos2::new(r.right() - right - pad, y), Align2::RIGHT_TOP, &second);
+                let (start, end) = (r.left() + left + pad, r.right() - right - pad);
+                let label = |s: &str| c.painter.layout_no_wrap(s.to_string(), font_id.clone(), tokens.sidebearing_label);
+                let (a, b) = (label(&first), label(&second));
+                // A narrow glyph shows only its width: the two sidebearings would run into each
+                // other. Zooming in brings them back.
+                if a.size().x + b.size().x + pad <= end - start {
+                    c.painter.galley(Pos2::new(start, y), a, tokens.sidebearing_label);
+                    c.painter.galley(Pos2::new(end - b.size().x, y), b, tokens.sidebearing_label);
+                }
                 text(Pos2::new(r.center().x, y + row), Align2::CENTER_TOP, &width);
             }
         }
@@ -224,10 +231,12 @@ pub struct TextDrag {
     anchor: Option<usize>,
 }
 
-/// Whether pointer input on the canvas places the text cursor: text mode, with no Hand or Zoom
-/// tool held.
+/// Whether pointer input on the canvas places the text cursor: the Text tool is active (not
+/// only the base under a held Hand or Zoom tool) and the tab is in text mode. The two go together
+/// (`shell::text::tool_follows_tab`); the Text tool's own `pointer` does nothing, so this is the
+/// one path for clicks on text.
 pub fn takes_pointer(app: &FontcraftApp) -> bool {
-    app.state.tab().is_some_and(|t| t.text_mode) && !matches!(app.tools.toolbox.active_id(), "hand" | "zoom")
+    app.state.tab().is_some_and(|t| t.text_mode) && app.tools.toolbox.active_id() == crate::shell::text::TEXT_TOOL
 }
 
 /// A pointer event in text mode. `None` when the event is not for the text (another mode, a
@@ -251,10 +260,8 @@ pub fn pointer(app: &mut FontcraftApp, ev: RawPointer) -> Option<Vec<String>> {
             app.tools.text_drag = TextDrag::default();
             if let Some(item) = item_at(&layout, at.x, at.y) {
                 run(app, &mut errors, "editView.setCursor", json!({"tab": tab.id, "index": item}));
+                // Leaving text mode makes the Select tool active, as Escape does.
                 run(app, &mut errors, "editView.toggleTextMode", json!({"tab": tab.id, "mode": "edit"}));
-                if app.tools.toolbox.base_id() == "text" {
-                    run(app, &mut errors, "tool.select", json!({"tool": "select"}));
-                }
             }
         }
         PointerKind::Down | PointerKind::Drag | PointerKind::Up => {

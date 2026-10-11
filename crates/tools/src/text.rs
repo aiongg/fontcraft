@@ -16,6 +16,7 @@ impl Tool for TextTool {
         "text"
     }
 
+    /// The shell places the text cursor before pointer events reach the tools, so none comes here.
     fn pointer(&mut self, _cx: &Context<'_>, _ev: &PointerEvent) -> Output {
         Output::default()
     }
