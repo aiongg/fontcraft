@@ -660,6 +660,7 @@ milestone = "M6"
 summary = "For a glyph under automatic alignment the metric fields are not editable numbers: they show the word 'auto' followed by the value derived from the components in parentheses."
 ref = "Spacing & Kerning › Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "metricsKey.autoAlignedOffset"
@@ -668,6 +669,7 @@ milestone = "M6"
 summary = "An automatically aligned metric can be adjusted without giving up alignment by entering '=' plus a signed number ('=+18', '=-12'): the amount is added to or taken from the derived value. Typical use is a composite whose mark sticks out of the glyph box (idieresis, dcaron, lcaron)."
 ref = "Spacing & Kerning › Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed. M5 keeps such keys and lists them as waiting for M6; the 1,994 key values on master layers of corpus sources that differ from the stored metric because the glyph is aligned automatically (M5 plan § 5) are the M6 measure for this row."
 
 # ───────────────────────────── Kerning: basics, modes, Info box ─────────────────────────────
 

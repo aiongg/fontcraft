@@ -919,6 +919,10 @@ Question 31 stays open and blocks only `path.sharpenCorner`.
 25. **Anchors**: placement rules of Set Anchors (database positions relative to metrics and
     outline), whether Set Anchors keeps existing anchors untouched, and renaming to a name that
     already exists.
+    **Answered for M6 (ours, `docs/plans/M6.md`):** Set Anchors adds only missing anchors from our
+    own table (top at the x-height or cap height, bottom on the baseline, centred on the bounding
+    box and corrected for the italic angle; marks get the underscore anchor at the matching metric);
+    renaming to an existing name is refused (`glyph.setAnchors`, `anchor.rename` guesses).
 26. **Anchor context**: storage key in the file format and validation of the code.
 27. **Guides**: how a guide is deleted; rotation pivot when dragging; whether angle-locked guides
     still move; exact semantics of the "both sidebearings" reference; snapping of nodes to guides.

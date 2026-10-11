@@ -330,6 +330,7 @@ effect = "export-filter"
 summary = "Decomposes all components at export, for environments that mishandle composites; file size grows. Only relevant to TrueType outlines because CFF output never contains components."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads this parameter (glyphsLib, ufo2ft, fontmake and fontc searched by the M6 planning pass); FontCraft follows the handbook and lists the difference in `docs/spec/40-compile.md` § 4a when it is built."
 
 [[parameter]]
 name = "Decompose Components in Variable Font"
@@ -352,6 +353,7 @@ effect = "export-filter"
 summary = "List of glyph names whose components are turned into outlines at export. Useful to freeze a composite before Rename Glyphs swaps one of its base glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads this parameter (glyphsLib, ufo2ft, fontmake and fontc searched by the M6 planning pass); FontCraft follows the handbook and lists the difference in `docs/spec/40-compile.md` § 4a when it is built."
 
 [[parameter]]
 name = "Default Layer Width"
@@ -807,11 +809,12 @@ name = "Hangul Composition Groups"
 scope = []
 kind = "list"
 area = "components"
-milestone = "M6"
+milestone = "M14"
 effect = "ui"
 summary = "List of groups, each with a key Jamo glyph and its similarly shaped variants, used to build complex Hangul composites automatically."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Moved from M6 to M14 by the M6 planning pass: the only row that reads it, smartFilter.rule.isHangulKey, is M14, and the handbook says nothing more about how the groups build Hangul composites."
 
 [[parameter]]
 name = "Has WWS Names"
@@ -1000,6 +1003,7 @@ effect = "export-filter"
 summary = "When set, composites with overlapping components (such as a letter with an attached cedilla) stay as components in TrueType export. No effect on CFF output."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. Whether the default should instead follow the handbook is M6 plan § 7, question 5."
 
 [[parameter]]
 name = "Keep Transformed Components"
@@ -1011,6 +1015,7 @@ effect = "export-filter"
 summary = "When set, composites whose components are scaled horizontally or vertically, or shifted vertically, stay as components in TrueType export. May disturb TrueType hinting of those glyphs; no effect on CFF output."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. Whether the default should instead follow the handbook is M6 plan § 7, question 5."
 
 [[parameter]]
 name = "Keep UI-Font Bounding Box"
@@ -1396,6 +1401,7 @@ effect = "features"
 summary = "On by default: top and bottom anchors of component base glyphs count as anchors of the composite unless the composite has its own anchor of that name, which gives it mark attachment for free. Turn off mainly to stop mark and mkmk rules being generated for composites."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Both oracles honour it (see components.propagateAnchorsParameter)."
 
 [[parameter]]
 name = "Reencode Glyphs"

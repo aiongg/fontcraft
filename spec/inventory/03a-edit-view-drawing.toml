@@ -1261,6 +1261,7 @@ milestone = "M6"
 summary = "When the selection is a single anchor plus a single path point, Align Selection moves the anchor horizontally so it sits above or below the point; with one anchor and two points it centres the anchor between the two. The point(s) do not move, and the horizontal position is corrected for the master's italic angle."
 ref = "Edit View › Aligning"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "align.componentOriginToNode"
@@ -1269,6 +1270,7 @@ milestone = "M6"
 summary = "Align Selection with exactly one node and one component selected moves the component so that its origin point lands on the node; the node stays put."
 ref = "Edit View › Aligning"
 status = "handbook"
+notes = "Documented, not yet observed. M3 built Align Selection for nodes; the component case waits for M6 (`03a` § 10)."
 
 [[behavior]]
 id = "align.componentOriginPoint"
@@ -2082,6 +2084,10 @@ milestone = "M6"
 summary = "Canvas context-menu command that places an anchor at the clicked position. It is named new anchor and its name is immediately in edit state; Return or a click on the canvas confirms the typed name."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "When `name` is omitted the anchor is named new anchor, and a name already on the layer gets an underscore appended until it is unique, as Option-drag duplication does (anchors.uniqueNamesPerLayer); adding two anchors without renaming in the reference app settles it.",
+]
 
 [[command]]
 id = "anchor.rename"
@@ -2096,6 +2102,10 @@ milestone = "M6"
 summary = "Renames an anchor. In the UI this starts by double-clicking the anchor, by pressing Return with it selected, or by editing the name field of the Info box."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Renaming an anchor to a name already on the layer is refused with a message; the reference app settles it.",
+]
 
 [[command]]
 id = "anchor.setPosition"
@@ -2109,6 +2119,8 @@ milestone = "M6"
 summary = "Places an anchor at explicit coordinates, the headless form of dragging it, moving it with the arrow keys or typing coordinates into the Info box. Our own command."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "inferred"
+own = true
+notes = "Our own headless form of moving an anchor."
 
 [[command]]
 id = "anchor.remove"
@@ -2122,6 +2134,8 @@ milestone = "M6"
 summary = "Removes the named anchors from a layer, the headless form of selecting anchors and pressing Delete. Our own command."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "inferred"
+own = true
+notes = "Our own headless form of selecting anchors and pressing Delete."
 
 [[command]]
 id = "glyph.setAnchors"
@@ -2135,6 +2149,12 @@ milestone = "M6"
 summary = "Adds the default anchors that the glyph info database lists for each selected glyph. For ligature glyphs named after their parts it also adds the appropriate caret anchors."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. The published glyph database has no anchor column (open decision D6), so the default anchors come from our own table; see the guesses. The segment and brush rules (start and end on the path's first and last node; left and right of the layer) are the handbook's."
+guesses = [
+  "Set Anchors adds only the default anchors the layer lacks and leaves existing anchors where they are; Set Anchors on a glyph with a moved anchor in the reference app settles it.",
+  "The default anchors come from our table keyed by category, subcategory and case: letters get top (at the x-height for lowercase, the cap height for uppercase) and bottom (on the baseline), centred on the outline's bounding box and corrected for the italic angle; combining marks get the underscore anchor at the matching metric and, for marks that stack, the plain anchor above the outline; anchors the corpus sources saved by the reference app hold for the same glyph names measure the table (M6 plan § 5).",
+  "A ligature named after its parts gets caret_1 to caret_(n-1) on the baseline, dividing the advance width equally; Set Anchors on f_f_l in the reference app settles it.",
+]
 
 [[command]]
 id = "glyph.setAnchorsForAllMasters"
@@ -2161,12 +2181,13 @@ milestone = "M6"
 summary = "Deletes all anchors of the selected glyphs' layers and rebuilds the default set from the glyph info database."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. Same default table as glyph.setAnchors."
 
 [[command]]
 id = "glyph.resetAnchorsForAllMasters"
 label = "Reset Anchors for All Masters"
 menu = ["Glyph"]
-shortcut = ""
+shortcut = "Cmd+Alt+Shift+U"
 kind = "engine"
 params = "{glyphs?: [names]}"
 area = "components"
@@ -2174,6 +2195,10 @@ milestone = "M6"
 summary = "Option variant of Reset Anchors that resets the anchors on all masters. The reference mentions the modifier but gives neither the item's label nor a shortcut."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The shortcut is Cmd+Alt+Shift+U, Reset Anchors with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.",
+]
 
 [[behavior]]
 id = "anchors.selection"
@@ -2198,6 +2223,7 @@ milestone = "M6"
 summary = "The anchor marker is a diamond when the anchor sits precisely on a metric line (baseline or x-height, for instance), a square when it is inside an alignment zone, and a circle otherwise. Anchors whose name starts with an underscore are drawn with a hole in the same three shapes."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "anchors.uniqueNamesPerLayer"
@@ -2206,6 +2232,7 @@ milestone = "M6"
 summary = "Anchor names are unique within a layer. An Option-drag that duplicates an anchor therefore gives the copy the original name with an underscore appended."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "anchors.originAnchor"

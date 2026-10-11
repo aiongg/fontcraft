@@ -3,7 +3,7 @@
 Source: Glyphs 4 Handbook, chapter "Reusing Shapes" (public web handbook), read 2026-10-07.
 Rows: `spec/inventory/09-reusing-shapes.toml`. Ids in `code` are command, tool, panel or behavior
 ids from that file unless another file is named. Statements tagged **[stated]** come straight from
-the handbook; **[inferred]** are our reading; **[memory]** are recalled and absent from the handbook.
+the handbook; **[inferred]** are our reading; **[oracle]** come from fontc and fontmake output.
 
 Commands this chapter leans on but which are defined in the Edit View inventory (03a/03b):
 `component.setTransform`, `component.setBaseGlyph`, `component.editBaseGlyph`, `selection.selectNext`,
@@ -16,7 +16,7 @@ What the chapter implies each object must store.
 
 | Object | Fields |
 |---|---|
-| Component (a shape on a layer, ordered among the layer's shapes) | base glyph name; offset x, y; scale x, y (percent); slant; rotation; automatic alignment on/off (per component); locked flag; chosen attachment anchor name (optional); smart values: property name → number |
+| Component (a shape on a layer, ordered among the layer's shapes) | base glyph name; offset x, y; scale x, y (percent); slant; rotation; automatic alignment setting (per component: off, by layer, forced, horizontal only); locked flag; chosen attachment anchor name (optional); smart values: property name → number |
 | Smart glyph | list of properties (name, min, max); per layer and property a pole: `min`, `max` or none |
 | Corner component (attached to one node or one extra node) | corner glyph name; scale x, y; alignment mode `left`, `right`, `both`, `none` |
 | Cap component (attached to two adjacent nodes of one path) | cap glyph name; Fit flag; scale x, y; alignment mode |
@@ -262,9 +262,11 @@ Shape order is the order components were added; it is the only ordering the rule
 - **AP-12** An anchor named `origin` in a glyph redefines the origin used when a component of that
   glyph is aligned to a node (3.8). The same name redefines the origin of a corner glyph (7.1) and,
   in cap glyphs, marks the first stem node (8.1).
-- **AP-13 [memory, not in the handbook]** Ligature glyphs carry numbered anchors per ligature part
-  (`top_1`, `top_2`, …) and marks can target them. The handbook documents only `caret_1`,
-  `caret_2` … for ligature carets. (`components.ligatureNumberedAnchors`) (Q-1)
+- **AP-13 [oracle]** In a composite of category Ligature, the anchors propagated from each base are
+  numbered by base (`top_1`, `top_2`, …), and a mark component whose anchor attribute is a
+  numbered name attaches there. The handbook documents only `caret_1`, `caret_2` … for ligature
+  carets; under AP-4 a numbered anchor is an alternative of the plain one.
+  (`components.ligatureNumberedAnchors`) (Q-1)
 
 ### 5.4 The three supported setups
 
@@ -480,103 +482,138 @@ mark / mkmk rules from them (AP-11).
 
 ## Open questions
 
+The M6 planning pass (2026-10-11, `docs/plans/M6.md`) answered each question below, next to it.
+Kinds: **handbook** (documented, not yet observed), **format** (the GlyphsSDK file-format
+specification v3, Apache-2.0), **oracle** (fontc 1.0.0 and fontmake 3.12.1, which gave identical
+results on every probe), **corpus** (to be checked against what corpus files saved by the
+reference app store, a measure of `docs/plans/M6.md` § 5) and **ours** (a guess, recorded in the
+named row's `guesses`). Nothing here was settled by watching the reference app.
+
 Alignment and anchors
 
 - **Q-1** Numbered ligature anchors (`top_1`, `top_2`, `bottom_1` …): absent from the handbook.
-  Confirm they exist, how a mark component picks one (by order of marks, or only through the anchor
-  menu), and how Set Anchors generates them.
-- **Q-2** Exact target search for a mark's `_X`: the nearest preceding component having `X`, the
-  first base, or the propagated `X` of everything placed so far? AP-3 and AP-7 fit "the most recent
-  preceding component that offers `X`", but that is not stated.
-- **Q-3** Which anchors appear in the anchor menu for a `_top` mark: only `top` and `top_*`? Is the
-  choice stored as an anchor name on the component? What happens when the stored name disappears
-  from the base glyph?
-- **Q-4** Does the top/bottom swap apply only to the names `top`/`bottom` and `_top`/`_bottom`, or to
-  suffixed ones too? Is it triggered by any negative vertical scale, or also by a 180° rotation?
-- **Q-5** "As if typed": is the offset of the next base exactly the sum of preceding base advance
-  widths? Is kerning between the bases applied? What is the composite's advance width (sum of base
-  widths)? How do right-to-left glyphs order?
-- **Q-6** Are the unprefixed cursive anchors `exit` / `entry` also used to connect components, or
-  only the `#`-prefixed ones the chapter shows? Does a `#exit` / `#entry` connection alter the
-  composite's advance width, and are `#` anchors excluded from the generated `curs` feature?
-- **Q-7** Do only `top` and `bottom` propagate, or also suffixed and numbered variants, `exit` /
-  `entry`, and carets? After a mark is attached, does the composite's `top` become the mark's `top`
-  (needed for stacking on composites)? How do offset, scale and flips of the component transform
-  the propagated anchor?
-- **Q-8** How metrics are derived when the single component is flipped, scaled or rotated (nine
-  from six), and with slanted masters.
-- **Q-9** Vertical placement of a base component under alignment: always baseline offset 0? What is
-  preserved of scale, slant and rotation on an auto-aligned component?
-- **Q-10** Is automatic alignment stored per component, per layer, or both? AA-1 and AA-2 are layer
-  conditions while AA-3 acts on one component. What does the Enable item do on a layer with paths?
-- **Q-11** When a path is added to a previously aligned layer, do the components keep their last
-  aligned positions as explicit offsets?
-- **Q-12** Lock on an auto-aligned component: is the menu item hidden, disabled, or a no-op? Does a
-  lock block Info box edits and Palette transforms as well as moves?
-- **Q-13** Does the font-wide Disable Automatic Alignment override per-component enable?
-- **Q-14** Position of the Info box arrow button: this chapter says top-left, the Edit View chapter
-  says top-right; and whether the base glyph is inserted to the left or right of the composite.
+  **Answered (oracle, handbook):** in a composite of category Ligature, propagation numbers the
+  anchors of each base (`top` of the second base becomes `top_2`); a component's anchor attribute
+  `top_2` attaches it there. Under the handbook's alternative-anchor rule `top_1` is an alternative
+  of `top`, so the anchor menu offers it. Set Anchors adds only caret anchors to ligatures (ours)
+  (`components.ligatureNumberedAnchors`, `glyph.setAnchors`).
+- **Q-2** Exact target search for a mark's `_X`. **Answered (oracle, ours):** the anchors that
+  propagation gives the components placed so far; a later component overwrites a name, so the most
+  recent component that offers `X` wins (`components.marksStackInOrder`).
+- **Q-3** Anchor menu contents and storage. **Answered (format, oracle, ours):** stored as the
+  component's `anchor` attribute; the menu lists `X` and `X_suffix`; a vanished name falls back to
+  `X` and is kept (`component.setAnchor`, `components.alternativeAnchorSuffix`).
+- **Q-4** Scope of the top/bottom swap. **Answered (oracle):** every name containing `top` or
+  `bottom` swaps under a negative vertical scale; left/right and entry/exit swap under a negative
+  horizontal scale; a 180° rotation does both (`components.verticalFlipSwapsTopBottomAnchors`).
+- **Q-5** "As if typed". **Answered (ours, corpus):** each base at the sum of the advances before
+  it, no kerning, width the sum, shape order for right-to-left glyphs
+  (`components.multipleBasesSetSideBySide`).
+- **Q-6** `exit` / `entry` against `#exit` / `#entry`. **Answered (oracle, ours):** only the `#`
+  names connect components; both oracles copy `#` anchors into composites and their mark writers
+  ignore them, so they never reach `curs` (`components.exitEntryAnchorsConnectBases`).
+- **Q-7** Which anchors propagate and how. **Answered (oracle, ours):** FontCraft runs fontc's
+  propagation in the editor and the compiler: every name, `_` anchors only from the first
+  component, `entry` only from the first, `*origin` shifts the others, the component's full
+  transform applied, later components overwrite, the composite's own anchors win. The handbook
+  names only `top` and `bottom` (`components.topBottomAnchorsPropagate`).
+- **Q-8** Metrics of a flipped or transformed single component. **Answered (ours, corpus):** the
+  base's width, the transform kept, a horizontal flip shifted to mirror the sidebearings
+  (`components.autoAlignSingleComponent`).
+- **Q-9** Vertical placement of a base. **Answered (ours, corpus):** offset (0, 0) for the first
+  base, its scale, slant and rotation kept (`components.autoAlignBaseThenMarks`).
+- **Q-10** Where alignment is stored. **Answered (format):** per component, as `alignment`: −1 off,
+  0 decided by the layer (AA-1, AA-2), 1 forced, 3 horizontal only. Enable stores 0 or 1 (ours,
+  `component.enableAutomaticAlignment`). Corpus: 7,097 components with 1, 6,041 with −1, none with 3.
+- **Q-11** Positions after a path is added. **Answered (format, handbook):** they stay as stored;
+  the file always holds placed positions (`components.pathOnLayerDisablesAutoAlign`).
+- **Q-12** Lock on an aligned component. **Answered (ours):** offered only for components that are
+  not aligned; the command refuses aligned ones; a lock blocks moves, Info box positions and
+  Palette transformations (`component.lock`, `components.lockedCannotMove`).
+- **Q-13** Font-wide option against per-component enable. **Answered (ours):** the font option wins,
+  forced components included (`components.fontWideDisableAutoAlign`).
+- **Q-14** Arrow button position and insertion side. **Answered (handbook, ours):** top right, base
+  glyph inserted to the left, as the Measuring page says (`components.infoBoxExtraControls`,
+  `components.doubleClickOpensBase`).
 
 Composition and editing
 
-- **Q-15** Create Composite when the glyph is not in the database or a part is missing: no-op,
-  error, or partial insert? Does it also reset anchors and metrics keys?
-- **Q-16** How the Component from Selection name suggestion is formed; behaviour when the name
-  already exists; whether anchors move with the shapes; where the new component's origin sits;
-  whether other masters are processed.
-- **Q-17** Recipe grammar details: Unicode values or suffixes on the left side, whitespace, and
-  whether more than one `+` chain mixes bases and marks freely.
-- **Q-18** `component.decompose` output: does one-level decomposition also bring in anchors?
-  Decomposition of components with smart values, and of corner/cap/segment/brush attachments inside
-  the base glyph.
-- **Q-19** Where "Show all glyphs that use this glyph as a component" shows its result.
-- **Q-20** Tab order when a layer has both components and anchors.
+- **Q-15** Create Composite without database data or with a missing part. **Answered (ours):**
+  refused with a message naming the missing parts; anchors and metrics keys kept. The component
+  list comes from Unicode canonical decomposition and our tables (open decision D6,
+  `docs/plans/M6.md` § 7, question 3) (`glyph.createComposite`).
+- **Q-16** Component from Selection details. **Answered (video for all masters, ours for the
+  rest):** a Glyphs 3 tutorial shows the dialog stating it applies to all master layers; suggested
+  name `_part.` plus the glyph name; a taken name is refused; shapes keep their coordinates and the
+  component sits at zero; anchors stay (`glyph.componentFromSelection`).
+- **Q-17** Recipe grammar. **Answered (ours):** names only, no spaces, any number of `+` parts; a
+  part of category Mark attaches to the base before it (`components.recipeBasePlusMarks`).
+- **Q-18** One-level decomposition. **Answered (ours):** no anchors added; smart components become
+  their interpolated outline; attachments inside the base are applied first (`component.decompose`).
+  Decompose Glyph adds the propagated anchors the layer lacks (`glyph.decomposeGlyph`).
+- **Q-19** Where "Show all glyphs that use this glyph" shows them. **Answered (ours):** a new Edit
+  View tab (`glyph.showGlyphsUsingAsComponent`).
+- **Q-20** Tab order with components and anchors. **Answered (ours):** nodes, components in shape
+  order, anchors, guides (`components.tabCyclesComponents`).
 
 Smart components
 
-- **Q-21** The exact interpolation formula with more than one layer per pole, with a layer assigned
-  to poles of several properties, and with the optional combined-extreme layer; which layer is the
-  origin (all-minimum is not always the master layer: in the stated example Regular is the maximum
-  of Width).
-- **Q-22** Default value of a property on a freshly added component; behaviour when a property is
-  removed or renamed while components hold values for it.
-- **Q-23** Smart glyphs in multi-master fonts: are properties per glyph and smart layers per master?
-- **Q-24** Smart handle mapping from drag distance to value; what constrains the drag direction.
-- **Q-25** Export of smart components: always decomposed, or ever kept as references?
+- **Q-21** Interpolation formula. **Answered (oracle):** glyphsLib's variation model, already ported
+  in `model/smart.rs` (M2): the master's first pole layer is the default, other pole layers sit at
+  ±1 per property, and a missing corner is the sum of the per-property differences
+  (`smart.cornerLayersInferred`).
+- **Q-22** Default value and removed properties. **Answered (oracle, ours):** a component with no
+  stored value draws at its master layer's poles, as glyphsLib does; values of a removed property
+  stay stored and are ignored (`smartComponent.setValue`, `smartGlyph.removeProperty`).
+- **Q-23** Smart glyphs with several masters. **Answered (format):** properties per glyph
+  (`partsSettings`), poles per layer (`partSelection`), each smart layer tied to one master
+  (`smart.layersHoldVariants`).
+- **Q-24** Smart handle drag. **Answered (ours):** the pointer projected on the line between the
+  anchor's positions at the two poles (`smart.handlesFromPropertyAnchors`).
+- **Q-25** Export of smart components. **Answered (oracle):** drawn as outlines, as both oracles do;
+  a plain component stays when no layer maps to a pole (`smart.axesAreLocalToGlyph`).
 
 Corners, caps, segments, brushes
 
-- **Q-26** The geometry of corner fitting: how the host node's two segments are trimmed, how the
-  corner is rotated to the incoming segment, and the precise maths of the `left` / `right` / `both`
-  alignment modes and of the entry-anchor offset.
-- **Q-27** How "facing left / right" of a corner glyph is determined (from the end node's side?).
-- **Q-28** Intermediate layer naming or attributes for corner scaling (how Width % / Height % are
-  recorded) and whether negative scales interpolate too.
-- **Q-29** Cap fitting maths: with `origin` only versus `node1` / `node2`; what Fit changes exactly;
-  which of the two selected nodes counts as the first; what the alignment modes mean for caps.
-- **Q-30** Whether the cap, segment and brush Info boxes have further controls (scale on segments
-  and brushes, an arrow button on caps).
-- **Q-31** Segment and brush bending maths (mapping of baseline distance to curve parameter, and of
-  height above the baseline to normal offset); which side of the host path the brush body falls on;
-  how brushes on consecutive segments join.
-- **Q-32** What a paste does when the selection does not match the component type (a corner pasted
-  with a segment selected, a cap pasted on non-adjacent nodes).
-- **Q-33** Whether corner/cap/segment/brush attachments must match across masters for
-  interpolation, and when they are applied at export relative to interpolation and overlap removal.
+- **Q-26** Corner fitting geometry. **Answered for corners (oracle):** FontCraft ports fontc's
+  `glyphs-reader/src/corner_components.rs` (a port of glyphsLib's filter): scale, then rotate by
+  the alignment mode (left: outgoing segment; right: incoming; both: the mean; none: no rotation),
+  then trim the host. The entry and exit anchors are ours, since neither oracle uses them yet
+  (`cornerComponent.setAlignment`, `corner.entryAnchor`, `corner.exitAnchor`).
+- **Q-27** Facing of a corner glyph. **Answered (handbook, oracle):** from the order of the open
+  path's nodes and the end node's side of the origin (`corner.pathDirection`).
+- **Q-28** Intermediate layers for corner scaling. **Answered (ours):** percentages read from the
+  layer name, linear per axis (`corner.scaleInterpolatesWithIntermediateLayers`).
+- **Q-29** Cap fitting maths. Open: no written source, neither oracle supports caps, no corpus
+  source uses them. `docs/plans/M6.md` § 7, question 4 decides whether M6 builds caps, segments
+  and brushes.
+- **Q-30** Further controls in the cap, segment and brush Info boxes. Open, as Q-29.
+- **Q-31** Segment and brush bending maths. Open, as Q-29.
+- **Q-32** Paste onto a selection of the wrong kind. **Answered (ours):** refused with a message
+  (`corner.copyPasteOntoNodes`).
+- **Q-33** Attachments across masters and the order at export. **Answered (oracle, ours):** both
+  oracles apply corner components when the source is loaded, before decomposition and overlap
+  removal; FontCraft applies them in the model's outline resolution, so the editor, measurement and
+  export agree. Matching across masters is checked with interpolation (M9).
 
 Pixel tool
 
-- **Q-34** Tool behaviour when grid spacing is below 2 (disabled, warning, or silent no-op).
-- **Q-35** Cell origin and snapping: are pixel origins at multiples of the grid spacing from (0, 0)?
-  Does the tool recognise pixels by exact position only?
-- **Q-36** Whether the `pixel` glyph is exported, whether pixel components are auto-aligned
-  (a pixel-only layer satisfies AA-1), and how they are decomposed and merged at export.
-- **Q-37** Whether Pixel and Pencil really share one toolbar button (suggested by the Shift+B
-  shortcut only).
+- **Q-34** Grid spacing below 2. **Answered (ours):** a message, nothing changes
+  (`pixel.requiresGridSpacingTwoOrMore`).
+- **Q-35** Cell origin and snapping. **Answered (ours):** pixels at multiples of the grid spacing,
+  found by exact offset (`pixel.setPixels`).
+- **Q-36** Export and alignment of pixels. **Answered (ours):** pixel components are written with
+  alignment off; the `pixel` glyph exports; components follow the usual export rules
+  (`pixel.usesGlyphNamedPixel`).
+- **Q-37** Pixel and Pencil on one toolbar button. Open; it blocks nothing (the tool row's `group`
+  value is our reading of the Shift+B shortcut).
 
 Export
 
-- **Q-38** How "overlapping" is tested for TrueType component retention (bounding boxes or true
-  outline intersection), and whether transformed (scaled, flipped, rotated) or nested components are
-  kept as references.
-- **Q-39** Whether a composite that references a non-exporting glyph is always decomposed.
+- **Q-38** How overlap is tested for keeping TrueType components. **Answered (oracle):** neither
+  oracle tests overlap; both keep every component that is not mixed with contours, not out of the
+  F2Dot14 range and not different between masters, transformed and nested ones included. FontCraft
+  does the same since M2 and M3. Whether to follow the handbook's default instead is
+  `docs/plans/M6.md` § 7, question 5.
+- **Q-39** Composites referencing a non-exporting glyph. **Answered (oracle, M2):** that component
+  is inlined with its transform composed (`export.underscoreGlyphsOmitted`).

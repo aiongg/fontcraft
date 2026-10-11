@@ -36,6 +36,12 @@ milestone = "M6"
 summary = "Rebuilds the current layer of each target glyph as a composite: every path and component already on the layer is removed and the components named by the glyph info database for that glyph are inserted in the database's order. With allMasters it does the same on every master layer."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
+notes = "Documented, not yet observed. The list of components comes from the glyph database, whose published data has no composition column (open decision D6); see the guesses."
+guesses = [
+  "The components are the full Unicode canonical decomposition of the glyph's code point, each code point mapped to its glyph name through the glyph database (U+0301 to acutecomb), suffixes carried over and the preferred-mark rules applied, plus our own table for glyphs Unicode does not decompose (i, j and ligatures by their name parts); the composites stored in corpus files saved by the reference app measure it (M6 plan § 5).",
+  "A glyph the database cannot decompose, or one whose parts are missing from the font, is refused with a message naming the missing parts and nothing changes; running it on such a glyph in the reference app settles it.",
+  "Create Composite keeps the layer's anchors and the glyph's metrics keys; the reference app settles it.",
+]
 
 [[command]]
 id = "glyph.createCompositeAllMasters"
@@ -89,7 +95,13 @@ milestone = "M6"
 summary = "Moves the selected paths and components of a layer into a new glyph with the given name and puts a component referencing that glyph in their place. In the UI it first asks for the name, then appends the new glyph to the current Edit View tab and makes it the active glyph. Also offered in the canvas context menu."
 ref = "Reusing Shapes › Components › Turning Paths into Components"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: offered in the canvas context menu; it asks for a name and then the selected paths are replaced by a component. Not shown: the Glyph menu entry, the new glyph being added to the tab."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 16:09–16:21: offered in the canvas context menu; it asks for a name and then the selected paths are replaced by a component. Not shown: the Glyph menu entry, the new glyph being added to the tab. At the same point the dialog says the change applies to all master layers (dialog.componentFromSelection)."
+guesses = [
+  "The suggested name is `_part.` plus the current glyph's name, with `.001`, `.002` appended while the name is taken; the dialog of the reference app settles it.",
+  "A name that is already a glyph is refused with a message; the reference app settles it.",
+  "The new glyph keeps the shapes at their coordinates and the component sits at offset zero; anchors stay on the original layer; the reference app settles it.",
+  "On each other master the shapes with the same indices move into the new glyph's layer of that master, and a master whose layer lacks them gets an empty layer; a two-master font in the reference app settles it.",
+]
 
 [[panel]]
 id = "dialog.componentPicker"
@@ -181,6 +193,7 @@ milestone = "M6"
 summary = "Add Glyphs accepts the recipe form component=glyph: the glyph named on the right of the equals sign is created holding the glyph on the left as its only component (Delta=increment makes increment from one Delta component)."
 ref = "Reusing Shapes › Components › Recipes"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "components.recipeBasePlusMarks"
@@ -189,6 +202,10 @@ milestone = "M6"
 summary = "Add Glyphs accepts the recipe form base+mark=glyph: names joined by plus signs become the components, in that order, of the glyph named after the equals sign, and the mark components are positioned on the base through anchors (q+tildecomb=qtilde)."
 ref = "Reusing Shapes › Components › Recipes"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A part whose glyph has category Mark is a mark and attaches to the base before it; any other part is a base; a recipe holds only glyph names, no spaces (spaces separate items in Add Glyphs) and any number of plus signs; typing recipes with code points or spaces into the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.recipeMultipleBases"
@@ -197,6 +214,7 @@ milestone = "M6"
 summary = "A recipe may join several base glyphs with plus signs (t+s.join=ts); they become base components set side by side, which is the usual way to build ligatures."
 ref = "Reusing Shapes › Components › Recipes"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "components.underscoreNameNotExported"
@@ -235,6 +253,10 @@ milestone = "M6"
 summary = "Chooses which of several same-type anchors (top, top_alt, top_viet ...) an attached component snaps to. In the UI it is the anchor menu in the component Info box, which only appears when more than one candidate anchor exists."
 ref = "Reusing Shapes › Components › Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. Stored as the component's `anchor` attribute."
+guesses = [
+  "The anchor menu lists the anchors of the attachment target whose name is the mark anchor's name without its underscore or that name followed by an underscore and a suffix; when the stored name no longer exists, the component attaches to the plain name and keeps the stored value; the reference app settles it.",
+]
 
 [[command]]
 id = "glyph.showGlyphsUsingAsComponent"
@@ -248,6 +270,10 @@ milestone = "M6"
 summary = "Canvas context-menu item that displays every glyph containing the current glyph as a component. The handbook does not say whether the result opens in a new tab or replaces the current text."
 ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The glyphs open in a new Edit View tab, one per line slot in glyph order; the reference app settles it.",
+]
 
 [[command]]
 id = "glyph.listComposites"
@@ -261,6 +287,11 @@ milestone = "M6"
 summary = "Read-only query returning the names of all glyphs that reference the given glyph as a component; the data behind the context-menu item above. The recursive option (users of users) is our addition."
 ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
 status = "inferred"
+notes = "Our own query."
+guesses = [
+  "`recursive` adds glyphs that use the composites, to the component depth limit; it has no counterpart in the reference app.",
+]
+own = true
 
 [[command]]
 id = "component.disableAutomaticAlignment"
@@ -274,7 +305,7 @@ milestone = "M6"
 summary = "Context-menu item on an auto-aligned component that turns alignment off for it, so the component can be positioned by hand."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "observed"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: the context menu of a component lists Disable Automatic Alignment, and after choosing it the component is dragged freely."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: the context menu of a component lists Disable Automatic Alignment, and after choosing it the component is dragged freely. Stores alignment -1 on the component (file-format specification v3)."
 
 [[command]]
 id = "component.enableAutomaticAlignment"
@@ -288,6 +319,10 @@ milestone = "M6"
 summary = "Context-menu item on a manually placed component that turns automatic alignment back on for it."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Enable stores 0 (decided by the layer) on a layer of components only and 1 (forced) on a layer that has paths, so the item always aligns the component; enabling alignment on a component next to a path in the reference app settles it.",
+]
 
 [[command]]
 id = "component.lock"
@@ -301,6 +336,10 @@ milestone = "M6"
 summary = "Context-menu item that pins a component in place so it cannot be moved. It applies to components that are not auto-aligned."
 ref = "Reusing Shapes › Components › Locking Components"
 status = "handbook"
+notes = "Documented, not yet observed. Sets the component's `locked` flag, the same flag `path.lockPath` sets on components since M3; the two commands share one implementation."
+guesses = [
+  "Lock Component is offered only for components that are not aligned automatically, and the command refuses an aligned component with a message; the context menu of an aligned component in the reference app settles it.",
+]
 
 [[command]]
 id = "component.unlock"
@@ -327,6 +366,10 @@ milestone = "M6"
 summary = "Replaces every component of the glyph layer with the paths and anchors of its base glyph, descending through nested components until none remain."
 ref = "Reusing Shapes › Components › Decomposing"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The anchors that decomposition brings in are the propagated anchors the layer lacks, so mark attachment is unchanged; decomposing a composite with propagated anchors in the reference app settles it.",
+]
 
 [[command]]
 id = "component.decompose"
@@ -340,7 +383,10 @@ milestone = "M6"
 summary = "Context-menu item that turns only the selected components into their contents, one level deep: components nested inside them are kept as components."
 ref = "Reusing Shapes › Components › Decomposing"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: Decompose is listed in the context menu of a component. Its effect is not shown."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: Decompose is listed in the context menu of a component. Its effect is not shown. Documented, not yet observed."
+guesses = [
+  "Decomposing one level adds no anchors to the layer; a smart component becomes its interpolated outline; corner, cap, segment and brush components inside the base glyph are applied before its paths are copied. Decomposing such components in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.tabCyclesComponents"
@@ -349,6 +395,10 @@ milestone = "M6"
 summary = "With a component selected, Tab moves the selection to the next component on the layer and Shift+Tab to the previous one. This is the generic next/previous-object selection (selection.selectNext in the Edit View inventory) applied to components."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Tab steps through the layer's nodes in path order, then the components in shape order, then the anchors, then the guides; Tab on a layer with components and anchors in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.infoBoxExtraControls"
@@ -357,6 +407,10 @@ milestone = "M6"
 summary = "Beyond the fields listed for the component Info box in the Edit View inventory (infoBox.component: name, offset, scales, slant, rotation, arrow button), this chapter adds two conditional controls: an anchor menu, present only when the attached component has several candidate anchors, and a Smart badge on smart components. The box needs View › Show Info and at least one selected component."
 ref = "Reusing Shapes › Components › Editing Components; Components › Anchors; Smart Components › Using Smart Components"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The arrow button sits at the top right of the component Info box, as the Measuring page says; the Components page says top left. A screenshot of the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.swapBaseKeepsPlacement"
@@ -365,6 +419,10 @@ milestone = "M6"
 summary = "Changing the glyph a component points to (component.setBaseGlyph, defined in the Edit View inventory) is how a component is swapped; that the component keeps its slot in the shape order, its alignment state and its chosen anchor is our assumption, as the handbook only says the glyph is exchanged."
 ref = "Edit View › Info Box; Reusing Shapes › Components › Editing Components"
 status = "inferred"
+notes = "The handbook (Components; Measuring › Info box) says only that the glyph is exchanged."
+guesses = [
+  "Swapping the base glyph keeps the component's slot in the shape order, its transform, its alignment setting and its stored attachment anchor; swapping a component in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.flipViaNegativeScaleOrMirror"
@@ -373,6 +431,10 @@ milestone = "M6"
 summary = "A component is flipped with the Palette mirror buttons or by transforming it through the Info box or bounding box (component.setTransform, defined in the Edit View inventory). The handbook does not spell out that a negative scale percentage is how a flip is stored for glyph components; it says so only for corner components."
 ref = "Reusing Shapes › Components › Editing Components; Palette › Transformations"
 status = "inferred"
+notes = "The file format stores a component's transform as a scale, an angle and a slant, or as a matrix (file-format specification v3), so a flip is a negative scale."
+guesses = [
+  "The mirror buttons and a negative scale in the Info box give the same stored transform; mirroring a component in the reference app and saving settles it.",
+]
 
 [[behavior]]
 id = "components.clickSelects"
@@ -413,6 +475,7 @@ milestone = "M6"
 summary = "Mirroring a component top-to-bottom exchanges the roles of its top and bottom anchors, so the anchor that ends up above still acts as the top one and the one below as the bottom one. A flipped top mark can therefore attach as a bottom mark (gcommaaccent from g and a flipped commaaccentcomb)."
 ref = "Reusing Shapes › Components › Editing Components; Palette › Transformations"
 status = "handbook"
+notes = "Documented, not yet observed. Both oracles swap anchor names when they propagate through a transformed component: a negative vertical scale swaps top and bottom in the name, a negative horizontal scale swaps left and right and entry and exit, and a 180° rotation does both (fontc `get_xy_rotation`). FontCraft uses the same rule for alignment, so a suffixed name (top_viet) swaps too."
 
 [[behavior]]
 id = "components.arrowKeyIncrements"
@@ -445,6 +508,10 @@ milestone = "M6"
 summary = "Double-clicking a component places its base glyph next to the composite in the Edit View text and activates it for editing."
 ref = "Reusing Shapes › Components › Moving between Base Glyphs and Composites"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The base glyph goes into the tab text to the left of the composite, as the Info box section of the Measuring page says; the Components page says only next to it. Double-clicking a component in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.lockedCannotMove"
@@ -453,6 +520,10 @@ milestone = "M6"
 summary = "A locked component rejects every move, from mouse, arrow keys or Info box, until it is unlocked."
 ref = "Reusing Shapes › Components › Locking Components"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A lock blocks Info box position edits and the Palette's transformations as well as moves, and leaves the component's other settings editable; a locked component in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.placeholderEmptyBase"
@@ -513,6 +584,10 @@ milestone = "M6"
 summary = "Anchors named top and bottom on a component's base glyph count as anchors of the composite that contains it, so further marks can attach to the composite although it holds no anchors of its own (Edieresis inherits bottom from E)."
 ref = "Reusing Shapes › Components › Nesting Components"
 status = "handbook"
+notes = "Documented, not yet observed. The handbook and the Propagate Anchors parameter text name top and bottom; both oracles propagate every anchor name, with rules for underscore, entry, exit and origin anchors. fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors."
+guesses = [
+  "The editor and the compiler propagate anchors exactly as fontc does, every name included, since its algorithm gives top and bottom as the handbook says and also the other names both reference compilers export; a composite that inherits an ogonek or a cedilla anchor in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.ownAnchorOverridesPropagated"
@@ -521,6 +596,7 @@ milestone = "M6"
 summary = "An anchor placed directly in the composite replaces a propagated anchor of the same name."
 ref = "Reusing Shapes › Components › Nesting Components"
 status = "handbook"
+notes = "Documented, not yet observed. Both oracles do the same (probe aacute with its own top). fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors."
 
 [[behavior]]
 id = "components.propagateAnchorsParameter"
@@ -529,6 +605,7 @@ milestone = "M6"
 summary = "Propagation is on by default. A font-level custom parameter Propagate Anchors with its checkbox off stops it, which also suppresses the mark and mkmk rules that would be generated for composites from inherited anchors."
 ref = "Reusing Shapes › Components › Nesting Components; Appendix › Custom Parameters › Propagate Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. Both oracles read it as a font-level flag, on by default; off stops propagation entirely (fontc `glyphs2fontir/src/source.rs` `compilation_flags`; glyphsLib `TRANSFORMATION_CUSTOM_PARAMS`). Two fontc test sources set it off."
 
 # =====================================================================================
 # Components: anchors and automatic alignment
@@ -557,6 +634,7 @@ milestone = "M6"
 summary = "A layer may carry several anchors of one type, told apart by an underscore suffix after the shared name (top, top_alt, top_viet); the suffix text is free. A mark component can be switched between them."
 ref = "Reusing Shapes › Components › Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. The chosen anchor is stored as the component's `anchor` attribute (file-format specification v3). At export both oracles use it for components after the first: when the glyph has both X and _X, its X anchor takes the attribute's name, X being the part before the first underscore. Corpus attribute values: cedilla 72, right 20, top_2 9, top_1 4, top.alt 4."
 
 [[behavior]]
 id = "components.anchorMenuOnlyWhenChoiceExists"
@@ -570,9 +648,10 @@ status = "handbook"
 id = "components.ligatureNumberedAnchors"
 area = "components"
 milestone = "M6"
-summary = "NOT in this handbook chapter: recalled from the reference app, ligature glyphs carry one numbered anchor per ligature part (top_1, top_2, bottom_1 ...), and a mark component in a composite can be attached to a chosen numbered anchor. The handbook documents only caret_1/caret_2 anchors for ligature carets; confirm by observation before implementing."
-ref = "not in handbook (Edit View › Ligature Carets covers caret_N only)"
-status = "memory"
+summary = "In a composite whose glyph category is Ligature, the anchors propagated from each base component are numbered by base: top from the first base becomes top_1, from the second top_2, and an anchor already numbered is shifted by the number of bases before it. A later component whose anchor attribute is a numbered name (top_2) attaches to that numbered anchor. The handbook documents only the caret_N anchors of ligatures; under its alternative-anchor rule top_1 and top_2 are alternatives of top, so the anchor menu offers them."
+ref = "fontc fontir/src/propagate_anchors.rs (ligature numbering, component anchor attribute); Reusing Shapes › Components › Anchors (alternative anchors)"
+status = "docs"
+notes = "Rewritten by the M6 planning pass from a recalled row: the oracles number ligature anchors this way (probe f_f gave top_1 and top_2; f_f with an acutecomb whose anchor attribute is top_2 attached it there). fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors."
 
 [[behavior]]
 id = "components.autoAlignDefaultOnWhenComponentsOnly"
@@ -581,6 +660,7 @@ milestone = "M6"
 summary = "Automatic alignment is on by default for a glyph layer whose shapes are all components. It keeps both the component positions and the composite's metrics tied to the base glyphs, so a sidebearing change in U flows to every composite built on U."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed. The file format stores alignment per component as a number: -1 off, 0 decided by the layer (this rule and components.pathOnLayerDisablesAutoAlign), 1 forced on whatever the layer holds, 3 horizontal only (GlyphsSDK file-format specification v3, `GSComponentAlignment`, Apache-2.0). The model reads it as `Alignment` (M1). Positions are stored already aligned, so a file opens with the reference's placement."
 
 [[behavior]]
 id = "components.pathOnLayerDisablesAutoAlign"
@@ -589,6 +669,7 @@ milestone = "M6"
 summary = "The presence of any path on a layer switches automatic alignment off for that layer. Components then keep fixed offsets and can drift out of place when their base glyphs change."
 ref = "Reusing Shapes › Components › Combining Paths and Components"
 status = "handbook"
+notes = "Documented, not yet observed. The components keep the positions stored in the file when a path is added; the handbook's warning that they can shift when a base glyph changes says the same."
 
 [[behavior]]
 id = "components.fontWideDisableAutoAlign"
@@ -597,6 +678,10 @@ milestone = "M6"
 summary = "The Font Info › Other option Disable Automatic Alignment turns off automatic component positioning and automatic metrics synchronisation for every composite in the font."
 ref = "Reusing Shapes › Components › Automatic Alignment; Font Info › Other › Disable Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed. Stored as the font setting `disablesAutomaticAlignment` (file-format specification v3; `Settings.disables_automatic_alignment` in the model)."
+guesses = [
+  "The font-wide option also overrides components whose alignment is forced (1); a forced component in a font with the option on, in the reference app, settles it.",
+]
 
 [[behavior]]
 id = "components.importedFilesDisableAutoAlignSetting"
@@ -629,6 +714,10 @@ milestone = "M6"
 summary = "When a composite's only component has the glyph category Number (zero to nine), the component is drawn blue and may be moved up and down while its horizontal position and the composite's metrics stay automatic."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed. The file format has a value for this state, alignment 3 (horizontal only)."
+guesses = [
+  "A Number-category single component with alignment 0 behaves as alignment 3, and alignment 3 gives the same horizontal-only alignment to any component; the corpus alignment measure (M6 plan § 5) checks the stored positions of both.",
+]
 
 [[behavior]]
 id = "components.autoAlignMetricsFromBase"
@@ -637,6 +726,7 @@ milestone = "M6"
 summary = "The sidebearings of an auto-aligned composite are derived from its base components, so ordinary metrics keys cannot be set on it. Its metrics fields read auto followed by the derived value in parentheses."
 ref = "Reusing Shapes › Components › Automatic Alignment; Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed. Alignment writes the derived width into the layer, as the reference's files store it, so exported widths need no alignment step at compile."
 
 [[behavior]]
 id = "components.autoAlignMetricsOffsetKeys"
@@ -653,6 +743,10 @@ milestone = "M6"
 summary = "A composite may consist of one auto-aligned component and then mirrors the base glyph's metrics. Typical uses are same-shape letters across scripts (Alpha, A, A-cy) and flipped twins (nine from six, mirrored brackets, guillemets and arrows)."
 ref = "Reusing Shapes › Components › Automatic Alignment › Single Component"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A single aligned component keeps its transform; the composite takes the base glyph's width, and a horizontally flipped component is shifted so its outline keeps the base glyph's sidebearings mirrored (nine from six keeps six's width); the corpus alignment measure (M6 plan § 5) checks the flipped single components the sources hold.",
+]
 
 [[behavior]]
 id = "components.autoAlignBaseThenMarks"
@@ -661,6 +755,10 @@ milestone = "M6"
 summary = "In a base-plus-marks composite the base component comes first in the shape order and the combining marks follow it; each mark is placed on the base through a matching anchor pair."
 ref = "Reusing Shapes › Components › Automatic Alignment › Base Component & Mark Components"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The first base sits at x = 0 and y = 0 and keeps its scale, slant and rotation; only its offset is computed; the corpus alignment measure (M6 plan § 5) checks it.",
+]
 
 [[behavior]]
 id = "components.marksStackInOrder"
@@ -669,6 +767,10 @@ milestone = "M6"
 summary = "Several marks on one base stack in the order they were added: each later mark attaches to the mark before it. This requires every stacking mark glyph to carry both the underscore anchor (_top) and the plain anchor (top)."
 ref = "Reusing Shapes › Components › Automatic Alignment › Base Component & Mark Components"
 status = "handbook"
+notes = "Documented, not yet observed. Propagation in both oracles gives the same result: a later component overwrites anchors of the same name, so after a mark with _top and top the composite's top is the mark's top, and a composite holding _bottom drops top and _top. fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors."
+guesses = [
+  "A mark's underscore anchor attaches to the anchor of that name the components before it give, as propagation computes it after each component (the most recent component that offers the name wins); a composite with two stacked marks and a third in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.anchoredMarksDoNotAffectSidebearings"
@@ -685,6 +787,10 @@ milestone = "M6"
 summary = "Several base components in one composite are laid out next to each other the way the same glyphs would be when typed in sequence."
 ref = "Reusing Shapes › Components › Automatic Alignment › Multiple Base Components"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Each base after the first is placed at the sum of the advance widths before it, with no kerning, and the composite's width is the sum of the bases' widths; right-to-left glyphs are laid out the same way, in shape order; the corpus alignment measure (M6 plan § 5) checks it on the sources' ligatures.",
+]
 
 [[behavior]]
 id = "components.marksBelongToPrecedingBase"
@@ -701,6 +807,10 @@ milestone = "M6"
 summary = "Base components can be chained with cursive-attachment anchors: when one component's glyph has an anchor #exit and the next one's has #entry, the second is positioned so the two anchors coincide. A part carrying both can be repeated (m from _part.stem and two _part.arch)."
 ref = "Reusing Shapes › Components › Automatic Alignment › Multiple Base Components"
 status = "handbook"
+notes = "Documented, not yet observed. Both oracles copy `#exit` and `#entry` anchors into composites like any name, and their mark writers ignore them, so they never reach curs."
+guesses = [
+  "Only the #-prefixed anchors connect components; the plain exit and entry anchors serve cursive attachment alone; the composite's width is the connected bases' widths after the shift, ending at the last base's advance. The corpus alignment measure (M6 plan § 5) checks it where sources use it.",
+]
 
 # =====================================================================================
 # Export-time behaviour
@@ -729,6 +839,7 @@ milestone = "M6"
 summary = "The instance custom parameter Keep Overlapping Components makes a TrueType-flavour export keep overlapping components as references too (Ccedilla stays a composite). It does nothing for CFF output."
 ref = "Reusing Shapes › Components; Appendix › Custom Parameters › Keep Overlapping Components"
 status = "handbook"
+notes = "See the parameter row Keep Overlapping Components and M6 plan § 7, question 5."
 
 [[behavior]]
 id = "export.underscoreGlyphsOmitted"
@@ -760,6 +871,7 @@ milestone = "M6"
 summary = "The alternative shapes of a smart glyph live on extra layers of that glyph (smart layers), added with the plus button of the Layers palette. A new layer is named with the current date and time and should be renamed, by double-clicking, to describe the variant (Narrow, Low Contrast)."
 ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed. The file format stores the properties per glyph (`partsSettings`) and the pole per layer (`partSelection`, 1 bottom, 2 top); a smart layer belongs to one master (`associatedMasterId`), so each master has its own smart layers (file-format specification v3)."
 
 [[behavior]]
 id = "smart.layersMustBeCompatible"
@@ -776,6 +888,7 @@ milestone = "M6"
 summary = "Smart properties act like variation axes that exist only inside one glyph; each component instance carries its own value per property and the component outline is interpolated from the glyph's smart layers."
 ref = "Reusing Shapes › Smart Components"
 status = "handbook"
+notes = "Documented, not yet observed. At export both oracles draw smart components as outlines when they load the source (glyphsLib `instantiate_smart_component`, fontc `glyphs-reader/src/smart_components.rs`), propagate the interpolated anchors, and keep a plain component when no layer maps to a pole. FontCraft's `model/smart.rs` (M2) draws them the glyphsLib way; M6 uses it in the editor and the compiler. Corpus: 10 smart glyphs and 15 smart components, all in fontc test data and the format samples."
 
 [[command]]
 id = "smartGlyph.showSettings"
@@ -828,6 +941,10 @@ milestone = "M6"
 summary = "Deletes a property from a smart glyph together with its pole assignments. The handbook only shows adding; removal, and what happens to values stored on existing components, is our assumption."
 ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
 status = "inferred"
+notes = "The handbook shows only the plus button of the Properties tab."
+guesses = [
+  "Removing a property drops its pole on every layer and leaves values stored on components in place and ignored; a minus button in the Properties tab of the reference app settles it.",
+]
 
 [[command]]
 id = "smartGlyph.setLayerPole"
@@ -854,6 +971,8 @@ milestone = "M6"
 summary = "Read-only query returning a smart glyph's properties (name, min, max) and the pole each layer holds for each property. Our addition for headless use."
 ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
 status = "inferred"
+own = true
+notes = "Our own query."
 
 [[command]]
 id = "smartComponent.showSettings"
@@ -880,6 +999,10 @@ milestone = "M6"
 summary = "Sets one property value on one smart component instance. Any number is accepted, including values below the minimum or above the maximum, which extrapolate. Driven in the UI by the slider, number field or checkbox, by bounding-box resizing, or by a smart handle."
 ref = "Reusing Shapes › Smart Components › Using Smart Components"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A new smart component stores no values and draws with the poles of its master layer, as glyphsLib does with a missing value; a property removed from the glyph leaves the stored value in place and ignored; adding a smart component in the reference app and saving settles it.",
+]
 
 [[panel]]
 id = "dialog.smartGlyphSettings"
@@ -970,6 +1093,7 @@ milestone = "M6"
 summary = "Layers are not needed at every combination of extremes. With N properties, the layer at all minimums plus one layer per property at its maximum suffice; shapes for combined extremes are computed by adding the per-property differences. A layer at a combined extreme is optional and, when present, overrides the computed shape."
 ref = "Reusing Shapes › Smart Components › Smart Glyph Layers Settings"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft draws smart components with glyphsLib's model (`model/smart.rs`, ported in M2): the component master's first pole layer is the default location, every other pole layer sits at -1 or 1 on each property where its pole differs, and a variation model gives the outline, so a missing corner of the property space is the sum of the per-property differences. fontmake's output is the oracle (M6 plan § 5)."
 
 [[behavior]]
 id = "smart.widthHeightFollowBoundingBox"
@@ -986,6 +1110,10 @@ milestone = "M6"
 summary = "An anchor whose name equals a property name exactly (case included), present on every layer of the smart glyph and moved on the layers that affect that property, becomes a gray drag handle on selected components; dragging it changes that property's value. Properties without such anchors simply get no handle."
 ref = "Reusing Shapes › Smart Components › Smart Handles"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Dragging a handle sets the value whose interpolated anchor position is nearest the pointer, found by projecting the pointer on the line between the anchor's positions at the property's two poles, with no clamp; dragging a handle in the reference app settles it.",
+]
 
 # =====================================================================================
 # Corner components
@@ -998,6 +1126,7 @@ milestone = "M6"
 summary = "A glyph is a corner glyph when its name starts with _corner. followed by any name (_corner.serif). It holds an open path lying on both sides of the layer origin."
 ref = "Reusing Shapes › Corner Components › Creating Corner Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed. Both oracles apply corner components (the Corner hint type) when they build: glyphsLib's `cornerComponents` filter and fontc's `corner_components.rs`, both Apache-2.0; FontCraft ports fontc's. Corpus: 29 corner hints in 3 sources."
 
 [[behavior]]
 id = "corner.originPoint"
@@ -1014,6 +1143,7 @@ milestone = "M6"
 summary = "The open path must run in the direction it would have as part of the host outline. Normally its start node shares the X or the Y coordinate of the origin, and the position of its end node relative to the origin decides which way the corner grows out of the stem; a path drawn the wrong way round makes the corner grow in the wrong direction and is fixed by reversing the contour."
 ref = "Reusing Shapes › Corner Components › Creating Corner Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed. fontc decides the side from the order of the open path's nodes, as the handbook describes."
 
 [[command]]
 id = "cornerComponent.add"
@@ -1079,6 +1209,7 @@ milestone = "M6"
 summary = "Chooses how a corner adapts to a diagonal stem. left: the start node follows the diagonal and the end node stays; right: the end node follows and the start node stays; both: a blend of the two; none: neither end is adjusted."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. fontc's `glyphs-reader/src/corner_components.rs` (a port of glyphsLib's `filters/cornerComponents.py`, both Apache-2.0) rotates the corner by the hint's alignment: left aligns to the outgoing segment, right to the incoming one, both to their mean angle, and none leaves it unrotated (fontc's `Alignment` names left and right as the reference does); FontCraft ports it, and the fontmake and fontc builds of the 3 corpus sources with corner hints are the oracle (M6 plan § 5)."
 
 [[command]]
 id = "cornerComponent.editGlyph"
@@ -1136,6 +1267,10 @@ milestone = "M6"
 summary = "A selected corner component can be copied with Edit › Copy and, with other nodes selected, pasted onto them with Edit › Paste, giving each node the same corner."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.",
+]
 
 [[behavior]]
 id = "corner.mirrorViaPalette"
@@ -1160,6 +1295,10 @@ milestone = "M6"
 summary = "The entry point, where the stem runs into the corner, defaults to the layer origin. An anchor named left (named right when the open path faces right) relocates it; the anchor must lie on the line through the origin and the path's start node. Moving it from the start node toward the baseline lengthens the corner on the obtuse side of a diagonal and shortens it on the acute side; moving it the other way does the opposite."
 ref = "Reusing Shapes › Corner Components › Adjusting the Entry Point of a Corner"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle uses the left and right anchors yet (fontc reads them and marks them unused), so sources that have them compile without the shift in both."
+guesses = [
+  "The entry anchor shifts the corner along the line through the origin and the start node by the anchor's distance from the origin before the corner is fitted, and the host segment is trimmed at the shifted point; a corner glyph with a left anchor on a diagonal stem in the reference app settles it.",
+]
 
 [[behavior]]
 id = "corner.exitAnchor"
@@ -1168,6 +1307,10 @@ milestone = "M6"
 summary = "The exit point, where the outline leaves the corner back into the host path, defaults to the open path's end node. An anchor named right (left for a right-facing corner) replaces the end node as exit position, so the end node itself may sit above or below the baseline, as for cupped serifs."
 ref = "Reusing Shapes › Corner Components › Adjusting the Exit Point of a Corner"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle uses it yet."
+guesses = [
+  "The outline leaves the corner at the exit anchor's fitted position and joins the host's outgoing segment where that segment is nearest to it; a cupped serif in the reference app settles it.",
+]
 
 [[behavior]]
 id = "corner.scaleStretchesByDefault"
@@ -1176,6 +1319,7 @@ milestone = "M6"
 summary = "Without further setup, scaling a corner component stretches its outline geometrically."
 ref = "Reusing Shapes › Corner Components › Adjusting the Width and Height"
 status = "handbook"
+notes = "Documented, not yet observed. Both oracles scale the corner by the hint's scale before fitting it."
 
 [[behavior]]
 id = "corner.scaleInterpolatesWithIntermediateLayers"
@@ -1184,6 +1328,10 @@ milestone = "M6"
 summary = "If the corner glyph has Intermediate layers tagged with a Width and Height in percent (for instance 150 % by 100 %), scaling interpolates between the main layer and those layers. An axis with no layer away from 100 % still stretches: with only a 150 % width layer, a 125 % width is interpolated while any height change stretches."
 ref = "Reusing Shapes › Corner Components › Adjusting the Width and Height"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle handles these layers; the file format does not say how the Width and Height percentages are stored."
+guesses = [
+  "The percentages are read from the intermediate layer's name (for example `Width 150 Height 100`) and interpolated linearly per axis, with scales beyond the layers extrapolated and negative scales mirrored after interpolation; a corner glyph saved by the reference app with such a layer settles it.",
+]
 
 [[behavior]]
 id = "corner.closedPathsAllowed"
@@ -1212,6 +1360,7 @@ milestone = "M6"
 summary = "A glyph is a cap glyph when its name starts with _cap. followed by any name (_cap.flag)."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
+notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. M6 plan § 7, question 4 decides whether M6 builds it."
 
 [[behavior]]
 id = "cap.attachesToTwoAdjacentNodes"
@@ -1367,6 +1516,7 @@ milestone = "M6"
 summary = "A glyph is a segment glyph when its name starts with _segment. followed by any name (_segment.stem). Its contents are a single open path laid on the baseline plus the anchors start and end."
 ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
 status = "handbook"
+notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. M6 plan § 7, question 4 decides whether M6 builds it."
 
 [[behavior]]
 id = "segment.startEndAnchors"
@@ -1493,6 +1643,7 @@ milestone = "M6"
 summary = "A glyph is a brush glyph when its name starts with _brush. followed by any name (_brush.arrow). It must contain exactly one closed path plus two anchors, start and end; several closed shapes have to be merged into one with Remove Overlap first."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
+notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. M6 plan § 7, question 4 decides whether M6 builds it."
 
 [[behavior]]
 id = "brush.startEndAnchors"
@@ -1663,6 +1814,11 @@ milestone = "M6"
 summary = "Headless form of painting with the Pixel tool: adds, removes or toggles pixel components at grid cells given in grid units. The cell addressing is our design; the handbook describes only the mouse gestures."
 ref = "Reusing Shapes › Pixel Tool › Drawing Pixels"
 status = "inferred"
+notes = "Our own headless form of the tool."
+guesses = [
+  "A pixel sits at the cell's lower left corner, at multiples of the grid spacing from the origin, and the tool finds an existing pixel by its exact offset; the reference app settles it.",
+]
+own = true
 
 [[panel]]
 id = "dialog.addPixelGlyph"
@@ -1682,6 +1838,10 @@ milestone = "M6"
 summary = "The Pixel tool works only when the font's Grid Spacing (Font Info › Other) is 2 or greater; the grid spacing is the pixel pitch."
 ref = "Reusing Shapes › Pixel Tool › Setup"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "With a grid spacing below 2 a click of the Pixel tool shows a message naming Font Info › Other › Grid Spacing and changes nothing; the reference app settles it.",
+]
 
 [[behavior]]
 id = "pixel.usesGlyphNamedPixel"
@@ -1690,6 +1850,11 @@ milestone = "M6"
 summary = "Every pixel the tool paints is a component referencing the glyph named exactly pixel, so redrawing that one glyph restyles the whole font."
 ref = "Reusing Shapes › Pixel Tool › Setup"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Pixel components are written with alignment off (-1), since a layer of components only would otherwise be aligned automatically; a pixel glyph saved by the reference app settles it.",
+  "The pixel glyph exports like any glyph whose name has no underscore, and pixel components export as components (TrueType) or outlines (CFF) by the usual rules; a pixel font exported by the reference app settles it.",
+]
 
 [[behavior]]
 id = "pixel.defaultShapeIsGridSquare"

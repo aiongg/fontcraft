@@ -692,6 +692,10 @@ question 15, question 16 (M6) and question 20 (M11).
    **Partly answered (source):** a custom `GlyphData.xml` may carry all five, and FontCraft reads
    them there (§ 4.1). The built-in values stay unpublished. For M4 only the sort key matters
    (question 2). Decomposition, anchors and marks stay open for M6 (open decision D6).
+   **M6 plan (proposed, `docs/plans/M6.md` § 7, question 3):** Create Composite takes Unicode
+   canonical decomposition mapped to glyph names plus our own tables, and Set Anchors our own
+   default-anchor table (`glyph.createComposite`, `glyph.setAnchors` guesses). The mark cloud
+   stays M14.
 2. **Default sort order.** ▶ **Answered for M4 (source and ours):** the tutorials say glyphs sort
    alphabetically within their category, adjustable by sort names. The key's details are ours
    (`glyphOrder.default`). An opened file keeps its order.
@@ -734,7 +738,9 @@ question 15, question 16 (M6) and question 20 (M11).
 15. **Inspector and Selection Info fields.** ▶ **Answered for M4 (ours):** case and direction are
     edited in Selection Info and List View; the badge corners are in the cell rows' `guesses`.
     The full Selection Info layout stays open.
-16. **Components cell syntax** in List View. Open; M6 builds component editing.
+16. **Components cell syntax** in List View. **Answered for M6 (ours):** names separated by a
+    comma and a space; an added name appends a component, a removed name deletes the last one of
+    that name, on the layer of the master shown (`glyph.setComponents`).
 17. **Tags context menu.** **Answered (source):** choosing a tag always adds it; tags are removed
     in the Tags field (`fontView.contextMenu.tags`).
 18. **Paste Special pairing.** ▶ **Answered for M4 (ours):** copy order against the targets'

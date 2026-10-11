@@ -634,3 +634,9 @@ the binary only; compilation never changes the source.
 18. **GDEF class inference.** fontc infers base and ligature classes from anchors for Glyphs
     sources only. Our native sources carry Glyphs-style categories, so we need to state which rule
     applies to them and to UFO imports.
+    **Checked in the M6 planning pass (oracle):** for Glyphs sources both oracles make a glyph a
+    mark when its category is Mark with subcategory Nonspacing or Spacing Combining, a ligature
+    when its subcategory is Ligature and it has an attaching anchor, and a base when it has any
+    anchor without an underscore after propagation (fontc `recompute_gdef_categories`); UFO
+    sources keep the categories they state. The mark writer that uses them is M8, or M6 if the
+    owner brings it in (`docs/plans/M6.md` § 7, question 2).

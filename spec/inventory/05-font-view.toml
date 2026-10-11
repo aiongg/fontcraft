@@ -643,6 +643,10 @@ milestone = "M6"
 summary = "Rewrites which components a glyph uses from a list of base-glyph names, adding and removing components to match (the editable Components cell of List View). Separator syntax, placement of added components and which layers are affected are not stated in the source."
 ref = "Font View › Glyph Properties › Components"
 status = "handbook"
+notes = "Documented, not yet observed (Glyph › Components: the List View cell adds and removes components)."
+guesses = [
+  "The cell lists component names separated by a comma and a space; a name added to the list appends a component at offset zero (aligned automatically when the layer allows it), a name removed deletes the last component with that name, and only the layer of the master shown in Font View changes; editing the cell in the reference app settles it.",
+]
 
 [[command]]
 id = "glyph.copyGlyphNames"
@@ -1592,6 +1596,7 @@ milestone = "M6"
 summary = "The Components column lists the names of the components used by the glyph; editing the cell adds or removes components to match."
 ref = "Font View › Glyph Properties › Components"
 status = "handbook"
+notes = "Documented, not yet observed. The column exists since M4, read only; editing runs glyph.setComponents."
 
 [[behavior]]
 id = "fontView.column.lastChanged"
@@ -1880,9 +1885,10 @@ status = "handbook"
 id = "addGlyphs.recipe"
 area = "components"
 milestone = "M6"
-summary = "The field also accepts glyph recipes, defined in another chapter. From memory a recipe has the form base+mark=newName, which builds newName as a composite of the listed glyphs, and source=newName, which builds newName from a single component; exact syntax must be taken from the components chapter."
-ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs"
-status = "memory"
+summary = "The Add Glyphs text field also accepts glyph recipes. The three forms are those of the Components page: component=glyph, base+mark=glyph and base+base=glyph (components.recipeSingleComponent, components.recipeBasePlusMarks, components.recipeMultipleBases). A recipe item builds the glyph named after the equals sign from the listed components."
+ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs; Reusing Shapes › Components › Recipes"
+status = "handbook"
+notes = "Verified by the M6 planning pass against the handbook pages Glyph Set (the field accepts recipes) and Components › Recipes (the three forms); the recalled forms were right, the examples differ. Documented, not yet observed. The M4 parser already splits recipe items (`glyphdata` `Item::Recipe`) and skips them with a message until M6."
 
 [[behavior]]
 id = "addGlyphs.existingNotDuplicated"
@@ -3293,7 +3299,7 @@ guesses = [
 id = "glyph.decomposeGlyphForAllMasters"
 label = "Decompose Components for All Masters"
 menu = ["Glyph"]
-shortcut = ""
+shortcut = "Cmd+Alt+Shift+D"
 kind = "engine"
 params = "{glyphs?: [names]}"
 area = "components"
@@ -3301,6 +3307,10 @@ milestone = "M6"
 summary = "The Option-key form of Decompose Components (the Font View chapter's name for Decompose Glyph): decomposes on every master layer of the targeted glyphs. An alias of glyph.decomposeGlyph over all masters; the label is ours."
 ref = "Font View › Batch-Processing"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The shortcut is Cmd+Alt+Shift+D, Decompose with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.",
+]
 
 [[command]]
 id = "path.convertToQuadratic"
