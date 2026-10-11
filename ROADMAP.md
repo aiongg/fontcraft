@@ -14,7 +14,7 @@ _Last updated: 2026-10-10 (M4 closed: every measure of `docs/plans/M4.md` § 5 m
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,648 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, pointer and key injection, toolbar, context menus, dialogs, panels, tests | **~60%** of what the siblings' "infrastructure" row covers; missing: the settings window, MCP resources and prompts, a performance budget suite |
 | Feature surface against the references (weighted, by behaviour, self-graded) | **~14%** |
-| Commands that exist (not: that behave like the reference) | **269 of 933** (`docs/parity.md`) |
+| Commands that exist (not: that behave like the reference) | **317 of 933** (`docs/parity.md`) |
 | Observed against the running reference | **52 rows**: 47 compiled-output rows checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
 ## Honest assessment (2026-10-10)
@@ -54,7 +54,7 @@ overlap-removal difference from fontmake's; the rest differ by less than one uni
 allow-listed. `crates/container` writes and reads WOFF 1 and WOFF2 with the `glyf`/`loca` and `hmtx`
 transforms; fontTools reads all of its output back.
 
-**What is real: editing by command (M3).** 269 of the 933 commands exist: all 184 of M3 and all 62 of M4.
+**What is real: editing by command (M3).** 317 of the 933 commands exist: all 184 of M3, all 62 of M4 and 49 of M5's 97.
 Every editing command takes explicit targets (shapes, nodes, segments, the foreground or the
 background) and runs the same from the window, `fontcraft-cli run`, MCP and the control channel:
 
@@ -139,7 +139,7 @@ dialog's default answer is Decompose.
 and M4's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
 a detail is unconfirmed, the handbook decides (Remove Overlap, for example, deletes open paths).
 Where no source says, we choose, and each choice is listed in `docs/guesses.md` to revisit
-(463 guesses on 328 rows).
+(506 guesses on 339 rows).
 
 | Gap | Detail |
 |---|---|
@@ -175,7 +175,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~14% | 269 of 933 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); about 50 of 172 panels, many of them partial (Font View's grid, List View, sidebar and inspector, the toolbar, the Info box, the Palette and five of its sections, the bottom bar, the Glyph Info, Selection Info and Start windows, the M3 and M4 dialogs) |
+| **Breadth:** commands, tools and panels exist | ~15% | 317 of 933 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); about 50 of 172 panels, many of them partial (Font View's grid, List View, sidebar and inspector, the toolbar, the Info box, the Palette and five of its sections, the bottom bar, the Glyph Info, Selection Info and Start windows, the M3 and M4 dialogs) |
 | **Depth:** features behave like the reference | ~6% | the M3 and M4 commands, tools, panels and dialogs behave as the handbook describes them, and none has been compared with the reference app. `path.sharpenCorner` waits in `fidelity`; the gaps are listed above |
 | **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands, the Export dialog and the CLI. Missing: variable fonts, instances between masters, version conversion, stroke attributes in UFO |
 | **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers; strokes, masks and overlap removal in the outline stage. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). With overlaps removed, 99.58% (TrueType) and 99.87% (CFF) of glyphs have no overlap-removal difference from fontmake's (`docs/plans/M3.md` § 5). No variable font, no features, no hinting, no subroutines |
@@ -427,7 +427,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 5 (5) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ✅ every measure met: every package M3.0 to M3.18 built; 184 of 184 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner`, which no source describes, moved to `fidelity` | 184 (184) |
 | M4 | Font View and glyph management | ✅ every measure met: every package M4.0 to M4.12 built; 62 of 62 commands live; the glyph database equal to fontc's on category, subcategory and production name for 200,504 names; `post` names equal both oracles' except one allow-listed source; every M4 dialog equals its command; an agent builds a font from glyph sets over the control channel; M1 to M3 baselines unchanged (`docs/plans/M4.md` § 5) | 62 (62) |
-| M5 | Spacing, kerning and text mode | 🚧 in progress: plan accepted (`docs/plans/M5.md`); M5.0 spec pass and M5.1 spacing keys done | 97 (1) |
+| M5 | Spacing, kerning and text mode | 🚧 in progress: plan accepted (`docs/plans/M5.md`); M5.0 to M5.6 and M5.15 built (spacing and kerning crates, their commands, text layout, kerning from compiled fonts); next M5.16, M5.7 and the UI wave | 97 (49) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
 | M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) |
 | M8 | OpenType features | ⬜ | 40 (0) |
@@ -459,7 +459,7 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Reusing shapes | 7 | 77 | 0 | 0% | everything; components are only exported (as composites, decomposed where the format needs it) |
 | Layers | 3 | 21 | 19 | 35% | background and layer commands; Edit Background; the active layer and the tab's master; the background and other visible layers drawn on the canvas; the Palette's Layers section with its row context menu; the Interpolate with Background dialog. Font View's master choice. Missing: nothing compared with the reference |
 | Guides, metric lines, zones, grid | 3 | 36 | 16 | 26% | guide, ruler, coordinate and Dimensions commands; metric lines, guides, the grid, CJK lines and measurement guides drawn; guides dragged and edited on the canvas, with their context menu and the Guide Properties dialog; the Measurement tool; snapping to guides and their crossings; the Palette's Dimensions section. Missing: script-specific metric lines; nothing compared with the reference |
-| Spacing and kerning | 7 | 79 | 1 | 1% | set width only |
+| Spacing and kerning | 7 | 79 | 49 | 12% | by command only: sidebearing and width setters with metrics keys, the spacing and kerning shortcuts, Update Metrics, Transform Metrics, kerning pairs, groups, exceptions and locks, Clean Up, Compress, group rename, the pair list, kerning-text copy and paste, kerning read from compiled fonts. Missing: everything in the window (text mode, Info box fields, Kerning window), kerning in exported fonts, metrics import and export |
 | Font Info | 6 | 48 | 2 | 2% | four font-wide fields can be read and set |
 | Interpolation | 8 | 68 | 1 | 1% | Edit View draws and edits any master (`view.selectMaster`); everything else |
 | OpenType layout | 7 | 46 | 0 | 0% | everything |

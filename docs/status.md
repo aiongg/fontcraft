@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-11, M5 accepted and started: M5.0 done, M5.1 next._
+_Updated: 2026-10-11, M5 in progress: M5.0–M5.6 and M5.15 built; M5.16 and M5.7 next._
 
 ## State of the tree
 
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
-- 269 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
-  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 463 guesses on 328
+- 317 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
+  are all live, and 49 of M5's 97. Feature parity is about 15% (ROADMAP.md › Parity estimate). 506 guesses on 339
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -19,7 +19,8 @@ _Updated: 2026-10-11, M5 accepted and started: M5.0 done, M5.1 next._
 
 ## Where to start
 
-1. **M5**, in the order of `docs/plans/M5.md` § 6: builder packages M5.1 and M5.2 first.
+1. **M5**, in the order of `docs/plans/M5.md` § 6: M5.16 (linked metrics in export) and M5.7
+   (text mode) by the builder, then the UI wave M5.8–M5.14 and M5.17 (the kern writer).
 
 M4, Font View and glyph management (`docs/plans/M4.md`), as built:
 
@@ -359,3 +360,12 @@ Append one terse entry per session: what landed, numbers, what is still open.
   cache, orders Update Metrics and resolves linked masters. Corpus: 4,413 of 4,413 keys parse;
   17,217 master values equal the stored metric; 12 Inter Italic differences up to 1.4 units are
   not explained. Open: the cache update after editing a much-used glyph takes 7.7 ms (target 2).
+  M5.2: the kerning core (sides, lookup with its step, locks, groups); lookup over Inter Regular's
+  490,911 covered pairs takes 52.6 ms. M5.3–M5.5: 48 spacing and kerning commands (setters with
+  keys, shortcuts, Update Metrics, Transform Metrics, Default Layer Width, pairs, exceptions,
+  groups, Clean Up, Compress, rename, the pair list, kerning-text copy and paste). Update Metrics
+  orders composites after their bases and settles Inter in one run (about 130 ms). Compress
+  follows stored order so the handbook's example settles. M5.6: `crates/textlayout`; 45 of 45
+  corpus display strings round trip; 10,000 items lay out in 2.15 ms. M5.15: kerning recovered
+  from compiled fonts, 945,310 covered pairs in 97 fontmake builds with 0 differences.
+  317 of 933 commands live.
