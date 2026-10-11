@@ -840,6 +840,7 @@ milestone = "M10"
 summary = "Stems are found by pairing opposing outline segments in each direction and scoring the pairs; pairs whose width matches a known stem width are preferred, and pairs wider than an initial limit of 150 units are not considered at first. Curves with an inflection are split there for analysis and the result is mapped back to the original curve."
 ref = "AFDKO otfautohint hinter.py; docs/otfautohint_Notes.md"
 status = "docs"
+notes = "crates/autohint/src/stems.rs ports the scoring, pruning, main-value choice and the 22-position limit from hinter.py. The widest stem considered is the larger of 150 and the widest dominant stem, times 1.15; a wider pair keeps a reduced score up to twice that width. Two quirks are kept because otfautohint is the oracle: stems sharing a position are grouped only when their upper edge equals the lower one, so each stem is its own best, and stems are merged only while reporting zones. The reference app's own autohinter is not documented."
 
 [[behavior]]
 id = "autohint.ps.ghostStems"
@@ -848,6 +849,7 @@ milestone = "M10"
 summary = "A horizontal segment that lies inside an alignment zone but has no opposing segment to form a stem with gets a synthetic ghost stem so that the edge can still be aligned; internally the ghost partner sits 20 units away. In the charstring a ghost hint is written with the reserved widths (-20 for a top edge, -21 for a bottom edge; these two numbers are from the Type 2 charstring convention, recalled rather than read here)."
 ref = "AFDKO otfautohint hinter.py (GhostWidth); docs/otfautohint_Notes.md › Stem ordering"
 status = "docs"
+notes = "Ported in crates/autohint/src/stems.rs: an edge inside a zone gets a ghost value of score 20 whose partner sits 20 units away, above a bottom edge and below a top edge; a real stem on the same edge with a higher score suppresses it. As in otfautohint, every ghost value refers to one shared ghost segment."
 
 [[behavior]]
 id = "autohint.ps.zoneMembership"
@@ -856,6 +858,7 @@ milestone = "M10"
 summary = "An edge counts as inside a zone when it lies between the zone's two edges widened by BlueFuzz on each side. A built-in list of symbol glyphs (at, bullet, copyright, currency, registered) is always treated as being in no zone."
 ref = "AFDKO otfautohint hinter.py (inBand); autohint.py (ACOptions.noBlues)"
 status = "docs"
+notes = "Ported in crates/autohint/src/dimension.rs (inBand): BlueValues and OtherBlues of the main dictionary, top zones for upper edges and bottom zones for lower edges, widened by that dictionary's BlueFuzz. Vertical stems never use zones."
 
 [[behavior]]
 id = "autohint.ps.counterHints"
@@ -864,6 +867,7 @@ milestone = "M10"
 summary = "Counter hints keep the gaps between three or more stems open and equal. The hinter only tries them on a short built-in list: vertical counters for m, M, T and ellipsis, horizontal counters for element, equivalence, notelement and divide. VCounterChars and HCounterChars extend the lists by at most 64 glyph names each, and LanguageGroup 1 marks a zone set whose (ideographic) glyphs should all get counter hints."
 ref = "AFDKO otfautohint --doc-fontinfo"
 status = "docs"
+notes = "Ported in crates/autohint/src/stems.rs (tryCounterHinting): the three highest main stems are kept as counter hints when their widths and both gaps agree within 0.05 units and the fourth stem, if any, scores at most a tenth of the first and no more than 1000. Without such stems the bounding boxes of the subpaths are added and the test is repeated; then the glyph is hinted normally. otfautohint reads LanguageGroup but its hinter does not use it, so neither does the port. The fontinfo lists reach the hinter through the glyph's dictionary."
 
 [[behavior]]
 id = "autohint.ps.fontinfoOverrides"
