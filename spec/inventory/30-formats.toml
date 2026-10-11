@@ -706,6 +706,10 @@ milestone = "M12"
 summary = "A single self-contained HTML page that embeds the freshly exported WOFF2 as a data URL and shows sample text, a character set table, feature toggles and, for variable fonts, axis sliders. Produced by the command-line tools and the export command for browser proofing."
 ref = "our design; fontbakery and fontmake leave proofing to external pages"
 status = "inferred"
+notes = "Built in M12.35 (crates/proof/src/html.rs): the font is embedded as WOFF2 (wrapped by the engine when the input is not WOFF2); sections sample (editable), waterfall, character set (every code point of the shown glyphs), feature switches for every GSUB and GPOS feature (the ones browsers apply by default start on) and size stops. The page carries no script."
+guesses = [
+  "The default sample is an English pangram with digits when the font maps all of its characters, else the first 64 characters of the character set. Settled by the owner.",
+]
 
 # ═════════════════════════════ Round-trip rules ═════════════════════════════
 
