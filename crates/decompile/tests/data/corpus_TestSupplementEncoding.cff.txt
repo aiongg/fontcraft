@@ -1,0 +1,415 @@
+## Top Dict
+FontBBox            {-71,-217,952,783}
+BaseFontName        "RamatSharon"
+sup.srcFontType     CFF (name-keyed)
+sup.nGlyphs         19
+## FontDict[0]
+FontName            "EKPHJH+RamatSharon"
+## Private
+## glyph[tag] {name,encoding,path}
+glyph[0] {.notdef,-,
+  783 width
+  735 0 move
+  735 783 line
+  48 783 line
+  48 0 line
+  735 0 line
+  96 48 move
+  96 735 line
+  687 735 line
+  687 48 line
+  96 48 line
+  endchar}
+glyph[1] {space,0x09+0x20,
+  285 width
+  endchar}
+glyph[2] {infinity,0xB0,
+  520 width
+  103 509 move
+  65 449 46 377 46 295 curve
+  46 211 64 139 102 79 curve
+  140 19 193 -11 261 -11 curve
+  329 -11 382 19 420 79 curve
+  458 139 477 211 477 294 curve
+  477 377 458 449 420 509 curve
+  382 569 329 600 261 600 curve
+  193 600 141 569 103 509 curve
+  199 166 move
+  184 202 177 244 177 293 curve
+  177 341 184 384 199 420 curve
+  213 456 234 475 261 475 curve
+  287 475 308 457 323 421 curve
+  337 385 345 343 345 295 curve
+  345 246 337 203 323 167 curve
+  308 131 287 113 261 113 curve
+  234 113 213 130 199 166 curve
+  endchar}
+glyph[3] {plusminus,0xB1,
+  520 width
+  370 588 move
+  257 588 line
+  250 563 236 536 215 508 curve
+  193 480 170 459 144 447 curve
+  144 317 line
+  158 320 175 326 195 336 curve
+  215 346 230 356 240 368 curve
+  240 0 line
+  370 0 line
+  370 588 line
+  endchar}
+glyph[4] {lessequal,0xB2,
+  520 width
+  97 452 move
+  97 453 110 459 137 469 curve
+  163 479 187 484 208 484 curve
+  219 484 232 482 246 478 curve
+  260 474 274 469 286 462 curve
+  298 454 307 445 313 435 curve
+  319 424 322 412 322 399 curve
+  322 382 318 365 310 347 curve
+  302 329 291 312 278 294 curve
+  58 0 line
+  431 0 line
+  488 124 line
+  318 124 line
+  385 233 line
+  403 262 417 292 429 323 curve
+  440 354 446 385 446 416 curve
+  446 442 440 466 430 489 curve
+  420 512 404 531 384 547 curve
+  364 563 338 575 308 584 curve
+  278 592 246 597 213 597 curve
+  189 597 167 594 148 589 curve
+  128 584 111 576 97 566 curve
+  97 452 line
+  endchar}
+glyph[5] {greaterequal,0xB3,
+  520 width
+  113 447 move
+  113 449 124 455 147 464 curve
+  170 472 196 477 225 477 curve
+  248 477 266 472 280 462 curve
+  293 452 300 436 300 413 curve
+  300 387 291 371 273 363 curve
+  255 355 234 351 209 351 curve
+  187 351 line
+  187 255 line
+  201 259 216 261 232 261 curve
+  258 261 281 255 300 243 curve
+  318 231 328 214 328 192 curve
+  328 164 320 144 304 132 curve
+  288 120 267 114 241 114 curve
+  213 114 184 119 153 130 curve
+  122 141 107 149 107 153 curve
+  74 28 line
+  80 18 99 8 133 -2 curve
+  166 -11 202 -16 242 -16 curve
+  304 -16 357 0 400 30 curve
+  442 60 464 113 464 187 curve
+  464 243 451 279 427 294 curve
+  403 308 385 318 373 322 curve
+  383 331 393 340 404 350 curve
+  425 374 436 405 436 441 curve
+  436 498 416 538 378 561 curve
+  339 584 292 596 236 596 curve
+  207 596 179 593 153 587 curve
+  126 581 113 576 113 572 curve
+  113 447 line
+  endchar}
+glyph[6] {yen,0xB4,
+  520 width
+  52 85 move
+  290 85 line
+  290 0 line
+  420 0 line
+  420 85 line
+  437 85 line
+  493 204 line
+  420 204 line
+  420 588 line
+  290 588 line
+  52 204 line
+  52 85 line
+  172 204 move
+  290 390 line
+  290 204 line
+  172 204 line
+  endchar}
+glyph[7] {mu,0xB5,
+  520 width
+  92 17 move
+  146 -3 line
+  168 -11 191 -16 217 -16 curve
+  277 -16 331 5 378 49 curve
+  425 93 449 146 449 209 curve
+  449 272 430 319 393 350 curve
+  355 380 308 396 250 396 curve
+  273 486 line
+  431 486 line
+  459 588 line
+  165 588 line
+  96 300 line
+  139 304 line
+  143 304 151 305 162 305 curve
+  200 305 235 296 265 280 curve
+  295 263 311 242 311 216 curve
+  311 180 298 154 274 140 curve
+  249 125 219 118 185 118 curve
+  163 118 142 120 124 125 curve
+  105 130 94 135 92 141 curve
+  92 17 line
+  endchar}
+glyph[8] {partialdiff,0xB6,
+  520 width
+  458 594 move
+  288 594 line
+  113 356 line
+  77 306 59 252 59 195 curve
+  59 163 65 133 77 105 curve
+  89 77 111 51 143 26 curve
+  175 1 218 -11 273 -11 curve
+  318 -11 359 0 395 24 curve
+  431 47 453 77 463 114 curve
+  473 151 478 182 478 206 curve
+  478 261 459 304 423 334 curve
+  387 364 346 381 301 385 curve
+  458 594 line
+  189 190 move
+  189 212 196 231 212 247 curve
+  227 262 246 270 268 270 curve
+  291 270 310 262 326 248 curve
+  341 231 349 212 349 190 curve
+  349 166 343 149 331 137 curve
+  319 125 309 118 300 115 curve
+  290 111 280 110 270 110 curve
+  260 110 249 112 239 116 curve
+  228 120 219 125 213 132 curve
+  197 148 189 167 189 190 curve
+  endchar}
+glyph[9] {summation,0xB7,
+  520 width
+  267 464 move
+  80 0 line
+  222 0 line
+  465 588 line
+  109 588 line
+  63 464 line
+  267 464 line
+  endchar}
+glyph[10] {product,0xB8,
+  520 width
+  375 578 move
+  315 602 278 610 265 600 curve
+  250 608 213 600 153 575 curve
+  93 549 63 503 63 436 curve
+  63 409 68 386 80 368 curve
+  92 349 105 336 120 328 curve
+  103 317 86 301 70 281 curve
+  54 261 46 226 46 176 curve
+  46 116 75 64 134 20 curve
+  193 -23 237 -33 265 -11 curve
+  277 -23 316 -14 382 15 curve
+  448 44 482 96 482 170 curve
+  482 218 474 253 459 275 curve
+  444 297 429 314 414 328 curve
+  426 335 437 346 448 360 curve
+  459 374 465 399 465 436 curve
+  465 506 435 553 375 578 curve
+  191 157 move
+  187 166 186 176 186 187 curve
+  186 197 188 207 192 218 curve
+  196 228 203 239 214 250 curve
+  225 261 241 267 263 267 curve
+  286 267 305 259 320 244 curve
+  335 228 343 210 343 189 curve
+  343 165 335 146 320 131 curve
+  305 116 287 109 265 109 curve
+  255 109 245 111 234 115 curve
+  223 119 214 124 208 131 curve
+  200 139 194 147 191 157 curve
+  193 439 move
+  193 459 200 476 214 490 curve
+  228 504 245 511 264 511 curve
+  283 511 300 504 314 490 curve
+  328 476 335 459 335 440 curve
+  335 418 328 401 314 387 curve
+  300 373 283 367 264 367 curve
+  244 367 228 374 214 388 curve
+  200 402 193 419 193 439 curve
+  endchar}
+glyph[11] {pi,0xB9,
+  520 width
+  77 0 move
+  247 0 line
+  422 238 line
+  458 288 476 341 476 399 curve
+  476 431 469 460 457 488 curve
+  445 516 423 541 393 565 curve
+  363 588 322 600 272 600 curve
+  226 600 184 588 145 565 curve
+  106 541 81 512 71 477 curve
+  60 442 55 411 55 384 curve
+  55 330 73 289 110 259 curve
+  146 229 188 213 234 209 curve
+  77 0 line
+  346 404 move
+  346 381 338 362 323 347 curve
+  307 331 289 324 267 324 curve
+  243 324 224 331 209 346 curve
+  193 362 186 382 186 404 curve
+  186 427 191 444 203 456 curve
+  215 468 225 475 235 479 curve
+  244 482 254 484 265 484 curve
+  275 484 285 482 296 478 curve
+  306 474 315 468 322 462 curve
+  338 446 346 426 346 404 curve
+  endchar}
+glyph[12] {daggerdbl,0xE0,
+  667 width
+  277 0 move
+  225 288 line
+  223 299 225 309 230 318 curve
+  234 327 242 333 252 335 curve
+  469 0 line
+  628 0 line
+  483 226 line
+  507 232 529 243 550 261 curve
+  571 279 585 298 593 319 curve
+  601 340 605 366 605 396 curve
+  605 543 line
+  605 555 602 565 597 573 curve
+  591 581 585 585 579 586 curve
+  573 587 566 588 560 588 curve
+  419 588 line
+  419 464 line
+  475 464 line
+  475 402 line
+  475 383 467 366 452 351 curve
+  443 341 431 333 415 328 curve
+  243 588 line
+  85 588 line
+  186 441 line
+  152 431 127 412 111 385 curve
+  95 357 87 333 87 312 curve
+  87 308 87 300 89 288 curve
+  124 124 line
+  74 124 line
+  74 0 line
+  277 0 line
+  endchar}
+glyph[13] {quotedblbase,0xE3,
+  543 width
+  53 464 move
+  325 464 line
+  325 0 line
+  455 0 line
+  455 464 line
+  506 464 line
+  506 537 line
+  506 541 504 546 502 552 curve
+  500 558 496 564 491 571 curve
+  485 577 479 582 473 584 curve
+  466 586 460 588 455 588 curve
+  53 588 line
+  53 464 line
+  endchar}
+glyph[14] {perthousand,0xE4,
+  600 width
+  422 0 move
+  558 0 line
+  558 526 line
+  558 537 555 546 551 553 curve
+  547 559 543 565 540 569 curve
+  537 573 532 578 525 582 curve
+  517 586 507 588 495 588 curve
+  60 588 line
+  60 464 line
+  422 464 line
+  422 0 line
+  190 0 move
+  190 334 line
+  60 334 line
+  60 0 line
+  190 0 line
+  endchar}
+glyph[15] {Acircumflex,0xE5,
+  328 width
+  276 538 move
+  276 554 273 565 269 572 curve
+  265 579 261 583 257 585 curve
+  253 587 245 588 235 588 curve
+  60 588 line
+  60 464 line
+  139 464 line
+  139 0 line
+  275 0 line
+  276 538 line
+  endchar}
+glyph[16] {Uacute,0xF2,
+  622 width
+  443 175 move
+  443 161 438 150 429 143 curve
+  419 135 412 130 408 128 curve
+  404 125 399 124 393 124 curve
+  286 124 line
+  286 538 line
+  286 544 285 551 285 557 curve
+  284 563 282 569 278 575 curve
+  274 581 269 585 265 586 curve
+  260 587 253 588 245 588 curve
+  70 588 line
+  70 464 line
+  149 464 line
+  149 124 line
+  53 124 line
+  53 0 line
+  449 0 line
+  467 0 481 3 493 9 curve
+  505 15 518 26 532 40 curve
+  546 54 556 67 563 80 curve
+  570 92 574 107 574 124 curve
+  574 538 line
+  574 544 573 550 573 556 curve
+  573 562 571 568 567 574 curve
+  563 580 560 583 556 585 curve
+  552 587 544 588 534 588 curve
+  359 588 line
+  359 464 line
+  443 464 line
+  443 175 line
+  endchar}
+glyph[17] {macron,0xF8,
+  543 width
+  354 0 move
+  490 0 line
+  490 486 line
+  490 498 487 511 481 525 curve
+  475 539 469 549 463 555 curve
+  457 561 449 568 439 576 curve
+  429 584 412 588 388 588 curve
+  60 588 line
+  60 464 line
+  354 464 line
+  354 0 line
+  endchar}
+glyph[18] {dotaccent,0xFA,
+  673 width
+  497 464 move
+  497 0 line
+  627 0 line
+  627 486 line
+  627 498 624 511 618 525 curve
+  612 539 605 550 597 558 curve
+  589 566 580 573 570 579 curve
+  560 585 545 588 525 588 curve
+  118 588 line
+  118 464 line
+  174 464 line
+  135 368 line
+  135 124 line
+  67 124 line
+  67 0 line
+  265 0 line
+  265 464 line
+  497 464 line
+  endchar}
