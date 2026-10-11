@@ -24,7 +24,8 @@
 //! | `standalone lookup n { … } n;` in a feature block | the feature block closed before the lookup and reopened after it, with its `script`, `language` and `lookupflag` statements repeated |
 //! | `standalone lookup …` outside any block | the keyword dropped |
 //! | `sub @A by @B [x];`, `sub @A by @B @One;` | the one-member class written as its glyph, so it repeats |
-//! | `language A B C;`, `sub @A by @B @C;` | unchanged: the compiler reads both |
+//! | `language A B C;` and the statements up to the next `script`, `language` or the block's end | the statement and the statements once per tag; a named lookup block is written once and referred to by name after that |
+//! | `sub @A by @B @C;` | unchanged: the compiler reads it |
 //!
 //! A feature entry is lowered with its `feature tag { … } tag;` wrapper: the `standalone`
 //! lowering closes and reopens that block, so it needs the tag. Outside every block `standalone`
@@ -50,7 +51,12 @@ pub fn lower(code: &str, variable: bool) -> Result<(String, OffsetMap), Vec<Diag
     if code.len() > MAX_LOWER_BYTES {
         return Err(vec![error(0..0, format!("the feature code is larger than {} MB", MAX_LOWER_BYTES >> 20))]);
     }
-    Lowering::new(code, variable).run()
+    let (text, map) = Lowering::new(code, variable).run()?;
+    match split_languages(&text) {
+        Ok(None) => Ok((text, map)),
+        Ok(Some((split, split_map))) => Ok((split, OffsetMap::compose(&map, &split_map))),
+        Err(found) => Err(found.into_iter().map(|d| Diagnostic { span: map.source_range(d.span.clone()), ..d }).collect()),
+    }
 }
 
 fn error(span: Range<usize>, message: impl Into<String>) -> Diagnostic {
@@ -822,6 +828,178 @@ impl<'a> Lowering<'a> {
 /// A glyph name that cannot be a range (`a-z`) or a class.
 fn single_glyph(name: &str) -> bool {
     !name.is_empty() && !name.starts_with('@') && !name.contains('-')
+}
+
+// ---------------------------------------------------------------------------------------------
+// Several languages in one statement
+
+/// Words that may follow the tags of a `language` statement.
+const LANGUAGE_OPTIONS: &[&str] = &["exclude_dflt", "include_dflt", "excludeDFLT", "includeDFLT", "required"];
+
+/// A `language` statement with several tags in a feature block, and the rules after it.
+struct LanguageSection {
+    statement: Range<usize>,
+    tags: Vec<String>,
+    options: String,
+    /// From the end of the statement.
+    start: usize,
+    /// Named lookup blocks in the section: (range, name).
+    lookups: Vec<(Range<usize>, String)>,
+}
+
+/// The second pass over already lowered text: `language A B C;` and the statements that follow
+/// it, up to the next `script` or `language` statement or the end of the feature block, become
+/// `language A;` with the statements, then the same for B and C. A named lookup block is
+/// written once; the repeats refer to it by name. `None` when the text has no such statement.
+fn split_languages(text: &str) -> Result<Option<(String, OffsetMap)>, Vec<Diagnostic>> {
+    let mut out = Out::new(text);
+    let mut lexer = Lexer::new(text);
+    // For each open brace: whether it opened a feature block.
+    let mut stack: Vec<bool> = Vec::new();
+    let mut stmt_start = true;
+    let mut feature_pending = false;
+    let mut section: Option<LanguageSection> = None;
+    let mut grown = text.len();
+    while let Some(tok) = lexer.next_significant() {
+        let in_feature = stack.last() == Some(&true);
+        match tok.kind {
+            Kind::Punct(b';') => {
+                stmt_start = true;
+                feature_pending = false;
+                continue;
+            }
+            Kind::Punct(b'{') => {
+                if stack.len() >= MAX_NESTING_DEPTH {
+                    return Err(vec![error(tok.range(), format!("blocks nest more than {MAX_NESTING_DEPTH} deep"))]);
+                }
+                stack.push(std::mem::take(&mut feature_pending));
+                stmt_start = true;
+                continue;
+            }
+            Kind::Punct(b'}') => {
+                if stack.pop() == Some(true)
+                    && let Some(open) = section.take()
+                {
+                    close_section(&mut out, text, open, tok.start, &mut grown)?;
+                }
+                stmt_start = true;
+                continue;
+            }
+            _ => {}
+        }
+        let at_start = std::mem::replace(&mut stmt_start, false);
+        if !at_start || tok.kind != Kind::Word {
+            continue;
+        }
+        match lexer.text(tok) {
+            "feature" => feature_pending = true,
+            "script" | "language" if in_feature => {
+                if let Some(open) = section.take() {
+                    close_section(&mut out, text, open, tok.start, &mut grown)?;
+                }
+                if lexer.text(tok) == "script" {
+                    continue;
+                }
+                let mut ahead = lexer.clone();
+                let mut tags = Vec::new();
+                let mut options = String::new();
+                let end = loop {
+                    let Some(next) = ahead.next_significant() else { break None };
+                    match next.kind {
+                        Kind::Punct(b';') => break Some(next.end),
+                        Kind::Word if LANGUAGE_OPTIONS.contains(&ahead.text(next)) || !options.is_empty() => {
+                            options.push(' ');
+                            options.push_str(ahead.text(next));
+                        }
+                        Kind::Word => tags.push(ahead.text(next).to_string()),
+                        _ => break None,
+                    }
+                };
+                if let Some(end) = end
+                    && tags.len() > 1
+                {
+                    section = Some(LanguageSection { statement: tok.start..end, tags, options, start: end, lookups: Vec::new() });
+                }
+            }
+            "lookup" if in_feature => {
+                // A named block: `lookup name [useExtension] {` … `} name;`.
+                let Some(open) = section.as_mut() else { continue };
+                let mut ahead = lexer.clone();
+                let Some(name) = ahead.next_significant().filter(|t| t.kind == Kind::Word) else { continue };
+                let mut brace = ahead.next_significant();
+                if brace.is_some_and(|t| ahead.text(t) == "useExtension") {
+                    brace = ahead.next_significant();
+                }
+                if !brace.is_some_and(|t| t.is(b'{')) {
+                    continue;
+                }
+                // The block's end: its closing brace, the end name and `;`.
+                let mut depth = 0usize;
+                let mut scan = ahead.clone();
+                let mut close = None;
+                while let Some(t) = scan.next_significant() {
+                    if t.is(b'{') {
+                        depth += 1;
+                    } else if t.is(b'}') {
+                        if depth == 0 {
+                            close = Some(t);
+                            break;
+                        }
+                        depth -= 1;
+                    }
+                }
+                let Some(close) = close else { continue };
+                let mut end = close.end;
+                let after_name = scan.next_significant();
+                if let Some(t) = after_name.filter(|t| t.kind == Kind::Word) {
+                    end = t.end;
+                    if let Some(semi) = scan.next_significant().filter(|t| t.is(b';')) {
+                        end = semi.end;
+                    }
+                }
+                open.lookups.push((tok.start..end, lexer.text(name).to_string()));
+            }
+            _ => {}
+        }
+    }
+    if let Some(open) = section.take() {
+        close_section(&mut out, text, open, text.len(), &mut grown)?;
+    }
+    if !out.changed {
+        return Ok(None);
+    }
+    Ok(Some(out.finish()))
+}
+
+/// Writes the first language in place of the statement and the repeats at `end`.
+fn close_section(out: &mut Out<'_>, text: &str, section: LanguageSection, end: usize, grown: &mut usize) -> Result<(), Vec<Diagnostic>> {
+    let rules = text.get(section.start..end).unwrap_or_default();
+    let mut repeat = String::with_capacity(rules.len());
+    let mut copied = section.start;
+    for (range, name) in &section.lookups {
+        repeat.push_str(text.get(copied..range.start).unwrap_or_default());
+        repeat.push_str(&format!("lookup {name};"));
+        copied = range.end;
+    }
+    repeat.push_str(text.get(copied..end).unwrap_or_default());
+    let per_language = repeat.len().saturating_add(32);
+    *grown = grown.saturating_add(per_language.saturating_mul(section.tags.len()));
+    if *grown > MAX_LOWER_BYTES {
+        return Err(vec![error(
+            section.statement.clone(),
+            format!("the feature code grows past {} MB when its languages are written out one by one", MAX_LOWER_BYTES >> 20),
+        )]);
+    }
+    let mut tags = section.tags.iter();
+    let first = tags.next().map(String::as_str).unwrap_or_default();
+    out.replace(section.statement.clone(), &format!("language {first}{};", section.options));
+    let mut inserted = String::new();
+    for tag in tags {
+        inserted.push_str(&format!("\nlanguage {tag}{};", section.options));
+        inserted.push_str(&repeat);
+    }
+    out.replace(end..end, &inserted);
+    Ok(())
 }
 
 #[cfg(test)]

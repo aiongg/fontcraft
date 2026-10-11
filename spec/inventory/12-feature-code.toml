@@ -858,9 +858,10 @@ notes = "Documented, not yet observed."
 id = "featureCode.multipleLanguagesCompiler"
 area = "features"
 milestone = "M8"
-summary = "fea-rs accepts this form directly, including trailing exclude_dflt or required; `dflt` inside the list is an error there."
+summary = "fea-rs 1.0.0 refuses a `language` statement with several tags, so the syntax-extension pass writes the statement and the statements after it once per tag (up to the next `script` or `language` statement or the end of the feature block), keeping trailing options such as exclude_dflt or required on each; a named lookup block is written once and referred to by name in the repeats."
 ref = "fea-rs test-data/compile-tests/mini-latin (multiple_languages*)"
 status = "docs"
+notes = "Built in X.integ4 (`features/src/lower.rs`, `split_languages`). Each language gets its own copy of the anonymous lookups, so the compiled font has one feature record per language rather than one shared record."
 
 [[behavior]]
 id = "featureCode.multipleSubstitutionClasses"

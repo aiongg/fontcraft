@@ -176,13 +176,25 @@ fn feature_code_optional_lookup_end_name() {
 fn feature_code_multiple_languages_pass_through_and_apply_to_each() {
     // featureCode.multipleLanguages, featureCode.multipleLanguagesCompiler
     let written = "languagesystem latn dflt;\nfeature locl {\nscript latn;\nlanguage AZE CRT TRK;\nsub i by idotaccent;\n} locl;";
+    // The compiler reads one tag per statement: each language gets the statement and the rules.
     let (text, map) = lower(written, false).unwrap();
-    assert_eq!(text, written);
-    assert!(map.is_identity());
-    let compiled = compile(written);
-    let locl = compiled.features.iter().find(|f| f.tag == Tag::new(b"locl")).unwrap();
+    assert_eq!(
+        text,
+        "languagesystem latn dflt;\nfeature locl {\nscript latn;\nlanguage AZE;\nsub i by idotaccent;\n\nlanguage CRT;\nsub i by idotaccent;\n\nlanguage TRK;\nsub i by idotaccent;\n} locl;"
+    );
+    let rule = text.find("sub i").unwrap();
+    assert_eq!(map.source_range(rule..rule + 5), written.find("sub i").unwrap()..written.find("sub i").unwrap() + 5);
+    // A named lookup is written once and referred to by the other languages.
+    let named = "feature locl {\nscript latn;\nlanguage AZE TRK exclude_dflt;\nlookup dotted {\n  sub i by idotaccent;\n} dotted;\nsub a by b;\nscript cyrl;\nsub c by d;\n} locl;";
+    assert_eq!(
+        static_text(named),
+        "feature locl {\nscript latn;\nlanguage AZE exclude_dflt;\nlookup dotted {\n  sub i by idotaccent;\n} dotted;\nsub a by b;\n\nlanguage TRK exclude_dflt;\nlookup dotted;\nsub a by b;\nscript cyrl;\nsub c by d;\n} locl;"
+    );
+    let compiled = compile(&text);
+    // Each language has its own copy of the rules, so its own locl record.
+    let systems: Vec<(Tag, Tag)> = compiled.features.iter().filter(|f| f.tag == Tag::new(b"locl")).flat_map(|f| f.language_systems.clone()).collect();
     for lang in [b"AZE ", b"CRT ", b"TRK "] {
-        assert!(locl.language_systems.contains(&(Tag::new(b"latn"), Tag::new(lang))), "{lang:?}: {:?}", locl.language_systems);
+        assert!(systems.contains(&(Tag::new(b"latn"), Tag::new(lang))), "{lang:?}: {systems:?}");
     }
 }
 
