@@ -7,12 +7,12 @@
 //!
 //! | Fields | Line | Meaning |
 //! |---|---|---|
-//! | 3 | `left	right	value` | a pair; a side that starts with `@` is a group, in command spelling (the group that faces the pair) |
-//! | 2 | `kerning-text	1` | the header, optional, only as the first line |
-//! | 2 | `master	name` | the master the lines were taken from, for information |
-//! | 2 | `direction	ltr` | `ltr`, `rtl` or `vertical` |
-//! | 4 or more | `group	side	name	member…` | members of the group `name` on `side` (`left`, `right`, `top`, `bottom`); several lines for one group add up |
-//! | 8 | `metrics	glyph	lsb	rsb	width	leftKey	rightKey	widthKey` | a glyph's metrics; an empty field has no value |
+//! | 3 | `left\tright\tvalue` | a pair; a side that starts with `@` is a group, in command spelling (the group that faces the pair) |
+//! | 2 | `kerning-text\t1` | the header, optional, only as the first line |
+//! | 2 | `master\tname` | the master the lines were taken from, for information |
+//! | 2 | `direction\tltr` | `ltr`, `rtl` or `vertical` |
+//! | 4 or more | `group\tside\tname\tmember…` | members of the group `name` on `side` (`left`, `right`, `top`, `bottom`); several lines for one group add up |
+//! | 8 | `metrics\tglyph\tlsb\trsb\twidth\tleftKey\trightKey\twidthKey` | a glyph's metrics; an empty field has no value |
 //!
 //! Blank lines are skipped and a line may end in `\r`. Names hold no control characters (the
 //! model forbids them), so a tab never occurs inside a field. Values are decimal numbers.
@@ -341,9 +341,9 @@ pub fn read(text: &str) -> Result<KerningText, ReadError> {
                     lsb: opt(*lb, lsb, &SIDEBEARING_RANGE)?,
                     rsb: opt(*rb, rsb, &SIDEBEARING_RANGE)?,
                     width: opt(*wb, width, &WIDTH_RANGE)?,
-                    left_key: key(*lk),
-                    right_key: key(*rk),
-                    width_key: key(*wk),
+                    left_key: key(lk),
+                    right_key: key(rk),
+                    width_key: key(wk),
                 });
             }
             [(kb, "metrics"), ..] => return Err(bad(*kb, format!("a metrics line has 8 fields, this one has {}", fields.len()))),
@@ -453,7 +453,7 @@ mod tests {
         assert!(matches!(read(&"a\tb\t1\n".repeat(MAX_TEXT_BYTES / 6 + 1)), Err(ReadError::TooLarge(_))));
         assert!(matches!(read(&"x".repeat(MAX_LINE_BYTES + 1)), Err(ReadError::LineTooLong { line: 1, .. })));
         let members = vec!["a"; 5000].join("\t");
-        let many = format!("group\tleft\tg\t{}\n", &members[..3999]).repeat(MAX_GROUP_MEMBERS / 2000 + 2);
+        let many = format!("group\tleft\tg\t{}\n", members.get(..3999).unwrap()).repeat(MAX_GROUP_MEMBERS / 2000 + 2);
         assert!(read(&many).unwrap_err().to_string().contains("group members"));
         assert!(read("metrics\ta\tx\t\t\t\t\t").unwrap_err().to_string().contains("line 1, byte 10"));
         assert!(read(&format!("metrics\ta\t\t\t\t{}\t\t", "k".repeat(300))).unwrap_err().to_string().contains("metrics key"));

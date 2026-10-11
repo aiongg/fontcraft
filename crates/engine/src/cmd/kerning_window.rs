@@ -62,13 +62,6 @@ pub fn specs() -> Vec<CommandSpec> {
 
 // ---------- parameters ----------
 
-fn master_param(p: &Params, font: &Font) -> Result<String> {
-    Ok(match p.opt_str("master")? {
-        Some(id) => font.master(id)?.id.clone(),
-        None => font.default_master()?.id.clone(),
-    })
-}
-
 fn direction_param(p: &Params) -> Result<Option<Direction>> {
     match p.opt_str("direction")? {
         None => Ok(None),
@@ -129,7 +122,7 @@ fn clip(text: &str) -> String {
 fn list_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.listPairs", p)?;
     let font = s.font()?;
-    let master = master_param(&p, font)?;
+    let master = super::kerning::master(&p, font)?;
     let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
     let term = p.opt_str("term")?.unwrap_or_default();
     if term.len() > MAX_NAME_LEN + 1 {
@@ -175,7 +168,7 @@ fn key(left: &Side, right: &Side) -> Key {
 fn copy_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.copyPairs", p)?;
     let font = s.font()?;
-    let master = master_param(&p, font)?;
+    let master = super::kerning::master(&p, font)?;
     let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
     let source = source_of(font, &master);
     let stored: Vec<NewPair> =
@@ -216,7 +209,7 @@ enum OnConflict {
 fn paste_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.pastePairs", p)?;
     let font = s.font()?;
-    let master = master_param(&p, font)?;
+    let master = super::kerning::master(&p, font)?;
     let on_conflict = match p.opt_str("onConflict")? {
         None | Some("ask") => OnConflict::Ask,
         Some("overwrite") => OnConflict::Overwrite,
@@ -313,7 +306,7 @@ fn unknown_sides(font: &Font, direction: Direction, pasted: &[NewPair]) -> (Vec<
 fn delete_pairs(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.deletePairs", p)?;
     let font = s.font()?;
-    let master = master_param(&p, font)?;
+    let master = super::kerning::master(&p, font)?;
     let direction = direction_param(&p)?.unwrap_or(Direction::Ltr);
     let all = p.bool_or("allMasters", false)?;
     let wanted = pairs_param(&p, "pairs", false)?.ok_or_else(|| p.bad("`pairs` is required"))?;

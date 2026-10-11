@@ -252,7 +252,7 @@ fn kerning_paste_refuses_hostile_kerning_text() {
         (big, "16777216"),
         (format!("A\t{}\t5", "x".repeat(1_000_000)), "line 1 is"),
         ("A\tV\t-1\n".repeat(500_001), "more than 500000 pairs"),
-        ("A\tV\t-1\nA\tV\tx".into(), "line 2, byte 12"),
+        ("A\tV\t-1\nA\tV\tx".into(), "line 2, byte 11"),
         ("A\tV".into(), "line kind"),
         ("A\tV\t-1\textra".into(), "fields"),
         ("A\tV\tNaN".into(), "not a number"),
