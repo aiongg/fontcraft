@@ -1449,14 +1449,17 @@ label = "Use Left"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{left: {document, master}, right: {document, master}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
+params = "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
 area = "interpolation"
 milestone = "M9"
 summary = "Writes the selected row's value from the left master to the right one (a font-info field, a metric, a glyph's outline, or a kerning pair), removing that difference."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "handbook"
+notes = "Documented, not yet observed. The row key is the one compareFonts.diff returns."
 guesses = [
   "For a glyph row, Use Left copies the master layer's shapes, anchors and width; the copy is one undo step in the receiving document only. Settle in the reference app's Compare Fonts window.",
+  "A glyph the receiving font lacks is added with the giving glyph's code points that are still free; a glyph or metric the giving side lacks is refused rather than deleted on the other side. Settle with Use Left on a glyph present in one font only.",
+  "A font-info or kerning row the giving side has no value for removes the value on the receiving side. Settle with Use Left on a kerning pair present in one master only.",
 ]
 observe = [
   "In F7 (two documents), open Compare Fonts, select a glyph row and choose Use Left: note what changed (outline, width, anchors) and what Undo reverts in each document.",
@@ -1468,12 +1471,13 @@ label = "Use Right"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{left: {document, master}, right: {document, master}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
+params = "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}}"
 area = "interpolation"
 milestone = "M9"
 summary = "Writes the selected row's value from the right master to the left one."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "handbook"
+notes = "Documented, not yet observed. Copies as compareFonts.useLeft does, in the other direction."
 
 [[command]]
 id = "compareFonts.diff"
@@ -1481,12 +1485,17 @@ label = "Diff Two Masters"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{left: {document, master}, right: {document, master}, categories?: [fontInfo|masterMetrics|glyph|kerning]}"
+params = "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, categories?: [fontInfo|masterMetrics|glyph|kerning]}"
 area = "interpolation"
 milestone = "M9"
 summary = "Query: returns the rows the Compare Fonts window would show, as structured data, so agents and the CLI can compare masters without the window."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "inferred"
+notes = "Our own query. Font info rows: family name, units per em, version, date, each property and each custom parameter (all entries of one name as one row). Master metrics rows: each metric, stem and number value. Glyph rows: the master layer's width, shapes and anchors. Kerning rows: the master's left-to-right pairs."
+guesses = [
+  "Only rows whose values differ are listed. Settle by opening Compare Fonts on two masters that share most values.",
+  "Kerning rows cover the left-to-right pairs only, not right-to-left or vertical kerning. Settle by comparing two fonts that differ only in right-to-left kerning.",
+]
 
 [[command]]
 id = "edit.compareFamily"
@@ -1596,12 +1605,16 @@ label = "Family Comparison Report"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{documents?: [path|documentId], attribute: componentNames|anchors|leftKerningGroup|rightKerningGroup|glyphs, filter?: all|missingInOne|ignoreIfMissingInOne}"
+params = "{documents?: [index|title|path], attribute: componentNames|anchors|leftKerningGroup|rightKerningGroup|glyphs, filter?: all|missingInOne|ignoreIfMissingInOne, offset?: number, limit?: number}"
 area = "interpolation"
 milestone = "M9"
 summary = "Query: returns the Compare Family table as data, with null for empty values and a missing marker for absent glyphs."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "inferred"
+notes = "Our own query. Columns are the documents in the order they were opened (or as listed), each read from its first master; rows are glyph names in the first document's order, then the names later documents add. `offset` and `limit` page the rows; `total` counts them all."
+guesses = [
+  "All lists a glyph with a non-empty value in any document; Ignore If Missing in One also requires such a value, Missing in One does not. Settle by filtering a family where a glyph absent from one document has no value in the others.",
+]
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Parameters introduced by this chapter (may duplicate the appendix inventory)
