@@ -995,6 +995,10 @@ milestone = "M6"
 summary = "Adds a property (a local axis) to a smart glyph: a free-form name plus a minimum and maximum, defaulting to 0 and 100. The minimum must be smaller than the maximum; negative numbers are allowed. In the UI it is the plus button at the bottom left of the Properties tab."
 ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A name another property of the glyph already has is refused; adding a second property with the same name in the reference app's Properties tab settles it.",
+]
 
 [[command]]
 id = "smartGlyph.setProperty"
@@ -1008,6 +1012,10 @@ milestone = "M6"
 summary = "Renames a smart property or changes its range, keeping min below max. Headless form of editing a row in the Properties tab."
 ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A rename carries the layers' poles and the values stored on every component of the glyph to the new name, and anchors named after the property keep their names; renaming a property in the reference app's settings window and saving settles it.",
+]
 
 [[command]]
 id = "smartGlyph.removeProperty"
@@ -1038,6 +1046,7 @@ milestone = "M6"
 summary = "Records, for one smart layer and one property, whether the layer represents the property's minimum, its maximum, or neither (the layer is unrelated to that property). In the UI this is a pair of checkboxes per property in the Layers tab."
 ref = "Reusing Shapes › Smart Components › Smart Glyph Layers Settings"
 status = "handbook"
+notes = "Documented, not yet observed. A layer is found by id, else by its palette name; one master may have at most 64 layers with poles (MAX_SMART_POLE_LAYERS)."
 
 [[command]]
 id = "smartGlyph.listProperties"
@@ -1073,15 +1082,16 @@ label = "Set Smart Component Value"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, component: index, property: name, value: number}"
+params = "{glyph: name, layer?: id, side?: foreground | background, component: index, property: name, value: number}"
 area = "components"
 milestone = "M6"
 summary = "Sets one property value on one smart component instance. Any number is accepted, including values below the minimum or above the maximum, which extrapolate. Driven in the UI by the slider, number field or checkbox, by bounding-box resizing, or by a smart handle."
 ref = "Reusing Shapes › Smart Components › Using Smart Components"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Values are limited to ±1,000,000 (MAX_COORDINATE)."
 guesses = [
   "A new smart component stores no values and draws with the poles of its master layer, as glyphsLib does with a missing value; a property removed from the glyph leaves the stored value in place and ignored; adding a smart component in the reference app and saving settles it.",
+  "A locked component refuses value changes; changing a value on a locked smart component in the reference app settles it.",
 ]
 
 [[panel]]
@@ -1149,6 +1159,7 @@ milestone = "M6"
 summary = "A property range may be any pair of numbers with minimum strictly below maximum, negatives included; the default is 0 to 100. For unit-like properties the handbook suggests using real measurements as the range ends (Width 200 to 600 when the shape is drawn 200 and 600 units wide)."
 ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "smart.valuesExtrapolate"
@@ -1157,6 +1168,7 @@ milestone = "M6"
 summary = "Component values outside a property's range are legal and extrapolate the interpolation linearly past the pole layers (Width 150 or 700 on a 200 to 600 range). The slider is limited to the range; only the number field reaches beyond it."
 ref = "Reusing Shapes › Smart Components › Smart Glyph Properties Settings"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "smart.zeroOneRangeIsToggle"
@@ -1165,6 +1177,7 @@ milestone = "M6"
 summary = "A property with minimum 0 and maximum 1 is treated as an on/off switch: the component settings show a checkbox for it in place of a slider."
 ref = "Reusing Shapes › Smart Components › Using Smart Components"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "smart.cornerLayersInferred"

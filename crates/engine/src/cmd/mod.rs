@@ -79,6 +79,7 @@ mod project;
 mod scale_upm;
 mod session;
 mod settings;
+pub mod smart;
 mod snippets;
 mod spacing;
 mod special_layers;
@@ -327,6 +328,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(features::specs());
         v.extend(numbers::specs());
         v.extend(features_compile::specs());
+        v.extend(smart::specs());
         v.extend(snippets::specs());
         v.extend(anchor_context::specs());
         v.extend(anchor::specs());
