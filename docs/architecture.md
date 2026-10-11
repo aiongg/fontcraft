@@ -61,6 +61,8 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L2 | `glyphquery` | today (M4.5) | which glyphs Font View shows: the search matcher, smart-filter rule trees compiled to the glyph predicate language (the Custom rule, global-guide filters and, in M8, the feature-code glyph tokens), list filters and folders, sidebar entries (categories, scripts and languages, `Groups*.plist` entries) and how a selection of them combines, and the glyphs an entry expects that the font lacks. Rule trees, predicates and patterns are read within depth, length and regex size limits |
 | L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them. In M12: five check scopes (layer, glyph, source, binary, family), one registry file per check group, compiled fonts read through read-fonts and skrifa, and an `AuditServices` trait for what L2 cannot compute (an in-memory compile, a TTX round trip, shaping, the master-compatibility report), which the engine implements |
 | L2 | `plugins` | M13 | sandboxed WebAssembly plug-ins (same manifest as the sibling apps) |
+| L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them |
+| L2 | `plugins` | M13 (created by M13.1, runtime M13.2) | the sandboxed WebAssembly module host, ported from VectorCraft's: ABI version 1, the sibling apps' manifest and parameter schema, filter, reporter and check modules, fuel, memory and time limits, a fresh instance per run. Depends on `model`, `geom`, `serde_json` and `wasmi`; builds for `wasm32-unknown-unknown` |
 | L3 | `format` | today | the native `.fontcraft` format, atomic writes |
 | L3 | `compile` | today (M2.1: staged pipeline) | model → OpenType binary |
 | L3 | `decompile` | M1 | OpenType binary → model, for opening compiled fonts. In M12: Type 1 (PFA, PFB) and bare CFF reading |
@@ -292,10 +294,18 @@ the English ids and labels.
 
 ## Plug-ins and scripting (planned, M13)
 
-No embedded Python. The scripting surface is the command registry itself (CLI `run --script`,
-`command.batch`, recorded actions), and plug-ins are WebAssembly modules run in a sandbox, with the
-manifest and parameter schema the sibling apps use: filters (glyph in, glyph out), reporters
-(drawing over Edit View), checks and export steps ([decision 0005](decisions/0005-extensions.md)).
+No embedded Python ([decision 0005](decisions/0005-extensions.md)). The scripting surface is the
+command registry itself: CLI `run --script`, `command.batch`, the control channel, MCP and macros.
+A macro is a `.fcmacro` JSON file of command steps with arguments, run as one transaction and one
+undo step; the Script menu mirrors the macros folder, and recording writes a macro.
+
+Plug-ins are WebAssembly modules run in a sandbox (the `plugins` crate), with the manifest and
+parameter schema the sibling apps use. There are three kinds: filters (one layer and parameters
+in, the layer's new contents out), reporters (read-only layer data in, drawing primitives over Edit
+View out) and checks (one layer in, findings for the audit out). An export step is a filter named
+in the `Filter` or `PreFilter` export parameter. Modules add no command ids: `plugin.runFilter`,
+`view.showReporter` and `audit.run` take a module id, so the registry stays static. Installed
+modules belong to the session, not to documents.
 
 ## Never crash, concretely
 

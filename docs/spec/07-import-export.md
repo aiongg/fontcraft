@@ -94,7 +94,8 @@ Destinations:
 
 `file.saveAs` (File › Save As…, Cmd+Shift+S; command row in `03a-edit-view-drawing.toml`) picks the
 source format (`dialog.saveAs`, `source.saveAsChoosesFormat`). Three built in; plug-ins may add
-more (`source.threeBuiltInFormats`, `source.pluginFormats`). A `.glyphs` file is one flat text
+more (`source.threeBuiltInFormats`; the plug-in formats have no row, since FontCraft has no
+file-format module kind). A `.glyphs` file is one flat text
 property list (`source.glyphsFileIsFlatPlist`).
 
 | Format | Suffix | Shape | Notes |

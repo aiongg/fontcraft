@@ -877,7 +877,8 @@ ufo2ft for fontmake, fontc's readers), checked with the oracle harness (`docs/pl
    description; both need sample files before a reader can be specified. Do we need our own project
    file, or are projects just extra instance lists inside a `.fontcraft` file?
 9. **FontLab VFJ.** The task assumed a documented JSON format; FontLab's help pages give no schema and
-   none was found. Either locate one or drop `vfj` to "best effort from sample files".
+   none was found. **Answered 2026-10-11 (`docs/plans/M13.md` § 7 question 2):** the `vfj` row is
+   dropped. FontLab exports UFO and designspace, which FontCraft reads.
 10. **Existing Rust writers.** Audit `glyphslib` 0.2.8 / `openstep-plist` 1.1.0 (unknown-key handling,
     byte fidelity against the reference, package writing, licence of bundled data) before deciding how
     much of our `.glyphs` layer is our own code.

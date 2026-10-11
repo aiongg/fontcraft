@@ -589,7 +589,8 @@ Corners, caps, segments, brushes
   (`docs/plans/M13.md`, M13.40 and § 8) records a provisional fitting in the rows' `guesses`
   (`capComponent.add`, `capComponent.setFit`, `capComponent.setAlignment`,
   `cap.node1Node2AnchorSetup`) and lists exports of a synthetic cap font from the reference app's
-  trial that settle it; M13.40 starts after those checks.
+  trial that settle it; M13.40 starts after those checks. If the trial ends without them, M13.40
+  to M13.42 build on the recorded guesses (`docs/plans/M13.md` § 7 question 6).
 - **Q-30** Further controls in the cap, segment and brush Info boxes. **Planned for M13:** a
   screenshot of each Info box in the trial (`infoBox.capComponent` observe step) settles it.
 - **Q-31** Segment and brush bending maths. **Planned for M13** as Q-29: provisional mapping in

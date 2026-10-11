@@ -110,13 +110,15 @@ We plan no companion app; `sharing.fontcraftEquivalent` proposes a read-only pre
 
 | Setting | Id | Effect |
 |---|---|---|
-| Python version | `addons.pythonVersion` | interpreter for scripts and plug-ins; Python 3+; relaunch to apply |
+| Python version | no row | interpreter for scripts and plug-ins; Python 3+; relaunch to apply |
 | Use system console for script output | `addons.useSystemConsoleForScriptOutput` | script log output is routed to the system console, not the Macro Panel |
 | Alternate Plugin Repos | `addons.alternatePluginRepos` | extra repositories, one per line |
 
 - If no interpreter works, install Python from Plugin Manager › Modules and choose the entry marked
   "(Glyphs)".
-- FontCraft embeds no Python, so `addons.pythonVersion` has no counterpart; see the Extensions notes.
+- FontCraft embeds no Python, so the Python version setting, the need for an interpreter, its
+  installation from Modules and the relaunch after a change have no counterpart and no inventory row
+  (`docs/plans/M13.md` § 7 question 2); see the Extensions notes.
 
 Alternate repositories:
 
