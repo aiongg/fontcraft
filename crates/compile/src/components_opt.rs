@@ -69,7 +69,7 @@ pub struct ComponentOptions {
 
 /// The glyphs one filter entry applies to.
 #[derive(Clone, Debug, PartialEq)]
-enum Scope {
+pub(crate) enum Scope {
     All,
     Only(HashSet<String>),
     Except(HashSet<String>),
@@ -94,7 +94,7 @@ struct SourceFilters {
     flatten: Vec<Scope>,
 }
 
-fn reaches(scopes: &[Scope], name: &str) -> bool {
+pub(crate) fn reaches(scopes: &[Scope], name: &str) -> bool {
     scopes.iter().any(|s| s.contains(name))
 }
 
@@ -138,10 +138,14 @@ fn is_transformed(c: &ResolvedComponent) -> bool {
     c.transform.as_coeffs().get(..4) != Some(&[1.0, 0.0, 0.0, 1.0][..])
 }
 
+/// The filter list of `master`, else of the font.
+fn filter_setting<'a>(font: &'a Font, master: &str) -> Option<&'a Value> {
+    font.master(master).ok().and_then(|m| m.user_data.get(FILTERS_KEY)).or_else(|| font.info.user_data.get(FILTERS_KEY))
+}
+
 /// The component filters of the filter list of `master`, else of the font.
 fn source_filters(font: &Font, master: &str, warnings: &mut Vec<String>) -> SourceFilters {
-    let setting = font.master(master).ok().and_then(|m| m.user_data.get(FILTERS_KEY)).or_else(|| font.info.user_data.get(FILTERS_KEY));
-    match setting {
+    match filter_setting(font, master) {
         Some(setting) => read_filters(setting, warnings),
         None => SourceFilters::default(),
     }
@@ -149,6 +153,29 @@ fn source_filters(font: &Font, master: &str, warnings: &mut Vec<String>) -> Sour
 
 fn read_filters(setting: &Value, warnings: &mut Vec<String>) -> SourceFilters {
     let mut out = SourceFilters::default();
+    for (key, scope) in filter_entries(setting, warnings) {
+        match key.as_str() {
+            "decomposeComponents" => out.decompose.push(scope),
+            "decomposeTransformedComponents" => out.decompose_transformed.push(scope),
+            "flattenComponents" => out.flatten.push(scope),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The scopes of the entries of filter `key` (spelled as [`filter_key`] gives it) in the filter
+/// list of `master`, else of the font; empty when the filter is not listed. Problems with the
+/// list are left to [`apply`] to report.
+pub(crate) fn listed_filter(font: &Font, master: &str, key: &str) -> Vec<Scope> {
+    let Some(setting) = filter_setting(font, master) else { return Vec::new() };
+    filter_entries(setting, &mut Vec::new()).into_iter().filter(|(k, _)| k == key).map(|(_, scope)| scope).collect()
+}
+
+/// The entries of a filter list in the ufo2ft namespace, in list order: each filter's key and the
+/// glyphs it reaches.
+fn filter_entries(setting: &Value, warnings: &mut Vec<String>) -> Vec<(String, Scope)> {
+    let mut out = Vec::new();
     let Some(entries) = setting.as_array() else {
         warnings.push(format!("the filter list ({FILTERS_KEY}) is not a list, so its component filters were not applied"));
         return out;
@@ -162,14 +189,8 @@ fn read_filters(setting: &Value, warnings: &mut Vec<String>) -> SourceFilters {
         if dict.get("namespace").is_some_and(|n| n.as_str() != Some("ufo2ft.filters")) {
             continue;
         }
-        let target = match filter_key(name).as_str() {
-            "decomposeComponents" => &mut out.decompose,
-            "decomposeTransformedComponents" => &mut out.decompose_transformed,
-            "flattenComponents" => &mut out.flatten,
-            _ => continue,
-        };
         match scope(dict.get("include"), dict.get("exclude")) {
-            Ok(s) => target.push(s),
+            Ok(s) => out.push((filter_key(name), s)),
             Err(why) => warnings.push(format!("the {name} filter was not applied: {why}")),
         }
     }

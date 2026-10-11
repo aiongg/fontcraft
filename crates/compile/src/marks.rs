@@ -3,10 +3,11 @@
 //! handed to the mark writer of `fontcraft_features::marks`, and its `GPOS` merged with the
 //! generated kerning's.
 //!
-//! - Anchors: for the reference's format, the effective anchors of
-//!   `fontcraft_components::propagate` on the compiled master; a glyph the propagation does not
-//!   cover, and every glyph of a UFO or designspace source, gives its own anchors. The reference
-//!   compilers propagate anchors only for the reference's format.
+//! - Anchors: the effective anchors of `fontcraft_components::propagate` on the compiled master,
+//!   with categories from the compile's glyph data, for the reference's format; for a UFO or
+//!   designspace source only when its ufo2ft filter list has a `propagateAnchors` entry, and then
+//!   only for the glyphs the entry reaches, as both reference compilers decide. Every other glyph
+//!   gives its own anchors.
 //! - Classes: worked out from the categories and anchors for the reference's format; for a UFO,
 //!   the stated `public.openTypeCategories`.
 //! - Which features: the feature-writer setting (as for the kerning), then feature code. Feature
@@ -20,13 +21,19 @@
 
 use std::collections::BTreeMap;
 
-use fontcraft_components::propagate::effective_anchors_for_master;
+use fontcraft_components::propagate::effective_anchors_for_master_with;
 use fontcraft_features::marks::{
     MarkAnchor, MarkGlyph, MarkInput, MarkLimits, MarkRequest, MarkTags, MasterAnchors, gpos_from_keys, mark_features, mark_tags,
 };
 use fontcraft_features::{FEATURE_WRITERS_KEY, FeatureError};
+use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Resolved, ResolvedGlyph, is_ufo_family};
 use write_fonts::tables::gdef::Gdef;
+
+use crate::components_opt::{Scope, listed_filter, reaches};
+
+/// The ufo2ft filter that propagates anchors, as [`listed_filter`] spells it.
+const PROPAGATE_FILTER: &str = "propagateAnchors";
 use write_fonts::tables::gpos::{Gpos, PositionLookup};
 use write_fonts::tables::layout::LangSys;
 use write_fonts::types::Tag;
@@ -45,8 +52,15 @@ pub(crate) struct Layout {
 /// The `GPOS` (`kern`'s lookups and the generated mark lookups) and `GDEF` of `resolved`'s master
 /// for the glyphs `order` (the final glyph order). `font` is the source `resolved` came from;
 /// without it only the glyphs' own anchors are read and every generated feature is written.
-pub(crate) fn generate(font: Option<&Font>, resolved: &Resolved, order: &[ResolvedGlyph], kern: Option<Gpos>, warnings: &mut Vec<String>) -> Layout {
-    let input = input(font, resolved, order, warnings);
+pub(crate) fn generate(
+    font: Option<&Font>,
+    data: Option<&GlyphData>,
+    resolved: &Resolved,
+    order: &[ResolvedGlyph],
+    kern: Option<Gpos>,
+    warnings: &mut Vec<String>,
+) -> Layout {
+    let input = input(font, data, resolved, order, warnings);
     let any_anchor = input.glyphs.iter().any(|g| g.anchors.iter().any(|m| !m.anchors.is_empty()));
     let tags = match font {
         Some(font) => tags(font, &resolved.master, any_anchor, warnings),
@@ -71,10 +85,14 @@ pub(crate) fn generate(font: Option<&Font>, resolved: &Resolved, order: &[Resolv
 }
 
 /// The mark writer's input: every glyph of `order` with its anchors on the compiled master.
-fn input(font: Option<&Font>, resolved: &Resolved, order: &[ResolvedGlyph], warnings: &mut Vec<String>) -> MarkInput {
+fn input(font: Option<&Font>, data: Option<&GlyphData>, resolved: &Resolved, order: &[ResolvedGlyph], warnings: &mut Vec<String>) -> MarkInput {
     let ufo = is_ufo_family(resolved.format);
+    let scopes = match font {
+        Some(font) if ufo => listed_filter(font, &resolved.master, PROPAGATE_FILTER),
+        _ => vec![Scope::All],
+    };
     let propagated = match font {
-        Some(font) if !ufo => match effective_anchors_for_master(font, &resolved.master) {
+        Some(font) if !scopes.is_empty() => match effective_anchors_for_master_with(font, data, &resolved.master) {
             Ok(map) => Some(map),
             Err(e) => {
                 warnings.push(format!("anchors were not passed on from components for mark attachment, so each glyph's own anchors were used: {e}"));
@@ -86,7 +104,7 @@ fn input(font: Option<&Font>, resolved: &Resolved, order: &[ResolvedGlyph], warn
     let glyphs = order
         .iter()
         .map(|g| {
-            let anchors: Vec<MarkAnchor> = match propagated.as_ref().and_then(|map| map.get(&g.name)) {
+            let anchors: Vec<MarkAnchor> = match propagated.as_ref().filter(|_| reaches(&scopes, &g.name)).and_then(|map| map.get(&g.name)) {
                 Some(list) => list.iter().map(|a| MarkAnchor { name: a.name.clone(), x: a.x, y: a.y }).collect(),
                 None => g.anchors.iter().map(|(name, p)| MarkAnchor { name: name.clone(), x: p.x, y: p.y }).collect(),
             };

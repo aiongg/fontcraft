@@ -250,11 +250,12 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
+    let glyph_data = font.and_then(|_| compile_glyph_data(options));
     let kern = match font {
         Some(font) => kern::generate(font, &resolved, &glyphs, &mut warnings),
         None => None,
     };
-    let layout = marks::generate(font, &resolved, &glyphs, kern, &mut warnings);
+    let layout = marks::generate(font, glyph_data.as_deref(), &resolved, &glyphs, kern, &mut warnings);
     let upm = f64::from(resolved.units_per_em);
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
@@ -303,6 +304,12 @@ pub fn fill_glyph_data(resolved: &mut Resolved, options: &Options, warnings: &mu
             g.width = 0.0;
         }
     }
+}
+
+/// The glyph database the compile reads categories from: the options' (a document's custom glyph
+/// data on top of the built-in one), else the built-in one; `None` when neither can be read.
+pub(crate) fn compile_glyph_data(options: &Options) -> Option<Arc<GlyphData>> {
+    options.glyph_data.0.clone().or_else(|| GlyphData::new().ok().map(Arc::new))
 }
 
 /// OpenType rounding: half up (`floor(v + 0.5)`), not half away from zero. A value that is not

@@ -128,3 +128,39 @@ fn the_language_systems_of_the_feature_code_get_the_mark_features() {
     assert_eq!(systems, ["DFLT/dflt kern[0] mark[1] mkmk[2]", "latn/dflt kern[0] mark[1] mkmk[2]"]);
     assert_eq!(kinds, ["pair", "base", "mkmk"]);
 }
+
+/// The glyphs a mark-to-base lookup attaches marks to.
+fn mark_bases(out: &Compiled) -> Vec<String> {
+    let font = FontRef::new(&out.bytes).unwrap();
+    let list = font.gpos().unwrap().lookup_list().unwrap();
+    let mut bases = Vec::new();
+    for lookup in list.lookups().iter() {
+        if let PositionSubtables::MarkToBase(subtables) = lookup.unwrap().subtables().unwrap() {
+            for t in subtables.iter() {
+                bases.extend(t.unwrap().base_coverage().unwrap().iter().map(|g| out.glyph_order[usize::from(g.to_u16())].clone()));
+            }
+        }
+    }
+    bases.sort();
+    bases
+}
+
+/// A UFO source passes anchors on from components only when its ufo2ft filter list asks for it,
+/// and then only for the glyphs the entry reaches, as both reference compilers do.
+#[test]
+fn a_ufo_source_propagates_anchors_only_when_its_filter_list_says_so() {
+    use fontcraft_model::{SourceFormat, UserData};
+    use fontcraft_model::plist::{Dict, openstep::parse_value};
+    let mut f = font();
+    f.source.format = SourceFormat::Ufo;
+    assert_eq!(mark_bases(&compile_ttf(&f, &Options::default()).unwrap()), ["A"]);
+    let with_filters = |text: &str| {
+        let mut d = Dict::new();
+        d.insert(crate::components_opt::FILTERS_KEY, parse_value(text).unwrap());
+        UserData(d)
+    };
+    Arc::make_mut(&mut f.info).user_data = with_filters("({name = propagateAnchors;})");
+    assert_eq!(mark_bases(&compile_ttf(&f, &Options::default()).unwrap()), ["A", "Aacute"]);
+    Arc::make_mut(&mut f.info).user_data = with_filters("({name = propagateAnchors; exclude = (Aacute);})");
+    assert_eq!(mark_bases(&compile_ttf(&f, &Options::default()).unwrap()), ["A"]);
+}
