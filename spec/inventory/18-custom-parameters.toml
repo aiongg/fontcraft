@@ -607,6 +607,9 @@ summary = "List of glyph names that are always exported, regardless of each glyp
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.9."
+guesses = [
+  "Export Glyphs accepts the names, wildcards and queries of Remove Glyphs and applies after Rename Glyphs, to the names glyphs are exported under; exporting a renamed glyph in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Export kern Table"
@@ -1567,6 +1570,9 @@ summary = "List of `glyphname=hex` entries; several code points are comma-separa
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on instances (a code point moves from its previous owner; `name=` clears); fontc ignores it. FontCraft follows the handbook at any level. M7 plan § 4: M7.9."
+guesses = [
+  "Reencode Glyphs applies after Rename Glyphs, to the names glyphs are exported under, and when two lines give the same code point the later line wins; the reference app settles both.",
+]
 observe = [
   "In font C (m7-export), export with Reencode Glyphs `a=0061,0251` and `space=`; read the exported TTF with ttx: note the cmap entries of a and space.",
 ]
@@ -1605,10 +1611,11 @@ effect = "export-filter"
 summary = "One entry per line: a full glyph name, a name with `*` wildcards, or a `key=value` query on glyph properties (name, unicode, note, script, category, subCategory, production, metrics keys, kerning groups, colorIndex, countOfLayers, mastersCompatible, export, colour and special-layer flags). Matching glyphs are not exported and automatic features follow the reduced glyph set."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours exact names on instances only (wildcards such as `*.sc` remove nothing; it subsets after compiling, which also drops the glyph's cmap entry); fontc ignores it. FontCraft follows the handbook: names, wildcards and key=value queries at any level. 5 corpus sources use it, all with exact names on instances; their glyph sets are compared with fontmake's (M7 plan § 5). M7 plan § 4: M7.9."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours exact names on instances only (wildcards such as `*.sc` remove nothing; it subsets after compiling, which also drops the glyph's cmap entry); fontc ignores it. FontCraft follows the handbook: names, wildcards and key=value queries at any level; `export=0` also drops components whose base glyph does not export, as documented. `colorIndex` entries are skipped with a warning until the export can remove the shapes of one palette colour. 5 corpus sources use it, all with exact names on instances; their glyph sets are compared with fontmake's (M7 plan § 5). M7 plan § 4: M7.9."
 guesses = [
   "A removed glyph that a kept composite uses is decomposed into that composite, as non-exported glyphs are (M2 preflight); removing the base of a composite in the reference app settles it.",
-  "Queries compare text values exactly except for `*`, are case-sensitive, and an unknown key is a warning that matches nothing; the reference app settles case and unknown keys.",
+  "Queries compare text values exactly except for `*`, are case-sensitive, and an unknown key is a warning that matches nothing; `unicode` compares hexadecimal text in either case, and a glyph without the property compares as empty text; the reference app settles case, empty values and unknown keys.",
+  "Remove and Keep Glyphs apply after Rename Glyphs, to the names glyphs are exported under, as the handbook's recipe for replacing a glyph needs and as fontmake does; the reference app settles it.",
 ]
 observe = [
   "In font C (m7-export), export an instance with Remove Glyphs `A` (A is the base of Aacute); read the exported TTF with ttx: note whether Aacute is decomposed, removed, or kept with a broken component.",
@@ -1648,9 +1655,10 @@ effect = "export-filter"
 summary = "List of `oldname=newname` entries (for example `g.single=g`); the two glyphs trade names. Composites using them and automatic features are updated, and the glyphs' export flags are swapped too, so the unwanted one must be non-exporting or handled with Export Glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on instances: it swaps the outlines and keeps the code points; fontc ignores it. FontCraft follows the handbook: names, export flags, composites and kerning follow the swap. M7 plan § 4: M7.9."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on instances: it swaps the outlines and keeps the code points; fontc ignores it. FontCraft follows the handbook for the export flags, which go with the glyph (the drawing now called `g` exports only if `g.single` did, or with Export Glyphs), and fontmake for code points, composites and kerning. M7 plan § 4: M7.9."
 guesses = [
-  "An entry naming a glyph the font lacks renames the existing glyph to the new name, with a warning; an entry whose old name is missing is skipped with a warning; the reference app settles both.",
+  "An entry naming a glyph the font lacks renames the existing glyph to the new name, keeping its code points, with a warning; an entry whose old name is missing is skipped with a warning; the reference app settles both.",
+  "Code points and production names stay with the names while the drawing, export flag and kerning go with the glyph, and composites keep the drawing they used (fontmake rewrites component references), although the handbook's Decompose Glyphs entry suggests that composites show the swapped drawing; check 38 in the reference app settles it.",
 ]
 observe = [
   "In font C (m7-export), export with Rename Glyphs `g.single=g`, then with `a=nonexistent`; read the exported TTF with ttx: note the swap's effect on composites and export flags, and what happens to the missing name.",
@@ -2209,7 +2217,7 @@ ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.9."
 guesses = [
-  "An exported glyph without code points whose name is an Arabic letter's name with .isol, .init, .medi or .fina, or a ligature of Arabic letters (lam_alef-ar), gets the presentation-form code point Unicode's compatibility decomposition gives for that letter and form (FB50–FDFF, FE70–FEFF); glyphs with code points keep them; only cmap changes; an export from the reference app settles which glyphs it covers.",
+  "An exported glyph without code points gets the legacy code point the glyph database records for its name (`unicodeLegacy`: beh-ar.init FE91, lam_alef-ar FEFB) when it lies in FB50–FDFF or FE70–FEFF and no other glyph has it; glyphs with code points keep them; only cmap changes; custom glyph data is not read for it; an export from the reference app settles which glyphs it covers.",
 ]
 observe = [
   "In font C (m7-export), export with Use Arabic Presentation Form Unicodes on; read the exported TTF with ttx: note the code points of beh-ar.init, beh-ar.medi, beh-ar.fina and lam_alef-ar, and whether anything besides cmap changes.",

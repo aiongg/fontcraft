@@ -225,8 +225,6 @@ pub(crate) fn generate(
     edits: &crate::export_params::ExportEdits,
     warnings: &mut Vec<String>,
 ) -> Option<Gpos> {
-    // M7.9: pairs follow `edits` (renamed glyphs, removed ones left out).
-    let _ = edits;
     let index = KernIndex::new(font);
     let has_kerning =
         [Direction::Ltr, Direction::Rtl].into_iter().any(|d| index.table(d, &resolved.master).is_ok_and(|t| t.pairs().next().is_some()));
@@ -252,7 +250,13 @@ pub(crate) fn generate(
     // master's: a UFO's lib, where glyphsLib also puts a `.glyphs` master's user data.
     let setting = font.info.user_data.get(FEATURE_WRITERS_KEY).or_else(|| font.master(&resolved.master).ok()?.user_data.get(FEATURE_WRITERS_KEY));
     let tags = kern_tags(setting, warnings);
-    let glyphs: Vec<KernGlyph> = order.iter().map(|g| KernGlyph { name: &g.name, codepoints: &g.unicodes, mark: mark(g) }).collect();
+    // The kerning names glyphs as the source does: a renamed glyph takes its pairs along, and a
+    // removed one is not in `order`, so its pairs find no glyph.
+    let sources = edits.source_names();
+    let glyphs: Vec<KernGlyph> = order
+        .iter()
+        .map(|g| KernGlyph { name: sources.get(g.name.as_str()).copied().unwrap_or(&g.name), codepoints: &g.unicodes, mark: mark(g) })
+        .collect();
     let request = KernRequest { font, index: &index, master: &resolved.master, glyphs: &glyphs, tags, limits: limits() };
     match kern_feature(&request) {
         Ok(kern) => {

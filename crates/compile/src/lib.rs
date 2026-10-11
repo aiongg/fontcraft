@@ -39,6 +39,7 @@
 //! pipeline (layout, variations, CFF, hinting) is in `docs/decisions/0002-compile-pipeline.md`.
 #![forbid(unsafe_code)]
 
+pub mod arabic_forms;
 mod build;
 pub mod cff;
 pub mod cff_hints;
