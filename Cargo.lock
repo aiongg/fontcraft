@@ -1090,6 +1090,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-textlayout"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-io-glyphs",
+ "fontcraft-model",
+ "fontcraft-spacing",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fontcraft-tools"
 version = "0.0.1"
 dependencies = [

@@ -1,0 +1,19 @@
+[package]
+name = "fontcraft-textlayout"
+description = "FontCraft text layout: text items, display strings, layout and hit testing (L2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-model.workspace = true
+fontcraft-spacing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+fontcraft-io-glyphs.workspace = true

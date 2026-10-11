@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**466 guesses on 329 rows (132 of them live commands).**
+**472 guesses on 331 rows (132 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -142,8 +142,14 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `infoBox.showsColorLabels` (behavior) | M4 | handbook | – | The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation. |
 | `background.snapping` (behavior) | M3 | handbook | – | The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default. |
+| `text.lineWidth` (behavior) | M5 | handbook | – | A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it. |
+| `text.lineWidth` (behavior) | M5 | handbook | – | In top-to-bottom text the lines are columns, placed from right to left one line height apart; a vertical tab in the reference app settles it. |
+| `text.currentGlyphAfterCursor` (behavior) | M5 | handbook | – | At the end of the text or of a line the current glyph is the glyph before the cursor, and next to a placeholder or a missing character it stays what it was; moving the cursor there in the reference app settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | Changing a tab's text is not an undo step and does not mark the document modified; no source says, and the window's edited mark after typing in a tab of the reference app settles it. |
+| `text.displayStrings` (behavior) | M5 | docs | – | A `/` with an empty name is the slash character, and a glyph is written as the character it was typed as only while the font still maps that character to it; saving such a string in the reference app settles it. |
+| `text.displayStrings` (behavior) | M5 | docs | – | A `/name` the font lacks and a character no glyph encodes are kept in the text and take half the em with nothing drawn; opening such a string in the reference app settles it. |
 | `textPreview.fallbackFont` (behavior) | M5 | handbook | – | Characters the font lacks are drawn in the interface font of the app. |
+| `preview.singleLine` (behavior) | M5 | handbook | – | On the preview line a line break takes no room; a tab of several lines in the reference app's Preview Area settles it. |
 | `editView.toggleTextMode` | M5 | handbook | no | Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either, and the toolbar after Escape, in the running app or a video, settles it. |
 | `editView.insertText` | M5 | handbook | no | A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends. |
 | `editView.previousGlyph` | M5 | handbook | no | At the first glyph of the order Previous Glyph does nothing (no wrap), and with several glyphs selected in the text it replaces only the current glyph. |

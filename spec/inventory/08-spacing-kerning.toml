@@ -667,6 +667,7 @@ milestone = "M5"
 summary = "No-kerning mode: Edit View lays text out without applying kerning, and the kerning shortcuts do nothing."
 ref = "Spacing & Kerning › Kerning › Kerning Modes"
 status = "handbook"
+notes = "The layout part is built in M5.6 (`textlayout::KerningMode`). Documented, not yet observed."
 
 [[behavior]]
 id = "kerning.modeKerning"
@@ -675,6 +676,7 @@ milestone = "M5"
 summary = "Kerning mode: Edit View applies and shows kerning pairs; both the kerning and the spacing shortcuts are live."
 ref = "Spacing & Kerning › Kerning › Kerning Modes"
 status = "handbook"
+notes = "The layout part is built in M5.6 (`textlayout::KerningMode`). Documented, not yet observed."
 
 [[behavior]]
 id = "kerning.modeLocked"
@@ -683,6 +685,7 @@ milestone = "M5"
 summary = "Locked-kerning mode: identical to kerning mode except that the spacing shortcuts are switched off, so a slipped modifier cannot alter sidebearings during a kerning session."
 ref = "Spacing & Kerning › Kerning › Kerning Modes"
 status = "handbook"
+notes = "The layout part is built in M5.6 (`textlayout::KerningMode`). Documented, not yet observed."
 
 [[panel]]
 id = "infoBox.kerning"

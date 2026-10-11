@@ -1344,8 +1344,11 @@ milestone = "M5"
 summary = "Text in Edit View wraps at a preset maximum line width, which is an application setting."
 ref = "Edit View › Entering Text"
 status = "handbook"
+notes = "Built in M5.6 (`textlayout::layout`). Documented, not yet observed."
 guesses = [
   "Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default.",
+  "A line that overflows breaks after its last space, else before the glyph that overflows, and a space may hang past the width; wrapped text in the reference app settles it.",
+  "In top-to-bottom text the lines are columns, placed from right to left one line height apart; a vertical tab in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -1355,6 +1358,10 @@ milestone = "M5"
 summary = "In text mode the glyph immediately after the text cursor is the current glyph: the Info box, placeholders and glyph-level commands refer to it."
 ref = "Edit View › Entering Text › Text Tool"
 status = "handbook"
+notes = "Built in M5.6 (`Text::current_glyph`). Documented, not yet observed."
+guesses = [
+  "At the end of the text or of a line the current glyph is the glyph before the cursor, and next to a placeholder or a missing character it stays what it was; moving the cursor there in the reference app settles it.",
+]
 
 [[behavior]]
 id = "text.clipboard"
@@ -1379,9 +1386,11 @@ milestone = "M5"
 summary = "The texts of the open Edit View tabs are stored in the document as its display strings, one string per tab, with a glyph that has no character written as `/name`. Opening a document opens its tabs again from them."
 ref = "GlyphsSDK file-format specification, versions 3 and 4 › DisplayStrings (UIState.plist in a package)"
 status = "docs"
-notes = "The owner's decision (docs/plans/M5.md § 7 question 4): opening a document opens one tab per stored string, and saving writes the open tabs in tab order. When the `Write DisplayStrings` custom parameter is false, saving writes none, as the reference does."
+notes = "The owner's decision (docs/plans/M5.md § 7 question 4): opening a document opens one tab per stored string, and saving writes the open tabs in tab order. When the `Write DisplayStrings` custom parameter is false, saving writes none, as the reference does. The string format is built in M5.6 (`textlayout::parse`, `Text::to_display_string`): a space after `/name` ends the name and is dropped, as the handbook describes sample strings; the 45 display strings of the 21 corpus sources that have them read and write back unchanged."
 guesses = [
   "Changing a tab's text is not an undo step and does not mark the document modified; no source says, and the window's edited mark after typing in a tab of the reference app settles it.",
+  "A `/` with an empty name is the slash character, and a glyph is written as the character it was typed as only while the font still maps that character to it; saving such a string in the reference app settles it.",
+  "A `/name` the font lacks and a character no glyph encodes are kept in the text and take half the em with nothing drawn; opening such a string in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -1407,6 +1416,7 @@ milestone = "M5"
 summary = "Any number of placeholders may sit in one tab and all of them show the same, currently selected glyph. Moving to another glyph rewrites every placeholder at once, which turns a spacing string built around one letter into the same string for the next letter."
 ref = "Edit View › Entering Text › Placeholder Glyphs"
 status = "handbook"
+notes = "Built in M5.6: the layout draws every placeholder as `Text::current_glyph`. Documented, not yet observed."
 
 [[behavior]]
 id = "text.longTextIsSlow"
@@ -2355,6 +2365,10 @@ milestone = "M5"
 summary = "The Preview Area and Preview Panel put the complete text of the active tab on one line, without wrapping, with the current glyph centred by default."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "The one-line layout is built in M5.6 (`Options::single_line`). Documented, not yet observed."
+guesses = [
+  "On the preview line a line break takes no room; a tab of several lines in the reference app's Preview Area settles it.",
+]
 
 [[behavior]]
 id = "preview.doubleClickEdits"
