@@ -2456,6 +2456,7 @@ milestone = "M12"
 summary = "A TrueType font with instructions does not have head.flags bit 3 set, so scalers may use fractional sizes the hints were not written for. The fix sets the bit."
 ref = "fontbakery integer_ppem_if_hinted"
 status = "docs"
+notes = "Runs when the font has an fpgm table, which is how the reference check decides that a font is hinted. Message code: `bad-flags`."
 
 [[check]]
 id = "check.hinting.smartDropout"
@@ -2464,9 +2465,10 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "The prep program of an instructed TrueType font (not one hinted in VTT) lacks the instructions that switch on dropout control with smart dropout (SCANCTRL with 0x01FF, SCANTYPE 4). The fix appends them."
+summary = "The prep program of a TrueType font (not one hinted in VTT, which leaves a TSI5 table) lacks the instructions that switch on dropout control with smart dropout (SCANCTRL with 0x01FF, SCANTYPE 4). The fix appends them."
 ref = "fontbakery smart_dropout"
 status = "docs"
+notes = "As the reference check, every TrueType font is checked, hinted or not; a font with no prep table fails. The seven bytes may appear anywhere in prep. Message code: `lacks-smart-dropout`."
 
 [[check]]
 id = "check.hinting.sizeImpact"
@@ -2478,6 +2480,7 @@ milestone = "M12"
 summary = "Reports the file size with and without hinting and the difference in bytes and percent."
 ref = "fontbakery hinting_impact"
 status = "docs"
+notes = "The size without hinting is computed, not written: for TrueType, the file size less the fpgm, prep, cvt, hdmx, LTSH, VDMX and TTFA tables (padded, with their directory entries) and every glyph's instructions; for CFF and CFF2, less an estimate of each glyph's hint operators, operands and masks as its charstring runs, so hints shared through subroutines count once per glyph. The reference check saves a dehinted copy, so its numbers differ in the last bytes; the verdict is always information. For WOFF and WOFF2 input the sizes are those of the unwrapped font. Message code: `size-impact`, with data `hinted`, `dehinted`, `increase`, `percent`."
 
 [[check]]
 id = "check.hinting.gasp"
@@ -2486,9 +2489,10 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A TrueType font has no gasp table or an empty one (failures), has no catch-all range ending at 0xFFFF, has further ranges besides it, or leaves rendering flags unset in the catch-all range (warnings); the ranges and their flags are listed as information. The fix writes a single 0xFFFF range with grid-fitting and smoothing flags all set."
+summary = "A TrueType font has no gasp table or one that cannot be read (failures), has no catch-all range ending at 0xFFFF, has further ranges besides it, or leaves rendering flags unset in the catch-all range (warnings); the ranges and their flags are listed as information. The fix writes a single 0xFFFF range with grid-fitting and smoothing flags all set."
 ref = "fontbakery googlefonts/gasp; MS Font Validator W0022 (afdko MSFontValidatorIssues.md 1.a)"
 status = "docs"
+notes = "Message codes: `lacks-gasp` and `empty` (fail), `lacks-ffff-range`, `non-ffff-range` and `unset-flags` (warn), `ranges` (info, listed only when a 0xFFFF range exists). A table with no ranges warns `lacks-ffff-range`, as the reference check does. The fix is not safe: it replaces the designer's ranges."
 
 [[check]]
 id = "check.hinting.autohinterTraces"
@@ -2500,6 +2504,7 @@ milestone = "M12"
 summary = "A font hinted by an automatic TrueType hinter does not record the hinter's parameters in its version string, or records an outdated hinter version."
 ref = "fontbakery googlefonts/has_ttfautohint_params; fontbakery googlefonts/old_ttfautohint"
 status = "docs"
+notes = "Two reference checks in one. `lacks-version-strings` (fail): no name ID 5 at all. `lacks-ttfa-params` (fail): every version string names the hinter (`ttfautohint (vX) `) with an empty options part; any version string without the mark passes. Then, for TrueType fonts only: `version-not-detected` (info) when no version string names the hinter, `old-ttfa` (warn) when the named version is older than 1.8.4. Versions are compared number by number where the reference compares them as text; the two agree for every released version."
 
 [[check]]
 id = "check.hinting.missingStemHints"
@@ -2511,6 +2516,7 @@ milestone = "M12"
 summary = "A marking glyph of a CFF font has no stem hints at all. Suppressed with `noHints`. The fix runs the autohinter on the listed glyphs."
 ref = "comparefamily single-face test 18 (missing hints, -nohints)"
 status = "docs"
+notes = "Reads `CFF ` only, as the reference test does; CFF2 fonts are skipped. A glyph is marking when its charstring has a moveto; hints called from subroutines count. One result per glyph, collapsed by the result cap when there are many (an unhinted font). A charstring that cannot be run is left out."
 
 [[check]]
 id = "check.hinting.stemHintSanity"
@@ -2522,6 +2528,7 @@ milestone = "M12"
 summary = "A CFF stem hint is nonsensical: negative width, wider than the glyph's bounding box, or lying above or below (left or right of) the bounding box; edge hints are tested against the box as well. Suppressed with `noHints`. The fix re-hints the glyph."
 ref = "comparefamily single-face test 18 (hint width and position, -nohints)"
 status = "docs"
+notes = "Message codes: `negative-width`, `wider-than-glyph`, `above-glyph`, `below-glyph`, `edge-outside-glyph`. The glyph box is the outline's exact box (curve extremes included) rounded outwards to whole units; the reference reads the box from its own metrics dump. Horizontal stems of width -20 and -21 are edge hints (top edge at the stem's first value, bottom edge at its second) and are tested only against the box. The reference's separate message for a width of exactly 1978 (an old tool's bug) is reported as `wider-than-glyph`."
 
 [[check]]
 id = "check.hinting.forceBold"
@@ -2533,6 +2540,7 @@ milestone = "M12"
 summary = "The CFF private dictionary sets ForceBold, which is harmless but obsolete. The fix removes it."
 ref = "comparefamily single-face test 10 (ForceBold)"
 status = "docs"
+notes = "Reported only when ForceBold is true, as the reference test does. Every font dictionary of a CID-keyed font is read. Message code: `force-bold`."
 
 [[check]]
 id = "check.hinting.blueValuesCount"
@@ -2544,6 +2552,7 @@ milestone = "M12"
 summary = "The PostScript alignment zones are malformed: BlueValues is empty, has an odd number of values or more than 7 pairs; OtherBlues has an odd number or more than 5 pairs; the same limits apply to FamilyBlues and FamilyOtherBlues."
 ref = "comparefamily single-face test 30; comparefamily single-face test 31; comparefamily family test 18 (zone counts)"
 status = "docs"
+notes = "Message codes: `no-blue-values` (BlueValues missing, with fewer than 2 values, or exactly 0 0), `too-many-zones`, `odd-count`. Every Private DICT of a CID-keyed font is checked; CFF2 private dictionaries are not read."
 
 [[check]]
 id = "check.hinting.blueValuesOrder"
@@ -2555,6 +2564,7 @@ milestone = "M12"
 summary = "In an alignment-zone pair the first value is larger than the second (BlueValues, OtherBlues and the family variants). The fix sorts each pair."
 ref = "comparefamily single-face test 32"
 status = "docs"
+notes = "Message code: `unordered-pair`, one per pair. The fix waits for the Font Info commands (M7) and reports only until then."
 
 [[check]]
 id = "check.hinting.blueZoneSeparation"
@@ -2566,6 +2576,7 @@ milestone = "M12"
 summary = "Two bottom zones or two top zones are closer together than 2 x BlueFuzz + 1 units, so they overlap for the hinter."
 ref = "comparefamily single-face test 33"
 status = "docs"
+notes = "Bottom zones are the first BlueValues pair and every OtherBlues pair; top zones are the other BlueValues pairs. Two zones are too close when the gap between them is less than 2 x BlueFuzz + 1 (BlueFuzz 1 when unset); zones that overlap or nest have a negative gap and are reported too, which the reference test, comparing end values only, can miss. Message code: `zones-too-close`, one per pair of zones."
 
 [[check]]
 id = "check.hinting.blueZoneHeight"
@@ -2577,6 +2588,7 @@ milestone = "M12"
 summary = "An alignment zone is taller than 1 / BlueScale units, which switches overshoot suppression off at the wrong sizes."
 ref = "comparefamily single-face test 34"
 status = "docs"
+notes = "A zone is too tall when its height times BlueScale (0.039625 when unset) is 1 or more, as the reference test computes it, so a zone of exactly 1 / BlueScale units is reported. All four zone arrays are checked. Message code: `zone-too-tall`."
 
 [[check]]
 id = "check.hinting.blueZonesOutsideBBox"
@@ -2588,6 +2600,7 @@ milestone = "M12"
 summary = "The lowest or highest alignment zone lies outside the font's bounding box, so no glyph can ever reach it."
 ref = "comparefamily family test 18 (zones vs font bounding box)"
 status = "docs"
+notes = "The bounding box is head.yMin and head.yMax. For BlueValues and for OtherBlues, sorted: the lowest zone is outside when its upper value is below yMin, the highest when its lower value is above yMax. Every font dictionary of a CID-keyed font is checked. Message codes: `below-bbox`, `above-bbox`."
 
 [[check]]
 id = "check.hinting.zonesOverlapInSource"
@@ -2599,6 +2612,8 @@ milestone = "M12"
 summary = "In a master's metrics two alignment zones overlap or touch, or a zone has no metric line inside it."
 ref = "Editor audit convention (alignment zones); mirrors comparefamily single-face test 33"
 status = "inferred"
+notes = "The handbook says zones must not overlap and must be at least one unit apart; documented, not yet observed in the reference app. The zones are the metrics' overshoots and the master's other zones. Threshold `minGap` (default 1): zones closer than this are reported as `zones-overlap`. A zone with no metric position of the master (or the baseline) inside it or on its edge is reported as `zone-without-metric`."
+guesses = ["A zone counts as holding a metric line when the master's position of any metric except the italic angle, or 0, lies inside it or on its edge; how the reference app judges zones that serve no metric would settle it."]
 
 [[check]]
 id = "check.hinting.stemsUndefined"
@@ -2610,6 +2625,8 @@ milestone = "M12"
 summary = "A master defines no standard horizontal or vertical stems, so the autohinter has nothing to normalise stem widths to."
 ref = "Editor audit convention (stem values)"
 status = "inferred"
+notes = "Message codes: `no-horizontal-stems`, `no-vertical-stems`, one per master and direction."
+guesses = ["A direction counts as undefined when none of the master's stems of that direction has a positive value; stems of value 0 count as missing. How the reference autohinter treats a zero stem would settle it."]
 
 # ---------------------------------------------------------------------------
 # kerning: Kerning
