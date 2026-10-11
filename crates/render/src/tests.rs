@@ -84,3 +84,44 @@ fn bad_sizes_and_paths_are_errors_not_crashes() {
     assert!(matches!(render_path(&path, Affine::IDENTITY, 20_000, 10, &Style::default()), Err(RenderError::TooLarge { .. })));
     assert_eq!(Image::from_rgba_premultiplied(2, 2, vec![0; 15]), Err(RenderError::BadPixels));
 }
+
+/// A layer holding a smart component draws the component at its value, interpolated between the
+/// part's pole layers, not the base glyph's master layer.
+#[test]
+fn layer_outlines_draw_smart_components_at_their_values() {
+    use fontcraft_geom::{Rect, Shape as _};
+    use fontcraft_model::{
+        Component, ComponentInfo, ComponentInfoBox, Glyph, GlyphInfo, GlyphInfoBox, Layer, LayerAttrs, LayerInfo, LayerInfoBox, PartProperty,
+        SmartPole, SmartValue,
+    };
+    let mut font = Font::new("Smart");
+    let master = font.masters.first().map(|m| m.id.clone()).unwrap();
+    let mut part = Glyph::new("_part.bar");
+    part.info = GlyphInfoBox::new(GlyphInfo {
+        parts: vec![PartProperty {
+            name: "Width".into(),
+            bottom_value: 200.0,
+            top_value: 600.0,
+            bottom_name: None,
+            top_name: None,
+            extra: Default::default(),
+        }],
+        ..Default::default()
+    });
+    for (id, top, width) in [(master.as_str(), false, 200.0), ("wide", true, 600.0)] {
+        let mut l = Layer::new(master.clone(), 600.0);
+        l.id = id.into();
+        l.shapes.push(Shape::Path(Path::rect(0.0, 0.0, width, 100.0)));
+        l.info = LayerInfoBox::new(LayerInfo {
+            attrs: LayerAttrs { smart_poles: vec![SmartPole { property: "Width".into(), top }], ..Default::default() },
+            ..Default::default()
+        });
+        part.layers.push(l);
+    }
+    font.glyphs.push(part);
+    let mut c = Component::new("_part.bar", 10.0, 0.0);
+    c.info = ComponentInfoBox::new(ComponentInfo { smart_values: vec![SmartValue { property: "Width".into(), value: 400.0 }], ..Default::default() });
+    let mut layer = Layer::new(master.clone(), 600.0);
+    layer.shapes.push(Shape::Component(c));
+    assert_eq!(layer_outline(&font, &layer).unwrap().bounding_box(), Rect::new(10.0, 0.0, 410.0, 100.0));
+}

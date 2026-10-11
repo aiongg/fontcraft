@@ -455,10 +455,9 @@ fn selection_bounds(font: &Font, r: &ResolvedTargets, t: &Targets) -> Option<Rec
     for &s in &t.shapes {
         let b = match parts.shapes.get(s) {
             Some(Shape::Path(path)) => path_bounds(path),
-            Some(Shape::Component(c)) => font.outline(&c.glyph, &r.layer.master).ok().filter(|o| !o.elements().is_empty()).map(|mut o| {
-                o.apply_affine(c.affine());
-                o.bounding_box()
-            }),
+            Some(Shape::Component(c)) => {
+                font.component_outline(c, &r.layer.master).ok().filter(|o| !o.elements().is_empty()).map(|o| o.bounding_box())
+            }
             _ => None,
         };
         if let Some(b) = b {

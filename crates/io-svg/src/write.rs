@@ -3,21 +3,24 @@
 use std::fmt::Write as _;
 
 use fontcraft_geom::{BezPath, PathEl, Point, Rect, Shape as _};
-use fontcraft_model::{MAX_OUTLINE_ELEMENTS, Shape};
+use fontcraft_model::{Component, MAX_OUTLINE_ELEMENTS, Shape};
 
 use crate::SvgError;
 
-/// `shapes` as an SVG document: paths as they are, components through `glyph_outline` (the
-/// resolved outline of the glyph a component names, or `None` to leave it out), each placed by
-/// its transform. Images and raw shapes are left out. See [`bez_to_svg`] for the document's form.
-pub fn shapes_to_svg(shapes: &[Shape], glyph_outline: &dyn Fn(&str) -> Option<BezPath>, view_box: Option<Rect>) -> Result<String, SvgError> {
+/// `shapes` as an SVG document: paths as they are, components through `component_outline` (the
+/// outline a component draws, placed by its transform, or `None` to leave it out). Images and raw
+/// shapes are left out. See [`bez_to_svg`] for the document's form.
+pub fn shapes_to_svg(
+    shapes: &[Shape],
+    component_outline: &dyn Fn(&Component) -> Option<BezPath>,
+    view_box: Option<Rect>,
+) -> Result<String, SvgError> {
     let mut all = BezPath::new();
     for shape in shapes {
         match shape {
             Shape::Path(p) => all.extend(p.to_bez().map_err(SvgError::BadPath)?),
             Shape::Component(c) => {
-                if let Some(mut outline) = glyph_outline(&c.glyph) {
-                    outline.apply_affine(c.affine());
+                if let Some(outline) = component_outline(c) {
                     all.extend(outline);
                 }
             }

@@ -28,9 +28,7 @@ pub fn outline(font: &Font, layer: &Layer) -> Result<BezPath, EvalError> {
                 if numbers.iter().any(|v| !v.is_finite()) {
                     return Err(EvalError::Measure("a component transform is not a number".into()));
                 }
-                let mut inner = font.outline(&c.glyph, &layer.master).map_err(|e| EvalError::Measure(e.to_string()))?;
-                inner.apply_affine(c.affine());
-                inner
+                font.component_outline(c, &layer.master).map_err(|e| EvalError::Measure(e.to_string()))?
             }
             Shape::Image(_) | Shape::Raw(_) => continue,
         };

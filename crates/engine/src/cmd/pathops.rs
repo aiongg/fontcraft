@@ -718,7 +718,8 @@ fn boolean_intersect(s: &mut Session, v: &Value) -> Result<Value> {
 
 // ── Correct Path Direction ──────────────────────────────────────────────────────────────────────
 
-/// Component outlines by (base glyph, master), for every component in the layers of `glyphs`.
+/// The outline each component in the layers of `glyphs` draws, placed by its transform, by
+/// (the component as JSON, master): smart components of one glyph draw differently by their values.
 type Outlines = HashMap<(String, String), BezPath>;
 
 fn component_outlines(font: &Font, glyphs: &[String]) -> Outlines {
@@ -729,9 +730,10 @@ fn component_outlines(font: &Font, glyphs: &[String]) -> Outlines {
             let background = layer.info.background.as_ref().map_or(&[][..], |b| b.shapes.as_slice());
             for shape in layer.shapes.iter().chain(background) {
                 let Shape::Component(c) = shape else { continue };
-                let key = (c.glyph.clone(), layer.master.clone());
+                let Ok(json) = serde_json::to_string(c) else { continue };
+                let key = (json, layer.master.clone());
                 if !out.contains_key(&key)
-                    && let Ok(outline) = font.outline(&c.glyph, &layer.master)
+                    && let Ok(outline) = font.component_outline(c, &layer.master)
                 {
                     out.insert(key, outline);
                 }
@@ -773,11 +775,7 @@ fn correct_direction_in(layer: &mut Layer, side: LayerSide, outlines: &Outlines)
         paths.into_iter().map(|(_, path)| (corner(path.to_bez().ok().as_ref().and_then(bounds_of)), Shape::Path(path))).collect();
     for shape in shapes.iter() {
         if let Shape::Component(c) = shape {
-            let b = outlines.get(&(c.glyph.clone(), master.clone())).and_then(|o| {
-                let mut o = o.clone();
-                o.apply_affine(c.affine());
-                bounds_of(&o)
-            });
+            let b = serde_json::to_string(c).ok().and_then(|json| outlines.get(&(json, master.clone()))).and_then(bounds_of);
             items.push((corner(b), shape.clone()));
         }
     }

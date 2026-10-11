@@ -293,8 +293,7 @@ pub fn layer_outline(font: &Font, layer: &Layer) -> Result<BezPath, RenderError>
                 out.extend(bez.elements().iter().copied());
             }
             Shape::Component(c) => {
-                let mut inner = font.outline(&c.glyph, &layer.master).map_err(|e| RenderError::Model(e.to_string()))?;
-                inner.apply_affine(c.affine());
+                let inner = font.component_outline(c, &layer.master).map_err(|e| RenderError::Model(e.to_string()))?;
                 out.extend(inner.elements().iter().copied());
             }
             _ => {}

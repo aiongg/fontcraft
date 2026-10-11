@@ -26,10 +26,7 @@ pub(crate) fn outline(font: &Font, shapes: &[Shape], master: &str) -> BezPath {
     for shape in shapes {
         let part = match shape {
             Shape::Path(p) => p.to_bez().ok(),
-            Shape::Component(c) => font.outline(&c.glyph, master).ok().map(|mut b| {
-                b.apply_affine(c.affine());
-                b
-            }),
+            Shape::Component(c) => font.component_outline(c, master).ok(),
             _ => None,
         };
         let Some(part) = part else { continue };

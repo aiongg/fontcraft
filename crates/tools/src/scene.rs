@@ -117,8 +117,7 @@ impl<'a> Scene<'a> {
         let mut components = Vec::new();
         for (i, shape) in scene.layer.shapes.iter().enumerate() {
             let Shape::Component(c) = shape else { continue };
-            let Ok(mut outline) = font.outline(&c.glyph, &layer.master) else { continue };
-            outline.apply_affine(c.affine());
+            let Ok(outline) = font.component_outline(c, &layer.master) else { continue };
             components.push((i, outline, c.info.locked));
         }
         for (i, outline, locked) in components {
