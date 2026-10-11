@@ -1,0 +1,334 @@
+//! Behaviour tests for anchor propagation. Every expected list is the output of the reference
+//! compiler (glyphsLib 6.15.0 `propagate_all_anchors`) on the same font, built the same way,
+//! order included.
+
+use std::sync::Arc;
+
+use fontcraft_model::plist::Value;
+use fontcraft_model::{Anchor, Component, Font, Glyph, GlyphTable, Layer, Param, Shape, Transform};
+
+use crate::propagate::{AnchorCache, AnchorSource, effective_anchors, effective_anchors_for_master, propagate_anchors_enabled};
+use crate::{ComponentsError, MAX_COMPONENT_DEPTH};
+
+const M: &str = "m01";
+const ID: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+fn glyph(name: &str, category: &str, sub: &str, anchors: &[(&str, f64, f64)], comps: &[(&str, [f64; 6], Option<&str>)]) -> Glyph {
+    let mut g = Glyph::new(name);
+    g.info.category = Some(category.to_string());
+    g.info.sub_category = Some(sub.to_string());
+    let mut layer = Layer::new(M, 600.0);
+    layer.anchors = anchors.iter().map(|(n, x, y)| Anchor::new(*n, *x, *y)).collect();
+    for (base, m, attr) in comps {
+        let mut c = Component::new(*base, 0.0, 0.0);
+        c.transform = Transform::Matrix(*m);
+        if let Some(a) = attr {
+            c.info.anchor = Some(a.to_string());
+        }
+        layer.shapes.push(Shape::Component(c));
+    }
+    g.layers.push(layer);
+    g
+}
+
+fn letter(name: &str, anchors: &[(&str, f64, f64)], comps: &[(&str, [f64; 6], Option<&str>)]) -> Glyph {
+    glyph(name, "Letter", "Lowercase", anchors, comps)
+}
+
+fn mark(name: &str, anchors: &[(&str, f64, f64)], comps: &[(&str, [f64; 6], Option<&str>)]) -> Glyph {
+    glyph(name, "Mark", "Nonspacing", anchors, comps)
+}
+
+fn liga(name: &str, comps: &[(&str, [f64; 6], Option<&str>)]) -> Glyph {
+    glyph(name, "Letter", "Ligature", &[], comps)
+}
+
+fn at(dx: f64, dy: f64) -> [f64; 6] {
+    [1.0, 0.0, 0.0, 1.0, dx, dy]
+}
+
+fn font(glyphs: Vec<Glyph>) -> Font {
+    let mut f = Font::new("Propagation");
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    f
+}
+
+/// The marks and letters most tests share.
+fn base_glyphs() -> Vec<Glyph> {
+    vec![
+        letter("a", &[("top", 250.0, 500.0), ("bottom", 250.0, 0.0), ("ogonek", 400.0, 0.0)], &[]),
+        mark("acutecomb", &[("_top", 100.0, 500.0), ("top", 100.0, 700.0)], &[]),
+        mark("gravecomb", &[("_top", 100.0, 500.0), ("top", 110.0, 720.0)], &[]),
+        letter("f", &[("top", 100.0, 700.0), ("bottom", 100.0, 0.0)], &[]),
+        letter("i", &[("top", 50.0, 700.0), ("bottom", 50.0, 0.0)], &[]),
+    ]
+}
+
+fn with(extra: Vec<Glyph>) -> Font {
+    let mut g = base_glyphs();
+    g.extend(extra);
+    font(g)
+}
+
+#[track_caller]
+fn assert_anchors(font: &Font, glyph: &str, want: &[(&str, f64, f64)]) {
+    let got = effective_anchors(font, glyph, M).unwrap();
+    let got: Vec<(String, f64, f64)> = got.into_iter().map(|a| (a.name, a.x, a.y)).collect();
+    let same = got.len() == want.len() && got.iter().zip(want).all(|(g, w)| g.0 == w.0 && (g.1 - w.1).abs() < 1e-6 && (g.2 - w.2).abs() < 1e-6);
+    assert!(same, "{glyph}: got {got:?}, want {want:?}");
+}
+
+#[test]
+fn marks_stack_and_the_last_mark_gives_the_top_anchor() {
+    let f = with(vec![
+        letter("aacute", &[], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None)]),
+        letter("aacutegrave", &[], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None), ("gravecomb", at(150.0, 200.0), None)]),
+    ]);
+    assert_anchors(&f, "aacute", &[("top", 250.0, 700.0), ("bottom", 250.0, 0.0), ("ogonek", 400.0, 0.0)]);
+    assert_anchors(&f, "aacutegrave", &[("top", 260.0, 920.0), ("bottom", 250.0, 0.0), ("ogonek", 400.0, 0.0)]);
+}
+
+#[test]
+fn an_own_anchor_replaces_the_propagated_one_in_place() {
+    let f = with(vec![letter("aacute.own", &[("top", 1.0, 2.0)], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None)])]);
+    assert_anchors(&f, "aacute.own", &[("top", 1.0, 2.0), ("bottom", 250.0, 0.0), ("ogonek", 400.0, 0.0)]);
+    let anchors = effective_anchors(&f, "aacute.own", M).unwrap();
+    assert_eq!(anchors.first().map(|a| &a.source), Some(&AnchorSource::Own));
+    assert_eq!(anchors.get(1).map(|a| &a.source), Some(&AnchorSource::Component { component: 0, base: "a".into() }));
+}
+
+#[test]
+fn a_mark_made_of_marks_keeps_the_first_attaching_anchor_unless_it_has_anchors_of_its_own() {
+    let f = with(vec![
+        mark("acutegravecomb", &[], &[("acutecomb", ID, None), ("gravecomb", at(0.0, 200.0), None)]),
+        mark("acutegravecomb.own", &[("_top", 5.0, 6.0)], &[("acutecomb", ID, None), ("gravecomb", at(0.0, 200.0), None)]),
+    ]);
+    assert_anchors(&f, "acutegravecomb", &[("_top", 100.0, 500.0), ("top", 110.0, 920.0)]);
+    assert_anchors(&f, "acutegravecomb.own", &[("_top", 5.0, 6.0)]);
+}
+
+#[test]
+fn a_vertically_flipped_mark_attaches_as_a_bottom_mark() {
+    let f = with(vec![
+        letter("g", &[("top", 250.0, 500.0), ("bottom", 250.0, -200.0)], &[]),
+        mark("commaturnedabovecomb", &[("_top", 100.0, 500.0), ("top", 100.0, 650.0)], &[]),
+        letter("gcommaaccent", &[], &[("g", ID, None), ("commaturnedabovecomb", [1.0, 0.0, 0.0, -1.0, 150.0, 300.0], None)]),
+    ]);
+    assert_anchors(&f, "gcommaaccent", &[("top", 250.0, 500.0), ("bottom", 250.0, -350.0)]);
+}
+
+#[test]
+fn flips_and_rotations_rename_anchors() {
+    let arrow =
+        [("top", 10.0, 20.0), ("topleft", 13.0, 23.0), ("left", 16.0, 26.0), ("entry", 18.0, 28.0), ("#exit", 21.0, 31.0), ("center", 26.0, 36.0)];
+    let f = with(vec![
+        glyph("arrow", "Symbol", "Arrow", &arrow, &[]),
+        glyph("arrow.rot180", "Symbol", "Arrow", &[], &[("arrow", [-1.0, 0.0, 0.0, -1.0, 0.0, 0.0], None)]),
+        glyph("arrow.mirror", "Symbol", "Arrow", &[], &[("arrow", [-1.0, 0.0, 0.0, 1.0, 100.0, 0.0], None)]),
+        glyph("arrow.shear", "Symbol", "Arrow", &[], &[("arrow", [-1.0, 0.5, 0.0, 1.0, 0.0, 0.0], None)]),
+        glyph("arrow.rot90", "Symbol", "Arrow", &[], &[("arrow", [0.0, 1.0, -1.0, 0.0, 0.0, 0.0], None)]),
+    ]);
+    assert_anchors(
+        &f,
+        "arrow.rot180",
+        &[
+            ("bottom", -10.0, -20.0),
+            ("bottomright", -13.0, -23.0),
+            ("right", -16.0, -26.0),
+            ("exit", -18.0, -28.0),
+            ("#entry", -21.0, -31.0),
+            ("center", -26.0, -36.0),
+        ],
+    );
+    assert_anchors(
+        &f,
+        "arrow.mirror",
+        &[("top", 90.0, 20.0), ("topright", 87.0, 23.0), ("right", 84.0, 26.0), ("exit", 82.0, 28.0), ("#entry", 79.0, 31.0), ("center", 74.0, 36.0)],
+    );
+    // A mirror with a vertical shear counts as a rotation plus a vertical flip.
+    assert_anchors(
+        &f,
+        "arrow.shear",
+        &[
+            ("bottom", -10.0, 25.0),
+            ("bottomleft", -13.0, 29.5),
+            ("left", -16.0, 34.0),
+            ("entry", -18.0, 37.0),
+            ("#exit", -21.0, 41.5),
+            ("center", -26.0, 49.0),
+        ],
+    );
+    assert_anchors(
+        &f,
+        "arrow.rot90",
+        &[
+            ("top", -20.0, 10.0),
+            ("topleft", -23.0, 13.0),
+            ("left", -26.0, 16.0),
+            ("entry", -28.0, 18.0),
+            ("#exit", -31.0, 21.0),
+            ("center", -36.0, 26.0),
+        ],
+    );
+}
+
+#[test]
+fn a_decomposed_180_degree_rotation_renames_like_the_matrix() {
+    let mut f = with(vec![glyph("arrow", "Symbol", "Arrow", &[("top", 10.0, 20.0), ("left", 16.0, 26.0)], &[])]);
+    let mut g = glyph("arrow.turned", "Symbol", "Arrow", &[], &[("arrow", ID, None)]);
+    if let Some(Shape::Component(c)) = g.layers.first_mut().and_then(|l| l.shapes.first_mut()) {
+        c.transform = Transform::Decomposed { pos: (0.0, 0.0), scale: (1.0, 1.0), angle: 180.0, slant: (0.0, 0.0) };
+    }
+    f.glyphs.push(g);
+    assert_anchors(&f, "arrow.turned", &[("bottom", -10.0, -20.0), ("right", -16.0, -26.0)]);
+}
+
+#[test]
+fn ligatures_number_anchors_by_base_and_an_attribute_picks_a_numbered_anchor() {
+    let f = with(vec![
+        liga("f_f", &[("f", ID, None), ("f", at(200.0, 0.0), None)]),
+        liga("f_f_i", &[("f_f", ID, None), ("i", at(400.0, 0.0), None)]),
+        liga("f_f.acute2", &[("f", ID, None), ("f", at(200.0, 0.0), None), ("acutecomb", at(210.0, 10.0), Some("top_2"))]),
+    ]);
+    assert_anchors(&f, "f_f", &[("top_1", 100.0, 700.0), ("bottom_1", 100.0, 0.0), ("top_2", 300.0, 700.0), ("bottom_2", 300.0, 0.0)]);
+    assert_anchors(
+        &f,
+        "f_f_i",
+        &[
+            ("top_1", 100.0, 700.0),
+            ("bottom_1", 100.0, 0.0),
+            ("top_2", 300.0, 700.0),
+            ("bottom_2", 300.0, 0.0),
+            ("top_3", 450.0, 700.0),
+            ("bottom_3", 450.0, 0.0),
+        ],
+    );
+    assert_anchors(&f, "f_f.acute2", &[("top_1", 100.0, 700.0), ("bottom_1", 100.0, 0.0), ("top_2", 310.0, 710.0), ("bottom_2", 300.0, 0.0)]);
+}
+
+#[test]
+fn the_anchor_attribute_renames_the_marks_top_anchor() {
+    let f = with(vec![
+        letter("a.viet", &[("top", 250.0, 500.0), ("top_viet", 260.0, 520.0)], &[]),
+        letter("aacute.viet", &[], &[("a.viet", ID, None), ("acutecomb", at(150.0, 0.0), Some("top_viet"))]),
+    ]);
+    assert_anchors(&f, "aacute.viet", &[("top", 250.0, 500.0), ("top_viet", 250.0, 700.0)]);
+}
+
+#[test]
+fn an_origin_anchor_shifts_the_bases_anchors_before_the_transform() {
+    let f = with(vec![
+        mark("ring.origin", &[("_top", 100.0, 500.0), ("top", 100.0, 800.0), ("*origin", 50.0, 20.0)], &[]),
+        letter("aring.origin", &[], &[("a", ID, None), ("ring.origin", [2.0, 0.0, 0.0, 2.0, 100.0, 0.0], None)]),
+    ]);
+    // The base itself keeps its anchors as stored.
+    assert_anchors(&f, "ring.origin", &[("_top", 100.0, 500.0), ("top", 100.0, 800.0), ("*origin", 50.0, 20.0)]);
+    assert_anchors(&f, "aring.origin", &[("top", 200.0, 1560.0), ("bottom", 250.0, 0.0), ("ogonek", 400.0, 0.0)]);
+}
+
+#[test]
+fn entry_comes_from_the_first_component_and_exit_from_the_last_base() {
+    let stroke = [("entry", 1.0, 1.0), ("exit", 2.0, 2.0), ("#entry", 3.0, 3.0), ("#exit", 4.0, 4.0), ("top", 5.0, 5.0)];
+    let f = with(vec![
+        letter("stroke", &stroke, &[]),
+        letter("stroke.first", &[], &[("stroke", ID, None), ("i", at(100.0, 0.0), None)]),
+        letter("stroke.last", &[], &[("i", ID, None), ("stroke", at(100.0, 0.0), None)]),
+        letter("stroke.mark", &[], &[("stroke", ID, None), ("acutecomb", at(100.0, 0.0), None)]),
+    ]);
+    assert_anchors(
+        &f,
+        "stroke.first",
+        &[("entry", 1.0, 1.0), ("#entry", 3.0, 3.0), ("#exit", 4.0, 4.0), ("top", 150.0, 700.0), ("bottom", 150.0, 0.0)],
+    );
+    assert_anchors(
+        &f,
+        "stroke.last",
+        &[("top", 105.0, 5.0), ("bottom", 50.0, 0.0), ("exit", 102.0, 2.0), ("#entry", 103.0, 3.0), ("#exit", 104.0, 4.0)],
+    );
+    // A mark after the stroke does not end it.
+    assert_anchors(&f, "stroke.mark", &[("entry", 1.0, 1.0), ("exit", 2.0, 2.0), ("#entry", 3.0, 3.0), ("#exit", 4.0, 4.0), ("top", 200.0, 700.0)]);
+}
+
+#[test]
+fn a_letter_with_a_top_attaching_anchor_passes_on_no_bottom() {
+    let f = with(vec![
+        letter("hook", &[("_top", 10.0, 20.0), ("top", 12.0, 22.0), ("bottom", 11.0, 21.0)], &[]),
+        letter("hook.used", &[], &[("a", ID, None), ("hook", at(0.0, 100.0), None)]),
+    ]);
+    assert_anchors(&f, "hook.used", &[("top", 12.0, 122.0), ("bottom", 250.0, 0.0), ("ogonek", 400.0, 0.0)]);
+}
+
+#[test]
+fn the_propagate_anchors_parameter_turns_propagation_off() {
+    let mut f = with(vec![letter("aacute", &[], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None)])]);
+    assert!(propagate_anchors_enabled(&f));
+    Arc::make_mut(&mut f.info).params.0.push(Param::new("Propagate Anchors", Value::Bool(false)));
+    assert!(!propagate_anchors_enabled(&f));
+    assert_anchors(&f, "aacute", &[]);
+}
+
+#[test]
+fn a_missing_base_passes_nothing_and_a_cycle_is_an_error() {
+    let f = with(vec![
+        letter("ghost", &[], &[("nothere", ID, None), ("acutecomb", at(150.0, 0.0), None)]),
+        letter("loop1", &[], &[("loop2", ID, None)]),
+        letter("loop2", &[], &[("loop1", ID, None)]),
+        letter("abovelLoop", &[], &[("loop1", ID, None)]),
+    ]);
+    assert_anchors(&f, "ghost", &[("top", 250.0, 700.0)]);
+    assert!(matches!(effective_anchors(&f, "loop1", M), Err(ComponentsError::Cycle(_))));
+    assert!(matches!(effective_anchors(&f, "abovelLoop", M), Err(ComponentsError::Cycle(_))));
+    assert!(matches!(effective_anchors(&f, "a", "nolayer"), Err(ComponentsError::MissingLayer { .. })));
+    assert!(matches!(effective_anchors_for_master(&f, M), Err(ComponentsError::Cycle(_))));
+}
+
+#[test]
+fn hostile_nesting_and_transforms_fail_with_a_message() {
+    let mut glyphs = base_glyphs();
+    for i in 0..1000 {
+        let next = if i == 0 { "a".to_string() } else { format!("deep{}", i - 1) };
+        glyphs.push(letter(&format!("deep{i}"), &[], &[(&next, ID, None)]));
+    }
+    glyphs.push(letter("nan", &[], &[("a", [f64::NAN, 0.0, 0.0, 1.0, 0.0, 0.0], None)]));
+    let f = font(glyphs);
+    assert!(matches!(effective_anchors(&f, "deep999", M), Err(ComponentsError::TooDeep { .. })));
+    assert!(effective_anchors(&f, &format!("deep{}", MAX_COMPONENT_DEPTH - 1), M).is_ok());
+    assert!(matches!(effective_anchors(&f, "nan", M), Err(ComponentsError::BadPlacement { .. })));
+}
+
+#[test]
+fn the_whole_master_matches_single_glyph_results() {
+    let f = with(vec![
+        letter("aacute", &[], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None)]),
+        liga("f_f", &[("f", ID, None), ("f", at(200.0, 0.0), None)]),
+    ]);
+    let all = effective_anchors_for_master(&f, M).unwrap();
+    for g in f.glyphs.iter() {
+        assert_eq!(all.get(&g.name), Some(&effective_anchors(&f, &g.name, M).unwrap()), "{}", g.name);
+    }
+}
+
+#[test]
+fn the_cache_reuses_results_until_a_reached_glyph_changes() {
+    let mut f = with(vec![letter("aacute", &[], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None)])]);
+    let mut cache = AnchorCache::new();
+    let first = cache.get(&f, "aacute", M).unwrap();
+    let again = cache.get(&f, "aacute", M).unwrap();
+    assert!(Arc::ptr_eq(&first, &again));
+    // An unrelated glyph changes: the entry stays.
+    if let Some(mut g) = f.glyphs.get_mut("i") {
+        g.layers.clear();
+    }
+    cache.retain_current(&f);
+    assert_eq!(cache.len(), 1);
+    assert!(Arc::ptr_eq(&first, &cache.get(&f, "aacute", M).unwrap()));
+    // The mark moves its top anchor: the composite follows.
+    if let Some(mut g) = f.glyphs.get_mut("acutecomb")
+        && let Some(l) = g.layers.first_mut()
+        && let Some(a) = l.anchors.get_mut(1)
+    {
+        a.y = 800.0;
+    }
+    let after = cache.get(&f, "aacute", M).unwrap();
+    assert_eq!(after.first().map(|a| (a.name.as_str(), a.y)), Some(("top", 800.0)));
+}

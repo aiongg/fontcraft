@@ -979,7 +979,7 @@ milestone = "M6"
 summary = "Flipping a glyph component vertically swaps the roles of the base glyph's top and bottom anchors for that component, so a mark drawn for the top can be reused below."
 ref = "Palette › Transformations › Mirroring"
 status = "handbook"
-notes = "Documented, not yet observed. The same rule as components.verticalFlipSwapsTopBottomAnchors; one implementation."
+notes = "Documented, not yet observed. The same rule as components.verticalFlipSwapsTopBottomAnchors; one implementation. M6.1: implemented in crates/components/src/propagate.rs."
 
 [[behavior]]
 id = "transform.mirrorCornerComponent"
