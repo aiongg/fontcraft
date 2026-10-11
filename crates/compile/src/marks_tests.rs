@@ -16,7 +16,9 @@ use crate::{Compiled, Flavour, Options, compile_ttf, plan};
 fn font() -> Font {
     let mut f = Font::new("Mark Sans");
     for (name, cps, width) in [("A", vec![0x41], 600.0), ("V", vec![0x56], 600.0), ("acutecomb", vec![0x301], 0.0), ("Aacute", vec![0xC1], 600.0)] {
-        f.add_glyph(name, cps, width).unwrap();
+        if f.glyph(name).is_none() {
+            f.add_glyph(name, cps, width).unwrap();
+        }
     }
     {
         let mut a = f.glyph_mut("A").unwrap();

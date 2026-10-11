@@ -8,7 +8,7 @@ use std::sync::Arc;
 use fontcraft_engine::Session;
 use fontcraft_engine::compile::{Options, compile_ttf};
 use fontcraft_engine::model::plist::{Array, Str, Value as Plist};
-use fontcraft_engine::model::{ColorLabel, Component, GLYPH_ORDER_PARAM, Shape};
+use fontcraft_engine::model::{Alignment, ColorLabel, Component, ComponentInfo, ComponentInfoBox, GLYPH_ORDER_PARAM, Shape};
 use fontcraft_testkit::{check_session, rect};
 use serde_json::{Value, json};
 
@@ -42,7 +42,11 @@ fn built(part: &str) -> Session {
     s.edit("references", |f| {
         {
             let mut b = f.glyph_mut("B")?;
-            b.layers[0].shapes.push(Shape::Component(Component::new(part, 100.0, 0.0)));
+            // Alignment off keeps the component where it is drawn: re-alignment after the rename
+            // would otherwise move it, and this test is about references only.
+            let mut c = Component::new(part, 100.0, 0.0);
+            c.info = ComponentInfoBox::new(ComponentInfo { alignment: Alignment::Disabled, ..Default::default() });
+            b.layers[0].shapes.push(Shape::Component(c));
             b.info.metrics_keys.left = Some(format!("=={part}+10"));
         }
         let k = Arc::make_mut(&mut f.kerning);

@@ -174,7 +174,13 @@ fn the_ruler_crosses_two_contours_and_merges_overlaps() {
     run(&mut s, "path.addPath", json!({"glyph": "C", "nodes": rect(0.0, 0.0, 100.0, 100.0)}));
     s.edit("component", |font| {
         let mut g = font.glyph_mut("D")?;
-        g.layers[0].shapes.push(Shape::Component(fontcraft_engine::model::Component::new("C", 200.0, 0.0)));
+        // Alignment off keeps the component where it is drawn after the next command.
+        let mut c = fontcraft_engine::model::Component::new("C", 200.0, 0.0);
+        c.info = fontcraft_engine::model::ComponentInfoBox::new(fontcraft_engine::model::ComponentInfo {
+            alignment: fontcraft_engine::model::Alignment::Disabled,
+            ..Default::default()
+        });
+        g.layers[0].shapes.push(Shape::Component(c));
         Ok(())
     })
     .unwrap();

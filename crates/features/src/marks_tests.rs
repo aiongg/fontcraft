@@ -154,11 +154,13 @@ fn features(gpos: &Gpos) -> Vec<String> {
     out
 }
 
+/// The glyph classes by name. A format 1 class table lists the glyphs between classed glyphs
+/// with class 0, which means no class, so those are left out.
 fn classes(gdef: &Gdef, names: &[String]) -> Vec<(String, u16)> {
     let mut out: Vec<(String, u16)> = gdef
         .glyph_class_def
         .as_deref()
-        .map(|c| c.iter().map(|(g, class)| (names[usize::from(g.to_u16())].clone(), class)).collect())
+        .map(|c| c.iter().filter(|&(_, class)| class != 0).map(|(g, class)| (names[usize::from(g.to_u16())].clone(), class)).collect())
         .unwrap_or_default();
     out.sort();
     out

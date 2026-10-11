@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use fontcraft_engine::Session;
 use fontcraft_engine::model::plist::Value as Plist;
-use fontcraft_engine::model::{Component, Font, Layer, Param, Path, Shape, SourceFormat};
+use fontcraft_engine::model::{Alignment, Component, ComponentInfo, ComponentInfoBox, Font, Layer, Param, Path, Shape, SourceFormat};
 use fontcraft_spacing::Field;
 use fontcraft_spacing::afm;
 use fontcraft_spacing::kerning::Direction;
@@ -241,8 +241,15 @@ fn a_composite_of_a_composite_takes_its_metrics_after_the_composite_it_shows() {
     e.layers[0].shapes = vec![Shape::Path(Path::rect(50.0, 0.0, 550.0, 700.0))];
     e.layers[0].width = 600.0;
     drop(e);
-    f.glyph_mut("Ecircumflex").unwrap().layers[0].shapes = vec![Shape::Component(Component::new("E", 0.0, 0.0))];
-    f.glyph_mut("Ecircumflexacute").unwrap().layers[0].shapes = vec![Shape::Component(Component::new("Ecircumflex", 0.0, 0.0))];
+    // Alignment off: an aligned composite takes its metrics from its components, and this test
+    // is about the order in which the composites are spaced.
+    let unaligned = |base: &str| {
+        let mut c = Component::new(base, 0.0, 0.0);
+        c.info = ComponentInfoBox::new(ComponentInfo { alignment: Alignment::Disabled, ..Default::default() });
+        vec![Shape::Component(c)]
+    };
+    f.glyph_mut("Ecircumflex").unwrap().layers[0].shapes = unaligned("E");
+    f.glyph_mut("Ecircumflexacute").unwrap().layers[0].shapes = unaligned("Ecircumflex");
     let mut s = Session::new();
     s.add_document(f, None).unwrap();
     // The nested composite's line comes first, in the file as in the glyph order.

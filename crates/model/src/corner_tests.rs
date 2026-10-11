@@ -216,8 +216,11 @@ fn points(shapes: &[Shape]) -> Vec<Vec<(f64, f64)>> {
     shapes.iter().filter_map(|s| if let Shape::Path(p) = s { Some(p.nodes.iter().map(|n| (n.x, n.y)).collect()) } else { None }).collect()
 }
 
+/// Draws `name` on master `m01`, adding the glyph unless the starting glyph set has it.
 fn add_glyph(font: &mut Font, name: &str, anchors: &[(&str, f64, f64)], paths: &[&str]) {
-    font.add_glyph(name, Vec::new(), 600.0).unwrap();
+    if font.glyph(name).is_none() {
+        font.add_glyph(name, Vec::new(), 600.0).unwrap();
+    }
     let mut g = font.glyph_mut(name).unwrap();
     let l = g.layer_mut("m01").unwrap();
     l.shapes = paths.iter().map(|p| Shape::Path(path(p))).collect();
