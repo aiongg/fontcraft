@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**871 rows to check: 1006 guesses and 56 observe steps.**
+**872 rows to check: 1009 guesses and 56 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **436** |
+| **Built milestones (M0 to M6)** | all | **437** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 95 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 50 |
@@ -45,7 +45,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 103 |
 | Built milestones (M0 to M6) | Font Info and features | 8 |
-| Built milestones (M0 to M6) | Files: open, import, export | 37 |
+| Built milestones (M0 to M6) | Files: open, import, export | 38 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
 | **Later milestones (after M6)** | all | **435** |
@@ -65,7 +65,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 68 |
 | Later milestones (after M6) | Elsewhere | 5 |
 
-## Built milestones (M0 to M6) (436)
+## Built milestones (M0 to M6) (437)
 
 ### Edit View: drawing, guides, layers and the Palette (95)
 
@@ -403,7 +403,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `glyph.resetAnchorsForAllMasters` (M6, handbook): Reset Anchors for All Masters
   - Guess: The shortcut is Cmd+Alt+Shift+U, Reset Anchors with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.
 - [ ] `components.liveUpdateFromBaseGlyph` (behavior, M6, handbook): A component is a live reference to its base glyph: editing the…
-  - Guess: Re-alignment after an edit touches only the masters whose layers the edit changed, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.
+  - Guess: Re-alignment after an edit touches only the masters whose layers the edit changed, and the masters of layers whose components are pinned to one of them, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.
   - Guess: A locked composite is not re-aligned when its base changes, because a lock keeps the glyph's drawing; locking a composite in the reference app and editing its base settles it.
 - [ ] `components.autoComposeOnAddGlyph` (behavior, M6, handbook): When a glyph that the glyph info database describes as a composite…
   - Guess: The Unicode decomposition is expanded fully (Aringacute is A, ringcomb, acutecomb), except that a letter with a horn stays whole when the font has it (Ohornacute is Ohorn, acutecomb); the composites stored in corpus sources saved by the reference app measure it (M6 plan § 5).
@@ -437,6 +437,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The editor and the compiler propagate anchors exactly as fontc does, every name included, since its algorithm gives top and bottom as the handbook says and also the other names both reference compilers export; a composite that inherits an ogonek or a cedilla anchor in the reference app settles it.
   - Guess: A non-master layer whose base glyph has no layer with the same id reads the base's master layer of the same master, where glyphsLib interpolates the base's anchors at the layer's axis location; a brace layer in the reference app whose base lacks it settles it.
   - Guess: A base glyph without a layer for the composite's master passes no anchors on, where glyphsLib stops with an error; the reference app with such a font settles it.
+  - Guess: A component pinned to another master (`masterId`) passes on the anchors of that master's layer of its base, the layer alignment places it from; a composite with a pinned component in the reference app, read through a mark attached to it, settles it.
 - [ ] `components.underscoreAnchorSnapsToPlainAnchor` (behavior, M6, handbook): A component whose base glyph has an anchor with a leading underscore…
   - Guess: A component whose underscore anchors find no plain anchor among the components before it is set after them as another base, as if typed; a mark added to a base without the matching anchor in the reference app settles it.
 - [ ] `components.alternativeAnchorSuffix` (behavior, M6, handbook): A layer may carry several anchors of one type, told apart by…
@@ -464,6 +465,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `smart.handlesFromPropertyAnchors` (behavior, M6, handbook): An anchor whose name equals a property name exactly (case included), present…
   - Guess: Dragging a handle sets the value whose interpolated anchor position is nearest the pointer, found by projecting the pointer on the line between the anchor's positions at the property's two poles, with no clamp; dragging a handle in the reference app settles it.
 - [ ] `corner.glyphNaming` (behavior, M6, handbook): A glyph is a corner glyph when its name starts with _corner
+  - Guess: A layer with a corner that cannot be fitted (its path deleted, a zero-length segment next to it) is drawn in the editor without any of its corners, as the export leaves it; a hint whose path was deleted in the reference app shows what it draws.
   - Guess: Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it.
 - [ ] `corner.copyPasteOntoNodes` (behavior, M6, handbook): A selected corner component can be copied with Edit › Copy and,…
   - Guess: Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.
@@ -1090,7 +1092,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (37)
+### Files: open, import, export (38)
 
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
@@ -1186,6 +1188,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The featureWriters setting is read from the font's user data, then from the built master's; fontc reads only a .glyphs font's user data, while glyphsLib also carries a master's into its UFO lib.
 - [ ] `open.alignsCompositeMetrics` (behavior, M6, handbook): On opening a font file, composite glyphs are put under automatic alignment…
   - Guess: A UFO counts as an imported file and is aligned on opening, because the Source Formats page points a UFO to the importing behaviours and gives it its own Disable Automatic Alignment option in Font Info; the running app opening a UFO with an out-of-date composite would settle it.
+- [ ] `compile.glyphsOutlinePreSteps` (behavior, M6, docs): Two Glyphs-specific steps run before decomposition when the source asks for them:…
+  - Guess: A glyph whose anchor propagation fails keeps its own anchors and the build goes on with a warning; exporting a source with a component cycle from the reference app settles what it does.
 - [ ] `compile.markFeatureWriter` (behavior, M6, docs): Anchors generate mark (mark to base and mark to ligature), mkmk (mark…
   - Guess: A top-level include in the feature code keeps all five generated features out until M8, as it keeps the generated kerning out, since the included file may hold any of them; compiling the included file (M8) settles it.
   - Guess: Anchors whose names the reference compilers refuse (`_`, `_top_1`, a number 0), whose ligature number is above 1,024, or whose positions do not fit 16 bits are left out with a warning, where fontc stops the build; an export of such anchors from the reference app would settle it.
