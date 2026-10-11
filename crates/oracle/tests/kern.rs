@@ -1,8 +1,10 @@
-//! The kern measure of M5.17 (`docs/plans/M5.md` § 5): for every corpus source without feature
-//! code that both reference compilers build, the effective value of every pair of glyphs that a
-//! stored pair of the default master covers (groups expanded, at most 1,000,000 pairs per
+//! The kern measure of M5.17 (`docs/plans/M5.md` § 5): for every corpus source without a
+//! hand-written `kern` feature that both reference compilers build, the effective value of every
+//! pair of glyphs that a stored pair of the compiled master covers (groups expanded, at most 1,000,000 pairs per
 //! source) is the same in FontCraft's `GPOS` as in fontc's (built with features) and fontmake's.
-//! Pairs are compared in every script either font has records for.
+//! Pairs are compared in every script either font has records for. The sources are the oracle
+//! corpus and Inter's roman `.glyphspackage` when it is fetched. A multi-master `.glyphs` source
+//! is compiled at its origin master, the default of fontc's variable font.
 //!
 //! Opt-in and slow: `cargo test -p fontcraft-oracle --features oracle --test kern -- --ignored
 //! --nocapture`. `FONTCRAFT_CORPUS` names the corpus folder (default: the repository's
@@ -20,9 +22,9 @@ use fontcraft_model::{Font, side_group};
 use fontcraft_oracle::tools::{Request, build_with_features, locate};
 use fontcraft_oracle::{Flavour, Hint, Oracle};
 use fontcraft_spacing::kerning::{Direction, KernIndex, Position, facing};
-use skrifa::FontRef;
 use skrifa::raw::TableProvider;
 use skrifa::raw::types::{GlyphId16, Tag};
+use skrifa::{FontRef, MetadataProvider};
 
 const MAX_PAIRS: usize = 1_000_000;
 /// Differences printed per source and reference.
@@ -31,12 +33,21 @@ const SHOWN: usize = 20;
 /// Differences with a known cause, written down in `docs/spec/40-compile.md` § 4a: the source's
 /// file name, the reference, the script, and the cause. They are reported and do not fail the
 /// measure.
-const KNOWN: &[(&str, &str, &str, &str)] = &[(
-    "KerningRtlOnlyMaster.glyphs",
-    "fontc",
-    "hebr",
-    "fontc builds the variable font of both masters: the second master's right-to-left pairs give its font a hebr script whose lookups hold only them, and a Latin pair read in hebr gets 0; FontCraft builds the first master, which has no right-to-left pairs, so hebr falls back to DFLT",
-)];
+const KNOWN: &[(&str, &str, &str, &str)] = &[
+    (
+        "KerningRtlOnlyMaster.glyphs",
+        "fontc",
+        "hebr",
+        "fontc builds the variable font of both masters: the second master's right-to-left pairs give its font a hebr script whose lookups hold only them, and a Latin pair read in hebr gets 0; FontCraft builds the first master, which has no right-to-left pairs, so hebr falls back to DFLT",
+    ),
+    ("Oswald.glyphs", "fontc", "cyrl", OSWALD_LIGATURES),
+    ("Oswald.glyphs", "fontmake", "cyrl", OSWALD_LIGATURES),
+];
+
+const OSWALD_LIGATURES: &str = "the unencoded ligature f_f gets the Latin script from the liga substitution that makes it, so the references put its pairs in the Latin lookup; FontCraft compiles no feature code before M8, so f_f has no script and its pairs are common, in every script's lookups";
+
+/// Sources of the measure outside the oracle corpus, when fetched.
+const EXTRA: &[&str] = &["inter/src/Inter-Roman.glyphspackage"];
 
 fn known(label: &str, d: &Difference) -> Option<&'static str> {
     let name = Path::new(label).file_name()?.to_str()?;
@@ -48,12 +59,7 @@ fn corpus() -> PathBuf {
     std::env::var_os("FONTCRAFT_CORPUS").map_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus"), PathBuf::from)
 }
 
-fn has_feature_code(font: &Font) -> bool {
-    let f = &font.features;
-    f.prefixes.iter().chain(&f.classes).chain(&f.features).any(|s| !s.disabled && !s.code.trim().is_empty())
-}
-
-/// The glyph pairs the default master's stored pairs cover, by source glyph name.
+/// The glyph pairs the stored pairs of `master` cover, by source glyph name.
 fn covered(font: &Font, index: &KernIndex, master: &str) -> Vec<(String, String)> {
     let mut out = BTreeSet::new();
     for direction in [Direction::Ltr, Direction::Rtl] {
@@ -110,7 +116,8 @@ fn generated_kerning_equals_both_references() {
         eprintln!("skipped: fontmake is not installed ({})", Oracle::Fontmake.install_hint());
         return;
     };
-    let sources = fontcraft_oracle::corpus::discover(&corpus()).unwrap();
+    let mut sources = fontcraft_oracle::corpus::discover(&corpus()).unwrap();
+    sources.extend(EXTRA.iter().map(|p| corpus().join(p)).filter(|p| p.exists()));
     let scratch = std::env::temp_dir().join(format!("fontcraft-kern-measure-{}", std::process::id()));
     let (mut compared, mut skipped) = (0usize, Vec::new());
     let mut pairs_compared: HashMap<&str, usize> = HashMap::new();
@@ -122,18 +129,23 @@ fn generated_kerning_equals_both_references() {
             skipped.push(format!("{label}: not read"));
             continue;
         };
-        let Ok(master) = font.default_master().map(|m| m.id.clone()) else { continue };
+        // fontc builds a `.glyphs` source with several masters as a variable font, whose default
+        // is the origin master; fontmake's file of that master is compared too.
+        let glyphs = matches!(source.extension().and_then(|e| e.to_str()), Some("glyphs" | "glyphspackage"));
+        let compiled = if glyphs { fontcraft_model::axes::origin(&font) } else { font.default_master().ok() };
+        let Some((master, master_name)) = compiled.map(|m| (m.id.clone(), m.name.clone())) else { continue };
         let index = KernIndex::new(&font);
         let pairs = covered(&font, &index, &master);
         if pairs.is_empty() {
             continue;
         }
-        if has_feature_code(&font) {
+        if fontcraft_compile::has_hand_written_kern(&font) {
+            eprintln!("not compared, a hand-written kern feature: {label}");
             with_code += 1;
             continue;
         }
         let options = Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, ..Default::default() };
-        let ours = match compile(&font, &font.default_target().unwrap(), fontcraft_compile::Flavour::TrueType, &options) {
+        let ours = match compile(&font, &fontcraft_model::Target::Master(master.clone()), fontcraft_compile::Flavour::TrueType, &options) {
             Ok(c) => c,
             Err(e) => {
                 skipped.push(format!("{label}: FontCraft: {e}"));
@@ -149,7 +161,7 @@ fn generated_kerning_equals_both_references() {
             v
         };
         let our_eval = PairEvaluator::new(&ours.bytes).unwrap();
-        let hint = Hint { family: font.family_name.clone(), style: font.default_master().unwrap().name.clone() };
+        let hint = Hint { family: font.family_name.clone(), style: master_name.clone() };
         let mut built = Vec::new();
         for (oracle, tool) in [(Oracle::Fontc, &fontc), (Oracle::Fontmake, &fontmake)] {
             let work = scratch.join(format!("{n}-{}", oracle.name()));
@@ -174,19 +186,30 @@ fn generated_kerning_equals_both_references() {
             continue;
         }
         compared += 1;
+        eprintln!("compared: {label} ({} pairs)", pairs.len());
         for (oracle, bytes) in &built {
             let Some(their_ids) = ids_by_name(bytes) else {
                 skipped.push(format!("{label}: {oracle}: no glyph names to match glyphs by"));
                 continue;
             };
             let their_eval = PairEvaluator::new(bytes).unwrap();
+            let their_font = FontRef::new(bytes).unwrap();
+            let their_cmap = their_font.charmap();
             let scripts: BTreeSet<Tag> = our_eval.scripts().into_iter().chain(their_eval.scripts()).collect();
             let mut shown = 0usize;
             for (a, b) in &pairs {
                 let ours_ab = [a, b].map(|name| ours.glyph_order.iter().position(|g| g == name).and_then(|i| u16::try_from(i).ok()));
                 let [Some(oa), Some(ob)] = ours_ab else { continue };
-                let names = [&our_names[usize::from(oa)], &our_names[usize::from(ob)]];
-                let (Some(ta), Some(tb)) = (their_ids.get(names[0]), their_ids.get(names[1])) else { continue };
+                // An encoded glyph is found by its code point, so that a production name given
+                // differently does not pair other glyphs; an unencoded one by its `post` name.
+                let theirs_of = |name: &str, ours: u16| -> Option<u16> {
+                    match font.glyph(name).and_then(|g| g.unicodes.first().copied()) {
+                        Some(cp) => their_cmap.map(cp).and_then(|g| u16::try_from(g.to_u32()).ok()),
+                        None => their_ids.get(&our_names[usize::from(ours)]).copied(),
+                    }
+                };
+                let (Some(ta), Some(tb)) = (theirs_of(a, oa), theirs_of(b, ob)) else { continue };
+                let (ta, tb) = (&ta, &tb);
                 *pairs_compared.entry(oracle).or_default() += 1;
                 for script in &scripts {
                     let (o, t) = (our_eval.value(*script, oa, ob), their_eval.value(*script, *ta, *tb));
@@ -202,7 +225,7 @@ fn generated_kerning_equals_both_references() {
         }
     }
     let _ = std::fs::remove_dir_all(&scratch);
-    eprintln!("sources with kerning and feature code (not compared): {with_code}");
+    eprintln!("sources with kerning and a hand-written kern feature (not compared): {with_code}");
     eprintln!("sources compared: {compared}; pairs compared: {pairs_compared:?}; differences: {}", all.len());
     for s in &skipped {
         eprintln!("skipped: {s}");
