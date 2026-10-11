@@ -2,16 +2,16 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-11, M5 accepted by the owner (M5.fix6 applied their decisions); M6's plan written and waiting for the owner's answers in `docs/plans/M6.md` § 7._
+_Updated: 2026-10-11, M6 wave A built and reviewed; plans M7 to M13 accepted (their questions answered in the inventory) and their interface skeletons merged; the first waves of M6 to M13 come next._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all eleven steps (1,288 tests, 19 ignored).
-  About 168,000 lines of Rust in 25 library crates, two apps and `xtask`. Built and run on Linux
+- `cargo xtask ci` passes all eleven steps (1,444 tests, 22 ignored).
+  About 204,000 lines of Rust in 38 library crates, two apps and `xtask`. Built and run on Linux
   x86-64 with Rust 1.97.
-- 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
-  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 677 guesses on 435
-  rows are listed in `docs/guesses.md`.
+- 365 of the 947 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
+  commands are all live, M6 to M13 have none yet. Feature parity is about 18% (ROADMAP.md ›
+  Parity estimate). About 1,050 guesses on 780 rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed. macOS and
   Windows have **not** been built.
@@ -20,37 +20,39 @@ _Updated: 2026-10-11, M5 accepted by the owner (M5.fix6 applied their decisions)
 
 ## Where to start
 
-1. **The owner's answers to `docs/plans/M6.md` § 7.** Don't start M6 before the plan is
-   accepted. The questions: accepting the plan, mark attachment at export (M6 or M8), the
-   composition data, caps, segments and brushes (M6 or M13), the TrueType default for
-   overlapping and transformed components, the milestone moves, and how anchor propagation is
-   written (question 7: port fontc's code, which derives from the reference app's source, or
-   write our own from the oracles' outputs; the plan recommends our own). Don't read fontc's or
-   glyphsLib's propagation code before that answer (`docs/clean-room.md`).
-2. **M6.0**, the spec pass: apply the answers (the mark-export rows move in from M8 if question
-   2 is (b); caps, segments and brushes move to M13 if question 4 is (b); the § 2 moves, already
-   in the inventory, are reverted if question 6 is rejected), mark `components` as M6.1's crate
-   in `docs/architecture.md`, regenerate parity and guesses again. Then the packages in
-   the order of § 6.
+1. **The first wave of each plan, M6 to M13** (`docs/plans/M<n>.md` § 6). Every package compiles
+   against the merged interface skeletons: M6.1a and M7.1 to M13.1 fixed the public signatures
+   of new crates and command modules, so the packages are written in parallel and built and
+   tested together. A skeleton file marks each placeholder with the package that fills it
+   (`// M8.5`); keep the signatures.
+2. **The M6 measures** (`docs/plans/M6.md` § 5): mark attachment against both oracles
+   (`cargo test -p fontcraft-oracle --features oracle --test marks -- --ignored`), propagation
+   against glyphsLib (`crates/engine/tests/corpus_propagation.rs`, which reads a JSON file of
+   glyphsLib's results made outside the repository), composition and alignment over the corpus
+   (`corpus_composition.rs`, `corpus_alignment.rs`).
 
-M6's plan in short: 220 rows (59 commands, 45 without caps, segments and brushes); a new crate
-`components` (reverse component index, anchor propagation equal to the oracles'); automatic
-alignment re-run by the engine inside each command's undo step; composition data from Unicode
-decomposition plus our own tables; smart and corner components drawn in the model's outline
-resolution; the M6 entries of `crates/oracle/allow.toml` removed when they export like the
-oracles'. Anchor propagation covers every anchor name as fontc does, beyond the handbook's top
-and bottom (a guess). Open questions Q-29 to Q-31 of `docs/spec/09-reusing-shapes.md` wait on
-§ 7 question 4; Q-37 stays open.
+M6 wave A, as built: `crates/components` (the component index; anchor propagation through nested,
+pinned and smart components; automatic alignment, re-run by the engine after each command inside
+its undo step; composition recipes from Unicode decomposition and our own tables); smart and
+corner components drawn by the model's outline resolution and exported; the `mark`, `mkmk`,
+`abvm` and `blwm` writers and `GDEF` (`crates/features/src/marks.rs`). Before the review fixes,
+propagation equalled glyphsLib's on 42,734 of 42,736 corpus layers. Two code reviews found
+unbounded work and allocation on hostile files, alignment that missed setting changes and pinned
+components, and outlines that failed on unfittable corners; all are fixed with tests. Known gaps:
+`Font::outline` draws a component pinned to another master from its own master; smart
+components where the oracles disagree (`w` in NestedSmartComponent follows glyphsLib, `m` in
+SmartComponents follows fontc) wait for the reference app.
 
-Seen before the rule existed (`docs/clean-room.md` › Recording): the M6 planning pass read
-fontc's `fontir/src/propagate_anchors.rs` and glyphsLib's `propagate_anchors.py`, whose notes say
-they derive from the reference app's privately shared source. The plan's § 2 records only what
-their outputs show. If the owner chooses to write anchor propagation ourselves, the agent that
-writes it reads neither file and works from the handbook and the oracles' outputs.
+Clean-room record (`docs/clean-room.md` › Recording): the M6 planning pass read fontc's
+`fontir/src/propagate_anchors.rs` and glyphsLib's `propagate_anchors.py`, whose notes say they
+derive from the reference app's privately shared source. Propagation was then written from the
+handbook and the oracles' outputs by agents that read neither file; M6.1's agent saw one line of
+glyphsLib's propagation code in a crash traceback and used only the fact that it crashes.
 
 Checks for the reference app: `cargo xtask observe` writes `docs/observe.md`, every row the
-running app could settle (606 rows, 649 guesses), built milestones first, grouped by place in
-the app. Rows take optional `observe = […]` steps; `observe --check` is a gate step.
+running app could settle (911 rows), built milestones first, grouped by place in the app. Rows
+take optional `observe = […]` steps; `observe --check` is a gate step. `cargo xtask testfonts`
+writes 45 synthetic `.glyphs` fonts for those checks into the git-ignored `plan/local/testfonts/`.
 
 Open items from M5 (the owner accepted M5 with the speed misses):
 
