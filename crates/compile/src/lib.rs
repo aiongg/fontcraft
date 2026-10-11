@@ -212,8 +212,7 @@ pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options
 /// is borrowed, not copied. Callers of [`compile_resolved_from`] resolve the prepared font.
 pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a, Font> {
     let mut out = Cow::Borrowed(font);
-    let has_corners =
-        font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::corner::is_corner)));
+    let has_corners = font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::corner::is_corner)));
     if has_corners {
         let (fitted, report) = fontcraft_model::corner::insert_all_corner_components(&out);
         warnings.extend(report.failed.into_iter().map(|e| format!("corner components were not fitted, so the paths were written without them: {e}")));

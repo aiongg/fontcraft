@@ -1627,7 +1627,10 @@ fn corner_and_smart_components_are_drawn_into_the_compiled_glyphs() {
     let n = Node::new;
     let mut corner = Glyph::new("_corner.cut");
     let mut l = Layer::new("m01", 0.0);
-    l.shapes.push(path(false, vec![n(0.0, 50.0, NodeKind::Line), n(-50.0, 50.0, NodeKind::Line), n(-50.0, 0.0, NodeKind::Line), n(25.0, 0.0, NodeKind::Line)]));
+    l.shapes.push(path(
+        false,
+        vec![n(0.0, 50.0, NodeKind::Line), n(-50.0, 50.0, NodeKind::Line), n(-50.0, 0.0, NodeKind::Line), n(25.0, 0.0, NodeKind::Line)],
+    ));
     corner.layers.push(l);
     f.glyphs.push(corner);
     {

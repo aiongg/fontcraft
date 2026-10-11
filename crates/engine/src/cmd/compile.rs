@@ -781,12 +781,7 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
     if let Some(key) = group.keys().find(|k| {
         !matches!(
             k.as_str(),
-            "keepDirection"
-                | "conversionError"
-                | "removeOverlaps"
-                | "flattenComponents"
-                | "decomposeComponents"
-                | "decomposeTransformedComponents"
+            "keepDirection" | "conversionError" | "removeOverlaps" | "flattenComponents" | "decomposeComponents" | "decomposeTransformedComponents"
         )
     }) {
         return Err(EngineError::Unsupported(format!("`outlines.{key}`")));

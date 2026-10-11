@@ -259,7 +259,7 @@ impl Placer {
             Shape::Path(p) if !p.closed => {
                 let mut on = p.nodes.iter().filter(|n| n.on_curve());
                 let first = on.next()?;
-                let last = on.last().unwrap_or(first);
+                let last = on.next_back().unwrap_or(first);
                 Some(((first.x, first.y), (last.x, last.y)))
             }
             _ => None,

@@ -149,8 +149,8 @@ fn mark_bases(out: &Compiled) -> Vec<String> {
 /// and then only for the glyphs the entry reaches, as both reference compilers do.
 #[test]
 fn a_ufo_source_propagates_anchors_only_when_its_filter_list_says_so() {
-    use fontcraft_model::{SourceFormat, UserData};
     use fontcraft_model::plist::{Dict, openstep::parse_value};
+    use fontcraft_model::{SourceFormat, UserData};
     let mut f = font();
     f.source.format = SourceFormat::Ufo;
     assert_eq!(mark_bases(&compile_ttf(&f, &Options::default()).unwrap()), ["A"]);

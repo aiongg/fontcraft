@@ -988,7 +988,7 @@ fn split_abvm(char_map: &HashMap<u32, GlyphId16>, glyph_count: usize, language_s
     let filtered: HashSet<ScriptCode> = if declared.is_empty() {
         abvm_scripts.clone()
     } else {
-        abvm_scripts.iter().filter(|s| script_to_ot_tags(*s).any(|t| declared.contains(&t))).copied().collect()
+        abvm_scripts.iter().filter(|s| script_to_ot_tags(s).any(|t| declared.contains(&t))).copied().collect()
     };
     let is_abvm = |cp: u32| -> Option<bool> {
         let mut saw = false;

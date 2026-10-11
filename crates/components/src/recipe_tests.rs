@@ -75,6 +75,6 @@ fn hostile_recipes_are_refused_with_a_message() {
     // No prefix of a mixed string panics.
     let text = "ä+ö=ü+=+é=a+b.sc=c_d";
     for (i, _) in text.char_indices() {
-        let _ = parse_recipe(&text[..i]);
+        let _ = parse_recipe(text.get(..i).unwrap());
     }
 }
