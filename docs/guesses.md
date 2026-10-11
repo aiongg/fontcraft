@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**675 guesses on 434 rows (190 of them live commands).**
+**676 guesses on 434 rows (190 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -171,6 +171,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `textPreview.setWritingDirection` | M5 | handbook | yes | The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ. |
 | `textPreview.setWritingDirection` | M5 | handbook | yes | A selected range with the other direction is an embedding: its base direction changes, one level inside the text's, and its runs are ordered by it; it keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it. |
 | `textPreview.setWritingDirection` | M5 | handbook | yes | Digits, Arabic-Indic digits included, form left-to-right runs; a neutral between two runs of the same direction takes that direction, else the base direction of the text or its range; a combining mark follows the character before it. Full UAX #9 at M8 would settle the cases where this differs. |
+| `textPreview.setWritingDirection` | M5 | handbook | yes | Digits count as left to right, so "12 34" in right-to-left text shows as "12 34" where full Unicode bidi gives "34 12"; M8's UAX #9 would settle it. |
 | `textPreview.find` | M5 | handbook | yes | The search options are Ignore Case (on at first) and Contains, Starts With or Full Word, as the system find bar of the reference offers them; matches do not overlap. |
 | `textPreview.find` | M5 | handbook | yes | Replace changes the current match, All changes every match; a replacement that would take the text past 1,000,000 characters is refused. |
 | `edit.selectSampleText` | M5 | handbook | yes | Choosing a sample string replaces the whole text of the tab; the handbook says the string goes into the text without saying where. |

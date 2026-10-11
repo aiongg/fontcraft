@@ -258,7 +258,8 @@ its whole text.
 
 - Letters of right-to-left scripts (Hebrew, Arabic, Syriac, Thaana, NKo and the other
   right-to-left blocks) form right-to-left runs; other letters form left-to-right runs.
-- Digits, Arabic-Indic digits included, form left-to-right runs.
+- Digits, Arabic-Indic digits included, form left-to-right runs. So "12 34" in right-to-left
+  text shows as "12 34", where the Unicode algorithm gives "34 12"; M8's UAX #9 settles it.
 - A neutral (space, punctuation, symbol) between two runs of the same direction takes that
   direction; otherwise it takes the base direction of the text or of its range.
 - A combining mark takes the direction of the character before it.

@@ -147,8 +147,79 @@ fn bidi_keeps_latin_words_in_order_in_right_to_left_text() {
     let l = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, bidi: true, embeddings: &embeddings, ..Options::default() }).unwrap();
     assert!(x(&l, 1) < x(&l, 0), "the Hebrew letters still read right to left");
     assert!(x(&l, 0) < x(&l, 3), "the Hebrew word stands left of the Latin one");
+    // Ranges are taken in order of their start, whatever their order in the list.
+    let listed_later = [Embedding { items: 4..6, rtl: true }, Embedding { items: 0..6, rtl: false }];
+    let later = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, bidi: true, embeddings: &listed_later, ..Options::default() }).unwrap();
+    assert_eq!(later.placed, l.placed);
     let l = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, bidi: true, ..Options::default() }).unwrap();
     assert!(x(&l, 3) < x(&l, 1), "without it, the Latin word stands left");
+}
+
+/// The test font with `alef` (500), `bet` (450), `gimel` (400), `one` and `two` (550) and
+/// `acutecomb` (0, a combining mark).
+fn bidi_font() -> Font {
+    let mut f = font();
+    f.add_glyph("alef", vec![0x5D0], 500.0).unwrap();
+    f.add_glyph("bet", vec![0x5D1], 450.0).unwrap();
+    f.add_glyph("gimel", vec![0x5D2], 400.0).unwrap();
+    f.add_glyph("one", vec![0x31], 550.0).unwrap();
+    f.add_glyph("two", vec![0x32], 550.0).unwrap();
+    f.add_glyph("acutecomb", vec![0x301], 0.0).unwrap();
+    kern(&mut f, Direction::Ltr, "f", "o", -40.0);
+    kern(&mut f, Direction::Rtl, "f", "o", -99.0);
+    f
+}
+
+#[test]
+fn bidi_lines_start_at_their_edge_and_a_trailing_space_kerns_with_nothing() {
+    let mut f = bidi_font();
+    kern(&mut f, Direction::Ltr, "x", "space", -100.0);
+    // alef ␣ b r o w n ␣ f o x ␣ | j u m p s ⏎ | bet ␣ f o x ´: the first line wraps before
+    // "jumps", so the space after "fox" trails it and takes the paragraph's level.
+    let t = text(&f, "\u{5d0} brown fox jumps\n\u{5d1} fox\u{301}");
+    let opts = Options { direction: Direction::Rtl, bidi: true, line_width: 7000.0, line_height: Some(1000.0), ..Options::default() };
+    let l = layout(&f, "m01", &t, &opts).unwrap();
+    let x = |i: usize| l.placed[i].x;
+    let ranges: Vec<_> = l.lines.iter().map(|line| line.items.clone()).collect();
+    assert_eq!(ranges, [0..12, 12..18, 18..24]);
+
+    assert_eq!(x(0), -500.0, "alef ends the first line at x = 0");
+    let latin: Vec<f64> = (2..7).chain(8..11).map(x).collect();
+    assert!(latin.windows(2).all(|p| p[0] < p[1]), "brown fox reads left to right: {latin:?}");
+    assert_eq!(l.placed[11].kern, 0.0, "the trailing space stands apart from x and does not kern with it");
+    assert_eq!(x(10) + 600.0, -750.0, "the Latin run ends where the space after alef begins");
+    assert_eq!(l.lines[0].length, 6050.0 - 40.0);
+    assert_eq!(x(11), -l.lines[0].length, "the trailing space stands at the far left");
+
+    assert_eq!(x(16) + 600.0, 0.0, "a line of Latin letters ends at x = 0");
+    let jumps: Vec<f64> = (12..17).map(x).collect();
+    assert!(jumps.windows(2).all(|p| p[0] < p[1]), "jumps reads left to right: {jumps:?}");
+    assert_eq!(l.placed[12].y, -1000.0);
+
+    assert_eq!(x(18), -450.0, "bet ends the third line at x = 0");
+    assert_eq!(l.placed[18].y, -2000.0);
+    assert_eq!(x(20), -l.lines[2].length, "fox starts the line at its length");
+    assert_eq!(x(21) - x(20), 600.0 - 40.0, "f o kerns from the left-to-right table");
+    assert_eq!(x(23), x(22) + 600.0, "the combining mark follows x, not the Hebrew letter");
+}
+
+#[test]
+fn bidi_reverses_a_right_to_left_run_in_left_to_right_text_and_off_changes_nothing() {
+    let f = bidi_font();
+    let t = text(&f, "ab \u{5d0}\u{5d1}\u{5d2} cd");
+    let l = layout(&f, "m01", &t, &Options { bidi: true, ..Options::default() }).unwrap();
+    let xs: Vec<f64> = l.placed.iter().map(|p| p.x).collect();
+    // a b ␣ alef bet gimel ␣ c d: the Hebrew run reads right to left.
+    assert_eq!(xs, [0.0, 600.0, 1200.0, 2300.0, 1850.0, 1450.0, 2800.0, 3050.0, 3650.0]);
+
+    // Without bidi every item follows the direction in text order, as in Edit View.
+    let t = text(&f, "\u{5d0} fox\u{301} 12");
+    let ltr = layout(&f, "m01", &t, &Options::default()).unwrap();
+    let xs: Vec<f64> = ltr.placed.iter().map(|p| p.x).collect();
+    assert_eq!(xs, [0.0, 500.0, 750.0, 1310.0, 1910.0, 2510.0, 2510.0, 2760.0, 3310.0]);
+    let rtl = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, ..Options::default() }).unwrap();
+    let xs: Vec<f64> = rtl.placed.iter().map(|p| p.x).collect();
+    assert_eq!(xs, [-500.0, -750.0, -1350.0, -1851.0, -2451.0, -2451.0, -2701.0, -3251.0, -3801.0]);
 }
 
 #[test]

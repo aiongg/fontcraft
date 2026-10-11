@@ -53,7 +53,7 @@
 //!               single_line: bool, missing_advance: Option<f64>, index: Option<&'a KernIndex>,
 //!               layers: Option<&'a BTreeMap<String, String>> (glyph → layer id),
 //!               bidi: bool, embeddings: &'a [Embedding] }  (Default)
-//! Embedding { items: Range<usize>, rtl: bool };  bidi::Class::{Ltr, Rtl, Digit, Mark, Neutral}
+//! Embedding { items: Range<usize>, rtl: bool };  bidi::MAX_EMBEDDINGS = 1_000;  bidi::Class::{Ltr, Rtl, Digit, Mark, Neutral}
 //! bidi::class(c: char) -> Class;  bidi::is_strong_rtl(c: char) -> bool
 //! layout(font: &Font, master: &str, text: &Text, options: &Options) -> Result<Layout, LayoutError>
 //! line_height(font: &Font, master: &Master) -> f64

@@ -50,7 +50,7 @@ pub const SIZE_RANGE: RangeInclusive<f64> = 4.0..=1_000.0;
 /// The font size of a new preview, in points.
 pub const DEFAULT_SIZE: f64 = 36.0;
 /// Most runs with their own writing direction.
-pub const MAX_RUNS: usize = 1_000;
+pub const MAX_RUNS: usize = fontcraft_textlayout::bidi::MAX_EMBEDDINGS;
 /// Longest search or replacement, in characters.
 pub const MAX_QUERY_CHARS: usize = 1_000;
 /// Match ranges listed in a reply.

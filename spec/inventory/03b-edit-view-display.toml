@@ -1311,6 +1311,7 @@ guesses = [
   "The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ.",
   "A selected range with the other direction is an embedding: its base direction changes, one level inside the text's, and its runs are ordered by it; it keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it.",
   "Digits, Arabic-Indic digits included, form left-to-right runs; a neutral between two runs of the same direction takes that direction, else the base direction of the text or its range; a combining mark follows the character before it. Full UAX #9 at M8 would settle the cases where this differs.",
+  "Digits count as left to right, so \"12 34\" in right-to-left text shows as \"12 34\" where full Unicode bidi gives \"34 12\"; M8's UAX #9 would settle it.",
 ]
 
 [[command]]

@@ -16,18 +16,25 @@
 //! 4. Levels follow from the direction and the embedding (even: left to right, odd: right to
 //!    left). On each line, trailing spaces and the line break take the paragraph's level, then
 //!    every run at or above each level from the highest down to the lowest odd one is reversed.
+//!
+//! Digits counting as left to right means "12 34" in right-to-left text reads "12 34", where the
+//! Unicode algorithm gives "34 12".
 
 use std::ops::Range;
 
 use crate::text::Item;
 
-/// A range of items, in text order, with its own base direction. Ranges that overlap an earlier
-/// one are ignored.
+/// A range of items, in text order, with its own base direction. Ranges are taken in order of
+/// their start (in list order when two start together); a range that overlaps one already taken
+/// is ignored, and so is every range past the first [`MAX_EMBEDDINGS`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Embedding {
     pub items: Range<usize>,
     pub rtl: bool,
 }
+
+/// The ranges with their own direction that [`levels`] takes.
+pub const MAX_EMBEDDINGS: usize = 1_000;
 
 /// The bidirectional class of a character, as these rules use it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,7 +48,8 @@ pub enum Class {
 
 /// Whether a character belongs to a right-to-left script. Digits in those blocks are not.
 pub fn is_strong_rtl(c: char) -> bool {
-    class(c) == Class::Rtl
+    let u = u32::from(c);
+    is_rtl_block(u) && !is_arabic_digit(u)
 }
 
 fn is_rtl_block(u: u32) -> bool {
@@ -86,9 +94,11 @@ fn item_class(item: &Item) -> Option<Class> {
 /// runs in the paragraph's direction. Linear in the items plus the embeddings.
 pub(crate) fn levels(items: &[Item], base_rtl: bool, embeddings: &[Embedding]) -> Option<Vec<u8>> {
     let n = items.len();
-    let opposite = |item: &Item| match item_class(item) {
-        Some(Class::Rtl) => !base_rtl,
-        Some(Class::Ltr | Class::Digit) => base_rtl,
+    let embeddings = embeddings.get(..MAX_EMBEDDINGS).unwrap_or(embeddings);
+    // Left-to-right text skips the full class lookup: this scan runs over every item.
+    let opposite = |item: &Item| match item {
+        Item::Glyph { typed: Some(c), .. } | Item::Missing(c) if base_rtl => matches!(class(*c), Class::Ltr | Class::Digit),
+        Item::Glyph { typed: Some(c), .. } | Item::Missing(c) => is_strong_rtl(*c),
         _ => false,
     };
     let embedded = embeddings.iter().any(|e| e.rtl != base_rtl && e.items.start < e.items.end.min(n));
@@ -97,8 +107,10 @@ pub(crate) fn levels(items: &[Item], base_rtl: bool, embeddings: &[Embedding]) -
     }
     let paragraph = u8::from(base_rtl);
     let mut embedding = vec![paragraph; n];
+    let mut sorted: Vec<&Embedding> = embeddings.iter().collect();
+    sorted.sort_by_key(|e| e.items.start);
     let mut taken = 0usize;
-    for e in embeddings {
+    for e in sorted {
         let (start, end) = (e.items.start.min(n), e.items.end.min(n));
         if start < taken || start >= end {
             continue;
@@ -173,18 +185,25 @@ pub(crate) fn levels(items: &[Item], base_rtl: bool, embeddings: &[Embedding]) -
     Some(levels)
 }
 
+/// Gives the trailing blanks (spaces and the closing line break) of the line `range` the
+/// paragraph's level, and returns the index of the first of them (`range.end` when there are
+/// none). `levels` and `blank` hold one entry per item of the whole text.
+pub(crate) fn reset_trailing(range: Range<usize>, levels: &mut [u8], blank: &[bool], base_rtl: bool) -> usize {
+    let mut first = range.end;
+    for i in range.rev() {
+        let (Some(level), Some(true)) = (levels.get_mut(i), blank.get(i)) else { break };
+        *level = u8::from(base_rtl);
+        first = i;
+    }
+    first
+}
+
 /// The visual order, left to right, of the items `range` of a line: indexes into the text.
-/// `levels` and `blank` (a space or a line break) hold one entry per item of the whole text.
-pub(crate) fn visual_order(range: Range<usize>, levels: &[u8], blank: &[bool], base_rtl: bool) -> Vec<usize> {
+/// `levels` holds one entry per item of the whole text, the line's trailing blanks reset by
+/// [`reset_trailing`].
+pub(crate) fn visual_order(range: Range<usize>, levels: &[u8], base_rtl: bool) -> Vec<usize> {
     let paragraph = u8::from(base_rtl);
     let mut line: Vec<(usize, u8)> = range.map(|i| (i, levels.get(i).copied().unwrap_or(paragraph))).collect();
-    // Trailing spaces and the closing line break take the paragraph's level.
-    for (i, level) in line.iter_mut().rev() {
-        if blank.get(*i) != Some(&true) {
-            break;
-        }
-        *level = paragraph;
-    }
     let highest = line.iter().map(|(_, l)| *l).max().unwrap_or(paragraph);
     let lowest_odd = line.iter().map(|(_, l)| *l).filter(|l| l % 2 == 1).min();
     if let Some(lowest_odd) = lowest_odd {

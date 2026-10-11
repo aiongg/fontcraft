@@ -250,7 +250,7 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         }
     };
     let table: Option<Table<'_>> = index.map(|i| i.table(direction, master)).transpose()?;
-    let levels = (options.bidi && direction != Direction::Vertical)
+    let mut levels = (options.bidi && direction != Direction::Vertical)
         .then(|| bidi::levels(text.items(), direction == Direction::Rtl, options.embeddings))
         .flatten();
     // A run of the other direction kerns from that direction's table.
@@ -294,30 +294,29 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         })
         .collect();
 
-    // Kerning with the previous item, when both are glyphs (and, with bidi, in the same run).
-    let kerns: Vec<f64> = (0..items.len())
-        .map(|i| {
-            let prev = i.checked_sub(1).and_then(|p| items.get(p)).and_then(|m| m.kern_id);
-            let this = items.get(i).and_then(|m| m.kern_id);
-            let table = match &levels {
-                None => table,
-                Some(levels) => {
-                    let level = levels.get(i);
-                    if i == 0 || levels.get(i - 1) != level {
-                        None
-                    } else if level.is_some_and(|l| (l % 2 == 1) == (direction == Direction::Rtl)) {
-                        table
-                    } else {
-                        other
-                    }
+    // Kerning between item `i` and the one before it, when both are glyphs (and, with bidi, at
+    // the same level: two such items stand side by side in the same run).
+    let kern = |i: usize, levels: Option<&[u8]>| {
+        let Some(p) = i.checked_sub(1) else { return 0.0 };
+        let table = match levels {
+            None => table,
+            Some(levels) => {
+                let level = levels.get(i);
+                if levels.get(p) != level {
+                    None
+                } else if level.is_some_and(|l| (l % 2 == 1) == (direction == Direction::Rtl)) {
+                    table
+                } else {
+                    other
                 }
-            };
-            match (table, prev, this) {
-                (Some(t), Some(a), Some(b)) => t.lookup(a, b).map_or(0.0, |applied| finite_or_zero(applied.value)),
-                _ => 0.0,
             }
-        })
-        .collect();
+        };
+        match (table, items.get(p).and_then(|m| m.kern_id), items.get(i).and_then(|m| m.kern_id)) {
+            (Some(t), Some(a), Some(b)) => t.lookup(a, b).map_or(0.0, |applied| finite_or_zero(applied.value)),
+            _ => 0.0,
+        }
+    };
+    let kerns: Vec<f64> = (0..items.len()).map(|i| kern(i, levels.as_deref())).collect();
 
     // Lines: greedy, breaking after the last space of a line that overflows, else before the
     // glyph that overflows. A line keeps at least one item, and a space may hang past the width.
@@ -362,27 +361,45 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
     }
     lines.push((start..n, pen));
 
-    // With bidi, each line's items move to their visual order; a kern stays between the two
-    // glyphs it was looked up for, which stand side by side in either order.
-    if let Some(levels) = &levels {
+    // With bidi, each line's trailing blanks take the paragraph's level, which only the line
+    // breaks above decide; their kerns are looked up again from those levels, so every kern
+    // stands between two glyphs of the same run. Then the items move to their visual order, a
+    // kern between the two glyphs it was looked up for (side by side, in either order), and the
+    // line's length is the sum of its advances and kerns as placed.
+    if let Some(levels) = levels.as_mut() {
         let rtl = direction == Direction::Rtl;
         let blank: Vec<bool> = items.iter().map(|m| m.is_space || m.is_break).collect();
-        for (range, length) in &lines {
+        for (range, length) in &mut lines {
+            let trailing = bidi::reset_trailing(range.clone(), levels, &blank, rtl);
+            for i in trailing.max(range.start + 1)..range.end {
+                if let Some(u) = used.get_mut(i) {
+                    *u = kern(i, Some(levels));
+                }
+            }
+            let order = bidi::visual_order(range.clone(), levels, rtl);
             let mut along = 0.0;
             let mut prev: Option<usize> = None;
-            for i in bidi::visual_order(range.clone(), levels, &blank, rtl) {
+            for &i in &order {
                 let gap = match prev {
                     Some(a) if a + 1 == i => used.get(i).copied().unwrap_or(0.0),
                     Some(a) if i + 1 == a => used.get(a).copied().unwrap_or(0.0),
                     _ => 0.0,
                 };
                 along += gap;
-                let advance = items.get(i).map_or(0.0, |m| m.advance);
                 if let Some(o) = offsets.get_mut(i) {
-                    *o = if rtl { length - along - advance } else { along };
+                    *o = along;
                 }
-                along += advance;
+                along += items.get(i).map_or(0.0, |m| m.advance);
                 prev = Some(i);
+            }
+            *length = along;
+            if rtl {
+                for &i in &order {
+                    let advance = items.get(i).map_or(0.0, |m| m.advance);
+                    if let Some(o) = offsets.get_mut(i) {
+                        *o = along - *o - advance;
+                    }
+                }
             }
         }
     }
