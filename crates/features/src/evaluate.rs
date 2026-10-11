@@ -18,10 +18,21 @@ use read_fonts::{FontRef, ReadError, TableProvider};
 use write_fonts::types::{GlyphId16, Tag};
 
 use crate::kern::{DIST, KERN};
-use crate::properties::DFLT_SCRIPT;
+use crate::properties::{COMMON_SCRIPT, DFLT_SCRIPT, INHERITED_SCRIPT, script_to_ot_tags, unicode_script_extensions};
 
 /// Most lookups and subtables the evaluator reads from one font.
 pub const MAX_EVAL_SUBTABLES: usize = 1_000_000;
+
+/// The OpenType script tags of `cp`'s Script_Extensions, without the common and inherited
+/// scripts: where the kern writer puts the pairs of a glyph with that code point. Empty for a
+/// common or inherited code point.
+pub fn script_tags(cp: u32) -> Vec<Tag> {
+    let mut out: Vec<Tag> =
+        unicode_script_extensions(cp).filter(|s| *s != COMMON_SCRIPT && *s != INHERITED_SCRIPT).flat_map(|s| script_to_ot_tags(&s)).collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
 
 struct EvalLookup<'a> {
     flags: LookupFlag,

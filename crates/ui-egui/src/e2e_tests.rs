@@ -616,20 +616,25 @@ fn taps(app: &mut FontcraftApp, key_name: &str, mods: Value, n: usize) {
     }
 }
 
-/// The M5 end-to-end measure (`docs/plans/M5.md` § 5) up to the Kerning window step: an agent on
-/// the control channel types in text mode, links `o`'s sidebearings to `n` with `=|n` keys,
-/// spaces `n` with the spacing keys and runs Update Metrics, sets kerning groups, and kerns `To`
-/// in group mode and `Tö` as an exception with the kerning keys. `engine.execute` only draws the
-/// test outlines, sets the keys and groups (the Info box fields of M5.8) and opens the lock.
+/// The M5 end-to-end measure (`docs/plans/M5.md` § 5): an agent on the control channel opens a
+/// synthetic two-master font, types in text mode, links `o`'s sidebearings to `n` with `=|n`
+/// keys, spaces `n` with the spacing keys and runs Update Metrics, sets kerning groups, kerns `To`
+/// in group mode and `Tö` as an exception with the kerning keys, opens the Kerning window,
+/// compresses, and exports the master's metrics as kerning-text and imports them into the second
+/// master. `engine.execute` draws the test outlines, sets the keys and groups (the Info box
+/// fields of M5.8), opens the lock and runs the Kerning window's Compress, export and import.
 ///
 /// The fixtures: every outline is one rectangle from x = 0, so a glyph's left sidebearing is
 /// where the rectangle starts and its right sidebearing the width after it. `=|n` gives `o` the
 /// opposite side of `n`: left = n's right (30), right = n's left.
 #[test]
 fn an_agent_spaces_and_kerns_text_over_the_control_channel() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-e2e-spacing-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("Control Text.fontcraft");
+    two_master_font(&file);
     let mut app = FontcraftApp::new(Session::new());
-    execute(&mut app, "file.new", json!({"familyName": "Control Text"}));
-    execute(&mut app, "glyph.addGlyphs", json!({"text": "odieresis"}));
+    execute(&mut app, "file.open", json!({"path": file}));
     for (glyph, w, left, right) in [
         ("H", 400, 60, 60),
         ("O", 500, 40, 40),
@@ -708,4 +713,41 @@ fn an_agent_spaces_and_kerns_text_over_the_control_channel() {
     ]);
     assert_eq!(pairs["pairs"], fixture, "{pairs}");
     assert_eq!(text(&mut app)["text"], "ToTö", "the kerning keys leave the text as it is");
+
+    // The Kerning window by its shortcut, Compress (both pairs are real exceptions, so it keeps
+    // them), and the master's spacing and kerning through kerning-text into the second master.
+    let window = shortcut(&mut app, json!({"key": "k", "cmd": true, "alt": true}), "window.kerning");
+    assert_eq!((window["open"].clone(), window["total"].clone()), (json!(true), json!(2)), "{window}");
+    let compressed = execute(&mut app, "kerning.compress", json!({}));
+    assert_eq!(compressed["runs"], 0, "{compressed}");
+    let exported = execute(&mut app, "file.exportMetrics", json!({"format": "metrics", "path": dir.join("Regular.tsv")}));
+    assert_eq!((exported["pairs"].clone(), exported["groups"].clone(), exported["glyphs"].clone()), (json!(2), json!(4), json!(55)), "{exported}");
+    let text_file = std::fs::read_to_string(dir.join("Regular.tsv")).unwrap();
+    for line in ["@T\t@o\t-40\n", "@T\todieresis\t-28\n"] {
+        assert!(text_file.contains(line), "{line:?} in {text_file}");
+    }
+    let imported = execute(&mut app, "file.importMetrics", json!({"file": dir.join("Regular.tsv"), "master": "m02"}));
+    assert_eq!(imported["kerning"]["pairs"], 2, "{imported}");
+    let second = execute(&mut app, "kerning.listPairs", json!({"master": "m02"}));
+    assert_eq!(second["pairs"], fixture, "{second}");
+    let in_second = execute(&mut app, "kerning.getPair", json!({"left": "T", "right": "odieresis", "master": "m02"}));
+    assert_eq!(in_second["value"], json!(-28.0), "{in_second}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The synthetic font the M5 end-to-end agent opens: a new font with `odieresis` and a second
+/// master `m02`, saved to `path`.
+fn two_master_font(path: &std::path::Path) {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"familyName": "Control Text"})).unwrap();
+    s.execute("glyph.addGlyphs", &json!({"text": "odieresis"})).unwrap();
+    s.edit("second master", |f| {
+        let mut m = f.masters[0].clone();
+        m.id = "m02".into();
+        m.name = "Bold".into();
+        std::sync::Arc::make_mut(&mut f.masters).push(m);
+        Ok(())
+    })
+    .unwrap();
+    s.execute("file.saveAs", &json!({"path": path})).unwrap();
 }
