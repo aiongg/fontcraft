@@ -2414,7 +2414,7 @@ fontcraft-cli mcp [--transport stdio|http] [--listen ADDR] [--root DIR]... [--re
 Times a subcommand: runs it several times on the given inputs, discards its outputs, and reports the minimum, median and spread of wall time and peak memory together with the per-stage breakdown. It can run reference tools found on PATH on the same input for a side-by-side figure.
 
 ```
-fontcraft-cli bench SUBCOMMAND [ARGS...] [--runs N] [--warmup N] [--compare TOOL...] [--json]
+fontcraft-cli bench [--runs N] [--warmup N] [--compare COMMAND]... [--stages] [--save FILE] [--baseline FILE] [--threshold PCT] [--json] SUBCOMMAND [ARGS...]
 ```
 
 | Reference tool | Reference option | Ours | Note |

@@ -2081,14 +2081,15 @@ guesses = [
 
 [[cli]]
 id = "bench"
-usage = "fontcraft-cli bench SUBCOMMAND [ARGS...] [--runs N] [--warmup N] [--compare TOOL...] [--json]"
+usage = "fontcraft-cli bench [--runs N] [--warmup N] [--compare COMMAND]... [--stages] [--save FILE] [--baseline FILE] [--threshold PCT] [--json] SUBCOMMAND [ARGS...]"
 options = [
-  "SUBCOMMAND [ARGS...]: the fontcraft-cli invocation to time",
+  "SUBCOMMAND [ARGS...]: the fontcraft-cli invocation to time; it comes after bench's own options (or after --)",
   "--runs N: timed repetitions; default 10",
   "--warmup N: untimed runs first; default 1",
-  "--compare TOOL...: also time these reference command lines (quoted), for example 'fontc Source.glyphs'",
-  "--stages: include the per-stage timing table of the last run",
+  "--compare COMMAND: also time this reference command line (quoted, found on PATH), for example 'fontc Source.glyphs'; may be repeated",
+  "--stages: include the per-stage timing table of one more run with --timing",
   "--save FILE / --baseline FILE: store the result, or compare with a stored result and exit 1 on a slowdown beyond --threshold PCT (default 10)",
+  "--json: print the result as JSON instead of text",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = ""
@@ -2101,6 +2102,10 @@ milestone = "M12"
 summary = "Times a subcommand: runs it several times on the given inputs, discards its outputs, and reports the minimum, median and spread of wall time and peak memory together with the per-stage breakdown. It can run reference tools found on PATH on the same input for a side-by-side figure."
 ref = "fontTools cu2qu/benchmark.py, qu2cu/benchmark.py; fontc --emit-timing; fontmake --timing"
 status = "inferred"
+notes = "Built in M12.43. Each run is a child process with its output discarded, so the figures include process start-up for us and for the reference tools alike. The figures are minimum, median, maximum and sample standard deviation of wall time (ms) and of peak resident memory (KiB, the VmHWM sampled every millisecond from /proc: Linux only, a lower bound for very short runs). A run of ours completes with exit status 0 or 1 (1 means it found something); a reference tool must exit 0, and one that fails or is not on PATH is reported in its entry without failing the run. --baseline compares the median wall time only; a timed subcommand that fails stops bench with exit status 4. --stages adds the standard error of one extra run with --timing, and reports none while the subcommand refuses that option. Limits: --runs 1 to 10,000, --warmup up to 1,000, 16 --compare lines, a stored result of at most 1 MiB."
+guesses = [
+  "Bench's options come before the timed subcommand and everything from the subcommand on is timed, so a subcommand's own options (such as --json) never clash with bench's; the reference benchmark modules take no such command line, so use will settle it.",
+]
 
 [[cli]]
 id = "completion"
@@ -2117,6 +2122,7 @@ milestone = "M12"
 summary = "Prints a shell completion script for the named shell to standard output. Completions cover subcommands, actions, option names and enumerated option values."
 ref = "AFDKO completion.py"
 status = "docs"
+notes = "Built in M12.43. The scripts are generated from the subcommand table: names, actions, every option of each subcommand's option table (switches with their --no- form) and the option names its usage synopsis shows, and the alternatives of a|b groups as option values or first-argument words. Other positions fall back to the shell's file-name completion. pwsh is accepted for powershell. The reference generator completes only command names."
 
 [[cli]]
 id = "help"
