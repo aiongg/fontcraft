@@ -13,6 +13,7 @@ pub mod drawing;
 pub mod font_view;
 pub mod glyph_info;
 pub mod item_state;
+pub mod kerning_window;
 pub mod keymap;
 pub mod masters;
 pub mod menus;
@@ -59,6 +60,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (start_window::COMMANDS, start_window::run),
     (text::COMMANDS, text::run),
     (crate::canvas::group_members::COMMANDS, crate::canvas::group_members::run),
+    (kerning_window::COMMANDS, kerning_window::run),
 ];
 
 /// Every shell command, in module order.
@@ -69,6 +71,7 @@ pub static UI_COMMANDS: LazyLock<Vec<UiCommand>> = LazyLock::new(|| MODULES.iter
 pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
     glyph_info::show(app, ui, pending);
     start_window::show(app, ui, pending);
+    kerning_window::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {

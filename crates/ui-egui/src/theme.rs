@@ -259,6 +259,9 @@ pub struct Tokens {
     /// Show Group Members: the outline of each member drawn behind the edited pair.
     pub group_members: Color32,
     pub group_members_width: f32,
+    /// The Kerning window's entries: a group (`@name`) and a single glyph.
+    pub kerning_group_text: Color32,
+    pub kerning_glyph_text: Color32,
 }
 
 impl Tokens {
@@ -432,6 +435,8 @@ impl Tokens {
             info_box_glyph_gap: 8.0,
             group_members: Color32::from_rgba_unmultiplied(0x3b, 0x82, 0xf6, 0xa0),
             group_members_width: 1.0,
+            kerning_group_text: Color32::from_rgb(0x5c, 0xa8, 0xf5),
+            kerning_glyph_text: Color32::from_rgb(0xd9, 0xb2, 0x48),
         }
     }
 
@@ -448,6 +453,8 @@ impl Tokens {
             row_selected: Color32::from_rgb(0xb4, 0xd4, 0xf8),
             selected_text: Color32::from_rgb(0x10, 0x10, 0x10),
             canvas: Color32::WHITE,
+            kerning_group_text: Color32::from_rgb(0x1f, 0x62, 0xc4),
+            kerning_glyph_text: Color32::from_rgb(0x9a, 0x6e, 0x00),
             ..Self::dark()
         }
     }
