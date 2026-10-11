@@ -25,8 +25,9 @@ impl Window {
         output.textures_delta.clear();
     }
 
+    /// Frames until the box has found its place: the glyph's position, then the box's size.
     fn settle(&self, app: &mut FontcraftApp) {
-        for _ in 0..3 {
+        for _ in 0..5 {
             self.frame(app, Vec::new());
         }
     }

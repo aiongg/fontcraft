@@ -149,7 +149,7 @@ fn tab_commits_and_moves_on_escape_cancels() {
 }
 
 #[test]
-fn arrows_step_a_field_by_one_and_by_ten_with_shift() {
+fn arrows_step_a_field_by_one_by_ten_with_shift_and_by_a_hundred_with_cmd_shift() {
     let mut app = edit_app();
     select_square(&mut app);
     let w = Window::new();
@@ -161,6 +161,8 @@ fn arrows_step_a_field_by_one_and_by_ten_with_shift() {
     assert_eq!(square(&app)[1], 110.0);
     w.key(&mut app, Key::ArrowDown, Modifiers::NONE);
     assert_eq!(square(&app)[1], 109.0);
+    w.key(&mut app, Key::ArrowUp, Modifiers::COMMAND | Modifiers::SHIFT);
+    assert_eq!(square(&app)[1], 209.0);
     assert!(w.focused(y), "the field stays focused");
 }
 

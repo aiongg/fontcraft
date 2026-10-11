@@ -1,10 +1,11 @@
-//! The kerning part of the Info box, at the lower left of the canvas while Show Info is on.
+//! The kerning part of the Info box glyph box (`info_box_metrics`), while Show Info is on.
 //!
-//! For the current glyph of an Edit View tab it shows, at each edge as drawn, the kerning
+//! For the current glyph of an Edit View tab it gives, for each edge as drawn, the kerning
 //! towards the neighbouring glyph, the lock of the current glyph in that pair and the current
-//! glyph's kerning group on that side (`infoBox.kerning`). While the Text tool is the chosen tool
-//! a smaller box before it shows the glyph before the current one: its name, its lock in the pair
-//! and its group that faces the current glyph (`infoBox.precedingGlyph`).
+//! glyph's kerning group on that side (`infoBox.kerning`); the glyph box draws them at its outer
+//! edges. While the Text tool is the chosen tool a smaller box beside the glyph box shows the
+//! glyph before the current one: its name, its lock in the pair and its group that faces the
+//! current glyph (`infoBox.precedingGlyph`).
 //!
 //! | Control | Runs |
 //! |---|---|
@@ -18,12 +19,10 @@
 //! pair with the glyph before; right to left, it is the pair with the glyph after, which is drawn
 //! on the left; top to bottom, the first edge is the pair with the glyph above.
 //!
-//! The kern fields follow the Info box field rules (`widgets`) and add what kern fields need: the
-//! grey placeholder `Kern` when no pair applies, Up and Down from zero in an empty field, and
-//! steps of 100 with Cmd+Shift (`spacing.infoBoxArrowSteps`).
+//! The kern fields follow the Info box field rules (`widgets`), show the grey placeholder `Kern`
+//! when no pair applies, and step from zero in an empty field.
 
-use egui::text::CCursorRange;
-use egui::{Id, Key, Modifiers};
+use egui::Id;
 use serde_json::{Value, json};
 
 use super::{Pending, widgets};
@@ -32,13 +31,6 @@ use crate::canvas::view;
 use crate::icons::Icon;
 use crate::state::WritingDirection;
 use crate::theme::Tokens;
-
-/// Longest text a kern field takes.
-const MAX_KERN_CHARS: usize = 32;
-/// Up and Down change a kern value by 1, by 10 with Shift and by 100 with Cmd+Shift.
-const STEPS: [(Modifiers, f64); 3] = [(Modifiers::COMMAND.plus(Modifiers::SHIFT), 100.0), (Modifiers::SHIFT, 10.0), (Modifiers::NONE, 1.0)];
-/// The keys a focused kern field keeps for itself, as `widgets` fields do.
-const FILTER: egui::EventFilter = egui::EventFilter { tab: false, horizontal_arrows: true, vertical_arrows: true, escape: true };
 
 /// Two glyphs next to each other in the text, in logical order, with `kerning.getPair`'s reply.
 struct Pair {
@@ -110,20 +102,20 @@ struct Edge {
 }
 
 /// The glyph before the current one, for the box the Text tool shows.
-struct Preceding {
+pub(super) struct Preceding {
     pair: Pair,
     group_command: &'static str,
 }
 
-struct Kerning {
+pub(super) struct Kerning {
     glyph: String,
     master: String,
     direction: &'static str,
     edges: [Edge; 2],
-    preceding: Option<Preceding>,
+    pub(super) preceding: Option<Preceding>,
 }
 
-fn read(app: &mut FontcraftApp) -> Option<Kerning> {
+pub(super) fn read(app: &mut FontcraftApp) -> Option<Kerning> {
     let tab = app.state.tab()?;
     let font = app.session.font().ok()?;
     let glyph = tab.edited_glyph()?.to_string();
@@ -177,59 +169,45 @@ fn read(app: &mut FontcraftApp) -> Option<Kerning> {
     Some(Kerning { glyph, master, direction, edges, preceding })
 }
 
-pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
-    let tokens = app.tokens.clone();
-    let Some(k) = read(app) else { return };
-    let canvas = ui.available_rect_before_wrap();
-    let pos = egui::pos2(canvas.left() + tokens.info_box_margin, canvas.bottom() - tokens.info_box_margin);
-    egui::Area::new(widgets::id("infoBox.kerning"))
-        .order(egui::Order::Middle)
-        .fixed_pos(pos)
-        .pivot(egui::Align2::LEFT_BOTTOM)
-        .constrain_to(canvas)
-        .show(ui.ctx(), |ui| {
-            ui.horizontal(|ui| {
-                if let Some(p) = &k.preceding {
-                    egui::Frame::popup(ui.style()).fill(tokens.panel).show(ui, |ui| preceding(ui, &tokens, &k, p, pending));
-                }
-                egui::Frame::popup(ui.style()).fill(tokens.panel).show(ui, |ui| contents(ui, &tokens, &k, pending));
-            });
-        });
+/// The kern field at edge `index` (0: left or top as drawn, 1: right or bottom).
+pub(super) fn edge_kern(ui: &mut egui::Ui, tokens: &Tokens, k: &Kerning, index: usize, pending: &mut Pending) {
+    if let Some(edge) = k.edges.get(index) {
+        kern(ui, tokens, k, edge, pending);
+    }
 }
 
-/// The current glyph's box: kern field, lock and group at each edge, the glyph name between.
-fn contents(ui: &mut egui::Ui, tokens: &Tokens, k: &Kerning, pending: &mut Pending) {
-    ui.horizontal(|ui| {
-        let [first, second] = &k.edges;
-        kern(ui, tokens, k, first, pending);
-        lock(ui, k, first.pair.as_ref(), first.own, &format!("infoBox.lock{}", first.salt), pending);
-        group(
-            ui,
-            tokens,
-            GroupField {
-                glyph: &k.glyph,
-                shown: &first.group,
-                command: first.group_command,
-                salt: format!("infoBox.group{}", first.salt),
-                hover: first.group_hover,
-            },
-            pending,
-        );
-        ui.label(&k.glyph);
-        group(
-            ui,
-            tokens,
-            GroupField {
-                glyph: &k.glyph,
-                shown: &second.group,
-                command: second.group_command,
-                salt: format!("infoBox.group{}", second.salt),
-                hover: second.group_hover,
-            },
-            pending,
-        );
-        lock(ui, k, second.pair.as_ref(), second.own, &format!("infoBox.lock{}", second.salt), pending);
-        kern(ui, tokens, k, second, pending);
+/// The group field and the lock at edge `index`, the group outermost.
+pub(super) fn edge_group(ui: &mut egui::Ui, tokens: &Tokens, k: &Kerning, index: usize, pending: &mut Pending) {
+    let Some(edge) = k.edges.get(index) else { return };
+    let field = GroupField {
+        glyph: &k.glyph,
+        shown: &edge.group,
+        command: edge.group_command,
+        salt: format!("infoBox.group{}", edge.salt),
+        hover: edge.group_hover,
+    };
+    let lock_salt = format!("infoBox.lock{}", edge.salt);
+    if index == 0 {
+        group(ui, tokens, field, pending);
+        lock(ui, k, edge.pair.as_ref(), edge.own, &lock_salt, pending);
+    } else {
+        lock(ui, k, edge.pair.as_ref(), edge.own, &lock_salt, pending);
+        group(ui, tokens, field, pending);
+    }
+}
+
+/// Draws the preceding glyph's box beside the glyph box `beside`: on its left, or on its right
+/// when the text runs right to left.
+pub(super) fn show_preceding(ctx: &egui::Context, canvas: egui::Rect, tokens: &Tokens, k: &Kerning, beside: egui::Rect, pending: &mut Pending) {
+    let Some(p) = &k.preceding else { return };
+    let gap = tokens.info_box_glyph_gap;
+    let (pos, pivot) = if k.direction == "rtl" {
+        (beside.right_top() + egui::vec2(gap, 0.0), egui::Align2::LEFT_TOP)
+    } else {
+        (beside.left_top() - egui::vec2(gap, 0.0), egui::Align2::RIGHT_TOP)
+    };
+    egui::Area::new(widgets::id("infoBox.preceding")).order(egui::Order::Middle).fixed_pos(pos).pivot(pivot).constrain_to(canvas).show(ctx, |ui| {
+        egui::Frame::popup(ui.style()).fill(tokens.panel).show(ui, |ui| preceding(ui, tokens, k, p, pending));
     });
 }
 
@@ -317,74 +295,17 @@ enum KernEdit {
     Clear,
 }
 
-/// A kern field being edited: its text, and the pass that last drew it focused.
-#[derive(Clone)]
-struct Editing {
-    text: String,
-    pass: u64,
-}
-
 fn parse(text: &str) -> Option<f64> {
     text.trim().parse::<f64>().ok().filter(|n| n.is_finite())
-}
-
-/// The arrow keys of this frame as a change of the value; consumed so the field keeps them.
-fn arrow_delta(input: &mut egui::InputState) -> f64 {
-    let mut delta = 0.0;
-    for (key, sign) in [(Key::ArrowUp, 1.0), (Key::ArrowDown, -1.0)] {
-        // The most modifiers first: a pattern also matches presses with Shift held.
-        for (modifiers, step) in STEPS {
-            delta += sign * step * input.count_and_consume_key(modifiers, key) as f64;
-        }
-    }
-    delta
 }
 
 /// A kern field showing `value`, or the grey placeholder `Kern` when no pair applies. Returns
 /// what to commit: a number, or `Clear` when a field that showed a value is emptied.
 fn kern_field(ui: &mut egui::Ui, tokens: &Tokens, id: Id, value: Option<f64>) -> Option<KernEdit> {
-    let ctx = ui.ctx().clone();
-    let pass = ctx.cumulative_pass_nr();
     let shown = value.map(widgets::format_number).unwrap_or_default();
-    // An edit left behind by a field that stopped being drawn is dropped, not committed later.
-    let editing = ctx.data(|d| d.get_temp::<Editing>(id)).filter(|e| pass.saturating_sub(e.pass) <= 1);
-    let focused = ctx.memory(|m| m.has_focus(id));
-    let mut text = editing.as_ref().map_or_else(|| shown.clone(), |e| e.text.clone());
-    let mut commit = None;
-    let mut cancelled = false;
-    if focused && editing.is_some() {
-        let (escape, delta) = ui.input_mut(|i| (i.consume_key(Modifiers::NONE, Key::Escape), arrow_delta(i)));
-        if escape {
-            cancelled = true;
-            text.clone_from(&shown);
-            ctx.memory_mut(|m| m.surrender_focus(id));
-        } else if delta != 0.0 {
-            let next = widgets::format_number(parse(&text).or(value).unwrap_or(0.0) + delta);
-            text.clone_from(&next);
-            commit = Some(next);
-        }
-    }
-    let hint = egui::RichText::new("Kern").color(tokens.text_dim);
-    let mut output = egui::TextEdit::singleline(&mut text)
-        .id(id)
-        .desired_width(tokens.field_width)
-        .char_limit(MAX_KERN_CHARS)
-        .event_filter(FILTER)
-        .hint_text(hint)
-        .show(ui);
-    if output.response.has_focus() {
-        if editing.is_none() {
-            output.state.cursor.set_char_range(Some(CCursorRange::select_all(&output.galley)));
-            output.state.store(&ctx, id);
-        }
-        ctx.data_mut(|d| d.insert_temp(id, Editing { text, pass }));
-    } else if editing.is_some() {
-        ctx.data_mut(|d| d.remove::<Editing>(id));
-        if !cancelled && text != shown {
-            commit = Some(text);
-        }
-    }
-    let committed = commit?;
+    let step = |text: &str, delta: f64| Some(widgets::format_number(parse(text).or(value).unwrap_or(0.0) + delta));
+    let look = widgets::Look { color: None, placeholder: Some(egui::RichText::new("Kern").color(tokens.text_dim)) };
+    let committed = widgets::line(ui, id, &shown, tokens.field_width, look, &step).0?;
     let trimmed = committed.trim();
     if trimmed.is_empty() {
         return value.is_some().then_some(KernEdit::Clear);

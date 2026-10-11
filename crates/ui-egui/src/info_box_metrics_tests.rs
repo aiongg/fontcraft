@@ -36,8 +36,9 @@ impl Window {
         flat
     }
 
+    /// Frames until the box has found its place: the glyph's position, then the box's size.
     fn settle(&self, app: &mut FontcraftApp) -> Vec<Shape> {
-        for _ in 0..2 {
+        for _ in 0..4 {
             self.frame(app, Vec::new());
         }
         self.frame(app, Vec::new())

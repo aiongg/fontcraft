@@ -3,9 +3,9 @@
 //!
 //! Field rules: clicking a field selects its text; Return or leaving the field commits; Tab
 //! commits and moves to the next field (Shift+Tab to the previous one); Escape cancels and leaves
-//! no field focused; Up and Down change a number by 1, by 10 with Shift, and commit at once. A
-//! field left with its text unchanged commits nothing, so tabbing through fields adds no undo
-//! steps.
+//! no field focused; Up and Down change a number by 1, by 10 with Shift and by 100 with
+//! Cmd+Shift, and commit at once. A field left with its text unchanged commits nothing, so tabbing
+//! through fields adds no undo steps.
 //!
 //! Every field and button has an id made by [`id`] from a salt such as `"infoBox.x"`, so tests
 //! (and the control channel) find it with `Context::read_response` or focus it directly.
@@ -18,9 +18,11 @@ use egui::{Id, Key, Modifiers, Sense, StrokeKind};
 use crate::icons::{self, Icon};
 use crate::theme::Tokens;
 
-/// Up and Down change a number by this much, and by [`BIG_STEP`] with Shift.
+/// Up and Down change a number by this much, by [`BIG_STEP`] with Shift and by [`HUGE_STEP`]
+/// with Cmd+Shift.
 pub const STEP: f64 = 1.0;
 pub const BIG_STEP: f64 = 10.0;
+pub const HUGE_STEP: f64 = 100.0;
 /// Longest text a field takes.
 const MAX_FIELD_CHARS: usize = 256;
 /// Decimals a number field shows.
@@ -71,7 +73,7 @@ pub fn number(ui: &mut egui::Ui, id: Id, value: Option<f64>, width: f32, clearab
         None => String::new(),
     };
     let step = |text: &str, delta: f64| parse_number(text).or(value).map(|v| format_number(v + delta));
-    let text = line(ui, id, &shown, width, &step)?;
+    let text = line(ui, id, &shown, width, Look::default(), &step).0?;
     let trimmed = text.trim();
     if clearable && (trimmed.is_empty() || trimmed == "--") {
         return value.is_some().then_some(NumberEdit::Clear);
@@ -81,23 +83,42 @@ pub fn number(ui: &mut egui::Ui, id: Id, value: Option<f64>, width: f32, clearab
 
 /// A text field showing `value`; the committed text.
 pub fn text(ui: &mut egui::Ui, id: Id, value: &str, width: f32) -> Option<String> {
-    line(ui, id, value, width, &|_, _| None)
+    line(ui, id, value, width, Look::default(), &|_, _| None).0
 }
 
-/// The arrow keys of this frame: +1/-1, ±10 with Shift; consumed so the field keeps them.
+/// The arrow keys of this frame: ±1, ±10 with Shift, ±100 with Cmd+Shift; consumed so the field
+/// keeps them.
 fn arrow_delta(input: &mut egui::InputState) -> f64 {
     let mut delta = 0.0;
     for (key, sign) in [(Key::ArrowUp, 1.0), (Key::ArrowDown, -1.0)] {
-        // Shift first: a plain pattern also matches presses with Shift held.
+        // The most modifiers first: a plain pattern also matches presses with Shift held.
+        delta += sign * HUGE_STEP * input.count_and_consume_key(Modifiers::COMMAND | Modifiers::SHIFT, key) as f64;
         delta += sign * BIG_STEP * input.count_and_consume_key(Modifiers::SHIFT, key) as f64;
         delta += sign * STEP * input.count_and_consume_key(Modifiers::NONE, key) as f64;
     }
     delta
 }
 
-/// One line of text under the field rules. Returns the text to commit. `step` turns the text
-/// and an arrow-key delta into the new text, or `None` where arrows do nothing.
-fn line(ui: &mut egui::Ui, id: Id, shown: &str, width: f32, step: &dyn Fn(&str, f64) -> Option<String>) -> Option<String> {
+/// How a [`line`] field draws beyond its text.
+#[derive(Default)]
+pub struct Look {
+    /// The text colour; `None`: the theme's.
+    pub color: Option<egui::Color32>,
+    /// Shown, greyed, while the field is empty.
+    pub placeholder: Option<egui::RichText>,
+}
+
+/// One line of text under the field rules. Returns the text to commit and the field's response.
+/// `step` turns the text and an arrow-key delta into the new text, or `None` where arrows do
+/// nothing.
+pub fn line(
+    ui: &mut egui::Ui,
+    id: Id,
+    shown: &str,
+    width: f32,
+    look: Look,
+    step: &dyn Fn(&str, f64) -> Option<String>,
+) -> (Option<String>, egui::Response) {
     let ctx = ui.ctx().clone();
     let pass = ctx.cumulative_pass_nr();
     // An edit left behind by a field that stopped being drawn (the selection changed under it)
@@ -120,7 +141,14 @@ fn line(ui: &mut egui::Ui, id: Id, shown: &str, width: f32, step: &dyn Fn(&str, 
             commit = Some(next);
         }
     }
-    let mut output = egui::TextEdit::singleline(&mut text).id(id).desired_width(width).char_limit(MAX_FIELD_CHARS).event_filter(FILTER).show(ui);
+    let mut edit = egui::TextEdit::singleline(&mut text).id(id).desired_width(width).char_limit(MAX_FIELD_CHARS).event_filter(FILTER);
+    if let Some(color) = look.color {
+        edit = edit.text_color(color);
+    }
+    if let Some(hint) = look.placeholder {
+        edit = edit.hint_text(hint);
+    }
+    let mut output = edit.show(ui);
     if output.response.has_focus() {
         if editing.is_none() {
             output.state.cursor.set_char_range(Some(CCursorRange::select_all(&output.galley)));
@@ -133,7 +161,7 @@ fn line(ui: &mut egui::Ui, id: Id, shown: &str, width: f32, step: &dyn Fn(&str, 
             commit = Some(text);
         }
     }
-    commit
+    (commit, output.response.response)
 }
 
 /// A push button with a stable id. `selected` draws it pressed (a mode that is on).

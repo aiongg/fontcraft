@@ -1,5 +1,6 @@
-//! The glyph part of the Info box: the current glyph's name, Unicode value, sidebearings and
-//! width, drawn in a box under the glyph while Show Info is on.
+//! The glyph box of the Info box: the current glyph's name, Unicode value, sidebearings and
+//! width, with its kerning at the outer edges (`info_box_kerning`), drawn under the glyph while
+//! Show Info is on.
 //!
 //! The current glyph is the edited glyph, or in text mode the glyph after the cursor
 //! (`Tab::edited_glyph`); the layer is the tab's active layer of it. Values and keys come from
@@ -10,32 +11,27 @@
 //! | left to right, right to left | LSB and RSB either side of the metrics mark, width below it | `spacing.setLeftSidebearing`, `spacing.setRightSidebearing`, `spacing.setWidth` |
 //! | top to bottom | T and B either side of the mark; O and H (vertical origin and height) below, shown only | `spacing.setTopSidebearing`, `spacing.setBottomSidebearing` |
 //!
-//! A field holds a number or a metrics key and follows the field rules of `widgets`, with one
-//! more step: Up and Down change a number by 1, by 10 with Shift and by 100 with Cmd+Shift, and
-//! commit at once; in a field that holds a key they do nothing. A key is drawn in the text
-//! colour while its value matches the metric; out of sync it is red with an update button
-//! beside it (`spacing.updateMetricsKey`); a key naming a glyph the font lacks is turquoise.
-//! Emptying a field that holds a key stores the metric's current number, which removes the key.
-//! A master that takes its metrics from another master shows that master's values, read only.
+//! The kern field of each edge sits at that edge on the metrics row, its group field and lock
+//! below it.
+//!
+//! A field holds a number or a metrics key and follows the field rules of `widgets`; in a field
+//! that holds a key Up and Down do nothing. A key is drawn in the text colour while its value
+//! matches the metric; out of sync it is red with an update button beside it
+//! (`spacing.updateMetricsKey`); a key naming a glyph the font lacks is turquoise. Emptying a
+//! field that holds a key stores the metric's current number, which removes the key. A master
+//! that takes its metrics from another master shows that master's values, read only.
 
-use egui::text::CCursorRange;
-use egui::{Id, Key, Modifiers};
 use fontcraft_geom::Point;
 use serde_json::{Value, json};
 
+use super::info_box_kerning::{self as kerning, Kerning};
 use super::{Pending, widgets};
 use crate::app::FontcraftApp;
 use crate::canvas::view;
+use crate::icons::Icon;
 use crate::state::WritingDirection;
 use crate::theme::Tokens;
 use crate::tools_glue;
-
-/// Up and Down change a number by this much with Cmd+Shift.
-pub const HUGE_STEP: f64 = 100.0;
-/// Longest text a field takes (a metrics key is at most 256 bytes).
-const MAX_FIELD_CHARS: usize = 256;
-/// The keys a focused field keeps for itself, as in `widgets`.
-const FILTER: egui::EventFilter = egui::EventFilter { tab: false, horizontal_arrows: true, vertical_arrows: true, escape: true };
 
 /// What a metrics field's key is doing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -181,36 +177,64 @@ fn mark_unlinked(app: &mut FontcraftApp, glyph: &str, layer: &str, fields: &mut 
     }
 }
 
-/// Draws the box under the current glyph. Call from the Info box while Show Info is on.
+/// Draws the box under the current glyph, and the preceding glyph's box beside it with the
+/// Text tool. Call from the Info box while Show Info is on.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let tokens = app.tokens.clone();
     let Some(m) = read(app, &tokens) else { return };
+    let k = kerning::read(app);
     let canvas = ui.available_rect_before_wrap();
-    egui::Area::new(widgets::id("infoBox.glyph"))
+    let shown = egui::Area::new(widgets::id("infoBox.glyph"))
         .order(egui::Order::Middle)
         .fixed_pos(m.anchor)
         .pivot(egui::Align2::CENTER_TOP)
         .constrain_to(canvas)
         .show(ui.ctx(), |ui| {
-            egui::Frame::popup(ui.style()).fill(tokens.panel).show(ui, |ui| contents(ui, &tokens, &m, pending));
+            egui::Frame::popup(ui.style()).fill(tokens.panel).show(ui, |ui| contents(ui, &tokens, &m, k.as_ref(), pending));
         });
+    if let Some(k) = &k {
+        kerning::show_preceding(ui.ctx(), canvas, &tokens, k, shown.response.rect, pending);
+    }
 }
 
-fn contents(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, pending: &mut Pending) {
+/// The box: five columns, the kerning of each edge outermost.
+///
+/// | | | name | Unicode | |
+/// | kern | LSB (T) | mark | RSB (B) | kern |
+/// | group, lock | | width (O, H) | | lock, group |
+fn contents(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, k: Option<&Kerning>, pending: &mut Pending) {
     let dim = |text: &str| egui::RichText::new(text).color(tokens.text_dim);
     let field = |ui: &mut egui::Ui, pending: &mut Pending, name: &str| {
         if let Some(f) = m.fields.iter().find(|f| f.field == name) {
             metric(ui, tokens, m, f, pending);
         }
     };
-    egui::Grid::new(widgets::id("infoBox.glyphGrid")).num_columns(3).spacing([6.0, 4.0]).show(ui, |ui| {
+    let kern = |ui: &mut egui::Ui, pending: &mut Pending, edge: usize| match k {
+        Some(k) => kerning::edge_kern(ui, tokens, k, edge, pending),
+        None => {
+            ui.label("");
+        }
+    };
+    let group = |ui: &mut egui::Ui, pending: &mut Pending, edge: usize| match k {
+        Some(k) => {
+            ui.horizontal(|ui| kerning::edge_group(ui, tokens, k, edge, pending));
+        }
+        None => {
+            ui.label("");
+        }
+    };
+    // Columns start at a field's width, so the box takes its size within a frame or two.
+    egui::Grid::new(widgets::id("infoBox.glyphGrid")).num_columns(5).min_col_width(tokens.field_width).spacing([6.0, 4.0]).show(ui, |ui| {
+        ui.label("");
         ui.label("");
         ui.vertical_centered(|ui| ui.strong(&m.glyph));
         match m.unicode {
             Some(u) => ui.label(dim(&format!("{u:04X}"))),
             None => ui.label(""),
         };
+        ui.label("");
         ui.end_row();
+        kern(ui, pending, 0);
         if m.vertical {
             ui.horizontal(|ui| {
                 ui.label(dim("T"));
@@ -221,19 +245,24 @@ fn contents(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, pending: &mut Pendi
                 ui.label(dim("B"));
                 field(ui, pending, "bottom");
             });
-            ui.end_row();
-            ui.label(dim(&format!("O {}", widgets::format_number(m.origin)))).on_hover_text("Vertical origin");
-            ui.label("");
-            ui.label(dim(&format!("H {}", widgets::format_number(m.height)))).on_hover_text("Vertical width");
         } else {
             field(ui, pending, "left");
             ui.vertical_centered(|ui| ui.label(dim("↔")).on_hover_text("Left and right sidebearings, width below"));
             field(ui, pending, "right");
-            ui.end_row();
+        }
+        kern(ui, pending, 1);
+        ui.end_row();
+        group(ui, pending, 0);
+        if m.vertical {
+            ui.label(dim(&format!("O {}", widgets::format_number(m.origin)))).on_hover_text("Vertical origin");
+            ui.label("");
+            ui.label(dim(&format!("H {}", widgets::format_number(m.height)))).on_hover_text("Vertical width");
+        } else {
             ui.label("");
             ui.vertical_centered(|ui| field(ui, pending, "width"));
             ui.label("");
         }
+        group(ui, pending, 1);
         ui.end_row();
     });
     if let Some(master) = &m.linked {
@@ -265,7 +294,8 @@ fn metric(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, f: &MetricField, pend
             let base = text.trim().parse::<f64>().ok().filter(|n| n.is_finite()).or(f.value)?;
             Some(widgets::format_number(base + delta))
         };
-        let (text, response) = line(ui, id, &shown, tokens.field_width, color, &step);
+        let look = widgets::Look { color: Some(color), placeholder: None };
+        let (text, response) = widgets::line(ui, id, &shown, tokens.field_width, look, &step);
         if let Some(message) = &f.message {
             response.on_hover_text(message);
         }
@@ -275,7 +305,7 @@ fn metric(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, f: &MetricField, pend
             pending.push((f.command, json!({"glyphs": [m.glyph], "layer": m.layer, "value": value})));
         }
         if f.state == KeyState::OutOfSync
-            && widgets::button(ui, widgets::id(("infoBox.updateMetric", f.field)), "🔄", "Update Metrics Key", true, false)
+            && widgets::icon_button(ui, widgets::id(("infoBox.updateMetric", f.field)), Icon::Update, "Update Metrics Key", true, false)
         {
             pending.push(("spacing.updateMetricsKey", json!({"glyph": m.glyph, "layer": m.layer, "field": f.field})));
         }
@@ -293,75 +323,4 @@ fn commit_value(text: &str, f: &MetricField) -> Option<Value> {
         Ok(n) if n.is_finite() => Some(json!(n)),
         _ => Some(json!(t)),
     }
-}
-
-/// The arrow keys of this frame: ±1, ±10 with Shift, ±100 with Cmd+Shift; consumed so the field
-/// keeps them.
-fn arrow_delta(input: &mut egui::InputState) -> f64 {
-    let mut delta = 0.0;
-    for (key, sign) in [(Key::ArrowUp, 1.0), (Key::ArrowDown, -1.0)] {
-        // Longest pattern first: a plain pattern also matches presses with Shift held.
-        delta += sign * HUGE_STEP * input.count_and_consume_key(Modifiers::COMMAND | Modifiers::SHIFT, key) as f64;
-        delta += sign * widgets::BIG_STEP * input.count_and_consume_key(Modifiers::SHIFT, key) as f64;
-        delta += sign * widgets::STEP * input.count_and_consume_key(Modifiers::NONE, key) as f64;
-    }
-    delta
-}
-
-/// A field being edited: its text, and the pass that last drew it focused.
-#[derive(Clone)]
-struct Editing {
-    text: String,
-    pass: u64,
-}
-
-/// One line of text under the `widgets` field rules, drawn in `color`. Returns the text to
-/// commit and the field's response. `step` turns the text and an arrow-key delta into the new
-/// text, or `None` where arrows do nothing.
-fn line(
-    ui: &mut egui::Ui,
-    id: Id,
-    shown: &str,
-    width: f32,
-    color: egui::Color32,
-    step: &dyn Fn(&str, f64) -> Option<String>,
-) -> (Option<String>, egui::Response) {
-    let ctx = ui.ctx().clone();
-    let pass = ctx.cumulative_pass_nr();
-    // An edit left behind by a field that stopped being drawn (the current glyph changed under
-    // it) is dropped, not committed later.
-    let editing = ctx.data(|d| d.get_temp::<Editing>(id)).filter(|e| pass.saturating_sub(e.pass) <= 1);
-    let focused = ctx.memory(|m| m.has_focus(id));
-    let mut text = editing.as_ref().map_or_else(|| shown.to_string(), |e| e.text.clone());
-    let mut commit = None;
-    let mut cancelled = false;
-    if focused && editing.is_some() {
-        let (escape, delta) = ui.input_mut(|i| (i.consume_key(Modifiers::NONE, Key::Escape), arrow_delta(i)));
-        if escape {
-            cancelled = true;
-            text = shown.to_string();
-            ctx.memory_mut(|m| m.surrender_focus(id));
-        } else if delta != 0.0
-            && let Some(next) = step(&text, delta)
-        {
-            text.clone_from(&next);
-            commit = Some(next);
-        }
-    }
-    let output =
-        egui::TextEdit::singleline(&mut text).id(id).desired_width(width).char_limit(MAX_FIELD_CHARS).text_color(color).event_filter(FILTER).show(ui);
-    let mut state = output.state;
-    if output.response.has_focus() {
-        if editing.is_none() {
-            state.cursor.set_char_range(Some(CCursorRange::select_all(&output.galley)));
-            state.store(&ctx, id);
-        }
-        ctx.data_mut(|d| d.insert_temp(id, Editing { text, pass }));
-    } else if editing.is_some() {
-        ctx.data_mut(|d| d.remove::<Editing>(id));
-        if !cancelled && text != shown {
-            commit = Some(text);
-        }
-    }
-    (commit, output.response.response)
 }

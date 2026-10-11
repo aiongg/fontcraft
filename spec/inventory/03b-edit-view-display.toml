@@ -27,9 +27,11 @@ milestone = "M5"
 summary = "Floating box drawn under the current glyph in Edit View with its name, Unicode value, sidebearings, width, kerning values and kerning groups. Current glyph means the glyph being edited; with text mode on, it is the glyph immediately following the text cursor. Shown only while View > Show Info is on."
 ref = "Edit View › Info Box"
 status = "handbook"
-notes = "Spacing part built in M5.8a (`panels/info_box_metrics.rs`): the name and Unicode value are shown, not edited; LSB, RSB and width are fields. Still to build: editing the name, the Unicode arrow button, the colour swatch in this box (it sits in the selection box), and the kerning values and groups (M5.8b)."
+notes = "Built in M5.8 (`panels/info_box_metrics.rs`, kerning in `panels/info_box_kerning.rs`): the name and Unicode value are shown, not edited; LSB, RSB and width are fields; each outer edge holds the kern field on the metrics row and the group field and lock below it. Still to build: editing the name, the Unicode arrow button, and the colour swatch in this box (it sits in the selection box)."
 guesses = [
   "With several glyphs selected in the text, the Info box describes the glyph after the cursor only, and the Unicode value is shown, not edited.",
+  "At each outer edge the kern field sits on the sidebearing row and the group field with its lock on the width row; a screenshot of the reference app's Info box in text mode would settle it.",
+  "The preceding glyph's box sits beside the glyph box, on the side where the preceding glyph is drawn; the reference app with the Text tool would settle it.",
 ]
 
 [[panel]]
@@ -266,10 +268,10 @@ notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 
 id = "infoBox.arrowKeyStepping"
 area = "ui-chrome"
 milestone = "M3"
-summary = "While an Info box field is focused, Up and Down raise or lower its value by 1, and by 10 with Shift held."
+summary = "While an Info box field is focused, Up and Down raise or lower its value by 1, by 10 with Shift held, and by 100 with Cmd and Shift held."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Built in M3.15: each press commits at once, as one undo step."
+notes = "Built in M3.15: each press commits at once, as one undo step. The handbook gives the step of 100 with Cmd+Shift for the glyph box's sidebearing fields; every Info box field takes it (widgets::arrow_delta)."
 
 [[behavior]]
 id = "infoBox.followsSelection"

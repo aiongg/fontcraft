@@ -75,6 +75,8 @@ pub enum Icon {
     KerningOff,
     KerningOn,
     KerningLocked,
+    // The Info box's update button for a metrics key out of sync.
+    Update,
 }
 
 /// Every icon, for tests and previews.
@@ -138,6 +140,7 @@ pub const ALL: &[Icon] = &[
     Icon::KerningOff,
     Icon::KerningOn,
     Icon::KerningLocked,
+    Icon::Update,
 ];
 
 /// The icon of the pointer tool `id` (an id of `fontcraft_tools::TOOLS`).
@@ -546,6 +549,10 @@ fn draw(pen: &mut Pen, icon: Icon) {
         Icon::TopToBottom => pen.writing(false, true),
         Icon::KerningOff => pen.kern_pair(0.12, 0.22, 0.78),
         Icon::KerningOn => pen.kern_pair(-0.16, 0.22, 0.78),
+        Icon::Update => {
+            pen.arc_arrow((0.5, 0.5), 0.3, PI * 0.1, PI * 0.8);
+            pen.arc_arrow((0.5, 0.5), 0.3, PI * 1.1, PI * 0.8);
+        }
         Icon::KerningLocked => {
             pen.kern_pair(-0.16, 0.06, 0.5);
             let arc: Vec<P> = (0..=12).map(|i| PI + PI * i as f32 / 12.0).map(|a| (0.5 + 0.11 * a.cos(), 0.7 + 0.11 * a.sin())).collect();
