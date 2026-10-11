@@ -967,6 +967,7 @@ milestone = "M12"
 summary = "head.unitsPerEm is outside 16-16384 (failure), or is an unusual value: any value that is not a power of two from 16 to 16384, 1000 or 2000 draws a warning."
 ref = "fontbakery opentype/unitsperem; comparefamily single-face test 16 (em square not 1000 or 2048)"
 status = "docs"
+notes = "comparefamily's family-level warning for an em that is neither 1000 nor 2048 is not reported; the FontBakery rule decides."
 
 [[check]]
 id = "check.metrics.italicAngle"
@@ -978,6 +979,7 @@ milestone = "M12"
 summary = "post.italicAngle is implausible: magnitude over 90 degrees (failure), over 30 or over 20 (warnings), positive although the glyphs lean right or negative although they lean left (the lean is measured on a reference glyph), non-zero in an upright style, or zero in an italic style."
 ref = "fontbakery opentype/italic_angle; comparefamily single-face test 12; MS Font Validator E1316/E2308 (afdko MSFontValidatorIssues.md 4.d)"
 status = "docs"
+notes = "The lean is measured on the first of bar, bracketleft, H and I (found through cmap) at 20% and 80% of its height, using the leftmost crossing; FontBakery takes the first crossing in path order. The style comes from the fsSelection italic bit or Italic in name ID 17 or 2, never the file name (guess on audit.familyGrouping)."
 
 [[check]]
 id = "check.metrics.italicBitVsAngle"
@@ -986,7 +988,7 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The italic style bit and the italic angle disagree: the bit is set while the angle is shallower than -4 degrees, or clear while the angle is steeper than -4. A single-style script face with a real slant is a legitimate exception."
+summary = "The italic bit of head.macStyle and post.italicAngle disagree: the bit is set while the angle is 4 degrees or less either way, or clear while it is more. A single-style script face with a real slant is a legitimate exception."
 ref = "comparefamily single-face test 12; MS Font Validator E1316/E2308 (afdko MSFontValidatorIssues.md 4.d)"
 status = "docs"
 
@@ -1033,6 +1035,7 @@ milestone = "M12"
 summary = "The monospace markers disagree with the advances. A font is taken as monospaced when at least 80% of its ASCII glyphs share one width; then post.isFixedPitch must be non-zero and PANOSE must say monospaced, with numberOfHMetrics 3 recommended and odd-width glyphs listed. Otherwise the markers must be clear. Also covers CFF isFixedPitch against post."
 ref = "fontbakery opentype/monospace; comparefamily single-face test 13; comparefamily family test 10"
 status = "docs"
+notes = "The hhea.advanceWidthMax test of the upstream monospace check is left to check.metrics.maxAdvanceWidth. Outliers are counted against the most common non-zero advance (upstream: the most common advance and side-bearing pair). When fewer than 80% of ASCII is covered, printable characters are approximated by leaving out control, separator, format and private-use code points and GDEF marks."
 guesses = ["One rule decides monospacing: at least 80% of the ASCII glyphs share one width, as the conformance checker of the opentype profile does; comparefamily's all-glyph hint is not reported separately (21-qa.md question 8)."]
 
 [[check]]
@@ -1099,7 +1102,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "OS/2.fsSelection bit 7 (USE_TYPO_METRICS) is not set, or it is set while the OS/2 table version is below 4 (a failure). The fix sets the bit and raises the table version to 4."
+summary = "OS/2.fsSelection bit 7 (USE_TYPO_METRICS) is not set (CJK fonts excepted), or it is set while the OS/2 table version is below 4; both are failures. The fix sets the bit and raises the table version to 4."
 ref = "comparefamily single-face test 16 (USE_TYPO_METRICS); fontbakery googlefonts/use_typo_metrics"
 status = "docs"
 observe = ["Tall font (ascender 750, descender -250, Aringacute reaching 1,042): export and read OS/2; note whether the fsSelection use-typo-metrics bit (bit 7) is set."]
@@ -1122,7 +1125,7 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The capitals are not centred between the typo ascender and descender within a small margin, so text will not sit centred in buttons and list rows without extra layout work. One possible vertical-metrics scheme; ignore when another is intended."
+summary = "The capitals (A B C D E H I M O S T X) are not centred between hhea.ascender and hhea.descender within 18% of 1.2 em, so text will not sit centred in buttons and list rows without extra layout work. Skipped when one of those capitals is missing. One possible vertical-metrics scheme; ignore when another is intended."
 ref = "fontbakery caps_vertically_centered"
 status = "docs"
 
@@ -1133,9 +1136,11 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The vertical metrics do not follow a chosen house scheme (`scheme` parameter): Google's (typo and hhea equal, win covering the bounding box, total height 120-200% of the em, USE_TYPO_METRICS set), Microsoft's (hhea equal to win and no line gap when USE_TYPO_METRICS is off), Type Network's, or the CJK scheme with the em box as typo metrics."
+summary = "The vertical metrics do not follow the house scheme the `scheme` parameter chooses. 0, Google Fonts: both line gaps 0, hhea total 120-200% of the em (over 150% a warning), ascenders positive, descenders 0 or negative; CJK fonts get its CJK scheme instead (USE_TYPO_METRICS clear, typo 0.88 and -0.12 em, line gaps 0, hhea equal to win, hhea total over 110% and up to 150% as a warning). 1, Microsoft: hhea equal to typo when USE_TYPO_METRICS is set, else equal to win. 2, Type Network: hhea equal to typo with no line gaps when USE_TYPO_METRICS is set; otherwise a warning to set it, and hhea equal to win with the typo total equal to the hhea total; and the space above the cap height and below the baseline within 30% of each other."
 ref = "fontbakery googlefonts/vertical_metrics; fontbakery googlefonts/cjk_vertical_metrics; fontbakery microsoft/vertical_metrics; fontbakery typenetwork/vertical_metrics; fontbakery typenetwork/font_is_centered_vertically"
 status = "docs"
+notes = "Type Network's centring check has an unreachable warning band upstream; only its failure at 30% or more is ported."
+guesses = ["The `scheme` parameter defaults to the Google Fonts scheme (0); no reference names a default, so the owner's choice of house scheme would settle it."]
 
 [[check]]
 id = "check.metrics.baseGlyphWidth"
@@ -1244,7 +1249,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "OS/2 strikeout size and position, or the subscript and superscript sizes and offsets, differ from the defaults derived from underline thickness, x-height, em size and italic angle. A strikeout size or underline thickness of zero is a failure because nothing is drawn. The fix writes the derived values."
+summary = "OS/2 strikeout size and position, or the subscript and superscript sizes and offsets, differ by more than 5 units from the defaults derived from underline thickness, x-height, em size and italic angle (a warning). A strikeout size or underline thickness of zero is a failure because nothing is drawn. The fix writes the derived values."
 ref = "comparefamily single-face test 27; fontbakery typenetwork/family/valid_strikeout; fontbakery typenetwork/family/valid_underline"
 status = "docs"
 

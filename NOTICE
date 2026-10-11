@@ -228,5 +228,9 @@ bundled, the file says so in its header and the project is listed here with its 
   The collection layout of crates/tables/src/collection.rs (M12.3) follows otf2otc.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014, 2017 Adobe.
   crates/tables/src/features.rs follows fontTools' TTFont glyph naming (MIT License).
 
+  The font-wide metrics checks (crates/audit/src/checks/metrics_font.rs) follow the rules of
+  FontBakery 1.1.0 (https://github.com/fonttools/fontbakery) and of comparefamily in AFDKO 5.0.1,
+  both Apache License 2.0.
+
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.
