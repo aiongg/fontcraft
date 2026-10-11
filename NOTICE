@@ -217,6 +217,8 @@ bundled, the file says so in its header and the project is listed here with its 
   reports (report.py) and options (autohint.py). otfautohint uses fontTools' bezierTools (MIT
   License) for its curve maths, which crates/autohint/src/bezier.rs ports with it;
   crates/autohint/src/glyph.rs also ports the quadratic-to-cubic step of fontTools' BasePen.
+  License) for its curve maths, which crates/autohint/src/bezier.rs ports with it.
+  crates/autohint/src/segments.rs ports its solveCubic and solveQuadratic.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

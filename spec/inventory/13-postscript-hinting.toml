@@ -733,6 +733,8 @@ milestone = "M10"
 summary = "The hinter can hint glyphs that still contain overlapping contours roughly as if the overlap had been removed. Which glyphs get this treatment is set by a list (-m, --overlaps-file), by --force-overlap (all glyphs) or --force-no-overlap (none); without any of these it is on for variable fonts and for runs with a reference font, and off for single static fonts."
 ref = "AFDKO otfautohint --help; docs/otfautohint_Notes.md"
 status = "docs"
+notes = "Ported in crates/autohint/src/overlap.rs and segments.rs: segments are generated on the overlap-free outline and each is recorded for the element of the original outline it was matched to. The autohinter cannot remove overlaps itself (it sits below the path operations), so the caller passes the overlap-free contours; when they draw the same outline, nothing is matched."
+guesses = ["FontCraft treats a glyph as overlapping when its path operations change the outline, where otfautohint asks whether any point of its flattened outline disappeared; the two differ on a cross of two bars whose corners all lie outside the other bar (overlapping here, not there), and comparing both autohinters on such glyphs would settle which to follow."]
 
 [[behavior]]
 id = "autohint.ps.looseOverlapMapping"
@@ -802,9 +804,10 @@ status = "docs"
 id = "autohint.ps.flexDetection"
 area = "hinting-ps"
 milestone = "M10"
-summary = "The hinter marks a pair of adjoining curves as flex when the pair's endpoints line up in one direction, the bulge is no deeper than 20 units, the pair is long relative to its depth, and the two halves are not too unequal in length (ratio of about 1:3 or better). A glyph that already carries flex is left as it is."
+summary = "The hinter marks a pair of adjoining curves as flex when the pair's endpoints line up in one direction, the bulge is no deeper than 20 units, the pair is at least three times as long as it is deep, and the two halves are not too unequal in length (ratio of about 1:3 or better). The bulge must be convex, the elements before and after the pair must not bend back towards its middle, no tiny element may sit between the curves, and the pair may not straddle the start of its contour. Flex the glyph already carries is cleared and found again."
 ref = "AFDKO otfautohint hinter.py (MaxFlex, FlexLengthRatioCutoff)"
 status = "docs"
+notes = "Ported in crates/autohint/src/flex.rs (addFlex, tryFlex, markFlex). The second curve of a flex pair adds a segment along the pair's chord, so the flat edge is hinted; a curve split at an inflection for segment generation loses its flex mark for that purpose, as in otfautohint."
 
 [[behavior]]
 id = "autohint.ps.hintSubstitution"
