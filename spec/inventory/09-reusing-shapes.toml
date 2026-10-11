@@ -137,6 +137,11 @@ milestone = "M6"
 summary = "A component is a live reference to its base glyph: editing the base glyph changes every component that points to it, and in Edit View the composites redraw while the base glyph is being edited."
 ref = "Reusing Shapes › Components"
 status = "handbook"
+notes = "Positions and widths follow through alignment: after every font-changing command the engine re-aligns the composites that depend on the changed glyphs, in dependency order and in the same undo step (`fontcraft_components::metrics::realign`, M6.2)."
+guesses = [
+  "Re-alignment after an edit touches only the masters whose layers the edit changed, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.",
+  "A locked composite is not re-aligned when its base changes, because a lock keeps the glyph's drawing; locking a composite in the reference app and editing its base settles it.",
+]
 
 [[behavior]]
 id = "components.autoComposeOnAddGlyph"
@@ -651,6 +656,10 @@ milestone = "M6"
 summary = "A component whose base glyph has an anchor with a leading underscore (_top) is positioned so that anchor coincides with the anchor of the same name without the underscore (top) on the base component, the same way mark-to-base positioning would place the mark glyph."
 ref = "Reusing Shapes › Components › Anchors"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A component whose underscore anchors find no plain anchor among the components before it is set after them as another base, as if typed; a mark added to a base without the matching anchor in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.alternativeAnchorSuffix"
@@ -660,6 +669,9 @@ summary = "A layer may carry several anchors of one type, told apart by an under
 ref = "Reusing Shapes › Components › Anchors"
 status = "handbook"
 notes = "Documented, not yet observed. The chosen anchor is stored as the component's `anchor` attribute (file-format specification v3). At export both oracles use it for components after the first: when the glyph has both X and _X, its X anchor takes the attribute's name, X being the part before the first underscore. Corpus attribute values: cedilla 72, right 20, top_2 9, top_1 4, top.alt 4."
+guesses = [
+  "The component's anchor attribute is matched by its plain name, the part before the first underscore or period, against the mark's underscore anchor; the target is the attribute's anchor, else for a numbered name (top_2) the plain anchor of that base, else the plain anchor; a ligature with a mark set to top_1 after its second base in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.anchorMenuOnlyWhenChoiceExists"
@@ -686,6 +698,9 @@ summary = "Automatic alignment is on by default for a glyph layer whose shapes a
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
 notes = "Documented, not yet observed. The file format stores alignment per component as a number: -1 off, 0 decided by the layer (this rule and components.pathOnLayerDisablesAutoAlign), 1 forced on whatever the layer holds, 3 horizontal only (GlyphsSDK file-format specification v3, `GSComponentAlignment`, Apache-2.0). The model reads it as `Alignment` (M1). Positions are stored already aligned, so a file opens with the reference's placement."
+guesses = [
+  "A component that is not aligned keeps its stored position but still counts: its anchors serve the marks after it and, as a base, it moves the next base to follow its stored place; a composite with one disabled base among aligned ones in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.pathOnLayerDisablesAutoAlign"
@@ -752,6 +767,9 @@ summary = "The sidebearings of an auto-aligned composite are derived from its ba
 ref = "Reusing Shapes › Components › Automatic Alignment; Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
 notes = "Documented, not yet observed. Alignment writes the derived width into the layer, as the reference's files store it, so exported widths need no alignment step at compile."
+guesses = [
+  "A layer with a path keeps its stored width even when it holds forced components, which are still placed; a forced component next to a path in the reference app, with the base's width changed, settles it.",
+]
 
 [[behavior]]
 id = "components.autoAlignMetricsOffsetKeys"
@@ -760,6 +778,7 @@ milestone = "M6"
 summary = "An auto-aligned composite accepts exactly one kind of metrics key, a signed number written after an equals sign (=+18, =-12), which adds to or subtracts from the derived sidebearing while alignment stays on."
 ref = "Reusing Shapes › Components › Automatic Alignment; Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "components.autoAlignSingleComponent"
@@ -770,7 +789,7 @@ ref = "Reusing Shapes › Components › Automatic Alignment › Single Componen
 status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
-  "A single aligned component keeps its transform; the composite takes the base glyph's width, and a horizontally flipped component is shifted so its outline keeps the base glyph's sidebearings mirrored (nine from six keeps six's width); the corpus alignment measure (M6 plan § 5) checks the flipped single components the sources hold.",
+  "A single aligned component keeps its transform; the composite takes the base glyph's width times the length of the component's transformed x axis (so a scaled component gives a scaled width), and a horizontally flipped component is shifted so its outline keeps the base glyph's sidebearings mirrored (nine from six keeps six's width); the corpus alignment measure (M6 plan § 5) checks the flipped single components the sources hold.",
 ]
 
 [[behavior]]
@@ -782,7 +801,7 @@ ref = "Reusing Shapes › Components › Automatic Alignment › Base Component 
 status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
-  "The first base sits at x = 0 and y = 0 and keeps its scale, slant and rotation; only its offset is computed; the corpus alignment measure (M6 plan § 5) checks it.",
+  "The first base sits at x = 0 and y = 0 and keeps its scale, slant and rotation; only its offset is computed; a base flipped vertically keeps its stored vertical offset, since y = 0 would hang it below the baseline; the corpus alignment measure (M6 plan § 5) checks it.",
 ]
 
 [[behavior]]
@@ -804,6 +823,7 @@ milestone = "M6"
 summary = "Mark components placed through anchors contribute nothing to the composite's sidebearings, so a wide mark may stick out of the glyph box (macron on dotless i). The stated cures are a narrower mark or an =+N / =-N metrics offset."
 ref = "Reusing Shapes › Components › Automatic Alignment › Base Component & Mark Components"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "components.multipleBasesSetSideBySide"
@@ -824,6 +844,10 @@ milestone = "M6"
 summary = "With several bases, shape order assigns marks: each base component is followed by its own marks, then the next base and its marks. A mark therefore attaches to the nearest base before it."
 ref = "Reusing Shapes › Components › Automatic Alignment › Multiple Base Components"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A mark looks for its anchor only on the nearest base before it and the marks attached since, never on an earlier base; a ligature whose second base lacks the mark's anchor, in the reference app, settles it.",
+]
 
 [[behavior]]
 id = "components.exitEntryAnchorsConnectBases"

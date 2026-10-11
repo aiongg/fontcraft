@@ -2443,6 +2443,7 @@ milestone = "M6"
 summary = "Disable Automatic Alignment switches off, for the whole font, both the automatic positioning of components and the automatic syncing of metrics in composite glyphs such as accented letters. Single components can instead be locked from the Edit View context menu, and a user setting applies the option to imported files."
 ref = "Font Info › Other Settings › Disable Automatic Alignment"
 status = "handbook"
+notes = "Documented, not yet observed. With the setting on, no component is placed and no width is derived; the stored positions stay as they are (`fontcraft_components::align`)."
 
 [[behavior]]
 id = "fontInfo.keepAlternatesNextToBase"

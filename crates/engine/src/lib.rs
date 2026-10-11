@@ -92,6 +92,22 @@ pub const JOURNAL_LIMIT: usize = 10_000;
 /// How deeply commands may call other commands.
 const MAX_DEPTH: u32 = 16;
 
+/// `new` with the composites that follow its changes since `old` re-aligned
+/// (`fontcraft_components::metrics::realign`), checked as every edit is; `None` when nothing
+/// moves. `what` names the command or interaction in the error.
+fn realigned(what: &str, old: &Arc<Font>, new: &Arc<Font>) -> Result<Option<Arc<Font>>> {
+    if Arc::ptr_eq(old, new) {
+        return Ok(None);
+    }
+    let next = fontcraft_components::metrics::realign(old, Font::clone(new))
+        .map_err(|e| EngineError::Disabled(what.to_string(), format!("the composites that follow this change cannot be aligned: {e}")))?;
+    if next.same_as(new) {
+        return Ok(None);
+    }
+    next.check_changed(new)?;
+    Ok(Some(Arc::new(next)))
+}
+
 /// Records `before` as the step that undoes the document's last change, and drops the redo steps.
 pub(crate) fn push_undo(doc: &mut DocState, label: Arc<str>, before: Arc<Font>) {
     doc.history.undo.push(HistoryEntry { label, font: before });
@@ -535,7 +551,9 @@ impl Session {
         let outcome = guard::catch_panic(|| (spec.run)(self, params));
         self.depth = 0;
         let result = match outcome {
-            Ok(r) => r.and_then(|v| accept(self).map(|()| v)),
+            Ok(r) => {
+                r.and_then(|v| self.realign_after(id, snapshot.as_ref().map(|s| s.0.as_slice())).map(|()| v)).and_then(|v| accept(self).map(|()| v))
+            }
             Err(panic) => Err(EngineError::Internal(format!("`{id}` failed unexpectedly: {panic}"))),
         };
         match result {
@@ -556,6 +574,25 @@ impl Session {
                 Err(e)
             }
         }
+    }
+
+    /// Re-aligns the composites that follow what command `id` changed in each open document,
+    /// in place, as part of the command's own undo step. `before` is the documents as they were
+    /// (`None` for a query). Undo and redo put back fonts as they were and are left alone; a
+    /// document the command opened has no `before` and is not aligned. Previews run through
+    /// [`Session::run_command`], so each preview is aligned too.
+    fn realign_after(&mut self, id: &str, before: Option<&[DocState]>) -> Result<()> {
+        let Some(before) = before else { return Ok(()) };
+        if matches!(id, "edit.undo" | "edit.redo") {
+            return Ok(());
+        }
+        for doc in &mut self.docs {
+            let Some(old) = before.iter().find(|d| d.id == doc.id) else { continue };
+            if let Some(font) = realigned(id, &old.font, &doc.font)? {
+                doc.font = font;
+            }
+        }
+        Ok(())
     }
 
     /// Starts an interaction on the active document: a drag, or a dialog with a live preview.
@@ -635,6 +672,17 @@ impl Session {
         if Arc::ptr_eq(&doc.font, &it.before) || doc.font.same_as(&it.before) {
             doc.font = it.before;
             return Ok(false);
+        }
+        // Each preview was aligned as it ran (`run_command`); this catches a font changed by
+        // other means meanwhile. A failure ends the interaction as a cancel would.
+        match realigned(&it.label, &it.before, &doc.font) {
+            Ok(Some(font)) => doc.font = font,
+            Ok(None) => {}
+            Err(e) => {
+                doc.font = it.before;
+                doc.revision += 1;
+                return Err(e);
+            }
         }
         push_undo(doc, it.label, it.before);
         if let Some(entry) = it.last {

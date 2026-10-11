@@ -673,6 +673,9 @@ summary = "An automatically aligned metric can be adjusted without giving up ali
 ref = "Spacing & Kerning › Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
 notes = "Documented, not yet observed. M5 keeps such keys and lists them as waiting for M6; the 1,994 key values on master layers of corpus sources that differ from the stored metric because the glyph is aligned automatically (M5 plan § 5) are the M6 measure for this row."
+guesses = [
+  "Offsets apply to the left and right sidebearing keys only: a left offset moves every component right and widens the glyph, a right offset widens it; a width key with an offset is not applied; entering =+N in the width field of an aligned glyph in the reference app settles it.",
+]
 
 # ───────────────────────────── Kerning: basics, modes, Info box ─────────────────────────────
 

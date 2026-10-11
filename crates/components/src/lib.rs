@@ -43,6 +43,10 @@ pub use propagate::{AnchorCache, AnchorSource, EffectiveAnchor};
 mod compose_tests;
 #[cfg(test)]
 mod recipe_tests;
+#[cfg(test)]
+mod align_tests;
+#[cfg(test)]
+mod metrics_tests;
 
 #[cfg(test)]
 mod tests {
