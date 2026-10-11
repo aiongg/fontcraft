@@ -209,6 +209,12 @@ fn path(text: &str) -> Path {
             node
         })
         .collect();
+    let mut nodes: Vec<Node> = nodes;
+    // Written in the reference's file order, a closed path's start node last; the reader moves
+    // it to the front.
+    if kind == "c" {
+        nodes.rotate_right(1);
+    }
     Path::new(kind == "c", nodes)
 }
 
@@ -292,7 +298,8 @@ fn the_exit_anchor_keeps_the_end_node_where_it_was_drawn() {
     add_glyph(&mut font, "_corner.cup", &[("right", 25.0, 0.0)], &["o:(0,50,l),(-50,50,l),(-50,0,l),(25,5,l)"]);
     add_glyph(&mut font, "I", &[], &["c:(100,0,l),(400,0,l),(400,500,l),(100,500,l)"]);
     set_hints(&mut font, "I", vec![CornerHint::new("_corner.cup", 0, 0).to_hint()]);
-    let want = vec![vec![(100.0, 50.0), (50.0, 50.0), (50.0, 0.0), (125.0, 5.0), (400.0, 0.0), (400.0, 500.0), (100.0, 500.0)]];
+    // In the model's order: the start node first.
+    let want = vec![vec![(100.0, 500.0), (100.0, 50.0), (50.0, 50.0), (50.0, 0.0), (125.0, 5.0), (400.0, 0.0), (400.0, 500.0)]];
     assert_eq!(points(&fitted(&font, "I")), want);
 }
 
