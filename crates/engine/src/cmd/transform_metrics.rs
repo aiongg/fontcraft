@@ -12,11 +12,12 @@ use std::collections::HashMap;
 use fontcraft_geom::round_to_grid;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::plist::Value as PValue;
-use fontcraft_model::{Font, Layer, Shape, Transform, glyph_props};
+use fontcraft_model::{Font, Layer, glyph_props};
 use fontcraft_spacing::{Field, SIDEBEARING_RANGE, WIDTH_RANGE, metric};
 use serde_json::{Value, json};
 
 use super::common::{each_layer, grid, scope};
+use super::spacing::shift_layer;
 use super::*;
 use crate::params::{Params, TargetKind};
 
@@ -133,8 +134,8 @@ fn transform_metrics(s: &mut Session, v: &Value) -> Result<Value> {
     let out = s.edit("Transform Metrics", |font| {
         each_layer(font, &scope, "glyph.transformMetrics", |glyph, layer| match plans.get(&(glyph.to_string(), layer.id.clone())) {
             Some(Ok(change)) => {
-                if change.dx != 0.0 {
-                    shift_layer(layer, change.dx);
+                if let Err(reason) = shift_layer(layer, change.dx) {
+                    return Ok(Some(reason));
                 }
                 layer.width = change.width;
                 Ok(None)
@@ -148,49 +149,6 @@ fn transform_metrics(s: &mut Session, v: &Value) -> Result<Value> {
         o.insert("mode".into(), json!(if matches!(mode, Mode::Width { .. }) { "width" } else { "sidebearings" }));
     }
     Ok(v)
-}
-
-fn shift_transform(t: &mut Transform, dx: f64) {
-    match t {
-        Transform::Decomposed { pos, .. } => pos.0 += dx,
-        Transform::Matrix([.., x, _]) => *x += dx,
-    }
-}
-
-fn shift_shapes(shapes: &mut [Shape], dx: f64) {
-    for shape in shapes {
-        match shape {
-            Shape::Path(path) => path.nodes.iter_mut().for_each(|n| n.x += dx),
-            Shape::Component(c) => shift_transform(&mut c.transform, dx),
-            Shape::Image(image) => shift_transform(&mut image.transform, dx),
-            Shape::Raw(_) => {}
-        }
-    }
-}
-
-/// Moves everything drawn in a layer sideways: outline, components, anchors, guides,
-/// annotations, the placed image and the background. Hints are left as they are.
-pub(crate) fn shift_layer(layer: &mut Layer, dx: f64) {
-    shift_shapes(&mut layer.shapes, dx);
-    layer.anchors.iter_mut().for_each(|a| a.x += dx);
-    if layer.info.is_default() {
-        return;
-    }
-    let info = &mut *layer.info;
-    info.guides.iter_mut().for_each(|g| g.x += dx);
-    info.annotations.iter_mut().for_each(|a| a.x += dx);
-    if let Some(image) = &mut info.image {
-        shift_transform(&mut image.transform, dx);
-    }
-    if let Some(b) = &mut info.background {
-        shift_shapes(&mut b.shapes, dx);
-        b.anchors.iter_mut().for_each(|a| a.x += dx);
-        b.guides.iter_mut().for_each(|g| g.x += dx);
-        b.annotations.iter_mut().for_each(|a| a.x += dx);
-        if let Some(image) = &mut b.image {
-            shift_transform(&mut image.transform, dx);
-        }
-    }
 }
 
 /// The width a new layer of `glyph` gets on `master`: the *Default Layer Width* entry for the

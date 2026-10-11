@@ -164,7 +164,7 @@ fn kerning_shortcuts_need_text_tool_create_the_missing_pair_and_refuse_bad_targe
         Ok(())
     })
     .unwrap();
-    refused(&mut s, id, json!({"left": "L", "right": "T", "master": "m02"}), "takes its kerning from master \"Regular\"");
+    refused(&mut s, id, json!({"left": "L", "right": "T", "master": "m02"}), "takes its metrics and kerning from master `m01`");
 }
 
 #[test]

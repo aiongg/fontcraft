@@ -204,6 +204,8 @@ pub struct Session {
     language_index: Option<Arc<fontcraft_glyphquery::LanguageIndex>>,
     /// Each open document's metrics keys that need attention, by document id.
     metrics_sync: HashMap<u64, fontcraft_spacing::SyncCache>,
+    /// Each open document's kerning prepared for lookups, by document id.
+    kern_index: HashMap<u64, Arc<fontcraft_spacing::kerning::KernIndex>>,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -398,6 +400,25 @@ impl Session {
         let cache = self.metrics_sync.entry(id).or_default();
         cache.update(&font);
         Ok(cache)
+    }
+
+    /// The active document's kerning prepared for lookups. The index is kept while it describes
+    /// the font ([`KernIndex::is_current`](fontcraft_spacing::kerning::KernIndex::is_current)) and
+    /// built again on the first call after an edit to kerning, masters or groups.
+    pub fn kern_index(&mut self) -> Result<Arc<fontcraft_spacing::kerning::KernIndex>> {
+        let doc = self.doc()?;
+        let (id, font) = (doc.id, doc.font.clone());
+        let open: Vec<u64> = self.docs.iter().map(|d| d.id).collect();
+        self.kern_index.retain(|id, _| open.contains(id));
+        let index = match self.kern_index.get(&id) {
+            Some(index) if index.is_current(&font) => index.clone(),
+            _ => {
+                let index = Arc::new(fontcraft_spacing::kerning::KernIndex::new(&font));
+                self.kern_index.insert(id, index.clone());
+                index
+            }
+        };
+        Ok(index)
     }
 
     /// [`Session::glyph_data`] for one document.

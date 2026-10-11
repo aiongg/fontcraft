@@ -361,12 +361,20 @@ fn find_layer<'f>(p: &Params, font: &'f Font, name: &str, layer: &str) -> Result
 }
 
 /// Moves everything drawn in a layer sideways by `dx`: outlines, components, images, anchors,
-/// guides, annotations, the placed image and the background. Fails when a coordinate would leave
-/// the model's range or a shape cannot be moved; the caller's edit is then dropped whole.
+/// guides, annotations, the placed image and the background. Hints stay as they are. Fails when a
+/// coordinate would leave the model's range or a shape cannot be moved, and then leaves the
+/// layer as it was.
 pub(crate) fn shift_layer(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
     if dx == 0.0 {
         return Ok(());
     }
+    let mut moved = layer.clone();
+    shift_in_place(&mut moved, dx)?;
+    *layer = moved;
+    Ok(())
+}
+
+fn shift_in_place(layer: &mut Layer, dx: f64) -> std::result::Result<(), String> {
     shift_shapes(&mut layer.shapes, dx)?;
     for a in &mut layer.anchors {
         shift_x(&mut a.x, dx)?;

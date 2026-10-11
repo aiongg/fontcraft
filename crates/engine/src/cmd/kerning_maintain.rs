@@ -4,6 +4,7 @@
 use fontcraft_spacing::kerning::{self, CompressReport, Direction, KeptWhy, MaintainError, NamedPair, Obsolete, Pair, Position, RenameScope, Side};
 use serde_json::{Value, json};
 
+use super::kerning::{direction, master};
 use super::*;
 use crate::EngineError;
 use crate::params::Params;
@@ -44,23 +45,6 @@ fn maintain_error(p: &Params, e: MaintainError) -> EngineError {
     p.bad(e.to_string())
 }
 
-fn direction(p: &Params) -> Result<Direction> {
-    match p.opt_str("direction")? {
-        None => Ok(Direction::Ltr),
-        Some(name) => {
-            Direction::from_name(name).ok_or_else(|| p.bad(format!("`direction` must be \"ltr\", \"rtl\" or \"vertical\", got \"{name}\"")))
-        }
-    }
-}
-
-fn master(s: &Session, p: &Params) -> Result<String> {
-    let font = s.font()?;
-    Ok(match p.opt_str("master")? {
-        Some(id) => font.master(id)?.id.clone(),
-        None => font.default_master()?.id.clone(),
-    })
-}
-
 fn sides(first: &Side, second: &Side) -> Value {
     json!({"left": first.command(), "right": second.command()})
 }
@@ -81,7 +65,7 @@ fn named_json(pair: &NamedPair) -> Value {
 fn clean_up(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("kerning.cleanUp", v)?;
     let direction = direction(&p)?;
-    let master = master(s, &p)?;
+    let master = master(&p, s.font()?)?;
     let removed = s.edit("Clean Up Kerning", |font| kerning::clean_up(font, direction, &master).map_err(|e| maintain_error(&p, e)))?;
     let removed: Vec<Value> = removed
         .iter()
@@ -148,7 +132,7 @@ fn compress_json(master: &str, direction: Direction, r: &CompressReport) -> Valu
 fn compress(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("kerning.compress", v)?;
     let direction = direction(&p)?;
-    let master = master(s, &p)?;
+    let master = master(&p, s.font()?)?;
     let runs = if p.bool_or("untilStable", false)? { kerning::MAX_COMPRESS_RUNS } else { 1 };
     let report = s.edit("Compress Kerning", |font| kerning::compress(font, direction, &master, runs).map_err(|e| maintain_error(&p, e)))?;
     Ok(compress_json(&master, direction, &report))
@@ -173,7 +157,7 @@ fn rename_group(s: &mut Session, v: &Value) -> Result<Value> {
                 let text = pair.get(key).and_then(Value::as_str).ok_or_else(|| p.bad(format!("`pair.{key}` must be a string")))?;
                 Side::parse(text).map_err(|e| p.bad(format!("`pair.{key}`: {e}")))
             };
-            RenameScope::Pair { master: master(s, &p)?, first: side("left")?, second: side("right")? }
+            RenameScope::Pair { master: master(&p, s.font()?)?, first: side("left")?, second: side("right")? }
         }
         other => return Err(p.bad(format!("`scope` must be \"pair\" or \"font\", got \"{other}\""))),
     };

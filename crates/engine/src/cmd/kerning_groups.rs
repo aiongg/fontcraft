@@ -5,18 +5,15 @@
 use std::sync::Arc;
 
 use fontcraft_model::{Font, KernGroups};
-use fontcraft_spacing::kerning::{Direction, GroupSide, KernIndex, Lock, Position, check_group_name, group_list, locks, shortcut_edit, stored_pair};
-use fontcraft_spacing::metrics_source;
+use fontcraft_spacing::kerning::{GroupSide, Lock, Position, check_group_name, group_list, locks, shortcut_edit, stored_pair};
 use serde_json::{Value, json};
 
+use super::kerning::{MAX_KERN_VALUE, direction, editable_master};
 use super::*;
 use crate::params::{Params, TargetKind};
 
 /// Largest step one shortcut call may take, in units.
 const MAX_SHORTCUT_STEP: i64 = 1_000;
-
-/// Largest kerning value, either sign, a shortcut may write: what a compiled pair value holds.
-const MAX_KERN_VALUE: f64 = 32_767.0;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -187,30 +184,6 @@ fn lock_name(lock: Lock) -> &'static str {
     }
 }
 
-/// `direction`, by default `ltr`.
-fn direction(p: &Params) -> Result<Direction> {
-    match p.opt_str("direction")? {
-        None => Ok(Direction::Ltr),
-        Some(name) => {
-            Direction::from_name(name).ok_or_else(|| p.bad(format!("`direction` must be \"ltr\", \"rtl\" or \"vertical\", got \"{name}\"")))
-        }
-    }
-}
-
-/// `master`, by default the first master, refused when it takes its kerning from another master.
-fn editable_master(p: &Params, font: &Font) -> Result<String> {
-    let id = match p.opt_str("master")? {
-        Some(id) => font.master(id).map_err(|_| p.bad(format!("`master`: the font has no master `{id}`")))?.id.clone(),
-        None => font.default_master()?.id.clone(),
-    };
-    if let Some(source) = metrics_source(font, &id)
-        && source.id != id
-    {
-        return Err(p.bad(format!("master `{id}` takes its kerning from master \"{}\" (`{}`): edit that master instead", source.name, source.id)));
-    }
-    Ok(id)
-}
-
 /// A glyph side of the pair: a name the font has.
 fn pair_glyph<'a>(p: &Params<'a>, key: &str, font: &Font) -> Result<&'a str> {
     let name = p.str(key)?;
@@ -229,11 +202,11 @@ fn shortcut(s: &mut Session, p: &Value, id: &'static str, label: &str, sign: f64
         None => 10,
     };
     let direction = direction(&p)?;
+    let index = s.kern_index()?;
     let font = s.font()?;
     let master = editable_master(&p, font)?;
     let left = pair_glyph(&p, "left", font)?.to_string();
     let right = pair_glyph(&p, "right", font)?.to_string();
-    let index = KernIndex::new(font);
     let locks = locks(&index, direction, &master, &left, &right).map_err(|e| p.bad(e.to_string()))?;
     let edit = shortcut_edit(&index, direction, &master, &left, &right, sign * amount as f64).map_err(|e| p.bad(e.to_string()))?;
     drop(index);

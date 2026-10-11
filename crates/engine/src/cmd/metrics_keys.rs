@@ -2,14 +2,14 @@
 //!
 //! The parser, the evaluator and the out-of-sync scan are in `fontcraft_spacing`; the scan's
 //! cache lives on the session ([`Session::metrics_sync`]). Updating a metric sets it to its key's
-//! value the way the setters do: a left sidebearing moves the layer's outline, components,
-//! anchors, guides and background and keeps the right sidebearing; a right sidebearing or a width
+//! value the way the setters do: a left sidebearing moves everything drawn in the layer
+//! (`spacing::shift_layer`) and keeps the right sidebearing; a right sidebearing or a width
 //! moves the right edge; a top sidebearing moves the vertical origin and keeps the bottom one; a
 //! bottom sidebearing changes the vertical width.
 
 use std::collections::HashSet;
 
-use fontcraft_model::{Font, Glyph, Layer, Master, Shape, Transform};
+use fontcraft_model::{Font, Glyph, Layer, Master};
 use fontcraft_spacing::{EvalError, Field, Finding, Problem, Scope, Slot, WIDTH_RANGE, effective_key, metric, parse_field, parse_stored};
 use serde_json::{Value, json};
 
@@ -172,40 +172,10 @@ fn plan(font: &Font, layer: &Layer, field: Field, value: f64, actual: f64) -> st
     }
 }
 
-fn shift_shapes(shapes: &mut [Shape], dx: f64) {
-    for shape in shapes {
-        match shape {
-            Shape::Path(path) => path.nodes.iter_mut().for_each(|n| n.x += dx),
-            Shape::Component(c) => match &mut c.transform {
-                Transform::Decomposed { pos, .. } => pos.0 += dx,
-                Transform::Matrix([.., x, _]) => *x += dx,
-            },
-            Shape::Image(_) | Shape::Raw(_) => {}
-        }
-    }
-}
-
-/// Moves a layer's outline, components, anchors, guides and background sideways.
-fn shift_layer(layer: &mut Layer, dx: f64) {
-    shift_shapes(&mut layer.shapes, dx);
-    layer.anchors.iter_mut().for_each(|a| a.x += dx);
-    // Only touch the layer info when it holds something to move, so an empty one stays unset.
-    if !layer.info.guides.is_empty() {
-        layer.info.guides.iter_mut().for_each(|g| g.x += dx);
-    }
-    if layer.info.background.is_some()
-        && let Some(bg) = layer.info.background.as_mut()
-    {
-        shift_shapes(&mut bg.shapes, dx);
-        bg.anchors.iter_mut().for_each(|a| a.x += dx);
-        bg.guides.iter_mut().for_each(|g| g.x += dx);
-    }
-}
-
-fn apply(layer: &mut Layer, change: &Change) {
+fn apply(layer: &mut Layer, change: &Change) -> std::result::Result<(), String> {
     match *change {
         Change::Left(dx) => {
-            shift_layer(layer, dx);
+            super::spacing::shift_layer(layer, dx)?;
             layer.width += dx;
         }
         Change::Width(w) => layer.width = w,
@@ -216,6 +186,7 @@ fn apply(layer: &mut Layer, change: &Change) {
             layer.info.vert_width = Some(width);
         }
     }
+    Ok(())
 }
 
 /// Sets one metric to its key's value. `Ok(None)`: no key applies, or the metric is in sync.
@@ -238,7 +209,7 @@ fn update_slot(font: &mut Font, slot: &Slot) -> std::result::Result<Option<(f64,
     let change = plan(font, layer, slot.field, value, actual)?;
     let mut g = font.glyph_mut(&slot.glyph).map_err(|e| e.to_string())?;
     let layer = g.layers.iter_mut().find(|l| l.id == slot.layer).ok_or_else(|| format!("glyph `{}` has no layer `{}`", slot.glyph, slot.layer))?;
-    apply(layer, &change);
+    apply(layer, &change)?;
     Ok(Some((actual, value)))
 }
 

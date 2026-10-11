@@ -7,7 +7,7 @@
 //! metrics are linked to another one, and name the master it follows.
 
 use fontcraft_model::{Font, KernTable};
-use fontcraft_spacing::kerning::{Applied, Direction, KernError, KernIndex, Lock, Position, Side, Which, facing, locks, stored_pair};
+use fontcraft_spacing::kerning::{Applied, Direction, KernError, Lock, Position, Side, Which, facing, locks, stored_pair};
 use fontcraft_spacing::{metrics_source, round_half_up};
 use serde_json::{Value, json};
 
@@ -257,12 +257,12 @@ fn applied_json(a: Option<&Applied<'_>>) -> (Value, Value, Value, Value) {
 
 fn get_pair(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.getPair", p)?;
+    let index = s.kern_index()?;
     let font = s.font()?;
     let direction = direction(&p)?;
     let master = master(&p, font)?;
     let left = glyph(&p, font, "left")?;
     let right = glyph(&p, font, "right")?;
-    let index = KernIndex::new(font);
     let applied = index.lookup(direction, &master, left, right).map_err(|e| kern_error(&p, e))?;
     let l = locks(&index, direction, &master, left, right).map_err(|e| kern_error(&p, e))?;
     let (value, step, pair, from) = applied_json(applied.as_ref());
@@ -279,6 +279,7 @@ fn get_pair(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn add_exception(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.addException", p)?;
+    let index = s.kern_index()?;
     let font = s.font()?;
     let direction = direction(&p)?;
     let master = editable_master(&p, font)?;
@@ -286,7 +287,6 @@ fn add_exception(s: &mut Session, p: &Value) -> Result<Value> {
     let right = glyph(&p, font, "right")?.to_string();
     let which = which(&p)?;
     let value = typed_value(&p, "value")?;
-    let index = KernIndex::new(font);
     let edit = fontcraft_spacing::kerning::open_locks(&index, direction, &master, &left, &right, which)
         .map_err(|e| kern_error(&p, e))?
         .ok_or_else(|| p.bad(format!("the pair {left} {right} has no closed lock on the {} side to open", side_name(which))))?;
@@ -311,13 +311,13 @@ fn side_name(which: Which) -> &'static str {
 
 fn remove_exception(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("kerning.removeException", p)?;
+    let index = s.kern_index()?;
     let font = s.font()?;
     let direction = direction(&p)?;
     let master = editable_master(&p, font)?;
     let left = glyph(&p, font, "left")?.to_string();
     let right = glyph(&p, font, "right")?.to_string();
     let which = which(&p)?;
-    let index = KernIndex::new(font);
     let (first, second, removed) = fontcraft_spacing::kerning::close_locks(&index, direction, &master, &left, &right, which)
         .map_err(|e| kern_error(&p, e))?
         .map(|a| (a.first.to_string(), a.second.to_string(), a.value))
@@ -326,8 +326,7 @@ fn remove_exception(s: &mut Session, p: &Value) -> Result<Value> {
         let table = direction.table_mut(std::sync::Arc::make_mut(&mut font.kerning));
         unstore(table, &master, &first, &second).map(|_| ()).ok_or_else(|| EngineError::Internal(format!("the pair {first} {second} was not found")))
     })?;
-    let font = s.font()?;
-    let now = KernIndex::new(font).lookup(direction, &master, &left, &right).map_err(|e| kern_error(&p, e))?.map_or(0.0, |a| a.value);
+    let now = s.kern_index()?.lookup(direction, &master, &left, &right).map_err(|e| kern_error(&p, e))?.map_or(0.0, |a| a.value);
     Ok(json!({
         "removed": {"left": Side::from_stored(&first).command(), "right": Side::from_stored(&second).command(), "value": removed},
         "value": now, "master": master, "direction": direction.name(),

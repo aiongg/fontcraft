@@ -10,8 +10,7 @@ use std::sync::Arc;
 use fontcraft_geom::{Rect, Shape as _};
 use fontcraft_model::glyphdata::{items, validate};
 use fontcraft_model::{
-    Component, Font, Glyph, GlyphTable, Layer, MAX_COMPONENT_DEPTH, MAX_GLYPHS, MAX_NAME_LEN, ModelError, Shape, Transform, glyph_order,
-    insert_by_sort_key,
+    Component, Font, Glyph, GlyphTable, Layer, MAX_COMPONENT_DEPTH, MAX_GLYPHS, MAX_NAME_LEN, ModelError, Shape, glyph_order, insert_by_sort_key,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -515,23 +514,6 @@ fn overwrite(font: &Font, clip: &GlyphClip, map: &HashMap<String, String>, c: &C
     Overwrite { target: target.name.clone(), source, active, metrics, boxes }
 }
 
-/// Moves a layer's outlines, components and anchors sideways.
-fn shift_layer(layer: &mut Layer, dx: f64) {
-    for shape in &mut layer.shapes {
-        match shape {
-            Shape::Path(path) => path.nodes.iter_mut().for_each(|n| n.x += dx),
-            Shape::Component(c) => match &mut c.transform {
-                Transform::Decomposed { pos, .. } => pos.0 += dx,
-                Transform::Matrix([.., x, _]) => *x += dx,
-            },
-            Shape::Image(_) | Shape::Raw(_) => {}
-        }
-    }
-    for a in &mut layer.anchors {
-        a.x += dx;
-    }
-}
-
 /// Applies the chosen parts of `o` to `target`; returns why a part was left out on a master.
 fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str) -> Vec<String> {
     let mut notes = Vec::new();
@@ -588,11 +570,13 @@ fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str) -> Vec<S
             let mut dx = 0.0;
             if parts.lsb {
                 match (lsb, bounds) {
-                    (Some(lsb), Some(b)) => {
-                        dx = lsb - b.min_x();
-                        shift_layer(to, dx);
-                        to.width += dx;
-                    }
+                    (Some(lsb), Some(b)) => match super::spacing::shift_layer(to, lsb - b.min_x()) {
+                        Ok(()) => {
+                            dx = lsb - b.min_x();
+                            to.width += dx;
+                        }
+                        Err(reason) => notes.push(format!("no left side bearing on master `{}`: {reason}", from.id)),
+                    },
                     _ => notes.push(format!("no left side bearing on master `{}`: one of the outlines is empty", from.id)),
                 }
             }
