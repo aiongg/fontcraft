@@ -620,7 +620,7 @@ milestone = "M10"
 summary = "gasp Table is a custom parameter on the font or on an export instance (the font value applies to instances without their own) holding a pair of PPM thresholds, each a size where the rendering behaviour that the font recommends switches; the defaults are 8 and 20. The table carries recommendations for both grayscale and ClearType renderers, which a renderer is free to ignore."
 ref = "TrueType Hinting › Advanced TrueType Hinting › gasp Table"
 status = "handbook"
-notes = "Read as the corpus stores it, a dictionary from maximum PPM to flags (instance, then master, then font); a size above 65535 is left out, as fontc does, and at most 256 ranges are read. Documented, not yet observed. Documented, not yet observed. The parameter's value holds the records themselves (largest PPM of each range to its flag bits), not two thresholds: fontc's test sources and glyphsLib read it that way, and M10.20 writes those records (crates/compile/src/gasp.rs); the instance's value replaces the font's."
+notes = "Read as the corpus stores it, a dictionary from maximum PPM to flags (instance, then master, then font); a size above 65535 is left out, as fontc does, and at most 256 ranges are read. Documented, not yet observed. The parameter's value holds the records themselves (largest PPM of each range to its flag bits), not two thresholds: fontc's test sources and glyphsLib read it that way, and M10.20 writes those records (crates/compile/src/gasp.rs); the instance's value replaces the font's."
 
 [[behavior]]
 id = "hinting.tt.gasp.ranges"

@@ -2,9 +2,8 @@
 //! extremes, bends and bounding boxes.
 //!
 //! Ported from otfautohint's `hinter.py` lines 78–1053 (`dimensionHinter`; AFDKO 5.0.1,
-//! Apache-2.0, Copyright 2021 Adobe; see `NOTICE`). [`solve_cubic`] ports `solveCubic` and
-//! `solveQuadratic` of fontTools' `misc/bezierTools.py` (MIT). Functions marked *shared* are
-//! called from other packages and keep their signature.
+//! Apache-2.0, Copyright 2021 Adobe; see `NOTICE`). Functions marked *shared* are called from other
+//! packages and keep their signature.
 //!
 //! Segments are generated from the outline [`DimHinter::seg_glyph`] returns: the main master's
 //! glyph, or the overlap-free outline in [`crate::state::GlyphHintState::overlap_removed`] when
@@ -14,6 +13,7 @@
 //! follows each element's association back to the main glyph, so every segment names an element
 //! of the main glyph.
 
+use crate::bezier::solve_cubic;
 use crate::glyph::{FlexPart, GlyphData, PeRef, Pt, SegmentSub, feq, fne};
 use crate::hinter::DimHinter;
 use crate::hinter::{
@@ -46,86 +46,6 @@ pub fn interpolate(q: f64, v0: f64, q0: f64, v1: f64, q1: f64) -> f64 {
         return v0;
     }
     v0 + (q - q0) * (v1 - v0) / dq
-}
-
-/// fontTools' `epsilon` and `epsilonDigits`.
-const EPSILON: f64 = 1e-10;
-const EPSILON_DIGITS: i32 = 6;
-
-/// Python's `round(x, 6)`, close enough for roots in [0, 1]: half to even on the scaled value.
-fn round6(x: f64) -> f64 {
-    let k = 10f64.powi(EPSILON_DIGITS);
-    (x * k).round_ties_even() / k
-}
-
-/// `solveQuadratic`: the real roots of `a·x² + b·x + c`, neither sorted nor unique.
-fn solve_quadratic(a: f64, b: f64, c: f64) -> Vec<f64> {
-    if a.abs() < EPSILON {
-        if b.abs() < EPSILON { Vec::new() } else { vec![-c / b] }
-    } else {
-        let dd = b * b - 4.0 * a * c;
-        if dd >= 0.0 {
-            let rdd = dd.sqrt();
-            vec![(-b + rdd) / 2.0 / a, (-b - rdd) / 2.0 / a]
-        } else {
-            Vec::new()
-        }
-    }
-}
-
-/// `solveCubic`: the real roots of `a·x³ + b·x² + c·x + d`, neither sorted nor unique.
-pub fn solve_cubic(a: f64, b: f64, c: f64, d: f64) -> Vec<f64> {
-    if a.abs() < EPSILON {
-        return solve_quadratic(b, c, d);
-    }
-    let a1 = b / a;
-    let a2 = c / a;
-    let a3 = d / a;
-    let q = (a1 * a1 - 3.0 * a2) / 9.0;
-    let r = (2.0 * a1 * a1 * a1 - 9.0 * a1 * a2 + 27.0 * a3) / 54.0;
-    let mut r2 = r * r;
-    let mut q3 = q * q * q;
-    if r2 < EPSILON {
-        r2 = 0.0;
-    }
-    if q3.abs() < EPSILON {
-        q3 = 0.0;
-    }
-    let r2_q3 = r2 - q3;
-    if r2 == 0.0 && q3 == 0.0 {
-        let x = round6(-a1 / 3.0);
-        vec![x, x, x]
-    } else if r2_q3 <= EPSILON * 0.5 {
-        let theta = (r / q3.sqrt()).clamp(-1.0, 1.0).acos();
-        let rq2 = -2.0 * q.sqrt();
-        let a1_3 = a1 / 3.0;
-        let pi = std::f64::consts::PI;
-        let mut xs = [rq2 * (theta / 3.0).cos() - a1_3, rq2 * ((theta + 2.0 * pi) / 3.0).cos() - a1_3, rq2 * ((theta + 4.0 * pi) / 3.0).cos() - a1_3];
-        xs.sort_by(f64::total_cmp);
-        let [x0, x1, x2] = xs;
-        if x1 - x0 < EPSILON && x2 - x1 < EPSILON {
-            let x = round6((x0 + x1 + x2) / 3.0);
-            vec![x, x, x]
-        } else if x1 - x0 < EPSILON {
-            let x = round6((x0 + x1) / 2.0);
-            vec![x, x, round6(x2)]
-        } else if x2 - x1 < EPSILON {
-            let x = round6((x1 + x2) / 2.0);
-            vec![round6(x0), x, x]
-        } else {
-            vec![round6(x0), round6(x1), round6(x2)]
-        }
-    } else {
-        let mut x = (r2_q3.sqrt() + r.abs()).powf(1.0 / 3.0);
-        if x == 0.0 {
-            return Vec::new();
-        }
-        x += q / x;
-        if r >= 0.0 {
-            x = -x;
-        }
-        vec![round6(x - a1 / 3.0)]
-    }
 }
 
 /// The parts of an element that segment generation reads, copied out so the glyph can be
@@ -786,15 +706,10 @@ impl DimHinter<'_> {
         let dim = self.dim();
         let do_y = !self.is_v();
         let Some(bounds) = self.seg_glyph_mut().element_mut(c).map(|pe| pe.get_bounds().clone()) else { return };
-        let (d, extp, extt) = bounds.farthest_extreme(do_y);
+        let (d, extp, extt, is_max) = bounds.farthest_extreme(do_y);
         if d <= 2.0 {
             return;
         }
-        // farthestExtreme's fourth value: the extreme lies beyond the upper side of the chord.
-        let [[lx0, ly0], [lx1, ly1]] = bounds.linear;
-        let [[bx0, by0], [bx1, by1]] = bounds.bounds;
-        let (d0, d1) = if do_y { ((ly0 - by0).abs(), (ly1 - by1).abs()) } else { ((lx0 - bx0).abs(), (lx1 - bx1).abs()) };
-        let is_max = d0 <= d1;
         let (frst, lst) = self.extrema_segment(c, extp, extt, is_max);
         let aavg = (frst + lst) / 2.0;
         let mut adist = if feq(frst, lst) { (el.e.a(dim) - el.s.a(dim)) / 10.0 } else { (lst - frst) / 2.0 };
