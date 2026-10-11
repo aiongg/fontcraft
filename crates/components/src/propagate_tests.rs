@@ -364,9 +364,11 @@ fn the_cache_reuses_results_until_a_reached_glyph_changes() {
 
 /// The smart-components example font: `_part.shoulder` has two properties and three pole layers
 /// whose `connect` anchor moves with `shoulderWidth`. A component of it passes on its anchors
-/// interpolated at its values, not the master layer's. Expected values from glyphsLib on the
-/// same font, and on a copy with `m`'s second shoulder removed (`m.one` here: a name with an
-/// underscore would make it a ligature).
+/// interpolated at its values, not the master layer's. Expected values from glyphsLib 6.15.0
+/// `propagate_all_anchors` on the same font written as a `.glyphs` file, once with `m.one` and
+/// once with `m_one`. Both treat `m_one` as a ligature of `m` and `one`: the stem's `connect`
+/// becomes `connect_1`, and the shoulder, which counts no bases (it has `_connect`), keeps
+/// `connect`.
 #[test]
 fn smart_components_pass_on_anchors_interpolated_at_their_values() {
     use fontcraft_model::{ComponentInfo, ComponentInfoBox, LayerAttrs, LayerInfo, LayerInfoBox, PartProperty, Path, SmartPole, SmartValue};
@@ -418,13 +420,15 @@ fn smart_components_pass_on_anchors_interpolated_at_their_values() {
     let stem = Shape::Component(Component::new("_part.stem", 0.0, 0.0));
     let f = font(vec![
         user("m", vec![stem.clone(), piece(17.0, 0.0, 28.78011, -44.28304), piece(180.0, 1.0, 0.0, -81.24796)]),
-        user("m.one", vec![stem, piece(17.0, 0.0, 28.78011, -44.28304)]),
+        user("m.one", vec![stem.clone(), piece(17.0, 0.0, 28.78011, -44.28304)]),
+        user("m_one", vec![stem, piece(17.0, 0.0, 28.78011, -44.28304)]),
         user("n", vec![Shape::Path(Path::rect(26.0, 1.0, 193.0, 365.0)), piece(0.0, 0.0, 0.0, -100.0)]),
         shoulder,
         glyph("_part.stem", "Letter", "Lowercase", &[("connect", 153.0, 0.0)], &[]),
     ]);
     assert_anchors(&f, "m", &[("connect", 470.0, 2.0)]);
     assert_anchors(&f, "m.one", &[("connect", 315.634033, 1.0)]);
+    assert_anchors(&f, "m_one", &[("connect_1", 153.0, 0.0), ("connect", 315.634033, 1.0)]);
     assert_anchors(&f, "n", &[("_connect", 136.0, 0.0), ("connect", 290.0, 1.0)]);
     assert_anchors(&f, "_part.shoulder", &[("_connect", 136.0, 0.0), ("connect", 320.0, 1.0)]);
 }
@@ -555,12 +559,16 @@ fn hostile_smart_anchor_interpolation_stops_at_the_work_limits() {
     assert!(matches!(limit("one159"), Some(ComponentsError::LimitExceeded { what: "anchor propagation steps on one master", .. })));
 }
 
-/// A smart glyph whose pole layers are drawn with components passes on what its master layer's
-/// components give, and one whose pole layers cannot be interpolated is reported.
+/// A smart glyph whose pole layers are drawn with components passes on the anchors those layers
+/// propagate, interpolated, own anchors included; one whose pole layers cannot be interpolated
+/// passes on its master layer's anchors and is reported. Expected values from glyphsLib 6.15.0
+/// `propagate_all_anchors` on the same glyphs written as `.glyphs` files.
 #[test]
-fn smart_glyphs_built_from_components_or_not_interpolable_pass_on_their_layer_anchors() {
+fn smart_glyphs_built_from_components_interpolate_their_propagated_anchors() {
     let a_at = |dx| vec![Shape::Component(Component::new("a", dx, 0.0))];
+    let top = |x| vec![Anchor::new("top", x, 500.0)];
     let built = smart_base("_built", 1, vec![(M.into(), vec![false], vec![], a_at(10.0)), ("wide".into(), vec![true], vec![], a_at(40.0))]);
+    let own = smart_base("_own", 1, vec![(M.into(), vec![false], top(100.0), a_at(10.0)), ("wide".into(), vec![true], top(300.0), a_at(40.0))]);
     let broken = smart_base(
         "_broken",
         1,
@@ -569,11 +577,63 @@ fn smart_glyphs_built_from_components_or_not_interpolable_pass_on_their_layer_an
             ("wide".into(), vec![true], vec![Anchor::new("bottom", 100.0, 0.0)], vec![]),
         ],
     );
-    let f = with(vec![built, broken, user("x", vec![smart_use("_built", 1, 50.0)]), user("y", vec![smart_use("_broken", 1, 50.0)])]);
-    assert_anchors(&f, "x", &[("top", 260.0, 500.0), ("bottom", 260.0, 0.0), ("ogonek", 410.0, 0.0)]);
+    let f = with(vec![
+        built,
+        own,
+        broken,
+        user("x", vec![smart_use("_built", 1, 50.0)]),
+        user("w", vec![smart_use("_own", 1, 50.0)]),
+        user("y", vec![smart_use("_broken", 1, 50.0)]),
+    ]);
+    assert_anchors(&f, "x", &[("top", 275.0, 500.0), ("bottom", 275.0, 0.0), ("ogonek", 425.0, 0.0)]);
+    assert_anchors(&f, "w", &[("top", 200.0, 500.0), ("bottom", 275.0, 0.0), ("ogonek", 425.0, 0.0)]);
     assert_anchors(&f, "y", &[("top", 100.0, 500.0)]);
     let all = effective_anchors_for_master(&f, M).unwrap();
     assert!(all.failed.is_empty());
     let noted: Vec<&str> = all.smart_fallbacks.iter().map(|(g, _)| g.as_str()).collect();
     assert_eq!(noted, ["y"]);
+}
+
+/// Many components of a smart glyph whose pole layers hold many shapes: each pole layer is
+/// worked out once, not once per component.
+#[test]
+fn many_smart_components_read_their_pole_layers_once() {
+    use fontcraft_model::Path;
+    let shapes = || (0..100_000).map(|_| Shape::Path(Path::new(false, Vec::new()))).collect::<Vec<_>>();
+    let base = smart_base(
+        "_wide",
+        1,
+        vec![
+            (M.into(), vec![false], vec![Anchor::new("top", 100.0, 500.0)], shapes()),
+            ("wide".into(), vec![true], vec![Anchor::new("top", 300.0, 500.0)], shapes()),
+        ],
+    );
+    let f = font(vec![base, user("many", (0..20_000).map(|_| smart_use("_wide", 1, 50.0)).collect())]);
+    assert_anchors(&f, "many", &[("top", 200.0, 500.0)]);
+}
+
+/// A component that gives a property twice is interpolated at the first value, and the reuse of
+/// interpolations tells apart components that give the same values in another order.
+#[test]
+fn a_smart_property_given_twice_reads_the_first_value() {
+    use fontcraft_model::{ComponentInfo, ComponentInfoBox, SmartValue};
+    let twice = |first: f64, second: f64| {
+        let mut c = Component::new("_wide", 0.0, 0.0);
+        let smart_values = vec![SmartValue { property: "p0".into(), value: first }, SmartValue { property: "p0".into(), value: second }];
+        c.info = ComponentInfoBox::new(ComponentInfo { smart_values, ..Default::default() });
+        Shape::Component(c)
+    };
+    let base = smart_base(
+        "_wide",
+        1,
+        vec![
+            (M.into(), vec![false], vec![Anchor::new("top", 100.0, 500.0)], vec![]),
+            ("wide".into(), vec![true], vec![Anchor::new("top", 300.0, 500.0)], vec![]),
+        ],
+    );
+    let f = font(vec![base, user("low", vec![twice(0.0, 100.0)]), user("high", vec![twice(100.0, 0.0)])]);
+    let all = effective_anchors_for_master(&f, M).unwrap();
+    let top = |g: &str| all.anchors[g].iter().find(|a| a.name == "top").map(|a| a.x);
+    assert_eq!(top("low"), Some(100.0));
+    assert_eq!(top("high"), Some(300.0));
 }

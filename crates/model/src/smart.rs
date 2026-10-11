@@ -217,13 +217,20 @@ pub fn pole_layers<'a, 'm>(base: &'a Glyph, master: &'m str) -> impl Iterator<It
     base.layers.iter().filter(move |l| !l.info.attrs.smart_poles.is_empty() && (master.is_empty() || l.master == master))
 }
 
-/// An upper bound on the steps [`component_anchors`] takes for a component of `base` in
-/// `master`, for callers that budget their work before calling it: reading every pole layer's
-/// anchors, building the variation model and adding up the weighted poles.
-pub fn anchor_interpolation_cost(base: &Glyph, master: &str) -> usize {
-    let (poles, anchors) = pole_layers(base, master).fold((0usize, 0usize), |(n, a), l| (n.saturating_add(1), a.max(l.anchors.len())));
-    let model = poles.saturating_mul(poles).saturating_mul(base.info.parts.len().saturating_add(1));
-    poles.saturating_mul(anchors.saturating_mul(3)).saturating_add(model)
+/// An upper bound on the steps [`interpolate_anchors`] takes for the component `c` of `base` in
+/// `master` when no pole layer has more than `anchors` anchors, for callers that budget their
+/// work before calling it: placing each pole layer on the properties, building the variation
+/// model, reading the component's values, and reading and weighing the pole layers' anchors.
+pub fn anchor_interpolation_cost(base: &Glyph, c: &Component, master: &str, anchors: usize) -> usize {
+    let (poles, ends) = pole_layers(base, master).fold((0usize, 0usize), |(n, e), l| (n.saturating_add(1), e.max(l.info.attrs.smart_poles.len())));
+    let parts = base.info.parts.len();
+    // Each pole layer looks up every property among its own ends and the default layer's.
+    let locations = poles.saturating_mul(parts).saturating_mul(ends.saturating_mul(2));
+    let model = poles.saturating_mul(poles).saturating_mul(parts.saturating_add(1));
+    let at = parts.saturating_mul(c.info.smart_values.len().saturating_add(ends));
+    // Per pole layer and anchor: index it by name, look up the default's, weigh two coordinates.
+    let read = poles.saturating_mul(anchors.saturating_mul(4));
+    locations.saturating_add(model).saturating_add(at).saturating_add(read)
 }
 
 /// A smart component's pole layers for one master, default first, with the variation model
@@ -282,36 +289,52 @@ fn interpolation<'a>(base: &'a Glyph, c: &Component, master: &str) -> Result<Opt
 /// pole layer (the master layer when that is a pole layer), each placed by interpolating the
 /// pole layers' anchors of the same name at the component's values, as its outline is. The
 /// positions are in the smart glyph's coordinates; the component's transform is not applied.
-/// The pole layers' own anchors are read, not anchors their components would pass on.
+/// The pole layers' own anchors are read; [`interpolate_anchors`] reads others.
 ///
 /// `Ok(None)` when the glyph is not a smart glyph or has one pole layer for the master (its
 /// layer's anchors apply unchanged). An error when the pole layers cannot be interpolated, when
 /// a pole layer lacks an anchor the first one has, or when a pole layer has more than
 /// [`MAX_SMART_ANCHORS`] anchors.
 pub fn component_anchors(font: &Font, c: &Component, master: &str) -> Result<Option<Vec<Anchor>>, String> {
-    let Some(base) = font.glyphs.get(&c.glyph).filter(|g| !g.info.parts.is_empty()) else { return Ok(None) };
+    let Some(base) = font.glyphs.get(&c.glyph) else { return Ok(None) };
+    interpolate_anchors(base, c, master, |l| l.anchors.as_slice())
+}
+
+/// [`component_anchors`] for a component `c` of the smart glyph `base`, with each pole layer's
+/// anchors given by `anchors` (anchor propagation passes the anchors a pole layer's components
+/// give it).
+pub fn interpolate_anchors<'a, 's>(
+    base: &'a Glyph,
+    c: &Component,
+    master: &str,
+    anchors: impl Fn(&'a Layer) -> &'s [Anchor],
+) -> Result<Option<Vec<Anchor>>, String> {
+    if base.info.parts.is_empty() {
+        return Ok(None);
+    }
     let Some(Interpolation { poles, model, at }) = interpolation(base, c, master)? else { return Ok(None) };
-    let Some(default) = poles.first() else { return Ok(None) };
-    if poles.iter().any(|l| l.anchors.len() > MAX_SMART_ANCHORS) {
+    let lists: Vec<&'s [Anchor]> = poles.iter().map(|&l| anchors(l)).collect();
+    let Some(&default) = lists.first() else { return Ok(None) };
+    if lists.iter().any(|l| l.len() > MAX_SMART_ANCHORS) {
         return Err(format!("a pole layer has more than {MAX_SMART_ANCHORS} anchors"));
     }
     let mut coordinates = Vec::with_capacity(poles.len());
-    for l in &poles {
+    for (l, list) in poles.iter().zip(&lists) {
         // The first anchor of a name, as in the default layer's own order.
-        let mut by_name: HashMap<&str, (f64, f64)> = HashMap::with_capacity(l.anchors.len());
-        for b in &l.anchors {
+        let mut by_name: HashMap<&str, (f64, f64)> = HashMap::with_capacity(list.len());
+        for b in *list {
             by_name.entry(b.name.as_str()).or_insert((b.x, b.y));
         }
-        let mut row = Vec::with_capacity(default.anchors.len() * 2);
-        for a in &default.anchors {
+        let mut row = Vec::with_capacity(default.len() * 2);
+        for a in default {
             let &(x, y) = by_name.get(a.name.as_str()).ok_or_else(|| format!("the pole layer `{}` has no anchor `{}`", layer_label(l), a.name))?;
             row.extend([x, y]);
         }
         coordinates.push(row);
     }
     let values = model.interpolate(&at, &coordinates).map_err(|e| format!("its pole layers' anchors cannot be interpolated ({e})"))?;
-    let mut out = Vec::with_capacity(default.anchors.len());
-    for (a, xy) in default.anchors.iter().zip(values.chunks_exact(2)) {
+    let mut out = Vec::with_capacity(default.len());
+    for (a, xy) in default.iter().zip(values.chunks_exact(2)) {
         let &[x, y] = xy else { continue };
         if !(crate::in_range(x) && crate::in_range(y)) {
             return Err("an interpolated anchor lies beyond the coordinate limit".into());
