@@ -2639,9 +2639,13 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A legacy kern table is present and unusable: it kerns glyphs that have no cmap entry (failure) or has no format 0 subtable (warning). A well-formed kern table is only noted. The fix regenerates it from GPOS for encoded glyphs or removes it."
+summary = "A legacy kern table is present and unusable: it kerns glyphs that have no cmap entry (failure) or has no format 0 subtable (warning). A well-formed kern table is only noted. The fix removes it."
 ref = "fontbakery opentype/kern_table; MS Font Validator W0022 (afdko MSFontValidatorIssues.md 1.a)"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 opentype/kern_table: the glyphs every cmap subtable maps are the encoded ones, format 0 subtables are the usable ones. A kern table that cannot be read is a warning (kern-unreadable)."
+guesses = [
+  "The fix only removes the table (tables.delete); regenerating a format 0 table from GPOS for encoded glyphs is not built, and nothing says which of the two a user expects first.",
+]
 
 [[check]]
 id = "check.kerning.gposKerningMissing"
@@ -2653,6 +2657,7 @@ milestone = "M12"
 summary = "A proportional font has no pair-adjustment lookups in GPOS. Ignore for scripts and designs that need no kerning."
 ref = "fontbakery gpos_kerning_info"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 gpos_kerning_info: nothing is reported when post.isFixedPitch is set; extension lookups count by the type they wrap."
 
 [[check]]
 id = "check.kerning.tabularKerning"
@@ -2661,9 +2666,13 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "Tabular figures, or other glyphs produced by tnum, take part in kerning, which breaks column alignment. The fix removes those pairs."
+summary = "Tabular figures, or other glyphs produced by tnum, take part in kerning, which breaks column alignment. The fix removes those pairs (report-only until a command does)."
 ref = "fontbakery tabular_kerning"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 tabular_kerning without shaping: pair values are read from the kern feature's pair lookups (lookups add up, the first subtable that applies decides), with the tnum single substitutions applied to the default figures. Device and variation deltas, contextual kerning, lookup flags and FontBakery's digraph exception are not read, and excluded code points are matched on the glyph itself, not on the name without its suffix."
+guesses = [
+  "Without a tnum feature every glyph except marks is checked against the figures; FontBakery also adds marks whose Unicode category is a number or a symbol, which a comparison on fonts with such marks would settle.",
+]
 
 [[check]]
 id = "check.kerning.groupsDifferBetweenMasters"
@@ -2675,6 +2684,10 @@ milestone = "M12"
 summary = "The kerning groups of a master differ from those of the default master."
 ref = "fontbakery designspace_has_consistent_groups"
 status = "docs"
+notes = "Reads the groups file each master kept from its own UFO; a source whose kerning groups live on the glyphs has one set for every master and always passes. When the glyphs' groups no longer match the default master's file, saving rewrites every master from the glyphs, so nothing is reported."
+guesses = [
+  "Only kerning groups (public.kern1 and public.kern2) are compared, member order ignored, one result per differing group; FontBakery compares every group of the file and reports once per source.",
+]
 
 [[check]]
 id = "check.kerning.missingGlyphReference"
@@ -2683,10 +2696,14 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A kerning pair or kerning group names a glyph that is not in the font. The fix deletes the dangling entries."
+summary = "A kerning pair names a glyph that is not in the font, or a kerning group that no glyph belongs to on the side facing the pair. The fix deletes the dangling pairs."
 ref = "Editor audit convention (kerning clean-up)"
 status = "inferred"
 observe = ["Kerning font (A and V kerned, then V removed): export; note whether the A V pair is reported, dropped without a message, or exported."]
+notes = "The pairs reported are the ones kerning.cleanUp deletes (codes missing-glyph and empty-group). Group members cannot name a missing glyph: groups are a property of each glyph."
+guesses = [
+  "A group side with no member on the side facing the pair counts as dangling, since it is what removing the group's glyphs leaves; observing the reference app's export would settle whether it treats it the same.",
+]
 
 [[check]]
 id = "check.kerning.glyphInSeveralGroups"
@@ -2698,6 +2715,7 @@ milestone = "M12"
 summary = "A glyph belongs to two kerning groups for the same side."
 ref = "Editor audit convention (kerning groups)"
 status = "inferred"
+notes = "Only a UFO groups file can list a glyph in two groups of one side; the glyph keeps the first group on reading, which the message names. A source whose groups live on the glyphs always passes."
 
 [[check]]
 id = "check.kerning.redundantPairs"
@@ -2706,9 +2724,12 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "A kerning pair has the value zero without overriding anything, or an exception repeats the value its group pair already gives. The fix removes such pairs."
+summary = "A kerning pair has the value zero without overriding anything, or an exception repeats the value its group pair already gives. The fix removes such pairs (report-only until a command does)."
 ref = "Editor audit convention (kerning clean-up)"
 status = "inferred"
+guesses = [
+  "A pair's fallback is the next pair that applies without it, in the order glyph-glyph, glyph-group, group-glyph, group-group, as the UFO specification orders them; the reference app's kerning window would settle whether it orders exceptions the same.",
+]
 
 [[check]]
 id = "check.kerning.excessivePair"
@@ -2720,6 +2741,9 @@ milestone = "M12"
 summary = "A negative kerning value is larger than the advance width of one of the two glyphs, so the glyphs swap places or collide."
 ref = "Editor audit convention (kerning sanity)"
 status = "inferred"
+guesses = [
+  "A group side stands for its narrowest glyph in that master, glyphs without width are left out, and vertical kerning is not checked; nothing documents the reference's rule.",
+]
 
 # ---------------------------------------------------------------------------
 # family: Family consistency
@@ -3246,6 +3270,7 @@ milestone = "M12"
 summary = "A COLR version 0 layer uses a fixed palette colour that is very dark or very bright, so it vanishes on a dark or a light background; such layers should use the text foreground colour instead."
 ref = "fontbakery color_cpal_brightness"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 color_cpal_brightness on the first palette, with the threshold minBrightness (default 0.1 of full brightness from black and from white). Brightness weighs red 0.299, green 0.587 and blue 0.114; FontBakery applies those weights to blue, green and red (fontTools stores colours blue first), so verdicts can differ on purpose."
 
 [[check]]
 id = "check.color.emptyGlyphOneForColrV0"
@@ -3257,6 +3282,7 @@ milestone = "M12"
 summary = "A COLR version 0 font has contours in glyph 1. One Windows renderer paints glyph 1 over other glyphs, so an empty glyph must hold that slot. The fix inserts an empty glyph after .notdef."
 ref = "fontbakery empty_glyph_on_gid1_for_colrv0"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 empty_glyph_on_gid1_for_colrv0: glyph 1 fails when its outline has an area (curves measured in 16 straight steps, areas under 0.01 square units count as empty)."
 
 [[check]]
 id = "check.color.colorTableSet"
@@ -3268,6 +3294,7 @@ milestone = "M12"
 summary = "The colour tables do not suit broad delivery: a COLR version 0 font also carries an SVG table it does not need, a COLR version 1 font has no SVG fallback, an SVG table has no COLR companion, or a variable font carries an SVG table (which cannot vary)."
 ref = "fontbakery googlefonts/colorfont_tables"
 status = "docs"
+notes = "Follows FontBakery 1.1.0 googlefonts/colorfont_tables, with its message codes drop-svg, add-svg, variable-svg and add-colr."
 
 # ---------------------------------------------------------------------------
 # vendor: Vendor groups (summarised, not built in)
