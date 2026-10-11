@@ -11,9 +11,11 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-hinting.workspace = true
 fontcraft-model.workspace = true
 fontcraft-container.workspace = true
 fontcraft-spacing.workspace = true
+fontcraft-ttasm.workspace = true
 skrifa.workspace = true
 thiserror.workspace = true
 

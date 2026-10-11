@@ -15,6 +15,8 @@
 
 mod control_server;
 mod pickers;
+#[cfg(not(target_arch = "wasm32"))]
+mod preview_server;
 mod user_files;
 
 use std::process::ExitCode;

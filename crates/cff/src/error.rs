@@ -34,6 +34,8 @@ pub enum Error {
     TableTooLarge(usize),
     /// The offsets in the Top DICT did not reach a fixed point.
     LayoutDidNotSettle,
+    /// A glyph's hints cannot be written ([`crate::CharstringHints::validate`]).
+    BadHints { glyph: String, message: String },
 }
 
 impl fmt::Display for Error {
@@ -65,6 +67,7 @@ impl fmt::Display for Error {
                 write!(f, "the CFF table would be {n} bytes, more than the limit of {}", crate::MAX_TABLE_SIZE)
             }
             Error::LayoutDidNotSettle => write!(f, "the CFF table layout did not settle"),
+            Error::BadHints { glyph, message } => write!(f, "the hints of `{glyph}` cannot be written: {message}"),
         }
     }
 }

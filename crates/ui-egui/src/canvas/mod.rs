@@ -17,6 +17,9 @@
 //! | [`text`] | text mode: kerned gaps, the text selection and cursor, metrics labels; the pointer in text mode |
 //! | [`group_members`] | Show Group Members: the other members of the edited pair's kerning groups, behind the glyphs |
 //! | [`measurement_line`] | text mode: the measurement line and the sidebearings on it |
+//! | [`hints_ps`] | PostScript hints: bars, badges, drag markers (M10.24) |
+//! | [`tt_badges`] | TrueType instruction badges of the Instructor (M10.25) |
+//! | [`tt_pixels`] | the Instructor's instance and grid-fitted outlines and pixel backdrop (M10.26) |
 //!
 //! Every colour and size comes from [`Tokens`]. Wheel and gestures act through `view.scrollTo`
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
@@ -31,11 +34,14 @@ pub mod composite;
 pub mod fill;
 pub mod group_members;
 pub mod guides;
+pub mod hints_ps;
 pub mod measurement_line;
 pub mod metrics;
 pub mod nodes;
 pub mod selection;
 pub mod text;
+pub mod tt_badges;
+pub mod tt_pixels;
 pub mod view;
 
 use egui::{Pos2, Rect, Sense, Stroke};

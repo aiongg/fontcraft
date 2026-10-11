@@ -67,7 +67,7 @@ pub(crate) fn build(
                 return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a CFF outline cannot hold components".into() });
             }
         };
-        glyphs.push(cff::Glyph { name: name.clone(), advance: g.width, path });
+        glyphs.push(cff::Glyph { name: name.clone(), advance: g.width, path, hints: None });
     }
     let cff_font = cff::Font {
         name: font_name(info, warnings),

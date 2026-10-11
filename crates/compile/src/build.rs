@@ -476,6 +476,11 @@ pub fn assemble(
     if let Some(kern) = kern {
         builder.add_raw(Tag::new(b"kern"), kern);
     }
+    // M10.19: `hinted` is true when the font carries TrueType instructions.
+    let hinted = false;
+    if let Some(gasp) = crate::gasp::gasp_table(font, flavour, hinted, warnings)? {
+        builder.add_table(&gasp).map_err(table("gasp"))?;
+    }
     if info.vertical {
         let (vhea, vmtx) = vertical(order, &boxes, &info);
         builder.add_table(&vhea).map_err(table("vhea"))?;

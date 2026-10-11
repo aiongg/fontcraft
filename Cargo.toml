@@ -42,6 +42,9 @@ fontcraft-fontinfo = { path = "crates/fontinfo" }
 fontcraft-fea = { path = "crates/fea" }
 fontcraft-shaping = { path = "crates/shaping" }
 fontcraft-interp = { path = "crates/interp" }
+fontcraft-ttasm = { path = "crates/ttasm" }
+fontcraft-autohint = { path = "crates/autohint" }
+fontcraft-hinting = { path = "crates/hinting" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }

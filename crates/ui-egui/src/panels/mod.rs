@@ -14,6 +14,8 @@
 //! | [`bottom_bar`] | the zoom controls along the lower edge of an Edit View tab |
 //! | [`widgets`] | fields with the Info box editing rules, buttons, the nine-point grid |
 //! | [`selection_info`] | the Selection Info window: the selected glyphs' properties |
+//! | [`info_box_ps_hint`], [`info_box_tt`] | the Info box of a PostScript hint and of the TrueType Instructor (M10.24, M10.27) |
+//! | [`hinting_waterfall`] | the Hinting Preview waterfall (M10.29) |
 //!
 //! Panels read engine state (the font and queries such as `selection.getInfo`) and act only by
 //! queueing commands with explicit targets; the app runs them after the frame. Their own
@@ -23,9 +25,12 @@
 pub mod bottom_bar;
 pub mod dimensions;
 pub mod fit_curve;
+pub mod hinting_waterfall;
 pub mod info_box;
 pub mod info_box_kerning;
 pub mod info_box_metrics;
+pub mod info_box_ps_hint;
+pub mod info_box_tt;
 pub mod layers;
 pub mod palette;
 pub mod selection_info;

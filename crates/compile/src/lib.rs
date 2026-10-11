@@ -15,6 +15,7 @@
 //! | Component options | [`components_opt`] | decomposition and flattening the options, parameters and filter list ask for |
 //! | Mark attachment | `marks` | the master's propagated anchors as `mark`, `mkmk`, `abvm`, `blwm` and `curs` lookups merged into the `GPOS`, and the `GDEF` classes, carets and mark filtering sets |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
+//! | Hinting (M10) | [`cff_hints`], [`tt_hints`], [`points`], [`gasp`] | CFF stem hints, masks and flex; `cvt `, `fpgm`, `prep` and glyph programs against the point map; `gasp` |
 //! | Table builders and assembly | `build`, [`cff`], [`names`], [`kern_table`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning or mark attachment, `GDEF` when glyphs have classes, carets or mark filtering sets, then the font file |
 //!
 //! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
@@ -40,9 +41,11 @@
 
 mod build;
 pub mod cff;
+pub mod cff_hints;
 pub mod components_opt;
 pub mod drawing;
 pub mod export_params;
+pub mod gasp;
 pub mod info;
 mod kern;
 pub mod kern_table;
@@ -52,10 +55,12 @@ pub mod names;
 pub mod order;
 pub mod outline;
 pub mod plan;
+pub mod points;
 pub mod preflight;
 pub mod preview;
 mod ranges;
 pub mod var;
+pub mod tt_hints;
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -161,6 +166,20 @@ pub struct Options {
     pub glyph_data: DataRef,
     /// Decomposition and flattening beyond what the source asks ([`components_opt`]).
     pub components: components_opt::ComponentOptions,
+    /// Hinting at export ([`HintingOptions`]).
+    pub hinting: HintingOptions,
+}
+
+/// What the compiler does about hints (`docs/plans/M10.md` § 3). The source's own settings
+/// (Autohint, Export PostScript Hints, Export TrueType Hints…) are read from the font by
+/// `fontcraft_hinting::HintSettings`; these options are the export dialog's and the command's.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HintingOptions {
+    /// Autohint: PostScript glyphs without manual hints, every TrueType glyph (the export
+    /// option; an instance's Autohint parameter overrides it).
+    pub autohint: bool,
+    /// Write no hints at all, whatever the source holds.
+    pub strip: bool,
 }
 
 /// The glyph database a compile reads ([`Options::glyph_data`]). Two are equal when they are the
@@ -195,6 +214,7 @@ impl Default for Options {
             overlap_time_limit: fontcraft_pathops::TIME_LIMIT,
             glyph_data: DataRef::default(),
             components: components_opt::ComponentOptions::default(),
+            hinting: HintingOptions::default(),
         }
     }
 }

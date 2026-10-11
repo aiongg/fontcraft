@@ -73,6 +73,10 @@ mod smart_filter_editor;
 mod transform_metrics;
 mod transformations;
 mod virtual_master;
+mod tt_deltas;
+mod tt_preview_address;
+mod ttf_stems;
+mod ttf_zones;
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};

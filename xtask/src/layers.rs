@@ -27,7 +27,9 @@ pub const TABLE: &[(&str, Class)] = &[
     ("cff", Class::Standalone),
     ("container", Class::Standalone),
     ("glyphdata", Class::Standalone),
+    ("ttasm", Class::Standalone),
     ("model", Class::Layer(1)),
+    ("autohint", Class::Layer(1)),
     ("pathops", Class::Layer(2)),
     ("audit", Class::Layer(2)),
     ("glyphquery", Class::Layer(2)),
@@ -39,6 +41,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("fea", Class::Standalone),
     ("shaping", Class::Layer(2)),
     ("interp", Class::Layer(2)),
+    ("hinting", Class::Layer(2)),
     ("format", Class::Layer(3)),
     ("compile", Class::Layer(3)),
     ("io-glyphs", Class::Layer(3)),
@@ -61,9 +64,15 @@ pub const TABLE: &[(&str, Class)] = &[
 
 /// Explicit orderings within a layer: a crate may use the ones before it in its chain.
 /// `textlayout` and `features` read kerning through `spacing`; `textlayout` shapes through
-/// `shaping`; `features` evaluates glyph predicates through `glyphquery`.
-pub const INTRA_LAYER_ORDER: &[&[&str]] =
-    &[&["spacing", "textlayout"], &["spacing", "features"], &["shaping", "textlayout"], &["glyphquery", "features"]];
+/// `shaping`; `features` evaluates glyph predicates through `glyphquery`; `hinting` reads TT zone
+/// and stem filters through `glyphquery`.
+pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
+    &["spacing", "textlayout"],
+    &["spacing", "features"],
+    &["shaping", "textlayout"],
+    &["glyphquery", "features"],
+    &["glyphquery", "hinting"],
+];
 
 /// External crates that are a UI toolkit, windowing or GPU dependency. A trailing `*` is a prefix.
 pub const UI_CRATES: &[&str] =

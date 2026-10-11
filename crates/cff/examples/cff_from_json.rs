@@ -99,7 +99,7 @@ fn font(v: &Value) -> Font {
                     }
                 })
                 .collect();
-            Glyph { name: g["name"].as_str().unwrap().to_string(), advance: g["advance"].as_f64().unwrap(), path }
+            Glyph { name: g["name"].as_str().unwrap().to_string(), advance: g["advance"].as_f64().unwrap(), path, hints: None }
         })
         .collect();
     Font {

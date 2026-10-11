@@ -12,6 +12,9 @@ mod anchor_context;
 mod annotation;
 pub(crate) mod audit;
 mod axes;
+mod autohint;
+mod autohint_report;
+mod autohint_tt;
 mod background;
 mod clipboard;
 mod clipboard_scale;
@@ -35,6 +38,13 @@ mod glyph_info;
 mod glyph_search;
 mod glyph_set;
 mod guide;
+mod hint_import;
+mod hint_points;
+mod hint_preview;
+mod hint_ps;
+mod hint_tt;
+mod hint_tt_defs;
+mod hint_tt_more;
 mod inspect;
 mod instance_masters;
 mod instances;
@@ -253,6 +263,16 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(interpolation::specs());
         v.extend(instance_masters::specs());
         v.extend(compare::specs());
+        v.extend(hint_ps::specs());
+        v.extend(hint_tt_defs::specs());
+        v.extend(hint_tt::specs());
+        v.extend(hint_tt_more::specs());
+        v.extend(hint_points::specs());
+        v.extend(hint_import::specs());
+        v.extend(hint_preview::specs());
+        v.extend(autohint::specs());
+        v.extend(autohint_tt::specs());
+        v.extend(autohint_report::specs());
         v
     })
 }

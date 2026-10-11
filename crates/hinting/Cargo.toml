@@ -1,0 +1,25 @@
+[package]
+name = "fontcraft-hinting"
+description = "FontCraft hinting: typed PostScript hints and TrueType instructions, hint settings, the TrueType compiler and autohinter (L2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-autohint.workspace = true
+fontcraft-geom.workspace = true
+fontcraft-glyphquery.workspace = true
+fontcraft-model.workspace = true
+fontcraft-ttasm.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# The TrueType interpreter runs the compiled programs in the M10.17 and M10.18 tests, on fonts
+# built in the test.
+skrifa.workspace = true
+write-fonts.workspace = true

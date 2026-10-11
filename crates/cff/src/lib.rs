@@ -35,6 +35,7 @@ mod charset;
 mod charstring;
 mod dict;
 mod error;
+pub mod hints;
 mod index;
 mod number;
 mod specialize;
@@ -45,6 +46,7 @@ use std::collections::HashSet;
 
 pub use bounds::Bounds;
 pub use error::Error;
+pub use hints::{CharstringHints, MAX_STEM_HINTS, Mask, StemHint};
 pub use number::Number;
 
 use charset::Charset;
@@ -89,6 +91,8 @@ pub struct Glyph {
     pub name: String,
     pub advance: f64,
     pub path: Vec<PathOp>,
+    /// Stem hints, masks and flex; `None` writes an unhinted charstring.
+    pub hints: Option<CharstringHints>,
 }
 
 /// Top DICT values. `Default` gives the CFF defaults, which are left out of the table; a string
@@ -387,6 +391,11 @@ fn validate(font: &Font) -> Result<(), Error> {
     }
     if !font.round_tolerance.is_finite() || font.round_tolerance < 0.0 {
         return Err(Error::BadRoundTolerance(font.round_tolerance));
+    }
+    for g in &font.glyphs {
+        if let Some(h) = &g.hints {
+            h.validate(&g.name, g.path.len())?;
+        }
     }
     check_string(&font.name, "font name", false, false)?;
     let t = &font.top;

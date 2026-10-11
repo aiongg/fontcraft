@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 fontcraft-audit.workspace = true
+fontcraft-autohint.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-pathops.workspace = true
 fontcraft-spacing.workspace = true
@@ -29,6 +30,8 @@ fontcraft-glyphquery.workspace = true
 fontcraft-components.workspace = true
 fontcraft-fontinfo.workspace = true
 fontcraft-interp.workspace = true
+fontcraft-hinting.workspace = true
+fontcraft-render.workspace = true
 skrifa.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -9,9 +9,12 @@
 //! | [`render_path`] | one Bézier path through an affine transform, into an image of a given size |
 //! | [`render_line`] | a line of glyphs of one master, side by side by their advance widths |
 //! | [`render_layer`] | one glyph layer, by layer id |
+//! | [`hinted::HintedRenderer`] | grid-fitted outlines and pixels of a compiled font at a pixel size (M10) |
 //!
 //! [`Image`] also wraps pixels from elsewhere (a window screenshot) so they can be written as PNG.
 #![forbid(unsafe_code)]
+
+pub mod hinted;
 
 use fontcraft_geom::{Affine, BezPath, PathEl, Point};
 use fontcraft_model::{Font, Glyph, Layer, Shape, metric};

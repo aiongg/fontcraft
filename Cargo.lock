@@ -890,6 +890,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-autohint"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-geom",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fontcraft-cff"
 version = "0.0.1"
 dependencies = [
@@ -911,16 +919,19 @@ dependencies = [
 name = "fontcraft-compile"
 version = "0.0.1"
 dependencies = [
+ "fontcraft-autohint",
  "fontcraft-cff",
  "fontcraft-components",
  "fontcraft-fea",
  "fontcraft-features",
  "fontcraft-fontinfo",
  "fontcraft-geom",
+ "fontcraft-hinting",
  "fontcraft-interp",
  "fontcraft-model",
  "fontcraft-pathops",
  "fontcraft-spacing",
+ "fontcraft-ttasm",
  "skrifa 0.48.0",
  "thiserror 2.0.21",
  "unicode-normalization",
@@ -954,8 +965,10 @@ dependencies = [
  "fontcraft-compile",
  "fontcraft-container",
  "fontcraft-geom",
+ "fontcraft-hinting",
  "fontcraft-model",
  "fontcraft-spacing",
+ "fontcraft-ttasm",
  "skrifa 0.48.0",
  "thiserror 2.0.21",
  "write-fonts 0.54.0",
@@ -967,6 +980,7 @@ version = "0.0.1"
 dependencies = [
  "base64 0.22.1",
  "fontcraft-audit",
+ "fontcraft-autohint",
  "fontcraft-compile",
  "fontcraft-components",
  "fontcraft-container",
@@ -977,12 +991,14 @@ dependencies = [
  "fontcraft-format",
  "fontcraft-geom",
  "fontcraft-glyphquery",
+ "fontcraft-hinting",
  "fontcraft-interp",
  "fontcraft-io-glyphs",
  "fontcraft-io-svg",
  "fontcraft-io-ufo",
  "fontcraft-model",
  "fontcraft-pathops",
+ "fontcraft-render",
  "fontcraft-spacing",
  "fontcraft-testkit",
  "log",
@@ -1062,6 +1078,20 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fontcraft-hinting"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-autohint",
+ "fontcraft-geom",
+ "fontcraft-glyphquery",
+ "fontcraft-model",
+ "fontcraft-ttasm",
+ "skrifa 0.48.0",
+ "thiserror 2.0.21",
+ "write-fonts 0.54.0",
 ]
 
 [[package]]
@@ -1163,6 +1193,7 @@ version = "0.0.1"
 dependencies = [
  "fontcraft-geom",
  "fontcraft-model",
+ "skrifa 0.48.0",
  "thiserror 2.0.21",
  "tiny-skia",
 ]
@@ -1214,6 +1245,13 @@ dependencies = [
  "fontcraft-model",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fontcraft-ttasm"
+version = "0.0.1"
+dependencies = [
+ "thiserror 2.0.21",
 ]
 
 [[package]]
