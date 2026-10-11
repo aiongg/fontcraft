@@ -44,6 +44,7 @@ use crate::params::Params;
 pub const MAX_TEXT_BYTES: usize = 16 << 20;
 /// Most include statements one import follows (an empty file included from many places costs
 /// no text, so the text cap alone does not bound the work).
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub const MAX_INCLUDE_STATEMENTS: usize = 100_000;
 /// The name an imported prefix gets when no `# Prefix:` comment names it.
 pub const PREFIX_NAME: &str = "Prefix";
