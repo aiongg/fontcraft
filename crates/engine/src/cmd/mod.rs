@@ -123,6 +123,7 @@ mod autospace;
 mod autotrace;
 mod cid;
 mod construction;
+mod corner;
 mod corner_helpers;
 mod cross_axis;
 mod derived_glyphs;
@@ -279,6 +280,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(file::specs());
         v.extend(edit::specs());
         v.extend(clipboard::specs());
+        v.extend(corner::specs());
         v.extend(glyph::specs());
         v.extend(decompose::specs());
         v.extend(glyph_set::specs());

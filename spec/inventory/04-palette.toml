@@ -979,6 +979,7 @@ milestone = "M6"
 summary = "Mirroring a corner component changes its handedness: a left corner becomes a right corner and the reverse."
 ref = "Palette › Transformations › Mirroring"
 status = "handbook"
+notes = "Documented, not yet observed. The same rule as corner.mirrorViaPalette; one implementation: `cornerComponent.setScale` with `flip` (M6.9)."
 
 [[behavior]]
 id = "transform.slantNotAdditive"

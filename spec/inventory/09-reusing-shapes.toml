@@ -1248,12 +1248,21 @@ label = "Add Corner Component"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, nodes?: [{path: index, node: index}], extraNodes?: [{x, y}], corner: name}"
+params = "{glyph: name, layer?: id, points?: [[shape, node]], extraNodes?: [[x, y]], corner: name}"
 area = "components"
 milestone = "M6"
 summary = "Attaches a corner component to each selected node, or to an extra node at a path intersection. In the UI it is a context-menu item that opens a glyph picker listing corner glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.9: `cmd/corner.rs`. The corner is stored as a `Corner` hint on the foreground, unscaled and aligned left (the defaults fontc reads); nodes are given in the model's order and stored in the file's order (a closed path's start node last). An extra node is given by its position: the two segments within 1 unit of it, and more than 1 unit from their end nodes, are stored as the hint's four-number origin. The corner glyph picker is M6.11's."
+guesses = [
+  "A node that already holds a corner gets the new corner in its place, unscaled and aligned left, rather than a second corner; adding a corner to a node with a corner in the reference app settles it.",
+  "An off-curve node and the first or last node of an open path are refused, because the fitting needs a segment on each side; the context menu on an open path's end node in the reference app settles it.",
+]
+observe = [
+  "Select the end node of an open path and open the context menu: note whether Add Corner Component is shown, and what the corner looks like if it is added.",
+  "Add a corner to a node that already has one: note whether the old corner is replaced or a second one is added.",
+]
 
 [[command]]
 id = "cornerComponent.decompose"
@@ -1278,12 +1287,13 @@ label = "Replace Corner Component"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, corners?: [indices], corner: name}"
+params = "{glyph: name, layer?: id, corners: [hint indices], corner: name}"
 area = "components"
 milestone = "M6"
 summary = "Swaps the corner glyph an attached corner component uses, keeping its node, scale and alignment. In the UI: click the component name in its Info box and pick another."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.9: `cmd/corner.rs`. Corners are addressed by their position in the layer's hint list, the numbering `corner::decompose_corners` uses; only the hint's `name` changes, every other stored key is kept."
 
 [[command]]
 id = "cornerComponent.setScale"
@@ -1291,12 +1301,16 @@ label = "Set Corner Scale"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, corners?: [indices], scaleX?: percent, scaleY?: percent}"
+params = "{glyph: name, layer?: id, corners: [hint indices], scaleX?: percent, scaleY?: percent, flip?: horizontal | vertical}"
 area = "components"
 milestone = "M6"
 summary = "Sets the horizontal and vertical scale of a corner component in percent. A negative value mirrors the corner on that axis, so one serif glyph serves left and right or bottom and top."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
+notes = "Documented, not yet observed. M6.9: `cmd/corner.rs`. The hint stores the scale as factors (`scale = (-1, 1)` for -100 %), and leaves the key out at 100 % on both axes. `flip` negates one factor of each listed corner: it is what the Palette's mirror buttons do to selected corners (`corner.mirrorViaPalette`). A scale of 0 is refused, and so is one beyond ±10,000 % (the model's limit)."
+guesses = [
+  "A scale of 0 percent is refused with a message, because it collapses the corner to a point; typing 0 in the reference app's scale field settles it.",
+]
 
 [[command]]
 id = "cornerComponent.setAlignment"
@@ -1304,13 +1318,13 @@ label = "Set Corner Alignment"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, corners?: [indices], mode: left | right | both | none}"
+params = "{glyph: name, layer?: id, corners: [hint indices], mode: left | right | both | none}"
 area = "components"
 milestone = "M6"
 summary = "Chooses how a corner adapts to a diagonal stem. left: the start node follows the diagonal and the end node stays; right: the end node follows and the start node stays; both: a blend of the two; none: neither end is adjusted."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. fontc's `glyphs-reader/src/corner_components.rs` (a port of glyphsLib's `filters/cornerComponents.py`, both Apache-2.0) rotates the corner by the hint's alignment: left aligns to the outgoing segment, right to the incoming one, both to their mean angle, and none leaves it unrotated (fontc's `Alignment` names left and right as the reference does; the stored `options` are 0 left, 1 right, 2 both, 4 none, and 3, which the reference also writes, is fitted unrotated); FontCraft ports it (`model/corner.rs`), and the fontmake and fontc builds of the 3 corpus sources with corner hints are the oracle (M6 plan § 5)."
+notes = "Documented, not yet observed. fontc's `glyphs-reader/src/corner_components.rs` (a port of glyphsLib's `filters/cornerComponents.py`, both Apache-2.0) rotates the corner by the hint's alignment: left aligns to the outgoing segment, right to the incoming one, both to their mean angle, and none leaves it unrotated (fontc's `Alignment` names left and right as the reference does; the stored `options` are 0 left, 1 right, 2 both, 4 none, and 3, which the reference also writes, is fitted unrotated); FontCraft ports it (`model/corner.rs`), and the fontmake and fontc builds of the 3 corpus sources with corner hints are the oracle (M6 plan § 5). The command (M6.9, `cmd/corner.rs`) writes `options` 1, 2 or 4 and leaves the key out for left, as the reference writes the default."
 
 [[command]]
 id = "cornerComponent.editGlyph"
@@ -1368,9 +1382,13 @@ milestone = "M6"
 summary = "A selected corner component can be copied with Edit › Copy and, with other nodes selected, pasted onto them with Edit › Paste, giving each node the same corner."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M6.9: `edit.copy` with `corners: [hint indices]` puts the corners on the clipboard as our own JSON (`fontcraft-corners`: each corner's glyph, scale and alignment, without its node); `edit.paste` of that text with `points` attaches them to those nodes, as `cornerComponent.add` does (`cmd/corner.rs`, called from `cmd/clipboard.rs`)."
 guesses = [
   "Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.",
+  "One copied corner goes onto every selected node; several copied corners go onto as many selected nodes, in order, and any other count is refused. Copying two corners and pasting them onto three nodes in the reference app settles it.",
+]
+observe = [
+  "Copy two corners, select three nodes and paste: note which nodes get which corner, or whether the paste is refused.",
 ]
 
 [[behavior]]
@@ -1380,6 +1398,13 @@ milestone = "M6"
 summary = "The Palette's mirror buttons flip selected corner components, equivalent to negating the matching scale; a left corner becomes a right one and the reverse."
 ref = "Reusing Shapes › Corner Components › Using Corner Components; Palette › Transformations"
 status = "handbook"
+notes = "Documented, not yet observed. M6.9: `cornerComponent.setScale` with `flip: horizontal | vertical` negates the matching factor of each selected corner. The Palette's mirror buttons run `transform.mirrorHorizontal` and `transform.mirrorVertical`, which do not take corners; sending them to the flip when corners are selected is not built yet."
+guesses = [
+  "Mirroring negates the scale only and keeps the corner's alignment mode; mirroring a corner aligned left in the reference app and reading its Info box settles it.",
+]
+observe = [
+  "Select a corner aligned left on a diagonal stem, press the horizontal mirror button and read the Info box: note the scale fields and the alignment button.",
+]
 
 [[behavior]]
 id = "corner.alignmentTypicalUse"
@@ -1452,7 +1477,10 @@ milestone = "M6"
 summary = "Extra nodes, the points where overlapping paths intersect (displayed with View › Show Nodes › Extra Nodes), can take corner components through the same context-menu item. This gives smooth joins or ink traps at stem and crossbar crossings."
 ref = "Reusing Shapes › Corner Components › Extra Nodes"
 status = "handbook"
-notes = "Documented, not yet observed. The file format stores such a corner with a four-number origin: a path and the node ending one segment, and a path and the node ending the other (GlyphsSDK file-format specification v3, `indexPath`); fontc reads only the first two numbers. FontCraft reads all four and leaves these corners out of outlines: fitting one needs the two paths' overlap removed first, which the model's outline resolution cannot do."
+notes = "Documented, not yet observed. The file format stores such a corner with a four-number origin: a path and the node ending one segment, and a path and the node ending the other (GlyphsSDK file-format specification v3, `indexPath`); fontc reads only the first two numbers. FontCraft reads all four and leaves these corners out of outlines: fitting one needs the two paths' overlap removed first, which the model's outline resolution cannot do. `cornerComponent.add` takes an extra node as `extraNodes: [[x, y]]` (M6.9)."
+guesses = [
+  "The two crossing segments are stored with the earlier path first (then the earlier node); a source saved by the reference app with a corner on an extra node settles which segment comes first.",
+]
 
 # =====================================================================================
 # Cap components
