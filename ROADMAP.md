@@ -4,7 +4,7 @@ FontCraft is a clean-room, open-source, Rust-only professional font editor and c
 tool suite, following the conventions of the ArtCraft Crafting Apps. This file tracks **how far it
 is and what is left**. It is updated in the same change as every task that lands.
 
-_Last updated: 2026-10-10 (M4 closed: every measure of `docs/plans/M4.md` § 5 met)._
+_Last updated: 2026-10-11 (M5 closed: every measure of `docs/plans/M5.md` § 5 met but the two out-of-sync speed targets)._
 
 ## Where we are
 
@@ -13,16 +13,17 @@ _Last updated: 2026-10-10 (M4 closed: every measure of `docs/plans/M4.md` § 5 m
 | Planning: charter, rules, references, decisions | **done** for this stage (`docs/`) |
 | Feature inventory: every command, tool, panel, parameter, check, CLI tool, format, table | **3,648 rows**, complete in breadth, checked mechanically; depth varies (`docs/spec/README.md`) |
 | Infrastructure: workspace, layering, gates, registry, history, interactions, guard, CLI, control channel, MCP, UI shell, canvas, renderer, screenshots, pointer and key injection, toolbar, context menus, dialogs, panels, tests | **~60%** of what the siblings' "infrastructure" row covers; missing: the settings window, MCP resources and prompts, a performance budget suite |
-| Feature surface against the references (weighted, by behaviour, self-graded) | **~14%** |
+| Feature surface against the references (weighted, by behaviour, self-graded) | **~18%** |
 | Commands that exist (not: that behave like the reference) | **365 of 933** (`docs/parity.md`) |
 | Observed against the running reference | **52 rows**: 47 compiled-output rows checked against fontc and fontmake, and 5 editor rows confirmed by public tutorial videos of the previous major version. The reference app itself has not been run |
 
-## Honest assessment (2026-10-10)
+## Honest assessment (2026-10-11)
 
 **In one line:** the project reads and writes `.glyphs`, UFO and designspace sources without loss
 and compiles static fonts that match fontc and fontmake, overlaps removed and with production names;
-its Edit View draws and edits outlines with 18 tools, and its Font View manages the glyph set
-with a glyph database, filters, search and an inspector, but none of the editor has been compared
+its Edit View draws and edits outlines with 18 tools and types, spaces and kerns text, its Font
+View manages the glyph set with a glyph database, filters, search and an inspector, and exported
+fonts carry pair kerning equal to fontc's and fontmake's, but none of the editor has been compared
 with the running reference app.
 
 **What is real: files and the compiler.** `.glyphs` files of versions 2, 3 and 4 and `.glyphspackage` folders open and
@@ -135,8 +136,29 @@ end-to-end test builds a font from glyph sets over the control channel, renames,
 duplicates and exports it. When other glyphs use a removed glyph as a component, the Remove Glyph
 dialog's default answer is Decompose.
 
-**What is not.** Nothing in the editor has been compared with the running reference app. M3's
-and M4's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
+**What is real: spacing, kerning and text mode (M5).** Two crates without egui hold the work:
+`crates/spacing` (metrics keys, sidebearings, the kerning index with groups, exceptions and locks,
+Clean Up, Compress, kerning-text) and `crates/textlayout` (Edit View and Text Preview layout with
+kerning and writing direction); `crates/features` writes the generated pair kerning of exported
+fonts, ported from fontc. Edit View has text mode: a tab holds typed text with a cursor,
+placeholders, line breaks and three writing directions, opens from a document's display strings
+and writes them back. Metrics keys (`=n`, `=|n`, `=n+10`, local keys) are parsed and evaluated in
+dependency order; every one of the 4,413 keys in the corpus parses. The spacing and kerning
+shortcuts work in text mode; the Info box edits sidebearings, widths, keys, kerning groups, pair
+values and locks; the Kerning window lists, filters, sorts, edits, copies, pastes, compresses and
+cleans up pairs; Font View's inspector edits metrics and groups and flags glyphs out of sync. The
+Preview Area, the Preview Panel, the measurement line, Text Preview, sample strings and Find Glyphs
+are there. Metrics import and export read and write kerning-text and AFM (fontTools' `afmLib`
+reads ours back) and copy spacing from another font. Opening a compiled font recovers its pair
+kerning: 945,310 pairs from 97 fontmake builds, 0 differences. The kerning lookup gives the value
+fontc and fontmake compile for every covered pair of 54 sources (506,285 pairs per oracle) but
+one pair, in a source that turns its kern writer off; exported fonts get the same pair kerning (`kern` and
+`dist`) for sources without a hand-written `kern` feature. An agent types, spaces, kerns,
+compresses and moves the kerning to a second master over the control channel alone (a third
+end-to-end test).
+
+**What is not.** Nothing in the editor has been compared with the running reference app. M3's,
+M4's and M5's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
 a detail is unconfirmed, the handbook decides (Remove Overlap, for example, deletes open paths).
 Where no source says, we choose, and each choice is listed in `docs/guesses.md` to revisit
 (625 guesses on 394 rows).
@@ -144,22 +166,24 @@ Where no source says, we choose, and each choice is listed in `docs/guesses.md` 
 | Gap | Detail |
 |---|---|
 | `path.sharpenCorner` | moved to the `fidelity` milestone: no written source says what it does, and the tutorial video shows the menu item without running it |
-| Text mode | Edit View edits glyphs, not typed text; text mode is M5 |
+| Text mode | no shaping: text is laid out by code point, kerning and direction until features exist (M8); Text Preview reverses Latin letters inside right-to-left runs |
+| Spacing speed | on Inter, the out-of-sync update after an edit to one glyph takes 7.4 ms against a 2 ms target, and the full scan 53.5 ms against 50 ms |
+| Kerning | a source with a hand-written `kern` feature exports without kerning until feature code compiles (M8); vertical kerning is stored and listed but not exported (neither reference compiler writes `vkrn`); automatically aligned glyphs wait for M6; vertical origin and vertical width have no commands; 12 metrics-key values in Inter Italic differ from the stored ones by up to 1.4 units, cause not settled |
 | Masters | the toolbar has no master icons (M9) |
-| Font View | metric and kerning-group fields are read-only until M5; recipe items in Add Glyphs wait for M6; images in cells wait for M11; filters cannot be renamed in place or dragged in the sidebar (they can by command) |
-| Export dialog | OTF and UFO tabs; the Variable tab is M9 and the Metrics tab M5 |
+| Font View | recipe items in Add Glyphs wait for M6; images in cells wait for M11; filters cannot be renamed in place or dragged in the sidebar (they can by command) |
+| Export dialog | OTF, UFO and Metrics tabs; the Variable tab is M9 |
 | Import Outlines | the missing-glyph question is asked once for all unmatched files, not once per file |
 | Hints | Shape Order and Expand Outline do not renumber hints that refer to a path by index |
 | Strokes in files | a UFO keeps no stroke attribute; cap code 4 and the forced cap axis are not confirmed against the reference's files |
 | Audit | 34 of the 36 outline checks; the other 264 checks are M12 |
 
-Beyond M3 there is no kerning editing, no component editing (components are exported as
-composites), no feature compilation, no variable fonts and no instances between masters (M9),
+Beyond M5 there is no component editing (components are exported as composites), no
+feature-code compilation, no variable fonts and no instances between masters (M9),
 no CFF subroutines, no hinting, no web app, no packaging. Glyphs-only data travels in
 glyphsLib's UFO lib keys where glyphsLib has a key for it, and alternate and intermediate
 layers travel as designspace rules and sparse sources; the data no key holds (glyph tags,
 locks, sort names, layer colours, drawing attributes…) does not, and the loss report lists it.
-Kerning, features and instances are read and written, not yet edited or compiled.
+Features and instances are read and written, not yet edited or compiled.
 
 **How much to trust the inventory.** It was compiled from public documentation in one day, each
 source read once. Of its 3,645 rows, 2,107 come from the primary reference's handbook, 1,055 from
@@ -175,26 +199,28 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 | Dimension | Estimate | Evidence and what is missing |
 |---|---|---|
-| **Breadth:** commands, tools and panels exist | ~18% | 365 of 933 commands; 19 of 33 tool rows usable in the window (18 tools: every M3 tool row, the Annotation row being the group of its six tools); about 50 of 172 panels, many of them partial (Font View's grid, List View, sidebar and inspector, the toolbar, the Info box, the Palette and five of its sections, the bottom bar, the Glyph Info, Selection Info and Start windows, the M3 and M4 dialogs) |
-| **Depth:** features behave like the reference | ~6% | the M3 and M4 commands, tools, panels and dialogs behave as the handbook describes them, and none has been compared with the reference app. `path.sharpenCorner` waits in `fidelity`; the gaps are listed above |
+| **Breadth:** commands, tools and panels exist | ~22% | 365 of 933 commands; 20 of 33 tool rows usable in the window (19 tools: every M3 tool row, the Annotation row being the group of its six tools, and M5's Text tool); about 65 of 172 panels, many of them partial (Font View's grid, List View, sidebar and inspector, the toolbar, the Info box with its spacing and kerning fields, the Palette and five of its sections, the bottom bar, the Glyph Info, Selection Info, Start, Kerning and Text Preview windows, the Preview Area and Panel, the M3, M4 and M5 dialogs) |
+| **Depth:** features behave like the reference | ~7% | the M3, M4 and M5 commands, tools, panels and dialogs behave as the handbook describes them, and none has been compared with the reference app. The kerning lookup equals what fontc and fontmake compile. `path.sharpenCorner` waits in `fidelity`; the gaps are listed above |
 | **File interop** | ~38% | own format, `.glyphs` versions 2 to 4 and `.glyphspackage`, UFO 2 and 3 and designspace in and out (every reference-written corpus source saves back byte for byte, and through the other family with only reported losses); UFOZ and compiled TrueType, CFF, collections, WOFF 1 and WOFF2 open (all 391 corpus fonts); static TTF and OTF out, plain, WOFF and WOFF2, from the export commands, the Export dialog and the CLI. Missing: variable fonts, instances between masters, version conversion, stroke attributes in UFO |
-| **Compiler correctness** | measured, low | 13 of 50 tables written, for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers; strokes, masks and overlap removal in the outline stage. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). With overlaps removed, 99.58% (TrueType) and 99.87% (CFF) of glyphs have no overlap-removal difference from fontmake's (`docs/plans/M3.md` § 5). No variable font, no features, no hinting, no subroutines |
-| **Agent automation** | ~55% | every existing command is reachable from CLI, control channel and MCP; the control channel's 19 methods drive the window's tools, pointer, keys, text fields, dialogs and menus; `ui.screenshot` and `ui.render` show the result; an agent can draw, edit and export glyphs, and build a font from glyph sets, over the control channel alone (two end-to-end tests). Missing: `ui.click` beyond dialogs, `ui.set`, MCP resources and prompts |
+| **Compiler correctness** | measured, low | 14 of 50 tables written (`GPOS` with generated pair kerning), for two static flavours (TrueType, CFF), plus the WOFF and WOFF2 containers; strokes, masks and overlap removal in the outline stage. Against fontc over 332 corpus sources and fontmake over 330 (TrueType) and 331 (CFF), no core table differs: each is identical, equivalent or allow-listed with a reason (fontc building variable fonts, bracket and colour glyphs, smart components (M6), fields where fontmake and fontc disagree and FontCraft follows fontc). 322 of 331 CFF tables decode to fontmake's outlines and 206 are byte-identical (`docs/plans/M2.md` § 5). With overlaps removed, 99.58% (TrueType) and 99.87% (CFF) of glyphs have no overlap-removal difference from fontmake's (`docs/plans/M3.md` § 5). The generated pair kerning equals both oracles' on every corpus source without a hand-written `kern` feature, with 27 known differences listed in `docs/spec/40-compile.md` § 4a (`docs/plans/M5.md` § 5). No variable font, no feature code, no hinting, no subroutines |
+| **Agent automation** | ~55% | every existing command is reachable from CLI, control channel and MCP; the control channel's 19 methods drive the window's tools, pointer, keys, text fields, dialogs and menus; `ui.screenshot` and `ui.render` show the result; an agent can draw, edit and export glyphs, build a font from glyph sets, and type, space and kern text, over the control channel alone (three end-to-end tests). Missing: `ui.click` beyond dialogs, `ui.set`, MCP resources and prompts |
 | **Robustness** | good for its size | no panics found in shipped code (lints including indexing, guard, sweep, hostile-input tests, hostile SVG, a random-path test of every path operation, corpus runs of overlap removal and the audit); dependency failures found and fenced: the glyph writer's coordinate panic, the SVG parser's stack overflow on deep nesting, linesweeper's NaN panic. linesweeper also hangs on rare inputs (`docs/plans/M3.md` › M3.6); it is kept from crates.io, and the path-operation commands and export run each glyph on a worker thread under a time limit (a glyph that runs out of time stays as it was; the worker cannot be stopped and runs on detached). One adversarial code review, most findings fixed and the rest listed in `docs/status.md`. No fuzzing, and the known scaling limits in `docs/status.md` |
-| **Performance** | a few measures | overlap removal over the corpus: median 38 µs, 99th percentile 403 µs per glyph layer; one node-drag preview step on Oswald: 142 µs; on Inter (3,017 glyphs) a Font View frame under 1 ms, a frame after an edit 8–10 ms (15–19 ms with every core busy), every glyph's effective properties 21–26 ms, a three-rule smart filter 28–35 ms, the first glyph-database lookup 24 ms. No budget suite for the targets in `docs/architecture.md` |
-| **Platforms** | Linux run verified; others untested | built and run on Linux (virtual display). macOS and Windows have not been built. wasm: 21 crates build for the browser; no web app |
+| **Performance** | a few measures | overlap removal over the corpus: median 38 µs, 99th percentile 403 µs per glyph layer; one node-drag preview step on Oswald: 142 µs; on Inter (3,017 glyphs) a Font View frame under 1 ms, a frame after an edit 8–10 ms (15–19 ms with every core busy), every glyph's effective properties 21–26 ms, a three-rule smart filter 28–35 ms, the first glyph-database lookup 24 ms; the kerning lookup over 490,911 pairs 39 ms, Update Metrics on all glyphs and masters 85 ms, a text-mode frame with 200 glyphs 5 ms, Text Preview layout of 1,000,000 characters about 210 ms; the out-of-sync update after one edit 7.4 ms, over its 2 ms target. No budget suite for the targets in `docs/architecture.md` |
+| **Platforms** | Linux run verified; others untested | built and run on Linux (virtual display). macOS and Windows have not been built. wasm: 24 crates build for the browser; no web app |
 | **Look and feel** | barely started | a functional shell with the siblings' default dark tokens; the toolbar, panels, dialogs and canvas overlays take their colours and sizes from the tokens, with drawn icons for the tools, the Transformations buttons and the Stroke section; Edit View follows the reference's node and handle display conventions as the handbook describes them; nothing measured against any reference |
 
 ### What to build next (in priority order)
 
-1. **M5, spacing, kerning and text mode**, package by package as `docs/plans/M5.md` § 6 orders
-   them: the builder packages first (M5.1 spacing keys, M5.2 kerning core), then the worktree
-   waves.
+1. **The owner's review of M5**: the results in `docs/plans/M5.md` § 5 and the questions left
+   for the owner in `docs/status.md` (the two out-of-sync speed targets among them).
+2. **M6's planning pass, components and anchors**, as `docs/execution-plan.md` § 3 describes:
+   its rows in `spec/inventory/*.toml`, `docs/spec/09-reusing-shapes.md`, and a plan in
+   `docs/plans/M6.md` for the owner to accept.
 
-Then M5–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
-orders them. Left from M3 and M4 for later milestones: text mode (M5), the inspector's metric and kerning
-fields (M5), Add Glyphs recipes (M6), the toolbar's master icons (M9), the Export dialog's
-Variable (M9) and Metrics (M5) tabs. Left from M2: instances between masters (M9), CFF
+Then M6–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
+orders them. Left from M3 to M5 for later milestones: Add Glyphs recipes and automatically aligned
+glyphs (M6), shaping and kerning with feature code (M8), the toolbar's master icons and the
+Export dialog's Variable tab (M9). Left from M2: instances between masters (M9), CFF
 subroutines (before M12), the compile plan's `features` section, and the CLI's `--name-by`, `--output-layout` and pattern instance
 selection (`docs/plans/M2.md` › M2.5).
 
@@ -211,7 +237,7 @@ on, so the engine track, where oracles prove correctness, goes first.
   behaviour notes (about 150,000 words), all in our own words. Every M3 command's `params` name
   its targets; shortcuts carry a `when` (the context they apply in). Every choice of ours where
   no source says what the reference does is a row's `guesses` entry, listed in `docs/guesses.md`.
-- **Workspace:** 22 library crates in enforced layers, two apps, `xtask`; about 138,000 lines of Rust.
+- **Workspace:** 25 library crates in enforced layers, two apps, `xtask`; about 168,000 lines of Rust.
 - **Glyph database and queries (M4):** `crates/glyphdata` (standalone): GlyphsInfo 1f126bd, the
   AGL and AGLFN, and UCD 17.0 in one 538 KB compressed blob, with lookup, synthesis of suffixed,
   ligature and `uniXXXX` names, production names, nice names, name validation, sort keys,
@@ -230,6 +256,22 @@ on, so the engine track, where oracles prove correctness, goes first.
   inspector, context menus, Selection Info, Glyph Info, the Start Window and nine dialogs; the
   dialog framework gained multi-line text, a third button, scrolling lists and a rule-tree
   control.
+- **Spacing and kerning (M5):** `crates/spacing` (no egui): metrics keys (parse, evaluate in
+  dependency order, the out-of-sync cache), sidebearings and widths, Transform Metrics, the
+  kerning index (glyph, group and exception lookup in the oracles' order, linked masters,
+  directions), locks, Clean Up, Compress, group renames and kerning-text. 97 commands: the
+  spacing setters and shortcuts, Update Metrics, kerning pairs, groups, exceptions and their
+  shortcuts, the Kerning window's list, filter, sort, copy, paste and delete, text mode, previews,
+  the measurement line, Text Preview, sample strings, Find Glyphs, and metrics import and export
+  (kerning-text, AFM, another font). `crates/textlayout`: text items, placeholders, line breaks,
+  directions and kerning for Edit View and Text Preview. `crates/decompile` recovers pair kerning
+  from a compiled font's `GPOS`. `crates/features`: the generated `kern` and `dist` features of
+  exported fonts, ported from fontc's kern writer, and an evaluator that reads a compiled font's
+  pair kerning. In the window: text mode in Edit View, the Info box's spacing and kerning fields,
+  the Kerning window, Font View's metric and group fields and out-of-sync badge, the Preview Area
+  and Panel, Text Preview, the Transform Metrics, Rename Kerning Group, paste-conflict and metrics
+  dialogs, and the Export dialog's Metrics tab. Measured against fontc and fontmake on the corpus
+  and Inter (`docs/plans/M5.md` § 5).
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry, atomic failure, the panic
@@ -427,7 +469,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 5 (5) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ✅ every measure met: every package M3.0 to M3.18 built; 184 of 184 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner`, which no source describes, moved to `fidelity` | 184 (184) |
 | M4 | Font View and glyph management | ✅ every measure met: every package M4.0 to M4.12 built; 62 of 62 commands live; the glyph database equal to fontc's on category, subcategory and production name for 200,504 names; `post` names equal both oracles' except one allow-listed source; every M4 dialog equals its command; an agent builds a font from glyph sets over the control channel; M1 to M3 baselines unchanged (`docs/plans/M4.md` § 5) | 62 (62) |
-| M5 | Spacing, kerning and text mode | 🚧 in progress: plan accepted (`docs/plans/M5.md`); M5.0 to M5.16 built: spacing and kerning crates and commands, text mode in Edit View, the Info box's spacing and kerning fields, the Kerning window, Font View spacing, previews, the measurement line, Text Preview, sample strings and Find Glyphs, metrics import and export, kerning from compiled fonts, linked metrics at export; generated pair kerning at export (M5.17); next the close | 97 (97) |
+| M5 | Spacing, kerning and text mode | ✅ every measure met but the two out-of-sync speed targets: every package M5.0 to M5.18 built; 97 of 97 commands live; every corpus metrics key parses; the kerning lookup equals fontc's and fontmake's compiled value for 506,285 pairs per oracle but one source that turns its kern writer off; exported fonts carry the same generated pair kerning; kerning read back from 97 compiled fonts with 0 differences; every M5 dialog equals its command; an agent types, spaces and kerns text over the control channel; M1 to M4 baselines unchanged. Missed: on Inter the out-of-sync update after one edit takes 7.4 ms (target 2) and the full scan 53.5 ms (target 50) (`docs/plans/M5.md` § 5) | 97 (97) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
 | M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) |
 | M8 | OpenType features | ⬜ | 40 (0) |
@@ -439,7 +481,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 28 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
-| | **Total** | | 933 (269) |
+| | **Total** | | 933 (365) |
 
 ## Parity estimate
 
@@ -452,28 +494,28 @@ err low. `docs/parity.md` gives the mechanical counts behind the "exists" column
 | Area | Weight | Commands | Exist | Done (behaviour) | Missing (main items) |
 |---|---:|---:|---:|---:|---|
 | Window, tabs, toolbar, sidebars, settings, shortcuts | 5 | 45 | 27 | 20% | tabs, zoom and scroll work; user settings kept between runs; the Start Window with recent documents; the toolbar with shared buttons and their menus; tools chosen by their letters, shared letters cycle; context menus; menu items greyed out by the selection; bottom bar zoom controls. Missing: settings window, shortcut editor, workspaces, title bar, sidebars, the toolbar's master icons (M9); nothing compared with the reference |
-| Font View | 6 | 63 | 55 | 35% | grid, List View, sidebar with categories, languages and filters, search, the glyph database, Add Glyphs, renaming with references, the inspector, Selection Info, Glyph Info, the Start Window, the glyph set dialogs. Missing: recipes (M6), images in cells (M11), editable metrics in the inspector (M5); nothing compared with the reference, and many choices are guesses |
-| Edit View text mode | 4 | 25 | 18 | 45% | typing, the Text tool, cursor keys, selection, clipboard as text, three directions, three kerning modes, kerned-gap colours, metrics labels, tabs from display strings, the Preview Area and Panel, the measurement line, Text Preview, sample strings, Find Glyphs. Missing: shaping (M8); nothing compared with the reference |
+| Font View | 6 | 63 | 55 | 38% | grid, List View, sidebar with categories, languages and filters, search, the glyph database, Add Glyphs, renaming with references, the inspector, Selection Info, Glyph Info, the Start Window, the glyph set dialogs. the inspector's metric and kerning-group fields and the out-of-sync badge. Missing: recipes (M6), images in cells (M11); nothing compared with the reference, and many choices are guesses |
+| Edit View text mode | 4 | 25 | 18 | 40% | typing, the Text tool, cursor keys, selection, clipboard as text, three directions, three kerning modes, kerned-gap colours, metrics labels, tabs from display strings, the Preview Area and Panel, the measurement line, Text Preview, sample strings, Find Glyphs. Missing: shaping (M8), Latin letters inside right-to-left runs in Text Preview; nothing compared with the reference |
 | Drawing and editing outlines | 10 | 96 | 79 | 25% | node, segment, transform, clipboard and selection commands; in the window Select, Lasso, Hand, Zoom, Draw, Pencil, Rectangle, Ellipse, Rotate and Scale, the bounding box and its knobs, context menus, the Info box, the Palette's Transformations and Fit Curve sections, the Transformations and Primitive Measurements dialogs, editing in any master. Missing: `path.sharpenCorner` (no source, in `fidelity`); nothing compared with the reference |
 | Path operations and filters | 6 | 66 | 40 | 28% | Remove Overlap, the booleans, path direction, extremes and inflections, Tidy up, Open Corner, Reconnect, Cut with Line, curve conversion and rounding as commands; the Knife; the six filters with dialogs and export strings; strokes and masks drawn on the canvas and applied at export; the Stroke section and the Shape Order dialog. Missing: stroke attributes in UFO, hints renumbered after Shape Order and Expand Outline; nothing compared with the reference |
 | Reusing shapes | 7 | 77 | 0 | 0% | everything; components are only exported (as composites, decomposed where the format needs it) |
 | Layers | 3 | 21 | 19 | 35% | background and layer commands; Edit Background; the active layer and the tab's master; the background and other visible layers drawn on the canvas; the Palette's Layers section with its row context menu; the Interpolate with Background dialog. Font View's master choice. Missing: nothing compared with the reference |
 | Guides, metric lines, zones, grid | 3 | 36 | 16 | 26% | guide, ruler, coordinate and Dimensions commands; metric lines, guides, the grid, CJK lines and measurement guides drawn; guides dragged and edited on the canvas, with their context menu and the Guide Properties dialog; the Measurement tool; snapping to guides and their crossings; the Palette's Dimensions section. Missing: script-specific metric lines; nothing compared with the reference |
-| Spacing and kerning | 7 | 79 | 65 | 35% | metrics keys, sidebearing and width setters, the spacing and kerning shortcuts in text mode, Update Metrics, Transform Metrics, kerning pairs, groups, exceptions and locks, Clean Up, Compress, group rename; the Info box's spacing and kerning fields, the Kerning window, Show Group Members, the Font View inspector fields and out-of-sync badge, metrics import and export (kerning-text, AFM), kerning read from compiled fonts. generated pair kerning in exported fonts (sources without feature code). Missing: kerning with hand-written features (M8), vertical kerning at export; nothing compared with the reference; many choices are guesses |
+| Spacing and kerning | 7 | 79 | 65 | 40% | metrics keys, sidebearing and width setters, the spacing and kerning shortcuts in text mode, Update Metrics, Transform Metrics, kerning pairs, groups, exceptions and locks, Clean Up, Compress, group rename; the Info box's spacing and kerning fields, the Kerning window, Show Group Members, the Font View inspector fields and out-of-sync badge, metrics import and export (kerning-text, AFM), kerning read from compiled fonts; generated pair kerning in exported fonts, the lookup equal to fontc's and fontmake's compiled values over the corpus. Missing: kerning with a hand-written `kern` feature (M8), vertical kerning at export, automatically aligned glyphs (M6), vertical origin and width commands, the out-of-sync update at its speed target; nothing compared with the reference; many choices are guesses |
 | Font Info | 6 | 48 | 2 | 2% | four font-wide fields can be read and set |
 | Interpolation | 8 | 68 | 1 | 1% | Edit View draws and edits any master (`view.selectMaster`); everything else |
-| OpenType layout | 7 | 46 | 0 | 0% | everything |
+| OpenType layout | 7 | 46 | 0 | 3% | the generated `kern` and `dist` features, following the source's feature-writer setting. Missing: feature code, classes, the other automatic features, the mark writer (M8) |
 | PostScript hinting | 3 | 27 | 0 | 0% | everything |
 | TrueType hinting | 4 | 40 | 0 | 0% | everything |
 | Colour fonts and images | 3 | 46 | 0 | 0% | everything |
 | Source formats | 6 | 14 | 8 | 60% | Glyphs-only data glyphsLib has no UFO key for; alternate layers' order and ids through a designspace, and alternate layers in a single UFO; STAT labels derived from instances; UFO 1; shape groups, gradients and shadows kept as stored values; right-to-left, vertical and contextual kerning in UFO; version conversion |
-| Compiling | 9 | 11 | 5 | 15% | static TTF and OTF, plain, WOFF and WOFF2, from the commands and the Export dialog; production names and database mark widths; strokes expanded, masks applied and overlaps removed (coverage-equal to fontmake's in over 99.5% of glyphs); core tables identical, equivalent or allow-listed against fontc and fontmake in every corpus source. Missing: variable fonts and instances between masters (M9), features (M8), hinting (M10), CFF subroutines, 37 of 50 tables |
-| Preview, proofing, printing | 2 | 23 | 0 | 0% | everything |
+| Compiling | 9 | 11 | 5 | 17% | static TTF and OTF, plain, WOFF and WOFF2, from the commands and the Export dialog; production names and database mark widths; generated pair kerning in `GPOS`; linked metrics and Default Layer Width; strokes expanded, masks applied and overlaps removed (coverage-equal to fontmake's in over 99.5% of glyphs); core tables identical, equivalent or allow-listed against fontc and fontmake in every corpus source. Missing: variable fonts and instances between masters (M9), feature code (M8), hinting (M10), CFF subroutines, 36 of 50 tables |
+| Preview, proofing, printing | 2 | 23 | 15 | 12% | the Preview Area and Preview Panel (invert, flip, blur, offset), Text Preview with its text, style, size, direction and find, sample strings. Missing: printing, proof sheets, shaping (M8); nothing compared with the reference |
 | Command-line tools | 8 | 42 | 4 | 3% | `commands`, `run`, `convert`, `compile` (static fonts; most of the reference compilers' options not yet), `info`, `tables list`, `glyphs list`, `oracle`; no dump, subset, instance, merge |
 | Quality checks | 3 | 33 | 8 | 10% | 34 of the 36 outline checks through `audit.run`; `audit.fix` applies eight fixes through path commands and each clears its check; live audit and canvas markers. Missing: the other 264 checks (M12); nothing compared with the reference |
 | Plug-ins and scripting | 3 | 16 | 0 | 0% | everything |
-| Agent surfaces | 4 | 11 | 3 | 42% | execute, list, inspect and batch over three surfaces; `ui.screenshot` and `ui.render`; tools, pointer, key, text, menu and dialog control over the control channel, enough to draw and export a font and to build one from glyph sets (two end-to-end tests); shortcuts sent with `ui.key` open their dialogs as the keyboard does. Missing: `ui.click` beyond dialogs, `ui.set`, MCP resources and prompts |
-| **Feature parity** | **117** | **933** | **269** | **~14%** | |
+| Agent surfaces | 4 | 11 | 3 | 42% | execute, list, inspect and batch over three surfaces; `ui.screenshot` and `ui.render`; tools, pointer, key, text, menu and dialog control over the control channel, enough to draw and export a font, to build one from glyph sets, and to type, space and kern text (three end-to-end tests); shortcuts sent with `ui.key` open their dialogs as the keyboard does. Missing: `ui.click` beyond dialogs, `ui.set`, MCP resources and prompts |
+| **Feature parity** | **117** | **933** | **365** | **~18%** | |
 
 ## Out of scope (by design or by law)
 

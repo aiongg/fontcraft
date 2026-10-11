@@ -2,24 +2,60 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-11, M5 in progress: M5.0–M5.17 built; the close (M5.18) next._
+_Updated: 2026-10-11, M5 closed (M5.18): every § 5 measure met but the two out-of-sync speed targets; the owner's review of M5 next, then M6's planning pass._
 
 ## State of the tree
 
-- `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
-  two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
+- `cargo xtask ci` (ten steps) was not run in M5.18: it ran `cargo fmt`, clippy on the crates
+  it changed, `xtask spec`, `parity` and `guesses`, and the tests it changed. Run the gate once
+  before the next push.
+  About 168,000 lines of Rust in 25 library crates, two apps and `xtask`. Built and run on Linux
+  x86-64 with Rust 1.97.
 - 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
   commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 625 guesses on 394
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
-  Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
+  Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed. macOS and
   Windows have **not** been built.
 - The repository is private at `github.com/aiongg/fontcraft`. There is no hosted CI (the gate
   runs locally) and no release.
 
 ## Where to start
 
-1. **M5.18**, M5's close: the § 5 measures and their results in `docs/plans/M5.md`.
+1. **The owner's review of M5**: `docs/plans/M5.md` § 5 › Results, and the open items below.
+2. **M6's planning pass** (components and anchors): `docs/execution-plan.md` § 3, the M6 rows
+   in `spec/inventory/*.toml` and `docs/spec/09-reusing-shapes.md`, written up as
+   `docs/plans/M6.md` for the owner to accept.
+
+Open items for the owner from M5:
+
+- The out-of-sync update after an edit to one glyph takes 7.4 ms on Inter against a 2 ms
+  target, and the full scan 53.5 ms against 50 ms: accept, or ask for the cache to be reworked.
+- 12 metrics-key values in Inter Italic differ from the stored values by up to 1.4 units; the
+  cause is not settled.
+- Preview Descender defaults to winAscent as the handbook says, probably a misprint; Preview
+  Ascender 1000 cuts Inter's capitals.
+- Text Preview reverses Latin letters inside right-to-left runs (no shaping before M8).
+- Vertical origin and vertical width have no commands and no rows.
+- Import Metrics' file choosers.
+
+M5, spacing, kerning and text mode (`docs/plans/M5.md`), as built:
+
+| Done | What it gave |
+|---|---|
+| M5.0 | spec pass: the rows, the crates registered in the layers, the owner's answers |
+| M5.1, M5.2 | `crates/spacing`: metrics keys, sidebearings, the out-of-sync cache, linked masters; the kerning index, groups, exceptions and locks |
+| M5.3, M5.4 | the spacing setters, shortcuts, Update Metrics and Transform Metrics; the kerning pair, group, exception and shortcut commands |
+| M5.5 | Clean Up, Compress, group rename, the Kerning window's pair list, kerning-text |
+| M5.6, M5.7 | `crates/textlayout`; text mode in Edit View, tabs from display strings |
+| M5.8 to M5.13 | the Info box's spacing and kerning fields, the Kerning window, Font View spacing, the Preview Area and Panel, the measurement line, Text Preview, sample strings and Find Glyphs |
+| M5.14, M5.15 | metrics import and export (kerning-text, AFM, another font); pair kerning recovered from compiled fonts |
+| M5.16, M5.17 | linked metrics and Default Layer Width at export; `crates/features`, the generated pair kerning of exported fonts, ported from fontc |
+| M5.18 | the § 5 measures (all met but the two out-of-sync speed targets); the kerning lookup measured against both oracles; the spacing and kerning undo sweep; the end-to-end test to the second master |
+
+Left for later milestones: automatically aligned glyphs (M6), shaping and kerning with a
+hand-written `kern` feature (M8), vertical kerning at export.
+
 
 M4, Font View and glyph management (`docs/plans/M4.md`), as built:
 
@@ -403,4 +439,14 @@ Append one terse entry per session: what landed, numbers, what is still open.
   129 pairs each, 0 differences with fontmake, 1 known difference with fontc (written in
   `docs/spec/40-compile.md` § 4a). Sources with feature code (21 kerned ones) get no generated
   kerning until M8.
-
+- **2026-10-11, M5.18, M5's close.** The kerning lookup against both oracles
+  (`index_lookup_equals_both_references`): 54 sources without a hand-written `kern` feature,
+  506,285 pairs per oracle, 1 difference (`FeatureWritersEmpty.glyphs` turns its kern writer
+  off); 5 sources with one, 5 pairs, 1 difference (`FeaInc-Bold.ufo`'s included feature). Round
+  trips equal the M4 baselines (glyphs 122/1/118/4, packages 22/0/7/0, UFO 125/15, designspace
+  59/53). New sweep: 45 undo runs over 42 spacing and kerning commands, 11 refusals pointer-equal.
+  The end-to-end test reaches the Kerning window, Compress and the import into a second master.
+  Speed on Inter (load 14 to 19): out-of-sync full scan 53.5 ms (50), after editing `n` 7.4 ms
+  (2), both missed; every other target met. Inter's `Tcommaaccent` (U+0162) and `uni021A`:
+  the references write `uni021A` and `uni021A.1` because they ignore Inter's `disablesNiceNames`;
+  FontCraft keeps the source names as documented. M5 is done but those two speed targets.
