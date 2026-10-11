@@ -1305,18 +1305,20 @@ status = "handbook"
 [[behavior]]
 id = "autoFeature.mark"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "mark (Mark to Base Positioning). Trigger: Base glyphs carry anchors without underscore (top, bottom) and combining marks carry the matching underscore anchors (_top, _bottom). Generated: Built at export only and never listed in the Features tab: mark classes per anchor name and mark-to-base lookups from the anchor positions of each master or instance. Mark glyphs get zero advance width at export."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the mark feature at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.mkmk"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "mkmk (Mark to Mark Positioning). Trigger: Combining marks (U+0300 and above) that carry both an underscore anchor and its plain counterpart (_top and top). Generated: Built at export only and never listed in the Features tab: mark-to-mark lookups from those anchors."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the mkmk feature at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.kern"
@@ -1345,10 +1347,11 @@ guesses = [
 [[behavior]]
 id = "autoFeature.curs"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "curs (Cursive Positioning). Trigger: Glyphs carry `entry` and `exit` anchors. Generated: Built at export and never listed in the Features tab: cursive attachment rules with the entry and exit anchor of each glyph."
 ref = "Font Info › Features › Implicit Features"
 status = "handbook"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the curs feature at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.abvm"

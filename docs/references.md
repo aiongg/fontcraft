@@ -47,7 +47,11 @@ that it reimplements a function of the primary reference app with a similar name
 version, and that fontc's version is based on the reference app's original Objective-C code,
 which its authors shared with the fontc team privately. Both files are Apache-2.0, but their
 code comes from proprietary source. [`clean-room.md`](clean-room.md) says when such code may be
-ported. fontc's kerning writer (`fontbe/src/features/kern.rs`), its mark writer
+ported. The owner decided not to port either file (`docs/plans/M6.md` § 7, question 7):
+FontCraft's anchor propagation is written from the handbook's description and from the oracles'
+outputs observed as a black box, and its specification is the M6 propagation measure (equal to
+glyphsLib's `propagate_all_anchors` on every corpus glyph). Nobody working on FontCraft reads the
+two files. fontc's kerning writer (`fontbe/src/features/kern.rs`), its mark writer
 (`fontbe/src/features/marks.rs`), its corner components (`glyphs-reader/src/corner_components.rs`,
 based on glyphsLib's `filters/cornerComponents.py`) and glyphsLib's `cornerComponents.py` carry no
 such note in their headers.

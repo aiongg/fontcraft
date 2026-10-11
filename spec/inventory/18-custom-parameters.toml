@@ -1003,7 +1003,7 @@ effect = "export-filter"
 summary = "When set, composites with overlapping components (such as a letter with an attached cedilla) stay as components in TrueType export. No effect on CFF output."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. Whether the default should instead follow the handbook is M6 plan § 7, question 5."
+notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. The owner's answer to M6 plan § 7 question 5 (a) keeps that default. It departs from what the parameter's text implies, that the reference decomposes them unless the parameter is set, so the parameter changes nothing (docs/spec/40-compile.md § 4a)."
 
 [[parameter]]
 name = "Keep Transformed Components"
@@ -1015,7 +1015,7 @@ effect = "export-filter"
 summary = "When set, composites whose components are scaled horizontally or vertically, or shifted vertically, stay as components in TrueType export. May disturb TrueType hinting of those glyphs; no effect on CFF output."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. Whether the default should instead follow the handbook is M6 plan § 7, question 5."
+notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. The owner's answer to M6 plan § 7 question 5 (a) keeps that default. It departs from what the parameter's text implies, that the reference decomposes them unless the parameter is set, so the parameter changes nothing (docs/spec/40-compile.md § 4a)."
 
 [[parameter]]
 name = "Keep UI-Font Bounding Box"
@@ -1401,7 +1401,7 @@ effect = "features"
 summary = "On by default: top and bottom anchors of component base glyphs count as anchors of the composite unless the composite has its own anchor of that name, which gives it mark attachment for free. Turn off mainly to stop mark and mkmk rules being generated for composites."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Both oracles honour it (see components.propagateAnchorsParameter)."
+notes = "Both oracles honour it (see components.propagateAnchorsParameter). The owner's answer to M6 plan § 7 question 7 (b): FontCraft's propagation is written from the handbook and from the oracles' outputs observed as a black box, with the plan's propagation measure (equal to glyphsLib's output on every corpus glyph and master layer) as its specification. Neither oracle's propagation code is read or ported: both derive from the reference app's source (docs/references.md)."
 
 [[parameter]]
 name = "Reencode Glyphs"

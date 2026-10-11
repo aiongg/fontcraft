@@ -852,7 +852,7 @@ milestone = "M6"
 summary = "Two Glyphs-specific steps run before decomposition when the source asks for them: erase open corners and propagate anchors from components to composites. Anchor propagation must run before non-export components are flattened, because it reads the component references. fontc exposes both as tri-state flags; fontmake gets them through filters listed in the UFO lib (glyphsLib adds eraseOpenCorners there)."
 ref = "fontc fontc/src/args.rs (--erase-open-corners, --propagate-anchors), fontir/src/glyph.rs; fontmake USAGE.md (Outline Filtering)"
 status = "docs"
-notes = "Checked by the M6 planning pass: the propagation both oracles run is fontc's `fontir/src/propagate_anchors.rs`, which glyphsLib ports; the deprecated glyphsLib `builder/anchor_propagation.py` and ufo2ft's `propagateAnchors` filter use an older algorithm. For UFO sources propagation runs only when the ufo2ft filters list it. FontCraft's propagation (M6) feeds the mark writer, which is M8 unless the owner brings it into M6 (M6 plan § 7, question 2)."
+notes = "Checked by the M6 planning pass: the propagation both oracles run is fontc's `fontir/src/propagate_anchors.rs`, which glyphsLib ports; the deprecated glyphsLib `builder/anchor_propagation.py` and ufo2ft's `propagateAnchors` filter use an older algorithm. For UFO sources propagation runs only when the ufo2ft filters list it. FontCraft's propagation (M6.1) feeds the mark writer (M6.17, the owner's answer to M6 plan § 7 question 2 (b)). The owner's answer to M6 plan § 7 question 7 (b): FontCraft's propagation is written from the handbook and from the oracles' outputs observed as a black box, with the plan's propagation measure (equal to glyphsLib's output on every corpus glyph and master layer) as its specification. Neither oracle's propagation code is read or ported: both derive from the reference app's source (docs/references.md)."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: glyph order and names
@@ -1531,26 +1531,29 @@ status = "docs"
 [[behavior]]
 id = "compile.markFeatureWriter"
 area = "compile"
-milestone = "M8"
+milestone = "M6"
 summary = "Anchors generate mark (mark to base and mark to ligature), mkmk (mark to mark), abvm and blwm (for scripts that use them) and, from entry/exit anchor pairs, curs. An anchor 'top' pairs with '_top'; 'entry' pairs with 'exit' and 'entry.N' with 'exit.N' only. fontc emits one lookup per mark class. curs is a separate writer from the mark writer."
 ref = "fontc fontbe/src/features/marks.rs, fontbe/src/features.rs"
 status = "docs"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark, mkmk, abvm, blwm and curs at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. A source with a hand-written mark, mkmk, abvm, blwm or curs feature without `# Automatic Code` gets none of that generated feature until M8."
 
 [[behavior]]
 id = "compile.gdefClasses"
 area = "compile"
-milestone = "M8"
+milestone = "M6"
 summary = "GDEF glyph classes come from an explicit GDEF block in feature code when there is one; otherwise from the source's glyph categories. For Glyphs sources the categories are refined from anchors (a glyph with attaching anchors becomes a base; a ligature without attaching anchors loses its ligature class); for UFO sources the stored categories are used as they are. fontmake's --no-generate-GDEF stops the generated block when the feature code already has one."
 ref = "fontc fontbe/src/features.rs, fontir/src/glyph.rs (recompute_gdef_categories); fontmake USAGE.md (--no-generate-GDEF)"
 status = "docs"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF glyph classes at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. An explicit GDEF block in feature code waits for M8."
 
 [[behavior]]
 id = "compile.gdefLigatureCarets"
 area = "compile"
-milestone = "M8"
+milestone = "M6"
 summary = "Ligature caret positions in GDEF come from anchors named caret_N (horizontal text, x coordinate) and vcaret_N (vertical text, y coordinate), and vary with the masters in a variable font."
 ref = "fontmake USAGE.md (GdefFeatureWriter); fontc fontbe/src/features/marks.rs"
 status = "docs"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF ligature caret list at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Carets that vary with the masters wait for the variable font (M9)."
 
 [[behavior]]
 id = "compile.featureVariations"

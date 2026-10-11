@@ -584,11 +584,12 @@ Corners, caps, segments, brushes
   path's nodes and the end node's side of the origin (`corner.pathDirection`).
 - **Q-28** Intermediate layers for corner scaling. **Answered (ours):** percentages read from the
   layer name, linear per axis (`corner.scaleInterpolatesWithIntermediateLayers`).
-- **Q-29** Cap fitting maths. Open: no written source, neither oracle supports caps, no corpus
-  source uses them. `docs/plans/M6.md` § 7, question 4 decides whether M6 builds caps, segments
-  and brushes.
-- **Q-30** Further controls in the cap, segment and brush Info boxes. Open, as Q-29.
-- **Q-31** Segment and brush bending maths. Open, as Q-29.
+- **Q-29** Cap fitting maths. **Deferred with M13:** no written source, neither oracle supports
+  caps, no corpus source uses them. Caps, segments and brushes moved to M13 until a tutorial video
+  or written source shows how they fit (the owner's answer to `docs/plans/M6.md` § 7, question 4).
+- **Q-30** Further controls in the cap, segment and brush Info boxes. **Deferred with M13**, as
+  Q-29.
+- **Q-31** Segment and brush bending maths. **Deferred with M13**, as Q-29.
 - **Q-32** Paste onto a selection of the wrong kind. **Answered (ours):** refused with a message
   (`corner.copyPasteOntoNodes`).
 - **Q-33** Attachments across masters and the order at export. **Answered (oracle, ours):** both
@@ -613,7 +614,8 @@ Export
 - **Q-38** How overlap is tested for keeping TrueType components. **Answered (oracle):** neither
   oracle tests overlap; both keep every component that is not mixed with contours, not out of the
   F2Dot14 range and not different between masters, transformed and nested ones included. FontCraft
-  does the same since M2 and M3. Whether to follow the handbook's default instead is
-  `docs/plans/M6.md` § 7, question 5.
+  does the same since M2 and M3, and keeps that default (the owner's answer to
+  `docs/plans/M6.md` § 7, question 5), which departs from what the texts of Keep Overlapping
+  Components and Keep Transformed Components imply (`docs/spec/40-compile.md` § 4a).
 - **Q-39** Composites referencing a non-exporting glyph. **Answered (oracle, M2):** that component
   is inlined with its transform composed (`export.underscoreGlyphsOmitted`).

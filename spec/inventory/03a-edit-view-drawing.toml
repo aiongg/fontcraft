@@ -2149,7 +2149,7 @@ milestone = "M6"
 summary = "Adds the default anchors that the glyph info database lists for each selected glyph. For ligature glyphs named after their parts it also adds the appropriate caret anchors."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. The published glyph database has no anchor column (open decision D6), so the default anchors come from our own table; see the guesses. The segment and brush rules (start and end on the path's first and last node; left and right of the layer) are the handbook's."
+notes = "Documented, not yet observed. The published glyph database has no anchor column, so the default anchors come from our own table, which a custom GlyphData.xml overrides (open decision D6, answered by the owner in M6 plan § 7 question 3 (a)); see the guesses. The segment and brush rules (start and end on the path's first and last node; left and right of the layer) are the handbook's."
 guesses = [
   "Set Anchors adds only the default anchors the layer lacks and leaves existing anchors where they are; Set Anchors on a glyph with a moved anchor in the reference app settles it.",
   "The default anchors come from our table keyed by category, subcategory and case: letters get top (at the x-height for lowercase, the cap height for uppercase) and bottom (on the baseline), centred on the outline's bounding box and corrected for the italic angle; combining marks get the underscore anchor at the matching metric and, for marks that stack, the plain anchor above the outline; anchors the corpus sources saved by the reference app hold for the same glyph names measure the table (M6 plan § 5).",
@@ -2245,10 +2245,11 @@ status = "handbook"
 [[behavior]]
 id = "anchors.markToBase"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "The mark feature is generated automatically from anchors: a combining mark carries an underscore-prefixed anchor (for example _top) and base glyphs carry the anchor of the same name without the underscore (top); each such pair becomes a mark-to-base attachment. Combining marks usually end in comb, have Unicode values and can be typed after any base."
 ref = "Edit View › Mark to Base Positioning"
 status = "handbook"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark-to-base and mark-to-ligature attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
 
 [[behavior]]
 id = "anchors.ccmpAlongsideMark"
@@ -2261,26 +2262,29 @@ status = "handbook"
 [[behavior]]
 id = "anchors.markToMark"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "The mkmk feature is generated automatically for every combining mark that has both an underscore anchor and the matching plain anchor, so marks carrying both can be stacked on each other."
 ref = "Edit View › Mark to Mark Positioning"
 status = "handbook"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark-to-mark attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
 
 [[behavior]]
 id = "anchors.cursiveAttachment"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "Anchors named exit and entry, placed at the end and the beginning of the connecting strokes of initial, medial and final forms, define cursive attachment: each glyph's entry anchor is placed on the exit anchor of its predecessor. With right-to-left typesetting switched on, Edit View previews the attachment live."
 ref = "Edit View › Cursive Attachment"
 status = "handbook"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write cursive attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. The live preview in Edit View waits for shaping (M8). Documented, not yet observed."
 
 [[behavior]]
 id = "anchors.ligatureCarets"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "Anchors on the baseline of a ligature glyph named caret_ plus a distinguishing suffix (caret_1, caret_2 …) mark text-cursor positions inside the ligature. The suffix only keeps the names unique and its order is ignored; at export they become LigatureCaretByPos entries in GDEF."
 ref = "Edit View › Ligature Carets"
 status = "handbook"
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF ligature caret list at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
 
 [[behavior]]
 id = "anchors.contextual"

@@ -692,10 +692,10 @@ question 15, question 16 (M6) and question 20 (M11).
    **Partly answered (source):** a custom `GlyphData.xml` may carry all five, and FontCraft reads
    them there (§ 4.1). The built-in values stay unpublished. For M4 only the sort key matters
    (question 2). Decomposition, anchors and marks stay open for M6 (open decision D6).
-   **M6 plan (proposed, `docs/plans/M6.md` § 7, question 3):** Create Composite takes Unicode
-   canonical decomposition mapped to glyph names plus our own tables, and Set Anchors our own
-   default-anchor table (`glyph.createComposite`, `glyph.setAnchors` guesses). The mark cloud
-   stays M14.
+   **Answered for M6 (the owner's answer to `docs/plans/M6.md` § 7, question 3 (a)):** Create
+   Composite takes Unicode canonical decomposition mapped to glyph names plus our own tables, and
+   Set Anchors our own default-anchor table; a custom `GlyphData.xml` overrides both
+   (`glyph.createComposite`, `glyph.setAnchors` guesses). The mark cloud stays M14.
 2. **Default sort order.** ▶ **Answered for M4 (source and ours):** the tutorials say glyphs sort
    alphabetically within their category, adjustable by sort names. The key's details are ours
    (`glyphOrder.default`). An opened file keeps its order.

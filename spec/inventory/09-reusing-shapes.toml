@@ -36,7 +36,7 @@ milestone = "M6"
 summary = "Rebuilds the current layer of each target glyph as a composite: every path and component already on the layer is removed and the components named by the glyph info database for that glyph are inserted in the database's order. With allMasters it does the same on every master layer."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
-notes = "Documented, not yet observed. The list of components comes from the glyph database, whose published data has no composition column (open decision D6); see the guesses."
+notes = "Documented, not yet observed. The list of components comes from the glyph database, whose published data has no composition column. Open decision D6, answered by the owner (M6 plan § 7 question 3 (a)): Unicode canonical decomposition mapped to glyph names, plus our own tables for what Unicode does not decompose; a custom GlyphData.xml overrides both. See the guesses."
 guesses = [
   "The components are the full Unicode canonical decomposition of the glyph's code point, each code point mapped to its glyph name through the glyph database (U+0301 to acutecomb), suffixes carried over and the preferred-mark rules applied, plus our own table for glyphs Unicode does not decompose (i, j and ligatures by their name parts); the composites stored in corpus files saved by the reference app measure it (M6 plan § 5).",
   "A glyph the database cannot decompose, or one whose parts are missing from the font, is refused with a message naming the missing parts and nothing changes; running it on such a glyph in the reference app settles it.",
@@ -475,7 +475,7 @@ milestone = "M6"
 summary = "Mirroring a component top-to-bottom exchanges the roles of its top and bottom anchors, so the anchor that ends up above still acts as the top one and the one below as the bottom one. A flipped top mark can therefore attach as a bottom mark (gcommaaccent from g and a flipped commaaccentcomb)."
 ref = "Reusing Shapes › Components › Editing Components; Palette › Transformations"
 status = "handbook"
-notes = "Documented, not yet observed. Both oracles swap anchor names when they propagate through a transformed component: a negative vertical scale swaps top and bottom in the name, a negative horizontal scale swaps left and right and entry and exit, and a 180° rotation does both (fontc `get_xy_rotation`). FontCraft uses the same rule for alignment, so a suffixed name (top_viet) swaps too."
+notes = "Documented, not yet observed. Both oracles swap anchor names when they propagate through a transformed component: a negative vertical scale swaps top and bottom in the name, a negative horizontal scale swaps left and right and entry and exit, and a 180° rotation does both (fontc `get_xy_rotation`). FontCraft uses the same rule for alignment, so a suffixed name (top_viet) swaps too. The owner's answer to M6 plan § 7 question 7 (b): FontCraft's propagation is written from the handbook and from the oracles' outputs observed as a black box, with the plan's propagation measure (equal to glyphsLib's output on every corpus glyph and master layer) as its specification. Neither oracle's propagation code is read or ported: both derive from the reference app's source (docs/references.md)."
 
 [[behavior]]
 id = "components.arrowKeyIncrements"
@@ -584,7 +584,7 @@ milestone = "M6"
 summary = "Anchors named top and bottom on a component's base glyph count as anchors of the composite that contains it, so further marks can attach to the composite although it holds no anchors of its own (Edieresis inherits bottom from E)."
 ref = "Reusing Shapes › Components › Nesting Components"
 status = "handbook"
-notes = "Documented, not yet observed. The handbook and the Propagate Anchors parameter text name top and bottom; both oracles propagate every anchor name, with rules for underscore, entry, exit and origin anchors. fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors."
+notes = "Documented, not yet observed. The handbook and the Propagate Anchors parameter text name top and bottom; both oracles propagate every anchor name, with rules for underscore, entry, exit and origin anchors. fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors. The owner's answer to M6 plan § 7 question 7 (b): FontCraft's propagation is written from the handbook and from the oracles' outputs observed as a black box, with the plan's propagation measure (equal to glyphsLib's output on every corpus glyph and master layer) as its specification. Neither oracle's propagation code is read or ported: both derive from the reference app's source (docs/references.md)."
 guesses = [
   "The editor and the compiler propagate anchors exactly as fontc does, every name included, since its algorithm gives top and bottom as the handbook says and also the other names both reference compilers export; a composite that inherits an ogonek or a cedilla anchor in the reference app settles it.",
 ]
@@ -596,7 +596,7 @@ milestone = "M6"
 summary = "An anchor placed directly in the composite replaces a propagated anchor of the same name."
 ref = "Reusing Shapes › Components › Nesting Components"
 status = "handbook"
-notes = "Documented, not yet observed. Both oracles do the same (probe aacute with its own top). fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors."
+notes = "Documented, not yet observed. Both oracles do the same (probe aacute with its own top). fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors. The owner's answer to M6 plan § 7 question 7 (b): FontCraft's propagation is written from the handbook and from the oracles' outputs observed as a black box, with the plan's propagation measure (equal to glyphsLib's output on every corpus glyph and master layer) as its specification. Neither oracle's propagation code is read or ported: both derive from the reference app's source (docs/references.md)."
 
 [[behavior]]
 id = "components.propagateAnchorsParameter"
@@ -605,7 +605,7 @@ milestone = "M6"
 summary = "Propagation is on by default. A font-level custom parameter Propagate Anchors with its checkbox off stops it, which also suppresses the mark and mkmk rules that would be generated for composites from inherited anchors."
 ref = "Reusing Shapes › Components › Nesting Components; Appendix › Custom Parameters › Propagate Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. Both oracles read it as a font-level flag, on by default; off stops propagation entirely (fontc `glyphs2fontir/src/source.rs` `compilation_flags`; glyphsLib `TRANSFORMATION_CUSTOM_PARAMS`). Two fontc test sources set it off."
+notes = "Documented, not yet observed. Both oracles read it as a font-level flag, on by default; off stops propagation entirely (fontc `glyphs2fontir/src/source.rs` `compilation_flags`; glyphsLib `TRANSFORMATION_CUSTOM_PARAMS`). Two fontc test sources set it off. The owner's answer to M6 plan § 7 question 7 (b): FontCraft's propagation is written from the handbook and from the oracles' outputs observed as a black box, with the plan's propagation measure (equal to glyphsLib's output on every corpus glyph and master layer) as its specification. Neither oracle's propagation code is read or ported: both derive from the reference app's source (docs/references.md)."
 
 # =====================================================================================
 # Components: anchors and automatic alignment
@@ -651,7 +651,7 @@ milestone = "M6"
 summary = "In a composite whose glyph category is Ligature, the anchors propagated from each base component are numbered by base: top from the first base becomes top_1, from the second top_2, and an anchor already numbered is shifted by the number of bases before it. A later component whose anchor attribute is a numbered name (top_2) attaches to that numbered anchor. The handbook documents only the caret_N anchors of ligatures; under its alternative-anchor rule top_1 and top_2 are alternatives of top, so the anchor menu offers them."
 ref = "fontc fontir/src/propagate_anchors.rs (ligature numbering, component anchor attribute); Reusing Shapes › Components › Anchors (alternative anchors)"
 status = "docs"
-notes = "Rewritten by the M6 planning pass from a recalled row: the oracles number ligature anchors this way (probe f_f gave top_1 and top_2; f_f with an acutecomb whose anchor attribute is top_2 attached it there). fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors."
+notes = "Rewritten by the M6 planning pass from a recalled row: the oracles number ligature anchors this way (probe f_f gave top_1 and top_2; f_f with an acutecomb whose anchor attribute is top_2 attached it there). fontc 1.0.0 `fontir/src/propagate_anchors.rs` (Apache-2.0; glyphsLib 6.15.0 `builder/transformations/propagate_anchors.py` is a port of it), checked by the M6 planning pass on a probe source built with fontc and fontmake 3.12.1, which gave identical anchors. The owner's answer to M6 plan § 7 question 7 (b): FontCraft's propagation is written from the handbook and from the oracles' outputs observed as a black box, with the plan's propagation measure (equal to glyphsLib's output on every corpus glyph and master layer) as its specification. Neither oracle's propagation code is read or ported: both derive from the reference app's source (docs/references.md)."
 
 [[behavior]]
 id = "components.autoAlignDefaultOnWhenComponentsOnly"
@@ -839,7 +839,7 @@ milestone = "M6"
 summary = "The instance custom parameter Keep Overlapping Components makes a TrueType-flavour export keep overlapping components as references too (Ccedilla stays a composite). It does nothing for CFF output."
 ref = "Reusing Shapes › Components; Appendix › Custom Parameters › Keep Overlapping Components"
 status = "handbook"
-notes = "See the parameter row Keep Overlapping Components and M6 plan § 7, question 5."
+notes = "FontCraft keeps overlapping components in TrueType output by default, as both oracles do (the owner's answer to M6 plan § 7 question 5 (a)), so the parameter changes nothing; see the parameter row Keep Overlapping Components."
 
 [[behavior]]
 id = "export.underscoreGlyphsOmitted"
@@ -1356,35 +1356,38 @@ status = "handbook"
 [[behavior]]
 id = "cap.glyphNaming"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A glyph is a cap glyph when its name starts with _cap. followed by any name (_cap.flag)."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
-notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. M6 plan § 7, question 4 decides whether M6 builds it."
+notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "cap.attachesToTwoAdjacentNodes"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A cap component is bound to two nodes that are neighbours on the same path (a corner is bound to one). It models stroke endings: spurs, terminals, flag serifs."
 ref = "Reusing Shapes › Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "cap.originAnchorSetup"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Simple anchor setup for a cap glyph: a single anchor named origin gives the spot in the cap shape on which the first stem node of the pair lands."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "cap.node1Node2AnchorSetup"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Flexible anchor setup for a cap glyph: two anchors named node1 and node2 stand for the two stem nodes, so both the position and the scaling of the cap are controlled relative to both nodes. This lets one cap fit stems of different widths."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "capComponent.add"
@@ -1394,10 +1397,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, path?: index, nodes?: [index, index], cap: name}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Attaches a cap component to two selected adjacent nodes of one path. In the UI it is a context-menu item that opens a glyph picker listing only cap glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "capComponent.decompose"
@@ -1407,10 +1411,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, caps?: [indices]}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Context-menu item that bakes a cap component into the host path and removes the component."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "capComponent.setFit"
@@ -1420,10 +1425,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, caps?: [indices], fit: bool}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Toggles the Fit option of a cap component. When on, the cap is resized automatically to the width of the stroke end it sits on, that is the distance between its two nodes."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "capComponent.setGlyph"
@@ -1433,10 +1439,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, caps?: [indices], cap: name}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Swaps the cap glyph used by an attached cap component. The handbook says caps are replaced the same way as corners, that is through the name in the Info box."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "capComponent.setScale"
@@ -1446,10 +1453,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, caps?: [indices], scaleX?: percent, scaleY?: percent}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Sets the horizontal and vertical scale of a cap component; negative values flip it. The handbook states only that caps transform like corners, so the field set is taken from the corner Info box."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "capComponent.setAlignment"
@@ -1459,10 +1467,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, caps?: [indices], mode: left | right | both | none}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Sets the alignment mode of a cap component using the same four modes as corners. The handbook says caps align like corners without describing what each mode does on a two-node attachment."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[panel]]
 id = "infoBox.capComponent"
@@ -1473,10 +1482,11 @@ controls = [
   "component name (replace), scale fields and alignment modes as in the corner Info box",
 ]
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Shown for a selected cap component when View › Show Info is on. Only the Fit checkbox is described explicitly; the remaining controls follow from the statement that caps are replaced, transformed and aligned like corners."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[panel]]
 id = "dialog.capPicker"
@@ -1484,26 +1494,29 @@ label = "Cap glyph picker"
 location = "dialog"
 controls = ["search field", "list restricted to cap glyphs", "Return inserts the highlighted glyph"]
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Glyph picker opened by Add Cap Component."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "cap.highlightAndSelection"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A cap component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected caps."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "cap.copyPasteOntoSegments"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A selected cap component can be copied and then pasted onto other selected segments (node pairs) with the standard Copy and Paste commands."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 # =====================================================================================
 # Segment components
@@ -1512,35 +1525,38 @@ status = "handbook"
 [[behavior]]
 id = "segment.glyphNaming"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A glyph is a segment glyph when its name starts with _segment. followed by any name (_segment.stem). Its contents are a single open path laid on the baseline plus the anchors start and end."
 ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
 status = "handbook"
-notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. M6 plan § 7, question 4 decides whether M6 builds it."
+notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "segment.startEndAnchors"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "The start and end anchors belong on the first and last node of the open path; Glyph › Set Anchors (Cmd+U) puts them there. If they sit elsewhere, the fitted component will not span the full length of the host segment. The path's two end nodes should both be on the baseline or both at one equal distance from it."
 ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "segment.appliesToStraightAndCurved"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A segment component replaces one straight or curved host segment with its open path, which may be a single bent segment or a long path with many nodes."
 ref = "Reusing Shapes › Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "segment.bendingAddsNoNodes"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Bending a segment component along a curved host segment moves its existing points only and never inserts nodes. Fidelity to the curve can suffer, but the node count is identical in every master, which keeps the result interpolatable."
 ref = "Reusing Shapes › Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "segmentComponent.add"
@@ -1550,10 +1566,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, segments?: [{path: index, segment: index}], segment: name}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Attaches a segment component to a selected path segment (a segment counts as selected after a click on it or when its two nodes are both selected). In the UI it is a context-menu item that opens a picker listing only segment glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "segmentComponent.decompose"
@@ -1563,10 +1580,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, segmentComponents?: [indices]}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Context-menu item that replaces the host segment with the fitted path of the segment component and removes the component."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "segmentComponent.setGlyph"
@@ -1576,10 +1594,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, segmentComponents?: [indices], segment: name}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Swaps the segment glyph used by an attached segment component; in the UI by clicking the component name in its Info box."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "segmentComponent.editGlyph"
@@ -1589,10 +1608,11 @@ shortcut = ""
 kind = "ui"
 params = "{glyph?: name, layer?: id, segmentComponent: index}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "The arrow button of the segment Info box: adds the segment glyph to the Edit View text and activates it."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[panel]]
 id = "infoBox.segmentComponent"
@@ -1600,10 +1620,11 @@ label = "Segment component Info box"
 location = "inspector"
 controls = ["component name (click to replace with another segment glyph)", "arrow button: open the segment glyph in Edit View"]
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Shown for a selected segment component when View › Show Info is on."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[panel]]
 id = "dialog.segmentPicker"
@@ -1611,26 +1632,29 @@ label = "Segment glyph picker"
 location = "dialog"
 controls = ["search field", "list restricted to segment glyphs", "Return inserts the highlighted glyph"]
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Glyph picker opened by Add Segment Component."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "segment.highlightAndSelection"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A segment component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected ones."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "segment.copyPasteOntoSegments"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A selected segment component can be copied and pasted onto other selected segments with the standard Copy and Paste commands."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 # =====================================================================================
 # Brushes
@@ -1639,43 +1663,47 @@ status = "handbook"
 [[behavior]]
 id = "brush.glyphNaming"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A glyph is a brush glyph when its name starts with _brush. followed by any name (_brush.arrow). It must contain exactly one closed path plus two anchors, start and end; several closed shapes have to be merged into one with Remove Overlap first."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. M6 plan § 7, question 4 decides whether M6 builds it."
+notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "brush.startEndAnchors"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end anchors at the left and right of the layer. They normally sit on the baseline or at one equal distance from it."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "brush.stretchZoneBetweenAnchors"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Only the part of the brush outline lying between the start and end anchors stretches and bends to follow the host segment. Outline before start and after end keeps its shape, which is how fixed ends such as an arrowhead are made."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "brush.bendingNeedsHandles"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A segment of the brush outline bends along a curved host segment only if it is a curve segment with handles; straight line segments stay straight. Handles are added to a line segment by Option-clicking it."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "brush.expandsSegments"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A brush turns a host path segment, straight or curved, into the brush's closed outline laid along it. It works on any segment but is intended mainly for open paths, most often an open path of a single segment."
 ref = "Reusing Shapes › Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "brush.add"
@@ -1685,10 +1713,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, segments?: [{path: index, segment: index}], nodes?: [{path: index, node: index}], brush: name}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Attaches a brush to every selected segment. If nodes are selected in place of segments, brushes are added so that each selected node is the end node of a new brush. In the UI it is a context-menu item that opens a picker listing only brush glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "brush.decompose"
@@ -1698,10 +1727,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, brushes?: [indices]}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Context-menu item that replaces a brush with the outline it produces and removes the brush."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "brush.setGlyph"
@@ -1711,10 +1741,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph?: name, layer?: id, brushes?: [indices], brush: name}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Swaps the brush glyph used by an attached brush; in the UI by clicking the component name in its Info box."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[command]]
 id = "brush.editGlyph"
@@ -1724,10 +1755,11 @@ shortcut = ""
 kind = "ui"
 params = "{glyph?: name, layer?: id, brush: index}"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "The arrow button of the brush Info box: adds the brush glyph to the Edit View text and activates it."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[panel]]
 id = "infoBox.brush"
@@ -1735,10 +1767,11 @@ label = "Brush Info box"
 location = "inspector"
 controls = ["component name (click to replace with another brush glyph)", "arrow button: open the brush glyph in Edit View"]
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Shown for a selected brush when View › Show Info is on."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[panel]]
 id = "dialog.brushPicker"
@@ -1746,26 +1779,29 @@ label = "Brush glyph picker"
 location = "dialog"
 controls = ["search field", "list restricted to brush glyphs", "Return inserts the highlighted glyph"]
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "Glyph picker opened by Add Brush."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "brush.highlightAndSelection"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "A brush is tinted with a faint blue background in Edit View. Clicking on the brush's outline selects it, Shift-click selects several, Delete removes the selected brushes."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 [[behavior]]
 id = "brush.copyPasteOntoSegments"
 area = "components"
-milestone = "M6"
+milestone = "M13"
 summary = "The standard Copy and Paste commands carry a selected brush over to other segments that are selected."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
 
 # =====================================================================================
 # Pixel tool and pixel fonts

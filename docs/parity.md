@@ -45,14 +45,14 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 | M3: Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 184 | 184 (100.0%) | 19 | 25 | 185 | 11 | 34 | 0 | 2 | 0 |
 | M4: Font View and glyph management | 62 | 62 (100.0%) | 0 | 24 | 162 | 3 | 0 | 0 | 0 | 0 |
 | M5: Spacing, kerning and text mode | 97 | 97 (100.0%) | 1 | 19 | 98 | 6 | 0 | 0 | 2 | 0 |
-| M6: Components and anchors | 59 | 0 (0.0%) | 1 | 16 | 138 | 5 | 0 | 0 | 0 | 0 |
+| M6: Components and anchors | 45 | 0 (0.0%) | 1 | 10 | 129 | 5 | 0 | 0 | 0 | 0 |
 | M7: Font Info and custom parameters | 62 | 2 (3.2%) | 0 | 11 | 70 | 69 | 0 | 0 | 0 | 0 |
-| M8: OpenType features | 40 | 0 (0.0%) | 0 | 10 | 332 | 20 | 0 | 0 | 2 | 4 |
+| M8: OpenType features | 40 | 0 (0.0%) | 0 | 10 | 322 | 20 | 0 | 0 | 2 | 4 |
 | M9: Interpolation and variable fonts | 67 | 0 (0.0%) | 2 | 15 | 144 | 33 | 0 | 0 | 4 | 8 |
 | M10: Hinting (PostScript and TrueType) | 57 | 0 (0.0%) | 1 | 9 | 165 | 25 | 0 | 0 | 0 | 5 |
 | M11: Colour fonts and images | 50 | 0 (0.0%) | 3 | 11 | 91 | 11 | 2 | 0 | 3 | 5 |
 | M12: Command-line tool suite and quality checks | 71 | 0 (0.0%) | 0 | 2 | 42 | 0 | 263 | 61 | 6 | 15 |
-| M13: Plug-ins, scripting and automation depth | 132 | 0 (0.0%) | 4 | 21 | 88 | 2 | 1 | 1 | 10 | 0 |
+| M13: Plug-ins, scripting and automation depth | 146 | 0 (0.0%) | 4 | 27 | 107 | 2 | 1 | 1 | 10 | 0 |
 | M14: 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | 28 | 0 (0.0%) | 0 | 7 | 40 | 6 | 0 | 0 | 1 | 0 |
 | fidelity: Interaction-fidelity pass: side by side with the reference, every modifier, cursor and default | 4 | 0 (0.0%) | 2 | 0 | 7 | 0 | 0 | 0 | 0 | 0 |
 
