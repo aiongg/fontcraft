@@ -209,7 +209,87 @@ fn display_string_conversion_cuts_long_strings_and_skips_bad_ones() {
     let app = FontcraftApp::default();
     let font = app.session.font().unwrap();
     let bad = format!("/{}", "n".repeat(300));
-    let (texts, warnings) = crate::shell::text::tabs_from_display_strings(font, &["AB".into(), "A".repeat(20_000), bad]);
+    let (texts, warnings) = crate::shell::text::tabs_from_display_strings(font, &["AB".into(), "A".repeat(20_000), bad.clone()], 10);
     assert_eq!(texts.iter().map(|t| t.len()).collect::<Vec<_>>(), [2, fontcraft_textlayout::MAX_ITEMS]);
     assert_eq!(warnings.len(), 2, "{warnings:?}");
+
+    // A bad name past the item limit does not matter; one in the items a tab would show does,
+    // in a string of any length.
+    let late = format!("{}{bad}", "A".repeat(10_050));
+    let early = format!("{bad}{}", "A".repeat(3_000_000));
+    let (texts, warnings) = crate::shell::text::tabs_from_display_strings(font, &[late, early], 10);
+    assert_eq!(texts.iter().map(|t| t.len()).collect::<Vec<_>>(), [fontcraft_textlayout::MAX_ITEMS]);
+    assert!(warnings[0].contains("shows the first"), "{warnings:?}");
+    assert!(warnings[1].contains("cannot be read"), "{warnings:?}");
+
+    // Strings past the tab limit are not read.
+    let (texts, warnings) = crate::shell::text::tabs_from_display_strings(font, &vec!["A".to_string(); 5], 3);
+    assert_eq!(texts.len(), 3);
+    assert_eq!(warnings, ["the document has 5 display strings; only the first 3 open as tabs"]);
+}
+
+#[test]
+fn each_document_keeps_and_saves_its_own_tabs() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-document-tabs-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = |name: &str, strings: &[&str]| {
+        let path = dir.join(name).to_string_lossy().into_owned();
+        let mut app = FontcraftApp::default();
+        let strings: Vec<String> = strings.iter().map(|s| s.to_string()).collect();
+        app.session
+            .edit("strings", |font| {
+                font.display_strings = Arc::new(strings);
+                Ok(())
+            })
+            .unwrap();
+        app.session.execute("file.saveAs", &json!({"path": path})).unwrap();
+        path
+    };
+    let (a, b) = (file("a.glyphs", &["AB", "C"]), file("b.glyphs", &["HO"]));
+    let shown = |app: &FontcraftApp| app.state.tabs.iter().map(|t| t.title()).collect::<Vec<_>>();
+
+    let mut app = FontcraftApp::default();
+    app.run("file.open", &json!({"path": a})).unwrap();
+    app.run("view.showTab", &json!({"index": 2})).unwrap();
+    app.run("file.open", &json!({"path": b})).unwrap();
+    assert_eq!(shown(&app), ["H O"], "only the active document's tabs show");
+    app.run("glyph.removeGlyph", &json!({"glyphs": ["A"], "confirm": true})).unwrap();
+    app.run("editView.setText", &json!({"tab": app.state.tabs[0].id, "text": "HOH"})).unwrap();
+
+    // Back to the first file: its tabs come back as they were, the showing one included, and
+    // removing A from the other document left them alone.
+    app.run("document.activate", &json!({"path": a})).unwrap();
+    assert_eq!(shown(&app), ["A B", "C"]);
+    assert_eq!(app.state.active_tab, Some(0));
+    app.run("file.save", &json!({})).unwrap();
+    app.run("document.activate", &json!({"path": b})).unwrap();
+    app.run("file.save", &json!({"force": true})).unwrap();
+
+    // Closing a document closes its tabs; the first file shows again with its own.
+    let closed = app.session.active().unwrap().id;
+    app.run("file.close", &json!({"discard": true})).unwrap();
+    assert_eq!(shown(&app), ["A B", "C"]);
+    assert!(!app.state.other_documents.contains_key(&closed));
+
+    let strings = |path: &str| {
+        let mut app = FontcraftApp::default();
+        app.run("file.open", &json!({"path": path})).unwrap();
+        app.session.font().unwrap().display_strings.to_vec()
+    };
+    assert_eq!(strings(&a), ["AB", "C"]);
+    assert_eq!(strings(&b), ["HOH"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn closed_tabs_lose_removed_glyphs() {
+    let mut app = FontcraftApp::default();
+    app.run("view.newTab", &json!({"glyphs": ["A", "B"]})).unwrap();
+    app.run("view.newTab", &json!({"glyphs": ["A"]})).unwrap();
+    app.run("view.closeTab", &json!({})).unwrap();
+    app.run("view.closeTab", &json!({})).unwrap();
+    app.run("glyph.removeGlyph", &json!({"glyphs": ["A"], "confirm": true})).unwrap();
+    app.run("view.reopenLastClosedTab", &json!({})).unwrap();
+    assert_eq!(app.state.tab().unwrap().shown_glyphs().collect::<Vec<_>>(), ["B"]);
+    assert!(app.run("view.reopenLastClosedTab", &json!({})).is_err(), "the tab that held only A is gone");
 }

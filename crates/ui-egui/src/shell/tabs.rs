@@ -168,6 +168,9 @@ pub(crate) fn open(app: &mut FontcraftApp, args: &Args, glyphs: Vec<String>) -> 
 
 /// Adds `tab` at the end of the strip, fitted to the canvas, shows it and describes it.
 pub(crate) fn push(app: &mut FontcraftApp, mut tab: Tab) -> Value {
+    if let Some(doc) = app.session.active() {
+        tab.document = doc.id;
+    }
     tab.view = view::fit(&app.session, &app.layouts, &tab, app.state.canvas_size, f64::from(app.tokens.fit_margin));
     app.state.tabs.push(tab);
     let index = app.state.tabs.len() - 1;

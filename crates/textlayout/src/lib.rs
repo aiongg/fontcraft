@@ -30,6 +30,7 @@
 //! Charmap::new(font: &Font) -> Charmap;  Charmap::glyph(&self, c: char) -> Option<&Arc<str>>;  Charmap::item(&self, c: char) -> Item
 //! parse(font: &Font, s: &str, limit: usize) -> Result<Vec<Item>, TextError>
 //! parse_with(map: &Charmap, s: &str, limit: usize) -> Result<Vec<Item>, TextError>
+//! parse_prefix(map: &Charmap, s: &str, limit: usize) -> Result<(Vec<Item>, bool more), TextError>
 //! Text::new() -> Text;  Text::with_limit(limit: usize) -> Result<Text, TextError>
 //! Text::from_display_string(font: &Font, s: &str) -> Result<Text, TextError>
 //! Text::items(&self) -> &[Item];  len;  is_empty;  limit;  cursor(&self) -> usize;  selection(&self) -> Range<usize>
@@ -62,7 +63,7 @@ pub use layout::{
     DEFAULT_LINE_WIDTH, KerningMode, LENGTH_RANGE, LINE_HEIGHT_PARAM, Layout, LayoutError, Line, MISSING_ADVANCE_RANGE, Options, Placed, layout,
     line_height,
 };
-pub use text::{Charmap, Item, PLACEHOLDER, Text, TextError, parse, parse_with};
+pub use text::{Charmap, Item, PLACEHOLDER, Text, TextError, parse, parse_prefix, parse_with};
 
 /// Items in an Edit View tab.
 pub const MAX_ITEMS: usize = 10_000;

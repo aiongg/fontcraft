@@ -109,10 +109,23 @@ pub fn parse_with(map: &Charmap, s: &str, limit: usize) -> Result<Vec<Item>, Tex
     if s.len() > limit.saturating_mul(MAX_NAME_LEN + 2) {
         return Err(TextError::TooManyItems { limit });
     }
+    parse_items(map, s, limit, false).map(|(items, _)| items)
+}
+
+/// The first `limit` items of `s`, read as [`parse`] reads it, and whether `s` holds more. An
+/// error in those items fails it; the rest of `s` is not read.
+pub fn parse_prefix(map: &Charmap, s: &str, limit: usize) -> Result<(Vec<Item>, bool), TextError> {
+    parse_items(map, s, limit, true)
+}
+
+fn parse_items(map: &Charmap, s: &str, limit: usize, cut: bool) -> Result<(Vec<Item>, bool), TextError> {
     let mut out = Vec::new();
     let mut chars = s.char_indices().peekable();
     while let Some((at, c)) = chars.next() {
         if out.len() >= limit {
+            if cut {
+                return Ok((out, true));
+            }
             return Err(TextError::TooManyItems { limit });
         }
         match c {
@@ -140,7 +153,7 @@ pub fn parse_with(map: &Charmap, s: &str, limit: usize) -> Result<Vec<Item>, Tex
             _ => out.push(map.item(c)),
         }
     }
-    Ok(out)
+    Ok((out, false))
 }
 
 /// A text with its cursor and selection.

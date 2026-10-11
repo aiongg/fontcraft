@@ -12,7 +12,7 @@
 use std::ops::Range;
 
 use fontcraft_model::{Font, param_flag};
-use fontcraft_textlayout::{Charmap, Item, KerningMode, MAX_ITEMS, MAX_PREVIEW_ITEMS, Text, TextError, parse, parse_with};
+use fontcraft_textlayout::{Charmap, Item, KerningMode, MAX_ITEMS, Text, TextError, parse, parse_prefix};
 use fontcraft_tools::{Key, KeyEvent};
 use serde_json::{Value, json};
 
@@ -330,22 +330,18 @@ pub(crate) fn reply(app: &FontcraftApp, index: usize) -> Value {
     })
 }
 
-/// The tab texts for a document's display strings, and a warning for each string that was cut
-/// to the tab item limit or could not be read.
-pub fn tabs_from_display_strings(font: &Font, strings: &[String]) -> (Vec<TabText>, Vec<String>) {
+/// The tab texts for a document's display strings, at most `tabs` of them, and a warning for
+/// each string that was cut to the tab item limit or could not be read, and for the strings
+/// past `tabs`, which are not read.
+pub fn tabs_from_display_strings(font: &Font, strings: &[String], tabs: usize) -> (Vec<TabText>, Vec<String>) {
     let map = Charmap::new(font);
     let mut texts = Vec::new();
     let mut warnings = Vec::new();
-    for (n, s) in strings.iter().enumerate() {
+    for (n, s) in strings.iter().enumerate().take(tabs) {
         let number = n + 1;
-        let items = match parse_with(&map, s, MAX_ITEMS) {
-            Ok(items) => items,
-            Err(TextError::TooManyItems { .. }) => {
-                // Read a longer prefix, then keep the first items: a string has at most one item
-                // per character.
-                let end = s.char_indices().nth(MAX_PREVIEW_ITEMS).map_or(s.len(), |(i, _)| i);
-                let mut items = s.get(..end).map(|p| parse_with(&map, p, MAX_PREVIEW_ITEMS)).and_then(Result::ok).unwrap_or_default();
-                items.truncate(MAX_ITEMS);
+        let items = match parse_prefix(&map, s, MAX_ITEMS) {
+            Ok((items, false)) => items,
+            Ok((items, true)) => {
                 warnings.push(format!("display string {number} holds more than {MAX_ITEMS} items; its tab shows the first {MAX_ITEMS}"));
                 items
             }
@@ -360,22 +356,25 @@ pub fn tabs_from_display_strings(font: &Font, strings: &[String]) -> (Vec<TabTex
             texts.push(TabText::new(text));
         }
     }
+    if strings.len() > tabs {
+        warnings.push(format!("the document has {} display strings; only the first {tabs} open as tabs", strings.len()));
+    }
     (texts, warnings)
 }
 
-/// The display strings for the open tabs, in strip order; none when the font's
-/// `Write DisplayStrings` parameter is off.
-pub fn display_strings(font: &Font, tabs: &[Tab]) -> Vec<String> {
+/// The display strings for these tabs, in order; none when the font's `Write DisplayStrings`
+/// parameter is off.
+pub fn display_strings<'t>(font: &Font, tabs: impl IntoIterator<Item = &'t Tab>) -> Vec<String> {
     if font.info.params.get("Write DisplayStrings").and_then(param_flag) == Some(false) {
         return Vec::new();
     }
-    tabs.iter().map(|t| t.text.to_display_string(font)).collect()
+    tabs.into_iter().map(|t| t.text.to_display_string(font)).collect()
 }
 
-/// Writes the open tabs into the active document's display strings before a save.
+/// Writes the active document's open tabs into its display strings before a save.
 pub(crate) fn store_display_strings(app: &mut FontcraftApp) {
-    let Ok(font) = app.session.font() else { return };
-    let strings = display_strings(font, &app.state.tabs);
+    let Some(doc) = app.session.active() else { return };
+    let strings = display_strings(&doc.font, app.state.tabs.iter().filter(|t| t.document == doc.id));
     if let Err(e) = app.session.set_display_strings(strings) {
         log::warn!("cannot store the tabs' texts in the document: {e}");
     }

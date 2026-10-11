@@ -55,6 +55,21 @@ pub struct UiState {
     pub glyph_info: crate::shell::glyph_info::GlyphInfoState,
     /// The Start Window: open, the selected recent document and the script chooser.
     pub start: crate::shell::start_window::StartState,
+    /// The document `tabs`, `active_tab` and `closed_tabs` belong to (`None`: none yet; the
+    /// active document takes them).
+    pub tabs_document: Option<u64>,
+    /// The tabs of the other open documents, by document id, kept while those documents are not
+    /// the active one.
+    pub other_documents: BTreeMap<u64, DocumentTabs>,
+}
+
+/// One document's Edit View tabs while another document is the active one.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DocumentTabs {
+    pub tabs: Vec<Tab>,
+    pub active_tab: Option<usize>,
+    pub closed_tabs: Vec<(usize, Tab)>,
 }
 
 impl Default for UiState {
@@ -75,6 +90,8 @@ impl Default for UiState {
             font_view: Default::default(),
             glyph_info: Default::default(),
             start: Default::default(),
+            tabs_document: None,
+            other_documents: BTreeMap::new(),
         }
     }
 }
@@ -98,6 +115,42 @@ impl UiState {
     pub fn tab_index(&self, id: u64) -> Option<usize> {
         self.tabs.iter().position(|t| t.id == id)
     }
+
+    /// Makes `tabs`, `active_tab` and `closed_tabs` those of document `active` (`None`: no
+    /// document is open). The ones shown until now are kept for their document while `is_open`
+    /// says it is still open, and dropped with it otherwise. Returns whether the tabs changed
+    /// hands.
+    pub fn follow_document(&mut self, active: Option<u64>, is_open: impl Fn(u64) -> bool) -> bool {
+        self.other_documents.retain(|id, _| is_open(*id));
+        let switched = match (self.tabs_document, active) {
+            (Some(shown), Some(now)) if shown == now => false,
+            (None, Some(_)) => false,
+            (shown, _) => {
+                let kept = DocumentTabs {
+                    tabs: std::mem::take(&mut self.tabs),
+                    active_tab: self.active_tab.take(),
+                    closed_tabs: std::mem::take(&mut self.closed_tabs),
+                };
+                if let Some(shown) = shown
+                    && is_open(shown)
+                    && (!kept.tabs.is_empty() || !kept.closed_tabs.is_empty())
+                {
+                    self.other_documents.insert(shown, kept);
+                }
+                if let Some(back) = active.and_then(|now| self.other_documents.remove(&now)) {
+                    self.tabs = back.tabs;
+                    self.active_tab = back.active_tab.filter(|i| *i < self.tabs.len());
+                    self.closed_tabs = back.closed_tabs;
+                }
+                true
+            }
+        };
+        self.tabs_document = active;
+        if let Some(id) = active {
+            self.tabs.iter_mut().chain(self.closed_tabs.iter_mut().map(|(_, t)| t)).for_each(|t| t.document = id);
+        }
+        switched
+    }
 }
 
 /// One Edit View tab: its text, the camera and the selection. The edited glyph is the text's
@@ -107,6 +160,8 @@ impl UiState {
 pub struct Tab {
     /// Stable for the session, unlike the tab's position in the strip.
     pub id: u64,
+    /// The id of the document the tab shows (its `DocState::id` in the session).
+    pub document: u64,
     /// The items, the cursor, the selection and the current glyph.
     pub text: TabText,
     /// Typing edits the text (`editView.toggleTextMode`); otherwise the current glyph is edited.
