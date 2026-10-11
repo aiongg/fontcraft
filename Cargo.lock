@@ -913,8 +913,10 @@ dependencies = [
  "fontcraft-container",
  "fontcraft-geom",
  "fontcraft-model",
+ "fontcraft-spacing",
  "skrifa 0.48.0",
  "thiserror 2.0.21",
+ "write-fonts 0.54.0",
 ]
 
 [[package]]

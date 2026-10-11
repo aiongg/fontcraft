@@ -13,9 +13,11 @@ workspace = true
 [dependencies]
 fontcraft-model.workspace = true
 fontcraft-container.workspace = true
+fontcraft-spacing.workspace = true
 skrifa.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 fontcraft-compile.workspace = true
 fontcraft-geom.workspace = true
+write-fonts.workspace = true

@@ -5,8 +5,9 @@
 //! a one-master document with the outlines, advance widths, code points, glyph names, vertical
 //! metrics and names of the font. TrueType outlines stay quadratic and composite glyphs stay
 //! components (`open.truetypeKeepsQuadratic`, `open.truetypeKeepsComponents`); CFF outlines come
-//! back cubic. Layout, hinting and every other table are not read; [`Decompiled::warnings`] lists
-//! them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
+//! back cubic. Pair kerning and kerning groups come back from the GPOS `kern` feature
+//! (`gpos_kern`); the rest of the layout, hinting and every other table are not read, and
+//! [`Decompiled::warnings`] lists them. The glyph order is recorded in a `glyphOrder` custom parameter, so a later export keeps
 //! the glyph ids (`open.recordsGlyphOrder`).
 //!
 //! Input is untrusted: every offset and size is checked, WOFF and WOFF2 data is decompressed only up
@@ -20,6 +21,9 @@ pub use fontcraft_container::woff2::Woff2Directory;
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
+
+mod gpos_kern;
+pub use gpos_kern::{MAX_CLASS_RECORDS, MAX_KERN_PAIRS};
 
 use fontcraft_model::plist::{Array, Dict, Layout, Str, Value};
 use fontcraft_model::{
@@ -162,6 +166,8 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         unicodes.entry(gid.to_u32()).or_default().push(cp);
     }
 
+    let mut recovered = gpos_kern::read(font, &glyph_names, MASTER, &mut warnings);
+
     let glyf = font.glyf().ok().zip(font.loca(None).ok());
     let outlines = font.outline_glyphs();
     let mut skipped_anchored = 0usize;
@@ -214,6 +220,7 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         layer.shapes.retain(|s| !matches!(s, Shape::Path(p) if p.to_bez().is_err()));
         let mut g = Glyph::new(name.clone());
         g.unicodes = unicodes.remove(&gid).unwrap_or_default();
+        g.kern_groups = recovered.groups.get_mut(gid as usize).map(std::mem::take).unwrap_or_default();
         g.layers.push(layer);
         glyphs.push(Arc::new(g));
     }
@@ -272,6 +279,7 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         .map(|r| r.tag())
         .filter(|t| !read_tables.iter().any(|r| Tag::new_checked(r.as_bytes()).ok() == Some(*t)))
         .map(|t| t.to_string().trim_end().to_string())
+        .map(|t| if t == "GPOS" && !recovered.kerning.is_empty() { "GPOS (all but pair kerning)".to_string() } else { t })
         .collect();
     left_out.sort();
     if !left_out.is_empty() {
@@ -292,7 +300,7 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         instances: Arc::default(),
         glyphs: GlyphTable::from_glyphs(glyphs),
         info: Default::default(),
-        kerning: Arc::default(),
+        kerning: Arc::new(recovered.kerning),
         features: Arc::default(),
         groups: Arc::default(),
         display_strings: Arc::default(),

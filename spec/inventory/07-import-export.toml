@@ -667,8 +667,12 @@ milestone = "M5"
 summary = "Pair kerning and kerning groups (classes) from a compiled font are mostly recovered into the document's kerning data; contextual kerning is not recovered."
 ref = "Import & Export › Opening Font Files › Importing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.15: opening a compiled font reads the pair lookups (glyph pairs and class pairs, extension lookups included) of the GPOS `kern` feature and stores kerning that gives every covered pair the value a shaper takes from the font: lookups add up in lookup-list order, and in one lookup the first subtable that applies decides. Classes become groups, class pairs group pairs, and covered pairs the groups do not reproduce become glyph pairs. At most 2,000,000 covered pairs are read; a class table of more than 1,000,000 class pairs is skipped with a warning. Contextual kerning is not read."
 guesses = [
   "A class read from a compiled font becomes a kerning group named after its first glyph in glyph order; no source says how the reference names recovered groups.",
+  "A glyph keeps the first class it is in on each side, and pairs of a later class with other members are stored as glyph pairs; opening a font whose subtables use overlapping classes in the reference app would settle it.",
+  "A `kern` feature record used only by right-to-left scripts fills the right-to-left kerning, any other the left-to-right kerning; opening an Arabic font in the reference app would settle it.",
+  "A pair two feature records of one direction cover (for two scripts) takes the first record's value; no source says what the reference does.",
 ]
 
 [[behavior]]
