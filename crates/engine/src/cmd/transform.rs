@@ -44,7 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Mirror Horizontally",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], origin?: origin} flips left to right across the vertical line through the origin. Target lists go with `glyph`; without them, or with `glyphs`, the whole layer (shapes and anchors) is changed. An on-curve node carries its handles. origin: {mode: \"box\" (default) | \"reference\" | \"metrics\" | \"layer\", boxPoint?: \"topLeft\" | \"top\" | \"topRight\" | \"left\" | \"center\" (default) | \"right\" | \"bottomLeft\" | \"bottom\" | \"bottomRight\", metric?: \"baseline\" | \"halfXHeight\" | \"xHeight\" | \"halfCapHeight\" | \"capHeight\", point?: [x, y]}, a metric name, or [x, y]. A metrics origin sits at half the advance width; the layer origin at half the width, midway between ascender and descender. Points and anchors are rounded to the grid → {glyphs: [names], layers: count, origin?: [x, y] (with one layer)}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: \"local\" | \"global\", index}], annotations?: [index], origin?: origin} flips left to right across the vertical line through the origin. Target lists go with `glyph`; without them, or with `glyphs`, the whole layer (shapes and anchors) is changed. An on-curve node carries its handles. origin: {mode: \"box\" (default) | \"reference\" | \"metrics\" | \"layer\", boxPoint?: \"topLeft\" | \"top\" | \"topRight\" | \"left\" | \"center\" (default) | \"right\" | \"bottomLeft\" | \"bottom\" | \"bottomRight\", metric?: \"baseline\" | \"halfXHeight\" | \"xHeight\" | \"halfCapHeight\" | \"capHeight\", point?: [x, y]}, a metric name, or [x, y]. A metrics origin sits at half the advance width; the layer origin at half the width, midway between ascender and descender. Points and anchors are rounded to the grid. With `corners: [hint indices]` (and `glyph`) it flips those corner components instead, as cornerComponent.setScale with `flip` does, and returns what that returns → {glyphs: [names], layers: count, origin?: [x, y] (with one layer)}",
             has_doc,
             mirror_horizontal
         )
@@ -54,7 +54,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Mirror Vertically",
             [],
             None,
-            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?: [[shape, node]], segments?, shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?, origin?: origin} flips top to bottom across the horizontal line through the origin; targets and origin as for transform.mirrorHorizontal → {glyphs: [names], layers: count, origin?: [x, y]}",
+            "{glyph?: name, glyphs?: [names], layer?: id, side?, points?: [[shape, node]], segments?, shapes?: [index], anchors?: [name], guides?: [{scope, index}], annotations?, origin?: origin} flips top to bottom across the horizontal line through the origin; targets, origin and `corners` as for transform.mirrorHorizontal → {glyphs: [names], layers: count, origin?: [x, y]}",
             has_doc,
             mirror_vertical
         )
@@ -796,11 +796,30 @@ fn slant_factor(p: &Params, key: &str, degrees: f64) -> Result<f64> {
 }
 
 fn mirror_horizontal(s: &mut Session, v: &Value) -> Result<Value> {
+    if let Some(out) = mirror_corners(s, v, "horizontal")? {
+        return Ok(out);
+    }
     palette(s, v, "transform.mirrorHorizontal", "Mirror Horizontally", |_| Ok(Affine::new([-1.0, 0.0, 0.0, 1.0, 0.0, 0.0])))
 }
 
 fn mirror_vertical(s: &mut Session, v: &Value) -> Result<Value> {
+    if let Some(out) = mirror_corners(s, v, "vertical")? {
+        return Ok(out);
+    }
     palette(s, v, "transform.mirrorVertical", "Mirror Vertically", |_| Ok(Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, 0.0])))
+}
+
+/// Mirroring with `corners` flips those corner components in place, as their scale does
+/// (cornerComponent.setScale with `flip`); `None` without `corners`.
+fn mirror_corners(s: &mut Session, v: &Value, flip: &str) -> Result<Option<Value>> {
+    let Some(corners) = v.get("corners") else { return Ok(None) };
+    let mut p = json!({"corners": corners, "flip": flip});
+    for key in ["glyph", "layer"] {
+        if let (Some(value), Some(o)) = (v.get(key), p.as_object_mut()) {
+            o.insert(key.into(), value.clone());
+        }
+    }
+    s.execute("cornerComponent.setScale", &p).map(Some)
 }
 
 fn scale(s: &mut Session, v: &Value) -> Result<Value> {

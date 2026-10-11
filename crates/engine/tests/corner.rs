@@ -204,7 +204,11 @@ fn corner_component_set_scale_and_mirroring() {
     assert_eq!(keys(&s, "I", 0), ["name", "origin", "type"]);
     run(&mut s, "cornerComponent.setScale", json!({"glyph": "I", "corners": [1], "flip": "vertical"}));
     assert_eq!(corners(&s, "I")[1].scale, Vec2::new(-1.0, -1.0));
-    assert_eq!(undo_steps(&s), 4);
+    // The Palette's mirror commands flip selected corners the same way.
+    run(&mut s, "transform.mirrorHorizontal", json!({"glyph": "I", "corners": [1]}));
+    run(&mut s, "transform.mirrorVertical", json!({"glyph": "I", "corners": [1]}));
+    assert_eq!(corners(&s, "I")[1].scale, Vec2::new(1.0, 1.0));
+    assert_eq!(undo_steps(&s), 6);
 
     for (params, why) in [
         (json!({"glyph": "I", "corners": [0], "scaleX": 0}), "must not be 0"),
