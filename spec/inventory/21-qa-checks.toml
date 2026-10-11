@@ -2175,6 +2175,7 @@ milestone = "M12"
 summary = "A named instance or axis breaks the registered-axis rules: wght outside 1-1000, wdth below 1 (above 1000 warns), an ital axis whose range is not 0-1, or (warning) a slnt axis whose range does not run from a negative value up to at least 0."
 ref = "fontbakery opentype/fvar/axis_ranges_correct"
 status = "docs"
+notes = "Every instance outside the weight or width range is reported; FontBakery stops at the first."
 
 [[check]]
 id = "check.variations.regularInstanceCoordinates"
@@ -2260,7 +2261,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "The fvar instance records are malformed: there are none, they differ in size (some with and some without a PostScript name ID), or (warning) two records repeat the same coordinates or the same name. The fix drops the repeats and makes the records uniform."
+summary = "The fvar instance records are malformed: some have a PostScript name ID and others do not, so they differ in size, or (warning) a record repeats an earlier one's coordinates and name IDs. A font without named instances is skipped. The fix drops the repeats and makes the records uniform."
 ref = "fontbakery opentype/varfont/same_size_instance_records; fontbakery opentype/varfont/distinct_instance_records"
 status = "docs"
 
@@ -2296,6 +2297,7 @@ milestone = "M12"
 summary = "An fvar name reference is invalid: an axis or subfamily name ID outside 256-32767 (subfamily may also be 2 or 17), a PostScript name ID that is not 6, 0xFFFF or in that range, or an ID with no record in the name table."
 ref = "fontbakery opentype/varfont/valid_nameids; fontbakery fvar_name_entries"
 status = "docs"
+notes = "FontBakery checks only that subfamily name IDs have a record; axis and PostScript name IDs are checked the same way here."
 
 [[check]]
 id = "check.variations.defaultInstanceNames"
@@ -2304,7 +2306,7 @@ scope = "binary"
 fixable = true
 area = "qa"
 milestone = "M12"
-summary = "The instance at the default location does not reuse the font's own names: its subfamily name must equal name ID 17 (or ID 2 when 17 is absent) and its PostScript name must equal name ID 6. The fix points the record at those IDs."
+summary = "The instance at the default location does not reuse the font's own names: its subfamily name must equal name ID 17 (or ID 2 when 17 is absent) and, when the records carry PostScript name IDs, its PostScript name must equal name ID 6. The fix points the record at those IDs."
 ref = "fontbakery opentype/varfont/valid_default_instance_nameids; fontbakery fontwerk/names_match_default_fvar"
 status = "docs"
 
@@ -2340,6 +2342,9 @@ milestone = "M12"
 summary = "An italic variable font has no upright sibling carrying an ital axis in STAT (failure), or the STAT ital axis is set up wrongly (warnings): it is not the last axis, its value is not 0 for upright or 1 for italic, the upright value is not marked elidable, or the upright value is not linked to 1."
 ref = "fontbakery opentype/STAT/ital_axis"
 status = "docs"
+guesses = [
+  "One font at a time, an italic variable font fails without an ital axis in STAT and a missing upright sibling is not reported; FontBakery pairs the fonts of a family. Comparing verdicts on corpus families with an upright and an italic variable font would settle whether the family checks must cover the pairing.",
+]
 
 [[check]]
 id = "check.variations.statItalicNaming"
@@ -2351,6 +2356,7 @@ milestone = "M12"
 summary = "A STAT axis value on an axis other than ital is named with the word Italic (the laxer variant also allows it on slnt)."
 ref = "fontbakery STAT_strings; fontbakery adobefonts/STAT_strings"
 status = "docs"
+notes = "The threshold allowOnSlnt (default 0) switches to the laxer rule that also allows Italic on slnt values."
 
 [[check]]
 id = "check.variations.statCoversInstances"
@@ -2362,6 +2368,7 @@ milestone = "M12"
 summary = "The STAT table is missing or cannot describe every named instance: an instance uses an axis value that no STAT axis value covers, or its name record is missing."
 ref = "fontbakery inconsistencies_between_fvar_STAT; fontbakery microsoft/fvar_STAT_axis_ranges"
 status = "docs"
+notes = "A format 4 axis value whose coordinates equal an instance's covers that whole instance; FontBakery's check ignores format 4 values."
 
 [[check]]
 id = "check.variations.statValueQuality"
@@ -2370,9 +2377,12 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The STAT table is poorly built: a format 1 value repeats within an axis, a value named Regular is not marked elidable, the axis ordering values are not valid, or a value that the naming scheme requires for an axis is absent."
+summary = "The STAT table is poorly built: a format 1 value repeats within an axis, a value named Regular is not marked elidable, the axis ordering is not opsz, wght, wdth, slnt, ital (custom axes first), a weight or width class value inside the fvar range has no STAT value, or (warning) there are no axis values."
 ref = "fontbakery microsoft/STAT_axis_values; fontbakery microsoft/STAT_table_eliding_bit; fontbakery microsoft/STAT_table_axis_order; fontbakery googlefonts/STAT/compulsory_axis_values"
 status = "docs"
+guesses = [
+  "The values an axis must name are the OS/2 weight classes (100 to 900) and width classes (50 to 200) inside the fvar range; the vendor check takes them from its own axis registry, with names and flags. Comparing verdicts with that check on the corpus variable fonts would settle it.",
+]
 
 [[check]]
 id = "check.variations.avarMissing"
@@ -2414,9 +2424,12 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "A static instance cannot be generated from the variable font at its default location; the instancer reports an error."
+summary = "A static instance cannot be made at the middle of every axis: a variation table (avar, gvar, HVAR, VVAR, MVAR, CFF2) cannot be read, or a glyph's outline or advance cannot be computed there."
 ref = "fontbakery googlefonts/varfont/generate_static"
 status = "docs"
+guesses = [
+  "Instancing is tested by computing every glyph's outline and advance at the middle of each axis and reading the variation tables, not by running an instancer; comparing verdicts with FontBakery on fonts whose instancing fails would settle whether this catches the same faults.",
+]
 
 [[check]]
 id = "check.variations.customAxisRange"

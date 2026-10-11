@@ -192,11 +192,16 @@ fn fixtures() -> Vec<(&'static str, Glyph)> {
     ]
 }
 
+/// The layer-scope outline checks of M3, which the fixtures below cover.
+fn m3(c: &&'static CheckSpec) -> bool {
+    c.group == CheckGroup::Outlines && c.scope == CheckScope::Layer
+}
+
 #[test]
 fn every_check_reports_its_fixture() {
     let fixtures = fixtures();
     let covered: HashSet<&str> = fixtures.iter().map(|(id, _)| *id).collect();
-    for spec in CHECKS.iter().filter(|c| c.group == CheckGroup::Outlines && c.scope == CheckScope::Layer) {
+    for spec in CHECKS.iter().filter(m3) {
         assert!(covered.contains(spec.id), "{} has no fixture", spec.id);
     }
     for (id, g) in &fixtures {
@@ -295,14 +300,14 @@ fn thresholds_are_validated_and_used() {
 
 #[test]
 fn profiles_select_their_checks() {
-    let outlines = ["check.outlines.*"];
-    assert_eq!(select(Some(Profile::Outlines), &outlines, &[]).len(), 28);
-    assert_eq!(select(Some(Profile::Universal), &outlines, &[]).len(), 29);
-    assert_eq!(select(Some(Profile::Strict), &outlines, &[]).len(), 34);
-    assert!(select(Some(Profile::Opentype), &outlines, &[]).is_empty());
+    let count = |profile: Profile| select(Some(profile), &[], &[]).into_iter().filter(m3).count();
+    assert_eq!(count(Profile::Outlines), 28);
+    assert_eq!(count(Profile::Universal), 29);
+    assert_eq!(count(Profile::Strict), 34);
+    assert_eq!(count(Profile::Opentype), 0);
     let open: Vec<&str> = select(None, &["check.outlines.open*"], &[]).iter().map(|c| c.id).collect();
     assert_eq!(open, vec!["check.outlines.openCorners", "check.outlines.openPath"]);
-    assert_eq!(select(None, &["check.outlines.*"], &["check.outlines.open*"]).len(), 32);
+    assert_eq!(select(None, &["check.outlines.*"], &["check.outlines.open*"]).into_iter().filter(m3).count(), 32);
 }
 
 #[test]
@@ -321,7 +326,7 @@ fn registry_matches_the_inventory() {
             rows.push((id, severity));
         }
     }
-    assert!(rows.len() <= CHECKS.len());
+    assert_eq!(rows.len(), CHECKS.iter().filter(m3).count());
     let mut ids = HashSet::new();
     for (id, severity) in rows {
         let spec = find(&id).unwrap_or_else(|| panic!("{id} is not in the registry"));

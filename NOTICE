@@ -236,5 +236,9 @@ bundled, the file says so in its header and the project is listed here with its 
   varLib.interpolatable and its helpers, contour-order and start-point tests, and the statistics
   of pens/statisticsPen.py (fontTools 4.66.1, MIT License, Copyright (c) 2017 Just van Rossum).
 
+  The variable-font table checks (crates/audit/src/checks/variations_binary.rs, M12.54) follow
+  the rules of FontBakery 1.1.0 (https://github.com/fonttools/fontbakery), Apache License 2.0:
+  its fvar, STAT, avar, HVAR, gvar and named-instance checks, re-implemented check by check.
+
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.
