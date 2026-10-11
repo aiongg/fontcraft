@@ -190,6 +190,15 @@ bundled, the file says so in its header and the project is listed here with its 
   filters/cornerComponents.py (Apache License 2.0). Its tests rebuild the cases of fontc's
   resources/testdata/glyphs3/CornerComponents.glyphs, which come from glyphsLib's corner
   component tests.
+  The generated mark attachment and GDEF table (crates/features/src/marks.rs and gdef.rs, M6.17)
+  are ported from fontc at commit 4504578c3f74c2739f7e55cae133bbfe773f6d8c: the mark and cursive
+  writer (fontbe/src/features/marks.rs), the anchor names (fontir/src/ir.rs), the GDEF classes
+  (glyphs2fontir/src/source.rs, ufo2fontir/src/source.rs and fontir/src/glyph.rs, which follow
+  glyphsLib's builder/features.py, Apache License 2.0), the feature-writer setting of the mark,
+  cursive and GDEF writers (fontir/src/ir/feature_writers.rs), and the order of generated lookups
+  and ligature carets (fea-rs/src/compile/feature_writer.rs and fea-rs/src/compile/tables/gdef.rs).
+  fontc's writer follows ufo2ft's markFeatureWriter.py, cursFeatureWriter.py and
+  gdefFeatureWriter.py (MIT License).
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

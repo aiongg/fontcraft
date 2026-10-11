@@ -133,6 +133,63 @@ pub(crate) fn feature_code(font: &Font) -> FeatureCode {
     out
 }
 
+/// The features of the enabled feature code that the editor did not write, with code besides
+/// comments, each once, in source order. Each keeps the generated feature of its tag out of a
+/// compile before M8 (`crate::marks`).
+pub(crate) fn hand_written_features(font: &Font) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let f = &font.features;
+    for s in f.prefixes.iter().chain(&f.classes) {
+        if s.disabled || s.automatic {
+            continue;
+        }
+        for tag in top_level(&s.code).features {
+            if !out.iter().any(|t| t == tag) {
+                out.push(tag.to_string());
+            }
+        }
+    }
+    for s in &f.features {
+        if s.disabled || s.automatic || without_comments(&s.code).all(|l| l.trim().is_empty()) {
+            continue;
+        }
+        if !out.contains(&s.name) {
+            out.push(s.name.clone());
+        }
+    }
+    out
+}
+
+/// The `languagesystem <script> <language>;` statements at the top level of the enabled prefixes
+/// and classes, as (script, language), each once, in source order.
+pub(crate) fn language_systems(font: &Font) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let f = &font.features;
+    for s in f.prefixes.iter().chain(&f.classes) {
+        if s.disabled {
+            continue;
+        }
+        let t = tokens(&s.code);
+        let mut depth = 0usize;
+        for (i, token) in t.iter().enumerate() {
+            match *token {
+                "{" => depth = depth.saturating_add(1),
+                "}" => depth = depth.saturating_sub(1),
+                "languagesystem" if depth == 0 => {
+                    if let (Some(script), Some(lang), Some(&";")) = (t.get(i + 1), t.get(i + 2), t.get(i + 3)) {
+                        let system = (script.to_string(), lang.to_string());
+                        if !out.contains(&system) {
+                            out.push(system);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
 /// Whether the source's feature code has a `kern` feature, or includes a file that may hold one:
 /// either keeps the generated kerning out of a compile before M8.
 pub fn has_kern_feature_code(font: &Font) -> bool {

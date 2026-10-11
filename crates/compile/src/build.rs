@@ -24,6 +24,7 @@ use fontcraft_geom::{Affine, Point, Rect};
 use fontcraft_model::{MAX_OUTLINE_ELEMENTS, ModelError, Resolved, ResolvedGlyph};
 use write_fonts::FontBuilder;
 use write_fonts::tables::cmap::Cmap;
+use write_fonts::tables::gdef::Gdef;
 use write_fonts::tables::glyf::{Anchor, Bbox, Component, ComponentFlags, CompositeGlyph, GlyfLocaBuilder, Glyph as TtGlyph, SimpleGlyph, Transform};
 use write_fonts::tables::gpos::Gpos;
 use write_fonts::tables::head::{Flags, Head, MacStyle};
@@ -348,6 +349,7 @@ pub fn assemble(
     flavour: Flavour,
     synthesised_notdef: bool,
     gpos: Option<&Gpos>,
+    gdef: Option<&Gdef>,
     options: &Options,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
@@ -433,7 +435,8 @@ pub fn assemble(
         caret_offset: i16_of(m.caret_offset),
         number_of_h_metrics: u16::try_from(h_metrics.len()).unwrap_or(u16::MAX),
     };
-    // Pair positioning looks at two glyphs; nothing else is compiled before M8.
+    // Pair, cursive and mark positioning each look at two glyphs; nothing else is compiled
+    // before M8.
     let max_context = if gpos.is_some() { 2 } else { 0 };
     let os2 = os2(&info, &horizontal.metrics, &code_points, max_context);
 
@@ -465,6 +468,9 @@ pub fn assemble(
     builder.add_table(&post).map_err(table("post"))?;
     if let Some(gpos) = gpos {
         builder.add_table(gpos).map_err(table("GPOS"))?;
+    }
+    if let Some(gdef) = gdef {
+        builder.add_table(gdef).map_err(table("GDEF"))?;
     }
     if info.vertical {
         let (vhea, vmtx) = vertical(order, &boxes, &info);

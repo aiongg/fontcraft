@@ -2250,7 +2250,7 @@ milestone = "M6"
 summary = "The mark feature is generated automatically from anchors: a combining mark carries an underscore-prefixed anchor (for example _top) and base glyphs carry the anchor of the same name without the underscore (top); each such pair becomes a mark-to-base attachment. Combining marks usually end in comb, have Unicode values and can be typed after any base."
 ref = "Edit View › Mark to Base Positioning"
 status = "handbook"
-notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark-to-base and mark-to-ligature attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark-to-base and mark-to-ligature attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed. Built in M6.17 with the generated mark writer (`compile.markFeatureWriter`)."
 
 [[behavior]]
 id = "anchors.ccmpAlongsideMark"
@@ -2268,7 +2268,7 @@ milestone = "M6"
 summary = "The mkmk feature is generated automatically for every combining mark that has both an underscore anchor and the matching plain anchor, so marks carrying both can be stacked on each other."
 ref = "Edit View › Mark to Mark Positioning"
 status = "handbook"
-notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark-to-mark attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark-to-mark attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed. Built in M6.17 with the generated mark writer (`compile.markFeatureWriter`)."
 
 [[behavior]]
 id = "anchors.cursiveAttachment"
@@ -2277,7 +2277,7 @@ milestone = "M6"
 summary = "Anchors named exit and entry, placed at the end and the beginning of the connecting strokes of initial, medial and final forms, define cursive attachment: each glyph's entry anchor is placed on the exit anchor of its predecessor. With right-to-left typesetting switched on, Edit View previews the attachment live."
 ref = "Edit View › Cursive Attachment"
 status = "handbook"
-notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write cursive attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. The live preview in Edit View waits for shaping (M8). Documented, not yet observed."
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write cursive attachment at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. The live preview in Edit View waits for shaping (M8). Documented, not yet observed. Built in M6.17 with the generated mark writer (`compile.markFeatureWriter`)."
 
 [[behavior]]
 id = "anchors.ligatureCarets"
@@ -2286,7 +2286,7 @@ milestone = "M6"
 summary = "Anchors on the baseline of a ligature glyph named caret_ plus a distinguishing suffix (caret_1, caret_2 …) mark text-cursor positions inside the ligature. The suffix only keeps the names unique and its order is ignored; at export they become LigatureCaretByPos entries in GDEF."
 ref = "Edit View › Ligature Carets"
 status = "handbook"
-notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF ligature caret list at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed."
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF ligature caret list at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Documented, not yet observed. Built in M6.17 (`compile.gdefLigatureCarets`): the carets are sorted by position, so the order of the suffixes does not matter."
 
 [[behavior]]
 id = "anchors.contextual"

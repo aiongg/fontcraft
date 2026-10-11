@@ -1535,10 +1535,14 @@ status = "docs"
 id = "compile.markFeatureWriter"
 area = "compile"
 milestone = "M6"
-summary = "Anchors generate mark (mark to base and mark to ligature), mkmk (mark to mark), abvm and blwm (for scripts that use them) and, from entry/exit anchor pairs, curs. An anchor 'top' pairs with '_top'; 'entry' pairs with 'exit' and 'entry.N' with 'exit.N' only. fontc emits one lookup per mark class. curs is a separate writer from the mark writer."
+summary = "Anchors generate mark (mark to base and mark to ligature), mkmk (mark to mark), abvm and blwm (for scripts that use them) and, from entry/exit anchor pairs, curs. An anchor 'top' pairs with '_top'; 'entry' pairs with 'exit'; the numbered 'entry.N' and 'exit.N' are not cursive for fontc. fontc emits one lookup per mark class. curs is a separate writer from the mark writer."
 ref = "fontc fontbe/src/features/marks.rs, fontbe/src/features.rs"
 status = "docs"
-notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark, mkmk, abvm, blwm and curs at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. A source with a hand-written mark, mkmk, abvm, blwm or curs feature without `# Automatic Code` gets none of that generated feature until M8."
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write mark, mkmk, abvm, blwm and curs at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. A source with a hand-written mark, mkmk, abvm, blwm or curs feature without `# Automatic Code` gets none of that generated feature until M8. Built in M6.17 (`crates/features/src/marks.rs`, `crates/compile/src/marks.rs`): the lookups, their order (curs, the kerning, abvm, blwm, mark, mkmk), the mark filtering sets of mkmk and the abvm/blwm split follow fontc, checked against a probe source that fontc and fontmake build to identical tables. Anchors are the propagated ones for the reference's format and each glyph's own for UFO sources, which the reference compilers do not propagate. The generated features are registered for the language systems of the feature code (`DFLT dflt` without any); the declared scripts also limit which scripts count for abvm. fontc treats only `entry` and `exit` as cursive anchors (its code marks numbered pairs as not supported); FontCraft follows fontc, so `entry.1` and `exit.1` attach nothing. The feature-writer setting's mark, cursive and GDEF writers are read as fontc reads them."
+guesses = [
+  "A top-level include in the feature code keeps all five generated features out until M8, as it keeps the generated kerning out, since the included file may hold any of them; compiling the included file (M8) settles it.",
+  "Anchors whose names the reference compilers refuse (`_`, `_top_1`, a number 0), whose ligature number is above 1,024, or whose positions do not fit 16 bits are left out with a warning, where fontc stops the build; an export of such anchors from the reference app would settle it.",
+]
 
 [[behavior]]
 id = "compile.gdefClasses"
@@ -1547,7 +1551,10 @@ milestone = "M6"
 summary = "GDEF glyph classes come from an explicit GDEF block in feature code when there is one; otherwise from the source's glyph categories. For Glyphs sources the categories are refined from anchors (a glyph with attaching anchors becomes a base; a ligature without attaching anchors loses its ligature class); for UFO sources the stored categories are used as they are. fontmake's --no-generate-GDEF stops the generated block when the feature code already has one."
 ref = "fontc fontbe/src/features.rs, fontir/src/glyph.rs (recompute_gdef_categories); fontmake USAGE.md (--no-generate-GDEF)"
 status = "docs"
-notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF glyph classes at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. An explicit GDEF block in feature code waits for M8."
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF glyph classes at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. An explicit GDEF block in feature code waits for M8. Built in M6.17 (`crates/features/src/gdef.rs`): the classes of a static master are worked out from its categories and its propagated anchors; a UFO's stated classes are used as they are. The feature-writer setting can leave the GDEF writer out, which leaves the classes and carets out but keeps the mark filtering sets the lookups need."
+guesses = [
+  "A static master's classes are worked out from that master's anchors only, as fontmake does for each master's UFO, where fontc looks at the anchors of every master; a source whose masters differ in anchor names would settle it.",
+]
 
 [[behavior]]
 id = "compile.gdefLigatureCarets"
@@ -1556,7 +1563,10 @@ milestone = "M6"
 summary = "Ligature caret positions in GDEF come from anchors named caret_N (horizontal text, x coordinate) and vcaret_N (vertical text, y coordinate), and vary with the masters in a variable font."
 ref = "fontmake USAGE.md (GdefFeatureWriter); fontc fontbe/src/features/marks.rs"
 status = "docs"
-notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF ligature caret list at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Carets that vary with the masters wait for the variable font (M9)."
+notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 2 (b)): package M6.17 ports fontc's mark writer (`fontbe/src/features/marks.rs`) and GDEF rules to write the GDEF ligature caret list at export from the propagated anchors. Contextual anchors, the zero advance width of marks and hand-written mark features stay in M8. Carets that vary with the masters wait for the variable font (M9). Built in M6.17 (`crates/features/src/gdef.rs`): `caret_N` gives its x, `vcaret_N` its y, written as coordinate carets sorted by position, for every glyph with such anchors."
+guesses = [
+  "Carets at the same position are all kept, as fontc keeps them, where ufo2ft keeps one; a ligature with two carets at one position in the reference app's export would settle it.",
+]
 
 [[behavior]]
 id = "compile.featureVariations"

@@ -50,10 +50,11 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
-    let gpos = match font {
-        Some(font) => crate::kern::generate(font, &resolved, &glyphs, &mut warnings).is_some(),
-        None => false,
+    let kern = match font {
+        Some(font) => crate::kern::generate(font, &resolved, &glyphs, &mut warnings),
+        None => None,
     };
+    let layout = crate::marks::generate(font, &resolved, &glyphs, kern, &mut warnings);
     let final_names = if flavour == Flavour::Cff || glyphs.len() <= crate::MAX_POST_NAMES {
         names::final_names(&resolved, &glyphs, &mut warnings)
     } else {
@@ -64,7 +65,7 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     Ok(Plan {
         glyph_order: glyphs.into_iter().map(|g| g.name).collect(),
         final_names,
-        tables: tables(flavour, names.vertical, gpos),
+        tables: tables(flavour, names.vertical, layout.gpos.is_some(), layout.gdef.is_some()),
         postscript_name: names.name(6),
         style_name,
         warnings,
@@ -85,7 +86,7 @@ pub fn file_stem(resolved: &Resolved, options: &Options, source: &str) -> Option
 }
 
 /// The tables `build::assemble` writes for `flavour`, sorted by tag as the table directory is.
-fn tables(flavour: Flavour, vertical: bool, gpos: bool) -> Vec<String> {
+fn tables(flavour: Flavour, vertical: bool, gpos: bool, gdef: bool) -> Vec<String> {
     let mut tags: Vec<&str> = vec!["OS/2", "cmap", "head", "hhea", "hmtx", "maxp", "name", "post"];
     match flavour {
         Flavour::TrueType => tags.extend(["glyf", "loca"]),
@@ -96,6 +97,9 @@ fn tables(flavour: Flavour, vertical: bool, gpos: bool) -> Vec<String> {
     }
     if gpos {
         tags.push("GPOS");
+    }
+    if gdef {
+        tags.push("GDEF");
     }
     tags.sort_unstable();
     tags.into_iter().map(str::to_string).collect()
