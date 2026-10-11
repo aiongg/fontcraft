@@ -45,9 +45,9 @@ Weighted command coverage (Σ weight × live share ÷ Σ weight, over areas that
 | M3: Edit View drawing: tools, nodes, selection, transforms, path operations, guides | 184 | 184 (100.0%) | 19 | 25 | 185 | 11 | 34 | 0 | 2 | 0 |
 | M4: Font View and glyph management | 62 | 62 (100.0%) | 0 | 24 | 162 | 3 | 0 | 0 | 0 | 0 |
 | M5: Spacing, kerning and text mode | 97 | 97 (100.0%) | 1 | 19 | 98 | 6 | 0 | 0 | 2 | 0 |
-| M6: Components and anchors | 45 | 0 (0.0%) | 1 | 10 | 129 | 5 | 0 | 0 | 0 | 0 |
+| M6: Components and anchors | 45 | 0 (0.0%) | 1 | 10 | 131 | 5 | 0 | 0 | 0 | 0 |
 | M7: Font Info and custom parameters | 62 | 2 (3.2%) | 0 | 11 | 70 | 69 | 0 | 0 | 0 | 0 |
-| M8: OpenType features | 40 | 0 (0.0%) | 0 | 10 | 322 | 20 | 0 | 0 | 2 | 4 |
+| M8: OpenType features | 40 | 0 (0.0%) | 0 | 10 | 320 | 20 | 0 | 0 | 2 | 4 |
 | M9: Interpolation and variable fonts | 67 | 0 (0.0%) | 2 | 15 | 144 | 33 | 0 | 0 | 4 | 8 |
 | M10: Hinting (PostScript and TrueType) | 57 | 0 (0.0%) | 1 | 9 | 165 | 25 | 0 | 0 | 0 | 5 |
 | M11: Colour fonts and images | 50 | 0 (0.0%) | 3 | 11 | 91 | 11 | 2 | 0 | 3 | 5 |

@@ -1356,18 +1356,20 @@ notes = "Moved from M8 by the M6 plan, which the owner accepted (docs/plans/M6.m
 [[behavior]]
 id = "autoFeature.abvm"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "abvm (Above-base Mark Positioning). Trigger: Same anchor convention as mark, for glyphs of scripts that use abvm. Generated: Built at export like mark and never listed in the Features tab; the split between mark, abvm and blwm is not documented."
 ref = "Font Info › Features › Implicit Features"
 status = "handbook"
+notes = "Written by the generated mark writer of M6.17 with mark and mkmk; the split between the three features follows the oracles' output."
 
 [[behavior]]
 id = "autoFeature.blwm"
 area = "features"
-milestone = "M8"
+milestone = "M6"
 summary = "blwm (Below-base Mark Positioning). Trigger: Same anchor convention as mark, for glyphs of scripts that use blwm. Generated: Built at export like mark and never listed in the Features tab; the split between mark, abvm and blwm is not documented."
 ref = "Font Info › Features › Implicit Features"
 status = "handbook"
+notes = "Written by the generated mark writer of M6.17 with mark and mkmk; the split between the three features follows the oracles' output."
 
 # ----------------------------------------------------------------------------
 # Behaviours: Text tokens
