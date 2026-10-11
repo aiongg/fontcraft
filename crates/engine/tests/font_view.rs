@@ -186,3 +186,20 @@ fn effective_properties_are_computed_again_only_for_changed_glyphs_and_new_glyph
     assert_eq!(computed(&mut s), 2 * n + 2);
     assert_eq!(symbols(&mut s), ["B"]);
 }
+
+#[test]
+fn query_glyphs_rule_metrics_keys_out_of_sync_follows_an_edit_to_the_referenced_glyph() {
+    let mut s = Session::with_document();
+    for name in ["A", "B"] {
+        run(&mut s, "path.addRectangle", json!({"glyph": name, "x": 50, "y": 0, "width": 400, "height": 500}));
+    }
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["B"], "value": "=A"}));
+    let rule = json!({"all": [{"property": "metricsKeysOutOfSync", "op": "is", "value": true}]});
+    let q = |s: &mut Session| names(&run(s, "fontView.queryGlyphs", json!({"rules": rule})));
+    assert!(q(&mut s).is_empty(), "a key just applied is in sync");
+    // B's width key reads A, whose width changes.
+    run(&mut s, "spacing.setWidth", json!({"glyphs": ["A"], "value": 700}));
+    assert_eq!(q(&mut s), vec!["B"]);
+    run(&mut s, "spacing.updateMetricsKey", json!({"glyph": "B", "field": "width"}));
+    assert!(q(&mut s).is_empty(), "updating the key brings B back in sync");
+}

@@ -3047,7 +3047,7 @@ milestone = "M5"
 summary = "Rule Metrics Keys Out of Sync is true when a metrics key of the glyph no longer matches the stored metric and needs updating; these are the glyphs carrying the warning triangle."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
-notes = "Evaluated by crates/glyphquery (property `metricsKeysOutOfSync`) from the set of out-of-sync glyphs its caller computes with crates/spacing, which glyphquery does not depend on: the glyphs with an `outOfSync` finding of spacing.listOutOfSyncMetrics on any master. Without that set no glyph matches. Documented, not yet observed."
+notes = "Evaluated by crates/glyphquery (property `metricsKeysOutOfSync`) from the set of out-of-sync glyphs its caller computes with crates/spacing, which glyphquery does not depend on: the glyphs with an `outOfSync` finding of spacing.listOutOfSyncMetrics on any master. fontView.queryGlyphs computes the set from the same scan as Font View's out-of-sync badge. Documented, not yet observed."
 guesses = ["Keys that name a missing glyph or cannot be evaluated do not count as out of sync, and a key out of sync on any master counts; the reference app on a glyph with an unlinked key and on one out of sync in one master only would settle it."]
 
 [[behavior]]

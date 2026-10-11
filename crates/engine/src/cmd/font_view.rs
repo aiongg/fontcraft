@@ -7,6 +7,7 @@
 //! exemplar characters grouped by script, [`crate::glyph_data::language_sets`]) and the entries of
 //! the user's `Groups*.plist` files ([`crate::Session::user_groups`]).
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_glyphquery::{self as gq, Catalog, Env, Expected, Filter, Groups, LanguageIndex, Matcher, RuleTree, Search, Selection};
@@ -252,10 +253,12 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
     let with_sidebar = p.bool_or("sidebar", false)?;
     let wants_filters = with_sidebar || entries.iter().any(|e| e.first().is_some_and(|s| s == "filters"));
     let sources = Sources::read(s, wants_filters)?;
+    // Rules, ours or a smart filter's, may ask for out-of-sync metrics keys.
+    let stale = if rules.is_some() || wants_filters { out_of_sync(s)? } else { HashSet::new() };
     let props = s.effective_props()?;
     let data = s.glyph_data()?;
     let font = s.font()?;
-    let env = Env::new(font, &data, master).map_err(|e| bad(&p, "master", e))?.with_props(&props);
+    let env = Env::new(font, &data, master).map_err(|e| bad(&p, "master", e))?.with_props(&props).with_out_of_sync(&stale);
     let catalog = sources.catalog(env)?;
     let glyphs = catalog.select(&Selection { entries, rules, search }).map_err(|e| p.bad(e.to_string()))?;
     let mut out = Map::new();
@@ -267,6 +270,14 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
         out.insert("sidebar".into(), sidebar);
     }
     Ok(Value::Object(out))
+}
+
+/// The glyphs with a metrics key whose value differs from the metric it sets, on any layer the
+/// scan covers. Font View's badge reads the same findings.
+fn out_of_sync(s: &mut Session) -> Result<HashSet<String>> {
+    let font = s.doc()?.font.clone();
+    let sync = s.metrics_sync()?;
+    Ok(sync.all(&font).filter(|f| matches!(f.problem, fontcraft_spacing::Problem::OutOfSync { .. })).map(|f| f.glyph.clone()).collect())
 }
 
 /// The glyphs an entry expects that the font lacks, and how many it expects in all.
