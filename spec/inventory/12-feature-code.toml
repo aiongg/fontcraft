@@ -310,6 +310,9 @@ summary = "Feature-code tokens start with `$` and are replaced by text before co
 ref = "Feature Code › Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A `$` inside a comment or a double-quoted string is left as it is, and any other `$` that starts no token is an error at it; a comment and a name string holding `$x` in a font exported from the reference app would settle it.",
+]
 
 [[behavior]]
 id = "token.expansionTiming"
@@ -328,6 +331,9 @@ summary = "`$name` inserts the master number value called name, defined under Fo
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A master that stores no value for a number name reads 0; a source file whose master lacks one of the values, exported from the reference app, would settle it.",
+]
 
 [[behavior]]
 id = "token.numberValue.interpolated"
@@ -346,6 +352,9 @@ summary = "`${name*2}` evaluates an expression with +, -, * and /. The number va
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "Expressions that do not start with the name (`${2*padding}`, `${(a+b)/2}`, literals only) are accepted, as the feature compiler and the reference library accept them; typing one in the reference app would show whether it refuses them.",
+]
 
 [[behavior]]
 id = "token.numberValue.expressionDetails"
@@ -410,6 +419,9 @@ summary = "Metric properties are width, LSB, RSB, TSB and BSB."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "LSB, RSB, TSB and BSB are measured as the spacing commands measure them (slanted back in an italic master), and on a layer without an outline they are an error at the token; Option-clicking `${space:LSB}` and the token of an italic glyph in the reference app would settle both.",
+]
 
 [[behavior]]
 id = "token.glyphProperty.anchors"
@@ -427,7 +439,7 @@ milestone = "M8"
 summary = "The same arithmetic as number tokens is allowed after the property: `${comma:RSB*3}`."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Inside a property token a name reads the glyph's property first and a number value otherwise, as glyphsLib does (`builder/tokens.py`)."
 
 [[behavior]]
 id = "token.glyphProperty.layerChoice"
