@@ -37,7 +37,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile Fonts",
             [],
             None,
-            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
+            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder; an Export Folder parameter puts a font's files in that sub-folder, `..` climbing out of the destination), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
             has_doc,
             compile
         ),
@@ -300,6 +300,19 @@ impl Request {
         let ext = container.extension(flavour);
         if self.flavours.len() > 1 { format!("{}/{stem}.{ext}", format_name(flavour)) } else { format!("{stem}.{ext}") }
     }
+
+    /// `name` inside the job's Export Folder; a one-file destination is written where it says.
+    fn placed(&self, folder: Option<&std::path::Path>, name: String) -> String {
+        match folder {
+            Some(folder) if !matches!(self.dest, Dest::File(_)) => crate::export_steps::in_folder(folder, &name),
+            _ => name,
+        }
+    }
+
+    /// Whether the files of a job with Export Folder `folder` land outside the destination folder.
+    fn outside(&self, folder: Option<&std::path::Path>) -> bool {
+        matches!(self.dest, Dest::Folder(_)) && folder.is_some_and(crate::export_steps::leaves_destination)
+    }
 }
 
 /// The file name stem of a font: its `fileName` parameter, else its PostScript name, else family
@@ -485,14 +498,25 @@ pub(super) fn build(
             other => other?,
         };
         let stem = stem(&resolved, &options, source);
-        // M7.10: the files of this job go under `_folder`.
-        let _folder = crate::export_steps::export_folder(&resolved, &options)?;
+        let folder = match crate::export_steps::export_folder(&resolved, &options) {
+            Ok(folder) => folder,
+            Err(e) => {
+                report.skipped.push(skip(job, &e.to_string()));
+                continue;
+            }
+        };
         for &flavour in &req.flavours {
             let compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &options)?;
             let mut files = Vec::with_capacity(req.containers.len());
             for &container in &req.containers {
                 let data = container.wrap(&compiled.bytes)?;
-                files.push(sink.put(req.file_name(&stem, flavour, container), container, data, &mut report.warnings)?);
+                let name = req.placed(folder.as_deref(), req.file_name(&stem, flavour, container));
+                let file = sink.put(name, container, data, &mut report.warnings)?;
+                if req.outside(folder.as_deref()) {
+                    let at = file.path.as_ref().map_or_else(|| file.name.clone(), |p| p.to_string_lossy().into_owned());
+                    report.warnings.push(format!("{at} is written outside the export destination, as the Export Folder parameter asks"));
+                }
+                files.push(file);
             }
             report.fonts.push(FontOut { job: job.clone(), flavour, glyph_order: compiled.glyph_order, warnings: compiled.warnings, files });
         }
@@ -897,6 +921,13 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
             other => other?,
         };
         let stem = stem(&resolved, &req.options, source);
+        let folder = match crate::export_steps::export_folder(&resolved, &req.options) {
+            Ok(folder) => folder,
+            Err(e) => {
+                skipped.push(skip(job, &e.to_string()));
+                continue;
+            }
+        };
         instances.push(json!({ "instance": job.label, "source": job.source, "master": resolved.master, "location": resolved.location }));
         for &flavour in &req.flavours {
             let plan = fontcraft_compile::plan::plan_resolved_from(font, resolved.clone(), flavour, &req.options)?;
@@ -904,7 +935,7 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
                 .containers
                 .iter()
                 .map(|&c| {
-                    let name = req.file_name(&stem, flavour, c);
+                    let name = req.placed(folder.as_deref(), req.file_name(&stem, flavour, c));
                     let path = match &req.dest {
                         Dest::Memory => None,
                         Dest::File(path) => Some(path.clone()),

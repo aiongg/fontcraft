@@ -794,8 +794,10 @@ effect = "export-filter"
 summary = "Applies a filter or app function to the instance's outlines at export, after decomposition; the value is the filter name followed by semicolon-separated arguments. Built-ins: AddExtremes, Autohinting, HatchOutlineFilter, OffsetCurve, RemoveOverlap, Roughenizer, RoundCorner, RoundedFont, Transformations (argument syntax in docs/spec/18-custom-parameters.md); `include:` or `exclude:` plus glyph names limits the glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on masters and instances, not on the font, and loads only filters that exist in ufo2ft under that name (Transformations works; RemoveOverlap, AddExtremes, RoundCorner and OffsetCurve are skipped with an error); include: and exclude: work; fontc ignores it. FontCraft runs the handbook's filter names through the M3.12 filter registry, on instances and masters. M7 plan § 4: M7.10."
+notes = "fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on masters and instances, not on the font, and loads only filters that exist in ufo2ft under that name (Transformations works; RemoveOverlap, AddExtremes, RoundCorner and OffsetCurve are skipped with an error); include: and exclude: work; fontc ignores it. FontCraft (M7.10) runs the handbook's filter names through the M3.12 filter registry; the strings of the font, the master and the instance all run, in that order, at most 64 with PreFilter."
 guesses = [
+  "Locked glyphs and locked paths are filtered at export like any other, since a lock guards editing; a Filter on a locked glyph in the reference app settles it.",
+  "Before decomposing, each composite takes the anchors its components pass on, so mark attachment is kept; reading the mark feature of a filtered export from the reference app settles it.",
   "The filter runs on every glyph of the instance with its components decomposed first, so a TrueType export of an instance with a Filter has no composites; a Transformations Filter on an instance with a composite in the reference app settles it.",
   "A Filter on a master applies to every export of that master; on the font it applies to every export, which fontmake ignores but no source forbids; the reference app's picker settles where it may be added.",
 ]
@@ -1482,7 +1484,7 @@ effect = "export-filter"
 summary = "Same value syntax as Filter, applied before decomposition. Only works for static fonts."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it as Filter (master and instance level, ufo2ft filter names only); fontc ignores it. M7 plan § 4: M7.10."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it as Filter (master and instance level, ufo2ft filter names only); fontc ignores it. FontCraft (M7.10) runs it on the target master's layers before Scale to UPM, with components in place."
 guesses = [
   "On a variable font setting PreFilter is skipped with a warning, not an error; the reference app settles it.",
 ]
@@ -1758,6 +1760,9 @@ summary = "Integer target UPM; everything in the font is scaled to it at export,
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. The scaling is font.info.scaleToUnitsPerEm's, run on a copy of the font before the instance is built. M7 plan § 4: M7.4 (scaling), M7.10 (the export step)."
+guesses = [
+  "The instance's value wins over the master's and the font's; a value that is not a whole number from 16 to 16384 is skipped with a warning, and a scaling that cannot be done refuses the export; a Scale to UPM on a master and another on its instance in the reference app settle the first part.",
+]
 observe = [
   "In font C (m7-export), export with Scale to UPM 2048; read the exported TTF with ttx: note the head, outline, hmtx, kerning, OS/2 and post values and how they were rounded.",
 ]

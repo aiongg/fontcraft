@@ -1726,9 +1726,9 @@ milestone = "M7"
 summary = "Extremes can be left out of the source and added only in the exported font through a Filter custom parameter with the value AddExtremes, which keeps shallow curves and some multi-master outlines simpler to edit."
 ref = "Edit View › Extremes & Inflections"
 status = "handbook"
+notes = "Documented, not yet observed. An AddExtremes Filter adds the extremes in the exported font only; the source keeps its nodes (M7.10)."
 
 # ───────────────────────────── Focusing and locking ─────────────────────────────
-notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[command]]
 id = "path.focusOnSelectedPath"
