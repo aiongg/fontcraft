@@ -85,6 +85,8 @@ pub struct PanelState {
     pub sample_strings: crate::dialogs::sample_strings::SampleStringsState,
     /// The Find Glyphs pop-up.
     pub find_glyphs: crate::dialogs::find_glyphs::FindGlyphsState,
+    /// The Font Info window.
+    pub font_info: crate::shell::font_info::FontInfoState,
 }
 
 impl Default for PanelState {
@@ -106,6 +108,7 @@ impl Default for PanelState {
             text_preview: Default::default(),
             sample_strings: Default::default(),
             find_glyphs: Default::default(),
+            font_info: Default::default(),
         }
     }
 }

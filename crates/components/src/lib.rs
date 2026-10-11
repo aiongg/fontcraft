@@ -40,17 +40,17 @@ pub use index::ComponentIndex;
 pub use propagate::{AnchorCache, AnchorSource, EffectiveAnchor};
 
 #[cfg(test)]
-mod compose_tests;
-#[cfg(test)]
-mod recipe_tests;
-#[cfg(test)]
 mod align_tests;
+#[cfg(test)]
+mod compose_tests;
 #[cfg(test)]
 mod metrics_tests;
 #[cfg(test)]
 mod index_tests;
 #[cfg(test)]
 mod propagate_tests;
+#[cfg(test)]
+mod recipe_tests;
 
 #[cfg(test)]
 mod tests {

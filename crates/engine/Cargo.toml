@@ -25,6 +25,7 @@ fontcraft-decompile.workspace = true
 fontcraft-container.workspace = true
 fontcraft-glyphquery.workspace = true
 fontcraft-components.workspace = true
+fontcraft-fontinfo.workspace = true
 skrifa.workspace = true
 serde.workspace = true
 serde_json.workspace = true

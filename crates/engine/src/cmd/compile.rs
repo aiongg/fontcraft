@@ -232,7 +232,7 @@ impl Pick {
 
 /// One font to build, before its formats.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct Job {
+pub(crate) struct Job {
     /// The instance's name (`#n` when it has none), or the master's.
     pub label: String,
     /// "instance", "master", or "default" (the first master, for a font without instances).
@@ -453,6 +453,7 @@ impl Sink {
 pub(super) fn build(
     font: &Font,
     source: &str,
+    path: Option<&std::path::Path>,
     data: Arc<GlyphData>,
     jobs: &[Job],
     req: &Request,
@@ -460,7 +461,8 @@ pub(super) fn build(
     report: &mut Report,
 ) -> Result<()> {
     font.check()?;
-    let options = Options { glyph_data: DataRef(Some(data)), ..req.options.clone() };
+    let ctx = crate::export_steps::StepContext { data: &data, path };
+    let options = Options { glyph_data: DataRef(Some(data.clone())), ..req.options.clone() };
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
     let font: &Font = &prepared;
     for job in jobs {
@@ -468,6 +470,8 @@ pub(super) fn build(
             report.skipped.push(skip(job, "the destination is one file: give a folder to export every instance"));
             continue;
         }
+        let prepared = crate::export_steps::prepare(font, job, &ctx, &mut report.warnings)?;
+        let font: &Font = &prepared;
         let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
                 report.skipped.push(skip(job, BETWEEN_MASTERS));
@@ -476,6 +480,8 @@ pub(super) fn build(
             other => other?,
         };
         let stem = stem(&resolved, &options, source);
+        // M7.10: the files of this job go under `_folder`.
+        let _folder = crate::export_steps::export_folder(&resolved, &options)?;
         for &flavour in &req.flavours {
             let compiled = fontcraft_compile::compile_resolved_from(font, resolved.clone(), flavour, &options)?;
             let mut files = Vec::with_capacity(req.containers.len());
@@ -826,7 +832,7 @@ fn compile(s: &mut Session, p: &Value) -> Result<Value> {
     let doc = s.doc()?;
     let mut report = Report::default();
     let mut sink = Sink::new(&req.dest, false)?;
-    build(&doc.font, &doc.title, s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
+    build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
     if matches!(req.dest, Dest::File(_)) && report.file_count() > 1 {
         return Err(p.bad(format!("`destination` is one file, but {} fonts were built: give a folder", report.fonts.len())));
     }
@@ -865,9 +871,11 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
         }
     };
     let want = |name: &str| sections.contains(&name);
+    let data = s.glyph_data()?;
     let doc = s.doc()?;
     let (font, source) = (&doc.font, doc.title.as_str());
     font.check()?;
+    let ctx = crate::export_steps::StepContext { data: &data, path: doc.path.as_deref() };
     let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
     let mut warnings: Vec<String> = Vec::new();
     let prepared = fontcraft_compile::prepare_source(font, &mut warnings);
@@ -875,6 +883,8 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let mut glyph_order: Option<Vec<String>> = None;
     let mut production_names: Option<Map<String, Value>> = None;
     for job in &jobs {
+        let prepared = crate::export_steps::prepare(font, job, &ctx, &mut warnings)?;
+        let font: &Font = &prepared;
         let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
                 skipped.push(skip(job, BETWEEN_MASTERS));

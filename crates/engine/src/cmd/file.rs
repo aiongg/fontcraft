@@ -433,7 +433,7 @@ fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
     let mut report = Report::default();
     compile::check_glyph_names(font)?;
     let mut sink = Sink::new(&req.dest, true)?;
-    compile::build(font, &s.doc()?.title, s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
+    compile::build(font, &s.doc()?.title, s.doc()?.path.as_deref(), s.glyph_data()?, &jobs, &req, &mut sink, &mut report)?;
     if report.fonts.is_empty() {
         return Err(compile::nothing_built(&report));
     }
@@ -510,7 +510,7 @@ fn export_all(s: &mut Session, p: &Value) -> Result<Value> {
     for (&i, jobs) in chosen.iter().zip(&jobs) {
         let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
         let mut report = Report::default();
-        compile::build(&doc.font, &doc.title, s.glyph_data_of(doc)?, jobs, &req, &mut sink, &mut report)?;
+        compile::build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data_of(doc)?, jobs, &req, &mut sink, &mut report)?;
         warnings.append(&mut report.warnings);
         reports.push((doc.title.clone(), report));
     }

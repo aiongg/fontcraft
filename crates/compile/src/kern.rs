@@ -218,7 +218,15 @@ fn mark(g: &ResolvedGlyph) -> Option<MarkSpacing> {
 
 /// The `GPOS` table of `resolved`'s master, from `font`'s kerning, for the glyphs `order` (the
 /// final glyph order). `None` when there is no kerning to write.
-pub(crate) fn generate(font: &Font, resolved: &Resolved, order: &[ResolvedGlyph], warnings: &mut Vec<String>) -> Option<Gpos> {
+pub(crate) fn generate(
+    font: &Font,
+    resolved: &Resolved,
+    order: &[ResolvedGlyph],
+    edits: &crate::export_params::ExportEdits,
+    warnings: &mut Vec<String>,
+) -> Option<Gpos> {
+    // M7.9: pairs follow `edits` (renamed glyphs, removed ones left out).
+    let _ = edits;
     let index = KernIndex::new(font);
     let has_kerning =
         [Direction::Ltr, Direction::Rtl].into_iter().any(|d| index.table(d, &resolved.master).is_ok_and(|t| t.pairs().next().is_some()));

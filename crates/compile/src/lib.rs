@@ -9,12 +9,13 @@
 //! | Resolve | [`drawing::resolve`] | one master, or an instance at a master, as the compiler reads it: glyphs, contours, components, metrics, names; strokes expanded and masks applied |
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
+//! | Export parameters | [`export_params`] | Export, Keep, Remove, Rename and Reencode Glyphs and the Arabic presentation forms change the resolved glyphs; the renames and removals go to the kerning writers |
 //! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
 //! | Pair kerning | `kern` | the master's kerning as `GPOS` (`fontcraft_features`), for a source without a hand-written `kern` feature |
 //! | Component options | [`components_opt`] | decomposition and flattening the options, parameters and filter list ask for |
 //! | Mark attachment | `marks` | the master's propagated anchors as `mark`, `mkmk`, `abvm`, `blwm` and `curs` lookups merged into the `GPOS`, and the `GDEF` classes, carets and mark filtering sets |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
-//! | Table builders and assembly | `build`, [`cff`], [`names`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning or mark attachment, `GDEF` when glyphs have classes, carets or mark filtering sets, then the font file |
+//! | Table builders and assembly | `build`, [`cff`], [`names`], [`kern_table`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning or mark attachment, `GDEF` when glyphs have classes, carets or mark filtering sets, then the font file |
 //!
 //! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
 //! as fontc builds it) or CFF outlines ([`Flavour::Cff`], as fontmake builds it: `maxp` 0.5, `post`
@@ -38,8 +39,10 @@ mod build;
 pub mod cff;
 pub mod components_opt;
 pub mod drawing;
+pub mod export_params;
 pub mod info;
 mod kern;
+pub mod kern_table;
 mod marks;
 pub mod names;
 pub mod order;
@@ -246,13 +249,14 @@ pub fn compile_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, 
 fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
+    let edits = export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
     let kern = match font {
-        Some(font) => kern::generate(font, &resolved, &glyphs, &mut warnings),
+        Some(font) => kern::generate(font, &resolved, &glyphs, &edits, &mut warnings),
         None => None,
     };
     let layout = marks::generate(font, glyph_data.as_deref(), &resolved, &glyphs, kern, &mut warnings);
@@ -270,6 +274,7 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
         overlap_time_limit: options.overlap_time_limit,
     };
     let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
+    let kern_table = font.and_then(|font| kern_table::build(font, &resolved, &glyphs, flavour, &edits, &mut warnings));
     let bytes = build::assemble(
         &resolved,
         &glyphs,
@@ -278,6 +283,7 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
         synthesised_notdef,
         layout.gpos.as_ref(),
         layout.gdef.as_ref(),
+        kern_table.as_deref(),
         options,
         &mut warnings,
     )?;

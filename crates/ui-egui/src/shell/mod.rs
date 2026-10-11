@@ -10,6 +10,7 @@ pub mod audit;
 pub mod clipboard;
 pub mod context_menu;
 pub mod drawing;
+pub mod font_info;
 pub mod font_view;
 pub mod glyph_info;
 pub mod item_state;
@@ -71,6 +72,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (text_preview::COMMANDS, text_preview::run),
     (crate::dialogs::sample_strings::COMMANDS, crate::dialogs::sample_strings::run),
     (crate::dialogs::find_glyphs::COMMANDS, crate::dialogs::find_glyphs::run),
+    (font_info::COMMANDS, font_info::run),
 ];
 
 /// Every shell command, in module order.
@@ -86,6 +88,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     text_preview::show(app, ui, pending);
     crate::dialogs::sample_strings::show(app, ui, pending);
     crate::dialogs::find_glyphs::show(app, ui, pending);
+    font_info::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {

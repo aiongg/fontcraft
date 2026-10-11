@@ -25,10 +25,12 @@
 
 pub mod clock;
 pub mod cmd;
+pub(crate) mod export_steps;
 pub mod glyph_data;
 pub mod guard;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
+pub(crate) mod linked;
 pub mod params;
 pub mod settings;
 
@@ -40,6 +42,7 @@ pub use clock::Clock;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use fontcraft_compile as compile;
 pub use fontcraft_container as container;
+pub use fontcraft_fontinfo as fontinfo;
 pub use fontcraft_format as format;
 pub use fontcraft_model as model;
 use fontcraft_model::glyphdata::GlyphData;

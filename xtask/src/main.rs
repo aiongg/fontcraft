@@ -14,6 +14,7 @@ mod guesses;
 mod layers;
 mod observe;
 mod overlap;
+mod paramcatalog;
 mod parity;
 mod roundtrip;
 mod sha256;
@@ -40,6 +41,9 @@ commands:
   observe [--check]
                   list every row the running reference app could settle (guesses, memory and inferred
                   rows, `observe` steps) in docs/observe.md (--check: fail if the file is out of date)
+  paramcatalog [--check]
+                  write crates/fontinfo/src/catalog_data.rs from the inventory's parameter rows
+                  (--check: fail if the file is out of date)
   assets          check that every asset has a row in ASSETS.md and that no font binary is in the repository
   brands          check that user-visible text names no other vendor's products
   layers          enforce the crate dependency layering (docs/architecture.md)
@@ -76,6 +80,7 @@ fn main() -> ExitCode {
         Some("parity") => parity::run(&root(), rest.contains(&"--check")),
         Some("guesses") => guesses::run(&root(), rest.contains(&"--check")),
         Some("observe") => observe::run(&root(), rest.contains(&"--check")),
+        Some("paramcatalog") => paramcatalog::run(&root(), rest.contains(&"--check")),
         Some("assets") => assets::run(&root()),
         Some("brands") => brands::run(&root()),
         Some("layers") => cmd_layers(),

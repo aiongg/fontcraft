@@ -1,0 +1,18 @@
+[package]
+name = "fontcraft-fontinfo"
+description = "FontCraft font information: the custom-parameter catalogue and value checks, field lists, target addressing, the row clipboard, text tokens, scaling to a new UPM and the glyph-set parameters (L2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-geom.workspace = true
+fontcraft-model.workspace = true
+fontcraft-plist.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

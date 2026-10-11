@@ -350,6 +350,7 @@ pub fn assemble(
     synthesised_notdef: bool,
     gpos: Option<&Gpos>,
     gdef: Option<&Gdef>,
+    kern: Option<&[u8]>,
     options: &Options,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
@@ -471,6 +472,9 @@ pub fn assemble(
     }
     if let Some(gdef) = gdef {
         builder.add_table(gdef).map_err(table("GDEF"))?;
+    }
+    if let Some(kern) = kern {
+        builder.add_raw(Tag::new(b"kern"), kern);
     }
     if info.vertical {
         let (vhea, vmtx) = vertical(order, &boxes, &info);
