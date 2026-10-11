@@ -75,6 +75,8 @@ pub struct PanelState {
     pub group_members: bool,
     /// The Kerning window: open, the search, the sort and the selected rows.
     pub kerning_window: crate::shell::kerning_window::KerningWindowState,
+    /// The inspector shows the vertical metric fields (`fontView.toggleMetricsOrientation`).
+    pub inspector_vertical: bool,
 }
 
 impl Default for PanelState {
@@ -91,6 +93,7 @@ impl Default for PanelState {
             selection_info: false,
             group_members: false,
             kerning_window: Default::default(),
+            inspector_vertical: false,
         }
     }
 }

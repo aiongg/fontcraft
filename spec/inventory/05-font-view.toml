@@ -139,6 +139,11 @@ milestone = "M5"
 summary = "Switches the inspector's metric fields between the horizontal set (LSB, RSB, width) and the vertical set (TSB, BSB, vertical origin, vertical width). Bound to the icon between the fields."
 ref = "Font View › Glyph Properties › Metrics"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The orientation is a panel setting kept across documents and sessions, not stored per font; watching the reference app reopen a file would settle it.",
+  "The switch shows the icon of the set on show (left to right, or top to bottom); a screenshot of the reference inspector would settle it.",
+]
 
 [[command]]
 id = "fontView.setSelection"
@@ -1454,6 +1459,11 @@ milestone = "M5"
 summary = "A cell shows a warning triangle at its top right when at least one metrics key of the glyph no longer matches its computed value."
 ref = "Font View › Grid View"
 status = "handbook"
+notes = "Documented, not yet observed. Read from the session's out-of-sync cache, which rescans only the glyphs an edit touched and the glyphs whose keys read them."
+guesses = [
+  "Any layer the out-of-sync scan covers counts, not only the layer of the master Font View shows; a font whose second master alone is out of sync, viewed on the first master in the reference app, would settle it.",
+  "Unlinked keys and keys that cannot be evaluated give no triangle; a key naming a missing glyph in the reference app would settle it.",
+]
 
 [[behavior]]
 id = "fontView.cell.badgeAnnotation"
@@ -1635,7 +1645,13 @@ milestone = "M5"
 summary = "The inspector shows LSB, RSB and width of the selected glyph on the current master, or TSB, BSB, vertical origin and vertical width after switching orientation. The fields accept numbers or metrics keys as defined in the spacing chapter."
 ref = "Font View › Glyph Properties › Metrics"
 status = "handbook"
-notes = "Shown read-only since M4; M5 makes the fields editable through the spacing.* commands."
+notes = "Documented, not yet observed. LSB, RSB, width, TSB and BSB edit through spacing.setLeftSidebearing, setRightSidebearing, setWidth, setTopSidebearing and setBottomSidebearing, one command for all selected glyphs, on the layer of Font View's master. Vertical origin and vertical width are shown read-only: no command sets them."
+guesses = [
+  "A field shows the metrics key that governs it (the layer's own key first, written with ==), else the measured value with up to two decimals; a screenshot of the reference inspector on a glyph with a key would settle it.",
+  "The orientation icon sits after the first field; the vertical set puts TSB and BSB on the first row and vertical origin and vertical width on a second row; a screenshot of the reference inspector would settle it.",
+  "A field left empty commits nothing; trying it in the reference app would settle it.",
+  "The vertical origin shows 0 and the vertical width shows ascender minus descender when the layer stores none; the reference inspector on a new glyph would settle it.",
+]
 
 [[behavior]]
 id = "fontView.inspector.kerningGroups"
@@ -1644,7 +1660,7 @@ milestone = "M5"
 summary = "The inspector shows and edits the left and right kerning group names of the selected glyphs, so many glyphs can be assigned to a group in one step."
 ref = "Font View › Glyph Properties › Kerning Groups"
 status = "handbook"
-notes = "Shown read-only since M4; M5 makes the fields editable through kerning.setLeftGroup and kerning.setRightGroup."
+notes = "Documented, not yet observed. The fields edit through kerning.setLeftGroup and kerning.setRightGroup, one command for all selected glyphs; an emptied field clears the group."
 
 [[behavior]]
 id = "fontView.inspector.tagsField"

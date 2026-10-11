@@ -149,7 +149,7 @@ fn every_inspector_field_edits_one_glyph_through_its_command() {
     let s = inspector::summarize(&app, &names(&["A"]));
     assert_eq!((s.field(Column::Name), s.field(Column::Width), s.export), (Shown::Same("A".into()), Shown::Same("600".into()), Some(true)));
     for column in [Column::Lsb, Column::Rsb, Column::Width, Column::LeftGroup, Column::RightGroup] {
-        assert!(!w.enabled(field(column)), "{column:?} is shown read-only until M5");
+        assert!(w.enabled(field(column)), "{column:?} can be edited");
     }
     assert!(w.enabled(field(Column::Name)), "one glyph: the name can be edited");
 

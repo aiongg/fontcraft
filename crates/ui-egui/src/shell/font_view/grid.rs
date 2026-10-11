@@ -22,6 +22,7 @@ use std::sync::Arc;
 use egui::text::{LayoutJob, TextWrapping};
 use egui::{Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, TextFormat, Vec2, pos2, vec2};
 use fontcraft_model::{ColorLabel, Font, Glyph};
+use fontcraft_spacing::{Problem, SyncCache};
 use serde_json::{Value, json};
 
 use super::cache::{FontViewCache, Row};
@@ -145,6 +146,14 @@ struct CellPaint<'a> {
     labels: bool,
     display_unicode: bool,
     pixels_per_point: f32,
+    /// The document's metrics keys that need attention (`Session::metrics_sync`).
+    sync: Option<&'a SyncCache>,
+}
+
+/// Whether a metrics key of `glyph`, on any layer the scan covers, is out of sync
+/// (`fontView.cell.badgeMetricsOutOfSync`). Unlinked keys and keys in error do not count.
+pub fn metrics_out_of_sync(sync: &SyncCache, glyph: &str) -> bool {
+    sync.glyph(glyph).iter().any(|f| matches!(f.problem, Problem::OutOfSync { .. }))
 }
 
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
@@ -152,6 +161,8 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let Some(doc) = session.active() else { return };
     let font = doc.font.clone();
     let doc_key = (doc.id, doc.revision);
+    // Scans again only the glyphs an edit touched and the glyphs whose keys read them.
+    let sync = session.metrics_sync().ok();
     let fv = &state.font_view;
     let cache = &font_view.cache;
     let labels = fv.cell_size >= LABEL_MIN_CELL;
@@ -170,6 +181,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         labels,
         display_unicode: cache.display_unicode,
         pixels_per_point: ui.ctx().pixels_per_point(),
+        sync,
     };
     font_view.images.start_frame();
     let mut laid_out = Vec::new();
@@ -361,7 +373,8 @@ fn paint_cell(painter: &egui::Painter, ctx: &egui::Context, images: &mut CellIma
         Cell::Ready(None) => {}
         Cell::Later => deferred = true,
     }
-    paint_badges(painter, t, art, glyph, c.master, row.props.has_custom_info);
+    let out_of_sync = c.sync.is_some_and(|s| metrics_out_of_sync(s, &glyph.name));
+    paint_badges(painter, t, art, glyph, c.master, row.props.has_custom_info, out_of_sync);
     if c.labels {
         paint_label(painter, c, label_rect(rect), glyph, selected);
     }
@@ -405,8 +418,8 @@ fn paint_colors(painter: &egui::Painter, t: &Tokens, rect: Rect, glyph: Option<C
 }
 
 /// The badges (`fontView.cell.badge*`): annotation note top left, custom glyph info bottom
-/// left, not exported top centre.
-fn paint_badges(painter: &egui::Painter, t: &Tokens, art: Rect, glyph: &Arc<Glyph>, master: &str, custom: bool) {
+/// left, not exported top centre, out-of-sync metrics keys top right.
+fn paint_badges(painter: &egui::Painter, t: &Tokens, art: Rect, glyph: &Arc<Glyph>, master: &str, custom: bool, out_of_sync: bool) {
     let s = t.badge_size;
     let pad = t.cell_inset / 2.0;
     if glyph.layer(master).is_some_and(|l| !l.info.annotations.is_empty()) {
@@ -431,6 +444,14 @@ fn paint_badges(painter: &egui::Painter, t: &Tokens, art: Rect, glyph: &Arc<Glyp
         painter.circle_stroke(c, r, stroke);
         let d = r * std::f32::consts::FRAC_1_SQRT_2;
         painter.line_segment([c + vec2(-d, d), c + vec2(d, -d)], stroke);
+    }
+    if out_of_sync {
+        let r = Rect::from_min_size(pos2(art.max.x - pad - s, art.min.y + pad), Vec2::splat(s));
+        painter.add(Shape::convex_polygon(vec![r.center_top(), r.right_bottom(), r.left_bottom()], t.font_view_badge_out_of_sync, Stroke::NONE));
+        let mark = Stroke::new(1.25, t.font_view_badge_out_of_sync_mark);
+        let x = r.center().x;
+        painter.line_segment([pos2(x, r.top() + s * 0.35), pos2(x, r.top() + s * 0.7)], mark);
+        painter.circle_filled(pos2(x, r.top() + s * 0.84), 0.75, t.font_view_badge_out_of_sync_mark);
     }
 }
 

@@ -61,6 +61,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (text::COMMANDS, text::run),
     (crate::canvas::group_members::COMMANDS, crate::canvas::group_members::run),
     (kerning_window::COMMANDS, kerning_window::run),
+    (font_view::metrics::COMMANDS, font_view::metrics::run),
 ];
 
 /// Every shell command, in module order.

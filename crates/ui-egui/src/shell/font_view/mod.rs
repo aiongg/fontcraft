@@ -10,6 +10,7 @@
 //! | [`status`] | the mode buttons and the status area: counts and the cell size slider |
 //! | [`images`] | cell outlines rasterised once per glyph and cell size |
 //! | [`inspector`] | the glyph inspector at the bottom left: the selected glyphs' properties |
+//! | [`metrics`] | the inspector's metric fields and their horizontal and vertical sets |
 //! | [`sidebar`] | the sidebar: entries with counts and badges, Cmd and Shift selection, filter actions |
 //! | [`search`] | the search field and its options |
 //!
@@ -21,6 +22,7 @@ pub mod grid;
 pub mod images;
 pub mod inspector;
 pub mod list;
+pub mod metrics;
 pub mod search;
 pub mod sidebar;
 pub mod status;

@@ -4,8 +4,8 @@
 //! | Row | Shows | Editing runs |
 //! |---|---|---|
 //! | Name | the glyph name | `glyph.rename` (one glyph only) |
-//! | LSB, RSB, Width | the metrics in Font View's master | read-only until the spacing commands (M5) |
-//! | Kerning | the left and right kerning groups | read-only until the kerning commands (M5) |
+//! | Metrics | LSB, RSB and width, or TSB, BSB, vertical origin and vertical width ([`super::metrics`]) | the `spacing.set*` command of the field |
+//! | Kerning | the left and right kerning groups | `kerning.setLeftGroup`, `kerning.setRightGroup`; an empty field clears the group |
 //! | Exports | a check box, a line when the glyphs differ | `glyph.setExport` |
 //! | Unicode | the code points, with the chevron of the extra rows | `glyph.setUnicodes` |
 //! | Production Name, Script, Category, Subcategory | the extra rows (`fontView.toggleInspectorDetails`) | `glyph.setProductionName`, `glyph.setScript`, `glyph.setCategory` |
@@ -26,7 +26,9 @@ use serde_json::{Value, json};
 
 use super::cache::Row;
 use super::columns::{CellCx, Column};
+use super::metrics::{self, MetricField};
 use crate::app::FontcraftApp;
+use crate::icons::Icon;
 use crate::panels::widgets;
 use crate::shell::{Args, UiCommand};
 use crate::theme::Tokens;
@@ -150,12 +152,19 @@ pub struct Summary {
     pub tags: Option<Vec<String>>,
     /// Whether the glyphs store their own sort name; `None` when some do.
     pub sort_name_stored: Option<bool>,
+    /// The metric fields of the orientation the inspector shows, in Font View's master.
+    metrics: HashMap<MetricField, Shown>,
 }
 
 impl Summary {
     /// What the field of `column` shows.
     pub fn field(&self, column: Column) -> Shown {
         self.fields.get(&column).cloned().unwrap_or_else(|| Shown::Same(String::new()))
+    }
+
+    /// What the metric field `field` shows (empty for a field of the other orientation).
+    pub fn metric(&self, field: MetricField) -> Shown {
+        self.metrics.get(&field).cloned().unwrap_or_else(|| Shown::Same(String::new()))
     }
 }
 
@@ -173,6 +182,13 @@ pub fn summarize(app: &FontcraftApp, glyphs: &[String]) -> Summary {
         }
         Err(_) => HashMap::new(),
     };
+    let metrics = match app.session.font() {
+        Ok(font) => metrics::fields(app.state.panels.inspector_vertical)
+            .iter()
+            .map(|&f| (f, Shown::of(rows.iter().map(|r| f.text(font, &r.glyph, &cache.master)))))
+            .collect(),
+        Err(_) => HashMap::new(),
+    };
     // Tags hold no comma, so the joined lists compare like the lists.
     let tags = match Shown::of(rows.iter().map(|r| r.glyph.info.tags.join(","))) {
         Shown::Mixed => None,
@@ -184,6 +200,7 @@ pub fn summarize(app: &FontcraftApp, glyphs: &[String]) -> Summary {
         export: common(rows.iter().map(|r| r.glyph.export)),
         tags,
         sort_name_stored: common(rows.iter().map(|r| matches!(r.props.sort_name.source, PropSource::Stored))),
+        metrics,
     }
 }
 
@@ -193,6 +210,7 @@ pub fn cached_summary(app: &FontcraftApp, ctx: &egui::Context, salt: &str, glyph
     let mut h = std::collections::hash_map::DefaultHasher::new();
     app.font_view.cache.generation.hash(&mut h);
     app.font_view.cache.master.hash(&mut h);
+    app.state.panels.inspector_vertical.hash(&mut h);
     app.session.active().map(|d| (d.id, d.revision)).hash(&mut h);
     glyphs.hash(&mut h);
     let key = h.finish();
@@ -212,6 +230,8 @@ pub fn cached_summary(app: &FontcraftApp, ctx: &egui::Context, salt: &str, glyph
 pub enum Edit {
     /// A text field committed this text.
     Text(Column, String),
+    /// A metric field committed this number or key.
+    Metric(MetricField, String),
     Export(bool),
     AddTags(Vec<String>),
     RemoveTag(String),
@@ -226,6 +246,13 @@ pub fn commands(app: &FontcraftApp, glyphs: &[String], edit: &Edit) -> Vec<(&'st
     }
     match edit {
         Edit::Text(Column::Name, _) if glyphs.len() != 1 => Vec::new(),
+        Edit::Text(column @ (Column::LeftGroup | Column::RightGroup), text) => {
+            let id = if *column == Column::LeftGroup { "kerning.setLeftGroup" } else { "kerning.setRightGroup" };
+            let text = text.trim();
+            let group = if text.is_empty() { Value::Null } else { json!(text) };
+            vec![(id, json!({"glyphs": glyphs, "group": group}))]
+        }
+        Edit::Metric(field, text) => metrics::edit_command(*field, glyphs, &app.font_view.cache.master, text).into_iter().collect(),
         Edit::Text(column, text) => {
             let Some(row) = glyphs.first().and_then(|g| app.font_view.cache.row_of(g)) else { return Vec::new() };
             if *column == Column::Name && (text.trim().is_empty() || text.trim() == row.glyph.name) {
@@ -398,6 +425,7 @@ pub fn show_in(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending)
     let tokens = app.tokens.clone();
     let visible = !app.state.panels.inspector_hidden;
     let details = app.state.panels.inspector_details;
+    let vertical = app.state.panels.inspector_vertical;
     let summary = cached_summary(app, ui.ctx(), SALT, &app.state.selected_glyphs);
     let mut edits = Vec::new();
     let frame = egui::Frame::NONE.fill(tokens.panel).inner_margin(tokens.palette_margin);
@@ -406,7 +434,7 @@ pub fn show_in(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending)
             pending.push(("fontView.toggleInspector", json!({ "visible": !visible })));
         }
         if visible {
-            edits = fields(ui, &tokens, &summary, details, pending);
+            edits = fields(ui, &tokens, &summary, details, vertical, pending);
         }
     });
     for edit in &edits {
@@ -414,8 +442,69 @@ pub fn show_in(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending)
     }
 }
 
+/// The id of the metric field `field` in the inspector.
+pub fn metric_field_id(field: MetricField) -> egui::Id {
+    widgets::id((SALT, field.id()))
+}
+
+/// The id of the button that switches between the horizontal and vertical metric fields.
+pub fn orientation_button_id() -> egui::Id {
+    widgets::id((SALT, "metricsOrientation"))
+}
+
+/// The Metrics rows: the fields of one orientation, with the switch after the first field.
+/// Horizontal: one row of LSB, RSB and width. Vertical: TSB and BSB, then vertical origin and
+/// vertical width on a second row.
+fn metric_rows(ui: &mut egui::Ui, tokens: &Tokens, s: &Summary, width: f32, vertical: bool, enabled: bool, pending: &mut Pending) -> Vec<Edit> {
+    let mut edits = Vec::new();
+    let spacing = ui.spacing().item_spacing.x;
+    let icon = ui.spacing().interact_size.y * 1.25;
+    let shown = metrics::fields(vertical);
+    let (first, second) = shown.split_at_checked(if vertical { 2 } else { shown.len() }).unwrap_or((shown, &[]));
+    let mut field = |ui: &mut egui::Ui, f: MetricField, w: f32| {
+        let id = metric_field_id(f);
+        if let Some(t) = text_field(ui, tokens, id, &s.metric(f), w, enabled && f.editable()) {
+            edits.push(Edit::Metric(f, t));
+        }
+        if let Some(r) = ui.ctx().read_response(id) {
+            r.on_hover_text(f.label());
+        }
+    };
+    ui.label(RichText::new("Metrics").color(tokens.text_dim));
+    ui.horizontal(|ui| {
+        let n = first.len().max(1) as f32;
+        let w = ((width - icon - n * spacing) / n).max(0.0);
+        for (i, &f) in first.iter().enumerate() {
+            field(ui, f, w);
+            if i == 0 {
+                let (glyph, hover, next) = if vertical {
+                    (Icon::TopToBottom, "Show Horizontal Metrics", "horizontal")
+                } else {
+                    (Icon::LeftToRight, "Show Vertical Metrics", "vertical")
+                };
+                if widgets::icon_button(ui, orientation_button_id(), glyph, hover, true, false) {
+                    pending.push(("fontView.toggleMetricsOrientation", json!({ "orientation": next })));
+                }
+            }
+        }
+    });
+    ui.end_row();
+    if !second.is_empty() {
+        ui.label("");
+        ui.horizontal(|ui| {
+            let n = second.len() as f32;
+            let w = ((width - (n - 1.0) * spacing) / n).max(0.0);
+            for &f in second {
+                field(ui, f, w);
+            }
+        });
+        ui.end_row();
+    }
+    edits
+}
+
 /// The inspector's rows. Returns the edits committed this frame.
-fn fields(ui: &mut egui::Ui, tokens: &Tokens, s: &Summary, details: bool, pending: &mut Pending) -> Vec<Edit> {
+fn fields(ui: &mut egui::Ui, tokens: &Tokens, s: &Summary, details: bool, vertical: bool, pending: &mut Pending) -> Vec<Edit> {
     let mut edits = Vec::new();
     let any = !s.glyphs.is_empty();
     let one = s.glyphs.len() == 1;
@@ -425,23 +514,15 @@ fn fields(ui: &mut egui::Ui, tokens: &Tokens, s: &Summary, details: bool, pendin
     egui::Grid::new(widgets::id((SALT, "grid"))).num_columns(2).show(ui, |ui| {
         edits.extend(text_row(ui, tokens, SALT, "Name", Column::Name, s, width, one));
 
-        ui.label(RichText::new("Metrics").color(tokens.text_dim));
-        ui.horizontal(|ui| {
-            let third = (width - 2.0 * spacing) / 3.0;
-            for (column, hover) in [(Column::Lsb, "LSB"), (Column::Rsb, "RSB"), (Column::Width, "Width")] {
-                text_field(ui, tokens, field_id(SALT, column), &s.field(column), third, false);
-                if let Some(r) = ui.ctx().read_response(field_id(SALT, column)) {
-                    r.on_hover_text(hover);
-                }
-            }
-        });
-        ui.end_row();
+        edits.extend(metric_rows(ui, tokens, s, width, vertical, any, pending));
 
         ui.label(RichText::new("Kerning").color(tokens.text_dim));
         ui.horizontal(|ui| {
             let half = (width - spacing) / 2.0;
             for (column, hover) in [(Column::LeftGroup, "Left Group"), (Column::RightGroup, "Right Group")] {
-                text_field(ui, tokens, field_id(SALT, column), &s.field(column), half, false);
+                if let Some(t) = text_field(ui, tokens, field_id(SALT, column), &s.field(column), half, any) {
+                    edits.push(Edit::Text(column, t));
+                }
                 if let Some(r) = ui.ctx().read_response(field_id(SALT, column)) {
                     r.on_hover_text(hover);
                 }

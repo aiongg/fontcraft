@@ -449,6 +449,7 @@ milestone = "M5"
 summary = "In Font View a glyph with any out-of-sync metrics key has its cell marked with a warning triangle at the top right. Such glyphs can be collected with a smart filter."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
+notes = "Documented, not yet observed. Drawn by fontView.cell.badgeMetricsOutOfSync; the triangle follows edits to the glyphs a key reads."
 
 [[command]]
 id = "spacing.updateMetricsKey"
