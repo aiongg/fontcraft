@@ -276,6 +276,14 @@ pub struct Tokens {
     pub preview_margin: f32,
     pub preview_controls_height: f32,
     pub preview_panel_size: [f32; 2],
+    /// The text-mode measurement line (`measurementLine.display`): the line, the sidebearings
+    /// printed on it, and the thin lines at the edges of each advance.
+    pub measurement_line: Color32,
+    pub measurement_line_width: f32,
+    pub measurement_line_label: Color32,
+    pub measurement_line_label_size: f32,
+    pub measurement_line_advance: Color32,
+    pub measurement_line_advance_width: f32,
 }
 
 impl Tokens {
@@ -461,6 +469,12 @@ impl Tokens {
             preview_margin: 16.0,
             preview_controls_height: 30.0,
             preview_panel_size: [640.0, 200.0],
+            measurement_line: Color32::from_rgb(0x1e, 0x9e, 0x8a),
+            measurement_line_width: 1.0,
+            measurement_line_label: Color32::from_rgb(0x14, 0x6e, 0x62),
+            measurement_line_label_size: 10.0,
+            measurement_line_advance: Color32::from_rgb(0xb8, 0xb8, 0xbc),
+            measurement_line_advance_width: 0.5,
         }
     }
 

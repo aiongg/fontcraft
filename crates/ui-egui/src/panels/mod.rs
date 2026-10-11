@@ -77,6 +77,8 @@ pub struct PanelState {
     pub inspector_vertical: bool,
     /// The Preview Area and the Preview Panel (`crate::shell::preview`).
     pub preview: crate::shell::preview::PreviewState,
+    /// The text-mode measurement line (`view.showMeasurementLine`) and its height per tab.
+    pub measurement: crate::shell::measurement::MeasurementLine,
 }
 
 impl Default for PanelState {
@@ -94,6 +96,7 @@ impl Default for PanelState {
             kerning_window: Default::default(),
             inspector_vertical: false,
             preview: Default::default(),
+            measurement: Default::default(),
         }
     }
 }

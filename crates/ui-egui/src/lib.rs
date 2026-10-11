@@ -65,6 +65,8 @@ mod kerning_dialogs_tests;
 #[cfg(test)]
 mod kerning_window_tests;
 #[cfg(test)]
+mod measurement_tests;
+#[cfg(test)]
 mod panels_tests;
 #[cfg(test)]
 mod preview_tests;

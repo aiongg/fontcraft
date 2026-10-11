@@ -253,6 +253,10 @@ pub fn pointer(app: &mut FontcraftApp, ev: RawPointer) -> Option<Vec<String>> {
         // Font units of the text, not of the edited glyph: the edited glyph moves with the cursor.
         Space::Font => ev.at,
     };
+    if let Some(errors) = super::measurement_line::pointer(app, &tab, &layout, &ev, at) {
+        app.tools.text_drag = TextDrag::default();
+        return Some(errors);
+    }
     let index = layout.hit(at.x, at.y);
     let mut errors = Vec::new();
     match ev.kind {

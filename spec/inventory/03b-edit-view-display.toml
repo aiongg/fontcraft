@@ -642,6 +642,11 @@ milestone = "M5"
 summary = "Toggles measurement mode for text: a line at an adjustable height, with numbers for the space between each sidebearing and the first outline crossing on that line. It is drawn only while the Text tool is active."
 ref = "Edit View › Glyph Display › View Options; Edit View › Measuring › Measurement Line"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.11b: one toggle for every tab, off at start; the line runs across the canvas at the tab's height on every line of horizontal text, and each glyph's numbers sit just above it, centred in the gap they measure."
+guesses = [
+  "The numbers sit just above the line, each centred between the advance edge and the crossing it measures, and a glyph narrower than 24 screen points gets none; watching the reference app with a known glyph would settle it.",
+  "In top-to-bottom text the line is not drawn; the handbook only describes horizontal text.",
+]
 
 [[command]]
 id = "view.showAnnotations"
@@ -1570,8 +1575,10 @@ milestone = "M5"
 summary = "Moves the text-mode measurement line to a given height above the baseline. In the reference this is done by Cmd+Alt+Ctrl-clicking or dragging in text mode, or by dragging with the Measurement tool."
 ref = "Edit View › Measuring › Measurement Line"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.11b: Cmd+Ctrl+Alt with a press or a drag in text mode (Ctrl+Alt off the Mac) moves the line to the pointer's height above the baseline of the text line under it; the Measurement tool does not move it yet."
 guesses = [
   "The text-mode measurement line height is kept per tab and starts at half the x-height of the tab master; no source gives the default or where it is kept.",
+  "A click or drag sets a whole-unit height, and Cmd+Ctrl+Alt only moves the line while it is shown (otherwise the click is an ordinary one); the reference app would settle both.",
 ]
 
 [[command]]
@@ -1580,13 +1587,14 @@ label = "Sidebearings at Height"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyphs: [names], master?: id, y: number}"
+params = "{glyphs: [names], master?: id, y: number} → {master, y, glyphs: [{glyph, layer, width, left, right}]}"
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Query returning, per glyph, the distance from the left edge of the advance to the first outline crossing at height y and from the last crossing to the right edge. These are the numbers the measurement line prints."
 ref = "Edit View › Measuring › Measurement Line"
 status = "inferred"
 own = true
+notes = "Built in M5.11b on the sidebearing measurement the `@` metrics keys use: components are resolved, and in an italic master the crossings move along the italic angle to half the x-height, as the italic sidebearings do. `left` and `right` are null where the outline does not reach y."
 
 [[behavior]]
 id = "measurement.labelColors"
@@ -1649,6 +1657,7 @@ milestone = "M5"
 summary = "The measurement line reports sidebearings at one height only: the gap between each side of the advance width and the first place the line meets the outline, ignoring the shape above and below."
 ref = "Edit View › Measuring › Measurement Line"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.11b: the numbers are those of `measure.sidebearingsAtHeight` for the layer each glyph is shown in; a glyph whose outline does not reach the line shows none."
 
 [[behavior]]
 id = "measurementLine.display"
@@ -1657,6 +1666,7 @@ milestone = "M5"
 summary = "In measurement mode thin grey vertical lines mark each glyph's advance width, negative kerning is shaded light blue and positive kerning yellow. Both kerning colours are settings."
 ref = "Edit View › Measuring › Measurement Line"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.11b: thin grey lines at both edges of every advance, the line's height across each text line. The kerned gaps are the text-mode colours (`kerning.highlightColors`), shown while the kerning mode shows kerning; the colour settings are not read yet."
 
 [[behavior]]
 id = "measurementLine.textToolOnly"
@@ -1665,6 +1675,19 @@ milestone = "M5"
 summary = "The View Options list says the measurement line is visible only while the Text tool is active, while the Measuring section also lets the Measurement tool drag it; treat it as shown in text mode and adjustable with either tool."
 ref = "Edit View › Glyph Display › View Options; Edit View › Measuring › Measurement Line"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.11b: drawn while the Text tool is the chosen tool (a Hand or Zoom tool held with Space keeps it); dragging it with the Measurement tool is not built yet."
+
+[[behavior]]
+id = "text.selectionTargets"
+area = "spacing-kerning"
+milestone = "M5"
+summary = "In text mode a glyph command run from a menu or a shortcut (Update Metrics, Locked, Transform Metrics…) acts on every glyph of the text selection, each once, in the layer of the tab's master; with nothing selected it acts on the current glyph."
+ref = "Font View › Batch-Processing › Batch Commands; Edit View › Entering Text"
+status = "inferred"
+notes = "Built in M5.11b (`tools_glue::selection_targets`): the shell fills `glyphs` from the selected items, placeholders as the current glyph, and `layer` with the tab's master when the command takes one."
+guesses = [
+  "Glyph commands in text mode take the glyphs of the text selection in the tab's master, as Font View's batch commands take the selected glyphs; the handbook does not say, and the reference app with a selected text would settle it.",
+]
 
 # ───────────────────────────── Annotating ─────────────────────────────
 

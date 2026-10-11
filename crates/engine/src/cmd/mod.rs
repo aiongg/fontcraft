@@ -33,6 +33,7 @@ mod kerning_window;
 mod layer;
 mod layers;
 mod measure;
+mod measure_line;
 mod meta;
 mod metrics_keys;
 mod new_document;
@@ -196,6 +197,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(transform::specs());
         v.extend(guide::specs());
         v.extend(measure::specs());
+        v.extend(measure_line::specs());
         v.extend(dimensions::specs());
         v.extend(node::specs());
         v.extend(fit_curve::specs());

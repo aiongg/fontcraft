@@ -16,6 +16,7 @@
 //! | [`audit_markers`] | audit results on the edited layer; also runs live audit |
 //! | [`text`] | text mode: kerned gaps, the text selection and cursor, metrics labels; the pointer in text mode |
 //! | [`group_members`] | Show Group Members: the other members of the edited pair's kerning groups, behind the glyphs |
+//! | [`measurement_line`] | text mode: the measurement line and the sidebearings on it |
 //!
 //! Every colour and size comes from [`Tokens`]. Wheel and gestures act through `view.scrollTo`
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
@@ -29,6 +30,7 @@ pub mod composite;
 pub mod fill;
 pub mod group_members;
 pub mod guides;
+pub mod measurement_line;
 pub mod metrics;
 pub mod nodes;
 pub mod selection;
@@ -118,6 +120,11 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             if let Some(layout) = layout.as_deref() {
                 let overlay = text::Overlay { font, doc, descender: span.0, labels: state.display.metrics };
                 text::draw_front(&tc, layout, &tab, &overlay, &mut layouts.sidebearings.borrow_mut());
+                measurement_line::draw(
+                    &tc,
+                    layout,
+                    &measurement_line::Line { font, doc, tab: &tab, state: &state.panels.measurement, tool: tools.toolbox.base_id() },
+                );
             }
             if !what.edited
                 && let Some(glyph) = tab.edited_glyph()

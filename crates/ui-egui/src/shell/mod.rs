@@ -16,6 +16,7 @@ pub mod item_state;
 pub mod kerning_window;
 pub mod keymap;
 pub mod masters;
+pub mod measurement;
 pub mod menus;
 pub mod palette;
 pub mod pickers;
@@ -65,6 +66,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (kerning_window::COMMANDS, kerning_window::run),
     (font_view::metrics::COMMANDS, font_view::metrics::run),
     (preview::COMMANDS, preview::run),
+    (measurement::COMMANDS, measurement::run),
 ];
 
 /// Every shell command, in module order.

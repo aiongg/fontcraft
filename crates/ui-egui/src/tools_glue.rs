@@ -585,10 +585,28 @@ pub fn with_targets(app: &FontcraftApp, id: &str, params: Value) -> Value {
 /// A command whose targets include `glyphs` but not `layer` gets the edited glyph as `glyphs`.
 /// A command that takes `segments` but not `points` gets the selected segments
 /// ([`selected_segments`]); one that takes `shapes` but not `points` also gets the paths whose
-/// on-curve nodes are all selected, which is what a selected path is.
+/// on-curve nodes are all selected, which is what a selected path is. In text mode a command
+/// that takes `glyphs` gets the glyphs of the text selection and, when it takes a layer, the
+/// tab's master as `layer`.
 pub fn selection_targets(session: &Session, state: &UiState, spec: &CommandSpec) -> Option<Map<String, Value>> {
     let font = session.font().ok()?;
     let tab = state.tab()?;
+    // In text mode a command that takes glyphs acts on every glyph of the text selection, in the
+    // tab's master; with nothing selected, on the current glyph as in edit mode.
+    if tab.text_mode && spec.targets.contains(&TargetKind::Glyphs) {
+        let mut seen = std::collections::HashSet::new();
+        let glyphs: Vec<&str> = tab.text.selection().filter_map(|i| tab.item_glyph(i)).filter(|g| seen.insert(*g)).collect();
+        if !glyphs.is_empty() {
+            let mut m = Map::new();
+            m.insert("glyphs".into(), json!(glyphs));
+            if (spec.targets.contains(&TargetKind::Layer) || takes_param(spec, "layer?"))
+                && let Some(master) = view::tab_master(font, tab)
+            {
+                m.insert("layer".into(), json!(master.id));
+            }
+            return Some(m);
+        }
+    }
     let scene = scene(font, tab)?;
     let selection = &tab.selection;
     let all = selection.targets(&scene);
