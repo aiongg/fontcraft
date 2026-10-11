@@ -11,9 +11,9 @@
 //! | [`ComponentOptions::flatten`], else a `flattenComponents` entry | a component that points at a composite is replaced by the glyphs that composite reaches, transforms combined, so every composite is one level deep |
 //!
 //! The decomposing steps run first and flattening after them, the order both reference compilers
-//! use (fontc's `apply_optional_transformations` in `fontir/src/glyph.rs`; ufo2ft's
-//! `decomposeComponents.py`, `decomposeTransformedComponents.py` and `flattenComponents.py`;
-//! all Apache-2.0). A glyph decomposed here is drawn as [`crate::outline`] draws a mixed glyph,
+//! use (fontc's `apply_optional_transformations` in `fontir/src/glyph.rs`, Apache-2.0; ufo2ft's
+//! `decomposeComponents.py`, `decomposeTransformedComponents.py` and `flattenComponents.py`,
+//! MIT). A glyph decomposed here is drawn as [`crate::outline`] draws a mixed glyph,
 //! by the same function, so it keeps its own contours first and a mirrored component's contours
 //! are reversed. Flattening stops at a glyph that has contours, or that will be decomposed
 //! anyway (mixed, or with a transform `glyf` cannot store), as both references do: that glyph is
