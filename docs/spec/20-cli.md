@@ -2305,7 +2305,7 @@ Engine command: `variations.planAvar`.
 Converts a location between coordinate spaces of a variable font: user values through fvar normalisation and the avar table to final normalised coordinates, or back. Useful for checking what an avar mapping does at a given point.
 
 ```
-fontcraft-cli variations map FONT [AXIS=VALUE...] [--from user|normalized] [--to design|normalized|user] [--all-axes]
+fontcraft-cli variations map FONT [AXIS=VALUE...] [--from user|normalized] [--to normalized|user] [--all-axes]
 ```
 
 Engine command: `variations.mapCoordinates`.

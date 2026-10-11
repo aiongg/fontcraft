@@ -1892,6 +1892,8 @@ milestone = "M12"
 summary = "Builds the avar table of a variable font from the axis mappings of a designspace (per-axis maps, and cross-axis mappings as avar version 2) and stores it in the font. Without a designspace it rebuilds avar from the font's own data, which normalises it."
 ref = "fontTools varLib.avar __main__ / build"
 status = "docs"
+notes = "Built in M12.33: segment maps equal to fontTools 4.66 varLib.avar.build on a designspace built in code. The axis range is the font's fvar range (fontTools takes the designspace's; they agree in a consistent family); discrete designspace axes are left out; an fvar axis the designspace lacks gets the identity map where fontTools stops. Cross-axis mappings (avar version 2) need the variation model's deltas (M9.5) and are refused until then; the store is laid out by write-fonts' builder, so its bytes may differ from fontTools' while its values agree."
+guesses = ["Without a designspace the font's own version 1 avar is read back as user-space maps and built again (fontTools' deprecated varLib.avar prints the maps instead); a version 2 avar is refused. Comparing with a user's expectations of the reference tool would settle it."]
 
 [[cli]]
 id = "variations plan-avar"
@@ -1919,7 +1921,7 @@ status = "docs"
 
 [[cli]]
 id = "variations map"
-usage = "fontcraft-cli variations map FONT [AXIS=VALUE...] [--from user|normalized] [--to design|normalized|user] [--all-axes]"
+usage = "fontcraft-cli variations map FONT [AXIS=VALUE...] [--from user|normalized] [--to normalized|user] [--all-axes]"
 options = [
   "AXIS=VALUE...: location to convert; axes not given are at their default",
   "--from user|normalized: the input values are user-space values (default) or already normalised to -1..1",
@@ -1936,6 +1938,7 @@ milestone = "M12"
 summary = "Converts a location between coordinate spaces of a variable font: user values through fvar normalisation and the avar table to final normalised coordinates, or back. Useful for checking what an avar mapping does at a given point."
 ref = "fontTools varLib.avar.map"
 status = "docs"
+notes = "Built in M12.33 and checked against fontTools 4.66 varLib.avar.map on fvar and avar tables built in code: version 1 maps unquantised values; version 2 quantises to F2Dot14, adds the rounded store deltas and clamps. As fontTools prints them, the axes listed are the ones given, or with avar version 2 the ones that end away from 0; --all-axes lists every axis. Values print as C's %g. fontTools prints user values unless -o; here the default output is the space other than --from, as the options say. A designspace as FONT (which fontTools accepts) is not supported."
 
 [[cli]]
 id = "variations build-hvar"
@@ -2707,12 +2710,13 @@ label = "Build avar Table"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, designspace?: path, output?: path, inPlace?: bool}"
+params = "{font: path, designspace?: path, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Writes an avar table into a variable font from the axis maps and cross-axis mappings of a designspace, or re-derives it from the font's current data; returns the per-axis segment maps written."
 ref = "docs/spec/20-cli.md › variations"
 status = "docs"
+notes = "Built in M12.33 (see the `variations build-avar` row). Takes TrueType and CFF fonts; the output defaults to <name>.avar.<ext> beside the input, as fontTools names it. Result: {output, avar, version?, segments}."
 
 [[command]]
 id = "variations.planAvar"
@@ -2733,12 +2737,13 @@ label = "Map Variation Coordinates"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, location: {axis: number}, from?: \"user\"|\"normalized\", to?: \"normalized\"|\"user\", allAxes?: bool}"
+params = "{font: path, location: {axis: number}, from?: \"user\"|\"normalized\", to?: \"normalized\"|\"user\", allAxes?: bool, face?: number}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Read-only query converting a location between user space and final normalised space of a variable font, applying fvar normalisation and the avar table (including avar 2 cross-axis mappings)."
 ref = "docs/spec/20-cli.md › variations"
 status = "docs"
+notes = "Built in M12.33 (see the `variations map` row). Result: {axes, to, location, user, normalized, mapped}; `face` picks a collection member."
 
 [[command]]
 id = "variations.buildHvar"
