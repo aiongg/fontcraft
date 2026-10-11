@@ -139,7 +139,7 @@ dialog's default answer is Decompose.
 and M4's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
 a detail is unconfirmed, the handbook decides (Remove Overlap, for example, deletes open paths).
 Where no source says, we choose, and each choice is listed in `docs/guesses.md` to revisit
-(620 guesses on 391 rows).
+(621 guesses on 391 rows).
 
 | Gap | Detail |
 |---|---|

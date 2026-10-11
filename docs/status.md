@@ -9,7 +9,7 @@ _Updated: 2026-10-11, M5 in progress: M5.0–M5.16 built; M5.17 (the kern writer
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
-  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 620 guesses on 391
+  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 621 guesses on 391
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -394,4 +394,8 @@ Append one terse entry per session: what landed, numbers, what is still open.
   by afmLib both ways on Inter). M5.syncfast: after a rename the out-of-sync cache rescans only
   the glyphs that name it; Font View frames after an edit on Inter take 6–10 ms. Open: the cache
   update after editing `n` takes 7.2 ms (target 2). 365 of 933 commands live; M5's 97 all live.
+  M5.fix3: nine review fixes (Replace All and AFM expansion refused before allocating; AFM import
+  leaves italic masters unchanged; nested composites import after their components; menu
+  shortcuts work while a list has the keyboard; Selected Glyphs works in Edit View tabs; the Find
+  Glyphs cache follows the document revision; dialogs open during a drag).
 
