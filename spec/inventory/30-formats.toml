@@ -350,6 +350,7 @@ area = "import-export"
 milestone = "M12"
 summary = "Packs several compiled fonts into one collection file and shares byte-identical tables between members. A command-line job modelled on the AFDKO collection tools; the reference app's export dialog has no collection option."
 ref = "OpenType specification › Font Collections; AFDKO otf2otc, otc2otf; fontTools ttLib.ttCollection"
+notes = "Written by collection.pack (plain or WOFF2) with otf2otc's layout; compiling straight to a collection is M12.42."
 status = "docs"
 
 [[format]]

@@ -1078,6 +1078,7 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Group of actions on OpenType collections (.ttc, .otc): list the member fonts and the tables they share, build a collection from separate fonts, and split a collection into separate fonts. Without an action it lists."
 ref = "AFDKO otf2otc.py, otc2otf.py; fontTools ttLib __main__"
+notes = "Without an action, a first argument that is an existing file is listed; any other first word that is not an action is a usage error (exit status 2)."
 status = "docs"
 
 [[cli]]
@@ -1096,6 +1097,7 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Lists each member of a collection with its index, PostScript name, outline flavour and tables, marking the tables whose data is shared with another member. Writes nothing."
 ref = "AFDKO otc2otf -r"
+notes = "Shared means another member's directory points at the same bytes (same tag, offset and length), as otc2otf -r reports it. A WOFF2 collection is unwrapped first; a single font lists as one member."
 status = "docs"
 
 [[cli]]
@@ -1103,7 +1105,7 @@ id = "collection pack"
 usage = "fontcraft-cli collection pack FONT FONT... -o OUT.ttc [--share-table TAG=INDEX]... [--no-share]"
 options = [
   "FONT...: fonts or collections to combine; members of input collections are appended in order",
-  "--share-table TAG=INDEX: use the TAG table of the INDEX-th input font (zero-based) for every member; repeatable",
+  "--share-table TAG=INDEX[,TAG=INDEX...]: use the TAG table of the INDEX-th input font (zero-based, counting the members of input collections) for every member that has a TAG table; repeatable",
   "--no-share: store every table separately even when identical",
   "--container plain|woff2: write an ordinary collection or a WOFF2 collection",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
@@ -1117,6 +1119,8 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Builds a collection from two or more fonts in the order given. Tables whose bytes are identical in several fonts are stored once. A table can also be forced to come from one font for all members."
 ref = "AFDKO otf2otc.py help; fontTools ttLib __main__"
+notes = "The layout follows otf2otc 5.0.1 (checked by running it on fonts built in code): header version 1, font directories in input order, then the tables grouped by tag in the order the tags first appear (a tag new to a later font goes in at that font's table position), each group holding the distinct versions in the order met. Table bytes are kept, head.checkSumAdjustment included; directory checksums are computed. DSIG tables are kept as they are."
+guesses = ["A --share-table that names a font past the inputs, or a font without that table, is refused; otf2otc ignores it silently. A user report of a script that relies on otf2otc's behaviour would settle it."]
 status = "docs"
 
 [[cli]]
@@ -1124,7 +1128,7 @@ id = "collection unpack"
 usage = "fontcraft-cli collection unpack FILE.ttc [--face N|NAME] [--output-dir DIR]"
 options = [
   "--face N|NAME: extract only this member",
-  "--name-by postscript-name|index: output names from PostScript names (default) or as stem-N",
+  "--name-by postscript-name|index: output names from PostScript names (default) or as STEM-fontN",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = "collection.unpack"
@@ -1137,6 +1141,8 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Writes each member of a collection as a separate font named after its PostScript name (or the collection name plus -fontN when it has none) with .ttf or .otf according to its outlines, or only the member chosen with --face. Shared tables are copied into every font that uses them."
 ref = "AFDKO otc2otf.py; fontTools ttLib __main__ (-y with -o)"
+notes = "Each member is written with the recommended table order and recomputed checksums, as otc2otf (fontTools' save) writes it; otc2otf also sets head.modified to the time of the run, which FontCraft does not, so a comparison with its output masks head.modified and head.checkSumAdjustment."
+guesses = ["When two members have the same PostScript name, the later ones are named STEM-fontN; otc2otf writes them to the same path, so the last one wins. A user report would settle whether the reference behaviour is wanted."]
 status = "docs"
 
 [[cli]]
@@ -1163,8 +1169,8 @@ options = [
   "--format woff2|woff: container to write; default woff2",
   "--glyf-transform / --no-glyf-transform: apply WOFF2's glyf/loca transform (default) or store them untransformed",
   "--hmtx-transform / --no-hmtx-transform: apply the optional hmtx transform that omits side bearings equal to xMin (default off)",
-  "--quality N: Brotli quality 0 to 11 for WOFF2 (default 11) or zlib level 1 to 9 for WOFF (default 9)",
-  "--zopfli[=ITERATIONS]: for WOFF, use the slower compressor that produces a few percent smaller files",
+  "--quality N: Brotli quality for WOFF2 (default 11) or zlib level for WOFF (default 6, fontTools' level); only the defaults are written yet",
+  "--zopfli: for WOFF, the slower compressor that produces a few percent smaller files (refused: not available yet)",
   "--metadata FILE: extended metadata XML block to embed",
   "--private-data FILE: private data block to embed",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
@@ -1179,6 +1185,7 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Compresses a TrueType or OpenType font, or a collection, into WOFF2 (default) or WOFF 1.0. The default output name replaces the extension with .woff2 or .woff."
 ref = "fontTools ttLib.woff2 compress; ttx --flavor woff|woff2, --with-zopfli"
+notes = "Collections are written only as WOFF2 (WOFF 1.0 has no collection form): each distinct table once, every font listing its tables, each loca right after its glyf. fontTools' WOFF2 module refuses collections, so the collection form has no oracle. A quality or zopfli request other than the defaults is refused instead of being ignored."
 status = "docs"
 
 [[cli]]
@@ -1198,6 +1205,7 @@ area = "cli-tools"
 milestone = "M12"
 summary = "Unwraps a WOFF or WOFF2 file into the plain font or collection it contains, named with .ttf, .otf or .ttc according to the content. Metadata and private blocks can be saved separately."
 ref = "fontTools ttLib.woff2 decompress"
+notes = "A WOFF2 collection decodes to a collection file (.ttc) with each distinct table once; head keeps its stored checkSumAdjustment there, while a single font gets it recomputed."
 status = "docs"
 
 [[cli]]
@@ -2414,7 +2422,7 @@ label = "Compress to WOFF"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, format?: \"woff2\"|\"woff\", output?: path, glyfTransform?: bool, hmtxTransform?: bool, quality?: int, zopfli?: bool|int, metadata?: path, privateData?: path}"
+params = "{font: path, format?: \"woff2\"|\"woff\", output?: path, outputDir?: path, glyfTransform?: bool, hmtxTransform?: bool, quality?: int, zopfli?: bool|int, metadata?: path, privateData?: path}"
 area = "cli-tools"
 milestone = "M12"
 summary = "Wraps a font or collection in WOFF2 or WOFF 1.0 and returns the output path with original and compressed sizes per table. The WOFF2 result decodes to a font that is table-for-table equivalent to the input (byte-identical when the glyf transform is off)."

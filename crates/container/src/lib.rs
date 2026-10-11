@@ -7,11 +7,12 @@
 //! - [`woff2::encode`] and [`woff2::decode`]: WOFF 2.0 (W3C recommendation). All tables go into
 //!   one Brotli stream (quality 11, window 22, font mode). The `glyf`/`loca` transform and the
 //!   `hmtx` transform are written when [`woff2::Options`] asks for them and read back.
-//! - [`to_sfnt`]: whatever the container, the sfnt inside.
+//! - [`to_sfnt`]: whatever the container, the sfnt (or collection) inside.
 //!
 //! Byte choices (table order, padding, checksums, header versions, the metadata and private
 //! blocks) follow fontTools, whose `ttLib/sfnt.py` and `ttLib/woff2.py` (MIT) these modules port.
-//! Collections are refused in both directions.
+//! WOFF2 also wraps collections (`ttcf`): each distinct table is stored once and every font lists
+//! the tables it uses. WOFF 1.0 has no collection form and refuses them.
 //!
 //! Every input is untrusted. Counts are capped ([`MAX_TABLES`]; glyph, contour and point counts
 //! by the 16-bit fields that hold them and by the data actually present), every offset and length
@@ -36,6 +37,8 @@ pub const MAX_SFNT: usize = 256 << 20;
 pub const MAX_TABLES: usize = 1024;
 /// Largest uncompressed extended metadata block accepted, in bytes.
 pub const MAX_METADATA: usize = 16 << 20;
+/// Most fonts a collection may hold, plain or in WOFF2.
+pub const MAX_COLLECTION_FONTS: usize = 256;
 
 /// Why a font could not be wrapped or unwrapped.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

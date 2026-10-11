@@ -1375,6 +1375,7 @@ area = "compile"
 milestone = "M12"
 summary = "A font collection stores byte-identical tables once and points several fonts at them; fontTools's TTCollection.save shares tables by default, and reads the timestamp once so head tables do not differ needlessly. write-fonts declares a TTCHeader type whose version computation panics as not supported yet, so the collection writer is ours. AFDKO has otf2otc and otc2otf for the same job."
 ref = "fonttools Lib/fontTools/ttLib/ttCollection.py; write-fonts src/font_builder.rs (TTCHeader); AFDKO python/afdko/otf2otc.py"
+notes = "The writer is fontcraft-container's assemble_collection: identical tables (same tag and bytes) are stored once; head keeps its bytes, checkSumAdjustment included, as otf2otc keeps them. Compiling straight to a collection is M12.42."
 status = "docs"
 
 [[behavior]]

@@ -216,6 +216,7 @@ bundled, the file says so in its header and the project is listed here with its 
   language and feature tags come from opentypespec 1.9.2
   (https://github.com/simoncozens/opentypespec-py, Apache License 2.0), which types the OpenType
   tag registry.
+  The collection layout of crates/tables/src/collection.rs (M12.3) follows otf2otc.py in AFDKO 5.0.1, Apache License 2.0, Copyright 2014, 2017 Adobe.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.
