@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use super::*;
-use crate::{Anchor, Font, Layer, LayerInfo, LayerInfoBox, ModelError, Node, NodeKind, Path, Shape};
+use crate::{Anchor, Font, Layer, LayerInfo, LayerInfoBox, Node, NodeKind, Path, Shape};
 
 /// A test glyph: name, corner hints (glyph, path, node, scale x, scale y, options), paths, and
 /// the paths the reference app draws.
@@ -334,20 +334,31 @@ fn a_corner_on_an_extra_node_is_left_out() {
 
 /// Hostile corners fail with a message and never panic: a scale of 10^9, a corner next to a
 /// zero-length segment, a path index past the shapes, a corner glyph whose path has one node.
+/// The outline is then drawn without the corners, and composites using the glyph still resolve.
 #[test]
 fn bad_corners_fail_with_a_message() {
     let mut font = Font::new("Bad");
     add_glyph(&mut font, "_corner.one", &[], &["o:(0,50,l),(-50,50,l),(-50,0,l),(25,0,l)"]);
     add_glyph(&mut font, "_corner.dot", &[], &["o:(0,50,l)"]);
     add_glyph(&mut font, "I", &[], &["c:(100,0,l),(100,0,l),(400,0,l),(400,500,l),(100,500,l)"]);
+    add_glyph(&mut font, "Icomp", &[], &[]);
+    font.glyph_mut("Icomp").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Component(crate::Component::new("I", 0.0, 0.0)));
+    let plain = font.outline("I", "m01").unwrap();
     let mut huge = CornerHint::new("_corner.one", 0, 2);
     huge.scale = Vec2::new(1e9, 1.0);
     for hint in [huge, CornerHint::new("_corner.one", 0, 1), CornerHint::new("_corner.one", 7, 0), CornerHint::new("_corner.dot", 0, 3)] {
         set_hints(&mut font, "I", vec![hint.to_hint()]);
         let layer = font.glyph("I").unwrap().layer("m01").unwrap();
         assert!(insert_corners(&font, layer).is_err(), "{hint:?}");
-        assert!(matches!(font.outline("I", "m01"), Err(ModelError::BadOutline { .. })), "{hint:?}");
+        assert_eq!(font.outline("I", "m01").unwrap(), plain, "{hint:?}");
+        assert_eq!(font.outline("Icomp", "m01").unwrap(), plain, "{hint:?}");
     }
+    // The path a fitting corner sits on is deleted.
+    set_hints(&mut font, "I", vec![CornerHint::new("_corner.one", 0, 3).to_hint()]);
+    assert_ne!(font.outline("I", "m01").unwrap(), plain);
+    font.glyph_mut("I").unwrap().layer_mut("m01").unwrap().shapes.clear();
+    assert!(font.outline("I", "m01").unwrap().elements().is_empty());
+    assert!(font.outline("Icomp", "m01").unwrap().elements().is_empty());
     // A corner glyph that does not exist is skipped, as the reference compilers skip it.
     set_hints(&mut font, "I", vec![CornerHint::new("_corner.none", 0, 3).to_hint()]);
     assert!(font.outline("I", "m01").is_ok());
