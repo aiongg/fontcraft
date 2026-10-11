@@ -85,6 +85,8 @@ mod text_keys_tests;
 #[cfg(test)]
 mod text_mode_tests;
 #[cfg(test)]
+mod text_preview_tests;
+#[cfg(test)]
 mod text_tests;
 #[cfg(test)]
 mod toolbar_tests;

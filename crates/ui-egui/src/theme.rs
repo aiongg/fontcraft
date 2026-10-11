@@ -284,6 +284,16 @@ pub struct Tokens {
     pub measurement_line_label_size: f32,
     pub measurement_line_advance: Color32,
     pub measurement_line_advance_width: f32,
+    /// The Text Preview window: its first size, the space around its text, the height of its
+    /// text field, the highlights of matches and of the current match, and characters drawn in
+    /// the interface font because the font lacks them.
+    pub text_preview_width: f32,
+    pub text_preview_height: f32,
+    pub text_preview_padding: f32,
+    pub text_preview_field_height: f32,
+    pub text_preview_match: Color32,
+    pub text_preview_current: Color32,
+    pub text_preview_fallback: Color32,
 }
 
 impl Tokens {
@@ -475,6 +485,13 @@ impl Tokens {
             measurement_line_label_size: 10.0,
             measurement_line_advance: Color32::from_rgb(0xb8, 0xb8, 0xbc),
             measurement_line_advance_width: 0.5,
+            text_preview_width: 640.0,
+            text_preview_height: 440.0,
+            text_preview_padding: 12.0,
+            text_preview_field_height: 72.0,
+            text_preview_match: Color32::from_rgba_unmultiplied(0xf2, 0xd0, 0x3c, 0x60),
+            text_preview_current: Color32::from_rgba_unmultiplied(0xf2, 0xa1, 0x1d, 0xa0),
+            text_preview_fallback: Color32::from_rgb(0x1a, 0x1a, 0x1b),
         }
     }
 

@@ -27,6 +27,7 @@ pub mod start_window;
 pub mod status_bar;
 pub mod tabs;
 pub mod text;
+pub mod text_preview;
 pub mod toolbar;
 pub mod transform;
 pub mod view;
@@ -67,6 +68,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (font_view::metrics::COMMANDS, font_view::metrics::run),
     (preview::COMMANDS, preview::run),
     (measurement::COMMANDS, measurement::run),
+    (text_preview::COMMANDS, text_preview::run),
 ];
 
 /// Every shell command, in module order.
@@ -79,6 +81,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     start_window::show(app, ui, pending);
     kerning_window::show(app, ui, pending);
     preview_panel::show(app, ui, pending);
+    text_preview::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {
