@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use fontcraft_model::{Font, Glyph, KernGroups, Layer, MetricsKeys, Shape, SourceFormat};
+use fontcraft_model::{Font, Glyph, KernGroups, Layer, MetricsKeys, SourceFormat};
 use fontcraft_spacing::afm::{self, Afm};
 use fontcraft_spacing::kerning::pairs::{self, NewPair};
 use fontcraft_spacing::kerning::{Direction, GroupSide, Position, Side, facing};
@@ -657,96 +657,105 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
     let mut skipped: Vec<Value> = Vec::new();
     let mut bad_keys: Vec<Value> = Vec::new();
     let (mut applied, mut keys_set) = (0usize, 0usize);
-    // Composites measure their components, so their bases take their metrics first.
-    let has_components = |font: &Font, name: &str| {
-        font.glyph(name)
-            .and_then(|g| g.layers.iter().find(|l| l.id == master))
-            .is_some_and(|l| l.shapes.iter().any(|s| matches!(s, Shape::Component(_))))
-    };
-    for pass in [false, true] {
-        for want in &wanted {
-            if !in_scope(scope, want.glyph) || has_components(font, want.glyph) != pass {
-                continue;
-            }
-            let Some(g) = font.glyph(want.glyph) else {
-                if !pass {
-                    report(&mut unknown, &mut seen, want.glyph);
-                }
-                continue;
-            };
-            let Some(layer) = g.layers.iter().find(|l| l.id == master) else {
-                if skipped.len() < MAX_REPORTED {
-                    skipped.push(json!({ "glyph": want.glyph, "reason": "the glyph has no layer for this master" }));
-                }
-                continue;
-            };
-            let measured = spacing::metric(font, layer, Field::Left).and_then(|l| Ok((l, spacing::metric(font, layer, Field::Right)?)));
-            let (lsb, rsb) = match measured {
-                Ok(v) => v,
-                Err(e) => {
-                    if skipped.len() < MAX_REPORTED {
-                        skipped.push(json!({ "glyph": want.glyph, "reason": e.to_string() }));
-                    }
-                    continue;
-                }
-            };
-            let (dx, width) = plan_glyph(mode, want, lsb, rsb, layer.width);
-            // The keys: what each field gets (`Some(None)`: no key) and the key it shows now.
-            let mut keys: Vec<KeyPlan> = Vec::new();
-            if let Some(texts) = &want.keys {
-                for (field, text) in KEY_FIELDS.into_iter().zip(texts) {
-                    let shown = spacing::effective_key(g, layer, field).map(|(scope, _)| scope);
-                    let new = match text {
-                        None => None,
-                        Some(t) => match spacing::parse_field(t, field, |n| font.glyph(n).is_some()) {
-                            Ok(Entry::Key(k)) => Some((k.scope, k.stored())),
-                            Ok(Entry::Number(_)) => None,
-                            Err(e) => {
-                                if bad_keys.len() < MAX_REPORTED {
-                                    bad_keys.push(json!({ "glyph": want.glyph, "field": field.name(), "key": clip(t), "error": e.to_string() }));
-                                }
-                                continue;
-                            }
-                        },
-                    };
-                    keys.push((field, new, shown));
-                }
-            }
-            if !WIDTH_RANGE.contains(&width) {
-                if skipped.len() < MAX_REPORTED {
-                    skipped.push(json!({ "glyph": want.glyph, "reason": format!("the width would be {width}, outside 0 to 65535") }));
-                }
-                continue;
-            }
-            let mut gm = font.glyph_mut(want.glyph)?;
-            let g: &mut Glyph = &mut gm;
-            let Some(l) = g.layers.iter_mut().find(|l| l.id == master) else { continue };
-            if let Err(e) = super::spacing::shift_layer(l, dx) {
-                if skipped.len() < MAX_REPORTED {
-                    skipped.push(json!({ "glyph": want.glyph, "reason": e }));
-                }
-                continue;
-            }
-            l.width = width;
-            for (field, new, shown) in keys {
-                match new {
-                    Some((Scope::Local, stored)) => *key_slot(&mut l.info.metrics_keys, field) = Some(stored),
-                    Some((Scope::Glyph, stored)) => {
-                        if shown == Some(Scope::Local) {
-                            *key_slot(&mut l.info.metrics_keys, field) = None;
-                        }
-                        *key_slot(&mut g.info.metrics_keys, field) = Some(stored);
-                    }
-                    None => match shown {
-                        Some(Scope::Local) => *key_slot(&mut l.info.metrics_keys, field) = None,
-                        Some(Scope::Glyph) => *key_slot(&mut g.info.metrics_keys, field) = None,
-                        None => {}
-                    },
-                }
-                keys_set += 1;
-            }
-            applied += 1;
+    // Composites measure their components, so their bases take their metrics first, and a
+    // composite of composites comes after the composites it shows. A glyph listed twice takes
+    // its last line.
+    let mut last: HashMap<&str, &Wanted> = HashMap::new();
+    let mut slots: Vec<spacing::Slot> = Vec::new();
+    for want in &wanted {
+        if !in_scope(scope, want.glyph) {
+            continue;
         }
+        if font.glyph(want.glyph).is_none() {
+            report(&mut unknown, &mut seen, want.glyph);
+            continue;
+        }
+        if last.insert(want.glyph, want).is_none() {
+            slots.push(spacing::Slot { glyph: want.glyph.to_string(), layer: master.to_string(), field: Field::Left });
+        }
+    }
+    let afm_source = matches!(source, Source::Afm(_));
+    for slot in spacing::update_order(font, &slots) {
+        let Some(&want) = last.get(slot.glyph.as_str()) else { continue };
+        let Some(g) = font.glyph(want.glyph) else { continue };
+        let Some(layer) = g.layers.iter().find(|l| l.id == master) else {
+            if skipped.len() < MAX_REPORTED {
+                skipped.push(json!({ "glyph": want.glyph, "reason": "the glyph has no layer for this master" }));
+            }
+            continue;
+        };
+        // An AFM box is the upright outline's, as export writes it; the other sources give
+        // sidebearings as measured, slanted back in an italic master.
+        let measured = if afm_source {
+            spacing::measure::upright_bounds(font, layer).map(|b| (b.map(|b| b.x0), b.map(|b| layer.width - b.x1)))
+        } else {
+            spacing::metric(font, layer, Field::Left).and_then(|l| Ok((l, spacing::metric(font, layer, Field::Right)?)))
+        };
+        let (lsb, rsb) = match measured {
+            Ok(v) => v,
+            Err(e) => {
+                if skipped.len() < MAX_REPORTED {
+                    skipped.push(json!({ "glyph": want.glyph, "reason": e.to_string() }));
+                }
+                continue;
+            }
+        };
+        let (dx, width) = plan_glyph(mode, want, lsb, rsb, layer.width);
+        // The keys: what each field gets (`Some(None)`: no key) and the key it shows now.
+        let mut keys: Vec<KeyPlan> = Vec::new();
+        if let Some(texts) = &want.keys {
+            for (field, text) in KEY_FIELDS.into_iter().zip(texts) {
+                let shown = spacing::effective_key(g, layer, field).map(|(scope, _)| scope);
+                let new = match text {
+                    None => None,
+                    Some(t) => match spacing::parse_field(t, field, |n| font.glyph(n).is_some()) {
+                        Ok(Entry::Key(k)) => Some((k.scope, k.stored())),
+                        Ok(Entry::Number(_)) => None,
+                        Err(e) => {
+                            if bad_keys.len() < MAX_REPORTED {
+                                bad_keys.push(json!({ "glyph": want.glyph, "field": field.name(), "key": clip(t), "error": e.to_string() }));
+                            }
+                            continue;
+                        }
+                    },
+                };
+                keys.push((field, new, shown));
+            }
+        }
+        if !WIDTH_RANGE.contains(&width) {
+            if skipped.len() < MAX_REPORTED {
+                skipped.push(json!({ "glyph": want.glyph, "reason": format!("the width would be {width}, outside 0 to 65535") }));
+            }
+            continue;
+        }
+        let mut gm = font.glyph_mut(want.glyph)?;
+        let g: &mut Glyph = &mut gm;
+        let Some(l) = g.layers.iter_mut().find(|l| l.id == master) else { continue };
+        if let Err(e) = super::spacing::shift_layer(l, dx) {
+            if skipped.len() < MAX_REPORTED {
+                skipped.push(json!({ "glyph": want.glyph, "reason": e }));
+            }
+            continue;
+        }
+        l.width = width;
+        for (field, new, shown) in keys {
+            match new {
+                Some((Scope::Local, stored)) => *key_slot(&mut l.info.metrics_keys, field) = Some(stored),
+                Some((Scope::Glyph, stored)) => {
+                    if shown == Some(Scope::Local) {
+                        *key_slot(&mut l.info.metrics_keys, field) = None;
+                    }
+                    *key_slot(&mut g.info.metrics_keys, field) = Some(stored);
+                }
+                None => match shown {
+                    Some(Scope::Local) => *key_slot(&mut l.info.metrics_keys, field) = None,
+                    Some(Scope::Glyph) => *key_slot(&mut g.info.metrics_keys, field) = None,
+                    None => {}
+                },
+            }
+            keys_set += 1;
+        }
+        applied += 1;
     }
     Ok(json!({
         "mode": mode.name(),

@@ -216,6 +216,44 @@ fn afm_export_expands_groups_and_imports_back_as_glyph_pairs() {
 }
 
 #[test]
+fn afm_export_then_import_leaves_an_italic_master_unchanged() {
+    let mut original = font();
+    original.set_metric_pos("m01", fontcraft_engine::model::metric::ITALIC_ANGLE, 12.0).unwrap();
+    let mut s = Session::new();
+    s.add_document(original.clone(), None).unwrap();
+    let text = run(&mut s, "file.exportMetrics", json!({"format": "afm"}))["text"].as_str().unwrap().to_string();
+    assert!(text.contains("\nC 65 ; WX 600 ; N A ; B 10 0 590 700 ;\n"), "the upright box: {text}");
+    let r = run(&mut s, "file.importMetrics", json!({"text": text, "importKerning": false, "importMetrics": true}));
+    assert_eq!(r["metrics"]["skipped"], json!([]), "{r}");
+    let after = s.font().unwrap();
+    for g in original.glyphs.iter() {
+        assert_eq!(after.glyph(&g.name), Some(g), "glyph {}", g.name);
+    }
+}
+
+#[test]
+fn a_composite_of_a_composite_takes_its_metrics_after_the_composite_it_shows() {
+    let mut f = Font::new("Nested");
+    for name in ["Ecircumflexacute", "Ecircumflex"] {
+        f.add_glyph(name, vec![], 600.0).unwrap();
+    }
+    let mut e = f.glyph_mut("E").unwrap();
+    e.layers[0].shapes = vec![Shape::Path(Path::rect(50.0, 0.0, 550.0, 700.0))];
+    e.layers[0].width = 600.0;
+    drop(e);
+    f.glyph_mut("Ecircumflex").unwrap().layers[0].shapes = vec![Shape::Component(Component::new("E", 0.0, 0.0))];
+    f.glyph_mut("Ecircumflexacute").unwrap().layers[0].shapes = vec![Shape::Component(Component::new("Ecircumflex", 0.0, 0.0))];
+    let mut s = Session::new();
+    s.add_document(f, None).unwrap();
+    // The nested composite's line comes first, in the file as in the glyph order.
+    let text = "metrics\tEcircumflexacute\t110\t50\t660\t\t\t\nmetrics\tEcircumflex\t90\t50\t640\t\t\t\nmetrics\tE\t70\t30\t600\t\t\t\n";
+    run(&mut s, "file.importMetrics", json!({"text": text, "importKerning": false, "importKerningGroups": false, "importMetrics": "lsbAndWidth"}));
+    let f = s.font().unwrap();
+    let lsbs: Vec<f64> = ["E", "Ecircumflex", "Ecircumflexacute"].iter().map(|g| metric(f, g, "m01", Field::Left)).collect();
+    assert_eq!(lsbs, [70.0, 90.0, 110.0]);
+}
+
+#[test]
 fn each_import_mode_takes_the_metrics_it_names() {
     let line = "metrics\tn\t30\t70\t700\t\t\t\n";
     for (mode, lsb, rsb, width) in [

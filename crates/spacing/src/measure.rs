@@ -58,6 +58,16 @@ pub fn bounds(font: &Font, layer: &Layer) -> Result<Option<Rect>, EvalError> {
     if let Some((tan, y0)) = slant(font, layer) {
         path.apply_affine(Affine::new([1.0, 0.0, -tan, 1.0, tan * y0, 0.0]));
     }
+    path_bounds(&path)
+}
+
+/// The bounds of a layer's outline as drawn, not slanted back in an italic master (the box an
+/// AFM file gives); `None` for an empty layer.
+pub fn upright_bounds(font: &Font, layer: &Layer) -> Result<Option<Rect>, EvalError> {
+    path_bounds(&outline(font, layer)?)
+}
+
+fn path_bounds(path: &BezPath) -> Result<Option<Rect>, EvalError> {
     if path.elements().is_empty() {
         return Ok(None);
     }

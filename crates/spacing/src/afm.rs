@@ -57,7 +57,7 @@ pub const MAX_PAIRS: usize = 2_000_000;
 /// Most glyphs one AFM text may hold.
 pub const MAX_CHARS: usize = MAX_GLYPHS;
 /// Most glyph pairs [`covered_pairs`] looks at (counting a pair once for every stored pair that
-/// covers it) before it gives up.
+/// covers it, and each glyph it expands a side to) before it gives up.
 pub const MAX_EXPANSION: usize = 50_000_000;
 /// The kerning values AFM pairs may have.
 pub const VALUE_RANGE: RangeInclusive<f64> = kerning_text::VALUE_RANGE;
@@ -179,18 +179,26 @@ pub fn covered_pairs(font: &Font, direction: Direction, master: &str) -> Result<
     let mut work = 0usize;
     for pair in stored_pairs(font, direction, source) {
         let firsts = expand(pair.left(), Position::First);
+        if firsts.is_empty() {
+            continue;
+        }
         let seconds = expand(pair.right(), Position::Second);
-        work = work.saturating_add(firsts.len().saturating_mul(seconds.len()));
+        let product = firsts.len().saturating_mul(seconds.len());
+        work = work.saturating_add(firsts.len()).saturating_add(seconds.len()).saturating_add(product);
         if work > MAX_EXPANSION {
             return Err(ExportError::TooMuchWork);
         }
+        // The members of a side are distinct glyphs, so one stored pair covers `product`
+        // distinct pairs: more than the limit is refused before any is added.
+        if product > MAX_PAIRS {
+            return Err(ExportError::TooManyPairs);
+        }
         for a in &firsts {
             for b in &seconds {
-                covered.insert((*a, *b));
+                if covered.insert((*a, *b)) && covered.len() > MAX_PAIRS {
+                    return Err(ExportError::TooManyPairs);
+                }
             }
-        }
-        if covered.len() > MAX_PAIRS {
-            return Err(ExportError::TooManyPairs);
         }
     }
     let mut covered: Vec<(usize, usize)> = covered.into_iter().collect();
@@ -622,6 +630,25 @@ mod tests {
                 KernPair { left: "Che-cy".into(), right: "A".into(), value: 0.0 },
             ],
         }
+    }
+
+    #[test]
+    fn a_group_pair_covering_more_than_the_limit_is_refused_before_expanding() {
+        // 5,000 × 5,000 glyph pairs from one stored pair: building them would take seconds and
+        // gigabytes; the refusal comes from their count alone.
+        let mut font = Font::new("Groups");
+        for i in 0..5000 {
+            font.add_glyph(&format!("g{i}"), vec![], 500.0).unwrap();
+        }
+        for i in 0..font.glyphs.len() {
+            let mut g = font.glyphs.get_mut_at(i).unwrap();
+            g.kern_groups.right = Some("X".into());
+            g.kern_groups.left = Some("Y".into());
+        }
+        std::sync::Arc::make_mut(&mut font.kerning).ltr.set("m01", "@MMK_L_X", "@MMK_R_Y", -10.0);
+        let started = std::time::Instant::now();
+        assert_eq!(covered_pairs(&font, Direction::Ltr, "m01"), Err(ExportError::TooManyPairs));
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "refused without expanding: {:?}", started.elapsed());
     }
 
     #[test]

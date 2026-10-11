@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**620 guesses on 391 rows (190 of them live commands).**
+**621 guesses on 391 rows (190 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -443,6 +443,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `file.importMetrics` | M5 | handbook | yes | A metrics file also sets the left, right and width keys as it gives them, an empty key field removing the key the field shows; an AFM leaves the keys as they are. |
 | `file.importMetrics` | M5 | handbook | yes | Width, Outline Centred rounds the new LSB half up, so the outline stays on whole units; the handbook does not say. |
 | `file.importMetrics` | M5 | handbook | yes | Selected Glyphs limits glyph metrics and kerning classes; kerning values are imported whole. |
+| `file.importMetrics` | M5 | handbook | yes | Selected Glyphs means the glyphs selected in Font View, also while an Edit View tab shows; the handbook does not say which selection. Ticking it with a tab open in the reference app would settle it. |
 | `export.fileNaming` (behavior) | M2 | memory | – | The PostScript-name stem is recalled from the reference, not read in a source; dropping characters a file name cannot hold and falling back to the source file's name are ours. |
 | `export.flavourSubfolders` (behavior) | M2 | inferred | – | An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented. |
 | `export.afmIsLossy` (behavior) | M5 | handbook | – | Group pairs are expanded to glyph pairs with the exceptions applied, so the AFM file holds the kerning that applies to every covered glyph pair; the handbook does not say. |
