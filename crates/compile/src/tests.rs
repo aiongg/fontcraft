@@ -1614,3 +1614,63 @@ fn a_kern_feature_with_use_extension_or_through_an_include_keeps_the_generated_k
     assert!(gpos, "{warnings:?}");
     assert!(!crate::has_kern_feature_code(&comments));
 }
+
+/// Corner components and smart components are drawn into the glyphs before the build, so the
+/// compiled outlines hold them (`compile.cornerComponents`, `compile.smartComponents`).
+#[test]
+fn corner_and_smart_components_are_drawn_into_the_compiled_glyphs() {
+    use fontcraft_model::corner::CornerHint;
+    use fontcraft_model::{
+        ComponentInfo, ComponentInfoBox, GlyphInfo, GlyphInfoBox, LayerAttrs, LayerInfo, LayerInfoBox, PartProperty, SmartPole, SmartValue,
+    };
+    let mut f = Font::new("Prepared Sans");
+    let n = Node::new;
+    let mut corner = Glyph::new("_corner.cut");
+    let mut l = Layer::new("m01", 0.0);
+    l.shapes.push(path(false, vec![n(0.0, 50.0, NodeKind::Line), n(-50.0, 50.0, NodeKind::Line), n(-50.0, 0.0, NodeKind::Line), n(25.0, 0.0, NodeKind::Line)]));
+    corner.layers.push(l);
+    f.glyphs.push(corner);
+    {
+        let mut i = f.glyph_mut("I").unwrap();
+        i.layers[0].shapes.push(Shape::Path(Path::rect(100.0, 0.0, 400.0, 700.0)));
+    }
+    let plain = compile_ttf(&f, &Options::default()).unwrap();
+    f.glyph_mut("I").unwrap().layers[0].info.hints.push(CornerHint::new("_corner.cut", 0, 1).to_hint());
+
+    let mut part = Glyph::new("_part.bar");
+    part.info = GlyphInfoBox::new(GlyphInfo {
+        parts: vec![PartProperty {
+            name: "Width".into(),
+            bottom_value: 100.0,
+            top_value: 300.0,
+            bottom_name: None,
+            top_name: None,
+            extra: Default::default(),
+        }],
+        ..Default::default()
+    });
+    for (id, top, width) in [("m01", false, 100.0), ("wide", true, 300.0)] {
+        let mut l = Layer::new("m01", 600.0);
+        l.id = id.into();
+        l.shapes.push(Shape::Path(Path::rect(0.0, 0.0, width, 100.0)));
+        l.info = LayerInfoBox::new(LayerInfo {
+            attrs: LayerAttrs { smart_poles: vec![SmartPole { property: "Width".into(), top }], ..Default::default() },
+            ..Default::default()
+        });
+        part.layers.push(l);
+    }
+    f.glyphs.push(part);
+    let mut c = Component::new("_part.bar", 0.0, 0.0);
+    c.info = ComponentInfoBox::new(ComponentInfo { smart_values: vec![SmartValue { property: "Width".into(), value: 200.0 }], ..Default::default() });
+    f.glyph_mut("H").unwrap().layers[0].shapes.push(Shape::Component(c));
+
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    let plain_font = FontRef::new(&plain.bytes).unwrap();
+    let points = |font: &FontRef, out: &Compiled| drawn(font, gid_of(out, "I")).iter().map(Vec::len).sum::<usize>();
+    assert!(points(&font, &out) > points(&plain_font, &plain), "the corner adds nodes to I");
+    assert!(matches!(raw(&font, gid_of(&out, "H")), Some(RawGlyph::Simple(_))), "the smart component is written as contours");
+    let h = drawn(&font, gid_of(&out, "H"));
+    let right = h.iter().flatten().map(|p| p.0).fold(f32::MIN, f32::max);
+    assert_eq!(right, 200.0, "the smart component is interpolated at its value");
+}

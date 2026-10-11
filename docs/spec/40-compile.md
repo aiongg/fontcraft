@@ -49,6 +49,10 @@ Input: the source model plus export options. Output: a list of errors and warnin
 - Variable font: keep all masters; single-point axes are removed from the variation model
   (`compile.variableOnlyTables`).
 - Apply instance glyph filters here (`compile.subsetOnExport`).
+- Source preparation, before the master is resolved, as both references do when they load a
+  source: corner components are fitted into their paths, then smart components are drawn as
+  outlines (`fontcraft_compile::prepare_source`). A layer whose corners cannot be fitted, or a
+  smart component that cannot be interpolated, is written as it is, with a warning.
 - Glyphs-style pre-steps when the source enables them: erase open corners, propagate anchors;
   propagation precedes any flattening (`compile.glyphsOutlinePreSteps`).
 

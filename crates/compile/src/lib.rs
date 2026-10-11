@@ -5,6 +5,7 @@
 //!
 //! | Stage | Where | What it does |
 //! |---|---|---|
+//! | Source preparation | [`prepare_source`] | corner components fitted into their paths, then smart components drawn as outlines, as both reference compilers do when they load a source |
 //! | Resolve | [`drawing::resolve`] | one master, or an instance at a master, as the compiler reads it: glyphs, contours, components, metrics, names; strokes expanded and masks applied |
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
@@ -47,6 +48,7 @@ pub mod plan;
 pub mod preflight;
 mod ranges;
 
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -192,8 +194,37 @@ pub struct Compiled {
 /// Compiles `font` at `target` (a master, or an instance at a master) to a static font.
 pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     font.check()?;
-    let resolved = drawing::resolve(font, target)?;
-    compile_resolved_from(font, resolved, flavour, options)
+    let mut notes = Vec::new();
+    let font = prepare_source(font, &mut notes);
+    let resolved = drawing::resolve(&font, target)?;
+    let mut compiled = compile_resolved_from(&font, resolved, flavour, options)?;
+    notes.append(&mut compiled.warnings);
+    compiled.warnings = notes;
+    Ok(compiled)
+}
+
+/// `font` as the compile stages read it: the corner components of every layer fitted into its
+/// paths ([`fontcraft_model::corner::insert_all_corner_components`]), then every smart component
+/// drawn as outlines ([`fontcraft_model::smart::draw_smart_components`]), the order in which
+/// both reference compilers apply them when they load a source. Corners go first because a
+/// smart glyph's pole layers can hold corners. A layer whose corners cannot be fitted, and a
+/// smart component that cannot be drawn, stay as they are, with a warning. A font with neither
+/// is borrowed, not copied. Callers of [`compile_resolved_from`] resolve the prepared font.
+pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a, Font> {
+    let mut out = Cow::Borrowed(font);
+    let has_corners =
+        font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::corner::is_corner)));
+    if has_corners {
+        let (fitted, report) = fontcraft_model::corner::insert_all_corner_components(&out);
+        warnings.extend(report.failed.into_iter().map(|e| format!("corner components were not fitted, so the paths were written without them: {e}")));
+        out = Cow::Owned(fitted);
+    }
+    if out.glyphs.iter().any(|g| !g.info.parts.is_empty()) {
+        let (drawn, report) = fontcraft_model::smart::draw_smart_components(&out);
+        warnings.extend(report.kept.into_iter().map(|e| format!("a smart component was written as a plain component: {e}")));
+        out = Cow::Owned(drawn);
+    }
+    out
 }
 
 /// Compiles the first master of `font` to a static TrueType font.

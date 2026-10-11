@@ -31,7 +31,12 @@ pub struct Plan {
 /// Plans the compile of `font` at `target`.
 pub fn plan(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     font.check()?;
-    plan_stages(Some(font), crate::drawing::resolve(font, target)?, flavour, options)
+    let mut notes = Vec::new();
+    let font = crate::prepare_source(font, &mut notes);
+    let mut plan = plan_stages(Some(&font), crate::drawing::resolve(&font, target)?, flavour, options)?;
+    notes.append(&mut plan.warnings);
+    plan.warnings = notes;
+    Ok(plan)
 }
 
 /// [`plan`] on a resolved font, without kerning: the resolved font holds none.

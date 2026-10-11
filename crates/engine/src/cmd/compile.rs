@@ -37,7 +37,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile Fonts",
             [],
             None,
-            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
+            "{formats?: [\"ttf\"|\"otf\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], instances?: bool|[string], mastersAsInstances?: bool, destination?: string, outlines?: {keepDirection?: bool, conversionError?: number, removeOverlaps?: bool, flattenComponents?: bool, decomposeComponents?: bool, decomposeTransformedComponents?: bool}, timestamp?: number|\"now\"} build static fonts from the active document: every exportable instance (instances: true, the default; a font without instances builds its first master), the named instances, or none (false); mastersAsInstances adds one font per master. Instances between masters are skipped. Each font is built once per format (ttf: TrueType outlines, otf: CFF; default ttf) and written once per container (default plain). destination: a folder (files named by the instance's fileName parameter, else the PostScript name, with the document's file name standing in for a missing family name; with several formats each goes into a ttf or otf subfolder), or a file path when exactly one file results; without it the fonts are built in memory and only described. conversionError: in em, default 0.001. removeOverlaps: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). decomposeComponents: write every composite as contours (default false: only the composites the source's parameters and filter list name). decomposeTransformedComponents: write as contours every composite with a scaled, mirrored, slanted or rotated component (default: as the source's filter list says). flattenComponents: replace a component that points at a composite by the glyphs it reaches, so no composite is nested (default: as the source's filter list says). timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). Glyphs are written under their production names unless the Don't use Production Names parameter or Use Custom Naming is on; a name the font cannot hold is made valid, with a warning → {fonts: [{instance, source, format, glyphs, warnings, files: [{name, container, bytes, path?}]}], skipped: [{instance, source, reason}], warnings}",
             has_doc,
             compile
         ),
@@ -461,6 +461,8 @@ pub(super) fn build(
 ) -> Result<()> {
     font.check()?;
     let options = Options { glyph_data: DataRef(Some(data)), ..req.options.clone() };
+    let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
+    let font: &Font = &prepared;
     for job in jobs {
         if req.first_only && !report.fonts.is_empty() {
             report.skipped.push(skip(job, "the destination is one file: give a folder to export every instance"));
@@ -776,10 +778,23 @@ fn outline_options(p: &Params, options: &mut Options) -> Result<()> {
         let e = v.as_f64().filter(|e| e.is_finite() && *e > 0.0 && *e <= 1.0);
         options.conversion_error = e.ok_or_else(|| p.bad("`outlines.conversionError` must be a number above 0 and at most 1 (em)"))?;
     }
-    if let Some(key) = group.keys().find(|k| !matches!(k.as_str(), "keepDirection" | "conversionError" | "removeOverlaps")) {
+    if let Some(key) = group.keys().find(|k| {
+        !matches!(
+            k.as_str(),
+            "keepDirection"
+                | "conversionError"
+                | "removeOverlaps"
+                | "flattenComponents"
+                | "decomposeComponents"
+                | "decomposeTransformedComponents"
+        )
+    }) {
         return Err(EngineError::Unsupported(format!("`outlines.{key}`")));
     }
     options.remove_overlap = flag("removeOverlaps")?.unwrap_or(true);
+    options.components.decompose_all = flag("decomposeComponents")?.unwrap_or(false);
+    options.components.decompose_transformed = flag("decomposeTransformedComponents")?;
+    options.components.flatten = flag("flattenComponents")?;
     Ok(())
 }
 
@@ -855,6 +870,8 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     font.check()?;
     let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
     let mut warnings: Vec<String> = Vec::new();
+    let prepared = fontcraft_compile::prepare_source(font, &mut warnings);
+    let font: &Font = &prepared;
     let mut glyph_order: Option<Vec<String>> = None;
     let mut production_names: Option<Map<String, Value>> = None;
     for job in &jobs {

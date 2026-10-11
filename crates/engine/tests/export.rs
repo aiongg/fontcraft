@@ -482,3 +482,54 @@ fn export_refuses_an_invalid_glyph_name_while_compile_writes_a_clean_one() {
     let warnings = built["fonts"][0]["warnings"].to_string();
     assert!(warnings.contains("`bad name` → `badname`"), "{warnings}");
 }
+
+/// The component flags of `font.compile`'s `outlines` group decompose and flatten composites.
+#[test]
+fn compile_component_flags_decompose_and_flatten() {
+    use fontcraft_engine::model::{Alignment, Component, ComponentInfo, ComponentInfoBox, Shape, Transform};
+    use skrifa::raw::TableProvider;
+    use skrifa::raw::tables::glyf::Glyph;
+    let mut s = drawn();
+    s.edit("composites", |font| {
+        let unaligned = |base: &str, transform: Transform| {
+            let mut c = Component::new(base, 0.0, 0.0);
+            c.transform = transform;
+            c.info = ComponentInfoBox::new(ComponentInfo { alignment: Alignment::Disabled, ..Default::default() });
+            Shape::Component(c)
+        };
+        font.glyph_mut("B")?.layers[0].shapes.push(unaligned("A", Transform::default()));
+        font.glyph_mut("C")?.layers[0].shapes.push(unaligned("B", Transform::default()));
+        font.glyph_mut("D")?.layers[0].shapes.push(unaligned("A", Transform::Matrix([0.5, 0.0, 0.0, 1.0, 0.0, 0.0])));
+        Ok(())
+    })
+    .unwrap();
+    let dir = temp("component-flags");
+    // Per glyph B, C, D: None when simple, else the component glyph ids.
+    let shape = |s: &mut Session, outlines: Value| -> Vec<Option<Vec<u16>>> {
+        let path = dir.join("out.ttf");
+        run(s, "font.compile", json!({"outlines": outlines, "destination": path, "timestamp": 0}));
+        let bytes = std::fs::read(&path).unwrap();
+        let font = skrifa::FontRef::new(&bytes).unwrap();
+        let (loca, glyf) = (font.loca(None).unwrap(), font.glyf().unwrap());
+        let gid = |c: char| font.charmap().map(c).unwrap();
+        ['B', 'C', 'D']
+            .iter()
+            .map(|&c| match loca.get_glyf(gid(c), &glyf).unwrap() {
+                Some(Glyph::Composite(g)) => Some(g.components().map(|c| c.glyph.to_u16()).collect()),
+                _ => None,
+            })
+            .collect()
+    };
+    let plain = shape(&mut s, json!({}));
+    assert!(plain.iter().all(Option::is_some), "composites stay composites by default: {plain:?}");
+    let b_gid = plain[1].as_ref().unwrap()[0];
+    let flat = shape(&mut s, json!({"flattenComponents": true}));
+    assert_ne!(flat[1].as_ref().unwrap()[0], b_gid, "C points at A once flattened: {flat:?}");
+    let transformed = shape(&mut s, json!({"decomposeTransformedComponents": true}));
+    assert!(transformed[0].is_some() && transformed[2].is_none(), "only the scaled composite is decomposed: {transformed:?}");
+    let all = shape(&mut s, json!({"decomposeComponents": true}));
+    assert!(all.iter().all(Option::is_none), "every composite is decomposed: {all:?}");
+    let e = s.execute("font.compile", &json!({"outlines": {"flattenComponents": 1}})).unwrap_err().to_string();
+    assert!(e.contains("flattenComponents"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
