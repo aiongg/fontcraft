@@ -1,5 +1,6 @@
 //! File › Export…: one tab per output kind, each a dialog of its own command, for the active
-//! document. Built: the OTF tab (`file.exportStatic`) and the UFO tab (`file.exportUfo`).
+//! document. Built: the OTF tab (`file.exportStatic`), the UFO tab (`file.exportUfo`) and the
+//! Metrics tab (`file.exportMetrics`).
 //!
 //! Exporting writes files, so nothing runs until OK, which reads Next… as in the handbook. Each
 //! tab has an export folder: Choose… picks it, and Next… with no folder asks for one
@@ -15,7 +16,11 @@ use super::{Dialog, Fields, Mode, Tab};
 pub const DIALOG: Dialog = Dialog::new("dialog.export", "Export", "file.export", Fields::Tabs(&TABS));
 
 /// The tabs, by the id `file.export {tab}` takes.
-pub const TABS: [Tab; 2] = [Tab { id: "otf", label: "OTF", dialog: OTF }, Tab { id: "ufo", label: "UFO", dialog: UFO }];
+pub const TABS: [Tab; 3] = [
+    Tab { id: "otf", label: "OTF", dialog: OTF },
+    Tab { id: "ufo", label: "UFO", dialog: UFO },
+    Tab { id: "metrics", label: "Metrics", dialog: METRICS },
+];
 
 /// Static OpenType fonts.
 pub const OTF: Dialog = Dialog {
@@ -29,6 +34,14 @@ pub const UFO: Dialog = Dialog {
     mode: Mode::RunOnOk,
     buttons: ["Next…", "Cancel"],
     ..Dialog::new("dialog.exportUfo", "Export", "file.exportUfo", Fields::Fixed(ufo_fields))
+};
+
+/// One master's spacing and kerning as a metrics file (kerning-text) or an AFM file. The master
+/// field opens on the master the toolbar shows.
+pub const METRICS: Dialog = Dialog {
+    mode: Mode::RunOnOk,
+    buttons: ["Next…", "Cancel"],
+    ..Dialog::new("dialog.exportMetrics", "Export", "file.exportMetrics", Fields::Fixed(metrics_fields))
 };
 
 /// The export folder field of every tab.
@@ -81,6 +94,21 @@ fn ufo_fields(session: &Session) -> Vec<Field> {
             true,
             "Draw smart components as outlines; off keeps them as components with their values in the glyph lib",
         ),
+        destination(),
+    ]
+}
+
+fn metrics_fields(session: &Session) -> Vec<Field> {
+    vec![
+        super::import_metrics::master_field(session, "master", "Master", "The master whose spacing and kerning are written"),
+        Field::choice(
+            "format",
+            "Format",
+            &[("metrics", "Metrics File"), ("afm", "AFM File")],
+            "metrics",
+            "Metrics File: every pair, group, width, sidebearing and metrics key, read back exactly; AFM File: widths and glyph pairs for other editors, without groups or keys",
+        ),
+        Field::text("fileName", "File Name", 200, "The file name without its extension (.tsv or .afm is added); empty: family and master name"),
         destination(),
     ]
 }

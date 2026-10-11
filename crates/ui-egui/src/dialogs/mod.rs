@@ -47,6 +47,7 @@ mod find_and_replace;
 pub mod find_glyphs;
 pub mod form;
 mod guide_properties;
+mod import_metrics;
 pub mod import_outlines_missing_glyph;
 mod interpolate_with_background;
 mod languages_list;
@@ -238,6 +239,11 @@ pub const DIALOGS: &[Dialog] = &[
     rename_kerning_group::DIALOG,
     paste_kerning_conflict::DIALOG,
     transform_metrics::DIALOG,
+    // Metrics export and import (the tab dialog first: the menu item opens it).
+    export::METRICS,
+    import_metrics::DIALOG,
+    import_metrics::FILE,
+    import_metrics::FONT,
 ];
 
 /// The shell commands of this module.
@@ -254,7 +260,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "Export…",
         &["File"],
         "Cmd+E",
-        "{tab?: \"otf\" (default) | \"ufo\", params?: {…}} opens the export dialog of the active document on a tab: static OpenType (file.exportStatic) or UFO (file.exportUfo); params set its first values. Nothing is written until OK; OK with no destination folder asks for one → ui.dialog.inspect's reply",
+        "{tab?: \"otf\" (default) | \"ufo\" | \"metrics\", params?: {…}} opens the export dialog of the active document on a tab: static OpenType (file.exportStatic), UFO (file.exportUfo) or metrics (file.exportMetrics); params set its first values. Nothing is written until OK; OK with no destination folder asks for one → ui.dialog.inspect's reply",
     ),
 ];
 
@@ -575,6 +581,18 @@ fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>,
                 values.insert(f.key.clone(), v);
             }
         }
+    }
+    // A master field opens on the master the toolbar shows, unless it was given or the tab
+    // shown before had one.
+    let carried = tabs
+        .as_ref()
+        .is_some_and(|t| t.saved.get(dialog.id).or_else(|| t.saved.get(CARRY)).and_then(Value::as_object).is_some_and(|m| m.contains_key("master")));
+    if !given.contains_key("master")
+        && !carried
+        && let Some(field) = fields.iter().find(|f| f.key == "master")
+        && let Some(v) = import_metrics::current_master(app).and_then(|m| field.check(&json!(m)).ok())
+    {
+        values.insert("master".into(), v);
     }
     if dialog.mode == Mode::Preview && targets.is_empty() {
         return Err(format!("{}: select a glyph first", dialog.title));

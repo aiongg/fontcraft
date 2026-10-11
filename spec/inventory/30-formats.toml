@@ -414,7 +414,10 @@ milestone = "M5"
 summary = "Text file with global metrics, per-glyph advance widths and bounding boxes, and flat kerning pairs. Exported for one master and imported into one master; group kerning is expanded to pairs on export and metrics keys are not representable, so importing can change sidebearings and break links."
 ref = "Import & Export › Exporting Metrics, Importing Metrics; Adobe TN 5004"
 status = "docs"
-notes = "fontTools `afmLib` (MIT) is the oracle: it reads what FontCraft writes, and FontCraft reads what it writes."
+notes = "Built (M5.14) in `crates/spacing/src/afm.rs`. Written: StartFontMetrics 4.1, the names, ItalicAngle, FontBBox and the vertical metrics, a `C` line per glyph (WX and B, whole numbers; the code of the first Unicode value up to 255, else -1) and `KPX` pairs. Read: `C`/`CH` lines (WX, W0X, W, W0, N, B), `KPX` and `KP`, the global keywords; composites, track kerning, KPY and KPH are skipped. Line ends `\\n`, `\\r\\n` or `\\r`. Limits: 16 MB, lines of 4,096 bytes, 65,535 glyphs, 500,000 pairs. fontTools `afmLib` (MIT) is the oracle: it reads what FontCraft writes, and FontCraft reads what it writes; its glyph-name pattern lacks `-`, which the measure's script widens."
+guesses = [
+  "A glyph's code is its first Unicode value when that is at most 255, else -1; Adobe's note means a code in the font's encoding. An AFM exported by the reference would settle it.",
+]
 
 [[format]]
 id = "pfm"

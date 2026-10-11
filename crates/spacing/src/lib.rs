@@ -68,6 +68,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
+pub mod afm;
 pub mod eval;
 pub mod kerning;
 pub mod kerning_text;

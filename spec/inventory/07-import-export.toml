@@ -84,17 +84,20 @@ label = "Export Metrics"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{document?: path, master?: id, format: "metrics"|"afm", path: path}'
+params = '{master?: id, format: "metrics"|"afm", direction?: "ltr"|"rtl"|"vertical", path?: path, destination?: folder, fileName?: string}'
 area = "spacing-kerning"
 milestone = "M5"
-summary = "Writes the spacing and kerning of one master (the master active in the toolbar when none is given) to a metrics file or an AFM file. Headless form of the dialog's Metrics tab."
+summary = "Writes the spacing and kerning of one master to a metrics file or an AFM file, or returns the text. Commands take explicit targets, so the master defaults to the first master; the dialog's Metrics tab passes the master the toolbar shows. Headless form of that tab."
 ref = "Import & Export › Exporting Font Files › Exporting Metrics"
 status = "handbook"
-
-# ───────────────────────────── Export: dialogs ─────────────────────────────
+notes = "Built (M5.14) in `crates/engine/src/cmd/metrics_io.rs`. metrics: kerning-text with the master's pairs of one direction, its kerning groups on the two sides facing that direction and one metrics line per glyph (LSB, RSB, width and the three keys as the fields show them); file.importMetrics reads it back to the same font. afm: `fontcraft_spacing::afm::from_master`. A linked master writes what it shows: the widths and kerning of the master it follows. `destination` with `fileName` (default Family-Master) adds .tsv or .afm; the file is written atomically. Documented, not yet observed."
 guesses = [
   "The `metrics` format is our kerning-text format (`kerning-text` in 30-formats.toml), because the reference does not document its own metrics file; files in the reference format are neither read nor written.",
+  "A metrics file holds the pairs of one direction (left to right by default, `direction` for the others), because kerning-text has one direction line; an export of a master with right-to-left or vertical pairs needs one file per direction. A reference metrics file with such pairs would settle it.",
+  "The metrics file's extension is .tsv; the reference's own extension is not documented.",
 ]
+
+# ───────────────────────────── Export: dialogs ─────────────────────────────
 
 [[panel]]
 id = "dialog.export"
@@ -170,14 +173,22 @@ id = "dialog.exportMetrics"
 label = "Export › Metrics"
 location = "dialog"
 controls = [
-  "Next… button: opens a save dialog",
-  "save dialog: file name, folder, format choice (Metrics File or AFM File)",
+  "Master pop-up: the master the toolbar shows at first",
+  "Format pop-up: Metrics File or AFM File",
+  "File Name field (without extension; empty: family and master name)",
+  "Export Folder with Choose…",
+  "Next… / Cancel",
 ]
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Exports the metrics of the master currently active in the toolbar. The tab itself has no stated options; destination and format are picked in the save dialog that follows."
 ref = "Import & Export › Exporting Font Files › Exporting Metrics"
 status = "handbook"
+notes = "Built (M5.14) as the Metrics tab of dialog.export (`crates/ui-egui/src/dialogs/export.rs`), running file.exportMetrics on Next…; Next… with no folder asks for one, as the other tabs do. Documented, not yet observed."
+guesses = [
+  "The format, file name and folder sit on the tab, with the folder chooser for the folder, because the dialog framework has no save-file chooser; the handbook puts them in a save dialog after Next…. A save-file chooser in the shell would settle it.",
+  "The tab shows a Master pop-up that starts on the toolbar's master, so a master can be exported without changing the toolbar; the handbook names no such control.",
+]
 
 [[panel]]
 id = "dialog.chooseExportFolder"
@@ -425,6 +436,7 @@ milestone = "M5"
 summary = "Metrics export covers exactly one master: the one selected in the toolbar at the time of export."
 ref = "Import & Export › Exporting Font Files › Exporting Metrics"
 status = "handbook"
+notes = "Built (M5.14): the Metrics tab opens on the master the toolbar shows (the showing tab's active master, else Font View's master); file.exportMetrics writes one master. Documented, not yet observed."
 
 [[behavior]]
 id = "export.metricsFileIsComplete"
@@ -433,6 +445,7 @@ milestone = "M5"
 summary = "The reference's own metrics file format carries all spacing and kerning data of the master, including what AFM cannot express. Its layout is proprietary and undocumented in the handbook; we need our own lossless equivalent."
 ref = "Import & Export › Exporting Font Files › Exporting Metrics"
 status = "handbook"
+notes = "Built (M5.14) with kerning-text: pairs in stored order, groups, LSB, RSB, width and the left, right and width keys of every glyph. Exporting a master and importing the file into the master again gives back the same glyphs and kerning (test `kerning_text_export_then_import_restores_the_master_exactly_as_one_undo_step`). Vertical metrics (TSB, BSB, vertical width) and their keys are not in the format."
 
 [[behavior]]
 id = "export.afmIsLossy"
@@ -441,11 +454,13 @@ milestone = "M5"
 summary = "AFM export is for exchange with other editors and drops what the format cannot represent; group kerning and metrics keys are named as unsupported. How group kerning is reduced (expanded to glyph pairs, or omitted) is not stated."
 ref = "Import & Export › Exporting Font Files › Exporting Metrics"
 status = "handbook"
-
-# ───────────────────────────── Source formats and saving ─────────────────────────────
+notes = "Built (M5.14): every glyph pair a stored pair covers is written with the value that applies to it (exceptions included), rounded half up, as are widths and bounding boxes; groups and keys are not written. fontTools afmLib reads the file (the § 5 measure on Inter, `afm_from_inter_regular_reads_back_with_afmlib_both_ways`)."
 guesses = [
   "Group pairs are expanded to glyph pairs with the exceptions applied, so the AFM file holds the kerning that applies to every covered glyph pair; the handbook does not say.",
+  "AFM values stay in the font's units and are not scaled to 1,000 units per em, so a round trip loses nothing; Adobe's note assumes 1,000. An AFM exported by the reference from a 2,048-unit font would settle it.",
 ]
+
+# ───────────────────────────── Source formats and saving ─────────────────────────────
 
 [[behavior]]
 id = "source.saveAsChoosesFormat"
@@ -765,9 +780,14 @@ milestone = "M5"
 summary = "Reads spacing and kerning for one master from a metrics file, an AFM file, a Glyphs file or a UFO and applies the parts the user ticks to the open document. Available from Font View. Which options exist depends on the file type (see the two dialogs); sourceMaster for multi-master source files is our addition."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
-notes = "`keepAlignedComponents` waits for automatic alignment (M6); until then it is accepted and has no effect."
+notes = "Built (M5.14) in `crates/engine/src/cmd/metrics_io.rs`; one undo step, refused for a linked master. Sources by content: kerning-text, AFM (`StartFontMetrics`), or any font source FontCraft opens; `text` takes a file's contents (for the browser) and `sourceDocument` another open document. Kerning replaces the master's pairs in each direction the source holds; values keep their fractions. Kerning classes: kerning-text sets the groups on the sides its group lines name (a file of pairs alone leaves the groups); a font source copies the groups of glyphs of the same name. Glyph metrics in the four modes of import.metricsModes; glyphs with components take theirs after the others, as they measure their components. Unknown glyphs and groups are listed. `keepAlignedComponents` waits for automatic alignment (M6); until then it is accepted and has no effect. Documented, not yet observed."
 guesses = [
   "The import goes to the master given, else the first master, and `sourceMaster` defaults to the first master of the source file.",
+  "Importing kerning replaces the master's pairs in each imported direction, so export then import gives back the same table; the handbook does not say whether it merges. Importing into a master with pairs in the reference app would settle it.",
+  "Import Kerning and Import Kerning Classes default to on (Import Kerning off for a Glyphs file, which cannot give kerning values), and Import Metrics to off; the handbook states no defaults.",
+  "A metrics file also sets the left, right and width keys as it gives them, an empty key field removing the key the field shows; an AFM leaves the keys as they are.",
+  "Width, Outline Centred rounds the new LSB half up, so the outline stays on whole units; the handbook does not say.",
+  "Selected Glyphs limits glyph metrics and kerning classes; kerning values are imported whole.",
 ]
 
 [[panel]]
@@ -787,6 +807,10 @@ milestone = "M5"
 summary = "Options shown after choosing a metrics or AFM file: kerning values, kerning classes, and glyph metrics with one of four ways to reconcile sidebearings and width. Exact checkbox captions for the kerning options are paraphrased, not quoted in the handbook."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+notes = "Built (M5.14) in `crates/ui-egui/src/dialogs/import_metrics.rs` as the first tab of the Import Metrics window (`dialog.importMetrics`), which File › Import › Metrics… opens. Besides the listed controls it has the file path and an Into Master pop-up that starts on the toolbar's master. Import runs file.importMetrics once; Cancel changes nothing. Documented, not yet observed."
+guesses = [
+  "The two dialogs are two tabs of one window opened from the menu, with the file typed as a path, because the dialog framework has no file chooser field; the handbook asks for the file first and then shows the dialog that fits it. A file field with a chooser would settle it.",
+]
 
 [[panel]]
 id = "dialog.importMetricsFont"
@@ -802,6 +826,11 @@ milestone = "M5"
 summary = "Reduced option set shown after choosing a Glyphs or UFO file: only the kerning checkboxes, with no glyph-metrics controls. The handbook's picture of the dialog is not reproduced in text, so the precise control list needs checking against the app."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+notes = "Built (M5.14) as the Font tab of the Import Metrics window: a Source pop-up (another open document, or the file below), the file path, Source Master, Into Master, the two kerning checkboxes and Selected Glyphs. Import Kerning starts off, and file.importMetrics refuses it for a Glyphs file. Documented, not yet observed."
+guesses = [
+  "The tab can import from another open document as well as from a file; the handbook names files only.",
+  "The tab offers Selected Glyphs and a Source Master field; the handbook does not say whether this dialog has them.",
+]
 
 [[behavior]]
 id = "import.metricsSources"
@@ -810,6 +839,7 @@ milestone = "M5"
 summary = "Metrics can be imported from four kinds of file: the reference's metrics file, AFM, a Glyphs file and a UFO. The first two are exactly what metrics export writes, so export followed by import round-trips a master's spacing and kerning (fully for the metrics file, partially for AFM)."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+notes = "Built (M5.14): kerning-text in place of the reference's metrics file, AFM, and every font source FontCraft opens (.glyphs, .glyphspackage, UFO, designspace, .fontcraft, compiled fonts), plus another open document. Kerning-text restores a master exactly; AFM restores the widths, the sidebearings its bounding boxes give and every expanded pair. Documented, not yet observed."
 
 [[behavior]]
 id = "import.metricsNoKerningValuesFromGlyphsFile"
@@ -818,6 +848,7 @@ milestone = "M5"
 summary = "When the source is a Glyphs file, kerning values cannot be imported through this command; only kerning classes can. Kerning values travel between Glyphs files by copying and pasting pairs in the Kerning window instead."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+notes = "Built (M5.14): for a .glyphs file or package (also an open document read from one), importKerning defaults to false and true is refused with a message that points to the Kerning window. Documented, not yet observed."
 
 [[behavior]]
 id = "import.metricsModes"
@@ -826,6 +857,7 @@ milestone = "M5"
 summary = "Glyph metrics from a metrics or AFM file are applied in one of four modes: take LSB and width (RSB follows), take RSB and width (LSB follows), take both sidebearings (width follows), or take the width and centre the outline so both sidebearings are equal. No default mode is stated."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+notes = "Built (M5.14): `importMetrics` takes lsbAndWidth, rsbAndWidth, bothSidebearings or widthCentered (true is lsbAndWidth). AFM gives the LSB and RSB from its bounding box. An empty glyph takes the width only. Documented, not yet observed."
 guesses = [
   "The default mode is LSB and width (the RSB follows); the handbook gives no default.",
 ]
@@ -846,6 +878,7 @@ milestone = "M5"
 summary = "Metrics are applied to every glyph unless Selected Glyphs is ticked, which limits the import to the Font View selection; with that option ticked and nothing selected, all glyphs are still processed."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
+notes = "Built (M5.14): the dialogs pass the Font View selection as `glyphs` when Selected Glyphs is ticked and an empty list (every glyph) when it is not; file.importMetrics treats an absent or empty list as every glyph. Documented, not yet observed."
 
 [[command]]
 id = "file.importFeatures"

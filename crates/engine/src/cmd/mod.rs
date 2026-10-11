@@ -36,6 +36,7 @@ mod layers;
 mod measure;
 mod measure_line;
 mod meta;
+mod metrics_io;
 mod metrics_keys;
 mod new_document;
 mod node;
@@ -186,6 +187,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(kerning_groups::specs());
         v.extend(kerning_maintain::specs());
         v.extend(kerning_window::specs());
+        v.extend(metrics_io::specs());
         v.extend(font::specs());
         v.extend(compile::specs());
         v.extend(meta::specs());
