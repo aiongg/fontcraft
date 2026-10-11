@@ -328,7 +328,37 @@ struct Inserted {
 }
 
 /// Fits `hints` into `shapes`, earlier paths and nodes first, and says where each went.
+/// Fits `hints` into `shapes`. A hint counts a closed path's nodes as the reference's format
+/// stores them, with the start node last (glyphsLib keeps that numbering in a UFO's hints), while
+/// the model keeps the start node first; the paths are turned to the format's order for the
+/// fitting, as fontc fits them, and back afterwards.
 fn apply(font: &Font, master: &str, shapes: &mut Vec<Shape>, hints: &[CornerHint]) -> Result<Vec<Inserted>, CornerError> {
+    let own = shapes.len();
+    turn_closed_paths(shapes, true);
+    let result = apply_in_format_order(font, master, shapes, hints);
+    if let Some(own_shapes) = shapes.get_mut(..own) {
+        turn_closed_paths(own_shapes, false);
+    }
+    result
+}
+
+/// Moves each closed path's first node to the end (`to_format`), or its last node to the front.
+fn turn_closed_paths(shapes: &mut [Shape], to_format: bool) {
+    for s in shapes {
+        if let Shape::Path(p) = s
+            && p.closed
+            && !p.nodes.is_empty()
+        {
+            if to_format {
+                p.nodes.rotate_left(1);
+            } else {
+                p.nodes.rotate_right(1);
+            }
+        }
+    }
+}
+
+fn apply_in_format_order(font: &Font, master: &str, shapes: &mut Vec<Shape>, hints: &[CornerHint]) -> Result<Vec<Inserted>, CornerError> {
     let mut targets: Vec<(usize, usize, &CornerHint)> = hints
         .iter()
         .filter_map(|h| match h.target {

@@ -188,38 +188,77 @@ key = "OS/2.xAvgCharWidth"
 sources = ["designspace_from_glyphs/IntermediateLayer", "designspace_from_glyphs/WghtVar_Anchors"]
 reason = "Follows from the mark widths of a UFO glyphsLib wrote (see hmtx)."
 
-# --- Smart components, corner components, open corners (M6) -----------------------------------
+# --- Open corners (M6) -------------------------------------------------------------------------
 
 [[allow]]
 table = "glyf"
 key = "glyf * outline"
 keys = ["glyf * bounds", "glyf * structure"]
-sources = ["/OpenCorners.ufo", "/NestedSmartComponent.glyphs", "/SmartComponent.glyphs", "/SmartComponents.glyphs", "/CornerComponents.glyphs"]
-reason = "Source reading: the reference interpolates smart components, applies corner components and erases open corners before compiling; FontCraft does from M6."
+sources = ["/OpenCorners.ufo"]
+reason = "Source reading: the reference compilers erase open corners before compiling (the eraseOpenCorners filter); FontCraft does not build that step yet."
 
 [[allow]]
 table = "CFF"
 key = "CFF * outline"
-sources = ["/OpenCorners.ufo", "/NestedSmartComponent.glyphs", "/SmartComponent.glyphs", "/SmartComponents.glyphs", "/CornerComponents.glyphs"]
-reason = "Source reading: smart components, corner components and open corners, as for glyf; M6."
+sources = ["/OpenCorners.ufo"]
+reason = "Source reading: open corners, as for glyf."
+
+# --- Corner components and smart components (M6) -----------------------------------------------
+
+[[allow]]
+table = "glyf"
+key = "glyf av_left_anchoroffpath outline"
+keys = ["glyf av_left_anchoroffpath bounds"]
+sources = ["/CornerComponents.glyphs"]
+reason = "Decided difference: the corner glyph's left anchor slides the corner along the baseline onto the slanted stem, as the reference app's own output stored in the source (`av_left_anchoroffpath.expectation`) shows node for node; both reference compilers ignore the left anchor."
 
 [[allow]]
 table = "hmtx"
-key = "hmtx * lsb"
+key = "hmtx av_left_anchoroffpath lsb"
 sources = ["/CornerComponents.glyphs"]
-reason = "Follows from the corner components the reference applies (see glyf); M6."
+reason = "Follows from the left anchor of the corner glyph (see glyf av_left_anchoroffpath)."
 
 [[allow]]
-table = "head"
-key = "head.xMax"
-sources = ["/SmartComponents.glyphs"]
-reason = "Follows from the smart components the reference interpolates (see glyf); M6."
+table = "glyf"
+key = "glyf au_left_anchoronpath outline"
+keys = ["glyf au_left_anchoronpath bounds"]
+sources = ["/CornerComponents.glyphs"]
+reason = "Decided difference: FontCraft applies the corner glyph's left anchor, which both reference compilers ignore; for this glyph the reference app's stored output (`au_left_anchoronpath.expectation`) keeps the corner's start node unmoved, which FontCraft does not reproduce either (`corner.entryAnchor` in spec/inventory/09-reusing-shapes.toml)."
 
 [[allow]]
-table = "hhea"
-key = "hhea.xMaxExtent"
+table = "hmtx"
+key = "hmtx au_left_anchoronpath lsb"
+oracle = "fontc"
+sources = ["/CornerComponents.glyphs"]
+reason = "Follows from the left anchor of the corner glyph (see glyf au_left_anchoronpath)."
+
+[[allow]]
+table = "glyf"
+key = "glyf ai_curved_outstroke outline"
+oracle = "fontmake"
+sources = ["/CornerComponents.glyphs"]
+reason = "The reference compilers differ: glyphsLib's corner filter places one node of the cut outgoing curve a unit away from fontc's. FontCraft follows fontc, whose result equals the reference app's stored output (`ai_curved_outstroke.expectation`)."
+
+[[allow]]
+table = "CFF"
+key = "CFF av_left_anchoroffpath outline"
+keys = ["CFF au_left_anchoronpath outline", "CFF ai_curved_outstroke outline"]
+sources = ["/CornerComponents.glyphs"]
+reason = "The corner glyphs of the three glyf entries above, in CFF outlines."
+
+[[allow]]
+table = "glyf"
+key = "glyf w outline"
+oracle = "fontc"
+sources = ["/NestedSmartComponent.glyphs"]
+reason = "The reference compilers differ on `w`, whose smart component's glyph holds another smart component: FontCraft's outline equals glyphsLib's (fontmake), which `fontcraft_model::smart` follows, not fontc's."
+
+[[allow]]
+table = "glyf"
+key = "glyf m outline"
+oracle = "fontmake"
 sources = ["/SmartComponents.glyphs"]
-reason = "Follows from the smart components the reference interpolates (see glyf); M6."
+reason = "The reference compilers differ on this smart component's interpolated outline (same ink, a different first point); FontCraft's matches fontc's."
 
 # --- glyphsLib reads keys in file order ----------------------------------------------------------
 
