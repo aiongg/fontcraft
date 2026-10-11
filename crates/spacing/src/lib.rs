@@ -1,4 +1,5 @@
-//! FontCraft spacing (L2): metrics keys, sidebearings, the out-of-sync scan and linked metrics.
+//! FontCraft spacing (L2): metrics keys, sidebearings, the out-of-sync scan, linked metrics and
+//! kerning.
 //! Pure functions over a [`fontcraft_model::Font`]; no I/O. Behaviour notes:
 //! `docs/spec/08-spacing-kerning.md` § 2; rows `metricsKey.*` in
 //! `spec/inventory/08-spacing-kerning.toml`.
@@ -36,6 +37,11 @@
 //! [`metrics_source`] is the master whose widths and kerning a master shows, following the
 //! *Link Metrics With First Master* and *Link Metrics With Master* parameters.
 //!
+//! # Kerning ([`kerning`])
+//! Command sides and stored sides, the pair that applies to two glyphs with the step that
+//! supplied it ([`kerning::KernIndex`]), lock states derived from the pairs, and kerning groups.
+//! The module's own doc comment lists its API.
+//!
 //! The public API:
 //! ```text
 //! parse_field(text: &str, field: Field, exists: impl Fn(&str) -> bool) -> Result<Entry, KeyError>
@@ -55,6 +61,7 @@
 #![forbid(unsafe_code)]
 
 pub mod eval;
+pub mod kerning;
 pub mod keys;
 pub mod link;
 pub mod measure;

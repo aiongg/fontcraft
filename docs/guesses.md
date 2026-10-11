@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**463 guesses on 328 rows (132 of them live commands).**
+**466 guesses on 329 rows (132 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -409,8 +409,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `kerning.shortcutsNeedTextTool` (behavior) | M5 | handbook | – | A keypress changes the kerning that applies by the step and stores the result on the sides the locks choose, creating that pair when it does not exist; no source says, and the Kerning window after the first keypress on an unkerned pair settles it. |
 | `kerning.shortcutModifierScheme` (behavior) | M5 | handbook | – | In right-to-left text Ctrl picks the pair with the glyph that is visually on the left and Cmd the pair with the glyph visually on the right; the handbook does not mention right-to-left text here, and watching the shortcuts on right-to-left text settles it. |
 | `kerning.verticalGroups` (behavior) | M5 | handbook | – | M5 stores and edits vertical pairs and shows them in top-to-bottom text; export writes none, as neither oracle does. |
+| `kerning.verticalGroups` (behavior) | M5 | handbook | – | A vertical group side is written `@MMK_T_` with the upper glyph's bottom group and `@MMK_B_` with the lower glyph's top group, by analogy with the left-to-right prefixes; a vertical group pair saved by the reference app settles it. |
 | `kerning.lockStates` (behavior) | M5 | handbook | – | A lock is open when the pair that applies names that glyph itself on that side while the glyph has a group there; opening a lock stores such a pair at the value that applied, so the kerning does not change. The kern field and the Kerning window right after a lock is opened, in the running app or a video, settle it. |
 | `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing a lock deletes the exception pair in the current master only; the all-masters variant exists only for deletion in the Kerning window. Closing a lock in a font with two masters and reading the other master's pairs settles it. |
+| `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing one lock while both are open deletes the glyph–glyph pair, so the other side shows whichever pair applies next; closing one lock of such a pair in the running app settles it. |
+| `kerning.pairLookupOrder` (behavior) | M5 | docs | – | When two stored pairs name the same sides in different spellings (the reference's group prefix and the UFO's), the first in stored order applies; a source with both, opened in the reference app, settles it. |
 | `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | The defaults are contains, every entry kind, both sides and not limited to the Font View selection; Reset returns to them. The options menu of a newly opened Kerning window settles them. |
 | `kerning.windowSorting` (behavior) | M5 | handbook | – | Before a header is clicked the list keeps the stored order of the pairs. |
 | `kerning.windowSelectionDrivesEditView` (behavior) | M5 | handbook | – | A group side is shown by its first member in glyph order. |

@@ -936,6 +936,7 @@ status = "handbook"
 notes = "Neither oracle exports vertical kerning: a test font with a `kerningVertical` pair compiles to a GPOS table with only `kern` in fontc 1.0.0 and fontmake 3.12.1."
 guesses = [
   "M5 stores and edits vertical pairs and shows them in top-to-bottom text; export writes none, as neither oracle does.",
+  "A vertical group side is written `@MMK_T_` with the upper glyph's bottom group and `@MMK_B_` with the lower glyph's top group, by analogy with the left-to-right prefixes; a vertical group pair saved by the reference app settles it.",
 ]
 
 [[behavior]]
@@ -1077,6 +1078,7 @@ status = "handbook"
 notes = "Documented, not yet observed: closing the lock removes the exception. An older answer on the reference forum, not the handbook, says that closing a lock applies the existing group value, so the number shown can change; deleting the exception pair gives that result."
 guesses = [
   "Closing a lock deletes the exception pair in the current master only; the all-masters variant exists only for deletion in the Kerning window. Closing a lock in a font with two masters and reading the other master's pairs settles it.",
+  "Closing one lock while both are open deletes the glyph–glyph pair, so the other side shows whichever pair applies next; closing one lock of such a pair in the running app settles it.",
 ]
 
 [[command]]
@@ -1114,9 +1116,12 @@ milestone = "M5"
 summary = "Effective kerning for two glyphs is taken from the most specific stored pair: glyph–glyph, then glyph–group (left glyph, right group), then group–glyph, then group–group, else zero. The handbook only states that exceptions override group kerning; the full four-step order, including the tie between the two mixed forms, is taken from the UFO 3 kerning.plist rules and must be checked against the reference app."
 ref = "Spacing & Kerning › Kerning › Kerning Group Exceptions; UFO 3 spec › kerning.plist › Exceptions"
 status = "docs"
+notes = "Both oracles compile this order. In a test font with A–@V = −30 and @A–V = −40, the pair A V gets −30 (glyph–group wins) in fontc 1.0.0 and fontmake 3.12.1; Aacute V gets −40 and Aacute W the group–group −50. fontc resolves pairs in the same order (`fontbe/src/features/kern.rs`, `lookup_kerning_value`, after fontTools `ufoLib/kerning.py`). What the reference Edit View shows is documented only as far as exceptions overriding groups."
+guesses = [
+  "When two stored pairs name the same sides in different spellings (the reference's group prefix and the UFO's), the first in stored order applies; a source with both, opened in the reference app, settles it.",
+]
 
 # ───────────────────────────── Kerning window ─────────────────────────────
-notes = "Both oracles compile this order. In a test font with A–@V = −30 and @A–V = −40, the pair A V gets −30 (glyph–group wins) in fontc 1.0.0 and fontmake 3.12.1; Aacute V gets −40 and Aacute W the group–group −50. fontc resolves pairs in the same order (`fontbe/src/features/kern.rs`, `lookup_kerning_value`, after fontTools `ufoLib/kerning.py`). What the reference Edit View shows is documented only as far as exceptions overriding groups."
 
 [[command]]
 id = "window.kerning"
