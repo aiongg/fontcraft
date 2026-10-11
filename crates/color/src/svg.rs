@@ -10,14 +10,23 @@
 //! - Palette colours are baked in from the palette `Color Palette for SVG` names; the text colour
 //!   is written as `currentColor`.
 //! - Centred strokes are written as SVG strokes; strokes on one side are expanded by the caller
-//!   and arrive as outlines.
+//!   and arrive as outlines. [`is_native_stroke`] is the rule both sides follow.
 //! - A document is at most [`crate::MAX_SVG_DOCUMENT_BYTES`]; the table at most
 //!   [`crate::MAX_SVG_TABLE_BYTES`].
+//!
+//! The document draws in font units: the glyph group's transform turns the font's y-up space
+//! into SVG's y-down space, so outlines, gradient points and stroke widths are written as the
+//! paint graph has them. Gradients and clip paths use user-space units, which inside the group
+//! are font units.
 
-use fontcraft_geom::{Affine, BezPath};
+use std::collections::HashMap;
+use std::fmt::Write as _;
 
-use crate::paint::{Paint, ShapeRef};
-use crate::{ColorError, Rgba};
+use fontcraft_geom::{Affine, BezPath, PathEl, Point};
+use fontcraft_model::{Extend, MAX_COORDINATE};
+
+use crate::paint::{ColorLine, ColorRef, Paint, ShapeRef, StrokeSpec};
+use crate::{ColorError, MAX_PAINT_DEPTH, MAX_STOPS, MAX_SVG_DOCUMENT_BYTES, MAX_SVG_TABLE_BYTES, Rgba};
 
 /// Where a bitmap is drawn in a glyph's document, in font units (y up, as the layer has it).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -30,12 +39,55 @@ pub struct BitmapPlacement {
     pub height: u32,
 }
 
+/// Whether a stroke is written as an SVG stroke. SVG strokes have one round pen, one cap for
+/// both ends and centre on the path; anything else (a stroke on one side, an oval pen, a round
+/// inset or axis-aligned cap, a fully round join) is expanded to an outline by the caller.
+pub fn is_native_stroke(spec: &StrokeSpec) -> bool {
+    spec.position == 0.0
+        && spec.width.is_finite()
+        && spec.width > 0.0
+        && spec.height == spec.width
+        && spec.cap_start == spec.cap_end
+        && spec.cap_start <= 2
+        && spec.join <= 2
+}
+
+/// Whether `paint` holds a conic gradient, which SVG cannot draw: [`document`] fills it with
+/// the colour of its first stop.
+pub fn has_sweep(paint: &Paint) -> bool {
+    fn walk(paint: &Paint, depth: usize) -> bool {
+        if depth > MAX_PAINT_DEPTH {
+            return false;
+        }
+        match paint {
+            Paint::Sweep { .. } => true,
+            Paint::Layers(list) => list.iter().any(|p| walk(p, depth + 1)),
+            Paint::Glyph { paint, .. } => walk(paint, depth + 1),
+            Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } => false,
+        }
+    }
+    walk(paint, 0)
+}
+
 /// The document of glyph `gid` drawing `paint`. `outlines` draws a [`ShapeRef`] in font units;
 /// `palette` is the palette baked in.
 pub fn document(paint: &Paint, outlines: &dyn Fn(&ShapeRef) -> BezPath, gid: u16, palette: &[Rgba]) -> Result<String, ColorError> {
-    // M11.9
-    let _ = (paint, outlines, gid, palette);
-    Err(ColorError::NotYetImplemented("SVG documents"))
+    let mut w = Writer { gid, palette, outlines, defs: String::new(), body: String::new(), next_id: 0 };
+    w.paint(paint, 0)?;
+    let mut out = String::with_capacity(w.defs.len() + w.body.len() + 160);
+    out.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" version="1.1">"#);
+    if !w.defs.is_empty() {
+        out.push_str("<defs>");
+        out.push_str(&w.defs);
+        out.push_str("</defs>");
+    }
+    let _ = write!(out, r#"<g id="glyph{gid}" transform="matrix(1 0 0 -1 0 0)">"#);
+    out.push_str(&w.body);
+    out.push_str("</g></svg>");
+    if out.len() > MAX_SVG_DOCUMENT_BYTES {
+        return Err(ColorError::LimitExceeded { what: "bytes in one SVG document", limit: MAX_SVG_DOCUMENT_BYTES });
+    }
+    Ok(out)
 }
 
 /// The document of glyph `gid` showing a PNG image, embedded as a data URL in an `<image>`
@@ -47,9 +99,483 @@ pub fn bitmap_document(png: &[u8], placement: &BitmapPlacement, gid: u16) -> Res
 }
 
 /// The `SVG ` table from documents given as (first glyph id, last glyph id, document bytes);
-/// records are sorted by glyph id and must not overlap.
+/// records are sorted by glyph id and must not overlap. Identical documents are stored once and
+/// shared by their records, which the format allows.
 pub fn table(docs: &[(u16, u16, Vec<u8>)]) -> Result<Vec<u8>, ColorError> {
-    // M11.9
-    let _ = docs;
-    Err(ColorError::NotYetImplemented("the SVG table"))
+    const HEADER: usize = 10;
+    const RECORD: usize = 12;
+    let count = u16::try_from(docs.len()).map_err(|_| ColorError::LimitExceeded { what: "SVG documents", limit: usize::from(u16::MAX) })?;
+    let mut sorted: Vec<&(u16, u16, Vec<u8>)> = docs.iter().collect();
+    sorted.sort_by_key(|d| (d.0, d.1));
+    let mut previous_end: Option<u16> = None;
+    for d in &sorted {
+        let (first, last, bytes) = (d.0, d.1, &d.2);
+        if first > last {
+            return Err(ColorError::BadSvg(format!("the document for glyphs {first} to {last} has its range reversed")));
+        }
+        if previous_end.is_some_and(|end| first <= end) {
+            return Err(ColorError::BadSvg(format!("two documents are given for glyph {first}")));
+        }
+        if bytes.is_empty() || bytes.len() > MAX_SVG_DOCUMENT_BYTES {
+            return Err(ColorError::BadSvg(format!("the document for glyph {first} is empty or larger than {MAX_SVG_DOCUMENT_BYTES} bytes")));
+        }
+        previous_end = Some(last);
+    }
+
+    let too_big = || ColorError::LimitExceeded { what: "bytes in the SVG table", limit: MAX_SVG_TABLE_BYTES };
+    // Document offsets count from the start of the document list, which follows the header.
+    let records_end = 2 + RECORD * sorted.len();
+    let mut data: Vec<u8> = Vec::new();
+    let mut stored: HashMap<&[u8], u32> = HashMap::new();
+    let mut records: Vec<u8> = Vec::with_capacity(RECORD * sorted.len());
+    for d in &sorted {
+        let (first, last, bytes) = (d.0, d.1, &d.2);
+        let offset = match stored.get(bytes.as_slice()) {
+            Some(&offset) => offset,
+            None => {
+                let at = records_end.checked_add(data.len()).ok_or_else(too_big)?;
+                if HEADER + at + bytes.len() > MAX_SVG_TABLE_BYTES {
+                    return Err(too_big());
+                }
+                let offset = u32::try_from(at).map_err(|_| too_big())?;
+                data.extend_from_slice(bytes);
+                stored.insert(bytes.as_slice(), offset);
+                offset
+            }
+        };
+        let length = u32::try_from(bytes.len()).map_err(|_| too_big())?;
+        records.extend_from_slice(&first.to_be_bytes());
+        records.extend_from_slice(&last.to_be_bytes());
+        records.extend_from_slice(&offset.to_be_bytes());
+        records.extend_from_slice(&length.to_be_bytes());
+    }
+
+    let mut out = Vec::with_capacity(HEADER + records_end + data.len());
+    out.extend_from_slice(&0u16.to_be_bytes()); // version
+    out.extend_from_slice(&(HEADER as u32).to_be_bytes()); // offset of the document list
+    out.extend_from_slice(&0u32.to_be_bytes()); // reserved
+    out.extend_from_slice(&count.to_be_bytes());
+    out.extend_from_slice(&records);
+    out.extend_from_slice(&data);
+    Ok(out)
+}
+
+/// Builds one document: `defs` collects gradients, clip paths and masks, `body` the drawing.
+struct Writer<'a> {
+    gid: u16,
+    palette: &'a [Rgba],
+    outlines: &'a dyn Fn(&ShapeRef) -> BezPath,
+    defs: String,
+    body: String,
+    next_id: usize,
+}
+
+/// How a shape is painted: as a fill, or as an SVG stroke.
+#[derive(Clone, Copy)]
+enum Mode<'s> {
+    Fill,
+    Stroke(&'s StrokeSpec),
+}
+
+impl Writer<'_> {
+    fn check_size(&self) -> Result<(), ColorError> {
+        if self.defs.len() + self.body.len() > MAX_SVG_DOCUMENT_BYTES {
+            return Err(ColorError::LimitExceeded { what: "bytes in one SVG document", limit: MAX_SVG_DOCUMENT_BYTES });
+        }
+        Ok(())
+    }
+
+    fn bad(&self, message: impl Into<String>) -> ColorError {
+        ColorError::BadPaint { glyph: format!("glyph id {}", self.gid), message: message.into() }
+    }
+
+    fn new_id(&mut self, kind: &str) -> String {
+        let id = format!("glyph{}-{kind}{}", self.gid, self.next_id);
+        self.next_id += 1;
+        id
+    }
+
+    fn paint(&mut self, paint: &Paint, depth: usize) -> Result<(), ColorError> {
+        if depth > MAX_PAINT_DEPTH {
+            return Err(ColorError::LimitExceeded { what: "nested paints", limit: MAX_PAINT_DEPTH });
+        }
+        match paint {
+            Paint::Layers(list) => {
+                for p in list {
+                    self.paint(p, depth + 1)?;
+                }
+            }
+            Paint::Glyph { shape, paint: inner } => self.glyph(shape, inner, depth)?,
+            // A paint outside any glyph fills everything; the renderer clips it to the glyph's
+            // drawing area.
+            simple => {
+                let neg = fmt(-MAX_COORDINATE);
+                let span = fmt(2.0 * MAX_COORDINATE);
+                let fill = self.paint_attrs(simple, Mode::Fill)?;
+                let _ = write!(self.body, r#"<rect x="{neg}" y="{neg}" width="{span}" height="{span}"{fill}/>"#);
+            }
+        }
+        self.check_size()
+    }
+
+    fn glyph(&mut self, shape: &ShapeRef, inner: &Paint, depth: usize) -> Result<(), ColorError> {
+        let d = path_data(&(self.outlines)(shape)).map_err(|m| self.bad(m))?;
+        if d.is_empty() {
+            return Ok(());
+        }
+        let native = shape.stroke.as_ref().filter(|s| is_native_stroke(s));
+        let simple = matches!(inner, Paint::Solid(_) | Paint::Linear { .. } | Paint::Radial { .. } | Paint::Sweep { .. });
+        match (native, simple) {
+            (None, true) => {
+                let fill = self.paint_attrs(inner, Mode::Fill)?;
+                let _ = write!(self.body, r#"<path d="{d}"{fill}/>"#);
+            }
+            (Some(spec), true) => {
+                let stroke = self.paint_attrs(inner, Mode::Stroke(spec))?;
+                let _ = write!(self.body, r#"<path d="{d}" fill="none"{stroke}/>"#);
+            }
+            (None, false) => {
+                let id = self.new_id("clip");
+                let _ = write!(self.defs, r#"<clipPath id="{id}"><path d="{d}"/></clipPath>"#);
+                let _ = write!(self.body, r#"<g clip-path="url(#{id})">"#);
+                self.paint(inner, depth + 1)?;
+                self.body.push_str("</g>");
+            }
+            (Some(spec), false) => {
+                // A stroke whose paint is itself layered: the stroked band masks the layers.
+                let id = self.new_id("mask");
+                let pen = stroke_style(spec);
+                let (neg, span) = (fmt(-MAX_COORDINATE), fmt(2.0 * MAX_COORDINATE));
+                let _ = write!(
+                    self.defs,
+                    r##"<mask id="{id}" maskUnits="userSpaceOnUse" x="{neg}" y="{neg}" width="{span}" height="{span}"><path d="{d}" fill="none" stroke="#FFFFFF"{pen}/></mask>"##
+                );
+                let _ = write!(self.body, r#"<g mask="url(#{id})">"#);
+                self.paint(inner, depth + 1)?;
+                self.body.push_str("</g>");
+            }
+        }
+        self.check_size()
+    }
+
+    /// The attributes that paint a shape with `paint`, each with a leading space.
+    fn paint_attrs(&mut self, paint: &Paint, mode: Mode<'_>) -> Result<String, ColorError> {
+        let (attr, opacity_attr) = match mode {
+            Mode::Fill => ("fill", "fill-opacity"),
+            Mode::Stroke(_) => ("stroke", "stroke-opacity"),
+        };
+        let mut out = String::new();
+        match paint {
+            Paint::Solid(color) => {
+                let (value, opacity) = self.color(color)?;
+                let _ = write!(out, r#" {attr}="{value}""#);
+                if opacity < 1.0 {
+                    let _ = write!(out, r#" {opacity_attr}="{}""#, fmt(opacity));
+                }
+            }
+            Paint::Linear { p0, p1, p2, line } => {
+                let id = self.linear(*p0, *p1, *p2, line)?;
+                let _ = write!(out, r#" {attr}="url(#{id})""#);
+            }
+            Paint::Radial { c0, r0, c1, r1, line } => {
+                let id = self.radial(*c0, *r0, *c1, *r1, line)?;
+                let _ = write!(out, r#" {attr}="url(#{id})""#);
+            }
+            Paint::Sweep { line, .. } => {
+                // SVG has no conic gradient: the first stop's colour stands in for it.
+                let first = line.stops.first().map_or(ColorRef::Foreground { alpha: 1.0 }, |s| s.color);
+                let (value, opacity) = self.color(&first)?;
+                let _ = write!(out, r#" {attr}="{value}""#);
+                if opacity < 1.0 {
+                    let _ = write!(out, r#" {opacity_attr}="{}""#, fmt(opacity));
+                }
+            }
+            Paint::Layers(_) | Paint::Glyph { .. } => return Err(self.bad("a layered paint cannot fill a single shape")),
+        }
+        if let Mode::Stroke(spec) = mode {
+            out.push_str(&stroke_style(spec));
+        }
+        Ok(out)
+    }
+
+    /// The colour as an SVG value and its opacity from 0 to 1.
+    fn color(&self, color: &ColorRef) -> Result<(String, f64), ColorError> {
+        let alpha_of = |a: f64| if a.is_finite() { Ok(a.clamp(0.0, 1.0)) } else { Err(self.bad("an alpha is not a number")) };
+        match *color {
+            ColorRef::Palette { index, alpha } => {
+                let entry = self.palette.get(usize::from(index)).ok_or(ColorError::NoSuchRow(usize::from(index)))?;
+                let [_, _, _, a] = entry.to_f64();
+                Ok((format!("#{:02X}{:02X}{:02X}", entry.r, entry.g, entry.b), a * alpha_of(alpha)?))
+            }
+            ColorRef::Foreground { alpha } => Ok(("currentColor".to_string(), alpha_of(alpha)?)),
+            ColorRef::Rgba(c) => {
+                if !c.iter().all(|v| v.is_finite()) {
+                    return Err(self.bad("a colour component is not a number"));
+                }
+                let [r, g, b, a] = c.map(|v| v.clamp(0.0, 1.0));
+                let byte = |v: f64| (v * 255.0).round() as u8;
+                Ok((format!("#{:02X}{:02X}{:02X}", byte(r), byte(g), byte(b)), a))
+            }
+        }
+    }
+
+    fn stops(&self, line: &ColorLine) -> Result<String, ColorError> {
+        if line.stops.len() > MAX_STOPS {
+            return Err(ColorError::LimitExceeded { what: "gradient stops", limit: MAX_STOPS });
+        }
+        let mut out = String::new();
+        for stop in &line.stops {
+            if !stop.offset.is_finite() {
+                return Err(self.bad("a gradient stop offset is not a number"));
+            }
+            let (value, opacity) = self.color(&stop.color)?;
+            let _ = write!(out, r#"<stop offset="{}" stop-color="{value}""#, fmt(stop.offset.clamp(0.0, 1.0)));
+            if opacity < 1.0 {
+                let _ = write!(out, r#" stop-opacity="{}""#, fmt(opacity));
+            }
+            out.push_str("/>");
+        }
+        Ok(out)
+    }
+
+    fn point(&self, p: Point) -> Result<(String, String), ColorError> {
+        Ok((coordinate(p.x).map_err(|m| self.bad(m))?, coordinate(p.y).map_err(|m| self.bad(m))?))
+    }
+
+    fn linear(&mut self, p0: Point, p1: Point, p2: Point, line: &ColorLine) -> Result<String, ColorError> {
+        let end = linear_end(p0, p1, p2);
+        let (x1, y1) = self.point(p0)?;
+        let (x2, y2) = self.point(end)?;
+        let stops = self.stops(line)?;
+        let id = self.new_id("linear");
+        let _ = write!(
+            self.defs,
+            r#"<linearGradient id="{id}" gradientUnits="userSpaceOnUse" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"{}>{stops}</linearGradient>"#,
+            spread(line.extend)
+        );
+        Ok(id)
+    }
+
+    fn radial(&mut self, c0: Point, r0: f64, c1: Point, r1: f64, line: &ColorLine) -> Result<String, ColorError> {
+        let (fx, fy) = self.point(c0)?;
+        let (cx, cy) = self.point(c1)?;
+        let r = coordinate(r1.max(0.0)).map_err(|m| self.bad(m))?;
+        let fr = coordinate(r0.max(0.0)).map_err(|m| self.bad(m))?;
+        let stops = self.stops(line)?;
+        let id = self.new_id("radial");
+        let focal_radius = if r0 > 0.0 { format!(r#" fr="{fr}""#) } else { String::new() };
+        let _ = write!(
+            self.defs,
+            r#"<radialGradient id="{id}" gradientUnits="userSpaceOnUse" cx="{cx}" cy="{cy}" r="{r}" fx="{fx}" fy="{fy}"{focal_radius}{}>{stops}</radialGradient>"#,
+            spread(line.extend)
+        );
+        Ok(id)
+    }
+}
+
+/// The SVG end point of a COLR linear gradient: `p1` projected onto the line through `p0` at
+/// right angles to `p0`–`p2`, so the colour bands run parallel to `p0`–`p2`. A degenerate
+/// `p2` leaves `p1` as it is.
+fn linear_end(p0: Point, p1: Point, p2: Point) -> Point {
+    let rotation = p2 - p0;
+    let normal = fontcraft_geom::Vec2::new(rotation.y, -rotation.x);
+    let len2 = normal.hypot2();
+    if !(len2.is_finite() && len2 > 1e-12) {
+        return p1;
+    }
+    p0 + normal * ((p1 - p0).dot(normal) / len2)
+}
+
+fn spread(extend: Extend) -> &'static str {
+    match extend {
+        Extend::Pad => "",
+        Extend::Repeat => r#" spreadMethod="repeat""#,
+        Extend::Reflect => r#" spreadMethod="reflect""#,
+    }
+}
+
+/// The stroke attributes of a native stroke, each with a leading space.
+fn stroke_style(spec: &StrokeSpec) -> String {
+    let cap = match spec.cap_start {
+        1 => " stroke-linecap=\"round\"",
+        2 => " stroke-linecap=\"square\"",
+        _ => "",
+    };
+    let join = match spec.join {
+        1 => " stroke-linejoin=\"round\"",
+        2 => " stroke-linejoin=\"bevel\"",
+        _ => "",
+    };
+    format!(r#" stroke-width="{}"{cap}{join}"#, fmt(spec.width))
+}
+
+/// A path's `d` attribute; empty for a path without segments.
+fn path_data(path: &BezPath) -> Result<String, String> {
+    fn push(d: &mut String, letter: char, points: &[Point]) -> Result<(), String> {
+        d.push(letter);
+        for (i, p) in points.iter().enumerate() {
+            if i > 0 {
+                d.push(' ');
+            }
+            let _ = write!(d, "{} {}", coordinate(p.x)?, coordinate(p.y)?);
+        }
+        Ok(())
+    }
+    let mut d = String::new();
+    let mut drawn = false;
+    for el in path.elements() {
+        match *el {
+            PathEl::MoveTo(p) => push(&mut d, 'M', &[p])?,
+            PathEl::LineTo(p) => push(&mut d, 'L', &[p])?,
+            PathEl::QuadTo(a, b) => push(&mut d, 'Q', &[a, b])?,
+            PathEl::CurveTo(a, b, c) => push(&mut d, 'C', &[a, b, c])?,
+            PathEl::ClosePath => d.push('Z'),
+        }
+        drawn |= !matches!(el, PathEl::MoveTo(_));
+    }
+    Ok(if drawn { d } else { String::new() })
+}
+
+/// A coordinate within ±[`MAX_COORDINATE`], written short.
+fn coordinate(v: f64) -> Result<String, String> {
+    if !(v.is_finite() && v.abs() <= MAX_COORDINATE) {
+        return Err(format!("the coordinate {v} is not a number within ±{MAX_COORDINATE}"));
+    }
+    Ok(fmt(v))
+}
+
+/// A number rounded to thousandths, without trailing zeros (`12`, `0.5`, `-3.125`).
+fn fmt(v: f64) -> String {
+    let rounded = (v * 1000.0).round() / 1000.0;
+    let rounded = if rounded == 0.0 { 0.0 } else { rounded };
+    let mut s = format!("{rounded:.3}");
+    while s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
+    s
+}
+
+#[cfg(test)]
+mod tests {
+    use fontcraft_geom::{BezPath, Point};
+    use fontcraft_model::Extend;
+
+    use super::{document, table};
+    use crate::paint::{ColorLine, ColorRef, ColorStop, Paint, ShapeRef, StrokeSpec};
+    use crate::{ColorError, Rgba};
+
+    fn square(x: f64) -> BezPath {
+        let mut p = BezPath::new();
+        p.move_to((x, 0.0));
+        p.line_to((x + 100.0, 0.0));
+        p.line_to((x + 100.0, 100.0));
+        p.line_to((x, 100.0));
+        p.close_path();
+        p
+    }
+
+    /// Draws shape `i` as a square at x = 200 × i.
+    fn outlines(shape: &ShapeRef) -> BezPath {
+        square(200.0 * shape.shapes.first().copied().unwrap_or(0) as f64)
+    }
+
+    fn shape(i: usize, stroke: Option<StrokeSpec>) -> ShapeRef {
+        ShapeRef { layer: "m01".into(), shapes: vec![i], stroke }
+    }
+
+    fn stroke(position: f64) -> StrokeSpec {
+        StrokeSpec { width: 20.0, height: 20.0, position, cap_start: 1, cap_end: 1, join: 0 }
+    }
+
+    fn glyph(shape: ShapeRef, paint: Paint) -> Paint {
+        Paint::Glyph { shape, paint: Box::new(paint) }
+    }
+
+    const PALETTE: [Rgba; 2] = [Rgba::new(255, 0, 0, 255), Rgba::new(0, 255, 0, 255)];
+
+    #[test]
+    fn svg_document_bakes_the_palette_and_writes_gradients_and_strokes() {
+        let line = ColorLine {
+            stops: vec![
+                ColorStop { offset: 0.0, color: ColorRef::Palette { index: 0, alpha: 1.0 } },
+                ColorStop { offset: 1.0, color: ColorRef::Rgba([0.0, 0.0, 1.0, 0.25]) },
+            ],
+            extend: Extend::Reflect,
+        };
+        let paint = Paint::Layers(vec![
+            glyph(shape(0, None), Paint::Solid(ColorRef::Palette { index: 1, alpha: 0.5 })),
+            // Rotated: p1 sits off the axis p2 sets, so the gradient runs along x to x = 100.
+            glyph(
+                shape(1, None),
+                Paint::Linear { p0: Point::new(0.0, 0.0), p1: Point::new(100.0, 100.0), p2: Point::new(0.0, 100.0), line: line.clone() },
+            ),
+            glyph(shape(2, Some(stroke(0.0))), Paint::Solid(ColorRef::Foreground { alpha: 1.0 })),
+            // A stroke on one side arrives expanded and is filled.
+            glyph(shape(3, Some(stroke(1.0))), Paint::Solid(ColorRef::Rgba([1.0, 0.0, 0.0, 1.0]))),
+            glyph(shape(4, None), Paint::Radial { c0: Point::new(50.0, 50.0), r0: 0.0, c1: Point::new(50.0, 50.0), r1: 70.5, line }),
+        ]);
+        let doc = document(&paint, &outlines, 7, &PALETTE).unwrap();
+        assert!(doc.starts_with(r#"<svg xmlns="http://www.w3.org/2000/svg""#), "{doc}");
+        assert!(doc.contains(r#"<g id="glyph7" transform="matrix(1 0 0 -1 0 0)">"#), "{doc}");
+        assert!(doc.contains(r##"<path d="M0 0L100 0L100 100L0 100Z" fill="#00FF00" fill-opacity="0.5"/>"##), "{doc}");
+        assert!(doc.contains(r#"x1="0" y1="0" x2="100" y2="0" spreadMethod="reflect">"#), "{doc}");
+        assert!(doc.contains(r##"<stop offset="0" stop-color="#FF0000"/><stop offset="1" stop-color="#0000FF" stop-opacity="0.25"/>"##), "{doc}");
+        assert!(doc.contains(r#"fill="none" stroke="currentColor" stroke-width="20" stroke-linecap="round"/>"#), "{doc}");
+        assert!(doc.contains(r##"<path d="M600 0L700 0L700 100L600 100Z" fill="#FF0000"/>"##), "{doc}");
+        assert!(doc.contains(r#"cx="50" cy="50" r="70.5" fx="50" fy="50" spreadMethod="reflect">"#), "{doc}");
+        assert!(usvg::Tree::from_str(&doc, &usvg::Options::default()).is_ok(), "{doc}");
+    }
+
+    #[test]
+    fn svg_document_clips_layered_paints_and_refuses_bad_input() {
+        let inner = Paint::Layers(vec![glyph(shape(1, None), Paint::Solid(ColorRef::Palette { index: 0, alpha: 1.0 }))]);
+        let doc = document(&glyph(shape(0, None), inner), &outlines, 3, &PALETTE).unwrap();
+        assert!(doc.contains(r#"<clipPath id="glyph3-clip0"><path d="M0 0L100 0L100 100L0 100Z"/></clipPath>"#), "{doc}");
+        assert!(doc.contains(r#"<g clip-path="url(#glyph3-clip0)">"#), "{doc}");
+        assert!(usvg::Tree::from_str(&doc, &usvg::Options::default()).is_ok(), "{doc}");
+
+        let missing_row = glyph(shape(0, None), Paint::Solid(ColorRef::Palette { index: 9, alpha: 1.0 }));
+        assert_eq!(document(&missing_row, &outlines, 3, &PALETTE), Err(ColorError::NoSuchRow(9)));
+        let nan = |_: &ShapeRef| {
+            let mut p = BezPath::new();
+            p.move_to((f64::NAN, 0.0));
+            p.line_to((1.0, 1.0));
+            p
+        };
+        let solid = glyph(shape(0, None), Paint::Solid(ColorRef::Foreground { alpha: 1.0 }));
+        assert!(matches!(document(&solid, &nan, 3, &PALETTE), Err(ColorError::BadPaint { .. })));
+        let mut deep = solid;
+        for _ in 0..100 {
+            deep = Paint::Layers(vec![deep]);
+        }
+        assert!(matches!(document(&deep, &outlines, 3, &PALETTE), Err(ColorError::LimitExceeded { .. })));
+    }
+
+    #[test]
+    fn svg_table_sorts_records_and_shares_identical_documents() {
+        let a = b"<svg>a</svg>".to_vec();
+        let b = b"<svg>bb</svg>".to_vec();
+        let bytes = table(&[(3, 3, b.clone()), (1, 1, a.clone()), (5, 6, a.clone())]).unwrap();
+        let be16 = |at: usize| u16::from_be_bytes([bytes[at], bytes[at + 1]]);
+        let be32 = |at: usize| u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+        assert_eq!((be16(0), be32(2), be32(6)), (0, 10, 0));
+        assert_eq!(be16(10), 3);
+        // Records: (start, end, offset from the list, length); the list starts at 10 and its
+        // documents after 2 + 3 × 12 = 38 bytes.
+        let record = |i: usize| (be16(12 + 12 * i), be16(14 + 12 * i), be32(16 + 12 * i), be32(20 + 12 * i));
+        assert_eq!(record(0), (1, 1, 38, 12));
+        assert_eq!(record(1), (3, 3, 50, 13));
+        assert_eq!(record(2), (5, 6, 38, 12));
+        assert_eq!(&bytes[48..60], a.as_slice());
+        assert_eq!(&bytes[60..73], b.as_slice());
+        assert_eq!(bytes.len(), 73);
+
+        assert!(table(&[(1, 2, a.clone()), (2, 3, b.clone())]).is_err());
+        assert!(table(&[(4, 2, a.clone())]).is_err());
+        assert!(table(&[(1, 1, Vec::new())]).is_err());
+        assert_eq!(table(&[]).unwrap().len(), 12);
+    }
 }

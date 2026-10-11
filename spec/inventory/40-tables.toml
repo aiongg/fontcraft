@@ -425,10 +425,11 @@ status = "docs"
 tag = "SVG "
 flavour = ["ttf", "otf"]
 read = "read-fonts"
-write = "none-yet"
+write = "own"
 area = "compile"
 milestone = "M11"
 summary = "SVG documents keyed by glyph id ranges, optionally gzip-compressed. read-fonts can list the documents; write-fonts has no SVG table, so the document index and the per-glyph SVG generation are ours."
+notes = "FontCraft writes version 0 with one uncompressed document per glyph, records sorted by glyph id; identical documents are stored once and shared by their records, which the format allows."
 ref = "read-fonts src/tables/svg.rs; write-fonts src/tables.rs"
 status = "docs"
 

@@ -1066,6 +1066,8 @@ ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Exporting"
 status = "handbook"
 guesses = [
   "One uncompressed SVG document per glyph whose group has the id `glyph<ID>` and a transform that flips y at the baseline; centred strokes are SVG strokes, inside and outside strokes are expanded to outlines. Settled by exporting the full-colour test font with Color Layers to SVG from the reference and reading the documents.",
+  "A conic gradient, which SVG cannot draw, is written in the colour of its first stop, with a warning. Settled by exporting a conic gradient with Color Layers to SVG from the reference.",
+  "A glyph whose document cannot be made (a palette row beyond the palette, a shape that cannot be drawn) is left out of the SVG table with a warning and keeps its master outline. Settled by exporting a palette layer whose index is beyond the palette with Color Layers to SVG from the reference.",
 ]
 observe = [
   "Full-colour font: export an instance with Color Layers to SVG and read the SVG table; note whether there is one document per glyph or grouped documents, whether they are compressed, the transform and viewBox, and whether strokes are written as strokes or outlines.",
