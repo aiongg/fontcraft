@@ -721,6 +721,7 @@ milestone = "M10"
 summary = "Behind the outlines a pixel rendering at the current size is shown. It is only indicative: real output adds filtering (gamma, colour mode, transparency) after the grid-fitted outline, so the backdrop is not a pixel-exact prediction."
 ref = "TrueType Hinting › Hinting Outlines"
 status = "handbook"
+guesses = ["The backdrop shows grey coverage of the grid-fitted outline, sampled 6 times across each pixel in the two ClearType intents and once down it in GDI ClearType, not coloured subpixels; screenshots of the reference app's backdrop in each intent would settle it."]
 
 [[command]]
 id = "hint.tt.showPixelPreview"
@@ -747,7 +748,7 @@ milestone = "M10"
 summary = "Chooses which Windows rendering mode the grid-fitted outline and the hinting preview simulate: Grayscale, ClearType (GDI) or DirectWrite. The handbook names the three intents and says there is a current one, but not which control selects it."
 ref = "TrueType Hinting › Hinting Outlines"
 status = "inferred"
-guesses = ["The rendering intent is a pop-up in the TrueType Instructor's Info box beside the pixel size; Grayscale maps to skrifa's smooth normal target, ClearType to its LCD target with the backward-compatible interpreter, DirectWrite to LCD with symmetric rendering; the reference app would settle the control and the comparison of outlines."]
+guesses = ["The rendering intent is a pop-up in the TrueType Instructor's Info box beside the pixel size; Grayscale maps to skrifa's smooth normal target, ClearType to its LCD target without symmetric rendering (no vertical oversampling), DirectWrite to LCD with symmetric rendering; the reference app would settle the control and the comparison of outlines."]
 observe = ["T3: with the TrueType Instructor active, look for the Grayscale, ClearType and DirectWrite choice; note where it is (Info box, toolbar or menu) and what kind of control it is."]
 
 [[panel]]
@@ -958,13 +959,14 @@ label = "Render Hinted Preview"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{instance: id, glyphs?: [names], text?: string, ppem: [number], intent?: 'grayscale'|'cleartype'|'directwrite', output?: 'bitmap'|'outline'}"
+params = "{instance?: name (default: the first master), glyphs?: [names], text?: string, ppem: number or [numbers], intent?: 'grayscale'|'cleartype'|'directwrite', output?: 'outline'|'bitmap', autohint?: bool}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Read-only query that compiles the instance's instructions in memory, runs them at the listed pixel sizes for the given rendering intent, and returns either bitmaps or the grid-fitted point coordinates. Headless counterpart of the red outline and the Hinting Preview, for agents and regression tests."
 ref = "TrueType Hinting › Hinting Outlines; Hinting Preview"
 status = "inferred"
 own = true
+notes = "The instance is built through the export path, so the preview shows the font an export writes. A glyph whose program fails or runs past skrifa's budget of 1,000,000 instructions is drawn unhinted with a message; so is every glyph at a size where `fpgm` or `prep` fails. Each glyph says whether it has a glyph program (`instructed`), which the red outline needs."
 
 # ---------------------------------------------------------------------------------------------
 # Instructions: general

@@ -297,7 +297,7 @@ label = "Render Hinted Preview"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{instance: id, text: string, ppem: [number], hinted?: bool, format?: 'png'|'json'}"
+params = "{instance?: name (default: the first master), text: string, ppem: number or [numbers], hinted?: bool, format?: 'png'|'json', autohint?: bool}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Compiles the given instance in memory with its PostScript hints and rasterizes a text at the listed pixel sizes with a hint-applying rasterizer, returning bitmaps (and optionally the unhinted rendering for comparison). Our design, replacing the reference's export-and-look-in-another-app loop for people and agents."
@@ -305,6 +305,7 @@ ref = "PostScript Hinting › Autohinting"
 status = "inferred"
 guesses = ["The preview rasterizes with skrifa's PostScript hinter (a port of FreeType's), not with an Adobe rasterizer; comparing with the Adobe application preview the handbook suggests would show how far they differ."]
 own = true
+notes = "`hinted: false` renders the same text without hints, for comparison; `format: 'json'` returns each glyph's outline in pixels instead of the line's PNG."
 
 # ---------------------------------------------------------------------------------------------
 # Manual hinting: commands
