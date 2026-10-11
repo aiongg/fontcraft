@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-11, M5 closed (M5.18): every § 5 measure met but the two out-of-sync speed targets; the owner's review of M5 next, then M6's planning pass._
+_Updated: 2026-10-11, M5 accepted by the owner (M5.fix6 applied their decisions); M6's plan written and waiting for the owner's answers in `docs/plans/M6.md` § 7._
 
 ## State of the tree
 
@@ -10,7 +10,7 @@ _Updated: 2026-10-11, M5 closed (M5.18): every § 5 measure met but the two out-
   About 168,000 lines of Rust in 25 library crates, two apps and `xtask`. Built and run on Linux
   x86-64 with Rust 1.97.
 - 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
-  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 626 guesses on 394
+  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 675 guesses on 434
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed. macOS and
@@ -20,20 +20,33 @@ _Updated: 2026-10-11, M5 closed (M5.18): every § 5 measure met but the two out-
 
 ## Where to start
 
-1. **The owner's review of M5**: `docs/plans/M5.md` § 5 › Results, and the open items below.
-2. **M6's planning pass** (components and anchors): `docs/execution-plan.md` § 3, the M6 rows
-   in `spec/inventory/*.toml` and `docs/spec/09-reusing-shapes.md`, written up as
-   `docs/plans/M6.md` for the owner to accept.
+1. **The owner's answers to `docs/plans/M6.md` § 7.** Don't start M6 before the plan is
+   accepted.
+2. **M6.0**, the spec pass: apply the answers (the mark-export rows move in from M8 if question
+   2 is (b); caps, segments and brushes move to M13 if question 4 is (b)), mark `components` as
+   M6.1's crate in `docs/architecture.md`, regenerate parity and guesses. Then the packages in
+   the order of § 6.
 
-Open items for the owner from M5:
+M6's plan in short: 220 rows (59 commands, 45 without caps, segments and brushes); a new crate
+`components` (reverse component index, anchor propagation ported from fontc); automatic
+alignment re-run by the engine inside each command's undo step; composition data from Unicode
+decomposition plus our own tables; smart and corner components drawn in the model's outline
+resolution; the M6 entries of `crates/oracle/allow.toml` removed when they export like the
+oracles'. Anchor propagation covers every anchor name as fontc does, beyond the handbook's top
+and bottom (a guess). Open questions Q-29 to Q-31 of `docs/spec/09-reusing-shapes.md` wait on
+§ 7 question 4; Q-37 stays open.
+
+Open items from M5 (the owner accepted M5 with the speed misses):
 
 - The out-of-sync update after an edit to one glyph takes 7.4 ms on Inter against a 2 ms
-  target, and the full scan 53.5 ms against 50 ms: accept, or ask for the cache to be reworked.
+  target, and the full scan 53.5 ms against 50 ms.
 - 12 metrics-key values in Inter Italic differ from the stored values by up to 1.4 units; the
   cause is not settled.
-- Preview Descender defaults to winAscent as the handbook says, probably a misprint; Preview
-  Ascender 1000 cuts Inter's capitals.
-- Text Preview reverses Latin letters inside right-to-left runs (no shaping before M8).
+- Preview Descender defaults to `winDescent`, which departs from the handbook's `winAscent`
+  (read as a misprint); Preview Ascender stays at the handbook's 1000 units.
+- Text Preview orders mixed-direction runs by simple rules of ours (`textlayout::bidi`); Edit
+  View keeps one direction per line until M8. Text Preview's million-character layout measured
+  296 to 382 ms under heavy load (target 500; 202 to 213 ms at M5's close).
 - Vertical origin and vertical width have no commands and no rows.
 - Import Metrics' file choosers.
 
@@ -463,3 +476,8 @@ Append one terse entry per session: what landed, numbers, what is still open.
   other. Lookup half, 59 sources: 54 without `kern` feature code, 506,285 pairs per oracle, 1
   differs per oracle (`FeatureWritersEmpty.glyphs`); 5 with it, 5 pairs, 1 differs per oracle
   (`FeaInc-Bold.ufo`).
+- **2026-10-11, M5 accepted, M6 planned.** M5.fix6: Preview Descender defaults to `winDescent`;
+  Text Preview keeps left-to-right runs in order in right-to-left text (`textlayout::bidi`,
+  Writing Direction ranges as embeddings). M6.plan: `docs/plans/M6.md`, 220 M6 rows (59
+  commands), no recalled rows left, 11 moves, 48 new guesses (675 on 434 rows). Open: the
+  owner's answers to the plan's § 7.

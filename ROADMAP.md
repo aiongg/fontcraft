@@ -161,12 +161,12 @@ end-to-end test).
 M4's and M5's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
 a detail is unconfirmed, the handbook decides (Remove Overlap, for example, deletes open paths).
 Where no source says, we choose, and each choice is listed in `docs/guesses.md` to revisit
-(626 guesses on 394 rows).
+(675 guesses on 434 rows).
 
 | Gap | Detail |
 |---|---|
 | `path.sharpenCorner` | moved to the `fidelity` milestone: no written source says what it does, and the tutorial video shows the menu item without running it |
-| Text mode | no shaping: text is laid out by code point, kerning and direction until features exist (M8); Text Preview reverses Latin letters inside right-to-left runs |
+| Text mode | no shaping: text is laid out by code point, kerning and direction until features exist (M8); Text Preview orders right-to-left and left-to-right runs by simple rules of ours (full Unicode bidi at M8); Edit View keeps one direction per line |
 | Spacing speed | on Inter, the out-of-sync update after an edit to one glyph takes 7.4 ms against a 2 ms target, and the full scan 53.5 ms against 50 ms |
 | Kerning | a source with a hand-written `kern` feature exports without kerning until feature code compiles (M8); vertical kerning is stored and listed but not exported (neither reference compiler writes `vkrn`); automatically aligned glyphs wait for M6; vertical origin and vertical width have no commands; 12 metrics-key values in Inter Italic differ from the stored ones by up to 1.4 units, cause not settled |
 | Masters | the toolbar has no master icons (M9) |
@@ -211,11 +211,11 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 
 ### What to build next (in priority order)
 
-1. **The owner's review of M5**: the results in `docs/plans/M5.md` § 5 and the questions left
-   for the owner in `docs/status.md` (the two out-of-sync speed targets among them).
-2. **M6's planning pass, components and anchors**, as `docs/execution-plan.md` § 3 describes:
-   its rows in `spec/inventory/*.toml`, `docs/spec/09-reusing-shapes.md`, and a plan in
-   `docs/plans/M6.md` for the owner to accept.
+1. **The owner's answers to `docs/plans/M6.md` § 7**: accepting the plan, mark attachment at
+   export in M6 or M8, the composition data, caps, segments and brushes in M6 or M13, and the
+   TrueType default for overlapping and transformed components.
+2. **M6, components and anchors**, package by package in the order of `docs/plans/M6.md` § 6,
+   starting with M6.0 (the spec pass that applies those answers).
 
 Then M6–M7 on the editor track and M8–M12 on the engine track, as `docs/execution-plan.md` § 4
 orders them. Left from M3 to M5 for later milestones: Add Glyphs recipes and automatically aligned
@@ -271,7 +271,13 @@ on, so the engine track, where oracles prove correctness, goes first.
   the Kerning window, Font View's metric and group fields and out-of-sync badge, the Preview Area
   and Panel, Text Preview, the Transform Metrics, Rename Kerning Group, paste-conflict and metrics
   dialogs, and the Export dialog's Metrics tab. Measured against fontc and fontmake on the corpus
-  and Inter (`docs/plans/M5.md` § 5).
+  and Inter (`docs/plans/M5.md` § 5). Text Preview keeps left-to-right runs in order inside
+  right-to-left text, and its Writing Direction ranges act as embeddings (simple rules in
+  `textlayout::bidi`). Preview Descender defaults to `winDescent`, which departs from the
+  handbook's wording. The owner accepted M5 with the two out-of-sync speed misses, which stay open.
+- **M6 plan:** `docs/plans/M6.md`: 220 rows (59 commands), every recalled row checked against the
+  handbook or the oracles, 35 of the 39 open questions in `docs/spec/09-reusing-shapes.md`
+  answered, 11 rows moved between milestones, 20 packages and the § 5 measures.
 - **Model:** fonts, masters, glyphs, layers, paths, components, anchors; `Arc`-shared glyphs;
   unknown keys preserved; invariants.
 - **Engine:** sessions, per-document history, the command registry, atomic failure, the panic
@@ -470,14 +476,14 @@ measured by what works (the parity table below and the measures in each mileston
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ✅ every measure met: every package M3.0 to M3.18 built; 184 of 184 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner`, which no source describes, moved to `fidelity` | 184 (184) |
 | M4 | Font View and glyph management | ✅ every measure met: every package M4.0 to M4.12 built; 62 of 62 commands live; the glyph database equal to fontc's on category, subcategory and production name for 200,504 names; `post` names equal both oracles' except one allow-listed source; every M4 dialog equals its command; an agent builds a font from glyph sets over the control channel; M1 to M3 baselines unchanged (`docs/plans/M4.md` § 5) | 62 (62) |
 | M5 | Spacing, kerning and text mode | ✅ every measure met but the two out-of-sync speed targets: every package M5.0 to M5.18 built; 97 of 97 commands live; every corpus metrics key parses; the kerning lookup equals fontc's and fontmake's compiled value for 506,285 pairs per oracle but one source that turns its kern writer off; exported fonts carry the same generated pair kerning but 27 known differences in two sources; kerning read back from 97 compiled fonts with 0 differences; every M5 dialog equals its command; an agent types, spaces and kerns text over the control channel; M1 to M4 baselines unchanged. Missed: on Inter the out-of-sync update after one edit takes 7.4 ms (target 2) and the full scan 53.5 ms (target 50) (`docs/plans/M5.md` § 5) | 97 (97) |
-| M6 | Components and anchors | ⬜ | 65 (0) |
+| M6 | Components and anchors | ⬜ planned: `docs/plans/M6.md` waits for the owner's answers (§ 7) | 59 (0) |
 | M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) |
 | M8 | OpenType features | ⬜ | 40 (0) |
 | M9 | Interpolation and variable fonts | ⬜ | 67 (0) |
 | M10 | Hinting (PostScript and TrueType) | ⬜ | 57 (0) |
 | M11 | Colour fonts and images | ⬜ | 50 (0) |
 | M12 | Command-line tool suite (61 of the 70 subcommand rows) and quality checks (263 of 300) | ⬜ | 71 (0) |
-| M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 126 (0) |
+| M13 | Plug-ins, scripting and automation depth (with the secondary references' features) | ⬜ | 132 (0) |
 | M14 | 1.0 polish: settings, shortcuts editor, languages, accessibility, packaging, web | ⬜ | 28 (0) |
 | – | Interaction-fidelity pass (side by side with the reference: every modifier, cursor, default; milestone `fidelity` in the inventory) | ⬜ | 3 (0) |
 | – | Hardening at scale (corpora, fuzzing, cross-platform and browser QA) | ⬜ | |
