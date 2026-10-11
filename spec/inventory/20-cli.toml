@@ -2874,7 +2874,8 @@ summary = "Compares two sources and lists every difference: glyphs added, remove
 ref = "Our design, after the reference vendor's free source-comparison companion tool"
 status = "inferred"
 own = true
-guesses = ["Masters and instances are matched by axis location first and by name second, and glyphs by name; a renamed glyph is reported as a rename when its outlines and code points are unchanged. A comparison with the companion tool on two versions of one font would settle it."]
+guesses = ["Masters and instances are matched by axis location first and by name second, and glyphs by name; a renamed glyph is reported as a rename when its outlines and code points are unchanged. A comparison with the companion tool on two versions of one font would settle it.", "A change id is the part name and a hash of the change's place and both values (`glyphs:3f2a1c9b04de`), so it is stable between runs and changes when either side changes; the companion tool's own way of naming changes would settle it.", "Kerning groups are compared per glyph under the kerning part, and the non-kerning glyph groups of a UFO under the features part; how the companion tool groups them would settle it."]
+notes = "Text output: one line per change with its id, kind, place and short values. --glyphs and --glyph-file take plain glyph names; the shared glyph-list grammar (ranges, code points, patterns) is not applied yet. Values are compared in the native file's form, so data a format keeps unread (extra keys) takes part."
 
 [[cli]]
 id = "sources merge"
@@ -2883,7 +2884,7 @@ options = [
   "BASE: the source the changes are applied to; OTHER: the source they are taken from",
   "--take ID,...: the change ids printed by sources diff",
   "--take-all: every change of the selected parts and glyphs",
-  "--parts LIST, --glyphs LIST: limit --take-all",
+  "--parts LIST, --glyphs LIST, --glyph-file PATH, --tolerance UNITS: limit --take-all, as in sources diff",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
 ]
 command = "source.merge"
@@ -2894,7 +2895,8 @@ summary = "Applies chosen changes from OTHER to BASE and writes the result in BA
 ref = "Our design, after the reference vendor's free source-comparison companion tool"
 status = "inferred"
 own = true
-guesses = ["Merging is two-way only (base and other), with no common ancestor; a three-way merge needs version history, which FontCraft does not keep. A user workflow that needs three-way merging would settle it."]
+guesses = ["Merging is two-way only (base and other), with no common ancestor; a three-way merge needs version history, which FontCraft does not keep. A user workflow that needs three-way merging would settle it.", "Without -o or --in-place the merge is refused rather than written beside BASE under a derived name; a user who expects a default output name would settle it."]
+notes = "--glyphs and --glyph-file take plain glyph names; the shared glyph-list grammar (ranges, code points, patterns) is not applied yet."
 
 [[command]]
 id = "tables.show"
@@ -2930,10 +2932,11 @@ label = "Merge Sources"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{base: path, other: path, take: [id] | \"all\", parts?: [string], glyphs?: [name], output: path} → {applied: [id], output: path}"
+params = "{base: path, other: path, take: [id] | \"all\", parts?: [string], glyphs?: [name], tolerance?: number, output?: path, outputDir?: path, inPlace?: bool, noClobber?: bool} → {applied: [id], output: path, format, losses}"
 area = "cli-tools"
 milestone = "M12"
-summary = "Applies the chosen changes of source.diff from OTHER to BASE and writes the result to output in BASE's format. All or nothing: a change that no longer applies refuses the whole merge."
+summary = "Applies the chosen changes of source.diff from OTHER to BASE and writes the result to output in BASE's format. All or nothing: a change that no longer applies, or a result that is not a consistent font, refuses the whole merge and nothing is written."
+guesses = ["A merged designspace is refused when it would be written beside BASE without inPlace, because its UFOs would replace BASE's; a user workflow that wants that would settle it."]
 ref = "Our design (docs/spec/20-cli.md › sources)"
 status = "inferred"
 own = true
