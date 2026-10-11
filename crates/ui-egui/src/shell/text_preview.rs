@@ -601,8 +601,15 @@ pub fn find_matches(text: &str, query: &str, ignore_case: bool, matching: Matchi
     out
 }
 
-/// `text` with the matches at `starts` (each `len` characters) replaced by `with`.
-fn replaced(text: &str, starts: &[usize], len: usize, with: &str) -> String {
+/// `text` with the matches at `starts` (each `len` characters, not overlapping) replaced by
+/// `with`, or `None` when the result would hold more than `limit` characters. The length is
+/// worked out before anything is built: a short text and replacement can multiply past memory.
+fn replaced(text: &str, starts: &[usize], len: usize, with: &str, limit: usize) -> Option<String> {
+    let removed = starts.len().saturating_mul(len);
+    let added = starts.len().saturating_mul(with.chars().count());
+    if text.chars().count().saturating_sub(removed).saturating_add(added) > limit {
+        return None;
+    }
     let mut out = String::with_capacity(text.len());
     let mut next = starts.iter().peekable();
     let mut skip = 0;
@@ -618,7 +625,7 @@ fn replaced(text: &str, starts: &[usize], len: usize, with: &str) -> String {
         }
         out.push(c);
     }
-    out
+    Some(out)
 }
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
@@ -747,10 +754,8 @@ fn find(app: &mut FontcraftApp, args: &Args) -> Result<Value, String> {
             None => starts.clone(),
         };
         if !chosen.is_empty() {
-            let text = replaced(&tp.text, &chosen, qlen, with);
-            if text.chars().count() > MAX_CHARS {
-                return Err(args.err(format!("replacing would make the text longer than {MAX_CHARS} characters")));
-            }
+            let text = replaced(&tp.text, &chosen, qlen, with, MAX_CHARS)
+                .ok_or_else(|| args.err(format!("replacing would make the text longer than {MAX_CHARS} characters")))?;
             replaced_count = chosen.len();
             new_text = Some(text);
         }
@@ -825,10 +830,10 @@ impl Placement {
 }
 
 /// Cmd+F while the window has the keyboard opens its find bar; it runs before the menu
-/// shortcuts, where Cmd+F is the Edit View's and Font View's Find.
+/// shortcuts, where Cmd+F is the Edit View's and Font View's Find. A modal dialog keeps it.
 pub fn find_shortcut(app: &FontcraftApp, ctx: &egui::Context, pending: &mut Pending) {
     let tp = &app.state.panels.text_preview;
-    if tp.open && tp.keyboard && ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::F)) {
+    if tp.open && tp.keyboard && app.dialog.is_none() && ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::F)) {
         pending.push(("textPreview.find", json!({})));
     }
 }
@@ -1245,6 +1250,19 @@ mod tests {
         assert_eq!(find_matches("Hat hat that", "hat", false, Matching::Contains), [4, 9]);
         assert_eq!(find_matches("Hat hat that", "hat", true, Matching::FullWord), [0, 4]);
         assert_eq!(find_matches("aaaa", "aa", true, Matching::Contains), [0, 2]);
-        assert_eq!(replaced("Hat hat that", &[0, 4], 3, "cap"), "cap cap that");
+        assert_eq!(replaced("Hat hat that", &[0, 4], 3, "cap", 12).as_deref(), Some("cap cap that"));
+        assert_eq!(replaced("Hat hat that", &[0, 4], 3, "caps", 13), None);
+    }
+
+    #[test]
+    fn replace_all_refuses_a_result_past_the_limit_before_building_it() {
+        // A full-length text with every character replaced by the longest replacement would
+        // be a billion characters; the refusal must come from arithmetic alone.
+        let text = "a".repeat(MAX_CHARS);
+        let starts: Vec<usize> = (0..MAX_CHARS).collect();
+        let with = "b".repeat(MAX_QUERY_CHARS);
+        let started = std::time::Instant::now();
+        assert_eq!(replaced(&text, &starts, 1, &with, MAX_CHARS), None);
+        assert!(started.elapsed() < std::time::Duration::from_millis(500), "refused without building: {:?}", started.elapsed());
     }
 }

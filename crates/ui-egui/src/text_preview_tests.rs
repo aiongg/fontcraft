@@ -362,3 +362,17 @@ fn cmd_f_opens_the_find_bar_only_while_the_text_preview_has_the_keyboard() {
     assert!(!app.state.panels.text_preview.find.open);
     assert!(app.state.panels.find_glyphs.open, "Cmd+F is the Edit View's Find again");
 }
+
+#[test]
+fn cmd_f_leaves_the_find_bar_closed_while_a_modal_dialog_is_open() {
+    let mut app = preview_app();
+    exec(&mut app, "window.textPreview", json!({}));
+    let w = Window::new();
+    w.frame(&mut app);
+    w.frame(&mut app);
+    assert!(app.state.panels.text_preview.keyboard);
+    exec(&mut app, "dialog.open", json!({"dialog": "dialog.addGlyphs"}));
+    assert!(app.dialog.is_some());
+    w.cmd_f(&mut app);
+    assert!(!app.state.panels.text_preview.find.open, "the dialog has the keyboard");
+}
