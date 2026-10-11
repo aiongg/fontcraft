@@ -8,6 +8,7 @@ use std::sync::Arc;
 use fontcraft_model::{Font, KernFirst, KernGroups, MasterKerning, side_group};
 
 use super::groups::{GroupNameError, check_group_name};
+use super::pairs::merge_master;
 use super::sides::{GroupSide, Side, facing};
 use super::{Direction, NamedPair, Position};
 use crate::link::metrics_source;
@@ -155,13 +156,13 @@ impl Entry {
     }
 }
 
-fn master_table<'a>(font: &'a Font, direction: Direction, master: &str) -> Option<&'a MasterKerning> {
-    direction.table(&font.kerning).0.iter().find(|m| m.master == master)
-}
-
-fn entries(table: Option<&MasterKerning>) -> Vec<Entry> {
-    table
-        .into_iter()
+/// The stored pairs of `master`'s own table, in stored order, over every entry for the master.
+fn master_entries(font: &Font, direction: Direction, master: &str) -> Vec<Entry> {
+    direction
+        .table(&font.kerning)
+        .0
+        .iter()
+        .filter(|m| m.master == master)
         .flat_map(|m| &m.firsts)
         .flat_map(|f| {
             f.seconds.iter().map(|(s, v)| Entry {
@@ -190,18 +191,18 @@ fn write_back(font: &mut Font, direction: Direction, master: &str, entries: &[En
             f.seconds.push((e.second_stored.clone(), e.value));
         }
     }
-    let table = &mut direction.table_mut(Arc::make_mut(&mut font.kerning)).0;
-    match table.iter().position(|m| m.master == master) {
+    let table = direction.table_mut(Arc::make_mut(&mut font.kerning));
+    match merge_master(table, master) {
         Some(i) if firsts.is_empty() => {
-            table.remove(i);
+            table.0.remove(i);
         }
         Some(i) => {
-            if let Some(m) = table.get_mut(i) {
+            if let Some(m) = table.0.get_mut(i) {
                 m.firsts = firsts;
             }
         }
         None if firsts.is_empty() => {}
-        None => table.push(MasterKerning { master: master.to_string(), firsts }),
+        None => table.0.push(MasterKerning { master: master.to_string(), firsts }),
     }
 }
 
@@ -233,7 +234,7 @@ fn obsolete(font: &Font, used: &HashMap<GroupSide, HashSet<&str>>, direction: Di
 /// without members on the side facing the pair, in stored order.
 pub fn obsolete_pairs(font: &Font, direction: Direction, master: &str) -> Vec<Removed> {
     let used = used_groups(font);
-    entries(master_table(font, direction, master))
+    master_entries(font, direction, master)
         .iter()
         .filter_map(|e| obsolete(font, &used, direction, e).map(|reason| Removed { pair: e.pair(), reason }))
         .collect()
@@ -244,7 +245,7 @@ pub fn obsolete_pairs(font: &Font, direction: Direction, master: &str) -> Vec<Re
 pub fn clean_up(font: &mut Font, direction: Direction, master: &str) -> Result<Vec<Removed>, MaintainError> {
     check_editable(font, master)?;
     let used = used_groups(font);
-    let mut list = entries(master_table(font, direction, master));
+    let mut list = master_entries(font, direction, master);
     let mut removed = Vec::new();
     for e in &mut list {
         if let Some(reason) = obsolete(font, &used, direction, e) {
@@ -296,7 +297,7 @@ pub fn compress(font: &mut Font, direction: Direction, master: &str, runs: usize
             Side::Group(_) => None,
         }
     };
-    let list = entries(master_table(font, direction, master));
+    let list = master_entries(font, direction, master);
     let mut work = Work { by_sides: HashMap::new(), member_pairs: HashMap::new(), list };
     for (i, e) in work.list.iter().enumerate() {
         work.by_sides.entry((e.first.clone(), e.second.clone())).or_insert(i);
@@ -534,7 +535,7 @@ fn rename_in_pair(
     if super::stored_pair(font, direction, master, new_first, new_second).is_some() {
         return Err(MaintainError::PairExists { master: master.to_string(), first: new_first.command(), second: new_second.command() });
     }
-    let mut list = entries(master_table(font, direction, master));
+    let mut list = master_entries(font, direction, master);
     let mut out = None;
     if let Some(e) = list.iter_mut().find(|e| e.first_stored == found.0 && e.second_stored == found.1) {
         match position {

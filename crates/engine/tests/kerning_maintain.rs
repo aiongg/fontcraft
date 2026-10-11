@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Font, KernGroups, Layer};
+use fontcraft_engine::model::{Font, KernFirst, KernGroups, Layer};
 use fontcraft_spacing::kerning::{Direction, KernIndex};
 use serde_json::{Value, json};
 
@@ -278,4 +278,24 @@ fn rename_group_for_the_whole_font_or_one_pair_keeps_sides_apart() {
     let e = refused(&mut s, "kerning.renameGroup", json!({"side": "left", "from": "Nope", "to": "Other", "scope": "font"}));
     assert!(e.contains("Nope"), "{e}");
     refused(&mut s, "kerning.renameGroup", json!({"side": "left", "from": "Tee", "to": "U", "scope": "pair"}));
+}
+
+/// A file can hold two kerning entries for one master; edits see the pairs of both.
+#[test]
+fn rename_group_in_one_pair_finds_it_in_a_second_entry_for_the_master() {
+    let mut s = font_with(&[("T", None, Some("T")), ("n", Some("n"), None)]);
+    set(&mut s, Direction::Ltr, "m01", &[("T", "n", -5.0)]);
+    s.edit("second entry", |font| {
+        let table = &mut Arc::make_mut(&mut font.kerning).ltr.0;
+        let mut extra = table[0].clone();
+        extra.firsts = vec![KernFirst { first: "@MMK_L_T".into(), seconds: vec![("@MMK_R_n".into(), -40.0)] }];
+        table.push(extra);
+        Ok(())
+    })
+    .unwrap();
+    let pair = json!({"left": "@T", "right": "@n"});
+    let out = undoable(&mut s, "kerning.renameGroup", json!({"side": "right", "from": "n", "to": "m", "scope": "pair", "pair": pair}));
+    assert_eq!(out["pairs"], json!([{"direction": "ltr", "master": "m01", "left": "@T", "right": "@m"}]));
+    let font = s.font().unwrap().clone();
+    assert_eq!(stored(&font, Direction::Ltr, "m01"), owned(&[("T", "n", -5.0), ("@MMK_L_T", "@MMK_R_m", -40.0)]));
 }
