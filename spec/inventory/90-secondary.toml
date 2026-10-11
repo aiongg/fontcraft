@@ -1595,10 +1595,11 @@ shortcut = ""
 kind = "engine"
 params = "{layers: [{font: fontRef | path, color: color, opacity?: number, offset?: [x, y], scale?: number}], output: 'colorLayers' | 'masters'}"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Stacks the matching glyphs of several monochrome fonts (the parts of a chromatic family) into one colour font, each source with its own colour, opacity, offset and scale. The bottom source supplies metrics and kerning. Output is either one colour-layered glyph set or one master per source."
 ref = "FontLab 8 What's new › Color › Overlay Fonts"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontlab"
 
 [[command]]
@@ -1609,10 +1610,11 @@ shortcut = ""
 kind = "engine"
 params = "{palette?: index}"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Derives a second CPAL palette for dark backgrounds from the existing palette and flags it as the dark-background palette, so browsers can select it. Available as an export option and previewable in a dark preview."
 ref = "FontLab 8 What's new › Test & adjust › Previewing (Dark palette export); Color; Formats"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontlab"
 
 [[panel]]
@@ -1855,10 +1857,11 @@ severity = "warn"
 scope = "source"
 fixable = true
 area = "qa"
-milestone = "M11"
+milestone = "M13"
 summary = "A glyph has outlines but is missing from a bitmap strike, or a strike has a glyph that the outline font lacks."
 ref = "FontForge Find Problems › Missing bitmaps"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[check]]
@@ -1867,10 +1870,11 @@ severity = "warn"
 scope = "source"
 fixable = true
 area = "qa"
-milestone = "M11"
+milestone = "M13"
 summary = "A bitmap glyph's advance differs from the outline advance scaled to the strike size and rounded."
 ref = "FontForge Find Problems › Bitmap/Outline Advance Width Mismatch"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 # =====================================================================================================
@@ -2383,10 +2387,11 @@ shortcut = ""
 kind = "engine"
 params = "{add?: [{ppem: number, depth?: 1 | 2 | 4 | 8}], remove?: [{ppem: number, depth?: number}], rasterize?: bool}"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Declares which embedded bitmap sizes (strikes) the font carries, in pixels per em, each either black-and-white or grey with 2, 4 or 8 bits per pixel. A new strike is filled by rasterising the outlines unless rasterize is false; removing a strike deletes its glyph bitmaps."
 ref = "FontForge Element menu › Bitmap Strikes Available"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[command]]
@@ -2397,10 +2402,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyphs?, strikes?: [{ppem: number, depth?: number}]}"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Re-rasterises the selected glyphs into the chosen strikes from the current outlines, overwriting hand edits in those bitmaps."
 ref = "FontForge Element menu › Regenerate Bitmap Glyphs"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[command]]
@@ -2411,10 +2417,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyphs?, strikes?: [{ppem: number, depth?: number}]}"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Deletes the selected glyphs from the chosen strikes, leaving outlines and other strikes alone."
 ref = "FontForge Element menu › Remove Bitmap Glyphs"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[panel]]
@@ -2423,10 +2430,11 @@ label = "Bitmap Glyph Editor"
 location = "window"
 controls = ["actual-size preview of the glyph", "pointer position in pixels from the glyph origin and drag distance", "Recalculate button: rasterise the outline into this glyph again", "pixel canvas with separate toggles for the outline overlay and the pixel grid", "tool palette: pointer, magnify, pencil, line, shift, hand", "context menu: outlined and filled rectangle and ellipse, flips, quarter-turn rotations, set width"]
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Edits one glyph of one strike pixel by pixel, with the scaled outline shown behind as a guide. Only the bitmap is editable here; the outline and grid are overlays."
 ref = "FontForge main views › Bitmap View"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[tool]]
@@ -2440,10 +2448,11 @@ gestures = [
   "Alt+click (grey strikes): pick up the grey level under the pointer as the drawing level",
 ]
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Sets and clears single pixels in a bitmap glyph. In a grey strike it paints with the current grey level, chosen from the shades palette or picked from the canvas."
 ref = "FontForge main views › Bitmap View (Pencil; Anti-aliased glyphs)"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[tool]]
@@ -2455,10 +2464,11 @@ gestures = [
   "drag: draw a straight run of pixels from press to release, setting or clearing by the state the first pixel took",
 ]
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Draws straight pixel lines in a bitmap glyph. The reference does not constrain the angle with Shift."
 ref = "FontForge main views › Bitmap View (Line)"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[tool]]
@@ -2470,10 +2480,11 @@ gestures = [
   "drag: move the whole bitmap of the glyph by whole pixels",
 ]
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Repositions the entire bitmap of the glyph relative to its origin. The ordinary pointer tool, by contrast, selects a rectangular region to move or copy and nudges it with the arrow keys."
 ref = "FontForge main views › Bitmap View (Four-arrow; Pointer)"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[panel]]
@@ -2482,10 +2493,11 @@ label = "Shades"
 location = "palette"
 controls = ["one swatch per grey level of the strike (4, 16 or 256)", "outline marking the current drawing level", "outline marking the level under the pointer"]
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Chooses the grey level the bitmap tools paint with. Shown only while a grey strike is being edited."
 ref = "FontForge main views › Bitmap View (Shades palette)"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[command]]
@@ -2496,10 +2508,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph, strike: {ppem: number, depth?: number}, pixels?: [{x: number, y: number, value: number}], rows?: [string], origin?: [x, y], advance?: number}"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Headless form of bitmap editing: sets individual pixels, or replaces the whole glyph bitmap from rows of values, with its origin offset and, in a bitmap-only font, its advance."
 ref = "FontForge main views › Bitmap View"
 status = "inferred"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[command]]
@@ -2510,10 +2523,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyphs?, strike: {ppem: number, depth?: number}, op: 'flipH' | 'flipV' | 'rotate90cw' | 'rotate90ccw' | 'rotate180' | 'skew', skew?: [dx, dy]}"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Flips, rotates by quarter turns or skews bitmap glyphs by a pixel ratio."
 ref = "FontForge Element menu › Transformations (bitmap view: Flip, Rotate, Skew)"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[command]]
@@ -2524,10 +2538,11 @@ shortcut = ""
 kind = "ui"
 params = "{strike?: {ppem: number, depth?: number}, magnification?: number}"
 area = "font-view"
-milestone = "M11"
+milestone = "M13"
 summary = "Makes the glyph grid show the bitmaps of one strike instead of rendered outlines, optionally magnified; omitting the strike returns to outlines. The View menu lists every strike, grey ones as size@depth."
 ref = "FontForge View menu › bitmap pixel size list, Bitmap Magnification"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[command]]
@@ -2538,10 +2553,11 @@ shortcut = ""
 kind = "engine"
 params = "{paths: [path], into?: fontRef, asBackground?: bool}"
 area = "import-export"
-milestone = "M11"
+milestone = "M13"
 summary = "Adds the strikes found in bitmap font files to the current font, matching glyphs by encoding or name. The reference reads BDF, X11 PCF, TeX PK and GF, the strikes embedded in TrueType and OpenType files, and Mac bitmap resources. A bitmap font can also be opened on its own as a bitmap-only font."
 ref = "FontForge File menu › Import (font view); Open"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[command]]
@@ -2552,10 +2568,11 @@ shortcut = ""
 kind = "engine"
 params = "{strikes?: [{ppem: number, depth?: number}], format: 'bdf' | 'embedded' | 'otb', path: path}"
 area = "import-export"
-milestone = "M11"
+milestone = "M13"
 summary = "Writes the chosen strikes as BDF files, embeds them in the exported TrueType or OpenType font, or writes a bitmap-only font in an sfnt wrapper. The reference also writes Windows FON and FNT, Mac NFNT and Palm formats, which we do not plan."
 ref = "FontForge dialogs › Generate Font › Bitmap Formats"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[panel]]
@@ -2564,28 +2581,31 @@ label = "Strike Properties"
 location = "dialog"
 controls = ["strike chooser", "table of named properties with typed values (strings, integers)", "add, remove and reset to computed defaults"]
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "Edits the property list that a BDF file carries for a strike, such as its font descriptor string, resolution, ascent and descent."
 ref = "FontForge Element menu › BDF Info; FontForge dialogs › BDF Info Dialog"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[behavior]]
 id = "bitmap.widthOnlyInBitmapFonts"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "A bitmap glyph's advance can be edited directly only when the font has no outlines; with outlines present the strike advance follows the outline advance scaled to the strike size and rounded."
 ref = "FontForge main views › Bitmap View (Pointer; Set Width); Find Problems › Bitmap/Outline Advance Width Mismatch"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 [[behavior]]
 id = "bitmap.references"
 area = "color"
-milestone = "M11"
+milestone = "M13"
 summary = "A bitmap glyph may be composed of references to other bitmap glyphs of the same strike, and building an accented composite can create the bitmap references together with the outline components."
 ref = "FontForge main views › Bitmap View (Bitmap references); FontForge Element menu › Build Accented Glyph"
 status = "docs"
+notes = "Moved from M11 to M13 by the M11 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 origin = "fontforge"
 
 # =====================================================================================================

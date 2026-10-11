@@ -271,6 +271,7 @@ effect = "table-value"
 summary = "List of colour palettes exported as the CPAL table of a COLR/CPAL colour font. The same palettes are used to preview colour glyphs in Font View and Edit View."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "A master may carry its own Color Palettes, which wins over the font's for that master (`color.palette.perMaster`); both oracles read it so. Values are stored as `\"r,g,b,a\"` strings in version 2, integer lists in version 3 and floats in version 4."
 
 [[parameter]]
 name = "Compatible name Table"

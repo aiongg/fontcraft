@@ -748,4 +748,6 @@ question 15, question 16 (M6) and question 20 (M11).
 19. **`glyphOrder` gaps.** **Answered (source):** glyphs the parameter does not name follow in the
     default order (`glyphOrder` parameter row). `.notdef` follows the same rule in Font View; export
     still moves it to glyph 0.
-20. **Batch image import.** Open; images are M11.
+20. **Batch image import.** ▶ **Answered for M11 (handbook, ours):** file names without extension
+    match glyph names exactly, case included; each image goes on the current master's layer;
+    unmatched files are listed in the result and create no glyph (`fontView.image.batchByFileName`).

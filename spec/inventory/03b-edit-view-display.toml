@@ -1979,12 +1979,15 @@ label = "Add Image…"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?: [names], layer?: id, path: file}"
+params = "{files: [path], glyphs?: [names], layer?: id}"
 area = "color"
 milestone = "M11"
-summary = "Places an image file on the layer of the selected glyph. The image is put at the layer origin and sized so that one typographic point of the image equals one font unit. Only a path relative to the document is stored, not the image data."
+summary = "Places an image file on a glyph layer. With one file it goes on the given (or selected) glyph's layer; with several files each is matched to the glyph of the same name without extension and goes on that glyph's current-master layer. The image is put at the layer origin and sized so that one typographic point of the image equals one font unit. Only a path relative to the document is stored, not the image data."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
+guesses = [
+  "A layer holds one placed image, as the version 3 format stores one: Add Image on a layer that has an image replaces it. Image shapes of the version 4 format are read, drawn and written back but not created. Settled by adding a second image to a glyph in the reference and reading the saved file.",
+]
 
 [[command]]
 id = "image.setTransform"
@@ -1998,6 +2001,9 @@ milestone = "M11"
 summary = "Sets position, displayed size and rotation of the layer's image, as the image fields of the Info box do. The same values change when the image is dragged, resized with the bounding box or Scale tool, turned with the Rotate tool or transformed from the Palette."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+guesses = [
+  "Width and height are the displayed size in font units; rotation turns the image about its position point (its bottom-left corner before rotation), as the stored `pos`, `scale` and `angle` suggest. Settled by rotating an image in the reference's Info box and reading the saved file.",
+]
 
 [[command]]
 id = "image.revealFile"
@@ -2050,6 +2056,9 @@ milestone = "M11"
 summary = "Limits the visible part of the image to a rectangle. In the reference this is done by dragging one of the image's handles with Ctrl+Alt held; the coordinate space of the stored crop is not documented."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+guesses = [
+  "The crop rectangle is in image pixels, measured from the image's bottom-left corner, as origin and size. Settled by cropping an image in the reference and reading `crop` in the saved file.",
+]
 
 [[command]]
 id = "image.setCropToLayerBounds"
@@ -2063,6 +2072,9 @@ milestone = "M11"
 summary = "Trims the image so that it ends at the layer bounds. Offered in the image's context menu; what exactly counts as the layer bounds (advance width by vertical metrics, or outline bounds) is not spelled out."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+guesses = [
+  "The layer bounds are the rectangle from 0 to the advance width and from the master's descender to its ascender. Settled by Set Crop to Layer Bounds on an image larger than the glyph in the reference.",
+]
 
 [[command]]
 id = "image.resetCrop"
@@ -2089,6 +2101,7 @@ milestone = "M11"
 summary = "Query returning the layer image's stored path, whether the file resolves, its position, size, rotation, crop and lock state."
 ref = "Edit View › Images › Manipulating Images"
 status = "inferred"
+own = true
 
 [[panel]]
 id = "editView.imageContextMenu"
@@ -2108,6 +2121,10 @@ milestone = "M11"
 summary = "The reference accepts every image type its operating system can decode and names JPEG, PNG, PDF, TIFF and PSD. FontCraft must decide which of these it decodes itself on every platform."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
+notes = "FontCraft decodes PNG, JPEG and TIFF itself on every platform, the web build included; PDF and PSD references are kept and drawn as an unsupported-image marker (M11 § 7, question 3)."
+guesses = [
+  "PDF and PSD images are kept as references and drawn as an unsupported-image marker with a message, not decoded. Settled by the owner's answer to M11 § 7 question 3.",
+]
 
 [[behavior]]
 id = "image.dragAndDrop"
@@ -2124,6 +2141,9 @@ milestone = "M11"
 summary = "The document records only the image's path relative to the font file. If the file has moved or the path no longer resolves, the canvas shows a missing-image symbol in its place."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
+guesses = [
+  "An image added to a document that has never been saved keeps its absolute path until the first save, which rewrites it relative to the new file. Settled by adding an image to an untitled document in the reference and saving it.",
+]
 
 [[behavior]]
 id = "image.alwaysShownForEmptyGlyphs"
@@ -2148,6 +2168,9 @@ milestone = "M11"
 summary = "A newly placed image sits at the layer origin, scaled so that one DTP point of the image maps to one font unit."
 ref = "Edit View › Images › Manipulating Images"
 status = "handbook"
+guesses = [
+  "The image's size in points comes from the resolution stored in the file (PNG pHYs, JPEG JFIF or Exif, TIFF resolution tags); a file without one counts as 72 pixels per inch, one pixel per unit. Settled by adding a 144 dpi PNG in the reference.",
+]
 
 [[behavior]]
 id = "image.directManipulation"

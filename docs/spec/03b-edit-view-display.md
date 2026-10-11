@@ -506,6 +506,11 @@ the active Edit View tab and is blank otherwise.
     and the command give the same annotation. The Annotation tool's key is `A`, as its row says.
 12. Image crop: coordinate space of the stored rectangle; meaning of "layer bounds"; whether a
     layer can hold more than one image; which formats FontCraft decodes natively (PDF, PSD).
+    **Answered for M11 (format, ours):** the crop is stored as origin and size, taken in image
+    pixels from the bottom-left corner; layer bounds are 0 to the advance width by descender to
+    ascender; a layer holds one image (Add Image replaces it), and the version 4 format's image
+    shapes are read, drawn and kept; PNG, JPEG and TIFF are decoded on every platform, PDF and
+    PSD kept as references (guesses on the image rows; M11 plan § 7, question 3).
 13. Preview blur range and unit; which custom parameters the instance preview honours.
     **Answered for M5 (our decision):** blur from 0 to 10 screen points of radius
     (`preview.setBlur`). Instance parameters wait for M9, when instances are interpolated.

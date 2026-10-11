@@ -31,7 +31,8 @@ A layered colour font uses none of these: its colour "layers" are whole masters.
 
 Font-level and master-level data:
 
-- `Color Palettes` (font): list of palettes, each a list of RGBA colours.
+- `Color Palettes` (font): list of palettes, each a list of RGBA colours. A master may carry its
+  own, which wins for that master (docs: both oracles; `color.palette.perMaster`).
 - `Master Color`, `Master Color Dark` (master): editor-only preview colours.
 - `Link Metrics With First Master`, `Link Metrics With Master` (master): metric sharing.
 - `Enforce Compatibility Check` (font): switched off for non-interpolating colour masters.
@@ -168,10 +169,12 @@ Export:
 - Stated: `Color Layers to SVG` on an instance writes each glyph's Color layer as an SVG document
   (`color.export.fullColorToSvg`).
 - Docs, not in the chapter: the same layers can be compiled to COLR v1
-  (`color.export.fullColorToColrV1`). fontc builds, per colour glyph, a `PaintColrLayers` whose
-  entries are `PaintGlyph` over `PaintSolid`, `PaintLinearGradient` or `PaintRadialGradient`, with a
-  clip box, and falls back to COLR v0 when every glyph is a stack of solid layers
-  (`color.export.colrVersionChoice`).
+  (`color.export.fullColorToColrV1`). Both oracles merge consecutive paths with equal attributes
+  into one layer glyph and build, per colour glyph, a `PaintColrLayers` whose entries are
+  `PaintGlyph` over `PaintSolid`, `PaintLinearGradient` or `PaintRadialGradient`, with a clip box.
+  fontc falls back to COLR v0 when every glyph is a stack of solid layers and reads only the
+  master layer's own attributes; fontmake writes version 1 and reads separate Color layers
+  (`color.export.colrVersionChoice`; M11 plan § 2).
 - Ours: strokes have no COLR paint, so they are expanded to outlines for COLR and kept as strokes in
   SVG (`color.export.strokeInColr`).
 
@@ -262,8 +265,8 @@ written and why.
 Notes for the compiler:
 
 - COLR layer glyphs are extra, unencoded glyphs in the glyph order, one per colour layer; they carry
-  the layer's outline in `glyf` or `CFF `. Their names and whether identical layers are shared are
-  not documented.
+  the layer's outline in `glyf` or `CFF `. Both oracles name them `<base>.color<i>` and share none
+  between glyphs (open question 2).
 - An SVG document in the table must address glyphs by element id `glyph<ID>`, so the SVG is written
   after the final glyph order is known. Referenced files need their coordinates mapped from the
   layer placement (y axis flipped, origin at the baseline).
@@ -282,15 +285,16 @@ pins write-fonts 0.54.0 and skrifa 0.48.0.
 | CPAL | yes (`tables/cpal.rs`): versions 0 and 1 (palette types and label arrays) | yes (`tables/cpal.rs`) | fontc already emits it (`fontbe/src/cpal.rs`) |
 | COLR v0 | yes (`tables/colr.rs`): BaseGlyph and Layer records, `v0_base_glyph`, `v0_layer` | yes (`tables/colr.rs`) | Version is computed on write: 0 unless a v1-only field is set |
 | COLR v1 | yes: BaseGlyphList, LayerList, ClipList, all Paint formats including the variable ones, ColorLine / VarColorLine, composite modes; closure helpers in `tables/colr/` | yes: generated from the same definitions, with DeltaSetIndexMap and ItemVariationStore | fontc emits Glyph, Solid, LinearGradient, RadialGradient and ColrLayers paints with clip boxes; skrifa `color` traverses paints for rendering |
-| sbix | yes (`tables/sbix.rs`): header, Strike, GlyphData, `glyph_data` | yes (`tables/sbix.rs`) | On write the header flags are masked to bit 0, so the "draw outlines" flag (bit 1) cannot currently be emitted |
+| sbix | yes (`tables/sbix.rs`): header, Strike, GlyphData, `glyph_data` | partly (`tables/sbix.rs`) | On write the header flags are masked to bit 0, so the "draw outlines" flag (bit 1) cannot currently be emitted. A `Strike` holds only offsets and does not own its `GlyphData`, so the caller lays out the strike bytes (M11 planning pass) |
 | SVG | yes (`tables/svg.rs`): document list, `glyph_data` returns the raw, possibly gzip-compressed document | **no** module | Reading stops at the bytes; no SVG parsing or rendering in fontations. Writing needs our own serializer |
 | CBDT | yes (`tables/cbdt.rs`, shared code in `tables/bitmap.rs`) | **no** module | skrifa `bitmap` reads strikes from sbix, CBDT and EBDT, in that order of preference |
 | CBLC | yes (`tables/cblc.rs`, shared code in `tables/bitmap.rs`) | **no** module | as CBDT |
 
 Consequences for FontCraft:
 
-- CPAL, COLR v0/v1 and sbix can be written with write-fonts today; for `[[table]]` rows that is
-  `write = "write-fonts"`.
+- CPAL and COLR v0/v1 can be written with write-fonts today (`write = "write-fonts"`). sbix is
+  serialised by FontCraft (`write = "own"`) and added with `FontBuilder::add_raw`, as SVG, CBDT
+  and CBLC will be.
 - SVG, CBDT and CBLC need `write = "own"` (or `"none-yet"` until built). The SVG table container is
   small (header, document records, concatenated documents); the work is generating the documents.
 - Opening an existing colour font for editing can use read-fonts for all six tables.
@@ -314,42 +318,107 @@ Settle these by observing the reference app or its exported fonts.
 
 1. Stacking order of colour palette layers in COLR: does the top entry in the Layers palette become
    the top (last) COLR layer?
+   **Answered for M11 (oracle):** both fontc 1.0.0 and fontmake 3.12.1 write the first colour layer
+   in the file as the first layer record, painted at the bottom; FontCraft does the same (guess on
+   `color.export.colrFromPaletteLayers`, to observe).
 2. Names and order of the generated COLR layer glyphs, and whether identical layers across glyphs
    are shared.
+   **Answered for M11 (oracle):** both oracles name layer glyphs `<base>.color<i>` by position among
+   the colour layers, merge consecutive shapes with equal attributes into one layer glyph, and share
+   nothing between glyphs. fontc names from the production name and orders numerically; fontmake
+   names from the source name and sorts as strings. FontCraft follows fontc.
 3. Does `Color Palette for CPAL` write only the chosen palette, or all palettes with the chosen one
    moved to position 0?
+   **Answered for M11 (ours):** every palette is written, the chosen one moved to position 0.
+   Neither oracle reads the parameter (guess on `color.export.colorPaletteForCpal`).
 4. Is CPAL version 0 always written? Are palette labels or light/dark palette type flags ever set?
+   **Answered for M11 (oracle):** both oracles write CPAL version 0 with no labels or palette types;
+   FontCraft does the same. fontc also writes CPAL when no colour layer uses it, fontmake does not;
+   FontCraft follows fontmake.
 5. When a colour row is removed in the palette editor, are layers using that or higher indices
    renumbered, left dangling, or flagged?
+   **Answered for M11 (ours):** layers that use higher indices are renumbered down; removing a row
+   that a layer uses is refused with a message naming the glyphs (guess on
+   `colorPalette.removeColor`).
 6. Initial colour of a new palette entry and initial contents of a new palette; can the last
    palette or the last colour be removed?
+   **Answered for M11 (ours):** a new row is opaque black; a new palette copies palette 0; the last
+   palette cannot be removed; the last colour can be removed when no layer uses it, which leaves no
+   CPAL (guesses on the palette commands).
 7. Which palette does the Layers palette chooser and the Edit View preview use when several palettes
    exist: always palette 0?
+   **Answered for M11 (ours):** always palette 0 (guess on `palette.layers.paletteColorChooser`).
 8. Does the reference app itself export full-colour layers as COLR v1, under which conditions, and
    is there a switch for it? The chapter mentions only SVG; the mapping here follows fontc.
+   **Answered for M11 (oracle, to observe):** both oracles compile full-colour layers to COLR. fontc
+   writes version 0 when every fill is solid and version 1 otherwise, and reads only colour
+   attributes on the master layer itself; fontmake writes version 1 for every full-colour glyph and
+   reads separate Color layers. FontCraft reads separate Color layers and chooses the version as
+   fontc does; no switch (guesses on `color.export.colrVersionChoice`,
+   `color.export.fullColorToColrV1`).
 9. `Export SVG Table`: the chapter asks for it to be checked for conversions, the appendix says SVG
    is exported by default. Is an SVG table written for svg layers without any parameter?
+   **Answered for M11 (appendix):** an SVG table is written whenever svg layers exist or a
+   conversion asks for it; Export SVG Table set off removes it (guess on
+   `color.export.exportSvgTable`).
 10. Are SVG documents stored compressed, one document per glyph or grouped, and how is the placed
     image's transform expressed (viewBox, wrapper group)?
+    **Answered for M11 (ours, nanoemoji's layout):** one uncompressed document per glyph, the
+    glyph's group with the id `glyph<ID>` and a transform that flips y at the baseline and applies
+    the placed image's transform. nanoemoji writes the same layout in its `untouchedsvg` mode;
+    neither oracle writes an SVG table from a Glyphs source.
 11. How is an image attached to an iColor layer: drag-and-drop, Glyph › Add Image, or automatic
     lookup by file name? What is the default size of a new iColor layer?
+    **Answered for M11 (ours):** Add Image with the iColor layer as target, a drop on the layer, or
+    `layer.setIColorImage`; a new iColor layer is 128 pixels per em (guesses on
+    `layer.convertToIColor`, `layer.setIColorImage`).
 12. Exact fitting rule of an image into the master-layer bounding box (scale to height, to width, or
     both), and what happens when the master layer has no paths.
+    **Answered for M11 (handbook, ours):** the iColor size alone sets the scale (unitsPerEm ÷ size
+    units per pixel); the image's bottom-left corner sits at the bottom-left of the master layer's
+    path bounds, or at the origin when the master layer has no paths.
 13. Are JPEG and TIFF sources stored as such in sbix or converted to PNG? What graphic type tags are
     written?
+    **Answered for M11 (ours):** JPEG is stored as `jpg `, TIFF converted to PNG (guess on
+    `color.sbix.bitmapFormats`).
 14. What does the reference do when the image sizes of a glyph have different aspect ratios, or when
     a referenced file is missing at export?
+    **Answered for M11 (ours):** unequal ratios export with a warning; a missing file leaves the
+    glyph out of that strike with a warning (guesses on `color.sbix.sameAspectRatio`,
+    `color.export.sbixAutomatic`).
 15. Stroke alignment: which side is "left" relative to path direction, and how are strokes written
     to SVG (native stroke or expanded outline)?
+    **Answered for M11 (format, ours):** the file format stores inside and outside (`strokePos`:
+    version 3 0 outside, 0.5 centred, 1 inside; version 4 −1 inside, 0 centred, 1 outside), so left
+    is taken as inside. Centred strokes are SVG strokes; others are expanded. fontc refuses stroked
+    colour paths; fontmake expands centred ones only.
 16. How is a gradient removed from a path, and can stops be moved along the bar?
+    **Answered for M11 (ours):** `attributes.removeGradient` (a new row); stops move by offset
+    (guesses on both rows).
 17. Defaults for a new gradient (type, stop colours, start and end points), and whether the
     file-format-only features (conic gradient, extend mode, radii) have any UI.
+    **Answered for M11 (format, ours):** linear, from the fill colour to the same colour
+    transparent, left middle to right middle of the bounds; conic gradients and extend modes are
+    accepted headless only (guesses on `attributes.addGradient`).
 18. Default values of the gray fill and of a new stroke colour.
+    **Answered for M11 (ours):** 50 % gray, opaque; a new stroke is black (guesses on
+    `color.fullColor.defaultGrayFill`, `attributes.setStrokeWidth`).
 19. Do Shadow, Inner Shadow and Pattern Image have further controls? The chapter lists only their
     names.
+    **Answered for M11 (format):** Shadow and Inner Shadow store blur, x and y offset and colour
+    (`shadow`, `shadowIn`); FontCraft stores them and never exports them. Pattern Image's fields are
+    unknown (guess on `attributes.addAttribute`).
 20. Can a glyph mix colour layer types (e.g. palette layers and an svg layer), and which tables are
     then written?
+    **Answered for M11 (ours):** each kind feeds its own table; an svg layer wins over a conversion
+    for its glyph (guess on `color.fourKinds`).
 21. Do colour layers interpolate in variable fonts (variable COLR), or are they exported from one
     master only? The chapter is silent.
+    **Answered for M11 (oracle, to observe):** fontmake writes variable COLR for fontc's COLRv1-var
+    source (PaintVarLinearGradient, an ItemVariationStore and a DeltaSetIndexMap); fontc writes it
+    static. Palette-layer glyphs vary through their own outline variations in both. FontCraft
+    follows fontmake in M11.19, after M9 (`color.export.variableColr`).
 22. In a layered-to-SVG or layered-to-COLR conversion, which master supplies the fallback outline,
     and is the master order (first on top) the paint order?
+    **Answered for M11 (ours):** the instance's own master supplies the fallback outline; the first
+    master is on top, as in Edit View (guesses on `color.layered.toColr`, `color.layered.toSvg`).
