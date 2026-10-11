@@ -792,7 +792,7 @@ milestone = "M8"
 summary = "On a lookup defined outside any feature the `standalone` keyword changes nothing and is ignored."
 ref = "Feature Code › Standalone Lookups"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft drops the keyword outside every block; inside a block other than a feature it is an error."
 
 [[behavior]]
 id = "featureCode.standaloneLowering"
@@ -801,8 +801,10 @@ milestone = "M8"
 summary = "Standard syntax has no way to define a lookup inside a feature without registering it. FontCraft lowers it by closing the feature block before the lookup, defining the lookup at top level and reopening the feature with its current script, language and lookupflag statements repeated: blocks with one tag add up, and lookups are ordered by their place in the file. fea-rs does not have the keyword."
 ref = "Feature Code › Standalone Lookups"
 status = "inferred"
+notes = "A feature entry is lowered with its `feature tag { … } tag;` wrapper so the block can be split. The reopened block repeats the last `script` and `language` statements and the lookup flags in effect, as fea-rs carries them: a `script` statement resets the flags, a `lookupflag` inside a named lookup of the feature stays in effect after it."
 guesses = [
   "The split-block lowering keeps the lookup's place in lookup order and leaves it out of the feature; a reference export of a feature with a standalone lookup, read back with a font tool, would settle it.",
+  "A standalone lookup starts with the lookup flags in effect in its feature, as a named lookup inside a feature does in fea-rs, so the split lookup states them; a reference export of a standalone lookup after `lookupflag IgnoreMarks;` would settle it.",
 ]
 observe = [
   "In F1 (Latin features), write a feature with a standalone lookup, export and read GSUB: note where the lookup is placed and that the feature does not reference it.",
@@ -850,7 +852,10 @@ milestone = "M8"
 summary = "A single glyph or one-member class on either side of such a rule is repeated to match the size of the other classes."
 ref = "Feature Code › Multiple Substitution With Classes"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. fea-rs repeats a single glyph among the replacements but refuses a one-member class there, so FontCraft writes an inline `[x]`, or a class defined as `[x]` earlier in the same entry, as the glyph. A one-member class defined in another entry reaches the compiler unchanged."
+guesses = [
+  "A single glyph or one-member class as the target of a rule whose replacements are larger classes is passed to the compiler, which refuses it: repeating the target gives several rules for one glyph. A reference export of `sub a by @B @C;` would settle what the reference does.",
+]
 
 [[behavior]]
 id = "featureCode.lookupflagReplaces"
