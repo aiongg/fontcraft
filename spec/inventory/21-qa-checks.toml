@@ -2759,6 +2759,7 @@ milestone = "M12"
 summary = "More than four fonts share one family name (name ID 1). A style-linked group holds at most regular, italic, bold and bold italic."
 ref = "fontbakery opentype/family/max_4_fonts_per_family_name; comparefamily family test 1"
 status = "docs"
+notes = "Counts the fonts per Windows English family name; fonts without that record are not counted."
 
 [[check]]
 id = "check.family.uniqueStyleLinking"
@@ -2770,6 +2771,7 @@ milestone = "M12"
 summary = "Two fonts with the same family name (ID 1) have the same combination of bold and italic bits, so applications cannot tell them apart."
 ref = "fontbakery opentype/family/bold_italic_unique_for_nameid1; comparefamily family test 5"
 status = "docs"
+guesses = ["Bold and italic come from OS/2 fsSelection, or head macStyle without an OS/2 table (the legacy family comparison reads macStyle); comparing the two tools' results on the legacy corpus families would settle it."]
 observe = [
   "Style font (instances Light, Regular, Semibold and Bold, each with an Italic): link Semibold as the bold of Light while Bold is linked to Regular; note whether the app warns about two fonts linked in one role.",
 ]
@@ -2784,6 +2786,8 @@ milestone = "M12"
 summary = "The fonts of one family do not agree on the typographic family name (name ID 16, or ID 1 when 16 is absent); the stricter variant compares ID 16 in every language."
 ref = "fontbakery opentype/family/consistent_family_name; fontbakery typographic_family_name; comparefamily family test 3"
 status = "docs"
+notes = "The basic rule compares every font given; the per-language rule of the legacy family comparison runs within each style-linked group when the `strict` threshold is 1 (the family comparison shortcut sets it)."
+guesses = ["The per-language comparison sits behind a `strict` threshold (default 0) so the opentype profile keeps the basic rule; the measure against the legacy comparison runs with strict 1."]
 
 [[check]]
 id = "check.family.equalVersions"
@@ -2803,9 +2807,11 @@ scope = "family"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The fonts of a family differ in PANOSE family type (first digit); a font without an OS/2 table fails. Stricter: PANOSE is all zero (failure), only the first four digits are set (warning), or the monospace digit contradicts CFF isFixedPitch or the advances."
+summary = "The fonts of a family differ in PANOSE family type (first digit, a warning); a font without an OS/2 table fails. With the `strict` threshold: PANOSE all zero fails and only the first four digits set warns."
 ref = "fontbakery opentype/family/panose_familytype; comparefamily family test 10"
 status = "docs"
+notes = "The monospace part of comparefamily family test 10 (PANOSE proportion against CFF isFixedPitch and the advances) is check.metrics.monospaceFlags's."
+guesses = ["The legacy rules (all zero, first four only) sit behind a `strict` threshold (default 0) because the check's home is the opentype profile; the measure against the legacy comparison runs with strict 1."]
 
 [[check]]
 id = "check.family.underlineConsistency"
@@ -2817,6 +2823,7 @@ milestone = "M12"
 summary = "post.underlineThickness or underlinePosition differs between the fonts of a family, so underlines jump where styles are mixed on a line. The fix copies the regular face's values."
 ref = "fontbakery opentype/family/underline_thickness; comparefamily family test 15"
 status = "docs"
+notes = "Typographic families; each font is compared with the first one that has a post table. The fix is report-only until the Font Info commands exist (M7)."
 
 [[check]]
 id = "check.family.verticalMetrics"
@@ -2828,6 +2835,7 @@ milestone = "M12"
 summary = "The fonts of a family differ in a vertical metric: typo ascender, descender or line gap, win ascent or descent, or hhea ascent, descent or line gap. The fix applies the largest extent to every font."
 ref = "fontbakery family/vertical_metrics"
 status = "docs"
+notes = "Typographic families. A font without OS/2 or hhea is reported and the comparison of its family is skipped. The fix is report-only until the Font Info commands exist (M7)."
 
 [[check]]
 id = "check.family.superfamilyVerticalMetrics"
@@ -2839,6 +2847,7 @@ milestone = "M12"
 summary = "Sibling families (folders given together as one super-family) differ in vertical metrics. A companion report lists the sibling folders found."
 ref = "fontbakery superfamily/vertical_metrics; fontbakery superfamily/list"
 status = "docs"
+guesses = ["The sibling families are the typographic families among the fonts given in one run, since a family check sees fonts, not folders; the folder listing becomes one informational result naming the families."]
 
 [[check]]
 id = "check.family.unitsPerEm"
@@ -2850,6 +2859,7 @@ milestone = "M12"
 summary = "The fonts of a family do not all use the same units per em."
 ref = "fontbakery adobefonts/family/consistent_upm; comparefamily single-face test 16 (different em squares)"
 status = "docs"
+notes = "Typographic families."
 
 [[check]]
 id = "check.family.axisRanges"
@@ -2861,6 +2871,7 @@ milestone = "M12"
 summary = "The variable fonts of a family (for example upright and italic) differ in their set of axes or in an axis's minimum, default or maximum."
 ref = "fontbakery opentype/varfont/family_axis_ranges; fontbakery varfont/consistent_axes"
 status = "docs"
+notes = "Typographic families, variable fonts only: each axis missing from a font is one result, each axis whose minimum, default or maximum differs is another."
 
 [[check]]
 id = "check.family.nameRecordSets"
@@ -2872,6 +2883,7 @@ milestone = "M12"
 summary = "Within a style-linked group the fonts do not carry the same set of name records (platform, encoding, language, name ID); IDs 16, 17, 18, 20, 21 and 22 are exempt."
 ref = "comparefamily family test 2"
 status = "docs"
+notes = "Follows the reference's counting: per style-linked group, each (platform, encoding, language, name ID) is counted over the fonts, and the group is reported when the counts are not all equal. IDs above 255 are exempt too."
 
 [[check]]
 id = "check.family.styleLinkedGroupShape"
@@ -2883,6 +2895,7 @@ milestone = "M12"
 summary = "A style-linked group has no base (regular) font, or its base is not the Regular face although the group has more than two members."
 ref = "comparefamily family test 6 (base font)"
 status = "docs"
+notes = "The base is the last upright font with neither bold nor italic set, else the last upright bold font, in the order the fonts are given (the reference's order)."
 
 [[check]]
 id = "check.family.boldLinkWeights"
@@ -2894,6 +2907,7 @@ milestone = "M12"
 summary = "Style linking will produce synthetic bolding: the regular face's usWeightClass is outside 250-550, the bold face's weight is outside the range allowed for that regular weight, the bold face is not heavier than the regular one, or the group uses more than two weight classes. A bold weight that is not a multiple of 50 warns."
 ref = "comparefamily family test 6 (weight ranges); comparefamily family test 8; fontbakery fontwerk/style_linking"
 status = "docs"
+notes = "The per-font style-linking test of the fontwerk profile (fsSelection, macStyle and name ID 2 against the style) is check.names.subfamilyMatchesStyleBits's; this check keeps comparefamily family tests 6 and 8."
 
 [[check]]
 id = "check.family.widthClass"
@@ -2916,6 +2930,7 @@ milestone = "M12"
 summary = "The copyright or trademark strings differ between the fonts of a family; when only the years differ this is a note."
 ref = "comparefamily family test 7"
 status = "docs"
+notes = "Typographic families; each font is compared with the first. The Macintosh strings are read when a font keeps Macintosh names, the Windows English ones otherwise. Years are four digits starting 19, 18, 10, 29, 28 or 20 (the reference's pattern), with the spaces and commas around them."
 
 [[check]]
 id = "check.family.macWindowsMenuNames"
@@ -2927,6 +2942,7 @@ milestone = "M12"
 summary = "For fonts that keep Macintosh names: the Mac and Windows family names of a bold or italic member of a style-linked group are identical, or those of the regular member differ."
 ref = "comparefamily family test 11"
 status = "docs"
+notes = "Runs only when the project sets keepMacNames, and only on fonts with Macintosh name records; CID-keyed fonts are skipped as in the reference."
 
 [[check]]
 id = "check.family.layoutConsistency"
@@ -2938,6 +2954,8 @@ milestone = "M12"
 summary = "The fonts of a family do not expose the same scripts, languages and features, or a feature maps to a different set of lookups in one font; the result includes a table of features per script and language. Expected when the character sets differ."
 ref = "comparefamily family test 12 (-rf report)"
 status = "docs"
+notes = "Compares, per typographic family, each font's map of (table, script, language, feature) to lookup indices, including the required feature and languages without features. The per-script and per-language feature table of the reference's report is audit.report.featureLanguages's (M12.60)."
+guesses = ["Fonts are compared within typographic families rather than across every font given, which is the same when one family is checked; running both tools on a folder holding two families would show any difference."]
 
 [[check]]
 id = "check.family.sizeFeatureGroups"
@@ -2949,6 +2967,7 @@ milestone = "M12"
 summary = "The optical-size (size feature) data of a family is inconsistent: fonts with the same subfamily ID have different menu names, size groups have different member counts (warning), or the design ranges of a group leave gaps or overlap."
 ref = "comparefamily family test 4"
 status = "docs"
+notes = "Read from the reference's source: its Python 3 code stops with an error when a family has two or more size groups (it sorts font objects and takes the length of a map), so the oracle comparison can only cover families with one size group."
 
 [[check]]
 id = "check.family.wwsBit"
@@ -2960,6 +2979,7 @@ milestone = "M12"
 summary = "OS/2.fsSelection bit 8 (WWS) is set in some fonts of a family but not all, is set with an OS/2 version below 4, or is set while two fonts share the same weight, width and italic values."
 ref = "comparefamily family test 13"
 status = "docs"
+notes = "Typographic families; a family with mixed bits is reported and the next family is still checked (the reference stops at the first such family)."
 
 [[check]]
 id = "check.family.embeddingPermissions"
@@ -2971,6 +2991,7 @@ milestone = "M12"
 summary = "The fonts of a family differ in OS/2.fsType."
 ref = "comparefamily family test 14"
 status = "docs"
+notes = "Each font is compared with the first of its typographic family. The reference's rule that Adobe fonts use fsType 8 is check.tables.fsType's."
 
 [[check]]
 id = "check.family.glyphWidthRatio"
@@ -2982,6 +3003,8 @@ milestone = "M12"
 summary = "A glyph is more than three times as wide in one font of a family as in another; also reports a glyph absent from the width list, which points at a wrong maxp.numGlyphs."
 ref = "comparefamily family test 16"
 status = "docs"
+notes = "A width ratio above 3 is a warning (as in the reference); a glyph of the compared glyph set with no width in a font fails. Fonts with the same glyph set are compared together; a font whose glyph set no other font shares joins the largest shared set, so its missing glyphs are reported as missing widths, as the reference does."
+guesses = ["Glyph names come from the post table or the CFF charset; fonts without names get made-up names per glyph id, which compare by glyph order; checking a post format 3 family against the reference would settle it."]
 
 [[check]]
 id = "check.family.blueValueArraySizes"
@@ -2990,9 +3013,10 @@ scope = "family"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "Within the upright or the italic members of a style-linked group, BlueValues or OtherBlues have a different number of entries."
+summary = "Within the fonts of a style-linked group that share a glyph set, BlueValues or OtherBlues have a different number of entries."
 ref = "comparefamily family test 18"
 status = "docs"
+notes = "The reference's comment speaks of upright and italic subgroups, but its code groups by glyph set; this check follows the code. Runs only when the first font has non-CID CFF outlines, as in the reference. The zone and bounding-box tests of the same reference test are the hinting checks'."
 
 [[check]]
 id = "check.family.familyBlues"
@@ -3004,6 +3028,8 @@ milestone = "M12"
 summary = "FamilyBlues or FamilyOtherBlues are unusable: absent from the family (warning), not equal to the BlueValues of any member, unique to one font, or over the zone limits."
 ref = "comparefamily family test 19"
 status = "docs"
+notes = "Typographic families of two or more CFF fonts; runs only when the first font has non-CID CFF outlines. A font without FamilyBlues counts with its own BlueValues, as in the reference."
+guesses = ["The zone limits are those of the CFF specification (14 values for FamilyBlues, 10 for FamilyOtherBlues); the reference allows 14 for both, so a family with 11 to 14 FamilyOtherBlues values would show the difference."]
 
 [[check]]
 id = "check.family.blueScaleAndShift"
@@ -3015,6 +3041,7 @@ milestone = "M12"
 summary = "BlueScale or BlueShift differs between the fonts of a style-linked group."
 ref = "comparefamily family test 20; comparefamily family test 21"
 status = "docs"
+notes = "Style-linked groups; each font is compared with the first. Unset values count as the defaults 0.039625 and 7; BlueScale values within 0.00002 are equal (16.16 fixed point)."
 
 [[check]]
 id = "check.family.codepointCoverage"
@@ -3026,6 +3053,7 @@ milestone = "M12"
 summary = "The fonts of a family do not encode the same set of characters; stricter still, upright and italic differ in glyph count."
 ref = "fontbakery googlefonts/family/equal_codepoint_coverage; fontbakery typenetwork/family/equal_numbers_of_glyphs"
 status = "docs"
+notes = "Typographic families: each font that encodes characters missing from another font is reported with them. Glyph counts are compared among the upright fonts and among the italic ones (a warning), only when the family has both."
 
 [[check]]
 id = "check.family.italicsHaveUprights"
@@ -3037,6 +3065,7 @@ milestone = "M12"
 summary = "An italic style has no upright partner of the same weight in the family."
 ref = "fontbakery googlefonts/family/italics_have_roman_counterparts"
 status = "docs"
+guesses = ["An italic font's partner is an upright font of the same typographic family with the same weight and width classes (any upright variable font for an italic variable font), read from the style bits instead of the file names the reference reads; running both on a family with a missing upright would settle it."]
 
 [[check]]
 id = "check.family.tabularFigureWidths"
@@ -3048,6 +3077,8 @@ milestone = "M12"
 summary = "Tabular figures do not have the same advance in every style of the family, so numeric columns shift when the style changes; half-width tabular sets are reported as information."
 ref = "fontbakery googlefonts/family/tnum_horizontal_metrics; fontbakery typenetwork/family/tnum_horizontal_metrics"
 status = "docs"
+notes = "Typographic families. Tabular glyphs are those whose names contain .tnum, .tf, .tosf, .tsc, .tab or .tabular; the most common width is the reference and a set of half that width is information. Skipped when no font has glyph names."
+guesses = ["Inconsistent widths fail, as in the stricter of the two reference checks, while the suffix rule and the half-width note follow the other; comparing both reference checks on the corpus families would settle it."]
 
 [[check]]
 id = "check.family.duplicateFullNames"
@@ -3059,6 +3090,7 @@ milestone = "M12"
 summary = "Two fonts of a family have the same full name (ID 4) or the same PostScript name (ID 6)."
 ref = "fontbakery typenetwork/family/duplicated_names"
 status = "docs"
+notes = "Compares the Windows English IDs 4 and 6 of every font given. The reference collects duplicate PostScript names into the wrong set and so never reports them; this check does."
 
 # ---------------------------------------------------------------------------
 # files: Files
