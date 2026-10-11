@@ -199,6 +199,9 @@ bundled, the file says so in its header and the project is listed here with its 
   and ligature carets (fea-rs/src/compile/feature_writer.rs and fea-rs/src/compile/tables/gdef.rs).
   fontc's writer follows ufo2ft's markFeatureWriter.py, cursFeatureWriter.py and
   gdefFeatureWriter.py (MIT License).
+  The axis ranges and normalization of the designspace (crates/interp/src/designspace.rs, M9.2)
+  follow fontc's glyphs2fontir/src/toir.rs (to_ir_axis) and fontdrasil/src/coords.rs
+  (CoordConverter).
 
   The PostScript autohinter (crates/autohint, M10) is ported from otfautohint in AFDKO 5.0.1
   (https://github.com/adobe-type-tools/afdko), Apache License 2.0, Copyright 2021 Adobe: its

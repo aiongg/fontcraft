@@ -60,6 +60,9 @@ milestone = "M9"
 summary = "Axis tags are four characters. Registered axes use their registered tag; a private axis takes any name and a tag of four capital letters so it cannot clash with a tag registered later."
 ref = "Interpolation › Setting up Axes"
 status = "handbook"
+guesses = [
+  "A tag of fewer than four printable ASCII characters is padded with spaces and a longer one exports its first four; settle by typing a three- and a five-character tag in the reference app's axis dialog and exporting.",
+]
 
 [[behavior]]
 id = "axes.coordinatesAreFreeNumbers"
@@ -92,6 +95,10 @@ milestone = "M9"
 summary = "When masters are disabled for a variable-font export, any axis on which the remaining masters all share one coordinate is left out of the exported font."
 ref = "Interpolation › Setting up Instances › Subsetting the Designspace"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "An axis is dropped only when Disable Masters removes a master, and an axis a virtual master still varies is kept; settle by exporting F1 with a third axis all masters share, without Disable Masters, and again with a virtual master on that axis.",
+]
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Masters (Font Info › Masters)
@@ -268,9 +275,12 @@ milestone = "M9"
 summary = "A Disable Masters parameter on a variable font setting lists master names separated by a comma and a space; those masters contribute nothing to that export, giving a variable font over a subset of the designspace."
 ref = "Interpolation › Setting up Instances › Subsetting the Designspace"
 status = "handbook"
-notes = "Neither oracle reads Disable Masters (fontc 1.0.0, glyphsLib 6.15.0); the measure builds the oracle from a copy of the source without those masters (docs/plans/M9.md § 5)."
+notes = "Neither oracle reads Disable Masters (fontc 1.0.0, glyphsLib 6.15.0); the measure builds the oracle from a copy of the source without those masters (docs/plans/M9.md § 5). The value is read as a list of names or as one text of names separated by commas."
 observe = [
   "In F1 (two masters), add Disable Masters naming Black on a variable font setting and export it: read `fvar` and note the axis range and named instances.",
+]
+guesses = [
+  "A name that is not a master is ignored and reported as a warning instead of refusing the export; settle by naming a missing master in the reference app and exporting.",
 ]
 
 [[behavior]]
@@ -641,6 +651,9 @@ milestone = "M9"
 summary = "A virtual master is a designspace location declared at font level that behaves as a master but has no master layers and no kerning of its own. Only glyphs that carry an intermediate layer at that location change there; all other glyphs and all kerning are unaffected."
 ref = "Interpolation › Intermediate Layers › Virtual Masters"
 status = "handbook"
+guesses = [
+  "On an axis a virtual master does not name, it sits at the origin's coordinate; settle by adding a virtual master that names one of two axes in the reference app and reading the exported `gvar` regions.",
+]
 
 [[behavior]]
 id = "virtualMaster.setupSteps"
@@ -1152,6 +1165,10 @@ milestone = "M9"
 summary = "A variable font needs the origin master and at least one further master per variation axis, arranged as in the minimal setup rule; the compiler must report a designspace that the chosen origin cannot span."
 ref = "Interpolation › Variable Font Options › Variable Font Origin"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The check asks, for each side of the origin an axis range reaches, for a master or virtual master that differs from the origin on that axis alone, and virtual masters count; settle by exporting the handbook's three-master example with Black as the origin.",
+]
 
 [[behavior]]
 id = "variable.alwaysTrueTypeFlavour"
@@ -1176,6 +1193,7 @@ milestone = "M9"
 summary = "The external range of each exported axis is the span of the masters' Axis Location values, while the internal range is the span of their Axes Coordinates. Between masters the internal-to-external relation is piecewise linear through the master pairs unless Axis Mappings says otherwise."
 ref = "Interpolation › Variable Font Options › Axis Location; Appendix › Custom Parameters › Axis Mappings"
 status = "handbook"
+notes = "Observed with fontmake 3.12.1 on fontc's `glyphs2/AxisMappingsBeyondMasters.glyphs`: an Axis Mappings parameter that reaches beyond the masters widens `fvar` to its ends (wght 300 to 900); fontc 1.0.0 keeps the masters' span (400 to 700), and fontc's later source follows fontmake. FontCraft follows fontmake."
 
 [[panel]]
 id = "dialog.axisLocation"
@@ -1207,6 +1225,9 @@ summary = "A mapping is, per axis, a list of control points pairing an internal 
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
 notes = "Checked in the M9 planning pass: a `.glyphs` file stores the parameter per axis tag as a dictionary from external to internal value (Oswald: 700 to 710), and both oracles write `avar` from normalised external to normalised internal coordinates with `fvar` in external coordinates (Oswald: wght 200 to 700)."
+guesses = [
+  "A mapping read from a file whose internal values neither rise nor fall throughout is ignored (identity) and reported as a warning; settle by giving the reference app such a mapping and exporting.",
+]
 
 [[behavior]]
 id = "axisMappings.perAxisOnly"
@@ -1223,6 +1244,10 @@ milestone = "M9"
 summary = "An Axis Mappings parameter in Font Info › Font applies to every variable font exported from the document; the same parameter on a variable font setting overrides it for that export."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A setting's Axis Mappings replaces the font's whole value, not axis by axis; settle by giving a setting a mapping for one axis of a two-axis font and reading `avar`.",
+]
 
 [[behavior]]
 id = "axisMappings.externalIncludesAxisLocation"
