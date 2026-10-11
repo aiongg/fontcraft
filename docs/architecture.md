@@ -20,7 +20,7 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
               │
    L4   tools: pointer and key events → commands (begin / preview / commit)        (4 tools today)
    L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (8 of 9 today)
-   L2   pathops · interp · spacing · textlayout · components · features · hinting · audit · glyphquery · plugins   (pathops, audit, glyphquery today)
+   L2   pathops · interp · spacing · textlayout · components · features · hinting · audit · glyphquery · plugins   (pathops, spacing, audit, glyphquery today)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
    L0   geom (kurbo)  ·  standalone crates: plist, cff, ttinstr, container, glyphdata  (all but ttinstr today)
 ```
@@ -45,7 +45,7 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L1 | `model` | today (M0 subset) | the font source model, pure data |
 | L2 | `pathops` | M3 | overlap removal, booleans, offset, corner operations, clean-up (on linesweeper) |
 | L2 | `interp` | M9 | variation model, interpolation of every master-bound value, compatibility checks |
-| L2 | `spacing` | planned, built by M5.1 (kerning by M5.2) | metrics keys, sidebearings, kerning lookup, groups, locks, Clean Up and Compress, the kerning-text and AFM formats. Depends on `model` and `geom` |
+| L2 | `spacing` | metrics keys and sidebearings built (M5.1); kerning by M5.2 | metrics keys, sidebearings, kerning lookup, groups, locks, Clean Up and Compress, the kerning-text and AFM formats. Depends on `model` and `geom` |
 | L2 | `textlayout` | planned, built by M5.6 | text as a list of items (glyph, placeholder, line break), characters mapped to glyphs by Unicode value and `/name` escapes, and the layout of those items with advances, kerning by mode, writing direction and wrapping; Edit View, the previews, Text Preview, `ui.render` and hit testing use it. Depends on `model` and `spacing` |
 | L2 | `components` | M6 | automatic alignment, anchor propagation, smart, corner, cap and segment components |
 | L2 | `features` | the pair-kerning writer in M5.17; the rest M8 | feature-code preprocessing (tokens), automatic features, compiling (on fea-rs), kern and mark writers |

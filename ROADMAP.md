@@ -139,7 +139,7 @@ dialog's default answer is Decompose.
 and M4's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
 a detail is unconfirmed, the handbook decides (Remove Overlap, for example, deletes open paths).
 Where no source says, we choose, and each choice is listed in `docs/guesses.md` to revisit
-(459 guesses on 327 rows).
+(463 guesses on 328 rows).
 
 | Gap | Detail |
 |---|---|
@@ -427,7 +427,7 @@ measured by what works (the parity table below and the measures in each mileston
 | M2 | Compile core: static TTF and OTF, oracle harness | ✅ done: the oracle harness, the staged pipeline, the core tables at fontc and fontmake parity (no table different), static CFF, WOFF and WOFF2 with transforms, the export commands and CLI `compile`; every measure met (`docs/plans/M2.md` § 5). Deferred on purpose: instances between masters (M9), overlap removal (M3), CFF subroutines, export dialogs (M3) | 5 (5) |
 | M3 | Edit View drawing: tools, nodes, selection, transforms, path operations, guides | ✅ every measure met: every package M3.0 to M3.18 built; 184 of 184 commands live, gesture equals command for all 19 tool rows, an agent draws and exports over the control channel, overlap removal at export coverage-equal to fontmake's in over 99.5% of glyphs, M1 and M2 baselines unchanged (`docs/plans/M3.md` § 5). `path.sharpenCorner`, which no source describes, moved to `fidelity` | 184 (184) |
 | M4 | Font View and glyph management | ✅ every measure met: every package M4.0 to M4.12 built; 62 of 62 commands live; the glyph database equal to fontc's on category, subcategory and production name for 200,504 names; `post` names equal both oracles' except one allow-listed source; every M4 dialog equals its command; an agent builds a font from glyph sets over the control channel; M1 to M3 baselines unchanged (`docs/plans/M4.md` § 5) | 62 (62) |
-| M5 | Spacing, kerning and text mode | 🚧 in progress: plan accepted (`docs/plans/M5.md`); M5.0 spec pass done | 97 (1) |
+| M5 | Spacing, kerning and text mode | 🚧 in progress: plan accepted (`docs/plans/M5.md`); M5.0 spec pass and M5.1 spacing keys done | 97 (1) |
 | M6 | Components and anchors | ⬜ | 65 (0) |
 | M7 | Font Info and custom parameters (70 of the 241 parameter rows land here; 205 of the 241 are custom parameters) | ⬜ | 62 (2) |
 | M8 | OpenType features | ⬜ | 40 (0) |

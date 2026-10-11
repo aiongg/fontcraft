@@ -9,7 +9,7 @@ _Updated: 2026-10-11, M5 accepted and started: M5.0 done, M5.1 next._
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 269 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
-  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 459 guesses on 327
+  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 463 guesses on 328
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -349,8 +349,13 @@ Append one terse entry per session: what landed, numbers, what is still open.
   units wide; removing a glyph keeps the kerning pairs that name it, as the handbook says
   (M4.16). M4.14: Remove Glyph's dialog defaults
   to Decompose. M5.0: the planning pass (222 rows, 97 commands; 27 rows
-  moved; 19 packages; 459 guesses on 327 rows). Next: the owner's acceptance of the M5 plan.
+  moved; 19 packages; 463 guesses on 328 rows). Next: the owner's acceptance of the M5 plan.
 - **2026-10-11, M5 started.** The owner accepted the M5 plan: the pair-kerning writer comes into
   M5 (M5.17), tabs open from the document's display strings, Text Preview uses our own layout.
   M5.0: the answers and the handbook's kerning details in the rows (5 kern-export rows moved from
-  M8; 459 guesses on 327 rows).
+  M8; 463 guesses on 328 rows).
+  M5.1: `crates/spacing` parses metrics keys, measures sidebearings (italic masters along the
+  angle, as the handbook says), evaluates keys with limits, scans for out-of-sync keys with a
+  cache, orders Update Metrics and resolves linked masters. Corpus: 4,413 of 4,413 keys parse;
+  17,217 master values equal the stored metric; 12 Inter Italic differences up to 1.4 units are
+  not explained. Open: the cache update after editing a much-used glyph takes 7.7 ms (target 2).

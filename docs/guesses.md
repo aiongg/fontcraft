@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**459 guesses on 327 rows (132 of them live commands).**
+**463 guesses on 328 rows (132 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -396,12 +396,14 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `metricsKey.calculationSyntax` (behavior) | M5 | handbook | – | A key holds at most one operation; a second operator or a parenthesis makes it invalid, and it is reported, not evaluated. |
 | `metricsKey.calculationSyntax` (behavior) | M5 | handbook | – | `@` and its height come last, after the operation (`=H+8@200`). |
 | `metricsKey.decimalOperands` (behavior) | M5 | handbook | – | The glyph name is the longest leading part of the key that names a glyph in the font; what follows must be nothing, an operation, or `@` and a number. So `=ka-deva/1.4` reads ka-deva even when a glyph `ka` exists. |
+| `metricsKey.decimalOperands` (behavior) | M5 | handbook | – | When no leading part names a glyph, the key is unlinked and names the shortest leading part after which the rest is valid: `=xa-deva-5` names `xa-deva`. |
 | `metricsKey.resultRounded` (behavior) | M5 | handbook | – | Exact halves round up (toward positive infinity), as both oracles round kerning values: fontc 1.0.0 and fontmake 3.12.1 write −10.5 as −10 and 10.5 as 11. |
 | `metricsKey.constant` (behavior) | M5 | handbook | – | On a glyph that is not aligned automatically, `=-30` and `=+30` are constants; reports on the reference forum treat `=-30` as a key that should work (thread "Build 1015 metrics keys"). On a glyph aligned automatically the form is the offset of `metricsKey.autoAlignedOffset`, evaluated from M6. |
 | `metricsKey.glyphLevelByDefault` (behavior) | M5 | handbook | – | A layer that is not a master layer (intermediate, alternate, backup) reads the referenced glyph's layer with the same layer id, else the layer of its own master; no source says. |
 | `metricsKey.localPrefix` (behavior) | M5 | handbook | – | On its layer a local key wins over the glyph-level key of the same field. |
 | `metricsKey.localPrefix` (behavior) | M5 | handbook | – | A plain number typed into a field removes the key the field showed: a local key from the layer, a glyph-level key from the glyph. |
 | `metricsKey.baselineOffset` (behavior) | M5 | handbook | – | When the line at the given height does not cross the outline, the key uses the bounding-box sidebearing; no source says. |
+| `metricsKey.baselineOffset` (behavior) | M5 | handbook | – | In a master with an italic angle, the crossing at the given height is moved along the italic angle to half the x-height, where the bounding-box sidebearings are measured; no source says. |
 | `kerning.infoBoxFieldEditing` (behavior) | M5 | handbook | – | A typed 0 is stored as a pair with value 0, which overrides a group value; both oracles keep such a pair (a 0 exception against a −60 group pair compiles to 0). Typing 0 in the reference app and reading the Kerning window settles it. |
 | `kerning.infoBoxFieldEditing` (behavior) | M5 | handbook | – | A typed value with a fraction is rounded to a whole unit; values read from files keep their fractions. Typing a fraction in the reference app settles it. |
 | `kerning.shortcutsNeedTextTool` (behavior) | M5 | handbook | – | A keypress changes the kerning that applies by the step and stores the result on the sides the locks choose, creating that pair when it does not exist; no source says, and the Kerning window after the first keypress on an unkerned pair settles it. |
@@ -422,6 +424,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `spacing.setTopSidebearing` | M5 | inferred | no | The top and bottom fields take the same key forms as the left and right ones, with `\|` naming the opposite vertical sidebearing; `@` is refused there. |
 | `spacing.setBottomSidebearing` | M5 | inferred | no | Setting the bottom sidebearing changes the vertical width only. |
 | `glyph.updateMetrics` | M5 | handbook | no | Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value; one Update Metrics on a two-step chain in the reference app settles it. |
+| `spacing.listOutOfSyncMetrics` | M5 | inferred | no | A key is out of sync when its value differs from the layer's metric rounded half up. |
+| `spacing.listOutOfSyncMetrics` | M5 | inferred | no | Master layers and layers with attributes (intermediate, alternate, colour, smart) are scanned; backup layers and the layers of a master that takes its metrics from another master are not. |
 | `kerning.setMode` | M5 | handbook | no | A new Edit View tab starts in kerning mode; no source gives the default. |
 | `kerning.increaseLeft` | M5 | handbook | no | Increase adds to the kerning value (more space) and decrease subtracts; the handbook names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair. The Info box kern value after one keypress, in the running app or a video, settles it. |
 | `kerning.setTopGroup` | M5 | handbook | no | The top and bottom group fields check names as the left and right ones do. |
