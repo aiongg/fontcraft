@@ -202,6 +202,7 @@ bundled, the file says so in its header and the project is listed here with its 
   The axis ranges and normalization of the designspace (crates/interp/src/designspace.rs, M9.2)
   follow fontc's glyphs2fontir/src/toir.rs (to_ir_axis) and fontdrasil/src/coords.rs
   (CoordConverter).
+  The variable font tables fvar, avar, HVAR, VVAR and MVAR and their name ID allocation (crates/compile/src/var/fvar.rs, avar.rs, hvar.rs, mvar.rs and names.rs, M9.6) follow fontc 1.0.0's fontbe/src/fvar.rs, avar.rs, hvar.rs, vvar.rs, metric_variations.rs and mvar.rs and fontir/src/ir/static_metadata.rs.
 
   The PostScript autohinter (crates/autohint, M10) is ported from otfautohint in AFDKO 5.0.1
   (https://github.com/adobe-type-tools/afdko), Apache License 2.0, Copyright 2021 Adobe: its

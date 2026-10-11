@@ -234,6 +234,10 @@ milestone = "M9"
 summary = "A variable font lists the document's static instances as predefined axis settings, so a font menu can offer style names instead of raw axis values."
 ref = "Interpolation › Interpolation Applications; Setting up Instances › Static Instances"
 status = "handbook"
+notes = "Documented, not yet observed. `var::fvar::named_instances` (M9.6) writes every exported static instance inside the axis ranges as an `fvar` named instance, named by `variableStyleNames` when set, else by its name, with its `variablePostscriptFontName` (else PostScript Font Name) as PostScript name, as fontc does."
+guesses = [
+  "Instances that do not export are left out of `fvar`, as the oracles do; settle by exporting F1 with one instance's export switch off and reading `fvar`.",
+]
 
 [[behavior]]
 id = "instances.parametersStaticOnly"

@@ -2253,6 +2253,13 @@ effect = "naming"
 summary = "Family name for the variable font, so static and variable versions installed side by side do not share a name."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6): the variable font setting's value, else the font's; without either, the setting's family name, else the font's."
+guesses = [
+  "Looked up on the variable font setting first and on the font second; an export from the reference app with the parameter on each would settle it.",
+]
+observe = [
+  "In F1 (two masters), set Variable Font Family Name on the font and a different one on a variable font setting; export the variable font and read name IDs 1 and 16.",
+]
 
 [[parameter]]
 name = "Variable Font File Name"
@@ -2264,6 +2271,13 @@ effect = "other"
 summary = "Replaces the default variable-font file name, which ends in `VF.ttf`."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting (also under the key `fileName`, which glyphsLib reads), then on the font. Path separators and characters file systems refuse become hyphens."
+guesses = [
+  "Without it the file is named as glyphsLib names it: the font's family name, a hyphen and the setting's name unless that is Regular, then `VF`, spaces removed (the default font of a source without settings: family name and `VF`); an export from the reference app would settle it.",
+]
+observe = [
+  "In F1 (two masters), export the variable font with no settings, then with settings named Regular and Italic: note each file name.",
+]
 
 [[parameter]]
 name = "Variable Font Optimize Deltas"
@@ -2304,6 +2318,10 @@ effect = "naming"
 summary = "By its key a style name for the variable font, but the source repeats the description of Variable Font Family Name word for word, so its exact role is unconfirmed."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. M9.6 reads it as `variableStyleName`: on a variable font setting or the font, the default style name after Variable SubfamilyName; on a static instance, the instance's name in `fvar`."
+guesses = [
+  "Read as a style name, not a family name as its description says: on a setting or the font the variable font's default style, on a static instance its `fvar` name; settle by exporting with it set in each place.",
+]
 
 [[parameter]]
 name = "Variable SubfamilyName"
@@ -2315,6 +2333,10 @@ effect = "naming"
 summary = "Style name given to the default outlines of the exported variable font, i.e. the origin master."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting, then on the font."
+guesses = [
+  "Without it the variable font's default style name is the origin master's name, as the oracles build it from the default master; settle by exporting F4 (three named masters) without the parameter and reading name IDs 2 and 17.",
+]
 
 [[parameter]]
 name = "variablePostscriptFontName"
@@ -2326,6 +2348,10 @@ effect = "naming"
 summary = "Sets name ID 6 and the PostScript name of the named instance in fvar. ASCII without spaces; must differ from the static font's PostScript name, ideally the name ID 25 prefix, a hyphen and the style name. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. On a variable font setting (property or parameter) M9.6 makes it name ID 6; on a static instance it is that instance's PostScript name in `fvar`, as fontc reads it (else the instance's PostScript Font Name). Characters a PostScript name may not hold are dropped; at most 63 are kept."
+guesses = [
+  "On a setting without it, the setting's PostScript Font Name property is used next; settle by exporting a setting with only that property set.",
+]
 
 [[parameter]]
 name = "variableStyleName"
@@ -2337,6 +2363,10 @@ effect = "naming"
 summary = "By its key a style name for the variable font, but the source repeats the description of Variable Font Family Name word for word, so its exact role is unconfirmed."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. M9.6 reads it like Variable Font Style Name (property or parameter)."
+guesses = [
+  "Read as a style name, not a family name as its description says: on a setting or the font the variable font's default style, on a static instance its `fvar` name; settle by exporting with it set in each place.",
+]
 
 [[parameter]]
 name = "variableStyleNames"
@@ -2348,6 +2378,10 @@ effect = "naming"
 summary = "Alternative style name for the variable export, needed when the same static style name occurs under several static family names and would otherwise produce duplicate fvar instance names. The source gives no value type; the plural key suggests one text per language (inferred)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. M9.6 reads it as a localised property of a static instance and uses the default-language text as the instance's `fvar` subfamily name."
+guesses = [
+  "Only the default-language text is written to `fvar`; settle by exporting an instance with two languages and reading the name records of its `fvar` entry.",
+]
 
 [[parameter]]
 name = "Variation Font Origin"
@@ -2376,6 +2410,10 @@ effect = "naming"
 summary = "Sets name ID 25, the family prefix used when PostScript names of arbitrary variable instances are generated (limit 127 characters); only ASCII letters and digits. Without it, the typographic family name stripped to those characters is used."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `var::names::variable_names` (M9.6) on the setting, then the font (parameter or font property, as fontc reads it); characters other than ASCII letters and digits are dropped and at most 63 are kept, as name ID 25 allows."
+guesses = [
+  "Without it no name ID 25 is written, as both oracles do; the typographic family fallback the description names is what a consumer computes. Settle by exporting without it and listing the name records.",
+]
 
 [[parameter]]
 name = "vendorID"

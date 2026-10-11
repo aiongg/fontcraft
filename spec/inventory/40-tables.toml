@@ -240,6 +240,7 @@ milestone = "M9"
 summary = "One axis record per ranged source axis (axes whose minimum, default and maximum coincide are left out) with name ids from 256 up, and one instance record per named instance with its subfamily name id and optional PostScript name id. If any instance has a PostScript name every instance record must carry the field, using the explicit no-name value for the others."
 ref = "fontc fontbe/src/fvar.rs, fontir/src/ir/static_metadata.rs; write-fonts src/tables/fvar.rs, instance_record.rs"
 status = "docs"
+notes = "Built by `var::fvar::build_fvar` (M9.6) from `VarAxes` and `VarInstance`s; its unit tests compare the bytes with fontc 1.0.0's on WghtVar, WghtVar_Avar and InstancePostscript. Axes whose range collapses are dropped by the designspace of a variable font setting, not by the builder."
 
 [[table]]
 tag = "avar"
@@ -251,6 +252,7 @@ milestone = "M9"
 summary = "Per-axis segment maps from default normalisation to the designer's mapping; every axis always gets the three required maps (-1, 0, 1). The table is left out when every map is an identity and there are no cross-axis mappings. With cross-axis mappings it becomes version 2 with an axis index map and an item variation store; write-fonts selects version 2 automatically when either is present."
 ref = "fontc fontbe/src/avar.rs; write-fonts src/tables/avar.rs"
 status = "docs"
+notes = "Built by `var::avar::build_avar` from the maps `var::avar::segment_map` derives (M9.6); its unit test compares the bytes with fontc 1.0.0's on WghtVar_Avar. Identity is decided on the written F2Dot14 values. Version 2 (cross-axis mappings) is not written: no source format FontCraft reads stores it."
 
 [[table]]
 tag = "gvar"
@@ -273,6 +275,7 @@ milestone = "M9"
 summary = "Advance width deltas for every glyph. fontc builds an indirect store with a glyph to delta-set index map and, when all glyphs share one variation model, also a direct store indexed by glyph id, then keeps the direct one if it is no larger than store plus map. Side bearing mappings are not written. Required for CFF2 because CFF2 has no phantom points."
 ref = "fontc fontbe/src/hvar.rs, fontbe/src/metric_variations.rs; write-fonts src/tables/hvar.rs, variations/ivs_builder.rs; AFDKO docs/CFF2_Support.md"
 status = "docs"
+notes = "Built by `var::hvar::build_hvar` (M9.6) from one `VarValue` per glyph; its unit tests compare the bytes with fontc 1.0.0's on WghtVar (mapped store) and WghtVar_Avar (direct store)."
 
 [[table]]
 tag = "VVAR"
@@ -284,6 +287,7 @@ milestone = "M9"
 summary = "Advance height deltas, built exactly like HVAR (direct or indirect store, whichever is smaller) and only when the font has vertical metrics, that is when vmtx is written."
 ref = "fontc fontbe/src/vvar.rs; write-fonts src/tables/vvar.rs"
 status = "docs"
+notes = "Built by `var::hvar::build_vvar` (M9.6) with the HVAR rules; the variable compile asks for it only when it writes vmtx."
 
 [[table]]
 tag = "MVAR"
@@ -295,6 +299,7 @@ milestone = "M9"
 summary = "Deltas for the global metrics that have an MVAR value tag (OS/2 typo and win metrics, x-height, cap height, sub/superscript, strikeout, underline, caret values and so on); hhea ascender, descender and line gap have no tag and are skipped. Metrics whose deltas are all zero are not encoded and the table is omitted when nothing varies."
 ref = "fontc fontbe/src/mvar.rs; write-fonts src/tables/mvar.rs; AFDKO docs/CFF2_Support.md"
 status = "docs"
+notes = "Built by `var::mvar::build_mvar` (M9.6) from (value tag, `VarValue`) pairs; its unit test compares the bytes with fontc 1.0.0's on WghtVar. The variable compile chooses which metrics have a tag."
 
 [[table]]
 tag = "STAT"
@@ -1088,6 +1093,7 @@ milestone = "M9"
 summary = "Axis, instance and STAT label names are allocated from name id 256 upward and one record is shared by identical strings. Axis names may only reuse a record with id 256 or higher. An instance at the default location may reuse ID 2 or 17 when its name matches; STAT value labels and the elided fallback name may reuse any existing record. Registration order follows fontTools so ids match fontmake's."
 ref = "fontc fontir/src/ir/static_metadata.rs (StaticMetadata::new, set_stat), fontbe/src/fvar.rs"
 status = "docs"
+notes = "`var::names::NameAllocator` (M9.6): `id_for` (from 256, shared text), `id_for_default_instance` (2 or 17 when that static record holds the name), `id_for_any` (any static record, for STAT). The allocator learns the static records from `NameAllocator::with_static`."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: OS/2, head, hhea, metrics
@@ -1436,6 +1442,7 @@ milestone = "M9"
 summary = "HVAR and VVAR are built twice when possible (direct store indexed by glyph id, and deduplicated store plus index map) and the smaller serialised result is kept, preferring direct on a tie. A .notdef with a single master is given dense deltas at every location so the region list comes out in the same order as fontTools's."
 ref = "fontc fontbe/src/hvar.rs, vvar.rs, metric_variations.rs"
 status = "docs"
+notes = "`var::hvar` (M9.6) builds the direct store when every varying glyph has the same regions and keeps it on a tie. The dense `.notdef` is the caller's: the variable compile gives glyph 0 a zero delta for every region of the font's model when it has no sources of its own."
 
 [[behavior]]
 id = "compile.avarMaps"
@@ -1444,6 +1451,7 @@ milestone = "M9"
 summary = "avar always writes the -1, 0 and 1 mappings for every axis even when the axis has no custom mapping, because some implementations require them (fontc matches fontTools here). The table is dropped only when all axes are identity and there is no avar 2 data."
 ref = "fontc fontbe/src/avar.rs"
 status = "docs"
+notes = "`var::avar` (M9.6): axes without a map get the three required points; the table is left out when every axis is identity."
 
 [[behavior]]
 id = "compile.fvarInstances"
@@ -1452,6 +1460,7 @@ milestone = "M9"
 summary = "Named instances are written only for variable fonts and their locations are reduced to the ranged axes. Instance subfamily names take ids from 256 up except that an instance at the default location reuses ID 2 or 17 when its name matches."
 ref = "fontc fontir/src/ir/static_metadata.rs (StaticMetadata::new), fontbe/src/fvar.rs"
 status = "docs"
+notes = "`var::fvar::named_instances` (M9.6) lists the exported static instances at their external coordinates and leaves out those outside the axis ranges (docs/plans/M9.md § 7, question 6)."
 
 [[behavior]]
 id = "compile.statDefaults"
