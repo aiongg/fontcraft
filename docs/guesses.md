@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**460 guesses on 327 rows (132 of them live commands).**
+**459 guesses on 327 rows (132 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -142,9 +142,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `infoBox.showsColorLabels` (behavior) | M4 | handbook | – | The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation. |
 | `background.snapping` (behavior) | M3 | handbook | – | The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default. |
-| `text.displayStrings` (behavior) | M5 | docs | – | Opening a document opens one tab per stored string, and saving writes the open tabs in tab order; changing a tab's text is not an undo step and does not mark the document modified. |
+| `text.displayStrings` (behavior) | M5 | docs | – | Changing a tab's text is not an undo step and does not mark the document modified; no source says, and the window's edited mark after typing in a tab of the reference app settles it. |
 | `textPreview.fallbackFont` (behavior) | M5 | handbook | – | Characters the font lacks are drawn in the interface font of the app. |
-| `editView.toggleTextMode` | M5 | handbook | no | Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either. |
+| `editView.toggleTextMode` | M5 | handbook | no | Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either, and the toolbar after Escape, in the running app or a video, settles it. |
 | `editView.insertText` | M5 | handbook | no | A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends. |
 | `editView.previousGlyph` | M5 | handbook | no | At the first glyph of the order Previous Glyph does nothing (no wrap), and with several glyphs selected in the text it replaces only the current glyph. |
 | `editView.nextGlyph` | M5 | handbook | no | At the last glyph of the order Next Glyph does nothing (no wrap). |
@@ -157,7 +157,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `infoBox.glyph` (panel) | M5 | handbook | – | With several glyphs selected in the text, the Info box describes the glyph after the cursor only, and the Unicode value is shown, not edited. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The swatch row opens the glyph section of the menu, under a Glyph Color caption (Layer Color while Alt is held). Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation. |
-| `window.textPreview` (panel) | M5 | handbook | – | Until M8 the preview applies the document kerning and no other feature; the reference shapes the text through the operating system. |
 | `measurement` (tool) | M3 | handbook | – | The ruler's ends snap unless Ctrl is held, and Shift keeps it horizontal or vertical, whichever is nearer. |
 | `measurement` (tool) | M3 | handbook | – | The ruler stays until the next press, Escape or a tool change (03b question 9). |
 | `measurement` (tool) | M3 | handbook | – | G with any modifiers adds the measurement guide. |
@@ -388,12 +387,11 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 |---|---|---|---|---|
 | `spacing.setWidth` | M5 | handbook | yes | A numeric width change is absorbed by the right sidebearing; the handbook does not say how it is split. |
 | `spacing.setWidth` | M5 | handbook | yes | A width key may be a glyph name, a constant or a calculation; `\|` and `@` are refused in the width field. |
-| `spacing.infoBoxArrowSteps` (behavior) | M5 | handbook | – | Up and Down in a field that holds a metrics key leave the key unchanged; no source says what they do there. |
-| `spacing.infoBoxArrowSteps` (behavior) | M5 | handbook | – | In a kern field Up adds 1 and Down subtracts 1 (10 with Shift), as a user report on the reference forum describes (thread "Glyphs 3 bug report: arrow keys in kerning"). |
+| `spacing.infoBoxArrowSteps` (behavior) | M5 | handbook | – | Up and Down in a field that holds a metrics key leave the key unchanged; no source says what they do there, and pressing Up in such a field in the reference app settles it. |
 | `spacing.shortcutsNeedTextTool` (behavior) | M5 | handbook | – | A spacing shortcut on a metric that holds a metrics key changes the number and keeps the key, which then shows as out of sync; no source says whether the reference keeps the key, removes it or ignores the keypress. |
 | `spacing.shortcutModifierScheme` (behavior) | M5 | handbook | – | In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text; in top-to-bottom text they do nothing in M5. No source says. |
-| `metricsKey.notSyncedAutomatically` (behavior) | M5 | handbook | – | A key whose chain of references returns to its own glyph, or runs deeper than 32 steps, is an error: the metric keeps its number and the key is reported. A forum answer by the reference developers shows the reference does not stop such cycles (thread "Possible bug with spacing formula"). |
-| `metricsKey.notSyncedAutomatically` (behavior) | M5 | handbook | – | Division by zero, and a result outside 0 to 65,535 units for a width or −32,768 to 32,767 for a sidebearing, are errors reported the same way. |
+| `metricsKey.notSyncedAutomatically` (behavior) | M5 | handbook | – | A key whose chain of references returns to its own glyph, or runs deeper than 32 steps, is an error: the metric keeps its number and the key is reported. A forum answer by the reference developers shows the reference does not stop such cycles (thread "Possible bug with spacing formula"). Watching the reference app with such a key settles what it shows. |
+| `metricsKey.notSyncedAutomatically` (behavior) | M5 | handbook | – | Division by zero, and a result outside 0 to 65,535 units for a width or −32,768 to 32,767 for a sidebearing, are errors reported the same way; watching the reference app with such a key settles what it shows. |
 | `metricsKey.calculationSyntax` (behavior) | M5 | handbook | – | Spaces around the parts of a key are ignored. |
 | `metricsKey.calculationSyntax` (behavior) | M5 | handbook | – | A key holds at most one operation; a second operator or a parenthesis makes it invalid, and it is reported, not evaluated. |
 | `metricsKey.calculationSyntax` (behavior) | M5 | handbook | – | `@` and its height come last, after the operation (`=H+8@200`). |
@@ -404,34 +402,35 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `metricsKey.localPrefix` (behavior) | M5 | handbook | – | On its layer a local key wins over the glyph-level key of the same field. |
 | `metricsKey.localPrefix` (behavior) | M5 | handbook | – | A plain number typed into a field removes the key the field showed: a local key from the layer, a glyph-level key from the glyph. |
 | `metricsKey.baselineOffset` (behavior) | M5 | handbook | – | When the line at the given height does not cross the outline, the key uses the bounding-box sidebearing; no source says. |
-| `kerning.infoBoxFieldEditing` (behavior) | M5 | handbook | – | A typed 0 is stored as a pair with value 0, which overrides a group value; both oracles keep such a pair (a 0 exception against a −60 group pair compiles to 0). |
-| `kerning.infoBoxFieldEditing` (behavior) | M5 | handbook | – | A typed value with a fraction is rounded to a whole unit; values read from files keep their fractions. |
-| `kerning.shortcutsNeedTextTool` (behavior) | M5 | handbook | – | A keypress changes the kerning that applies by the step and stores the result on the sides the locks choose, creating that pair when it does not exist; no source says. |
-| `kerning.shortcutModifierScheme` (behavior) | M5 | handbook | – | In right-to-left text Ctrl picks the pair with the glyph that is visually on the left and Cmd the pair with the glyph visually on the right; no source says. |
+| `kerning.infoBoxFieldEditing` (behavior) | M5 | handbook | – | A typed 0 is stored as a pair with value 0, which overrides a group value; both oracles keep such a pair (a 0 exception against a −60 group pair compiles to 0). Typing 0 in the reference app and reading the Kerning window settles it. |
+| `kerning.infoBoxFieldEditing` (behavior) | M5 | handbook | – | A typed value with a fraction is rounded to a whole unit; values read from files keep their fractions. Typing a fraction in the reference app settles it. |
+| `kerning.shortcutsNeedTextTool` (behavior) | M5 | handbook | – | A keypress changes the kerning that applies by the step and stores the result on the sides the locks choose, creating that pair when it does not exist; no source says, and the Kerning window after the first keypress on an unkerned pair settles it. |
+| `kerning.shortcutModifierScheme` (behavior) | M5 | handbook | – | In right-to-left text Ctrl picks the pair with the glyph that is visually on the left and Cmd the pair with the glyph visually on the right; the handbook does not mention right-to-left text here, and watching the shortcuts on right-to-left text settles it. |
 | `kerning.verticalGroups` (behavior) | M5 | handbook | – | M5 stores and edits vertical pairs and shows them in top-to-bottom text; export writes none, as neither oracle does. |
-| `kerning.lockStates` (behavior) | M5 | handbook | – | A lock is open when the pair that applies names that glyph itself on that side while the glyph has a group there; opening a lock stores such a pair at the value that applied, so the kerning does not change. |
-| `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing a lock deletes the exception pair in the current master only; the all-masters variant exists only for deletion in the Kerning window. |
-| `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | The defaults are contains, every entry kind, both sides and not limited to the Font View selection; Reset returns to them. |
+| `kerning.lockStates` (behavior) | M5 | handbook | – | A lock is open when the pair that applies names that glyph itself on that side while the glyph has a group there; opening a lock stores such a pair at the value that applied, so the kerning does not change. The kern field and the Kerning window right after a lock is opened, in the running app or a video, settle it. |
+| `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing a lock deletes the exception pair in the current master only; the all-masters variant exists only for deletion in the Kerning window. Closing a lock in a font with two masters and reading the other master's pairs settles it. |
+| `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | The defaults are contains, every entry kind, both sides and not limited to the Font View selection; Reset returns to them. The options menu of a newly opened Kerning window settles them. |
 | `kerning.windowSorting` (behavior) | M5 | handbook | – | Before a header is clicked the list keeps the stored order of the pairs. |
 | `kerning.windowSelectionDrivesEditView` (behavior) | M5 | handbook | – | A group side is shown by its first member in glyph order. |
-| `kerning.compressRules` (behavior) | M5 | handbook | – | When two pairs would lift to the same group pair with different values, neither is lifted. |
-| `kerning.compressOneStepPerRun` (behavior) | M5 | handbook | – | A run lifts the left side of every pair that can lift it, else its right side. |
+| `kerning.compressRules` (behavior) | M5 | handbook | – | When two pairs would lift to the same group pair with different values, neither is lifted; running Compress on such a pair list in the reference app settles it. |
+| `kerning.compressOneStepPerRun` (behavior) | M5 | handbook | – | A run lifts the left side of every pair that can lift it, else its right side; one run on a pair list where both sides can lift, in the reference app, settles it. |
+| `kerning.implicitKernFeature` (behavior) | M5 | handbook | – | The generated lookups follow fontc's kern writer (split by script and direction, glyph pairs before class pairs, values rounded half up); the handbook gives no rules, and the GPOS of a font the reference app exports from a test source settles it. |
 | `spacing.setLeftSidebearing` | M5 | handbook | no | A numeric left sidebearing moves the outline, components and anchors sideways and changes the width by the same amount, so the right sidebearing stays. |
 | `spacing.setLeftSidebearing` | M5 | handbook | no | A key is evaluated and applied as soon as it is stored. |
 | `spacing.setRightSidebearing` | M5 | handbook | no | A key is evaluated and applied as soon as it is stored. |
 | `spacing.setTopSidebearing` | M5 | inferred | no | Setting the top sidebearing moves the vertical origin and changes the vertical width by the same amount, so the bottom sidebearing stays, as the left sidebearing does horizontally. |
 | `spacing.setTopSidebearing` | M5 | inferred | no | The top and bottom fields take the same key forms as the left and right ones, with `\|` naming the opposite vertical sidebearing; `@` is refused there. |
 | `spacing.setBottomSidebearing` | M5 | inferred | no | Setting the bottom sidebearing changes the vertical width only. |
-| `glyph.updateMetrics` | M5 | handbook | no | Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value. |
+| `glyph.updateMetrics` | M5 | handbook | no | Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value; one Update Metrics on a two-step chain in the reference app settles it. |
 | `kerning.setMode` | M5 | handbook | no | A new Edit View tab starts in kerning mode; no source gives the default. |
-| `kerning.increaseLeft` | M5 | handbook | no | Increase adds to the kerning value (more space) and decrease subtracts; the handbook table names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair. |
+| `kerning.increaseLeft` | M5 | handbook | no | Increase adds to the kerning value (more space) and decrease subtracts; the handbook names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair. The Info box kern value after one keypress, in the running app or a video, settles it. |
 | `kerning.setTopGroup` | M5 | handbook | no | The top and bottom group fields check names as the left and right ones do. |
-| `kerning.renameGroup` | M5 | handbook | no | With scope `pair`, only the side of the selected pair changes to the new name and the glyphs keep their group; no source says whether the reference also moves glyphs into the new group. |
+| `kerning.renameGroup` | M5 | handbook | no | With scope `pair`, only the side of the selected pair changes to the new name and the glyphs keep their group; no source says whether the reference also moves glyphs into the new group, and the Group fields after a pair-only rename settle it. |
 | `kerning.copyPairs` | M5 | handbook | no | The clipboard holds the pairs as kerning-text lines (`left<TAB>right<TAB>value`), so they also paste into a text editor; no source gives the reference clipboard format. |
 | `kerning.pastePairs` | M5 | handbook | no | A pasted group side keeps its name; a group the target font lacks is pasted as it is and reported. |
 | `kerning.cleanUp` | M5 | handbook | no | Clean Up acts on the given master and direction only, like the Kerning window list. |
-| `kerning.compress` | M5 | handbook | no | Compress acts on the given master and direction only. |
-| `dialog.renameKerningGroup` (panel) | M5 | handbook | – | The buttons read This Pair, All Pairs and Cancel; the handbook gives no captions. |
+| `kerning.compress` | M5 | handbook | no | Compress acts on the given master and direction only; running it on a font with two masters and reading the other master's pairs settles it. |
+| `dialog.renameKerningGroup` (panel) | M5 | handbook | – | The buttons read This Pair, All Pairs and Cancel; the handbook gives no captions, and a screenshot or video of the dialog settles them. |
 | `dialog.pasteKerningConflict` (panel) | M5 | handbook | – | The warning has a Cancel button besides Overwrite and Keep Existing. |
 
 ## `09-reusing-shapes.toml`
