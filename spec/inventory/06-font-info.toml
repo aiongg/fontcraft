@@ -480,6 +480,8 @@ notes = "Documented, not yet observed. The same scaling serves the Scale to UPM 
 guesses = [
   "Scaling by new/old covers every layer of every glyph (paths, component offsets but not component scales, anchors, guides, hints, backgrounds, special layers), the advance widths and vertical metrics, master metric positions and zone sizes, stems, kerning, global guides, and the custom parameters whose catalogue entry is measured in units (typoAscender, hheaAscender, winAscent, underlinePosition and the like); metrics keys, italic angles and percentages are kept; the reference app on a font holding all of these settles the list.",
   "Scaled coordinates are rounded to the font's grid (none when the grid spacing is 0), and a scale that would put a coordinate beyond ±32768 is refused; the reference app settles the rounding.",
+  "A placed image keeps its place over the scaled outline (its position is scaled and its own scale multiplied by the factor), stroke widths and the positions and widths of hints not attached to nodes are scaled, and named number values are kept; the reference app on a font holding these settles it.",
+  "Shapes the model keeps as stored (shape groups, paths with node kinds it cannot read) are not scaled, and a font with a locked glyph is refused naming the glyph, as every other edit of a locked glyph is; the reference app settles whether it scales locked glyphs.",
 ]
 observe = [
   "In font A (m7-one), click the double arrow beside Units per Em, scale to 2048 and save: note which of outlines, component offsets, anchors, the guide, kerning, metrics, zones, stems and typoAscender changed, and how half units were rounded.",
@@ -492,7 +494,7 @@ milestone = "M7"
 summary = "Because typing a new UPM does not touch outlines while the scale button does, lowering the UPM by typing and then scaling back to the original value enlarges every glyph; raising it first and scaling back shrinks them. Both steps must stay separate undoable actions."
 ref = "Font Info › Font › Units per Em"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.4 (test of the two steps and their undo)."
+notes = "Documented, not yet observed. `font.info.set` with unitsPerEm changes the value alone and `font.info.scaleToUnitsPerEm` scales, each its own undo step (engine test `font_info_unitsperem_resize_trick_is_two_undo_steps`)."
 
 [[behavior]]
 id = "fontInfo.unitsPerEm.exportOverrides"
