@@ -225,6 +225,10 @@ ending alignment; meant for composites whose marks reach outside the glyph box.
   (`kerning.addException`); closing it removes the exception (`kerning.closingLockRemovesException`,
   `kerning.removeException`). An older answer on the reference forum, not the handbook, says that
   closing a lock applies the existing group value, so the number shown can change.
+- Closing one lock of a glyph–glyph exception while the other side stays open (our choice, not
+  documented): the exception becomes the closed side's group against the open side's glyph, at
+  the value that applied, unless that pair is already stored. Closing the left lock alone is
+  refused when L – @gL(R) is stored, since that pair comes before @gR(L) – R (§ 3.7).
 
 ### 3.7 Pair lookup order
 

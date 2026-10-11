@@ -268,3 +268,40 @@ fn closing_lock_removes_exception() {
     assert!(Arc::ptr_eq(&s.doc().unwrap().font, &before), "undo gives back the very font");
     assert!(refused(&mut s, "kerning.removeException", json!({"left": "T", "right": "oacute", "side": "both", "master": "m02"})).contains("m01"));
 }
+
+#[test]
+fn closing_one_lock_of_a_glyph_pair_keeps_the_other_open() {
+    let locks = |s: &mut Session, l: &str, r: &str| get(s, l, r, json!({}))["locks"].clone();
+    let with_pair = |l: &str, r: &str, v: f64| {
+        let mut f = oracle_font();
+        Arc::make_mut(&mut f.kerning).ltr.set("m01", l, r, v);
+        let mut s = Session::new();
+        s.add_document(f, None).unwrap();
+        s
+    };
+    // Right lock: the left glyph against the right glyph's group, at the value that applied.
+    let mut s = with_pair("Aacute", "W", -80.0);
+    let r = run(&mut s, "kerning.removeException", json!({"left": "Aacute", "right": "W", "side": "right"}));
+    assert_eq!(r["stored"], json!({"left": "Aacute", "right": "@V", "value": -80.0}));
+    assert_eq!((stored(&s, "m01", "Aacute", "W"), stored(&s, "m01", "Aacute", "@MMK_R_V")), (None, Some(-80.0)));
+    assert_eq!(r["value"], json!(-80.0));
+    assert_eq!(locks(&mut s, "Aacute", "W"), json!({"left": "open", "right": "closed"}));
+    // Left lock: the left glyph's group against the right glyph.
+    let mut s = with_pair("Aacute", "W", -80.0);
+    run(&mut s, "kerning.removeException", json!({"left": "Aacute", "right": "W", "side": "left"}));
+    assert_eq!(stored(&s, "m01", "@MMK_L_A", "W"), Some(-80.0));
+    assert_eq!(locks(&mut s, "Aacute", "W"), json!({"left": "closed", "right": "open"}));
+    assert_eq!(value(&mut s, "Aacute", "V"), -40.0, "the rest of the group keeps its kerning");
+
+    // The pair for the side that stays open is already stored: only the exception goes.
+    let mut s = with_pair("A", "V", -90.0);
+    let r = run(&mut s, "kerning.removeException", json!({"left": "A", "right": "V", "side": "right"}));
+    assert_eq!((r["stored"].clone(), r["value"].clone()), (Value::Null, json!(-30.0)));
+    assert_eq!(locks(&mut s, "A", "V"), json!({"left": "open", "right": "closed"}));
+    // A–@V comes before @A–V, so the left lock alone cannot close.
+    let mut s = with_pair("A", "V", -90.0);
+    let e = refused(&mut s, "kerning.removeException", json!({"left": "A", "right": "V", "side": "left"}));
+    assert!(e.contains("A @V") && e.contains("close both locks"), "{e}");
+    let r = run(&mut s, "kerning.removeException", json!({"left": "A", "right": "V", "side": "both"}));
+    assert_eq!((r["stored"].clone(), r["value"].clone()), (Value::Null, json!(-30.0)));
+}

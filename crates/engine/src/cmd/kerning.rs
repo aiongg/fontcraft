@@ -61,7 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Close Kerning Lock",
             [],
             None,
-            "{left: glyph name, right: glyph name, side: \"left\"|\"right\"|\"both\", master?: master id (default: the first master), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default \"ltr\")} close the open locks named by `side`: delete the exception that applies in this master, so the group kerning applies again → {removed: {left, right, value}, value: the kerning that applies now, master, direction}",
+            "{left: glyph name, right: glyph name, side: \"left\"|\"right\"|\"both\", master?: master id (default: the first master), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default \"ltr\")} close the open locks named by `side`: delete the exception that applies in this master, so the group kerning applies again. Closing one side of a glyph–glyph exception keeps the other side open: the closed side's group against the open side's glyph is stored at the value that applied, unless that pair exists. The left lock alone is refused when the left glyph's pair with the right glyph's group would apply instead → {removed: {left, right, value}, stored: {left, right, value} or null, value: the kerning that applies now, master, direction}",
             has_doc,
             remove_exception
         ),
@@ -318,17 +318,23 @@ fn remove_exception(s: &mut Session, p: &Value) -> Result<Value> {
     let left = glyph(&p, font, "left")?.to_string();
     let right = glyph(&p, font, "right")?.to_string();
     let which = which(&p)?;
-    let (first, second, removed) = fontcraft_spacing::kerning::close_locks(&index, direction, &master, &left, &right, which)
+    let close = fontcraft_spacing::kerning::close_locks(&index, direction, &master, &left, &right, which)
         .map_err(|e| kern_error(&p, e))?
-        .map(|a| (a.first.to_string(), a.second.to_string(), a.value))
         .ok_or_else(|| p.bad(format!("the pair {left} {right} has no open lock on the {} side to close", side_name(which))))?;
+    let (first, second, removed) = (close.removed.first.to_string(), close.removed.second.to_string(), close.removed.value);
+    let replacement = close.replacement;
     s.edit("Close Kerning Lock", |font| {
         let table = direction.table_mut(std::sync::Arc::make_mut(&mut font.kerning));
-        unstore(table, &master, &first, &second).map(|_| ()).ok_or_else(|| EngineError::Internal(format!("the pair {first} {second} was not found")))
+        unstore(table, &master, &first, &second).ok_or_else(|| EngineError::Internal(format!("the pair {first} {second} was not found")))?;
+        if let Some(e) = &replacement {
+            store(font, direction, &master, &e.first, &e.second, e.value);
+        }
+        Ok(())
     })?;
     let now = s.kern_index()?.lookup(direction, &master, &left, &right).map_err(|e| kern_error(&p, e))?.map_or(0.0, |a| a.value);
+    let stored = replacement.map(|e| json!({"left": e.first.command(), "right": e.second.command(), "value": e.value}));
     Ok(json!({
         "removed": {"left": Side::from_stored(&first).command(), "right": Side::from_stored(&second).command(), "value": removed},
-        "value": now, "master": master, "direction": direction.name(),
+        "stored": stored, "value": now, "master": master, "direction": direction.name(),
     }))
 }

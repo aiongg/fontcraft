@@ -1,6 +1,6 @@
 //! Kerning locks: derived from the pair that applies, never stored.
 
-use super::lookup::{Applied, KernError, KernIndex};
+use super::lookup::{Applied, KernError, KernIndex, Step};
 use super::sides::{Side, facing};
 use super::{Direction, Position};
 
@@ -122,8 +122,22 @@ pub fn open_locks(index: &KernIndex, direction: Direction, master: &str, first: 
     Ok(Some(Edit { first, second, value: applied.map_or(0.0, |a| a.value) }))
 }
 
-/// The exception that closing the `which` locks deletes: the pair that applies, when one of those
-/// locks is open. Deleting it lets the group kerning apply again, so the value can change.
+/// What closing locks does to the stored pairs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Close<'a> {
+    /// The exception deleted: the pair that applied.
+    pub removed: Applied<'a>,
+    /// The pair stored in its place, at the value that applied, when one side of a glyph–glyph
+    /// exception closes and the other stays open: the closed side's group against the open
+    /// side's glyph.
+    pub replacement: Option<Edit>,
+}
+
+/// What closing the `which` locks does, when one of them is open: the exception that applies is
+/// deleted, so the group kerning applies again and the value can change. Closing one side of a
+/// glyph–glyph exception keeps the other side open: the pair for the side that stays open
+/// replaces it unless it is already stored. The left lock alone cannot close when the left
+/// glyph's pair with the right glyph's group would then apply ([`KernError::LockShadowed`]).
 pub fn close_locks<'a>(
     index: &'a KernIndex,
     direction: Direction,
@@ -131,8 +145,40 @@ pub fn close_locks<'a>(
     first: &str,
     second: &str,
     which: Which,
-) -> Result<Option<Applied<'a>>, KernError> {
+) -> Result<Option<Close<'a>>, KernError> {
     let (applied, locks) = derive(index, direction, master, first, second)?;
-    let open = (which.has(Position::First) && locks.first == Lock::Open) || (which.has(Position::Second) && locks.second == Lock::Open);
-    Ok(applied.filter(|_| open))
+    let Some(applied) = applied else { return Ok(None) };
+    let close = |lock: Lock, position: Position| if lock == Lock::Open && which.has(position) { Lock::Closed } else { lock };
+    let closed = Locks { first: close(locks.first, Position::First), second: close(locks.second, Position::Second) };
+    if closed == locks {
+        return Ok(None);
+    }
+    let still_open = if closed.first == Lock::Open {
+        Some(Step::GlyphGroup)
+    } else if closed.second == Lock::Open {
+        Some(Step::GroupGlyph)
+    } else {
+        None
+    };
+    let replacement = match still_open {
+        Some(step) if applied.step == Step::GlyphGlyph => {
+            let table = index.table(direction, master)?;
+            let f = index.glyph_id(first).ok_or_else(|| KernError::UnknownGlyph(first.to_string()))?;
+            let s = index.glyph_id(second).ok_or_else(|| KernError::UnknownGlyph(second.to_string()))?;
+            if step == Step::GroupGlyph
+                && let Some(shadow) = table.at_step(f, s, Step::GlyphGroup)
+            {
+                let pair = format!("{} {}", Side::from_stored(shadow.first).command(), Side::from_stored(shadow.second).command());
+                return Err(KernError::LockShadowed { first: first.to_string(), second: second.to_string(), pair });
+            }
+            if table.at_step(f, s, step).is_some() {
+                None
+            } else {
+                let (first, second) = locked_pair(index, direction, first, second, closed);
+                Some(Edit { first, second, value: applied.value })
+            }
+        }
+        _ => None,
+    };
+    Ok(Some(Close { removed: applied, replacement }))
 }

@@ -26,7 +26,8 @@
 //! without that group is [`Lock::Ungrouped`] and is always written as itself. [`locked_pair`] is
 //! the pair a lock state names; [`shortcut_edit`] the pair and value a kerning shortcut writes;
 //! [`open_locks`] the exception that opening locks stores (at the value that applied, so nothing
-//! moves); [`close_locks`] the exception that closing locks deletes.
+//! moves); [`close_locks`] the exception that closing locks deletes, and the pair that keeps the
+//! other side open when one side of a glyph–glyph exception closes.
 //!
 //! # Groups ([`groups`])
 //! [`check_group_name`] accepts `A–Z a–z 0–9 _ . -`. [`members`] lists a group's glyphs on one
@@ -68,7 +69,8 @@
 //! locked_pair(index: &KernIndex, Direction, first: &str, second: &str, locks: Locks) -> (Side, Side)
 //! shortcut_edit(index: &KernIndex, Direction, master: &str, first: &str, second: &str, amount: f64) -> Result<Edit, KernError>
 //! open_locks(index: &KernIndex, Direction, master: &str, first: &str, second: &str, which: Which) -> Result<Option<Edit>, KernError>
-//! close_locks<'a>(index: &'a KernIndex, Direction, master: &str, first: &str, second: &str, which: Which) -> Result<Option<Applied<'a>>, KernError>
+//! close_locks<'a>(index: &'a KernIndex, Direction, master: &str, first: &str, second: &str, which: Which) -> Result<Option<Close<'a>>, KernError>
+//! Close { removed: Applied, replacement: Option<Edit> };  Table::at_step(&self, first: usize, second: usize, Step) -> Option<Applied<'_>>
 //! check_group_name(name: &str) -> Result<(), GroupNameError>
 //! members<'a>(font: &'a Font, side: GroupSide, group: &str) -> Vec<&'a str>
 //! group_list(font: &Font, side: GroupSide) -> Vec<(&str, Vec<&str>)>
@@ -101,7 +103,7 @@ pub mod sides;
 mod tests;
 
 pub use groups::{GroupNameError, MAX_GROUP_NAME_LEN, check_group_name, group_list, members};
-pub use locks::{Edit, Lock, Locks, Which, close_locks, locked_pair, locks, open_locks, shortcut_edit};
+pub use locks::{Close, Edit, Lock, Locks, Which, close_locks, locked_pair, locks, open_locks, shortcut_edit};
 pub use lookup::{Applied, KernError, KernIndex, Step, StoredPair, Table, stored_pair};
 pub use maintain::{
     Absorbed, CompressReport, Kept, KeptWhy, Lift, MAX_COMPRESS_RUNS, MaintainError, Obsolete, Pair, Removed, RenameReport, RenameScope,

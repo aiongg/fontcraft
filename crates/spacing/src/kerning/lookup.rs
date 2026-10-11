@@ -65,6 +65,8 @@ pub enum KernError {
     UnknownGlyph(String),
     #[error("the kerning amount must be a finite number")]
     NotFinite,
+    #[error("the left lock of {first} {second} cannot close alone: the pair {pair} applies before the group pair it would leave; close both locks, or delete {pair} first")]
+    LockShadowed { first: String, second: String, pair: String },
 }
 
 /// A multiply-rotate hasher for the index's integer keys. The keys are dense positions, not
@@ -285,17 +287,28 @@ impl<'a> Table<'a> {
 
     /// The stored pair that applies between the glyphs with ids `first` and `second`.
     pub fn lookup(&self, first: usize, second: usize) -> Option<Applied<'a>> {
-        let pairs = self.pairs?;
+        self.steps(first, second)?.into_iter().find_map(|(a, b, step)| self.entry(a?, b?, step))
+    }
+
+    /// The stored pair that `step` finds between the glyphs with ids `first` and `second`, whether
+    /// or not an earlier step finds one.
+    pub fn at_step(&self, first: usize, second: usize, step: Step) -> Option<Applied<'a>> {
+        let (a, b, _) = self.steps(first, second)?.into_iter().find(|(_, _, s)| *s == step)?;
+        self.entry(a?, b?, step)
+    }
+
+    /// The side keys each step looks up, in lookup order.
+    fn steps(&self, first: usize, second: usize) -> Option<[(Option<u32>, Option<u32>, Step); 4]> {
         let f = u32::try_from(first).ok().filter(|id| *id < GROUP_BIT)?;
         let s = u32::try_from(second).ok().filter(|id| *id < GROUP_BIT)?;
         let fg = self.index.group_at(first, facing(self.direction, Position::First)).map(|g| g | GROUP_BIT);
         let sg = self.index.group_at(second, facing(self.direction, Position::Second)).map(|g| g | GROUP_BIT);
-        let steps =
-            [(Some(f), Some(s), Step::GlyphGlyph), (Some(f), sg, Step::GlyphGroup), (fg, Some(s), Step::GroupGlyph), (fg, sg, Step::GroupGroup)];
-        steps.into_iter().find_map(|(a, b, step)| {
-            let e = pairs.get(&pair_key(a?, b?))?;
-            Some(Applied { value: e.value, step, first: &e.first, second: &e.second, master: self.master })
-        })
+        Some([(Some(f), Some(s), Step::GlyphGlyph), (Some(f), sg, Step::GlyphGroup), (fg, Some(s), Step::GroupGlyph), (fg, sg, Step::GroupGroup)])
+    }
+
+    fn entry(&self, a: u32, b: u32, step: Step) -> Option<Applied<'a>> {
+        let e = self.pairs?.get(&pair_key(a, b))?;
+        Some(Applied { value: e.value, step, first: &e.first, second: &e.second, master: self.master })
     }
 }
 

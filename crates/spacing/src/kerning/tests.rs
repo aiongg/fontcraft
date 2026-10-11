@@ -202,7 +202,7 @@ fn locks_follow_the_pair_that_applies() {
     assert_eq!(open_locks(&index, Direction::Ltr, "m01", "T", "odieresis", Which::Second).unwrap(), None);
     assert_eq!(close_locks(&index, Direction::Ltr, "m01", "T", "odieresis", Which::First).unwrap(), None, "the left lock is closed");
     let gone = close_locks(&index, Direction::Ltr, "m01", "T", "odieresis", Which::Second).unwrap().unwrap();
-    assert_eq!((gone.first, gone.second), ("@MMK_L_T", "odieresis"));
+    assert_eq!((gone.removed.first, gone.removed.second, gone.replacement), ("@MMK_L_T", "odieresis", None));
     let both = open_locks(&index, Direction::Ltr, "m01", "T", "odieresis", Which::Both).unwrap().unwrap();
     assert_eq!(pair(&both), ("T".into(), "odieresis".into(), -60.0));
 
