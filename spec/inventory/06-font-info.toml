@@ -1209,6 +1209,7 @@ status = "inferred"
 notes = "M7 plan § 4: M7.6."
 guesses = [
   "Add Metric appends a definition of the given category and gives every master position 0 and zone 0; the reference app settles whether the Metrics heading has a plus button and what it adds.",
+  "A definition equal to an existing one (same category, name and scope) is refused, and a metric without a category needs a name; adding a second plain x-height in the reference app settles it.",
 ]
 observe = [
   "In font B (m7-two), look for a plus button beside Metrics on the Masters tab: note whether it exists and what it adds.",
@@ -1227,6 +1228,9 @@ summary = "Changes the category (metric type), the display name or the glyph sco
 ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "handbook"
 notes = "Documented, not yet observed. Changing the category keeps every master's values. M7 plan § 4: M7.6."
+guesses = [
+  "A category change that the masters' values do not fit (a baseline off 0, an italic angle beyond ±89°) is refused rather than changing the values; changing a metric with a value of 800 to Baseline in the reference app settles it.",
+]
 
 [[command]]
 id = "font.metrics.remove"
@@ -1260,7 +1264,7 @@ milestone = "M7"
 summary = "Sets a master's value for one metric: the left field is the offset from the baseline and the right field the size of the alignment zone that begins at that offset. Italic Angle takes only one value."
 ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.6."
+notes = "Documented, not yet observed. The baseline is always 0 (handbook), so a position other than 0 for a Baseline metric is refused; its zone can be set. M7 plan § 4: M7.6."
 guesses = [
   "Zone sizes may be negative (zones below a line, such as at the baseline and the descender); Italic Angle takes a position only, between −89 and 89 degrees; typing a negative zone in the reference app settles it.",
 ]
@@ -1293,9 +1297,10 @@ milestone = "M7"
 summary = "The default set of metrics depends on the font's script and language choice. Latin gets Ascender, Cap Height, x-Height, Baseline, Descender and Italic Angle; Arabic gets Ascender, Baseline, Descender, Alef Height, Joining Line and Meem Depth."
 ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.6."
+notes = "Documented, not yet observed. Applied by file.newFromGlyphSets: Arabic without Latin takes the Arabic set; any other choice keeps the Latin set and adds Italic Angle 0. file.new keeps its five Latin metrics without Italic Angle. M7 plan § 4: M7.6."
 guesses = [
   "A new font whose chosen scripts include Arabic and not Latin gets the metrics Ascender 800, Alef Height 700, Joining Line 150, Baseline 0, Descender −200 and Meem Depth −250 at 1000 UPM; a new Arabic font in the reference app settles names, order and values.",
+  "Alef Height, Joining Line and Meem Depth are stored as named metrics without a category, with zones of 16 units (−16 below the baseline, none on the Joining Line); the file a new Arabic font saves in the reference app settles their categories and zones.",
 ]
 observe = [
   "Choose File › New with Arabic chosen: write down the default metrics, their order and their values.",
@@ -1326,7 +1331,10 @@ milestone = "M7"
 summary = "A metric with a glyph scope is drawn only in glyphs matching the scope; for example a metric scoped to Devanagari glyphs shows no alignment line elsewhere. Scopes use the smart-filter rule model."
 ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "handbook"
-notes = "Documented, not yet observed. The scope is the metric's `filter`, evaluated with the smart-filter rules of crates/glyphquery (M4). M7 plan § 4: M7.6 (canvas hook)."
+notes = "Documented, not yet observed. The scope is the metric's `filter`, evaluated with the smart-filter rules of crates/glyphquery (M4), in ui-egui `canvas/metric_scope.rs`. A scope that does not read as a predicate leaves the line shown. M7 plan § 4: M7.6 (canvas hook)."
+guesses = [
+  "A hidden metric hides its alignment zone too, and in text mode the glyph being edited decides for the whole line of text; scoping x-height to Greek and typing A and alpha side by side in the reference app settles it.",
+]
 observe = [
   "In font B (m7-two), scope x-Height to the script greek and look at A in Edit View: note whether the x-height line is hidden.",
 ]
