@@ -156,12 +156,13 @@ label = "Expand Feature Code"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font?, target: {instance?: id}|{variable: true}, includeImplicit?: bool}"
+params = "{font?, target?: {master?: id}|{instance: id}|{variable: true}, includeImplicit?: bool}"
 area = "features"
 milestone = "M8"
 summary = "Query: returns the complete standard feature file for one export target after resolving tokens, conditional blocks, syntax extensions and, optionally, the implicit features. Not a reference command; needed so agents and the CLI can inspect what the compiler receives."
 ref = "Feature Code › Tokens; Feature Code › Conditional Feature Code"
 status = "inferred"
+notes = "Expands the code for a master (`target: {master}`); instances, the variable font and the implicit features are refused until their values and writers can be written as code."
 
 [[command]]
 id = "font.features.showSnippetFolder"

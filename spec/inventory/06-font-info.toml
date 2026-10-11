@@ -1481,6 +1481,9 @@ summary = "Adds a named number with the plus button beside the Number Values hea
 ref = "Font Info › Masters › Number Values"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A number value name is letters, digits, `_` and `.`, not starting with a digit, and a name the font has is refused; naming a number value with a space or a hyphen in the reference app would settle it.",
+]
 
 [[command]]
 id = "font.numbers.rename"
@@ -2087,6 +2090,9 @@ summary = "Adds a prefix entry: free-form feature code placed outside every feat
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A new prefix without a name is called Prefix, then Prefix 2, Prefix 3 and so on, and a prefix name another prefix has is refused; adding two prefixes in the reference app would settle it.",
+]
 
 [[command]]
 id = "font.features.addClass"
@@ -2115,6 +2121,10 @@ summary = "Adds a feature identified by its four-character tag. Also used to add
 ref = "Font Info › Features › Editing Feature Code; Implicit Features"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "Adding a tag the font already has is refused, although files may hold a tag twice; adding a present feature again from the picker in the reference app would settle it.",
+  "A feature added without `automatic` is a manual entry with empty code, and the picker asks for automatic code when Update could generate the feature; adding smcp from the picker to a font with .sc glyphs in the reference app would settle it.",
+]
 
 [[command]]
 id = "font.features.remove"
@@ -2323,14 +2333,14 @@ id = "font.features.openSpec"
 label = "Spec"
 menu = []
 shortcut = ""
-kind = "ui"
+kind = "engine"
 params = "{tag: string}"
 area = "features"
 milestone = "M8"
 summary = "Opens the specification page of the selected feature on Microsoft's OpenType site in the browser. The button is shown at the top-right only while a feature is selected."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The engine command returns the section's address and the Features tab opens it in the browser."
 
 [[command]]
 id = "font.features.setLabel"
@@ -2345,6 +2355,9 @@ summary = "Adds or changes one localized display name of a stylistic set feature
 ref = "Font Info › Features › Naming Stylistic Sets"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The language of a name is `dflt` or one of the OpenType language tags the name table can hold, and an empty name is refused; the language picker of the reference app would settle the list.",
+]
 
 [[command]]
 id = "font.features.removeLabel"
