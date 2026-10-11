@@ -2583,6 +2583,9 @@ milestone = "M9"
 summary = "Instance previews take intermediate and alternate layers into account and apply some, not all, of the instance's custom parameters. The handbook does not list which."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+guesses = [
+  "The preview of an instance applies the instance's interpolation parameters (Local Interpolation, InterpolationWeightY, manual interpolation), Rename Glyphs and Remove Glyphs, and no filters; settle by previewing an instance with a filter parameter in the reference app.",
+]
 
 [[behavior]]
 id = "preview.panelBlankWithoutEditTab"

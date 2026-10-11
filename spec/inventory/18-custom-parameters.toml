@@ -335,6 +335,7 @@ effect = "export-filter"
 summary = "For variable-font export: components whose base glyph has intermediate (brace) layers are turned into outlines. On by default; set to off to keep them as components."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Neither oracle reads this parameter, and both keep such composites as composites (observed with fontc 1.0.0 and fontmake 3.12.1 in the M9 planning pass). The default is the owner's decision (docs/plans/M9.md § 7, question 4)."
 
 [[parameter]]
 name = "Decompose Components"
@@ -467,6 +468,7 @@ effect = "interpolation"
 summary = "List of masters to ignore. Meant for special production setups and for testing, such as checking how interpolation behaves without an in-between master."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Neither oracle reads it and no corpus source sets it (M9 planning pass)."
 
 [[parameter]]
 name = "Disable Subroutines"
@@ -735,6 +737,7 @@ effect = "features"
 summary = "Feature tag into which the conditional glyph substitutions generated from alternate (bracket) layers are written in a variable font. Default `rvrn`."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "The Switching Shapes page gives `rlig` as the default and the appendix `rvrn`; both oracles use `rvrn`. The default is the owner's decision (docs/plans/M9.md § 7, question 2)."
 
 [[parameter]]
 name = "fileName"
@@ -986,6 +989,9 @@ effect = "interpolation"
 summary = "Float used to interpolate y coordinates of an instance while x coordinates keep using the instance's weight value; it only acts when it differs from that value. Large differences distort diagonals."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+guesses = [
+  "Read only for fonts whose first axis is the weight axis, and applied to y coordinates of outlines, anchors and vertical metrics; settle with an instance that sets it in the reference app.",
+]
 
 [[parameter]]
 name = "isFixedPitch"
@@ -1145,6 +1151,9 @@ effect = "interpolation"
 summary = "Value: one interpolation value per axis separated by semicolons, then a semicolon, `include:` and a comma-separated glyph list (for example `95; include: e, o, c`). The listed glyphs are interpolated at those values, the rest at the instance's own position."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+guesses = [
+  "The listed glyphs are interpolated at the given location with every other part of the instance unchanged, including their widths; settle with an instance that sets it in the reference app.",
+]
 
 [[parameter]]
 name = "MakeOTF Compatibility Mode"
@@ -1316,6 +1325,7 @@ effect = "interpolation"
 summary = "On by default: a contour whose nodes all move by half a unit or less gets no deltas. Set to off to keep these small deltas."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Neither oracle reads it; both always drop deltas that IUP can infer, within 0.5 units."
 
 [[parameter]]
 name = "panose"
@@ -2186,6 +2196,9 @@ effect = "interpolation"
 summary = "Described identically to Optimize Variable Deltas: on by default, drops the deltas of any contour whose nodes all move by half a unit or less; set to off to keep them."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+guesses = [
+  "Treated as a second name of Optimize Variable Deltas, as the appendix describes both alike; settle by setting one of them off in the reference app and comparing the exported gvar.",
+]
 
 [[parameter]]
 name = "Variable Font Origin"
@@ -2197,6 +2210,7 @@ effect = "interpolation"
 summary = "Names the master stored as the default outlines of the variable font; every other master and instance is reached by deltas from it."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Read by both oracles as a master id; without it they choose by master names, the handbook by order (docs/plans/M9.md § 7, question 3). 22 corpus sources set it, Inter among them."
 
 [[parameter]]
 name = "Variable Font Style Name"
@@ -2263,6 +2277,9 @@ effect = "interpolation"
 summary = "Described identically to Variable Font Origin: names the master stored as the variable font's default outlines."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+guesses = [
+  "Treated as an older name of Variable Font Origin naming the master by name, as glyphsLib reads it; settle in the reference app.",
+]
 
 [[parameter]]
 name = "variationsPostScriptNamePrefix"

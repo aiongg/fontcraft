@@ -39,7 +39,7 @@ Each feature note also ends with its own open questions about the reference's be
 Recorded so nobody rediscovers them. Each is also in the note of the feature it affects.
 
 - Info for Selection is `Cmd+Alt+I` in one handbook chapter and `Cmd+Shift+I` (also Show Info) in another.
-- The default feature for alternate layers is `rlig` in the interpolation chapter and `rvrn` in the appendix.
+- The default feature for alternate layers is `rlig` in the interpolation chapter and `rvrn` in the appendix. Both oracles use `rvrn`; the owner decides (`docs/plans/M9.md` § 7, question 2).
 - Field increments: Shift ×10 and Cmd ×100 in the handbook; the format documentation says the largest step needs both.
 - The Masters plus-menu entry is "Add Other Font" in one chapter and "Add Other Master" in another.
 - The component info box's arrow button is described on opposite corners in two chapters.

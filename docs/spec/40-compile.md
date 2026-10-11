@@ -634,10 +634,17 @@ the binary only; compilation never changes the source.
     imports; confirm we persist the imported order instead of re-sorting at each compile.
 15. **Instance extrapolation.** fontmake's default interpolator refuses it. Decide whether our
     instancer allows extrapolated static instances and how the compile preflight reports them.
+    **Checked in the M9 planning pass:** fontmake clamps rather than refuses: ufo2ft's
+    instantiator normalises with fontTools' `normalizeLocation`, which clamps to the axis range.
+    The handbook says the reference extrapolates static instances. 25 static instances in 11
+    corpus sources lie outside their masters. The owner decides (`docs/plans/M9.md` § 7,
+    question 6); the plan recommends extrapolating, with a note in the export report.
 16. **VORG, hdmx in write-fonts.** Both have generated code that is not compiled into 0.54.0.
     Check newer write-fonts releases before writing our own.
 17. **STAT format 4.** write-fonts can write it and fontc does not emit it; decide whether our
     Font Info exposes multi-axis labels.
+    **For M9:** not written, as fontc; STAT comes from the derivation fontc and glyphsLib share
+    (`docs/plans/M9.md` § 3).
 18. **GDEF class inference.** fontc infers base and ligature classes from anchors for Glyphs
     sources only. Our native sources carry Glyphs-style categories, so we need to state which rule
     applies to them and to UFO imports.

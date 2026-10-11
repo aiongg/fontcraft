@@ -38,6 +38,9 @@ milestone = "M9"
 summary = "Changes the axis order. Order matters because intermediate-layer coordinates and alternate-layer ranges are shown and stored in axis order, so the command must permute those lists too. Not described in the chapter."
 ref = "Interpolation › Setting up Axes"
 status = "inferred"
+guesses = [
+  "Reordering permutes every master, instance, virtual master and special-layer coordinate list with the axes, so no location changes; settle by dragging axes in the reference app's Font Info, if it allows it.",
+]
 
 [[behavior]]
 id = "axes.definition"
@@ -114,6 +117,9 @@ milestone = "M9"
 summary = "The origin master is a designer's choice only for variable fonts. When interpolating static instances the engine determines a suitable origin by itself."
 ref = "Interpolation › Setting up Masters › Minimal Multiple Masters Setup"
 status = "handbook"
+guesses = [
+  "Static instances use the same variation model as the variable font, anchored at the variable origin; the result does not depend on the origin for the variable model. Settle by comparing instances of an irregular two-axis setup in the reference app (docs/plans/M9.md § 8).",
+]
 
 [[behavior]]
 id = "masters.cornerAndIntermediateSetups"
@@ -156,6 +162,9 @@ milestone = "M9"
 summary = "Interpolates the instances of the current document, turns each into a master and creates new source documents from them, so each instance can be edited as ordinary outlines. The chapter says a file per instance in one sentence and a new file holding those masters in the next; which it is must be observed."
 ref = "Interpolation › Working with Multiple Fonts › Glyphs Files, Masters, & Instances"
 status = "handbook"
+guesses = [
+  "One new document per instance, as the Several Fonts section of the handbook says (a file per instance), holding one master with the instance's outlines, metrics, kerning and features and no special layers; settle by running the command in the reference app.",
+]
 
 [[command]]
 id = "interpolation.interpolateGlyph"
@@ -169,6 +178,9 @@ milestone = "M9"
 summary = "Query: returns the interpolated layer (shapes, anchors, width) of one glyph at an arbitrary location, applying intermediate layers and alternate-layer switching as an export would. Fails with a compatibility report when the contributing layers are incompatible."
 ref = "Interpolation › Setting up Instances"
 status = "inferred"
+guesses = [
+  "`coordinates: external` converts the location through Axis Location and Axis Mappings first; the default is internal, as the coordinate fields of the reference take internal values.",
+]
 
 [[command]]
 id = "interpolation.describeDesignspace"
@@ -247,6 +259,7 @@ milestone = "M9"
 summary = "A Disable Masters parameter on a variable font setting lists master names separated by a comma and a space; those masters contribute nothing to that export, giving a variable font over a subset of the designspace."
 ref = "Interpolation › Setting up Instances › Subsetting the Designspace"
 status = "handbook"
+notes = "Neither oracle reads Disable Masters (fontc 1.0.0, glyphsLib 6.15.0); the measure builds the oracle from a copy of the source without those masters (docs/plans/M9.md § 5)."
 
 [[behavior]]
 id = "variableFontSetting.splitFamily"
@@ -255,6 +268,7 @@ milestone = "M9"
 summary = "One document may export several variable fonts (e.g. retail and reduced trial versions) through several variable font settings. A family may also be split over several documents, e.g. upright and italic, when glyph sets or features differ a lot."
 ref = "Interpolation › Working with Multiple Fonts › Grouping Fonts into Families"
 status = "handbook"
+notes = "glyphsLib turns each variable font setting into a designspace variable font and fontmake builds one file per setting; fontc 1.0.0 builds one variable font only."
 
 [[behavior]]
 id = "family.groupingByFamilyName"
@@ -300,6 +314,9 @@ milestone = "M9"
 summary = "Compatibility is tested only between masters that are both needed to interpolate some defined instance. Adding Enforce Compatibility Check and leaving it on widens the test to all masters; adding it unchecked hides the red indicators altogether, for fonts whose masters differ on purpose such as colour fonts."
 ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines; Appendix › Custom Parameters › Enforce Compatibility Check"
 status = "handbook"
+guesses = [
+  "Masters needed by an instance are those with a non-zero scalar at the instance's location in the variation model; variable font settings count as needing every master they do not disable. Settle by observing the indicators with an instance between two of three masters.",
+]
 
 [[behavior]]
 id = "compatibility.exportBlocked"
@@ -321,6 +338,9 @@ milestone = "M9"
 summary = "Query: reports per glyph whether its layers are compatible and, if not, the first mismatch per layer pair (path count, node count or segment type at path/segment index, anchor set, component count or reference, shape order), plus warnings for segments whose angle differs by more than 20° and for crossing shape correspondences. Alternate layers are compared among themselves, not with master layers."
 ref = "Interpolation › Outline Compatibility"
 status = "inferred"
+guesses = [
+  "The 20° warning measures the angle of each segment's chord from its start node to its end node; settle with the Master Compatibility view on a segment that turns by 19° and 21°.",
+]
 
 [[command]]
 id = "glyph.setShapeOrder"
@@ -347,6 +367,9 @@ milestone = "M9"
 summary = "Exchanges two shapes in the order of one non-current layer. This is what dragging the end of a connecting line onto the end of another line does in Master Compatibility view; the same gesture applies to start nodes and anchors, whose headless forms need their own parameters."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "inferred"
+guesses = [
+  "A drag that ends on no other line end changes nothing; settle by observing the drag in the Master Compatibility view.",
+]
 
 [[panel]]
 id = "window.shapeOrder"
@@ -375,6 +398,9 @@ milestone = "M9"
 summary = "Toggles an Edit View mode that draws the current glyph's paths, components and anchors for all masters at once with correspondence lines and compatibility colours."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
+guesses = [
+  "Shape tints cycle through eight theme colours by shape index; settle by observing the view with nine shapes.",
+]
 
 [[panel]]
 id = "editView.masterCompatibility"
@@ -493,6 +519,9 @@ milestone = "M9"
 summary = "Context-menu item on a non-master layer in the Layers palette: turns it into an intermediate layer and opens one number field per axis. A null or empty coordinate means the layer takes that axis value from the master it is attached to. Confirmed with Return."
 ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
 status = "handbook"
+guesses = [
+  "Coordinates outside the axis range of the masters and virtual masters are refused with a message; settle by typing one in the reference app's popover.",
+]
 
 [[command]]
 id = "layers.clearIntermediate"
@@ -506,6 +535,9 @@ milestone = "M9"
 summary = "Turns an intermediate layer back into a plain backup layer by removing its coordinates. Presumably done by unticking Intermediate in the context menu; not stated."
 ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
 status = "inferred"
+guesses = [
+  "Unticking Intermediate in the layer's context menu runs this command; settle in the reference app's Layers palette.",
+]
 
 [[panel]]
 id = "popover.intermediateLayer"
@@ -553,6 +585,9 @@ milestone = "M9"
 summary = "An intermediate layer takes part in interpolation like a master layer for its glyph, so it must be compatible with the layers it interpolates with and is included in the compatibility indicators. Implied by the chapter, not spelled out."
 ref = "Interpolation › Intermediate Layers"
 status = "inferred"
+guesses = [
+  "An intermediate layer is checked against every master layer of its glyph, not only its neighbours, because the variable font needs all of them compatible. Settle by observing the indicators with an incompatible intermediate layer between unrelated masters.",
+]
 
 [[behavior]]
 id = "intermediateLayer.sparseInExport"
@@ -561,6 +596,7 @@ milestone = "M9"
 summary = "In a variable font an intermediate layer adds variation data only for its own glyph; static instances interpolate that glyph with the extra support point. Components that reference a glyph with intermediate layers are decomposed in variable export by default (Decompose Brace Layers, appendix)."
 ref = "Interpolation › Intermediate Layers; Appendix › Custom Parameters › Decompose Brace Layers"
 status = "handbook"
+notes = "Observed with both oracles on a probe (fontc's `IntermediateLayer.glyphs` plus a composite of `H`): a composite whose base glyph has intermediate layers stays a composite with no variation data of its own. The Decompose Brace Layers default is the owner's decision (docs/plans/M9.md § 7, question 4)."
 
 [[behavior]]
 id = "virtualMaster.concept"
@@ -585,6 +621,7 @@ milestone = "M9"
 summary = "A virtual master's coordinates count when computing each axis's range, so an axis on which all real masters share one value still gets a real extent. A variable font then stores deltas for the affected glyphs only, which keeps the file small."
 ref = "Interpolation › Intermediate Layers › Virtual Masters; Appendix › Custom Parameters › Virtual Master"
 status = "handbook"
+notes = "Observed with fontc 1.0.0 and fontmake 3.12.1 on fontc's `glyphs3/IntermediateLayer.glyphs`: both extend the axis to the virtual masters' coordinates (CPHT 600 to 800) and give gvar data on that axis only to the glyphs with intermediate layers there."
 
 [[panel]]
 id = "dialog.virtualMaster"
@@ -613,6 +650,9 @@ milestone = "M9"
 summary = "Context-menu item on a layer in the Layers palette, master layers included: marks it as an alternate layer and opens min and max fields per axis that bound the region where this outline replaces the normal one. Either bound may be empty (open-ended); all empty yields the layer named []. Confirmed with Return."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+guesses = [
+  "Choosing Alternate on a master layer with no `[]` partner under the same master adds no partner layer; the partner is made by hand as the handbook describes. Settle in the reference app.",
+]
 
 [[command]]
 id = "layers.clearAlternate"
@@ -626,6 +666,9 @@ milestone = "M9"
 summary = "Removes the axis ranges from a layer, making it an ordinary master or backup layer again. Presumably done by unticking Alternate in the context menu; not stated."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "inferred"
+guesses = [
+  "Unticking Alternate in the layer's context menu runs this command; settle in the reference app's Layers palette.",
+]
 
 [[command]]
 id = "layers.editSpecialLayerSettings"
@@ -714,9 +757,13 @@ status = "handbook"
 id = "alternateLayer.rangeSemantics"
 area = "interpolation"
 milestone = "M9"
-summary = "A range is a conjunction over axes of min ≤ value and value < max in internal coordinates, with a missing bound meaning unbounded. The inclusive lower and exclusive upper edges follow the feature-code condition syntax and are an assumption for alternate layers."
+summary = "A range is a conjunction over axes of min ≤ value ≤ max in internal coordinates, a missing bound meaning the end of the axis. Both bounds are inclusive, as fontTools evaluates designspace rules for static instances and as OpenType feature variations store them."
 ref = "Interpolation › Switching Shapes › Alternate Layers; Feature Code › Conditional Feature Code"
 status = "inferred"
+notes = "Checked in the M9 planning pass: fontTools 4.66.1 `designspaceLib.evaluateConditions` (used by ufo2ft's instantiator, hence by fontmake's static instances) keeps both bounds; fontc and glyphsLib write the rule bounds as FeatureVariations condition ranges, which are inclusive by the OpenType specification."
+guesses = [
+  "Both bounds inclusive, as the oracles; the handbook does not say. Settle with an instance exactly on a bound in the reference app (docs/plans/M9.md § 8).",
+]
 
 [[behavior]]
 id = "alternateLayer.staticExport"
@@ -733,6 +780,7 @@ milestone = "M9"
 summary = "In a variable font, alternate layers are switched on by an OpenType feature whose substitution applies only inside the stated region (a feature variation). The feature is chosen by the Feature for Feature Variations parameter; without it a default is used (the chapter says rlig, the appendix says rvrn). Compiling the alternate outlines as extra glyphs that the feature swaps in is our implementation choice, following fontc and fonttools."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "Both oracles default to `rvrn` (fontc `glyphs2fontir/src/source.rs` `make_feature_variations`, glyphsLib `builder/bracket_layers.py`); fontc's comment notes the reference's own tutorial says `rlig`. The default is the owner's decision (docs/plans/M9.md § 7, question 2)."
 
 [[behavior]]
 id = "switching.threeMethods"
@@ -762,6 +810,7 @@ status = "handbook"
 # ───────────────────────────────────────────────────────────────────────────────
 # Editing several masters at once
 # ───────────────────────────────────────────────────────────────────────────────
+notes = "No corpus source uses conditional feature code (M9 planning pass). glyphsLib 6.15.0 converts it (`builder/variable_features.py`), so fontmake is the oracle; fontc 1.0.0 does not read it."
 
 [[command]]
 id = "edit.showAllMasters"
@@ -798,9 +847,15 @@ kind = "engine"
 params = "{glyphs?: [name], layer?: id, location?: {tag: number}}"
 area = "interpolation"
 milestone = "M9"
-summary = "Replaces the content of a master, intermediate or backup layer with the interpolation of the glyph's other layers at that layer's location; used to seed a new master or brace layer. Recalled from the reference app's Layers palette menu; the Interpolation chapter does not mention it, so label, placement and scope are unverified."
-ref = "Not in the handbook chapter (recalled: Layers palette actions menu)"
-status = "memory"
+summary = "Replaces the content of a master, intermediate or backup layer with the interpolation of the glyph's other sources at that layer's location, as one undo step; used to seed a new master or intermediate layer. Our own command: the handbook copy has no such item."
+ref = "FontCraft (no counterpart in the handbook)"
+status = "inferred"
+own = true
+notes = "Verified by the M9 planning pass: the handbook copy names no Re-Interpolate item in the Layers palette, its actions menu or the context menu, so the row is our own. Whether the reference app has such an item is a check for the reference app (docs/plans/M9.md § 8)."
+guesses = [
+  "The layer's own drawing is left out of the sources it is interpolated from; settle by observing an item of this name in the reference app's Layers palette, if it has one.",
+  "With no location given, a master layer uses its master's location and an intermediate layer its coordinates; a backup layer needs a location and is refused without one.",
+]
 
 [[behavior]]
 id = "mastersAsLayers.paletteListing"
@@ -1000,6 +1055,7 @@ status = "handbook"
 # ───────────────────────────────────────────────────────────────────────────────
 # Variable font options: origin, axis location, axis mappings, STAT
 # ───────────────────────────────────────────────────────────────────────────────
+notes = "The file format stores HOI per node: GlyphsSDK's version 4 description (Apache-2.0) gives the node attribute `hoi`, keyed by axis tag and kept in the lower node of a span, holding an intermediate point (`ip`), a rotation centre and direction (`rc`, `rd`) or a Bézier timing (`tl`, `tu`, `al`, `au`). No corpus source uses it, neither oracle reads it, and no source documents how a variable font encodes it. Its milestone is the owner's decision (docs/plans/M9.md § 7, question 5)."
 
 [[behavior]]
 id = "variable.originMaster"
@@ -1008,6 +1064,7 @@ milestone = "M9"
 summary = "A variable font stores the outlines of one origin master in full and every other master as differences from it. The origin is the first master in the Masters tab unless a Variable Font Origin parameter names another."
 ref = "Interpolation › Variable Font Options › Variable Font Origin"
 status = "handbook"
+notes = "Both oracles pick a different default when no parameter names the origin: the master named by the words all master names share (Regular when none), else the first (fontc `glyphs-reader/src/font.rs` `default_master_idx`, glyphsLib `find_base_style`). The handbook's first-master rule against the oracles' is the owner's decision (docs/plans/M9.md § 7, question 3)."
 
 [[behavior]]
 id = "variable.originIsFallback"
@@ -1075,6 +1132,7 @@ milestone = "M9"
 summary = "A mapping is, per axis, a list of control points pairing an internal coordinate with an external one; values between points are interpolated linearly, and points off the diagonal make the user's slider more sensitive in some parts of the range than in others."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+notes = "Checked in the M9 planning pass: a `.glyphs` file stores the parameter per axis tag as a dictionary from external to internal value (Oswald: 700 to 710), and both oracles write `avar` from normalised external to normalised internal coordinates with `fvar` in external coordinates (Oswald: wght 200 to 700)."
 
 [[behavior]]
 id = "axisMappings.perAxisOnly"
@@ -1147,6 +1205,9 @@ milestone = "M9"
 summary = "Changes one control point, by typing in the list or by dragging it vertically in the graph. Points must stay in increasing order on both coordinates for the mapping to be valid; the editor's reaction to a violation is not described."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+guesses = [
+  "A change that breaks the increasing order on either coordinate is refused with a message and changes nothing; settle by dragging a point past its neighbour in the reference app.",
+]
 
 [[command]]
 id = "axisMappings.nudgePoint"
@@ -1160,6 +1221,9 @@ milestone = "M9"
 summary = "Inside the Axis Mappings dialog the Up, Down, Left and Right keys move the selected control point; holding Shift moves in steps of 10 and Cmd in steps of 100. The base step (presumably 1) and which key pair moves the internal and which the external coordinate are not stated, so no global shortcut is recorded."
 ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
+guesses = [
+  "The base step is 1 unit, Up and Down move the external value and Left and Right the internal value; settle in the reference app's Axis Mappings dialog.",
+]
 
 [[command]]
 id = "axisMappings.removePoint"
@@ -1210,6 +1274,7 @@ milestone = "M9"
 summary = "By default the style attributes are derived from the instances: their names and axis coordinates are analysed to obtain per-axis value names. The derivation algorithm is not documented and must be designed and compared against the reference."
 ref = "Interpolation › Variable Font Options › Style Attributes Table"
 status = "handbook"
+notes = "Both oracles reproduce the derivation from the exported fonts they observed: fontc `glyphs2fontir/src/stat.rs` follows glyphsLib `builder/stat.py` (both Apache-2.0, no note of being derived from the reference app's source). FontCraft ports fontc's (docs/plans/M9.md § 3)."
 
 [[behavior]]
 id = "stat.manualOverrides"
@@ -1267,6 +1332,9 @@ milestone = "M9"
 summary = "Writes the selected row's value from the left master to the right one (a font-info field, a metric, a glyph's outline, or a kerning pair), removing that difference."
 ref = "Interpolation › Working with Multiple Fonts › Compare Fonts"
 status = "handbook"
+guesses = [
+  "For a glyph row, Use Left copies the master layer's shapes, anchors and width; the copy is one undo step in the receiving document only. Settle in the reference app's Compare Fonts window.",
+]
 
 [[command]]
 id = "compareFonts.useRight"
@@ -1306,6 +1374,9 @@ milestone = "M9"
 summary = "Opens the Compare Family window, a table with one column per open document and one row per glyph, for checking one glyph attribute across a family kept in separate files."
 ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "handbook"
+guesses = [
+  "Each column shows the document's first master; settle by opening Compare Family on documents with several masters.",
+]
 
 [[panel]]
 id = "window.compareFamily"

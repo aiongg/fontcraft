@@ -619,6 +619,9 @@ milestone = "M9"
 summary = "VARIABLE is the only symbol the handbook documents; nesting, `#else` and other symbols are not mentioned. FontCraft accepts only the two documented forms and reports anything else as an error."
 ref = "Feature Code › Conditional Feature Code"
 status = "inferred"
+guesses = [
+  "Only `#ifdef VARIABLE` and `#ifndef VARIABLE` blocks are read, without nesting or `#else`; an unterminated `#ifndef VARIABLE` runs to the end of the code, as glyphsLib reads it. Settle with nested blocks in the reference app.",
+]
 
 [[behavior]]
 id = "featureCode.condition"
@@ -656,9 +659,13 @@ status = "handbook"
 id = "featureCode.conditionScope"
 area = "features"
 milestone = "M9"
-summary = "How far a condition reaches (to the next condition, the end of the feature or `#endif`) and which coordinate scale its limits use are not stated; FontCraft applies it up to the next `condition` or the end of the enclosing block and reads limits in the same axis coordinates as the variable GPOS syntax."
+summary = "A condition applies to the rules that follow it up to the next `condition` statement, a bare `condition;` (which returns to unconditional rules) or the end of the feature; a condition inside a lookup block is an error. Its limits are internal (design) coordinates, mapped to external ones before compiling."
 ref = "Feature Code › Conditional Feature Code"
-status = "inferred"
+status = "docs"
+notes = "Taken in the M9 planning pass from glyphsLib 6.15.0 `builder/variable_features.py` (Apache-2.0), which converts this syntax for fontmake; the handbook does not say. No corpus source uses it."
+guesses = [
+  "The scope and coordinate rules follow glyphsLib's converter; settle with a feature holding two conditions and a bare `condition;` in the reference app.",
+]
 
 [[behavior]]
 id = "featureCode.conditionLowering"
@@ -666,7 +673,8 @@ area = "features"
 milestone = "M9"
 summary = "A condition and its rules are lowered to a `conditionset` plus a `variation <tag> <set> { ... }` block for the compiler; fea-rs supports that pair."
 ref = "fea-rs src/parse/grammar/variations.rs"
-status = "inferred"
+status = "docs"
+notes = "glyphsLib 6.15.0 lowers it the same way, with overlapping regions split into non-overlapping ones most specific first (fontTools `overlayFeatureVariations`); an inverted range is dropped with a warning."
 
 [[behavior]]
 id = "featureCode.variablePos"
@@ -706,7 +714,8 @@ area = "features"
 milestone = "M9"
 summary = "The syntax is lowered to the standard variable value form `(default tag=coord:value ...)`; for a static instance the value is interpolated to one number."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md §2.e.iv; Feature Code › Variable GPOS"
-status = "inferred"
+status = "docs"
+notes = "glyphsLib 6.15.0 lowers it to feaLib's variable scalar with user coordinates and rounds each value to a whole number."
 
 [[behavior]]
 id = "featureCode.delete"

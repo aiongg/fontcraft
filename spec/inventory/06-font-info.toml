@@ -547,6 +547,10 @@ milestone = "M9"
 summary = "Appends a design axis, as the plus button beside the Axes heading does. Every master and instance gains a coordinate for the new axis; the default name, tag and coordinate of a new axis are not stated."
 ref = "Font Info › Font › Axes"
 status = "handbook"
+guesses = [
+  "A new axis is named Weight with tag wght when the font has no such axis, else a private axis `Axis N` with tag `AXSN`; settle by pressing the plus button in the reference app.",
+  "Existing masters, instances and virtual masters get coordinate 0 on the new axis, and intermediate layers inherit it from their master; settle in the reference app's Masters tab after adding an axis.",
+]
 
 [[command]]
 id = "font.axes.set"
@@ -573,6 +577,9 @@ milestone = "M9"
 summary = "Deletes an axis through the minus button of its row or Cmd+Delete on the selected row. What happens to the stored master and instance coordinates of that axis is not described."
 ref = "Font Info; Font Info › Font › Axes"
 status = "handbook"
+guesses = [
+  "Removing an axis drops its coordinate from every master, instance, virtual master, intermediate layer and alternate range; an alternate range that becomes empty on every axis stays an alternate layer `[]`. Settle in the reference app.",
+]
 
 [[command]]
 id = "font.axes.listPredefined"
@@ -719,6 +726,9 @@ ref = "Font Info › Masters › Custom Parameters"
 status = "handbook"
 
 # ───────────────────────────── Masters tab ─────────────────────────────
+guesses = [
+  "A parameter interpolates when its value is a number, or a list of numbers of the same length, on every master; other values are taken from the origin master. Settle with a parameter that is text on one master in the reference app.",
+]
 
 [[panel]]
 id = "fontInfo.masters"
@@ -814,6 +824,9 @@ milestone = "M9"
 summary = "Imports one or more masters from other open fonts. The UI lists every master of every open document and imports the chosen ones on OK; Cancel imports nothing. How glyphs missing on either side are handled is not described."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
+guesses = [
+  "Glyphs missing in the imported master get an empty layer for it; glyphs only the other font has are not added; axis coordinates come from the other font's master by axis tag, 0 for tags it lacks. Settle by adding a master from a font with different glyphs in the reference app.",
+]
 
 [[panel]]
 id = "fontInfo.addOtherFont"
@@ -1805,6 +1818,7 @@ milestone = "M9"
 summary = "An instance whose coordinates lie inside the range covered by masters is interpolated; one outside is extrapolated. With masters at weight 40 and 120, weight 80 interpolates while 20 and 150 extrapolate."
 ref = "Font Info › Exports › Axes Coordinates"
 status = "handbook"
+notes = "fontmake does not extrapolate: ufo2ft's instantiator normalises the location with fontTools' `normalizeLocation`, which clamps to the axis range. How FontCraft treats extrapolated static instances is the owner's decision (docs/plans/M9.md § 7, question 6)."
 
 [[behavior]]
 id = "fontInfo.styleLinking.sameFamily"
@@ -2455,6 +2469,9 @@ ref = "Font Info › Other Settings › Font Type"
 status = "handbook"
 
 # ───────────────────────────── Notes tab ─────────────────────────────
+guesses = [
+  "Default and Variable both use the variable-font model (fontTools' VariationModel); they agree on one axis and on full grids, and the Multiple Master model of the reference is not documented for other setups. Settle by comparing an instance of an irregular two-axis setup under both settings in the reference app (docs/plans/M9.md § 8).",
+]
 
 [[panel]]
 id = "fontInfo.notes"

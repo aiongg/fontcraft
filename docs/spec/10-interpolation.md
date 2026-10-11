@@ -292,8 +292,8 @@ Rules:
 - A master layer may carry the range itself. Its partner is an extra Alternate layer with both
   bounds empty, labelled `[]`; the master layer then holds the alternate drawing and `[]` the normal
   one. Exports are identical either way (`alternateLayer.onMasterLayer`).
-- Range edges: assumed min inclusive, max exclusive, as in feature-code conditions
-  (`alternateLayer.rangeSemantics`, inferred).
+- Range edges: both inclusive, as fontTools evaluates designspace rules and as OpenType feature
+  variations store them (`alternateLayer.rangeSemantics`, inferred; a guess until observed).
 
 Export:
 
@@ -545,45 +545,93 @@ exact STAT formats the reference emits.
 
 ## Open questions
 
+Answers from the M9 planning pass follow each question (`docs/plans/M9.md` § 2 and § 3 give the
+evidence). "Guess" means a choice of ours recorded in the row's `guesses`; § 8 of the plan lists
+the check in the reference app that would settle it.
+
 1. Default feature for alternate-layer switching: the chapter says `rlig`, the appendix says
    `rvrn`. Observe an export.
+   **Oracles:** fontc and glyphsLib both default to `rvrn`. The default is the owner's decision
+   (`docs/plans/M9.md` § 7, question 2).
 2. Direction of the mapping wording: the chapter calls internal coordinates the master values and
    external the result of mapping, and also says external values are "used for interpolation".
    We assume the OpenType sense (user picks external; font maps it to internal). Confirm with an
    exported `avar`.
+   **Answered (format and oracles):** the file stores Axis Mappings per axis from external to
+   internal value, and both oracles write `avar` from normalised external to normalised internal
+   (Oswald: external 700 maps to the master at internal 710; `fvar` runs 200 to 700).
 3. Alternate-layer range edges: inclusive or exclusive at min and max; behaviour of an instance
    exactly on a bound.
+   **Guess:** both inclusive, as fontTools' rule evaluation and OpenType feature variations.
 4. How Axis Location and Axis Mappings combine when both are present (fontc prefers Axis
    Mappings and warns), and whether Axis Location on instances feeds the map or only `fvar` and
    `STAT`.
+   **Oracles:** Axis Mappings wins, then Axis Location when every master has it, then the
+   instances' locations, then identity (fontc `glyphs-reader`; the model's `axes::mapping`
+   already follows glyphsLib's equivalent). An instance's Axis Location gives its external
+   coordinate (glyphsLib `get_user_loc`, the model's `axes::instance_user_value`), which feeds
+   the map only when the masters set no mapping of their own. Built as the oracles do; M9.4
+   confirms it on fontc's `AxisLocation*` and `InstanceMapping*` test sources.
 5. `File › Generate Instances`: one new document per instance, or one document with all
    instances as masters; whether special layers, kerning and features are carried along.
+   **Guess:** one document per instance (the Several Fonts section says a file per instance), with
+   kerning and features and no special layers.
 6. `Add Other Master`: handling of glyphs missing on either side and of axis coordinates.
+   **Guess:** missing glyphs get empty layers; coordinates matched by axis tag.
 7. Value given to existing masters, instances and special layers when an axis is added; what
    happens to them when an axis is removed or reordered.
+   **Guess:** 0 on a new axis (intermediate layers inherit); removal drops the coordinate;
+   reordering permutes every list.
 8. Contents of the predefined axis list.
+   **Ours:** the registered OpenType axes (ital, opsz, slnt, wdth, wght) plus the axes the
+   registry lists as proposed (`font.axes.listPredefined` returns them); a guess on the extra
+   entries until observed.
 9. Shape Order window: layout, whether it includes special layers, selection and drag rules.
+   Open; the M3 dialog stays, and the all-layers window is built from this note (blocks nothing).
 10. Master Compatibility view: colour palette, whether dragging works for start nodes and
     anchors as well as shapes, what "the angle of a segment" is measured from, and whether the
     20° threshold is fixed.
+    **Guess:** eight theme tints; shapes only are dragged; the chord angle; a fixed 20°.
 11. Whether compatibility is also required of intermediate layers against all masters or only
     their neighbours, and how the "only masters needed by an instance" rule treats them.
+    **Guess:** against every master layer of the glyph.
 12. How to revert a layer from Intermediate or Alternate (unticking the menu item is assumed).
+    **Guess:** unticking the item; `layers.clearIntermediate` and `layers.clearAlternate`.
 13. Whether several alternate ranges per glyph may overlap, and which wins.
+    **Oracles:** allowed; overlapping regions are split so the most specific (smallest) region
+    applies, as fontTools' `overlayFeatureVariations` does. One corpus glyph has overlapping
+    ranges (`BracketTestFontKerning`, glyph `x`).
 14. HOI: where curve data is stored (per node, per layer pair, per axis); the exact curve
     mathematics for the three types; the rotation approximation; how curves are compiled into a
     variable font; interplay with intermediate layers; which key moves knobs.
+    **Partly answered (format):** per node, keyed by axis tag, in the lower node of a span
+    (GlyphsSDK version 4 description: `ip`, `rc`/`rd`, `tl`/`tu`/`al`/`au`). The mathematics,
+    the variable encoding and the keys stay open; the milestone is the owner's decision
+    (`docs/plans/M9.md` § 7, question 5).
 15. Axis Mappings dialog: base arrow-key step, which arrow pair moves which coordinate, whether
     internal values of a point are editable and constrained to master positions, what happens
     with non-monotonic points.
+    **Guess:** step 1; Up and Down change the external value; internal values editable, not tied
+    to masters; a change that breaks the order is refused.
 16. STAT derivation from instance names: the algorithm, which axis value formats are written,
     how range bounds are chosen, treatment of names that combine several axes.
+    **Oracles:** both reproduce the reference's output (fontc `glyphs2fontir/src/stat.rs`,
+    glyphsLib `builder/stat.py`); FontCraft ports fontc's.
 17. Whether `Variable Font Origin` and `Virtual Master` may also sit on a variable font setting.
+    **Guess:** font level only, as both oracles read them.
 18. Extrapolation limits: whether the reference clamps or warns, and how extrapolation behaves
     with more than two masters on an axis and with the Variable interpolation model.
+    **Handbook and oracle differ:** the handbook extrapolates static instances; fontmake clamps.
+    The owner's decision (`docs/plans/M9.md` § 7, question 6); with more masters, the variation
+    model's outermost regions extend.
 19. Compare Fonts: whether identical rows are listed, how outline differences are shown, what
     Use Left/Right copies for a glyph row (outline only, or metrics and anchors too), undo scope
     across two documents.
+    **Guess:** differing rows only; shapes, anchors and width copied; one undo step in the
+    receiving document.
 20. Compare Family: which master of each document is shown, column order, and what "relevant
     information" means for the All filter.
+    **Guess:** the first master; documents in the order they were opened; a glyph with a
+    non-empty value in any document.
 21. `Re-Interpolate`: exact label, location and scope (recalled, absent from the chapter).
+    **Verified absent from the handbook copy:** the row is our own command (`own = true`).
