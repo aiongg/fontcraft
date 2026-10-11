@@ -383,8 +383,11 @@ impl Reader {
             if class == 0 || class2.get(g) != class || self.listed.get(usize::from(second)) == Some(&self.subtable_stamp) {
                 continue;
             }
-            let Some(members) = seconds.get_mut(usize::from(class)) else { continue };
-            members.push(second);
+            // A second class past the class count makes a shaper skip the subtable for that pair:
+            // the glyph is in no class, class 0 included.
+            if let Some(members) = seconds.get_mut(usize::from(class)) {
+                members.push(second);
+            }
             if let Some(slot) = self.listed.get_mut(usize::from(second)) {
                 *slot = self.subtable_stamp;
             }

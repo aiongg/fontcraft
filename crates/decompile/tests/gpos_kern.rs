@@ -341,6 +341,38 @@ fn shared_script_and_language_records_spend_the_budget() {
     assert!(d.warnings.iter().any(|w| w.contains("script and feature lists are too large")), "{:?}", d.warnings);
 }
 
+/// A second glyph whose class is past the class count gets nothing from the class table: a
+/// shaper skips the subtable for that pair, so the glyph is not part of class 0.
+#[test]
+fn a_second_class_past_the_count_is_not_class_0() {
+    let (ttf, names) = base_font();
+    let g = |n: &str| gid(&names, n).to_u16();
+    let (mut v, mut w) = ((g("V"), 1), (g("W"), 5));
+    if w.0 < v.0 {
+        std::mem::swap(&mut v, &mut w);
+    }
+    let words: Vec<u16> = vec![
+        1, 0, 10, 30, 44, // header: version, script list, feature list, lookup list
+        1, 0x4446, 0x4C54, 8, 4, 0, 0, 0xFFFF, 1, 0, // DFLT with one feature
+        1, 0x6B65, 0x726E, 8, 0, 1, 0, // kern: lookup 0
+        1, 4, 2, 0, 1, 8, // one pair lookup, one subtable
+        2, 20, 4, 0, 26, 30, 1, 2, // format 2, x advances, one first class, two second classes
+        (-10i16) as u16, (-30i16) as u16, // class 0 against classes 0 and 1
+        1, 1, g("A"), // coverage
+        2, 0, // first classes: all class 0
+        2, 2, v.0, v.0, v.1, w.0, w.0, w.1, // second classes: V is 1, W is 5
+    ];
+    let gpos: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+    let base = FontRef::new(&ttf).unwrap();
+    let bytes = write_fonts::FontBuilder::new().add_raw(WTag::new(b"GPOS"), gpos).copy_missing_tables(base).build();
+    let doc = decompile(&bytes, None).unwrap().font;
+    let index = KernIndex::new(&doc);
+    let value = |a: &str, b: &str| index.lookup(Direction::Ltr, "m01", a, b).unwrap().map_or(0.0, |p| p.value);
+    assert_eq!(value("A", "V"), -30.0);
+    assert_eq!(value("A", "o"), -10.0);
+    assert_eq!(value("A", "W"), 0.0);
+}
+
 fn fonts(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for e in entries.flatten() {
