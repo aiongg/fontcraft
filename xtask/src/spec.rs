@@ -275,6 +275,10 @@ pub fn load(root: &Path) -> Result<Inventory, Vec<String>> {
                 if fields.contains_key("own") && !flag("own") {
                     err("`own` must be true or false".into());
                 }
+                // The Custom Parameter picker's text where the summary names a vendor.
+                if fields.contains_key("picker") && (kind != "parameter" || s("picker").trim().is_empty()) {
+                    err("only a parameter has `picker`, a non-empty string".into());
+                }
                 if fields.contains_key("context") && kind != "command" {
                     err("only a command has `context`".into());
                 }

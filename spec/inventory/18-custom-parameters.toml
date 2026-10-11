@@ -39,6 +39,9 @@ summary = "UFO-derived parameter names are accepted both in the full UFO spellin
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. The compiler reads both spellings already for the names it handles (M2, crates/compile/src/info.rs); the catalogue lists every alias so the picker, `describe` and the compiler share one table. M7 plan § 4: M7.2."
+guesses = [
+  "A parameter added under another spelling is stored under the catalogue's spelling (the short name), and set and remove find rows of either spelling; the saved file of the observe step settles which spelling the reference app keeps.",
+]
 observe = [
   "In font A (m7-one), add the parameter `description`, then search the picker for `openTypeNameDescription`: note which spelling the list shows and which the saved file uses.",
 ]
@@ -54,6 +57,9 @@ summary = "Adds an OpenType glyph class at export. The value is the class name w
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A leading @ on the class name is dropped, and the white space after the semicolon is not part of the code (glyphsLib's split); exporting with the parameter in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Add Feature"
@@ -604,6 +610,9 @@ summary = "List of glyph names that are always exported, regardless of each glyp
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.9."
+guesses = [
+  "Export Glyphs accepts the names, wildcards and queries of Remove Glyphs and applies after Rename Glyphs, to the names glyphs are exported under; exporting a renamed glyph in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Export kern Table"
@@ -615,9 +624,11 @@ effect = "other"
 summary = "Adds an old-style kern table alongside GPOS kerning, for TrueType-flavoured output only. Group kerning is expanded to every glyph pair, so an unsubsetted font can overflow the table; intended only for legacy software."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.11."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. Built in compile/src/kern_table.rs from the master's kerning after the export's glyph renames and removals. M7 plan § 4: M7.11."
 guesses = [
   "The table is version 0 with one format 0 subtable per run of at most 10,920 pairs (the subtable's 16-bit length), class pairs expanded to every member pair, exceptions overriding, zero pairs left out, only the default (horizontal) kerning of the exported master; pairs past 65,535 in total are dropped with a warning; an export with the parameter in the reference app settles it.",
+  "When the table is full, the pairs kept are those found first in lookup order (glyph–glyph exceptions, then glyph–group, group–glyph, group–group), so exceptions survive; an export of a font past the limit in the reference app settles it.",
+  "A CFF export with the parameter on writes no kern table and reports it in a warning; an OTF export with the parameter in the reference app settles it.",
 ]
 observe = [
   "In font C (m7-export), export with Export kern Table on, including the A/V class pair; read the exported TTF with ttx: note the kern table's format and its pairs.",
@@ -788,8 +799,10 @@ effect = "export-filter"
 summary = "Applies a filter or app function to the instance's outlines at export, after decomposition; the value is the filter name followed by semicolon-separated arguments. Built-ins: AddExtremes, Autohinting, HatchOutlineFilter, OffsetCurve, RemoveOverlap, Roughenizer, RoundCorner, RoundedFont, Transformations (argument syntax in docs/spec/18-custom-parameters.md); `include:` or `exclude:` plus glyph names limits the glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on masters and instances, not on the font, and loads only filters that exist in ufo2ft under that name (Transformations works; RemoveOverlap, AddExtremes, RoundCorner and OffsetCurve are skipped with an error); include: and exclude: work; fontc ignores it. FontCraft runs the handbook's filter names through the M3.12 filter registry, on instances and masters. M7 plan § 4: M7.10."
+notes = "fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on masters and instances, not on the font, and loads only filters that exist in ufo2ft under that name (Transformations works; RemoveOverlap, AddExtremes, RoundCorner and OffsetCurve are skipped with an error); include: and exclude: work; fontc ignores it. FontCraft (M7.10) runs the handbook's filter names through the M3.12 filter registry; the strings of the font, the master and the instance all run, in that order, at most 64 with PreFilter."
 guesses = [
+  "Locked glyphs and locked paths are filtered at export like any other, since a lock guards editing; a Filter on a locked glyph in the reference app settles it.",
+  "Before decomposing, each composite takes the anchors its components pass on, so mark attachment is kept; reading the mark feature of a filtered export from the reference app settles it.",
   "The filter runs on every glyph of the instance with its components decomposed first, so a TrueType export of an instance with a Filter has no composites; a Transformations Filter on an instance with a composite in the reference app settles it.",
   "A Filter on a master applies to every export of that master; on the font it applies to every export, which fontmake ignores but no source forbids; the reference app's picker settles where it may be added.",
 ]
@@ -975,9 +988,10 @@ effect = "other"
 summary = "References another source file; glyphs it has that the host lacks appear in the host as if copied, in layer and master order, visible and typeable but locked. Used to split work across people or share smart components. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12. 3 corpus sources (the GlyphsSDK samples) use it."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12. 3 corpus sources (the GlyphsSDK samples) use it; their value is a dictionary whose `Path` names the file (`files/LinkedFontv3.glyphs`, beside the samples), and the version 2 sample's dictionary is empty. FontCraft also reads a plain string."
 guesses = [
   "The path is relative to the host file's folder unless absolute; the imported glyphs are read when the host opens and before each export, shown locked, never saved into the host; a missing or unreadable file is a warning on opening and at export, not an error; the reference app settles the path form and the missing-file case.",
+  "A linked glyph's layers go to the host master with the same id, else the one at the same position, and layers of other masters are left out; the linked file's kerning, features and groups are not imported; the reference app settles both with font B (m7-two) linked into font A (m7-one).",
 ]
 observe = [
   "Add Import Font naming font B (m7-two) by relative path, then by absolute path, then rename font B (m7-two)'s file: note which glyphs are shown, whether they are locked, and the message for the missing file.",
@@ -993,9 +1007,10 @@ effect = "other"
 summary = "References a master in another source file so it behaves like a master of the host. Both files need mutually compatible axis values, and each linked master takes a parameter of its own. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12. No sample file uses it."
 guesses = [
-  "The value is the other file's path, a semicolon and the master's name, resolved as Import Font resolves paths; the linked master is read-only and its glyphs' layers are not saved into the host; the reference app settles the value syntax.",
+  "The value is the other file's path, a semicolon and the master's name or id, or a dictionary with `Path` and `Master` (the form Import Font's samples suggest), resolved as Import Font resolves paths; with no master named, the file's first master; the reference app settles the value syntax.",
+  "The linked master keeps its id unless the host uses it (then it gets a fresh one), takes its axis values by axis tag, its metric and stem values by definition, its layers for every glyph the host has and its kerning; its layers can be edited but are not saved into the host; the reference app settles whether it is read-only.",
 ]
 observe = [
   "Add Import Master naming font B (m7-two)'s Bold master: note the master added and what is saved in the host file.",
@@ -1134,7 +1149,10 @@ effect = "features"
 summary = "Changes the generated cjct feature so conjuncts do not stack vertically, for user-interface fonts with limited vertical room. The source says it is only implemented for Oriya."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft's cjct writes ligature rules onto named conjunct glyphs only and never stacks below forms, so the parameter changes nothing (`features::auto::indic`)."
+guesses = [
+  "The parameter has no effect because the generated cjct never stacks conjuncts; Update in the reference app on an Oriya font with and without the parameter would show what it changes.",
+]
 
 [[parameter]]
 name = "licenses"
@@ -1212,6 +1230,7 @@ area = "features"
 milestone = "M12"
 effect = "features"
 summary = "When checked, the compiled layout tables are made comparable to makeotf output, for feature code written against makeotf behaviour or for applications that rely on it."
+picker = "When on, the compiled layout tables match the output of the classic feature compiler, for feature code written against its behaviour or for applications that rely on it."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Moved to M12 by the M8 planning pass, with the makeotf-compatible compile mode (`compile.makeotfReleaseMode` and the other `docs/spec/40-compile.md` § 1.11 rows): the handbook does not say which layout differences it removes, and fea-rs has no such mode."
@@ -1363,6 +1382,10 @@ summary = "Five semicolon-separated values: design size in decipoints; subfamily
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The values are whole decipoints from 0 to 65535 and the code is a `size` feature added at the end of the list, replacing the code of a `size` feature the font already has; exporting with the parameter in the reference app and reading GPOS settles it.",
+  "The menu name is written for Windows (English) and, when it is plain ASCII, for the Mac (Roman, English); a subfamily of 0 writes no range and no name, as the feature file specification asks; the exported name table of the reference app settles it.",
+]
 
 [[parameter]]
 name = "Optimize Variable Deltas"
@@ -1397,9 +1420,11 @@ effect = "other"
 summary = "Number of font units equal to one point, which sets the scale of exported PDFs and of artwork copied to the clipboard for use in drawing applications. The source labels it a float but describes an integer."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. FontCraft has no PDF export; the ratio scales the SVG that edit.copy puts on the clipboard. M7 plan § 4: M7.11. 2 corpus sources use it."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. FontCraft has no PDF export; the ratio scales the SVG flavour that edit.copy and edit.cut return. M7 plan § 4: M7.11. 2 corpus sources use it."
 guesses = [
-  "The copied SVG gives coordinates in points, font units divided by the ratio, and declares its width and height in pt; without the parameter one unit is one point; copying into a drawing application from the reference app settles the scale.",
+  "The copied SVG gives coordinates in points, font units divided by the ratio, and declares its width and height in pt; without the parameter the SVG keeps one font unit per user unit with no unit on its size; copying into a drawing application from the reference app settles the scale.",
+  "The master's parameter wins over the font's, and a ratio that is not a number from 0.001 to 1,000,000 is ignored; copying from a font with the parameter on a master in the reference app settles it.",
+  "Only the SVG flavour is scaled: the clipboard fragment that edit.paste reads keeps font units, so copy and paste inside the app keeps the size; pasting a drawing copied from the reference app back into it settles what its own paste does.",
 ]
 observe = [
   "In font A (m7-one), set Point To Unit Ratio 10, copy glyph A and paste into a drawing application: note the pasted size.",
@@ -1424,6 +1449,7 @@ area = "font-info"
 milestone = "M7"
 effect = "naming"
 summary = "Sets name ID 6. Must be ASCII without spaces and, for compatibility, under 30 characters (Adobe's limit is 29), built as family name, hyphen, style words; long names should use Adobe's standard style abbreviations (list in docs/spec/18-custom-parameters.md)."
+picker = "Sets name ID 6: ASCII without spaces and under 30 characters, built as family name, hyphen and style words; long names use the standard PostScript style abbreviations."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Written to name ID 6 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does; fontc reads the font's only. M7 plan § 4: M7.8."
@@ -1474,7 +1500,7 @@ effect = "export-filter"
 summary = "Same value syntax as Filter, applied before decomposition. Only works for static fonts."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it as Filter (master and instance level, ufo2ft filter names only); fontc ignores it. M7 plan § 4: M7.10."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it as Filter (master and instance level, ufo2ft filter names only); fontc ignores it. FontCraft (M7.10) runs it on the target master's layers before Scale to UPM, with components in place."
 guesses = [
   "On a variable font setting PreFilter is skipped with a warning, not an error; the reference app settles it.",
 ]
@@ -1562,6 +1588,9 @@ summary = "List of `glyphname=hex` entries; several code points are comma-separa
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on instances (a code point moves from its previous owner; `name=` clears); fontc ignores it. FontCraft follows the handbook at any level. M7 plan § 4: M7.9."
+guesses = [
+  "Reencode Glyphs applies after Rename Glyphs, to the names glyphs are exported under, and when two lines give the same code point the later line wins; the reference app settles both.",
+]
 observe = [
   "In font C (m7-export), export with Reencode Glyphs `a=0061,0251` and `space=`; read the exported TTF with ttx: note the cmap entries of a and space.",
 ]
@@ -1589,6 +1618,9 @@ summary = "List of feature tags not to export, for an unwanted auto-generated fe
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "Besides a list, one text with the names separated by commas or line breaks is accepted, and every entry of a listed name is left out; the reference app's parameter editor settles which forms it stores.",
+]
 
 [[parameter]]
 name = "Remove Glyphs"
@@ -1600,10 +1632,11 @@ effect = "export-filter"
 summary = "One entry per line: a full glyph name, a name with `*` wildcards, or a `key=value` query on glyph properties (name, unicode, note, script, category, subCategory, production, metrics keys, kerning groups, colorIndex, countOfLayers, mastersCompatible, export, colour and special-layer flags). Matching glyphs are not exported and automatic features follow the reduced glyph set."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours exact names on instances only (wildcards such as `*.sc` remove nothing; it subsets after compiling, which also drops the glyph's cmap entry); fontc ignores it. FontCraft follows the handbook: names, wildcards and key=value queries at any level. 5 corpus sources use it, all with exact names on instances; their glyph sets are compared with fontmake's (M7 plan § 5). M7 plan § 4: M7.9."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours exact names on instances only (wildcards such as `*.sc` remove nothing; it subsets after compiling, which also drops the glyph's cmap entry); fontc ignores it. FontCraft follows the handbook: names, wildcards and key=value queries at any level; `export=0` also drops components whose base glyph does not export, as documented. `colorIndex` entries are skipped with a warning until the export can remove the shapes of one palette colour. 5 corpus sources use it, all with exact names on instances; their glyph sets are compared with fontmake's (M7 plan § 5). M7 plan § 4: M7.9."
 guesses = [
   "A removed glyph that a kept composite uses is decomposed into that composite, as non-exported glyphs are (M2 preflight); removing the base of a composite in the reference app settles it.",
-  "Queries compare text values exactly except for `*`, are case-sensitive, and an unknown key is a warning that matches nothing; the reference app settles case and unknown keys.",
+  "Queries compare text values exactly except for `*`, are case-sensitive, and an unknown key is a warning that matches nothing; `unicode` compares hexadecimal text in either case, and a glyph without the property compares as empty text; the reference app settles case, empty values and unknown keys.",
+  "Remove and Keep Glyphs apply after Rename Glyphs, to the names glyphs are exported under, as the handbook's recipe for replacing a glyph needs and as fontmake does; the reference app settles it.",
 ]
 observe = [
   "In font C (m7-export), export an instance with Remove Glyphs `A` (A is the base of Aacute); read the exported TTF with ttx: note whether Aacute is decomposed, removed, or kept with a broken component.",
@@ -1643,9 +1676,10 @@ effect = "export-filter"
 summary = "List of `oldname=newname` entries (for example `g.single=g`); the two glyphs trade names. Composites using them and automatic features are updated, and the glyphs' export flags are swapped too, so the unwanted one must be non-exporting or handled with Export Glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on instances: it swaps the outlines and keeps the code points; fontc ignores it. FontCraft follows the handbook: names, export flags, composites and kerning follow the swap. M7 plan § 4: M7.9."
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on instances: it swaps the outlines and keeps the code points; fontc ignores it. FontCraft follows the handbook for the export flags, which go with the glyph (the drawing now called `g` exports only if `g.single` did, or with Export Glyphs), and fontmake for code points, composites and kerning. M7 plan § 4: M7.9."
 guesses = [
-  "An entry naming a glyph the font lacks renames the existing glyph to the new name, with a warning; an entry whose old name is missing is skipped with a warning; the reference app settles both.",
+  "An entry naming a glyph the font lacks renames the existing glyph to the new name, keeping its code points, with a warning; an entry whose old name is missing is skipped with a warning; the reference app settles both.",
+  "Code points and production names stay with the names while the drawing, export flag and kerning go with the glyph, and composites keep the drawing they used (fontmake rewrites component references), although the handbook's Decompose Glyphs entry suggests that composites show the swapped drawing; check 38 in the reference app settles it.",
 ]
 observe = [
   "In font C (m7-export), export with Rename Glyphs `g.single=g`, then with `a=nonexistent`; read the exported TTF with ttx: note the swap's effect on composites and export flags, and what happens to the missing name.",
@@ -1674,6 +1708,10 @@ summary = "Value is the four-letter feature tag, a semicolon, then the new code.
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "Only the first feature of that tag is replaced, its labels are kept and it counts as hand-written from then on, so a replaced `kern` still gets the generated kerning after it; exporting a font with a stylistic-set name and a replaced `kern` in the reference app settles it.",
+  "A Replace parameter that names no entry does nothing, without a message, as the handbook limits these parameters to existing entries and glyphsLib skips them; the reference app's export report settles it.",
+]
 
 [[parameter]]
 name = "Replace Prefix"
@@ -1695,6 +1733,7 @@ area = "compile"
 milestone = "M12"
 effect = "table-value"
 summary = "One of Adobe-CNS1-6, Adobe-GB1-5, Adobe-Japan1-3, Adobe-Japan1-6, Adobe-Korea1-2 or Adobe-Identity-0. With Adobe-Identity-0 the GSUB table is built from the font's own features; with the others Adobe's cmap and GSUB resources for that collection are used."
+picker = "The registry, ordering and supplement of a CID-keyed font, one of the six standard character collections (CNS1, GB1, Japan1-3, Japan1-6, Korea1, Identity). Identity builds GSUB from the font's own features; the others use the collection's cmap and GSUB resources."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Moved from M7 to M12 by the M7 planning pass, with export.cidMapping: CID-keyed output is M12's (compile.cidKeyedFonts, compile.cidCmapResources), where the AFDKO tools are the oracle; neither fontc nor fontmake reads the parameter."
@@ -1744,6 +1783,9 @@ summary = "Integer target UPM; everything in the font is scaled to it at export,
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. The scaling is font.info.scaleToUnitsPerEm's, run on a copy of the font before the instance is built. M7 plan § 4: M7.4 (scaling), M7.10 (the export step)."
+guesses = [
+  "The instance's value wins over the master's and the font's; a value that is not a whole number from 16 to 16384 is skipped with a warning, and a scaling that cannot be done refuses the export; a Scale to UPM on a master and another on its instance in the reference app settle the first part.",
+]
 observe = [
   "In font C (m7-export), export with Scale to UPM 2048; read the exported TTF with ttx: note the head, outline, hmtx, kerning, OS/2 and post values and how they were rounded.",
 ]
@@ -2203,7 +2245,7 @@ ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.9."
 guesses = [
-  "An exported glyph without code points whose name is an Arabic letter's name with .isol, .init, .medi or .fina, or a ligature of Arabic letters (lam_alef-ar), gets the presentation-form code point Unicode's compatibility decomposition gives for that letter and form (FB50–FDFF, FE70–FEFF); glyphs with code points keep them; only cmap changes; an export from the reference app settles which glyphs it covers.",
+  "An exported glyph without code points gets the legacy code point the glyph database records for its name (`unicodeLegacy`: beh-ar.init FE91, lam_alef-ar FEFB) when it lies in FB50–FDFF or FE70–FEFF and no other glyph has it; glyphs with code points keep them; only cmap changes; custom glyph data is not read for it; an export from the reference app settles which glyphs it covers.",
 ]
 observe = [
   "In font C (m7-export), export with Use Arabic Presentation Form Unicodes on; read the exported TTF with ttx: note the code points of beh-ar.init, beh-ar.medi, beh-ar.fina and lam_alef-ar, and whether anything besides cmap changes.",

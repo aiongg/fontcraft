@@ -441,8 +441,10 @@ pub struct Saved {
 
 /// Writes `font` to `path` in `format`. A single file is written atomically. A package writes
 /// only the files whose bytes differ from what is on disk, and removes glyph files the document
-/// no longer has.
+/// no longer has. Linked glyphs and masters (Import Font, Import Master) are left out.
 pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
+    let own = crate::linked::unlinked(font);
+    let font: &Font = &own;
     let mut losses = if format == SaveFormat::Native { Vec::new() } else { losses(font, format.families()) };
     if matches!(format, SaveFormat::Ufo | SaveFormat::Designspace) {
         losses.extend(ufo_layer_losses(font, format == SaveFormat::Designspace));

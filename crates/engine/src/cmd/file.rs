@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. warnings lists what reading a compiled font left out and the glyph data files that could not be used → {title, path, format, version?, glyphs, masters, viewOnly, warnings}",
+            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO, designspace or compiled font has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. warnings lists what reading a compiled font left out and the glyph data files that could not be used → {title, path, format, version?, glyphs, masters, viewOnly, aligned, warnings}",
             always,
             open
         ),
@@ -121,6 +121,8 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
         );
     }
     let (font, mut warnings) = crate::io::open(&path, face)?;
+    let font = crate::linked::resolve(&font, Some(&path), &mut warnings)?.unwrap_or(font);
+    let (font, aligned) = align_imported(s, font, &mut warnings);
     let glyph_data = crate::glyph_data::source_files(&path, &mut warnings);
     // Every reader checks the font it returns.
     s.push_document(font, Some(path.clone()));
@@ -139,9 +141,51 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let reply = json!({
         "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "format": format,
         "version": version, "glyphs": doc.font.glyphs.len(), "masters": doc.font.masters.len(), "viewOnly": save_format.is_none(), "warnings": warnings,
+        "aligned": aligned,
     });
     remember(s, &path);
     Ok(reply)
+}
+
+/// The user setting that keeps imported fonts out of automatic alignment.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) const DISABLE_ALIGNMENT_FOR_IMPORTED: &str = "user.disableAutomaticAlignmentForImportedFiles";
+
+/// What opening an imported font (UFO, designspace, compiled) does to its composites
+/// (`open.alignsCompositeMetrics`, `components.importedFilesDisableAutoAlignSetting`): with the
+/// user setting Disable Automatic Alignment for Imported Files on, the font's own Disable
+/// Automatic Alignment option is switched on, so its components stay where the file puts them;
+/// otherwise every composite is aligned, so its metrics follow its bases. A font whose own option
+/// is already on is left as read. `.fontcraft` and `.glyphs` sources store aligned positions and
+/// are not touched. Alignment that fails, or gives a font that does not pass the model's checks,
+/// leaves the font as read with a warning. Returns the font and how many glyphs alignment changed.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) fn align_imported(s: &Session, mut font: Font, warnings: &mut Vec<String>) -> (Font, usize) {
+    use fontcraft_model::SourceFormat;
+    if !matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Ufoz | SourceFormat::Designspace | SourceFormat::Binary) {
+        return (font, 0);
+    }
+    if s.settings().get_bool(DISABLE_ALIGNMENT_FOR_IMPORTED) == Some(true) {
+        if font.info.settings.disables_automatic_alignment != Some(true) {
+            std::sync::Arc::make_mut(&mut font.info).settings.disables_automatic_alignment = Some(true);
+        }
+        return (font, 0);
+    }
+    let before = font.clone();
+    let names: Vec<String> = font.glyphs.as_arcs().iter().map(|g| g.name.clone()).collect();
+    let aligned = match fontcraft_components::metrics::realign_glyphs(font, &names) {
+        Ok(aligned) => aligned,
+        Err(e) => {
+            warnings.push(format!("the composites were left as the file places them: {e}"));
+            return (before, 0);
+        }
+    };
+    if let Err(e) = aligned.check_changed(&before) {
+        warnings.push(format!("the composites were left as the file places them: {e}"));
+        return (before, 0);
+    }
+    let changed = aligned.glyphs.as_arcs().iter().zip(before.glyphs.as_arcs()).filter(|(a, b)| !std::sync::Arc::ptr_eq(a, b)).count();
+    (aligned, changed)
 }
 
 /// Puts a document just opened or saved first in the recent documents. The list is a

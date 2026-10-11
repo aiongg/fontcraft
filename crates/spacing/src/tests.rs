@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use fontcraft_model::plist::{Str, Value};
-use fontcraft_model::{Component, Font, Layer, Node, NodeKind, Param, Path, Shape};
+use fontcraft_model::{Alignment, Component, Font, Layer, Node, NodeKind, Param, Path, Shape};
 
 use crate::*;
 
@@ -425,4 +425,50 @@ fn italic_masters_measure_along_the_angle_through_half_the_x_height() {
     // At a height, the crossing moves along the angle to half the x-height.
     let (l, r) = sidebearings_at_height(&f, &o.layers[0], 500.0).unwrap().unwrap();
     assert!((l - (40.0 - lean)).abs() < 1e-9 && (r - (50.0 + lean)).abs() < 1e-9, "{l} {r}");
+}
+
+/// n.alt holds only a component of n, so alignment derives its width and side sidebearings: keys
+/// there are not evaluated, scanned or updated, except that the top and bottom keys still are.
+/// With the font's Disable Automatic Alignment option on, the same keys apply again.
+#[test]
+fn keys_on_an_aligned_composite_leave_its_derived_metrics_alone() {
+    let mut f = font();
+    let first = |f: &Font| f.glyph("n.alt").unwrap().layers[0].clone();
+    assert!(derives_metrics(&f, &first(&f)));
+    set_glyph_key(&mut f, "n.alt", Field::Left, "=o");
+    set_glyph_key(&mut f, "n.alt", Field::Right, "=+18");
+    set_glyph_key(&mut f, "n.alt", Field::Width, "=600");
+    set_glyph_key(&mut f, "n.alt", Field::Top, "=99");
+    for field in [Field::Left, Field::Right, Field::Width] {
+        assert_eq!(evaluate(&f, "n.alt", "m01", field), Ok(None), "{field:?}");
+    }
+    assert_eq!(evaluate(&f, "n.alt", "m01", Field::Top), Ok(Some(99.0)));
+    let listed = |found: &[Finding]| found.iter().filter(|x| x.glyph == "n.alt" && x.layer == "m01").map(|x| x.field).collect::<Vec<_>>();
+    assert_eq!(listed(&scan(&f)), [Field::Top], "only the top key is compared");
+
+    let offset = key(&f, "=+18", Field::Right);
+    assert!(is_offset(&offset, Field::Right) && is_offset(&offset, Field::Left));
+    assert!(!is_offset(&offset, Field::Width), "the width takes no offset");
+    assert!(!is_offset(&key(&f, "=18", Field::Left), Field::Left), "a constant is not an offset");
+
+    // A disabled component, or a path beside it, leaves the metrics to the keys.
+    let mut disabled = first(&f);
+    if let Shape::Component(c) = &mut disabled.shapes[0] {
+        c.info.alignment = Alignment::Disabled;
+    }
+    assert!(!derives_metrics(&f, &disabled));
+    let mut with_path = first(&f);
+    with_path.shapes.push(Shape::Path(Path::rect(0.0, 0.0, 10.0, 10.0)));
+    assert!(!derives_metrics(&f, &with_path));
+
+    // The font option turns alignment off: the cache scans again and every key applies.
+    let mut font = Arc::new(f);
+    let mut cache = SyncCache::default();
+    cache.update(&font);
+    assert_eq!(listed(cache.glyph("n.alt")), [Field::Top]);
+    Arc::make_mut(&mut Arc::make_mut(&mut font).info).settings.disables_automatic_alignment = Some(true);
+    cache.update(&font);
+    assert_eq!(listed(cache.glyph("n.alt")), [Field::Left, Field::Right, Field::Width, Field::Top]);
+    assert_eq!(listed(cache.glyph("n.alt")), listed(&scan(&font)));
+    assert_eq!(evaluate(&font, "n.alt", "m01", Field::Right), Ok(Some(18.0)), "an offset off alignment is a constant");
 }

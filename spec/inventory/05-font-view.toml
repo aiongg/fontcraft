@@ -2396,7 +2396,7 @@ milestone = "M8"
 summary = "A name may carry several dot suffixes in a row. Automatic features only work when the suffixes follow the order of the features in Font Info, so a small cap in stylistic set 2 is h.sc.ss02, not h.ss02.sc."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The generators remove only the last suffix, so each suffix in a chain builds on the glyph before it: the ss02 rule of h.sc.ss02 is `sub h.sc by h.sc.ss02;`, as the corpus stores `sub comma.dnom by comma.dnom.ss07;` (M8.10)."
 
 [[behavior]]
 id = "glyphName.ligature"
@@ -3103,7 +3103,7 @@ milestone = "M8"
 summary = "Rule Custom holds a free-form glyph predicate written in the same expression language as glyph predicate tokens in feature code."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
-notes = "Evaluated in M4 by crates/glyphquery, the same evaluator that smart-filter rules compile to. Attributes: name, productionName, category, subCategory, script, note, case, direction, tags, colorIndex, export, hasUnicode, hasCustomGlyphInfo, hasMetricsKeys, metricsKeysOutOfSync, hasKerningGroups, countOfUnicodes, countOfLayers, countOfPaths and countOfComponents (first master), and layer.colorIndex, layer.hasAnnotations, layer.countOfPaths, layer.countOfComponents, layer.countOfAnchors, layer.width, layer.anchors.<name>.x/.y (the shown master). isAligned, hasHints, isColorGlyph and layer bounds are refused as not supported yet. Nesting is limited to 64 levels and the text to 16 KB."
+notes = "Evaluated by crates/glyphquery, the same evaluator smart-filter rules compile to and predicate tokens use (`token.predicate.*` lists the attributes and forms). Glyph attributes, the count attributes reading the first master, and layer attributes reading the shown master, the bounds with components resolved. `name in class(X)` reads the font's enabled feature classes. isAligned, hasHints and isColorGlyph follow the guesses of `token.predicate.boolean`; editor-state attributes (mastersCompatible, changeCount, lastChange and the like) are refused as not supported yet. Nesting is limited to 64 levels and the text to 16 KB."
 guesses = [
   "The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.",
 ]
@@ -3323,6 +3323,7 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "The shortcut is Cmd+Alt+Shift+D, Decompose with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.",
+  "Only master layers are decomposed; intermediate and alternate layers keep their components. A composite with a brace layer in the reference app settles it.",
 ]
 
 [[command]]

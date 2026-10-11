@@ -1264,7 +1264,10 @@ milestone = "M6"
 summary = "When the selection is a single anchor plus a single path point, Align Selection moves the anchor horizontally so it sits above or below the point; with one anchor and two points it centres the anchor between the two. The point(s) do not move, and the horizontal position is corrected for the master's italic angle."
 ref = "Edit View › Aligning"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. `path.alignSelection` with exactly one anchor and one or two points, nothing else."
+guesses = [
+  "With two points the anchor keeps its height and moves horizontally onto the line at the italic angle through the points' midpoint, and a locked anchor refuses it; aligning an anchor between two nodes of different heights on an italic master in the reference app settles it.",
+]
 
 [[behavior]]
 id = "align.componentOriginToNode"
@@ -1273,7 +1276,7 @@ milestone = "M6"
 summary = "Align Selection with exactly one node and one component selected moves the component so that its origin point lands on the node; the node stays put."
 ref = "Edit View › Aligning"
 status = "handbook"
-notes = "Documented, not yet observed. M3 built Align Selection for nodes; the component case waits for M6 (`03a` § 10)."
+notes = "Documented, not yet observed. `path.alignSelection` with exactly one component in `shapes` and one on-curve node in `points`. A locked component, or one automatic alignment places, refuses it."
 
 [[behavior]]
 id = "align.componentOriginPoint"
@@ -1282,6 +1285,10 @@ milestone = "M6"
 summary = "A component's origin point is the position of an anchor named origin in the referenced glyph when there is one. Otherwise, for upright masters it is where the baseline meets the left sidebearing; for slanted masters it is where the baseline is met by a vertical line drawn through the point at which the slanted left sidebearing reaches half the x-height."
 ref = "Edit View › Aligning"
 status = "handbook"
+notes = "Documented, not yet observed. Only the base glyph's own anchors on the component's master are searched for origin, not anchors propagated from its components."
+guesses = [
+  "The left sidebearing line is x = 0 of the base glyph, and on a slanted master it is slanted about half the x-height, so without an origin anchor the origin point is the base glyph's (0, 0) on every master; aligning a component on an italic master in the reference app settles it.",
+]
 
 [[behavior]]
 id = "align.singleNodeToBackground"
@@ -1719,9 +1726,9 @@ milestone = "M7"
 summary = "Extremes can be left out of the source and added only in the exported font through a Filter custom parameter with the value AddExtremes, which keeps shallow curves and some multi-master outlines simpler to edit."
 ref = "Edit View › Extremes & Inflections"
 status = "handbook"
+notes = "Documented, not yet observed. An AddExtremes Filter adds the extremes in the exported font only; the source keeps its nodes (M7.10)."
 
 # ───────────────────────────── Focusing and locking ─────────────────────────────
-notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[command]]
 id = "path.focusOnSelectedPath"
@@ -2081,32 +2088,32 @@ id = "anchor.add"
 label = "Add Anchor"
 menu = []
 shortcut = ""
+context = ["canvas"]
 kind = "engine"
-params = "{glyph?, layer?, name?: string, x: number, y: number}"
+params = "{glyph, layer?, side?, name?: string, x: number, y: number} → {anchor, selection}"
 area = "components"
 milestone = "M6"
 summary = "Canvas context-menu command that places an anchor at the clicked position. It is named new anchor and its name is immediately in edit state; Return or a click on the canvas confirms the typed name."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The position is rounded to the font's grid. The name's edit state is the shell's (M6.10); the command takes the name as a parameter."
 guesses = [
-  "When `name` is omitted the anchor is named new anchor, and a name already on the layer gets an underscore appended until it is unique, as Option-drag duplication does (anchors.uniqueNamesPerLayer); adding two anchors without renaming in the reference app settles it.",
+  "When `name` is omitted the anchor is named new anchor, and a name already on the layer, given or not, gets underscores appended until it is unique, as Option-drag duplication does (anchors.uniqueNamesPerLayer); adding two anchors without renaming in the reference app settles it.",
 ]
 
 [[command]]
 id = "anchor.rename"
 label = "Rename"
 menu = []
-shortcut = "Return"
-when = "editView"
+shortcut = ""
 kind = "engine"
-params = "{glyph?, layer?, anchor: string, name: string}"
+params = "{glyph, layer?, side?, anchor: string, name: string} → {anchor, selection}"
 area = "components"
 milestone = "M6"
 summary = "Renames an anchor. In the UI this starts by double-clicking the anchor, by pressing Return with it selected, or by editing the name field of the Info box."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Return with an anchor selected starts the rename in Edit View; the shell maps that (M6.10), because Return with nodes selected is Toggle Node Type (`path.toggleNodeType`), so the command itself has no shortcut."
 guesses = [
   "Renaming an anchor to a name already on the layer is refused with a message; the reference app settles it.",
 ]
@@ -2117,14 +2124,14 @@ label = "Set Position"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?, layer?, anchor: string, x: number, y: number}"
+params = "{glyph, layer?, side?, anchor: string, x?: number, y?: number} → {anchor, x, y, selection}"
 area = "components"
 milestone = "M6"
 summary = "Places an anchor at explicit coordinates, the headless form of dragging it, moving it with the arrow keys or typing coordinates into the Info box. Our own command."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "inferred"
 own = true
-notes = "Our own headless form of moving an anchor."
+notes = "Our own headless form of moving an anchor. Coordinates are rounded to the font's grid; an omitted one keeps its value. A locked anchor refuses it."
 
 [[command]]
 id = "anchor.remove"
@@ -2132,14 +2139,14 @@ label = "Remove"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?, layer?, anchors: [names]}"
+params = "{glyph, layer?, side?, anchors: [names]} → {removed, selection}"
 area = "components"
 milestone = "M6"
 summary = "Removes the named anchors from a layer, the headless form of selecting anchors and pressing Delete. Our own command."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "inferred"
 own = true
-notes = "Our own headless form of selecting anchors and pressing Delete."
+notes = "Our own headless form of selecting anchors and pressing Delete. A locked anchor refuses it."
 
 [[command]]
 id = "glyph.setAnchors"
@@ -2147,7 +2154,7 @@ label = "Set Anchors"
 menu = ["Glyph"]
 shortcut = "Cmd+U"
 kind = "engine"
-params = "{glyphs?: [names], layer?}"
+params = "{glyph? | glyphs?: [names], layer? | layers?: [ids]} → {glyphs, added, removed?, skipped}"
 area = "components"
 milestone = "M6"
 summary = "Adds the default anchors that the glyph info database lists for each selected glyph. For ligature glyphs named after their parts it also adds the appropriate caret anchors."
@@ -2166,12 +2173,13 @@ label = "Set Anchors for All Masters"
 menu = ["Glyph"]
 shortcut = "Cmd+Alt+U"
 kind = "engine"
-params = "{glyphs?: [names]}"
+params = "{glyph? | glyphs?: [names]} → {glyphs, added, removed?, skipped}"
 area = "components"
 milestone = "M6"
 summary = "Option variant of Set Anchors that adds the default anchors on every master layer of the selected glyphs."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. Master layers only; brace and bracket layers are left as they are."
 
 [[command]]
 id = "glyph.resetAnchors"
@@ -2179,13 +2187,13 @@ label = "Reset Anchors"
 menu = ["Glyph"]
 shortcut = "Cmd+Shift+U"
 kind = "engine"
-params = "{glyphs?: [names], layer?}"
+params = "{glyph? | glyphs?: [names], layer? | layers?: [ids]} → {glyphs, added, removed?, skipped}"
 area = "components"
 milestone = "M6"
 summary = "Deletes all anchors of the selected glyphs' layers and rebuilds the default set from the glyph info database."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. Same default table as glyph.setAnchors."
+notes = "Documented, not yet observed. Same default table as glyph.setAnchors; the anchors are placed as Set Anchors places them on a layer without anchors."
 
 [[command]]
 id = "glyph.resetAnchorsForAllMasters"
@@ -2193,13 +2201,13 @@ label = "Reset Anchors for All Masters"
 menu = ["Glyph"]
 shortcut = "Cmd+Alt+Shift+U"
 kind = "engine"
-params = "{glyphs?: [names]}"
+params = "{glyph? | glyphs?: [names]} → {glyphs, added, removed?, skipped}"
 area = "components"
 milestone = "M6"
 summary = "Option variant of Reset Anchors that resets the anchors on all masters. The reference mentions the modifier but gives neither the item's label nor a shortcut."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Master layers only."
 guesses = [
   "The shortcut is Cmd+Alt+Shift+U, Reset Anchors with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.",
 ]
@@ -2236,7 +2244,7 @@ milestone = "M6"
 summary = "Anchor names are unique within a layer. An Option-drag that duplicates an anchor therefore gives the copy the original name with an underscore appended."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. anchor.add appends underscores to a taken name and anchor.rename refuses one; Option-drag duplication in `cmd/node/moving.rs` still names copies top.1, top.2 and is to follow the underscore rule."
 
 [[behavior]]
 id = "anchors.originAnchor"
@@ -2245,6 +2253,7 @@ milestone = "M6"
 summary = "An anchor named origin inside a glyph defines the point of that glyph's components that Align Selection places on a node."
 ref = "Edit View › Anchors"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `path.alignSelection` (align.componentOriginPoint)."
 
 [[behavior]]
 id = "anchors.markToBase"
@@ -2262,7 +2271,10 @@ milestone = "M8"
 summary = "When the mark feature is generated and glyphs such as idotless and jdotless exist, the ccmp feature is generated as well."
 ref = "Edit View › Mark to Base Positioning"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Update writes ccmp from the glyph names (`features::auto::ccmp`): i or j with its dotless form and at least one encoded top mark."
+guesses = [
+  "ccmp follows from the glyph names alone, whether or not the marks carry anchors for the mark feature; Update in the reference app on a font with idotless and an anchorless acutecomb would settle it.",
+]
 
 [[behavior]]
 id = "anchors.markToMark"

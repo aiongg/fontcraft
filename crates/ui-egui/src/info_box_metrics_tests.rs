@@ -273,3 +273,73 @@ fn the_box_describes_the_glyph_after_the_text_cursor() {
     w.settle(&mut app);
     assert!(!w.drawn(field("width")), "Show Info off hides the box");
 }
+
+/// Aacute built from A (outline 20–580, width 600) and a wide acute that reaches past both sides,
+/// stored as alignment places it; open in Edit View.
+fn aligned_app() -> FontcraftApp {
+    use fontcraft_engine::model::{Anchor, Component, Glyph, Layer, Path, Shape as Drawn};
+    let mut app = FontcraftApp::default();
+    app.session
+        .edit("fixture", |f| {
+            let master = f.masters[0].id.clone();
+            {
+                let mut a = f.glyph_mut("A")?;
+                let l = a.layers.iter_mut().find(|l| l.id == master).expect("A has the master's layer");
+                l.shapes = vec![Drawn::Path(Path::rect(20.0, 0.0, 580.0, 700.0))];
+                l.width = 600.0;
+                l.anchors.push(Anchor::new("top", 300.0, 700.0));
+            }
+            let mut acute = Glyph::new("acutecomb");
+            let mut l = Layer::new(&master, 0.0);
+            l.shapes.push(Drawn::Path(Path::rect(-400.0, 720.0, 400.0, 800.0)));
+            l.anchors.push(Anchor::new("_top", 0.0, 500.0));
+            acute.layers.push(l);
+            f.glyphs.push(acute);
+            let mut aacute = Glyph::new("Aacute");
+            let mut l = Layer::new(&master, 600.0);
+            l.shapes.push(Drawn::Component(Component::new("A", 0.0, 0.0)));
+            l.shapes.push(Drawn::Component(Component::new("acutecomb", 300.0, 200.0)));
+            aacute.layers.push(l);
+            f.glyphs.push(aacute);
+            Ok(())
+        })
+        .unwrap();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["Aacute"]})).unwrap();
+    app
+}
+
+fn shown(app: &mut FontcraftApp) -> Vec<String> {
+    let tokens = app.tokens.clone();
+    let m = info_box_metrics::read(app, &tokens).expect("a current glyph");
+    m.fields.iter().map(info_box_metrics::MetricField::shown).collect()
+}
+
+#[test]
+fn an_aligned_composite_shows_auto_values_and_takes_offsets() {
+    let mut app = aligned_app();
+    let w = Window::new();
+    w.settle(&mut app);
+    assert_eq!(state(&mut app, "left"), KeyState::Auto);
+    // The derived sidebearings leave the mark out.
+    assert_eq!(shown(&mut app), ["auto (20)", "auto (20)", "auto (600)"]);
+
+    w.enter(&mut app, field("left"), "=+30");
+    let (id, params) = last(&app);
+    assert_eq!((id.as_str(), &params["value"]), ("spacing.setLeftSidebearing", &json!("=+30")));
+    w.settle(&mut app);
+    assert_eq!(shown(&mut app), ["=+30 (50)", "auto (20)", "auto (630)"]);
+
+    // A number is sent as typed and refused: nothing changes.
+    let steps = app.session.journal().len();
+    w.enter(&mut app, field("right"), "40");
+    w.settle(&mut app);
+    assert_eq!(app.session.journal().len(), steps, "the setter refuses a number on an aligned glyph");
+    assert_eq!(metrics(&mut app, "Aacute")["width"], 630.0);
+
+    // Emptying the field that holds the offset removes it.
+    w.focus(&mut app, field("left"));
+    w.key(&mut app, Key::Backspace, Modifiers::NONE);
+    w.key(&mut app, Key::Enter, Modifiers::NONE);
+    assert_eq!(last(&app).1["value"], json!("=+0"));
+    assert_eq!(metrics(&mut app, "Aacute")["width"], 600.0);
+}

@@ -33,6 +33,12 @@
 //! recomputes only the glyphs whose `Arc` changed and the glyphs whose keys read them (a reverse
 //! index). [`update_order`] puts the metrics Update Metrics will set in dependency order.
 //!
+//! # Automatic alignment ([`aligned`])
+//! A layer of components under automatic alignment takes its width and its left and right
+//! sidebearings from its base components ([`derives_metrics`]). Keys in those fields do not apply
+//! there, except the offsets `=+N` and `=-N` on a sidebearing, which alignment adds itself:
+//! [`evaluate`] gives no value for them, the scan skips them and Update Metrics leaves them.
+//!
 //! # Linked metrics ([`link`])
 //! [`metrics_source`] is the master whose widths and kerning a master shows, following the
 //! *Link Metrics With First Master* and *Link Metrics With Master* parameters.
@@ -62,6 +68,8 @@
 //! SyncCache::all<'a>(&'a self, font: &'a Font) -> impl Iterator<Item = &'a Finding>
 //! update_order(font: &Font, slots: &[Slot]) -> Vec<Slot>
 //! metrics_source<'a>(font: &'a Font, master: &str) -> Option<&'a Master>
+//! derives_metrics(font: &Font, layer: &Layer) -> bool;  derived_field(font, layer, field) -> bool
+//! is_offset(key: &Key, field: Field) -> bool
 //! kerning_text::read(text: &str) -> Result<KerningText, ReadError>
 //! kerning_text::write(doc: &KerningText) -> Result<String, WriteError>
 //! kerning_text::from_master(font: &Font, Direction, master: &str) -> KerningText
@@ -69,6 +77,7 @@
 #![forbid(unsafe_code)]
 
 pub mod afm;
+pub mod aligned;
 pub mod eval;
 pub mod kerning;
 pub mod kerning_text;
@@ -82,6 +91,7 @@ pub mod sync;
 #[cfg(test)]
 mod tests;
 
+pub use aligned::{derived_field, derives_metrics, is_offset};
 pub use eval::{EvalError, effective_key, evaluate, evaluate_key};
 pub use keys::{Body, Entry, Key, KeyError, KeyErrorKind, Op, Operation, Scope, parse_field, parse_stored};
 pub use link::{LINK_WITH_FIRST_MASTER, LINK_WITH_MASTER, metrics_source};

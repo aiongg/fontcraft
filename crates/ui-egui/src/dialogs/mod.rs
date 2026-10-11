@@ -271,6 +271,7 @@ pub const DIALOGS: &[Dialog] = &[
     import_metrics::DIALOG,
     import_metrics::FILE,
     import_metrics::FONT,
+    import_features::DIALOG,
 ];
 
 /// The shell commands of this module.

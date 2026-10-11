@@ -87,6 +87,9 @@ fn copy(s: &mut Session, p: &Value) -> Result<Value> {
     if p.get("glyphs").is_some() {
         return super::glyph_set::copy_glyphs(s, &p);
     }
+    if p.get("corners").is_some() {
+        return super::corner::copy_corners(s, &p);
+    }
     let c = gather(s.font()?, &p)?;
     let mut out = json!({"json": c.json, "svg": c.svg});
     if c.skipped > 0
@@ -190,6 +193,7 @@ fn gather(font: &Font, p: &Params) -> Result<Copied> {
     let shapes: Vec<Shape> = fragment.shapes.iter().cloned().map(FragmentShape::into_shape).collect();
     let master = r.layer.master.as_str();
     let svg = shapes_to_svg(&shapes, &|c: &Component| font.component_outline(c, master).ok(), None).map_err(|e| p.bad(e.to_string()))?;
+    let svg = super::clipboard_scale::scale_copy(font, master, &shapes, svg).map_err(|e| p.bad(e.to_string()))?;
     Ok(Copied { targets: copied, skipped, json, svg })
 }
 
@@ -342,6 +346,9 @@ fn paste(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("edit.paste", p)?;
     if let Some(text) = super::glyph_set::glyphs_text(&p)? {
         return super::glyph_set::paste_glyphs(s, &p, text);
+    }
+    if let Some(pasted) = super::corner::paste_onto_nodes(s, &p)? {
+        return Ok(pasted);
     }
     let mut t = Targets::parse(&p)?;
     if t.has_lists() {

@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use fontcraft_model::{Font, Glyph, KernGroups, Layer, MetricsKeys, SourceFormat};
+use fontcraft_model::{Alignment, Font, Glyph, KernGroups, Layer, MetricsKeys, Shape, SourceFormat};
 use fontcraft_spacing::afm::{self, Afm};
 use fontcraft_spacing::kerning::pairs::{self, NewPair};
 use fontcraft_spacing::kerning::{Direction, GroupSide, Position, Side, facing};
@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Metrics…",
             ["File", "Import"],
             None,
-            "{file?: path | text?: the contents of a kerning-text or AFM file | sourceDocument?: index of another open document (exactly one of the three), master?: id (default: the first master), sourceMaster?: id or name of a master of a font source (default: its first master), importKerning?: bool (default true; refused for a .glyphs file or package, where it defaults to false), importKerningGroups?: bool (default true), importMetrics?: false|true|\"lsbAndWidth\"|\"rsbAndWidth\"|\"bothSidebearings\"|\"widthCentered\" (default false; true is lsbAndWidth; kerning-text and AFM only), keepAlignedComponents?: bool (accepted; no effect until automatic alignment exists), glyphs?: [names] (metrics and groups of these glyphs only; empty or absent: every glyph)} imports spacing and kerning into one master as one undo step. A file is kerning-text, AFM, or a font source (.glyphs, .glyphspackage, UFO, designspace, .fontcraft, a compiled font). Kerning replaces the master's pairs in each direction the source holds (kerning-text: its direction; AFM: left to right; a font source: each direction its master has pairs in), with the values as given. Kerning groups: kerning-text sets each glyph's groups on the sides its group lines name (a glyph in no group line of such a side loses its group there); a font source copies the groups of the glyphs of the same name; AFM has none. Metrics: lsbAndWidth takes LSB and width (RSB follows), rsbAndWidth RSB and width (LSB follows), bothSidebearings both sidebearings (width follows), widthCentered the width with the outline centred (LSB rounded half up); kerning-text also sets the left, right and width keys as the file gives them, and an empty key field removes the key that field shows. Glyphs and groups the font lacks are listed → {master, source, kerning?: {directions, pairs, unknownGlyphs, unknownGroups}, groups?: {glyphs, unknownGlyphs}, metrics?: {mode, glyphs, keys, skipped: [{glyph, reason}], unknownGlyphs, badKeys: [{glyph, field, key, error}]}}",
+            "{file?: path | text?: the contents of a kerning-text or AFM file | sourceDocument?: index of another open document (exactly one of the three), master?: id (default: the first master), sourceMaster?: id or name of a master of a font source (default: its first master), importKerning?: bool (default true; refused for a .glyphs file or package, where it defaults to false), importKerningGroups?: bool (default true), importMetrics?: false|true|\"lsbAndWidth\"|\"rsbAndWidth\"|\"bothSidebearings\"|\"widthCentered\" (default false; true is lsbAndWidth; kerning-text and AFM only), keepAlignedComponents?: bool (default false: a composite aligned automatically whose imported metrics differ from what alignment derives, its offset keys from the file included, has alignment switched off for that layer's components so the values hold, and is listed in unaligned; true keeps it aligned with its derived metrics and lists it in skipped), glyphs?: [names] (metrics and groups of these glyphs only; empty or absent: every glyph)} imports spacing and kerning into one master as one undo step. A file is kerning-text, AFM, or a font source (.glyphs, .glyphspackage, UFO, designspace, .fontcraft, a compiled font). Kerning replaces the master's pairs in each direction the source holds (kerning-text: its direction; AFM: left to right; a font source: each direction its master has pairs in), with the values as given. Kerning groups: kerning-text sets each glyph's groups on the sides its group lines name (a glyph in no group line of such a side loses its group there); a font source copies the groups of the glyphs of the same name; AFM has none. Metrics: lsbAndWidth takes LSB and width (RSB follows), rsbAndWidth RSB and width (LSB follows), bothSidebearings both sidebearings (width follows), widthCentered the width with the outline centred (LSB rounded half up); kerning-text also sets the left, right and width keys as the file gives them, and an empty key field removes the key that field shows. Glyphs and groups the font lacks are listed → {master, source, kerning?: {directions, pairs, unknownGlyphs, unknownGroups}, groups?: {glyphs, unknownGlyphs}, metrics?: {mode, glyphs, keys, skipped: [{glyph, reason}], unaligned: [names], unknownGlyphs, badKeys: [{glyph, field, key, error}]}}",
             has_doc,
             import_metrics
         ),
@@ -405,8 +405,7 @@ fn import_metrics(s: &mut Session, v: &Value) -> Result<Value> {
     if mode.is_some() && is_font {
         return Err(p.bad("glyph metrics are imported from kerning-text and AFM files; a font source gives kerning and kerning groups"));
     }
-    // Accepted for the dialog; automatic alignment, which it protects, does not exist yet.
-    p.bool_or("keepAlignedComponents", false)?;
+    let keep = p.bool_or("keepAlignedComponents", false)?;
     if !kerning && !groups && mode.is_none() {
         return Err(p.bad("nothing to import: turn on importKerning, importKerningGroups or importMetrics"));
     }
@@ -431,7 +430,7 @@ fn import_metrics(s: &mut Session, v: &Value) -> Result<Value> {
             out.insert("kerning".into(), import_kerning(font, &master, &plan));
         }
         if let Some(mode) = mode {
-            out.insert("metrics".into(), import_glyph_metrics(font, &master, &source, mode, scope.as_ref())?);
+            out.insert("metrics".into(), import_glyph_metrics(font, &master, &source, mode, scope.as_ref(), keep)?);
         }
         Ok(out)
     })?;
@@ -630,7 +629,11 @@ fn plan_glyph(mode: Mode, want: &Wanted, lsb: Option<f64>, rsb: Option<f64>, wid
     }
 }
 
-fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mode, scope: Option<&HashSet<String>>) -> Result<Value> {
+/// Applies the metrics `source` gives to layer `master` of each glyph. A composite aligned
+/// automatically (`import.metricsBreaksAutoAlignment`) is first aligned with its new bases and the
+/// file's keys; values that differ from that switch its components' alignment off, unless `keep`
+/// (Keep Aligned Components), which leaves the glyph as it was.
+fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mode, scope: Option<&HashSet<String>>, keep: bool) -> Result<Value> {
     let wanted: Vec<Wanted> = match source {
         Source::Text(doc) => doc
             .metrics
@@ -675,32 +678,19 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
         }
     }
     let afm_source = matches!(source, Source::Afm(_));
+    let mut unaligned: Vec<String> = Vec::new();
+    let skip = |skipped: &mut Vec<Value>, glyph: &str, reason: String| {
+        if skipped.len() < MAX_REPORTED {
+            skipped.push(json!({ "glyph": glyph, "reason": reason }));
+        }
+    };
     for slot in spacing::update_order(font, &slots) {
         let Some(&want) = last.get(slot.glyph.as_str()) else { continue };
         let Some(g) = font.glyph(want.glyph) else { continue };
         let Some(layer) = g.layers.iter().find(|l| l.id == master) else {
-            if skipped.len() < MAX_REPORTED {
-                skipped.push(json!({ "glyph": want.glyph, "reason": "the glyph has no layer for this master" }));
-            }
+            skip(&mut skipped, want.glyph, "the glyph has no layer for this master".into());
             continue;
         };
-        // An AFM box is the upright outline's, as export writes it; the other sources give
-        // sidebearings as measured, slanted back in an italic master.
-        let measured = if afm_source {
-            spacing::measure::upright_bounds(font, layer).map(|b| (b.map(|b| b.x0), b.map(|b| layer.width - b.x1)))
-        } else {
-            spacing::metric(font, layer, Field::Left).and_then(|l| Ok((l, spacing::metric(font, layer, Field::Right)?)))
-        };
-        let (lsb, rsb) = match measured {
-            Ok(v) => v,
-            Err(e) => {
-                if skipped.len() < MAX_REPORTED {
-                    skipped.push(json!({ "glyph": want.glyph, "reason": e.to_string() }));
-                }
-                continue;
-            }
-        };
-        let (dx, width) = plan_glyph(mode, want, lsb, rsb, layer.width);
         // The keys: what each field gets (`Some(None)`: no key) and the key it shows now.
         let mut keys: Vec<KeyPlan> = Vec::new();
         if let Some(texts) = &want.keys {
@@ -722,39 +712,87 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
                 keys.push((field, new, shown));
             }
         }
-        if !WIDTH_RANGE.contains(&width) {
-            if skipped.len() < MAX_REPORTED {
-                skipped.push(json!({ "glyph": want.glyph, "reason": format!("the width would be {width}, outside 0 to 65535") }));
+        // A composite aligned automatically is compared with what alignment gives it once its
+        // bases have their new metrics and its own keys are in (an offset key changes it).
+        let original = g.clone();
+        let aligned = spacing::derives_metrics(font, layer);
+        if aligned {
+            {
+                let mut gm = font.glyph_mut(want.glyph)?;
+                set_keys(&mut gm, master, &keys);
             }
+            if let Ok(Some(realigned)) = fontcraft_components::align::align_layer(font, want.glyph, master)
+                && let Some(l) = font.glyph_mut(want.glyph)?.layers.iter_mut().find(|l| l.id == master)
+            {
+                *l = realigned;
+            }
+        }
+        let Some(layer) = font.glyph(want.glyph).and_then(|g| g.layers.iter().find(|l| l.id == master)) else { continue };
+        // An AFM box is the upright outline's, as export writes it; the other sources give
+        // sidebearings as measured, slanted back in an italic master.
+        let measured = if afm_source {
+            spacing::measure::upright_bounds(font, layer).map(|b| (b.map(|b| b.x0), b.map(|b| layer.width - b.x1)))
+        } else {
+            spacing::metric(font, layer, Field::Left).and_then(|l| Ok((l, spacing::metric(font, layer, Field::Right)?)))
+        };
+        let (lsb, rsb) = match measured {
+            Ok(v) => v,
+            Err(e) => {
+                if aligned {
+                    restore(font, &original)?;
+                }
+                skip(&mut skipped, want.glyph, e.to_string());
+                continue;
+            }
+        };
+        let (dx, width) = plan_glyph(mode, want, lsb, rsb, layer.width);
+        if aligned {
+            // Values that round to the derived ones leave alignment on.
+            if dx.abs() < 0.5 && (width - layer.width).abs() < 0.5 {
+                keys_set += keys.len();
+                applied += 1;
+                continue;
+            }
+            if keep {
+                restore(font, &original)?;
+                skip(&mut skipped, want.glyph, "the glyph is aligned automatically and Keep Aligned Components keeps its derived metrics".into());
+                continue;
+            }
+        }
+        if !WIDTH_RANGE.contains(&width) {
+            if aligned {
+                restore(font, &original)?;
+            }
+            skip(&mut skipped, want.glyph, format!("the width would be {width}, outside 0 to 65535"));
             continue;
         }
         let mut gm = font.glyph_mut(want.glyph)?;
-        let g: &mut Glyph = &mut gm;
-        let Some(l) = g.layers.iter_mut().find(|l| l.id == master) else { continue };
+        let Some(l) = gm.layers.iter_mut().find(|l| l.id == master) else { continue };
         if let Err(e) = super::spacing::shift_layer(l, dx) {
-            if skipped.len() < MAX_REPORTED {
-                skipped.push(json!({ "glyph": want.glyph, "reason": e }));
+            drop(gm);
+            if aligned {
+                restore(font, &original)?;
             }
+            skip(&mut skipped, want.glyph, e);
             continue;
         }
         l.width = width;
-        for (field, new, shown) in keys {
-            match new {
-                Some((Scope::Local, stored)) => *key_slot(&mut l.info.metrics_keys, field) = Some(stored),
-                Some((Scope::Glyph, stored)) => {
-                    if shown == Some(Scope::Local) {
-                        *key_slot(&mut l.info.metrics_keys, field) = None;
-                    }
-                    *key_slot(&mut g.info.metrics_keys, field) = Some(stored);
+        if aligned {
+            // The imported values hold only with the layer's components placed by hand.
+            for shape in &mut l.shapes {
+                if let Shape::Component(c) = shape
+                    && c.info.alignment != Alignment::Disabled
+                {
+                    c.info.alignment = Alignment::Disabled;
                 }
-                None => match shown {
-                    Some(Scope::Local) => *key_slot(&mut l.info.metrics_keys, field) = None,
-                    Some(Scope::Glyph) => *key_slot(&mut g.info.metrics_keys, field) = None,
-                    None => {}
-                },
             }
-            keys_set += 1;
+            if unaligned.len() < MAX_REPORTED {
+                unaligned.push(want.glyph.to_string());
+            }
+        } else {
+            set_keys(&mut gm, master, &keys);
         }
+        keys_set += keys.len();
         applied += 1;
     }
     Ok(json!({
@@ -762,7 +800,39 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
         "glyphs": applied,
         "keys": keys_set,
         "skipped": skipped,
+        "unaligned": unaligned,
         "unknownGlyphs": unknown,
         "badKeys": bad_keys,
     }))
+}
+
+/// Stores the keys of `keys` on `glyph` and its layer `master`: a field's new key where it was
+/// typed for (a glyph-wide key drops the layer's own, which would hide it), or no key, which
+/// removes the key the field showed.
+fn set_keys(glyph: &mut Glyph, master: &str, keys: &[KeyPlan]) {
+    let Some(l) = glyph.layers.iter_mut().find(|l| l.id == master) else { return };
+    for (field, new, shown) in keys {
+        match new {
+            Some((Scope::Local, stored)) => *key_slot(&mut l.info.metrics_keys, *field) = Some(stored.clone()),
+            Some((Scope::Glyph, stored)) => {
+                if *shown == Some(Scope::Local) {
+                    *key_slot(&mut l.info.metrics_keys, *field) = None;
+                }
+                *key_slot(&mut glyph.info.metrics_keys, *field) = Some(stored.clone());
+            }
+            None => match shown {
+                Some(Scope::Local) => *key_slot(&mut l.info.metrics_keys, *field) = None,
+                Some(Scope::Glyph) => *key_slot(&mut glyph.info.metrics_keys, *field) = None,
+                None => {}
+            },
+        }
+    }
+}
+
+/// Puts glyph `original` back as it was before this import touched it.
+fn restore(font: &mut Font, original: &Arc<Glyph>) -> Result<()> {
+    let mut gm = font.glyph_mut(&original.name)?;
+    let g: &mut Glyph = &mut gm;
+    *g = Glyph::clone(original);
+    Ok(())
 }

@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use fontcraft_geom::Rect;
 use fontcraft_model::{Font, Glyph, Layer, MAX_COMPONENT_DEPTH, Shape};
 
+use crate::aligned::derived_field;
 use crate::keys::{Body, Key, KeyError, Op, Scope, parse_stored};
 use crate::measure::{at_height, bounds, metric_from, outline};
 use crate::{Field, MAX_CHAIN, SIDEBEARING_RANGE, WIDTH_RANGE, referenced_layer, round_half_up};
@@ -48,9 +49,13 @@ pub fn effective_key<'a>(glyph: &'a Glyph, layer: &'a Layer, field: Field) -> Op
 }
 
 /// The value of the key that applies to `field` of layer `layer` of `glyph`; `None` when no key
-/// applies.
+/// applies, which includes a field that automatic alignment derives ([`crate::aligned`]): there
+/// alignment sets the metric, and applies an offset key itself.
 pub fn evaluate(font: &Font, glyph: &str, layer: &str, field: Field) -> Result<Option<f64>, EvalError> {
     let (g, l) = find(font, glyph, layer)?;
+    if derived_field(font, l, field) {
+        return Ok(None);
+    }
     let Some((scope, text)) = effective_key(g, l, field) else { return Ok(None) };
     let key = parse_stored(text, scope, field, |n| font.glyph(n).is_some())?;
     Ctx::new(font).value(g, l, field, &key).map(Some)
@@ -230,6 +235,10 @@ impl<'a> Ctx<'a> {
             seen.push(node);
             if !self.deps.contains(&g.name) {
                 self.deps.insert(g.name.clone());
+            }
+            // Alignment sets this metric: the key stored there does not continue the chain.
+            if derived_field(font, l, f) {
+                break;
             }
             let Some((scope, text)) = effective_key(g, l, f) else { break };
             let Ok(k) = parse_stored(text, scope, f, |n| self.exists(n)) else { break };

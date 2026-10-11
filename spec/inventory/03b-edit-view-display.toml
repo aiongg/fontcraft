@@ -210,6 +210,7 @@ milestone = "M6"
 summary = "Repoints the selected component at another glyph, keeping its transform. Triggered from the glyph picker that opens when the base glyph name in the component Info box is clicked."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "Documented, not yet observed. Keeps the slot in the shape order, the transform, the alignment setting and the attachment anchor (see components.swapBaseKeepsPlacement); a base that would make the glyph contain itself is refused."
 
 [[command]]
 id = "component.setTransform"
@@ -223,6 +224,10 @@ milestone = "M6"
 summary = "Sets any of the component values shown in the base-glyph Info box: offset, horizontal and vertical scale in percent, rightward slant and counterclockwise rotation. Offset changes have no effect while the component is automatically aligned."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
+notes = "Documented, not yet observed. Positions are rounded to the grid. A matrix transform from a file is shown as position, scale, slant and rotation with a horizontal slant only; a position edit keeps it a matrix."
+guesses = [
+  "The command refuses a position edit on an aligned component (only `y` on one aligned horizontally) and any edit on a locked component, and accepts slants within ±89°, rotations within ±360° and scales from −10,000 % to 10,000 % except 0; typing such values into the Info box of the reference app settles it.",
+]
 
 [[command]]
 id = "component.editBaseGlyph"
@@ -2297,6 +2302,9 @@ summary = "Enables language-specific substitutions for the tab's text and picks 
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The menu offers the script and language pairs that the font's enabled locl entries name in their `script` and `language` statements, in order of appearance; the menu's entries in the reference app would settle it.",
+]
 observe = [
   "In F1 (Latin features), turn on Localized Forms in Edit View, choose Turkish and type i: write down the menu's script and language entries and note the glyph shown.",
 ]

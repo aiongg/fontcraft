@@ -13,6 +13,9 @@
 //! Rows: `font.customParameters.describe`, `customParameters.nameCaseConvention`,
 //! `customParameters.shortAndLongNames` (M7.2).
 
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
 use crate::catalog_data::PARAMS;
 use crate::target::Scope;
 
@@ -125,14 +128,101 @@ pub fn all() -> &'static [ParamSpec] {
     PARAMS
 }
 
+/// Every spelling (names and aliases) and the index of its entry in [`PARAMS`].
+fn index() -> &'static HashMap<&'static str, usize> {
+    static INDEX: OnceLock<HashMap<&'static str, usize>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        let mut map = HashMap::new();
+        for (i, p) in PARAMS.iter().enumerate() {
+            for s in std::iter::once(p.name).chain(p.aliases.iter().copied()) {
+                map.entry(s).or_insert(i);
+            }
+        }
+        map
+    })
+}
+
 /// The entry `name` or one of its aliases names. Exact spelling: names that differ only by case are
 /// different parameters (`customParameters.nameCaseConvention`).
 pub fn lookup(name: &str) -> Option<&'static ParamSpec> {
-    // M7.2: an index over names and aliases built once.
-    PARAMS.iter().find(|p| p.name == name || p.aliases.contains(&name))
+    index().get(name).and_then(|i| PARAMS.get(*i))
 }
 
 /// The canonical spelling of `name` (itself, or the name its alias stands for).
 pub fn canonical(name: &str) -> Option<&'static str> {
     lookup(name).map(|p| p.name)
+}
+
+/// The name properties among the entries that hold one text for every language; the entries of
+/// kind [`ParamKind::Localized`] are the others (`designers`, `familyNames`…). The format keeps
+/// these as properties, not as custom parameters (`docs/plans/M7.md` § 3).
+const SINGLE_PROPERTIES: &[&str] = &[
+    "designerURL",
+    "manufacturerURL",
+    "licenseURL",
+    "versionString",
+    "vendorID",
+    "uniqueID",
+    "postscriptFontName",
+    "WWSFamilyName",
+    "WWSSubfamilyName",
+    "variationsPostScriptNamePrefix",
+];
+
+/// Whether `spec` is a name property, and if so whether it holds one text per language
+/// (`Some(true)`) or one text for all (`Some(false)`). Adding one through the custom-parameter
+/// commands writes the property of that key.
+pub fn property(spec: &ParamSpec) -> Option<bool> {
+    if spec.kind == ParamKind::Localized {
+        Some(true)
+    } else if SINGLE_PROPERTIES.contains(&spec.name) {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// The entries whose name, aliases or summary hold `query` (any case), names before summaries,
+/// each in catalogue order; with `scope`, only the entries allowed there. An empty query matches
+/// every entry.
+pub fn search(query: &str, scope: Option<Scope>) -> Vec<&'static ParamSpec> {
+    let q = query.trim().to_lowercase();
+    let allowed = |p: &&'static ParamSpec| scope.is_none_or(|s| p.scopes.allows(s));
+    let in_name = |p: &ParamSpec| std::iter::once(p.name).chain(p.aliases.iter().copied()).any(|s| s.to_lowercase().contains(&q));
+    let mut out: Vec<&'static ParamSpec> = PARAMS.iter().filter(allowed).filter(|p| in_name(p)).collect();
+    out.extend(PARAMS.iter().filter(allowed).filter(|p| !in_name(p) && p.summary.to_lowercase().contains(&q)));
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spellings_scopes_and_search() {
+        // Filled by `cargo xtask paramcatalog`; an empty table has nothing to check.
+        if PARAMS.is_empty() {
+            return;
+        }
+        // Short and long spellings read as one parameter; case matters.
+        assert_eq!(canonical("openTypeNameDescription"), Some("descriptions"));
+        assert_eq!(canonical("description"), Some("descriptions"));
+        assert_eq!(canonical("openTypeOS2TypoAscender"), Some("typoAscender"));
+        assert_eq!(canonical("TypoAscender"), None);
+        assert_eq!(lookup("Name Table Entry").map(|p| p.repeatable), Some(true));
+        assert_eq!(lookup("designers").and_then(property), Some(true));
+        assert_eq!(lookup("vendorID").and_then(property), Some(false));
+        assert_eq!(lookup("typoAscender").and_then(property), None);
+        // Every spelling finds its own entry.
+        for p in all() {
+            for s in std::iter::once(p.name).chain(p.aliases.iter().copied()) {
+                assert_eq!(lookup(s).map(|q| q.name), Some(p.name), "{s}");
+            }
+        }
+        let found = search("openTypeNameDescription", None);
+        assert_eq!(found.iter().map(|p| p.name).collect::<Vec<_>>(), ["descriptions"]);
+        assert!(search("glyph", Some(Scope::Master)).iter().all(|p| p.scopes.allows(Scope::Master)));
+        assert!(search("", Some(Scope::Instance)).len() < all().len());
+        assert_eq!(search("", None).len(), all().len());
+    }
 }

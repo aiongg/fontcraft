@@ -552,7 +552,7 @@ milestone = "M6"
 summary = "When on, components in an imported font are not put under automatic alignment, so they stay where the file places them."
 ref = "Settings › User Settings"
 status = "handbook"
-notes = "Moved from M14 to M6 by the M6 planning pass: components.importedFilesDisableAutoAlignSetting and open.alignsCompositeMetrics read it in M6; the value lives in the user settings store of M4. The Settings window stays M14."
+notes = "Moved from M14 to M6 by the M6 planning pass: components.importedFilesDisableAutoAlignSetting and open.alignsCompositeMetrics read it in M6. Built in M6.15 as a live setting of the user settings store (`settings.set`, default off); file.open reads it. The Settings window stays M14."
 
 [[setting]]
 id = "user.disableLocalization"

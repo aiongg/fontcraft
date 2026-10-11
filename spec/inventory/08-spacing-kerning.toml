@@ -185,9 +185,24 @@ milestone = "M5"
 summary = "Query, our addition for agents: returns the layer's sidebearings and width, the metrics key stored for each (with whether it is glyph-level or layer-local), the value each key currently evaluates to, and whether each is in sync."
 ref = "Spacing & Kerning › Spacing › Info Box; Metrics Keys"
 status = "inferred"
+own = true
+
+[[command]]
+id = "spacing.getDerivedMetrics"
+label = "Get Derived Metrics"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{glyph: name, layer?: id}'
+area = "spacing-kerning"
+milestone = "M6"
+summary = "Query, our addition for agents and the Info box: whether automatic alignment sets the layer's width and side sidebearings, the values it derives from the base components with the offset keys added, and the offset keys as a field shows them."
+ref = "Spacing & Kerning › Spacing › Metrics Keys & Automatic Alignment"
+status = "inferred"
+notes = "Built in M6.15 (`cmd/spacing.rs`) on `fontcraft_components::metrics::derived_metrics`; the Info box reads it to show `auto (value)`."
+own = true
 
 # ───────────────────────────── Spacing shortcuts ─────────────────────────────
-own = true
 
 [[command]]
 id = "spacing.increaseLeftSidebearing"
@@ -663,7 +678,14 @@ milestone = "M6"
 summary = "For a glyph under automatic alignment the metric fields are not editable numbers: they show the word 'auto' followed by the value derived from the components in parentheses."
 ref = "Spacing & Kerning › Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Built in M6.15 (`panels/info_box_metrics.rs`): the left, right and width fields of a layer aligned automatically read `spacing.getDerivedMetrics` and show `auto (value)`, the value derived from the base components."
+guesses = [
+  "A sidebearing that holds an offset key shows the key followed by the derived value in parentheses (`=+18 (68)`) instead of the word auto; an aligned glyph with an offset in the reference app settles it.",
+  "Emptying an aligned field that holds an offset removes the offset; the reference app with an offset deleted from the field settles it.",
+]
+observe = [
+  "Give an aligned composite such as Aacute the left sidebearing =+20 and read the field: does it show auto, the key, or both, and is the value in parentheses the one with the offset?",
+]
 
 [[behavior]]
 id = "metricsKey.autoAlignedOffset"
@@ -672,9 +694,9 @@ milestone = "M6"
 summary = "An automatically aligned metric can be adjusted without giving up alignment by entering '=' plus a signed number ('=+18', '=-12'): the amount is added to or taken from the derived value. Typical use is a composite whose mark sticks out of the glyph box (idieresis, dcaron, lcaron)."
 ref = "Spacing & Kerning › Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed. M5 keeps such keys and lists them as waiting for M6; the 1,994 key values on master layers of corpus sources that differ from the stored metric because the glyph is aligned automatically (M5 plan § 5) are the M6 measure for this row."
+notes = "Documented, not yet observed. Built in M6.15: alignment adds the offsets (`fontcraft_components::metrics`); the spacing setters store them and refuse every other value on an aligned layer (`cmd/spacing.rs`); evaluation, the out-of-sync scan and Update Metrics leave the left, right and width keys of aligned layers alone (`crates/spacing/src/aligned.rs`). The 1,994 key values on master layers of corpus sources that differ from the stored metric because the glyph is aligned automatically (M5 plan § 5) are the measure for this row."
 guesses = [
-  "Offsets apply to the left and right sidebearing keys only: a left offset moves every component right and widens the glyph, a right offset widens it; a width key with an offset is not applied; entering =+N in the width field of an aligned glyph in the reference app settles it.",
+  "Offsets apply to the left and right sidebearing keys only: a left offset moves every component right and widens the glyph, a right offset widens it; an offset typed into the width field of an aligned glyph is refused, and one stored there by a file is ignored; entering =+N in the width field of an aligned glyph in the reference app settles it.",
 ]
 
 # ───────────────────────────── Kerning: basics, modes, Info box ─────────────────────────────
@@ -1744,7 +1766,7 @@ milestone = "M8"
 summary = "The user may add a feature named kern in Font Info › Features to hold hand-written positioning rules, typically contextual kerning that looks at more than two glyphs (for example extra space after f when a space and then T, V, W or Y follow). How the hand-written code is combined with the implicit pair kerning is not stated."
 ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A hand-written `kern` feature without a `# Automatic Code` line gets one at its end, as glyphsLib and fontc add it, so the generated kerning follows the hand-written rules."
 
 [[behavior]]
 id = "kerning.groupClassNames"
@@ -1754,6 +1776,9 @@ summary = "Every kerning group is available in feature code as a glyph class nam
 ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "Only the `@MMK_L_`/`@MMK_R_` classes the code refers to and no class entry defines are written, before the first entry, with the glyphs the target exports in font order, and a group without such glyphs stays undefined so the compiler names the reference; the expanded code of a reference export settles it.",
+]
 
 [[behavior]]
 id = "kerning.kernCodeTokens"

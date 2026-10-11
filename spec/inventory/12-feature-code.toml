@@ -156,12 +156,13 @@ label = "Expand Feature Code"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font?, target: {instance?: id}|{variable: true}, includeImplicit?: bool}"
+params = "{font?, target?: {master?: id}|{instance: id}|{variable: true}, includeImplicit?: bool}"
 area = "features"
 milestone = "M8"
 summary = "Query: returns the complete standard feature file for one export target after resolving tokens, conditional blocks, syntax extensions and, optionally, the implicit features. Not a reference command; needed so agents and the CLI can inspect what the compiler receives."
 ref = "Feature Code › Tokens; Feature Code › Conditional Feature Code"
 status = "inferred"
+notes = "Expands the code for a master (`target: {master}`); instances, the variable font and the implicit features are refused until their values and writers can be written as code."
 
 [[command]]
 id = "font.features.showSnippetFolder"
@@ -189,13 +190,13 @@ label = "Expand Text Tokens"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font?, text: string, master?: id, instance?: id}"
+params = "{font?: path, text: string, master?: id, instance?: id}"
 area = "font-info"
 milestone = "M7"
 summary = "Query: returns a text field value with every triple-brace token replaced, in the context of a font, master or instance. Not a reference command; lets agents preview name fields."
 ref = "Appendix › Text Tokens"
 status = "inferred"
-notes = "Our own query. M7 plan § 4: M7.13."
+notes = "Our own query. Returns the expanded text, the tokens that named nothing and the context used; `master` and `instance` take an id, a name or an index. M7 plan § 4: M7.13."
 
 [[command]]
 id = "url.open"
@@ -310,6 +311,9 @@ summary = "Feature-code tokens start with `$` and are replaced by text before co
 ref = "Feature Code › Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A `$` inside a comment or a double-quoted string is left as it is, and any other `$` that starts no token is an error at it; a comment and a name string holding `$x` in a font exported from the reference app would settle it.",
+]
 
 [[behavior]]
 id = "token.expansionTiming"
@@ -328,6 +332,9 @@ summary = "`$name` inserts the master number value called name, defined under Fo
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A master that stores no value for a number name reads 0; a source file whose master lacks one of the values, exported from the reference app, would settle it.",
+]
 
 [[behavior]]
 id = "token.numberValue.interpolated"
@@ -346,6 +353,9 @@ summary = "`${name*2}` evaluates an expression with +, -, * and /. The number va
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "Expressions that do not start with the name (`${2*padding}`, `${(a+b)/2}`, literals only) are accepted, as the feature compiler and the reference library accept them; typing one in the reference app would show whether it refuses them.",
+]
 
 [[behavior]]
 id = "token.numberValue.expressionDetails"
@@ -410,6 +420,9 @@ summary = "Metric properties are width, LSB, RSB, TSB and BSB."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "LSB, RSB, TSB and BSB are measured as the spacing commands measure them (slanted back in an italic master), and on a layer without an outline they are an error at the token; Option-clicking `${space:LSB}` and the token of an italic glyph in the reference app would settle both.",
+]
 
 [[behavior]]
 id = "token.glyphProperty.anchors"
@@ -427,7 +440,7 @@ milestone = "M8"
 summary = "The same arithmetic as number tokens is allowed after the property: `${comma:RSB*3}`."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Inside a property token a name reads the glyph's property first and a number value otherwise, as glyphsLib does (`builder/tokens.py`)."
 
 [[behavior]]
 id = "token.glyphProperty.layerChoice"
@@ -460,7 +473,7 @@ milestone = "M8"
 summary = "`$[predicate]` expands to the names, separated by spaces, of all glyphs for which the predicate is true."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A token ends at the `]` that closes it outside quoted text, so `$[name matches \"[a-z]\"]` is one token (`features::tokens_predicate::token_len`); glyphsLib ends it at the first `]`."
 
 [[behavior]]
 id = "token.predicate.inClassEntry"
@@ -478,7 +491,7 @@ milestone = "M8"
 summary = "In prefix and feature code the token must sit inside class brackets: `@Minuscule = [$[case == lower]];`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. `features::tokens_predicate::check_placement` refuses a token in a prefix or feature that is not inside class brackets; comments, quoted text and other tokens are skipped when the brackets are counted."
 
 [[behavior]]
 id = "token.predicate.boolean"
@@ -487,7 +500,12 @@ milestone = "M8"
 summary = "Boolean glyph properties are compared with true or false: `isAligned == false`, `hasHints == true`, `isColorGlyph == false`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Also accepted: hasPostScriptHints, hasTrueTypeHints, hasCorners, hasComponents, hasAnnotations, hasSpecialLayers, isAnyColorGlyph, isAppleColorGlyph, isSVGColorGlyph, isFullColorGlyph, isColorPaletteGlyph, isSmartGlyph, locked; yes and no stand for true and false; a yes-or-no attribute alone means `== true`."
+guesses = [
+  "isAligned holds when every master layer has a component placed automatically (a forced or horizontal component, or one left to the usual rule on a layer without paths), with the font setting off; a composite with one master unaligned in the reference app would settle it.",
+  "hasHints counts stem and TrueType hints on any layer and not corner components, caps, brushes or segments; a glyph with only a corner component in the reference app would settle it.",
+  "isColorGlyph holds for glyphs with colour palette layers only, and isAnyColorGlyph for every kind of colour layer; an SVG colour glyph in the reference app would settle it.",
+]
 
 [[behavior]]
 id = "token.predicate.numeric"
@@ -541,6 +559,7 @@ milestone = "M8"
 summary = "Further operators accepted by fea-rs for this syntax: =, != and <> , beginswith, single-quoted strings, and case-insensitive operator keywords. Listed there but rejected: matches and like."
 ref = "fea-rs test-data/parse-tests/good/glyphsapp_predicate.fea"
 status = "docs"
+notes = "FontCraft expands every predicate before fea-rs sees the code, so it also accepts `like` (`*` and `?` wildcards over the whole value), `matches` (a regular expression over the whole value), `=<` and `=>`, `in {…}` lists and `between {low, high}`, as Apple's predicate format has them. glyphsLib finds a `matches` expression anywhere in the value and refuses `=>`."
 
 [[behavior]]
 id = "token.predicate.keyPaths"
@@ -549,7 +568,7 @@ milestone = "M8"
 summary = "Nested data is reached with dotted paths: `layer.anchors.center.y > 250`, `layer.maxX > 520`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Layer paths read the target's master (Font View: the shown master): layer.width, layer.minX, layer.maxX, layer.minY, layer.maxY (the outline with components resolved and curve extremes included; none for an empty layer), layer.LSB, layer.RSB, layer.isAligned, layer.colorIndex, layer.hasAnnotations, layer.countOfPaths, layer.countOfComponents, layer.countOfAnchors, layer.anchors.<name>.x and .y. Glyph attributes besides the handbook's: productionName (also production), unicode (upper-case hexadecimal), string, sortName, description, the four kerning groups, the six metrics keys, countOfTags, countOfPartsSettings. Any other path is an error naming it."
 
 [[behavior]]
 id = "token.predicate.tags"
@@ -567,7 +586,10 @@ milestone = "M8"
 summary = "Predicates combine with AND and OR, NOT negates the predicate that follows, and parentheses group: `\"draft\" in tags OR (\"math\" in tags AND case == upper)`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. glyphsLib reads AND and OR right to left without precedence, so `a AND b OR c` means `a AND (b OR c)` there; the comparison test in `features/src/tokens_predicate_tests.rs` lists the difference."
+guesses = [
+  "NOT binds tighter than AND, and AND tighter than OR, as in Apple's predicate format that the reference's language follows; this row's observe step would settle it.",
+]
 observe = [
   "In F5 (tokens), write `$[note contains \"x\" OR \"ipa\" in tags AND case == upper]` and Option-click it: note the glyphs listed, which shows whether AND binds tighter than OR.",
 ]
@@ -579,7 +601,11 @@ milestone = "M8"
 summary = "`class(Name)` stands for the members of the feature class @Name, so `name in class(Round) AND name in class(Tall)` yields the intersection of two classes."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A class entry is read as glyph names, `@Other` references (16 levels at most, a cycle is an error) and predicate tokens; disabled classes are left out."
+guesses = [
+  "In feature code a class name the font has no enabled class for is an error naming it, and in the Custom smart-filter rule it matches nothing; writing `class(Missing)` in the reference app would settle it.",
+  "Predicate tokens inside a class count non-exporting glyphs as members; only the token's own result leaves them out. A class built from a predicate in a font with a non-exporting match would settle it.",
+]
 
 [[behavior]]
 id = "token.predicate.resultOrder"
@@ -792,7 +818,7 @@ milestone = "M8"
 summary = "On a lookup defined outside any feature the `standalone` keyword changes nothing and is ignored."
 ref = "Feature Code › Standalone Lookups"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft drops the keyword outside every block; inside a block other than a feature it is an error."
 
 [[behavior]]
 id = "featureCode.standaloneLowering"
@@ -801,8 +827,10 @@ milestone = "M8"
 summary = "Standard syntax has no way to define a lookup inside a feature without registering it. FontCraft lowers it by closing the feature block before the lookup, defining the lookup at top level and reopening the feature with its current script, language and lookupflag statements repeated: blocks with one tag add up, and lookups are ordered by their place in the file. fea-rs does not have the keyword."
 ref = "Feature Code › Standalone Lookups"
 status = "inferred"
+notes = "A feature entry is lowered with its `feature tag { … } tag;` wrapper so the block can be split. The reopened block repeats the last `script` and `language` statements and the lookup flags in effect, as fea-rs carries them: a `script` statement resets the flags, a `lookupflag` inside a named lookup of the feature stays in effect after it."
 guesses = [
   "The split-block lowering keeps the lookup's place in lookup order and leaves it out of the feature; a reference export of a feature with a standalone lookup, read back with a font tool, would settle it.",
+  "A standalone lookup starts with the lookup flags in effect in its feature, as a named lookup inside a feature does in fea-rs, so the split lookup states them; a reference export of a standalone lookup after `lookupflag IgnoreMarks;` would settle it.",
 ]
 observe = [
   "In F1 (Latin features), write a feature with a standalone lookup, export and read GSUB: note where the lookup is placed and that the feature does not reference it.",
@@ -850,7 +878,10 @@ milestone = "M8"
 summary = "A single glyph or one-member class on either side of such a rule is repeated to match the size of the other classes."
 ref = "Feature Code › Multiple Substitution With Classes"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. fea-rs repeats a single glyph among the replacements but refuses a one-member class there, so FontCraft writes an inline `[x]`, or a class defined as `[x]` earlier in the same entry, as the glyph. A one-member class defined in another entry reaches the compiler unchanged."
+guesses = [
+  "A single glyph or one-member class as the target of a rule whose replacements are larger classes is passed to the compiler, which refuses it: repeating the target gives several rules for one glyph. A reference export of `sub a by @B @C;` would settle what the reference does.",
+]
 
 [[behavior]]
 id = "featureCode.lookupflagReplaces"
@@ -951,9 +982,10 @@ milestone = "M8"
 summary = "aalt (All Alternatives). Trigger: At least one other feature in the font substitutes glyphs. Generated: Built from every substituting feature in the list; expected form is one `feature <tag>;` line per such feature, leaving the grouping to the compiler (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (7 sources): only `feature xxxx;` lines, one per substituting feature in the font's feature order (M8 planning pass)."
+notes = "The reference's stored output in the corpus (7 sources): only `feature xxxx;` lines, one per substituting feature in the font's feature order (M8 planning pass). The corpus's aalt entries never list ccmp, liga or dlig, though they list frac made of ligature rules (Oswald) and a manual calt (Markow); features whose code only includes a file are not listed (Inter)."
 guesses = [
   "Generated as one `feature xxxx;` line per other feature with substitutions, in sidebar order, leaving the grouping to the compiler, as the corpus shows; cv features and features listed after aalt included.",
+  "Left out: ccmp and all four ligature features (hlig and rlig by analogy with liga and dlig), and disabled features; Update on a font with hlig and a disabled ss01 would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the aalt entry: compare it with FontCraft's generator for the same font, or note that no aalt entry is created.",
@@ -966,9 +998,12 @@ milestone = "M8"
 summary = "liga (Standard Ligatures). Trigger: A ligature glyph, i.e. a name made of component names joined by underscores. Only f_f_i, f_f_l, f_f, fi, fl, lu_lakkhangyao-thai and ru_lakkhangyao-thai land here by default; any other ligature is forced in by a `.liga` suffix (f_b.liga, yi_yi-cy.liga). Generated: One ligature rule per glyph, `sub <components> by <ligature>;`, with the components read from the name parts (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (3 sources): `lookupflag IgnoreMarks;` in the newer files, then one ligature rule per glyph, longest sequences first (`sub f f i by f_f_i;` before `sub f i by fi;`) (M8 planning pass)."
+notes = "The reference's stored output in the corpus (3 sources): `lookupflag IgnoreMarks;` in the newer files, then one ligature rule per glyph, longest sequences first (`sub f f i by f_f_i;` before `sub f i by fi;`) (M8 planning pass). Oswald's mark ligatures (brevecomb_acutecomb) get no rule. Rules of equal length keep the glyph order."
 guesses = [
   "Generated code starts with `lookupflag IgnoreMarks;`, as the newer corpus files have it, and lists longer ligatures first; Update on a font with f_f_i, fi and a mark would settle it.",
+  "A ligature goes to the first feature that claims it: its routing suffix, then the lam-alef set (rlig), then a longs component (hlig), then the default list (liga), else dlig; Update on a font with longs_t.liga would settle it.",
+  "A ligature with another suffix joins components carrying that suffix (`sub f.sc i.sc by f_i.sc;`) and gets no rule when one is missing; Update on a font with f_i.sc would settle it.",
+  "A second ligature with the same component sequence in one feature gets no rule, and ligatures whose components are all marks get none; Update on a font with lam_alef-ar and lam_alef-ar.fina but no positional forms would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the liga entry: compare it with FontCraft's generator for the same font, or note that no liga entry is created.",
@@ -1013,6 +1048,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with such ligatures would settle it.",
+  "Ligatures of joining scripts take positional components where the font has them: `sub lam-ar.init alef-ar.fina by lam_alef-ar;` and `sub lam-ar.medi alef-ar.fina by lam_alef-ar.fina;`; Update on F2 would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1028,6 +1064,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "With a shared `.sc` set each capital maps to the small cap named after its lowercase letter (`sub A by a.sc;`), with a `.c2sc` set to its own suffix; Update on a font with A, a and a.sc would settle it.",
+  "A capital takes its own `.c2sc` form first, then a shared-set glyph on its own base (A.sc), then the shared-set glyph of its lowercase letter (a.sc); the case pair is found by code point, else by the name with its first letter changed. Update on a font with A.c2sc, A.sc and a.sc would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1043,10 +1080,12 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "A `.sc` or `.smcp` glyph on an uppercase base (A.sc) serves smcp from the lowercase letter of the same character, after any glyph on a lowercase base; Update on a font with A.sc only would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Inter (2 sources) has 13 exporting, encoded `.sc` glyphs (IPA small capitals such as g.sc for U+0262) and stores no smcp or c2sc entry; whether the reference skips encoded glyphs or the designer removed the entries is not known, and FontCraft writes both features for them."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the smcp entry: compare it with FontCraft's generator for the same font, or note that no smcp entry is created.",
+  "In F1 (Latin features), add a glyph g.sc with code point U+0262 and press Update: note whether smcp and c2sc entries list it.",
 ]
 
 [[behavior]]
@@ -1058,6 +1097,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "Capitals are paired with petite capitals as c2sc pairs them with small capitals: `.c2pc` first, then `.pc` or `.pcap` on the capital, then on its lowercase letter.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1086,6 +1126,9 @@ milestone = "M8"
 summary = "sups (Superscript). Trigger: Glyphs ending in `.sups`, or figure names with `superior` appended and no period (onesuperior). Generated: Single substitutions from the default glyph to the superior form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "The `superior` ending is accepted on any base glyph, not only figures, since the handbook names letter forms such as ainferior too; a `.sups` glyph wins over a `superior` name for the same base. Update on a font with asuperior would settle it.",
+]
 notes = "The reference's stored output in the corpus (5 sources): one `sub X by X.sups;` line per glyph; Oswald also maps figures to the unsuffixed superior names (`sub one by onesuperior;`) (M8 planning pass)."
 
 [[behavior]]
@@ -1096,9 +1139,9 @@ summary = "subs (Subscript). Trigger: Names with `inferior` appended, or ending 
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "`.subs` comes before `.sinf` and both before an `inferior` name when one glyph has several forms (sinf: `.sinf` first); Update on a font with a.subs and a.sinf would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "The reference's stored output in the corpus (Inter, 2 sources): one `sub X by X.suffix;` line per glyph in the glyph order of the suffixed glyphs, no lookup, no flag; FontCraft's generator writes the same lines (M8.10)."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the subs entry: compare it with FontCraft's generator for the same font, or note that no subs entry is created.",
 ]
@@ -1110,10 +1153,7 @@ milestone = "M8"
 summary = "sinf (Scientific Inferiors). Trigger: Same glyphs as subs: `inferior` names, `.sinf` or `.subs`. Generated: Single substitutions from the default glyph to the inferior form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-guesses = [
-  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
-]
-notes = "Documented, not yet observed."
+notes = "The reference's stored output in the corpus (Inter, 2 sources): one `sub X by X.suffix;` line per glyph in the glyph order of the suffixed glyphs, no lookup, no flag; FontCraft's generator writes the same lines (M8.10)."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the sinf entry: compare it with FontCraft's generator for the same font, or note that no sinf entry is created.",
 ]
@@ -1126,7 +1166,7 @@ summary = "afrc (Alternative Fractions). Trigger: The font has figures, slash an
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "One ligature rule per nut fraction from the figures, slash and figures it names; Update on a font with oneovertwo would settle it.",
+  "One ligature rule per nut fraction from the figures, slash and figures it names, in the handbook's list order; Update on a font with oneovertwo and oneoverten would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1140,9 +1180,10 @@ milestone = "M8"
 summary = "frac (Fractions). Trigger: `.numr` and `.dnom` figures plus the fraction glyph. Without them, the feature falls back to whatever precomposed fractions exist. Generated: With numerators and denominators: contextual rules that turn figures before the fraction slash into numerators and figures after it into denominators, and slash into fraction; in the fallback case: ligature rules onto the precomposed fractions (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (3 Oswald sources): only the fallback, ligature rules onto precomposed fractions (`sub one slash four by onequarter;`); no source stores the numerator and denominator form (M8 planning pass)."
+notes = "The reference's stored output in the corpus (3 Oswald sources): only the fallback, ligature rules onto precomposed fractions (`sub one slash four by onequarter;`); no source stores the numerator and denominator form (M8 planning pass). The handbook says the fallback uses the fractions listed for afrc; the corpus shows the Unicode vulgar fractions, in code point order (onequarter before onehalf, against Oswald's glyph order)."
 guesses = [
-  "With `.numr` and `.dnom` figures, fraction gets three lookups: figures to numerators, figures after fraction or a numerator to denominators, slash between figures to fraction; Update on a font with both sets would settle it.",
+  "With `.numr` and `.dnom` figures and a fraction glyph, frac gets three lookups: slash between figures to fraction, figures to numerators, numerators after fraction or a denominator to denominators; Update on a font with both sets would settle it.",
+  "The fallback takes the Unicode vulgar fractions in code point order, then the nut fractions in the handbook's order, one rule per input sequence; Update on a font with onehalf and oneovertwo would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the frac entry: compare it with FontCraft's generator for the same font, or note that no frac entry is created.",
@@ -1155,10 +1196,7 @@ milestone = "M8"
 summary = "dnom (Denominators). Trigger: Glyphs ending in `.dnom`. Generated: Single substitutions from the default glyph to the `.dnom` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-guesses = [
-  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
-]
-notes = "Documented, not yet observed."
+notes = "The reference's stored output in the corpus (Inter, 2 sources): one `sub X by X.suffix;` line per glyph in the glyph order of the suffixed glyphs, no lookup, no flag; FontCraft's generator writes the same lines (M8.10)."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the dnom entry: compare it with FontCraft's generator for the same font, or note that no dnom entry is created.",
 ]
@@ -1170,10 +1208,7 @@ milestone = "M8"
 summary = "numr (Numerators). Trigger: Glyphs ending in `.numr`. Generated: Single substitutions from the default glyph to the `.numr` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-guesses = [
-  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
-]
-notes = "Documented, not yet observed."
+notes = "The reference's stored output in the corpus (Inter, 2 sources): one `sub X by X.suffix;` line per glyph in the glyph order of the suffixed glyphs, no lookup, no flag; FontCraft's generator writes the same lines (M8.10)."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the numr entry: compare it with FontCraft's generator for the same font, or note that no numr entry is created.",
 ]
@@ -1200,6 +1235,9 @@ milestone = "M8"
 summary = "tnum (Tabular Figures). Trigger: Glyphs ending in `.tf` (tabular lining) or `.tosf` (tabular oldstyle); also for other characters. The default figure set carries no figure suffix at all. Generated: Single substitutions from proportional forms to the matching tabular forms (`sub zero by zero.tf;`)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "The unsuffixed glyph of a figure set takes the first style no suffixed form claims, in the order lf, osf, tf, tosf, decided per base name; every form maps to the form of the other width with the same height. Update on a font with lf, tf and osf figures would settle it.",
+]
 notes = "The reference's stored output in the corpus (3 sources): one `sub zero by zero.tf;` line per glyph (M8 planning pass)."
 
 [[behavior]]
@@ -1209,6 +1247,9 @@ milestone = "M8"
 summary = "pnum (Proportional Figures). Trigger: Glyphs ending in `.osf` (proportional oldstyle) or `.lf` (proportional lining); also for other characters. Generated: Single substitutions from tabular forms to the matching proportional forms (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "pnum maps each tabular form to the proportional form of the same height, with the default figure placed as tnum describes; lines follow the glyph order of the suffixed glyph of each pair, as the corpus shows.",
+]
 notes = "The reference's stored output in the corpus (3 sources): the reverse direction, `sub zero.tf by zero;` (M8 planning pass)."
 
 [[behavior]]
@@ -1234,6 +1275,9 @@ summary = "ordn (Ordinals). Trigger: The default figures together with numero, o
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 notes = "The reference's stored output in the corpus (5 sources): the same three lines everywhere: `sub [zero … nine] [A a]' by ordfeminine;`, the same with `[O o]` and ordmasculine, then `sub N o period by numero;` (M8 planning pass)."
+guesses = [
+  "Letters missing from the font are left out of the `[A a]` and `[O o]` classes, and the numero rule needs N, o and period; Update on a font without capital A would settle it.",
+]
 
 [[behavior]]
 id = "autoFeature.ornm"
@@ -1243,7 +1287,7 @@ summary = "ornm (Ornaments). Trigger: Glyphs named with `.ornm` on a base name f
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "`sub bullet from [A.ornm …];` with the ornaments in glyph order, then `sub A by A.ornm;` per letter; Update on a font with bullet and A.ornm would settle it.",
+  "`sub bullet from [A.ornm …];` with the ornaments in glyph order, then `sub A by A.ornm;` per letter whose base glyph exists; Update on a font with bullet and A.ornm would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1272,6 +1316,9 @@ milestone = "M8"
 summary = "case (Uppercase Forms). Trigger: Glyphs ending in `.case`, and figures ending in `.lf`. Generated: Single substitutions from the default glyph to the `.case` form, and from default figures to lining figures (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Default figures that take an oldstyle style (by the tnum rule, for example when `.lf` forms exist and `.osf` forms do not) map to the lining figures of their width; the `.case` rule wins for a glyph that has both. Update on a font with one and one.lf would settle it.",
+]
 notes = "The reference's stored output in the corpus (5 sources): one `sub X by X.case;` line per glyph, no lookup, no flag (M8 planning pass)."
 
 [[behavior]]
@@ -1282,9 +1329,10 @@ summary = "cpsp (Capital Spacing). Trigger: Uppercase letters exist and the user
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "The amount is a number value named after the feature if the font has one, else 5 units per side, written `pos @Uppercase <5 0 10 0>;`; adding Capital Spacing in the reference app would settle the amount.",
+  "The amount is 5 units per side, written `pos @Uppercase <5 0 10 0>;`; adding Capital Spacing in the reference app would settle the amount.",
+  "Without an Uppercase class entry the rule lists the capitals inline (`pos [A B] <5 0 10 0>;`); a capital is a glyph whose subcategory is Uppercase, or without category data one whose code point is an uppercase letter; adding Capital Spacing to a font without the class would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Update writes the entry only when the font already has one."
 observe = [
   "In F1 (Latin features), add Capital Spacing from the plus menu in Font Info › Features: copy its code and note the spacing amount.",
 ]
@@ -1296,9 +1344,14 @@ milestone = "M8"
 summary = "locl (Localized Forms). Trigger: Glyphs ending in `.loclXXX` where XXX is an OpenType language tag (`.loclENG`, `.loclSVE`). Built-in triggers: idotaccent, i.TRK or i.loclTRK with i (TRK, AZE, CRT, KAZ, TAT); Scommaaccent, Tcommaaccent and their lowercase with the cedilla forms present (ROM, MOL); periodcentered.loclCAT (plus `.case`), L_periodcentered_L.loclCAT, l_periodcentered_l.loclCAT or legacy Ldot, ldot with L, l and periodcentered (CAT); Iacute_J.loclNLD, iacute_j.loclNLD or Jacute, jacute with Iacute, iacute, J, j (NLD); six-ar and `.urdu` figures such as four-persian.urdu (URD). Generated: Per script and language, a `script`/`language` section holding single substitutions to the localised glyphs (ligature or contextual rules for the Catalan and Dutch cases); languages sharing rules are listed together (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (6 sources) differs by version: per-script `script`/`language` sections with named lookups referenced from each further language, or one lookup holding several languages, or the non-standard `language AZE CRT KAZ TAT TRK;` in a version 4 file (M8 planning pass)."
+notes = "The reference's stored output in the corpus (6 sources) differs by version: a flat list of `language` sections in a version 1 file (Oswald Heavy); per-script `script`/`language` sections with lookups named locl_latn_N referenced from each further language (Oswald, Oswald Italic, version 3); one lookup holding several languages with the script and language statements inside it (Inter, version 3); and `language AZE CRT KAZ TAT TRK;` with lookups named idotaccent, commaaccent and puntvolat in the version 4 file (Markow). The generator writes the version 4 form; the rules and languages are the same in all six. Missing pairs are left out (Inter has no Tcedilla rule)."
 guesses = [
-  "One named lookup per rule set (`locl_latn_0`) inside `script latn; language XXX;`, referenced from each further language that shares it, as the Oswald files have it; Update on a font with idotaccent and Scommaaccent would settle the current form.",
+  "The code takes the form of the version 4 file in the corpus (Markow): one `script` section per script, one named lookup per rule set (idotaccent, commaaccent, puntvolat) after a `language` statement listing every language that shares it; Update on a font with idotaccent and Scommaaccent would settle the current form.",
+  "When several Turkish i glyphs exist, idotaccent is used before i.TRK and i.loclTRK, the order the handbook lists them; Update on a font with idotaccent and i.loclTRK would settle it.",
+  "The Catalan and Dutch rules use, in order of preference, the `.loclCAT` middle dot, the `.loclCAT` or `.loclNLD` ligature, then the legacy Ldot, ldot or Jacute, jacute in context, lowercase rule first; the ligature and Jacute forms have no corpus example and Update on fonts with each would settle them.",
+  "The Dutch lookup is named ijacute and the Urdu lookup urdu; Urdu writes `sub X by X.urdu;` under `script arab; language URD;` for each `.urdu` glyph whose base exists, and six-ar alone writes nothing; Update on a font with Jacute and on one with four-persian.urdu would settle them.",
+  "Other `.loclXXX` glyphs (XXX three or four capitals or digits) get `sub base by base.loclXXX;` in a lookup named locl_<script>_<XXX>, under the script of the base glyph's code point, else of the stored script, else DFLT, after the built-in sets; Update on a font with be-cy.loclSRB would settle the shape.",
+  "Suffixed forms of the built-in glyphs (i.sc and idotaccent.sc) get no built-in rule; Update on a font with small caps would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the locl entry: compare it with FontCraft's generator for the same font, or note that no locl entry is created.",
@@ -1338,9 +1391,10 @@ status = "handbook"
 guesses = [
   "salt copies the rules of ss01 only, as the handbook says; Update on a font with ss01 and ss02 would settle whether other sets join.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Markow, saved by the reference app version 4, stores an automatic ss01 and no salt entry; FontCraft follows the handbook and writes salt."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the salt entry: compare it with FontCraft's generator for the same font, or note that no salt entry is created.",
+  "In F1 (Latin features) with a.ss01 and no salt entry, press Update: note whether a salt entry is created.",
 ]
 
 [[behavior]]
@@ -1412,6 +1466,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "The suffix is accepted on glyphs of any script, since the handbook only says it is used in Syriac; Update on a Latin glyph with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1442,6 +1497,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "The suffix is accepted on glyphs of any script, since the handbook only says it is used in Syriac; Update on a Latin glyph with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1457,6 +1513,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "The suffix is accepted on glyphs of any script, since the handbook only says it is used in Syriac; Update on a Latin glyph with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1472,6 +1529,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.",
+  "The `sub space by emspace;` line comes last and only when the feature has other rules and both glyphs exist; Update on a font with one width form would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1487,6 +1545,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "A base counts as kana by its code point (Hiragana, Katakana, their extensions and the halfwidth forms) or its script; Update on a font with a kanji and a kana with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1517,6 +1576,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.",
+  "The `sub space by enspace;` line comes last and only when the feature has other rules and both glyphs exist; Update on a font with one width form would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1547,6 +1607,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "A base counts as kana by its code point (Hiragana, Katakana, their extensions and the halfwidth forms) or its script; Update on a font with a kanji and a kana with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1623,6 +1684,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "A base counts as kana by its code point (Hiragana, Katakana, their extensions and the halfwidth forms) or its script; Update on a font with a kanji and a kana with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1652,9 +1714,9 @@ summary = "abvs (Above-base Substitutions). Trigger: Certain pairings of a base 
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the base and mark pairs it joins; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists abvs in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the abvs entry: compare it with FontCraft's generator for the same font, or note that no abvs entry is created.",
 ]
@@ -1667,9 +1729,9 @@ summary = "akhn (Akhands). Trigger: South Asian scripts only: a particular group
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "The akhands are k_ssa and j_nya in every Indic script, written as consonant, halant, consonant; Update on a Devanagari font with those glyphs would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub ka-S halant-S ssa-S by k_ssa-S;` line for `k_ssa-S` and the same for `j_nya-S`, when their letters and the halant exist."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the akhn entry: compare it with FontCraft's generator for the same font, or note that no akhn entry is created.",
 ]
@@ -1682,9 +1744,9 @@ summary = "blwf (Below Base Forms). Trigger: South Asian scripts: a halant, glyp
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "The rakar mark (`rakar-deva`) is formed in blwf from halant and ra, as Indic shaping expects, besides the `.below` glyphs the handbook names; Update on a Devanagari font with rakar-deva would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub halant-S X-S by X-S.below;` line per `X-S.below` whose `X-S` and halant exist, and `sub halant-S ra-S by rakar-S;` for a `rakar-S` glyph unless `ra-S.below` exists."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blwf entry: compare it with FontCraft's generator for the same font, or note that no blwf entry is created.",
 ]
@@ -1697,9 +1759,9 @@ summary = "blws (Below-base Substitutions). Trigger: South Asian scripts: partic
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the script-specific sequences it substitutes; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists blws in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blws entry: compare it with FontCraft's generator for the same font, or note that no blws entry is created.",
 ]
@@ -1712,9 +1774,9 @@ summary = "cjct (Conjunct Forms). Trigger: Conjunct cluster glyphs in South Asia
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Conjunct rules read the half forms the half feature has made, falling back to consonant and halant; Update on a Devanagari font with k_ya-deva would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one line per conjunct `X_Ya-S` (not an akhand, not a rakar ligature): each leading part as its half form `X-S` when the font has it, else as `Xa-S halant-S`, then the last consonant."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the cjct entry: compare it with FontCraft's generator for the same font, or note that no cjct entry is created.",
 ]
@@ -1727,9 +1789,9 @@ summary = "half (Half Forms). Trigger: Glyphs whose names end in `Halfform`, tog
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Half forms are recognised by the name (the full form with a final `a` exists) rather than by the Halfform subcategory alone; Update on a Devanagari font would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub Xa-S halant-S by X-S;` line per glyph `X-S` (not a mark, not ending in `a`) whose full form `Xa-S` and halant exist, the glyph database's half-form naming (`k-deva`, `j_ny-deva`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the half entry: compare it with FontCraft's generator for the same font, or note that no half entry is created.",
 ]
@@ -1742,9 +1804,9 @@ summary = "nukt (Nukta Forms). Trigger: Nukta ligatures whose names end in `Nukt
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "The rule is `sub base nukta by baseNukta;` in glyph order; Update in the reference app on a Devanagari font with kaNukta-deva would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub X-S nukta-S by XNukta-S;` line per glyph named `XNukta-S` whose `X-S` and `nukta-S` exist, in glyph order (S is the script suffix, such as `deva`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the nukt entry: compare it with FontCraft's generator for the same font, or note that no nukt entry is created.",
 ]
@@ -1757,9 +1819,9 @@ summary = "pref (Pre-base Forms). Trigger: South and Southeast Asian scripts: pa
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the letter combinations it forms; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists pref in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pref entry: compare it with FontCraft's generator for the same font, or note that no pref entry is created.",
 ]
@@ -1772,9 +1834,9 @@ summary = "pres (Pre-base Substitutions). Trigger: South Asian scripts: particul
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document how a numbered matra width is matched to each conjunct; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists pres in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pres entry: compare it with FontCraft's generator for the same font, or note that no pres entry is created.",
 ]
@@ -1787,9 +1849,9 @@ summary = "psts (Post-base Substitutions). Trigger: A halant together with base 
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the script-specific base and matra arrangements it substitutes; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists psts in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the psts entry: compare it with FontCraft's generator for the same font, or note that no psts entry is created.",
 ]
@@ -1802,9 +1864,9 @@ summary = "rkrf (Rakar Forms). Trigger: Devanagari, Gujarati and Malayalam only:
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Rakar ligatures are recognised by the names `X_ra-S` and `Xa_rakar-S`, as the handbook gives no naming; Update on a Devanagari font with k_ra-deva would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): For Devanagari, Gujarati and Malayalam: one `sub Xa-S halant-S ra-S by X_ra-S;` line per glyph named `X_ra-S` or `Xa_rakar-S` whose letters and halant exist; other scripts treat such names as conjuncts."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rkrf entry: compare it with FontCraft's generator for the same font, or note that no rkrf entry is created.",
 ]
@@ -1817,9 +1879,9 @@ summary = "rphf (Reph Forms). Trigger: The trio ra-deva, halant-deva, reph-deva,
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Generated from the glyph names alone, in glyph order, with no lookup or flag; Update in the reference app on a Devanagari font would settle the form.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Generated from the glyph names (`features::auto::indic`): one `sub ra-S halant-S by reph-S;` line per script whose ra, halant and reph glyphs exist."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rphf entry: compare it with FontCraft's generator for the same font, or note that no rphf entry is created.",
 ]
@@ -1832,9 +1894,9 @@ summary = "vatu (Vattu Variants). Trigger: The rkrf feature contains particular 
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+  "Not generated, because the handbook does not document the rkrf lookups it is derived from; Update in the reference app on a font of the script would settle what to write.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Not generated: in a font with glyphs of an Indic script, Update lists vatu in its report as not generated, with the reason (`features::auto::indic`)."
 observe = [
   "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the vatu entry: compare it with FontCraft's generator for the same font, or note that no vatu entry is created.",
 ]
@@ -1846,9 +1908,12 @@ milestone = "M8"
 summary = "ccmp (Glyph Composition and Decomposition). Trigger: Many constellations across scripts. Documented example: i and j, their dotless forms idotless and jdotless, and combining marks that sit on top. Generated: For the Latin case, a lookup that swaps the dotted letter for its dotless form when a top mark follows; other scripts add their own lookups, which are not documented."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (5 sources): a lookup `ccmp_DFLT_1` with `lookupflag 0;` and ligatures of stacked marks (`sub brevecomb acutecomb by brevecomb_acutecomb;`), and lookups `ccmp_Other_N` with an inline `@CombiningTopAccents = [...]`, `lookupflag UseMarkFilteringSet @CombiningTopAccents;` and `sub i' @CombiningTopAccents by idotless;` (M8 planning pass)."
+notes = "The reference's stored output in the corpus (5 sources): a lookup `ccmp_DFLT_1` with `lookupflag 0;` and ligatures of stacked marks (`sub brevecomb acutecomb by brevecomb_acutecomb;`), and lookups `ccmp_Other_N` with an inline `@CombiningTopAccents = [...]`, `lookupflag UseMarkFilteringSet @CombiningTopAccents;` and `sub i' @CombiningTopAccents by idotless;` (M8 planning pass). Generated by `features::auto::ccmp`; against the 5 automatic ccmp entries of the corpus: Markow (version 4) and Oswald-glyph-categories (version 3.2) match; Oswald-Italic (version 3.2) differs only in naming its dotless lookup `ccmp_Other_1`; Oswald_Heavy (version 1) and fontc's Fea_Feature fixture hold older forms (a `[i j]` class rule, the `@Markscomb` case-mark lookups) or hand-edited code."
 guesses = [
   "Latin ccmp is generated in the corpus's form: mark-ligature lookup first, then the dotless lookups with the top-accent filtering set; scripts other than Latin get no ccmp until a source shows their form.",
+  "Lookups are numbered `ccmp_DFLT_1`, `ccmp_DFLT_2` in that order, as the newest corpus sources name a lone mark-ligature or dotless lookup `ccmp_DFLT_1`; Update in the reference app on a font with both would settle it.",
+  "`@CombiningTopAccents` holds the encoded marks of canonical combining class 230, sorted by name, which matches every stored list in the corpus; a font with an unencoded top mark in the reference app would settle whether anchors count too.",
+  "The Latin split lookup `ccmp_latn_1` (fi, fl, the lj, nj and dž digraphs into their letters, in a fixed order) is kept from a version 3 source, as no newer source has those glyphs; Update in the reference app on a font with fi would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the ccmp entry: compare it with FontCraft's generator for the same font, or note that no ccmp entry is created.",
@@ -1951,6 +2016,9 @@ summary = "`{{{versionString}}}` gives the application's version number."
 ref = "Appendix › Text Tokens"
 status = "handbook"
 notes = "Documented, not yet observed. FontCraft gives its own version. M7 plan § 4: M7.13."
+guesses = [
+  "The token gives FontCraft's full release number (`0.0.1`), where the handbook's example shows two parts (`3.4`); the reference app's output for a release number of three parts would settle the form.",
+]
 
 [[behavior]]
 id = "textToken.buildNumber"
@@ -1959,7 +2027,7 @@ milestone = "M7"
 summary = "`{{{buildNumber}}}` gives the application's build number."
 ref = "Appendix › Text Tokens"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft gives its own build number (the commit count of the release, 0 in development builds). M7 plan § 4: M7.13."
+notes = "Documented, not yet observed. FontCraft gives its own build number: the value of `FONTCRAFT_BUILD_NUMBER` when the release was built, 0 in development builds. M7 plan § 4: M7.13."
 
 [[behavior]]
 id = "textToken.keyPath"
@@ -1970,7 +2038,8 @@ ref = "Appendix › Text Tokens"
 status = "handbook"
 notes = "Documented, not yet observed. glyphsLib resolves the key as an attribute of its font or instance object. M7 plan § 4: M7.13."
 guesses = [
-  "The supported key paths are the font's familyName, versionMajor, versionMinor, unitsPerEm, date, copyright, designer, designerURL, manufacturer, manufacturerURL and the instance's name, familyName, fullName (family and style name with a space), postscriptFontName, postscriptFullName, weightClass, widthClass; this is the set glyphsLib's objects expose under those names, and tokens tried in the reference app settle more.",
+  "The supported key paths are the font's familyName, versionMajor, versionMinor, unitsPerEm (and upm), date (as the source writes it), copyright, designer, designerURL, manufacturer, manufacturerURL, license, licenseURL, trademark, description, sampleText, vendorID, uniqueID, and the instance's name, familyName, fullName and postscriptFullName (family and style name with a space), postscriptFontName and fontName (family without spaces, a hyphen, the style name), preferredFamilyName, preferredSubfamilyName, weightClass (400 when unset) and widthClass (5 when unset); tokens tried in the reference app settle more.",
+  "In an instance context a key the instance does not have (designer, copyright…) reads the font's value, where glyphsLib keeps such a token as written; the same token typed into an instance's field in the reference app settles it.",
 ]
 observe = [
   "In font A (m7-one), type `{{{familyName}}} {{{fullName}}} {{{designer}}} {{{nonsense}}}` into the description field, export and read name ID 10: note which tokens expand.",
@@ -1983,7 +2052,10 @@ milestone = "M7"
 summary = "In a master context the token may be the name of a number value."
 ref = "Appendix › Text Tokens"
 status = "handbook"
-notes = "Documented, not yet observed. Number values are M8's definitions; the token reads them where they exist. M7 plan § 4: M7.13."
+notes = "Documented, not yet observed. The token reads the master's value of the font's number value of that name. In a master context only number values (and the tokens of every context) resolve; an instance context reads no number values until instances interpolate them (M9). M7 plan § 4: M7.13."
+guesses = [
+  "A master that stores no value for a defined number value reads 0, as a missing metric value does; the reference app with a number value added after the master settles it.",
+]
 
 [[behavior]]
 id = "textToken.glyphProperty"
@@ -1996,7 +2068,13 @@ status = "handbook"
 # ----------------------------------------------------------------------------
 # Behaviours: Regular expressions
 # ----------------------------------------------------------------------------
-notes = "Documented, not yet observed. M7 plan § 4: M7.13; the same property names as M8's glyph property tokens in feature code (layout__tokens), of which M7 implements width, LSB, RSB and the bounds."
+notes = "Documented, not yet observed. M7 plan § 4: M7.13; the same property names as M8's glyph property tokens in feature code (layout__tokens), of which M7 implements width, LSB, RSB, anchors.<name>.x and .y, and the bounds as bounds.origin.x, bounds.origin.y, bounds.size.width and bounds.size.height. TSB and BSB stay as written until M8."
+guesses = [
+  "In a font or instance context the token reads the first master's layer (an instance does not interpolate the value yet); the reference app with `{{{H:width}}}` in an instance's name settles it.",
+  "LSB and RSB of an empty layer name nothing and stay as written; the reference app with `{{{space:LSB}}}` settles it.",
+  "Numbers are written without a fraction when whole and with at most three decimals otherwise; a glyph with a fractional width in the reference app settles it.",
+  "The bounds are spelled as the reference's scripting object names them (`bounds.origin.x`, `bounds.size.width`); the reference app with those tokens settles it.",
+]
 
 [[behavior]]
 id = "regex.anyCharacter"

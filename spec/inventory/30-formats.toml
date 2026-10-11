@@ -392,6 +392,7 @@ milestone = "M8"
 summary = "Plain-text layout code. Importing splits a file into named classes, feature blocks and a prefix that receives everything else (language systems, standalone lookups, table blocks); exporting concatenates prefixes, classes and enabled features in order. Within UFO the whole `features.fea` text is already carried untouched from M1 on, including `include()` statements, whose targets are resolved relative to the UFO."
 ref = "AFDKO OpenTypeFeatureFileSpecification; UFO 3 features.fea; Import & Export › Importing Feature Files; fea-rs 1.0.0"
 status = "docs"
+notes = "Read by file.importFeatures and written by file.exportFeatures (M8.22, `crates/engine/src/cmd/features_io.rs`). Importing inlines includes from inside the file's folder, reads the UFO writer's form back with its flags, and otherwise splits the text at the top level; exporting writes the entries assembled for one master (classes, prefixes, features; disabled entries left out)."
 
 # ───────────────────────────── Legacy formats ─────────────────────────────
 
@@ -595,6 +596,7 @@ milestone = "M8"
 summary = "Writes a master's kerning as a `kern` feature with class definitions and pair-positioning rules, and reads simple pair rules (glyph or class on each side, x-advance only) from a `kern` or `dist` feature back into kerning and groups. Contextual rules, device adjustments and value records that change more than the advance are left as feature code."
 ref = "AFDKO OpenTypeFeatureFileSpecification › GPOS pair adjustment; Import & Export › Importing OpenType Features"
 status = "docs"
+notes = "Written by file.exportFeatures with format fea-kern (M8.22): group classes, then one lookup per direction with glyph pairs, glyph–group pairs as enum rules and group pairs in that order. Reading is not built: file.importFeatures keeps a kern feature as feature code."
 
 # ───────────────────────────── Tool formats ─────────────────────────────
 

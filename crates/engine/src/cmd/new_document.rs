@@ -175,6 +175,7 @@ fn new_from_glyph_sets(s: &mut Session, v: &Value) -> Result<Value> {
     let data = s.glyph_data_without_document()?;
 
     let mut font = Font::new(family);
+    super::metric_defs::script_defaults(&mut font, picks.iter().map(|pick| pick.script.as_str()));
     // New's starting glyph set gives way to the sets', but its drawn .notdef stays, first.
     let notdef = font.glyph(".notdef").cloned();
     font.glyphs.retain(|_| false);

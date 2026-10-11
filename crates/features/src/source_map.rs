@@ -86,23 +86,105 @@ impl OffsetMap {
         self.segments.is_empty()
     }
 
-    /// The input offset `output` came from.
+    /// The input offset `output` came from. A position inside replaced text maps to the start
+    /// of what it replaced; a position no segment covers maps to itself.
     pub fn source_offset(&self, output: usize) -> usize {
-        // M8.3: binary search over the segments.
-        output
+        self.map_start(output).unwrap_or(output)
     }
 
-    /// The input range `output` came from.
+    /// The input range `output` came from: a range ending inside replaced text ends where the
+    /// replaced text ends.
     pub fn source_range(&self, output: Range<usize>) -> Range<usize> {
-        self.source_offset(output.start)..self.source_offset(output.end)
+        self.try_source_range(output.clone()).unwrap_or(output)
+    }
+
+    /// [`OffsetMap::source_range`], or `None` when the start of `output` is in text no segment
+    /// covers (text a pass or the assembler wrote around the code).
+    pub fn try_source_range(&self, output: Range<usize>) -> Option<Range<usize>> {
+        let start = self.map_start(output.start)?;
+        let end = self.map_end(output.end.max(output.start)).unwrap_or(start).max(start);
+        Some(start..end)
+    }
+
+    /// The input offset a range starting at `output` starts at.
+    fn map_start(&self, output: usize) -> Option<usize> {
+        if self.is_identity() {
+            return Some(output);
+        }
+        let i = self.segments.partition_point(|(out, _)| out.end <= output);
+        if let Some((out, input)) = self.segments.get(i)
+            && out.start <= output
+        {
+            return Some(if is_copy(out, input) { input.start.saturating_add(output - out.start) } else { input.start });
+        }
+        // At the very end of a segment that nothing follows.
+        let (out, input) = self.segments.get(i.checked_sub(1)?)?;
+        (out.end == output).then_some(input.end)
+    }
+
+    /// The input offset a range ending at `output` ends at.
+    fn map_end(&self, output: usize) -> Option<usize> {
+        if self.is_identity() {
+            return Some(output);
+        }
+        let i = self.segments.partition_point(|(out, _)| out.end < output);
+        let (out, input) = self.segments.get(i)?;
+        if out.start < output {
+            Some(if is_copy(out, input) { input.start.saturating_add(output - out.start) } else { input.end })
+        } else if out.start == output {
+            Some(input.start)
+        } else {
+            None
+        }
     }
 
     /// The map of `first` followed by `second` (`second` rewrote `first`'s output): from
     /// `second`'s output to `first`'s input.
     pub fn compose(first: &OffsetMap, second: &OffsetMap) -> OffsetMap {
-        // M8.3
-        if second.is_identity() { first.clone() } else { second.clone() }
+        if second.is_identity() {
+            return first.clone();
+        }
+        if first.is_identity() {
+            return second.clone();
+        }
+        let mut out = OffsetMap::default();
+        for (out2, mid) in &second.segments {
+            if !is_copy(out2, mid) {
+                // Replaced text maps to everything its source came from.
+                if let Some(start) = first.map_start(mid.start) {
+                    let end = first.map_end(mid.end).unwrap_or(start).max(start);
+                    out.segments.push((out2.clone(), start..end));
+                }
+                continue;
+            }
+            // Copied text follows `first`'s segments piece by piece.
+            let from = first.segments.partition_point(|(o, _)| o.end <= mid.start);
+            for (out1, in1) in first.segments.iter().skip(from) {
+                if out1.start >= mid.end {
+                    break;
+                }
+                let a = out1.start.max(mid.start);
+                let b = out1.end.min(mid.end);
+                if a >= b {
+                    continue;
+                }
+                let piece = out2.start + (a - mid.start)..out2.start + (b - mid.start);
+                let source = if is_copy(out1, in1) { in1.start + (a - out1.start)..in1.start + (b - out1.start) } else { in1.clone() };
+                out.segments.push((piece, source));
+            }
+        }
+        // A second map whose every segment fell in unmapped text maps nothing; keep that from
+        // reading as the identity.
+        if out.segments.is_empty() {
+            out.segments.push((0..0, 0..0));
+        }
+        out
     }
+}
+
+/// Copied text: the same length in and out.
+fn is_copy(output: &Range<usize>, input: &Range<usize>) -> bool {
+    output.len() == input.len()
 }
 
 /// For each virtual file of an assembly that holds an entry: the entry, and the map from the
@@ -126,9 +208,8 @@ impl SourceMap {
     /// The entry and the range of its stored code that `span` of `file` came from; `None` for a
     /// file that holds no entry, or a span inside text the assembler wrote around the code.
     pub fn locate(&self, file: &str, span: Range<usize>) -> Option<EntryRange> {
-        // M8.3: spans inside the wrapper map to `None`.
         let (_, entry, map) = self.files.iter().find(|(p, _, _)| p == file)?;
-        Some(EntryRange { entry: *entry, range: map.source_range(span) })
+        Some(EntryRange { entry: *entry, range: map.try_source_range(span)? })
     }
 
     /// [`SourceMap::locate`] for a diagnostic.

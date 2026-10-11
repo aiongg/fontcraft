@@ -41,6 +41,7 @@ pub mod guides;
 pub mod hints_ps;
 pub mod images;
 pub mod measurement_line;
+pub mod metric_scope;
 pub mod metrics;
 pub mod nodes;
 pub mod power_guides;
@@ -120,7 +121,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         if tab.edit_background {
             background::tint(&c);
         }
-        let (lines, marks) = metrics::of(font, master);
+        let (lines, marks) = metric_scope::of(session, font, master, &tab);
         let span = view::vertical_span(font, master);
         // Vertical text has no horizontal metric lines to share: each column is its own.
         let vertical_text = text_mode && tab.direction == crate::state::WritingDirection::Ttb;

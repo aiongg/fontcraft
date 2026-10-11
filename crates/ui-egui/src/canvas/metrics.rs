@@ -13,7 +13,7 @@ pub fn of(font: &Font, master: &Master) -> (Vec<(String, f64)>, Metrics) {
         .iter()
         .zip(master.metric_values.iter())
         .filter(|(d, v)| d.kind != metric::ITALIC_ANGLE && v.pos.is_finite())
-        .map(|(d, v)| (d.kind.clone(), v.pos))
+        .map(|(d, v)| (d.name.clone().unwrap_or_else(|| d.kind.clone()), v.pos))
         .collect();
     let zones = font
         .alignment_zones(master)

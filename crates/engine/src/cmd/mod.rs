@@ -8,6 +8,7 @@
 //! parameters through [`crate::params::Params`] and changes fonts only through
 //! [`crate::Session::edit`], which makes the change one undo step.
 
+mod anchor;
 mod anchor_context;
 mod annotation;
 mod attributes;
@@ -24,7 +25,9 @@ mod color_layer;
 mod common;
 mod compare;
 pub(crate) mod compile;
+mod component;
 mod custom_params;
+mod decompose;
 mod dimensions;
 mod edit;
 mod features;
@@ -59,7 +62,7 @@ mod kerning_maintain;
 mod kerning_window;
 mod layer;
 mod layers;
-mod masters;
+pub mod masters;
 mod measure;
 mod measure_line;
 mod meta;
@@ -76,6 +79,7 @@ mod project;
 mod scale_upm;
 mod session;
 mod settings;
+pub mod smart;
 mod snippets;
 mod spacing;
 mod special_layers;
@@ -119,6 +123,7 @@ mod autospace;
 mod autotrace;
 mod cid;
 mod construction;
+mod corner;
 mod corner_helpers;
 mod cross_axis;
 mod derived_glyphs;
@@ -275,7 +280,9 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(file::specs());
         v.extend(edit::specs());
         v.extend(clipboard::specs());
+        v.extend(corner::specs());
         v.extend(glyph::specs());
+        v.extend(decompose::specs());
         v.extend(glyph_set::specs());
         v.extend(path::specs());
         v.extend(spacing::specs());
@@ -323,8 +330,10 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(features::specs());
         v.extend(numbers::specs());
         v.extend(features_compile::specs());
+        v.extend(smart::specs());
         v.extend(snippets::specs());
         v.extend(anchor_context::specs());
+        v.extend(anchor::specs());
         v.extend(features_io::specs());
         v.extend(axes::specs());
         v.extend(special_layers::specs());
@@ -406,6 +415,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(tt_assembly::specs());
         v.extend(tt_debug::specs());
         v.extend(metrics_files::specs());
+        v.extend(component::specs());
         v
     })
 }

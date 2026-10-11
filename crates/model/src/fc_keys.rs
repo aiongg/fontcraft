@@ -57,6 +57,9 @@ pub const STATUS_DEFINITIONS: &str = "com.fontcraft.statusDefinitions";
 /// The user's export profiles: an array of `{"name", "params": {…}}` (M13.43,
 /// `file.saveExportProfile`).
 pub const EXPORT_PROFILES: &str = "com.fontcraft.exportProfiles";
+/// A glyph or master added from a linked source (Import Font, Import Master): the parameter's path as
+/// written (M7.12). Never written to a file: saving leaves linked glyphs and masters out.
+pub const LINKED_SOURCE: &str = "com.fontcraft.linkedSource";
 
 /// Every key with the object it is stored on.
 pub const ALL: &[(&str, Owner)] = &[
@@ -74,6 +77,7 @@ pub const ALL: &[(&str, Owner)] = &[
     (GLYPH_STATUS, Owner::Glyph),
     (STATUS_DEFINITIONS, Owner::Font),
     (EXPORT_PROFILES, Owner::Settings),
+    (LINKED_SOURCE, Owner::Glyph),
 ];
 
 /// Whether `key` is one of FontCraft's own keys.
