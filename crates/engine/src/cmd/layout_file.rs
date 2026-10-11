@@ -109,14 +109,178 @@ fn face_by_name(p: &Params<'_>, bytes: &[u8], name: &str) -> Result<u32> {
 
 /// `layout.listFeatures` (M12.12).
 fn list_specs() -> Vec<CommandSpec> {
-    // M12.12
-    Vec::new()
+    vec![super::cmd!(
+        query "layout.listFeatures",
+        "List Layout Features",
+        [],
+        None,
+        "{font: path, face?: number, table?: \"GSUB\"|\"GPOS\", lookups?: bool, by?: \"feature\"|\"script\"} the scripts, language systems and features of a compiled font's GSUB and GPOS; with lookups, the lookups each feature names per language system with their type (an extension lookup's type read through) → by feature (default): {features: [{table, feature, systems: [{script, language, lookups?: [{index, type, extension}]}]}]}; by script: {systems: [{table, script, language, features: [{feature, lookups?}]}]}",
+        super::always,
+        m12_12::list_features
+    )]
 }
 
 /// `layout.decompileFeatures` (M12.12).
 fn decompile_specs() -> Vec<CommandSpec> {
-    // M12.12
-    Vec::new()
+    vec![super::cmd!(
+        "layout.decompileFeatures",
+        "Decompile Layout to Feature Code",
+        [],
+        None,
+        "{font: path, face?: number, tables?: [\"GSUB\"|\"GPOS\"|\"GDEF\"|\"BASE\"] (default all the font has), features?: [tag] (only these features and the lookups they reach), showExtensions?: bool, names?: \"final\"|\"source\" (source: development names from goadb), goadb?: path, classes?: \"auto\"|\"inline\" (auto names glyph sets used more than once), output?: path, outputDir?: path, noClobber?: bool} the font's layout tables as feature code; without output or outputDir the text is returned; constructs without feature syntax are written as comments and listed → {text?, output?, unsupported: [string]}",
+        super::always,
+        m12_12::decompile_features
+    )]
+}
+
+/// The runners of M12.12.
+mod m12_12 {
+    use std::collections::BTreeMap;
+    use std::path::Path;
+
+    use serde_json::{Value, json};
+
+    use super::super::file_io::{OutputRequest, output_path, read_input, write_output};
+    use crate::params::Params;
+    use crate::{Result, Session};
+    use fontcraft_tables::fea_write::{DecompileOptions, decompile_report};
+    use fontcraft_tables::features::{FeatureEntry, list_features as list, lookup_kinds};
+    use fontcraft_tables::sfnt::{SfntFont, Tag, parse_tag, tag_str};
+
+    fn tag_text(t: Tag) -> String {
+        tag_str(t).trim_end().to_string()
+    }
+
+    /// The font at `font`, face `face` (0 by default).
+    fn open(p: &Params) -> Result<(String, SfntFont)> {
+        let path = p.str("font")?;
+        let face = p.opt_int("face", 0, i64::from(u32::MAX))?.and_then(|f| u32::try_from(f).ok()).unwrap_or(0);
+        let input = read_input(Path::new(path))?;
+        if !input.kind.is_font() {
+            return Err(p.bad(format!("{path} is not a compiled font (it holds {})", input.kind.name())));
+        }
+        let font = fontcraft_tables::read(&input.bytes, face)?;
+        Ok((path.to_string(), font))
+    }
+
+    fn tags(p: &Params, key: &str, allowed: Option<&[&str]>) -> Result<Vec<Tag>> {
+        let mut out = Vec::new();
+        for s in p.opt_strings(key)?.unwrap_or_default() {
+            if let Some(allowed) = allowed {
+                if !allowed.contains(&s) {
+                    return Err(p.bad(format!("`{key}` takes {}, got \"{s}\"", allowed.join(", "))));
+                }
+            }
+            out.push(parse_tag(s)?);
+        }
+        Ok(out)
+    }
+
+    pub(super) fn list_features(_: &mut Session, p: &Value) -> Result<Value> {
+        let p = Params::new("layout.listFeatures", p)?;
+        let table = match p.opt_str("table")? {
+            None => None,
+            Some("GSUB") => Some(*b"GSUB"),
+            Some("GPOS") => Some(*b"GPOS"),
+            Some(other) => return Err(p.bad(format!("`table` must be \"GSUB\" or \"GPOS\", got \"{other}\""))),
+        };
+        let with_lookups = p.bool_or("lookups", false)?;
+        let by = p.opt_str("by")?.unwrap_or("feature");
+        if !matches!(by, "feature" | "script") {
+            return Err(p.bad(format!("`by` must be \"feature\" or \"script\", got \"{by}\"")));
+        }
+        let (_, font) = open(&p)?;
+        let entries: Vec<FeatureEntry> = list(&font)?.into_iter().filter(|e| table.is_none_or(|t| e.table == t)).collect();
+        let mut kinds = BTreeMap::new();
+        if with_lookups {
+            for t in [*b"GSUB", *b"GPOS"] {
+                kinds.insert(t, lookup_kinds(&font, t)?);
+            }
+        }
+        let lookups = |e: &FeatureEntry| -> Value {
+            let k = kinds.get(&e.table);
+            Value::Array(
+                e.lookups
+                    .iter()
+                    .map(|i| {
+                        let kind = k.and_then(|k| k.get(usize::from(*i)));
+                        json!({ "index": i, "type": kind.map(|k| k.lookup_type), "extension": kind.map(|k| k.extension) })
+                    })
+                    .collect(),
+            )
+        };
+        if by == "script" {
+            let mut systems: Vec<Value> = Vec::new();
+            let mut last: Option<(Tag, Tag, Tag)> = None;
+            for e in &entries {
+                let key = (e.table, e.script, e.language);
+                if last != Some(key) {
+                    systems
+                        .push(json!({ "table": tag_text(e.table), "script": tag_text(e.script), "language": tag_text(e.language), "features": [] }));
+                    last = Some(key);
+                }
+                let mut f = json!({ "feature": tag_text(e.feature) });
+                if let (true, Some(o)) = (with_lookups, f.as_object_mut()) {
+                    o.insert("lookups".into(), lookups(e));
+                }
+                if let Some(Value::Array(list)) = systems.last_mut().and_then(|s| s.get_mut("features")) {
+                    list.push(f);
+                }
+            }
+            return Ok(json!({ "systems": systems }));
+        }
+        let mut grouped: BTreeMap<(Tag, Tag), Vec<Value>> = BTreeMap::new();
+        for e in &entries {
+            let mut s = json!({ "script": tag_text(e.script), "language": tag_text(e.language) });
+            if let (true, Some(o)) = (with_lookups, s.as_object_mut()) {
+                o.insert("lookups".into(), lookups(e));
+            }
+            grouped.entry((e.table, e.feature)).or_default().push(s);
+        }
+        let features: Vec<Value> =
+            grouped.into_iter().map(|((t, f), systems)| json!({ "table": tag_text(t), "feature": tag_text(f), "systems": systems })).collect();
+        Ok(json!({ "features": features }))
+    }
+
+    pub(super) fn decompile_features(_: &mut Session, p: &Value) -> Result<Value> {
+        let p = Params::new("layout.decompileFeatures", p)?;
+        let mut options = DecompileOptions {
+            tables: tags(&p, "tables", Some(&["GSUB", "GPOS", "GDEF", "BASE"]))?,
+            features: tags(&p, "features", None)?,
+            show_extensions: p.bool_or("showExtensions", false)?,
+            ..DecompileOptions::default()
+        };
+        options.named_classes = match p.opt_str("classes")?.unwrap_or("auto") {
+            "auto" => true,
+            "inline" => false,
+            other => return Err(p.bad(format!("`classes` must be \"auto\" or \"inline\", got \"{other}\""))),
+        };
+        match p.opt_str("names")?.unwrap_or("final") {
+            "final" => {}
+            "source" => {
+                let goadb =
+                    p.opt_str("goadb")?.ok_or_else(|| p.bad("`names: \"source\"` needs `goadb`, the file that maps final names to source names"))?;
+                let bytes = read_input(Path::new(goadb))?.bytes;
+                let text = String::from_utf8(bytes).map_err(|_| p.bad(format!("{goadb} is not UTF-8 text")))?;
+                for entry in fontcraft_tables::goadb::parse(&text)?.entries {
+                    options.rename.insert(entry.final_name, entry.source_name);
+                }
+            }
+            other => return Err(p.bad(format!("`names` must be \"final\" or \"source\", got \"{other}\""))),
+        }
+        let req = OutputRequest::from_params(&p)?;
+        if req.in_place {
+            return Err(p.bad("`inPlace` would replace the font with feature code: give `output` or `outputDir`"));
+        }
+        let (path, font) = open(&p)?;
+        let d = decompile_report(&font, &options)?;
+        if req.output.is_none() && req.output_dir.is_none() {
+            return Ok(json!({ "text": d.text, "unsupported": d.unsupported }));
+        }
+        let out = output_path(Path::new(&path), &req, "", Some("fea"))?;
+        write_output(&out, d.text.as_bytes(), &req)?;
+        Ok(json!({ "output": out, "unsupported": d.unsupported }))
+    }
 }
 
 /// `layout.convertSyntax` (M12.13).

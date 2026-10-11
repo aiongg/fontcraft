@@ -2588,6 +2588,7 @@ milestone = "M12"
 summary = "Read-only query returning the scripts, language systems and features of GSUB and GPOS and optionally the lookups (index and type) each feature references per language system."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
+notes = "Entries come in table, script and language order (the default language system first, as dflt), the required feature first. With lookups, each lookup has its index, its type (an extension lookup's type read through) and whether it is stored through Extension lookups. The face is chosen by number; choosing it by name is not built yet."
 
 [[command]]
 id = "layout.compileFeatures"
@@ -2614,6 +2615,8 @@ milestone = "M12"
 summary = "Read-only query that writes the GSUB, GPOS, GDEF and BASE tables of a binary font as feature code with stable generated class and lookup names, and returns the text or the path written plus a list of constructs that had no feature syntax."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
+notes = "Checked with fontTools feaLib 4.66.1: text written for a font built in code compiles back to the same lookup types, lookup order, language systems (exclude_dflt where a language drops default lookups) and GDEF classes. Lookups are top-level blocks in lookup-list order, except that a lookup a contextual rule calls comes first, because the compiler resolves lookup names as it reads. Known differences after a round trip: a type 5 or 7 contextual lookup comes back as chaining (6 or 8); the aalt feature is rebuilt by the compiler; feature parameters other than size, feature variations and variation indices are written as comments. Glyph names follow the names fontTools gives the font (CFF charset, post, then cmap names); cmap-derived names use the glyph list only for ASCII, uniXXXX otherwise."
+guesses = ["A lookup a feature uses is named feature_script_language_index after the first language system that uses it, and any other lookup GSUB_index or GPOS_index; the round-trip measure on the corpus would show whether stabler names are needed.", "Glyph sets of two or more glyphs used at least twice become named classes (@first_last); sets used once stay inline. Reading the decompiled text of a few corpus fonts would settle the threshold.", "Mark classes are named @MC_lookup_subtable_class, one set per subtable, so a mark that has different anchors in two subtables of one lookup never collides."]
 
 [[command]]
 id = "layout.lintFeatures"
