@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**572 guesses on 369 rows (170 of them live commands).**
+**620 guesses on 391 rows (190 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -131,6 +131,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `view.zoomIn` | M3 | handbook | yes | One step multiplies the scale by √2, and the zoom value stays between 50 and 64,000 (03b question 8). |
 | `view.zoomToActiveLayer` | M3 | handbook | yes | The descender-to-ascender span, or the advance width when that is the tighter limit, fills the window less 8% on each side. |
 | `view.zoomToRect` | M3 | inferred | yes | The rectangle fills the window less 8% on each side, the margin of Zoom to Active Layer. |
+| `view.showMeasurementLine` | M5 | handbook | yes | The numbers sit just above the line, each centred between the advance edge and the crossing it measures, and a glyph narrower than 24 screen points gets none; watching the reference app with a known glyph would settle it. |
+| `view.showMeasurementLine` | M5 | handbook | yes | In top-to-bottom text the line is not drawn; the handbook only describes horizontal text. |
 | `path.editBackground` | M3 | handbook | yes | The edited side belongs to the tab and stays when another glyph, layer or master is edited. |
 | `path.editBackground` | M3 | handbook | yes | Audit markers are not drawn on the background. |
 | `path.selectionToBackground` | M3 | handbook | yes | A selected point or segment copies its whole path, and the other side's guides, hints, annotations and image stay; the handbook does not say what is replaced. |
@@ -142,6 +144,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `editView.insertText` | M5 | handbook | yes | A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends. |
 | `editView.setCursor` | M5 | inferred | yes | Shift+click extends the selection to the click, keeping the end of the selection away from it; the reference app settles it. |
 | `editView.setCursor` | M5 | inferred | yes | A double-click on a glyph in text mode also makes the Select tool active; the reference app settles it. |
+| `edit.find` | M5 | handbook | yes | The pop-up opens with an empty search field each time; whether the reference keeps the last query would settle it. |
+| `edit.find` | M5 | handbook | yes | Up and Down in the search field move the selection to the result above or below; the handbook names only clicks. |
+| `edit.find` | M5 | handbook | yes | The selected results go into the text in list order, not in the order they were picked. |
+| `glyph.search` | M5 | inferred | yes | The default mode is Name; the handbook does not say which mode the pop-up starts in. |
+| `glyph.search` | M5 | inferred | yes | For a query of one term, the glyph encoded with it or named exactly by it comes first, then names that differ only in case, then the rest in glyph order; the reference's order of results is not documented. |
+| `glyph.search` | M5 | inferred | yes | An empty query lists nothing. |
+| `glyph.search` | M5 | inferred | yes | A Unicode term may start with U+. |
 | `editView.previousGlyph` | M5 | handbook | yes | At the first glyph of the order Previous Glyph does nothing (no wrap), and with several glyphs selected in the text it replaces only the current glyph. |
 | `editView.nextGlyph` | M5 | handbook | yes | At the last glyph of the order Next Glyph does nothing (no wrap). |
 | `editView.previousVisibleGlyph` | M5 | handbook | yes | For a current glyph that Font View does not list, Previous Glyph in Font View takes the last glyph listed; stepping from such a glyph in the reference app settles it. |
@@ -149,9 +158,29 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `edit.addPlaceholder` | M5 | handbook | yes | A placeholder is written `/Placeholder` in display strings and copied to the plain-text clipboard as the text of the current glyph; no source shows either. |
 | `edit.addPlaceholder` | M5 | handbook | yes | A placeholder goes in place of the selection, as a typed character does; adding one with text selected in the reference app settles it. |
 | `editView.setWritingDirection` | M5 | handbook | yes | Vertical text in text mode draws no horizontal metric lines, since every column has its own; a vertical tab in the reference app settles it. |
+| `textPreview.setStyle` | M5 | handbook | yes | Until instances are interpolated (M9) the style list holds the masters and the instances that sit at a master location. |
+| `textPreview.setFontSize` | M5 | handbook | yes | A new preview draws at 36 points, and sizes from 4 to 1,000 points are allowed; the reference app's field would settle both. |
+| `textPreview.togglePinned` | M5 | handbook | yes | The Text Preview is a window inside the app window; pinned, it stays in front of the other windows there, unpinned it goes behind the one clicked last. A separate pinned window in the reference app is the model. |
+| `textPreview.setLayoutOrientation` | M5 | handbook | yes | Vertical text runs in columns from right to left, with the vertical widths and origins Edit View uses; the reference app on our own vertical font would settle it. |
+| `textPreview.setWritingDirection` | M5 | handbook | yes | The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ. |
+| `textPreview.setWritingDirection` | M5 | handbook | yes | A selected range with the other direction has its glyphs reversed within each line it spans, and keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it. |
+| `textPreview.find` | M5 | handbook | yes | The search options are Ignore Case (on at first) and Contains, Starts With or Full Word, as the system find bar of the reference offers them; matches do not overlap. |
+| `textPreview.find` | M5 | handbook | yes | Replace changes the current match, All changes every match; a replacement that would take the text past 1,000,000 characters is refused. |
+| `edit.selectSampleText` | M5 | handbook | yes | Choosing a sample string replaces the whole text of the tab; the handbook says the string goes into the text without saying where. |
+| `edit.selectNextSampleString` | M5 | handbook | yes | Next and Previous wrap around at the ends of the list. |
+| `edit.selectNextSampleString` | M5 | handbook | yes | Next and Previous step through the strings of all groups as one list, from the string chosen last in any tab; with none chosen yet, Next takes the first string and Previous the last. |
 | `measure.ruler` | M3 | inferred | yes | Crossings follow the nonzero winding rule, and a line that only touches a contour does not cross it; the handbook does not say how the reference merges overlapping contours. |
 | `measure.ruler` | M3 | inferred | yes | Components are measured like paths, and the ruler stays until the next click or tool change (03b question 10). |
+| `view.setMeasurementLineHeight` | M5 | handbook | yes | The text-mode measurement line height is kept per tab and starts at half the x-height of the tab master; no source gives the default or where it is kept. |
+| `view.setMeasurementLineHeight` | M5 | handbook | yes | A click or drag sets a whole-unit height, and Cmd+Ctrl+Alt only moves the line while it is shown (otherwise the click is an ordinary one); the reference app would settle both. |
 | `annotation.add` | M3 | inferred | yes | New annotations get a text box 200 units wide, an arrow at 45° and a circle 100 units across; the handbook gives no defaults (03b question 11). |
+| `view.togglePreviewArea` | M5 | handbook | yes | Each tab opens and closes its own Preview Area, while all tabs share one height; a second tab in the reference app settles it. |
+| `view.togglePreviewArea` | M5 | handbook | yes | The area is 140 points tall until its separator is dragged; the reference app's first height settles it. |
+| `window.previewPanel` | M5 | handbook | yes | The Preview Panel keeps Invert, Flip, Blur, centring and offset of its own, apart from the Preview Area; the reference app settles it. |
+| `preview.flip` | M5 | handbook | yes | Flip turns the strip half a circle, as a printed proof turned upside down, rather than mirroring it top to bottom; the reference app settles it. |
+| `preview.setBlur` | M5 | handbook | yes | The blur amount runs from 0 to 10 screen points of blur radius; the handbook gives no range or unit. |
+| `preview.alwaysCenterActiveGlyph` | M5 | handbook | yes | Off, a line wider than the strip sits as near to centring the edited glyph as it can without leaving a gap at either edge; the reference app with a long text settles it. |
+| `preview.setOffset` | M5 | inferred | yes | The offset is in screen points, added to where the centring puts the line, and stays when the edited glyph changes; dragging in the reference app settles it. |
 | `infoBox.showsColorLabels` (behavior) | M4 | handbook | – | The split square sits at the left of the Info box and is drawn only when the glyph or the active layer has a colour label; the Info box itself shows only while something is selected. Settled by observation. |
 | `background.snapping` (behavior) | M3 | handbook | – | The background's nodes, then its handles, are snap targets after the edited layer's nodes and handles and before guides; its outlines between nodes are not targets. |
 | `text.lineWidth` (behavior) | M5 | handbook | – | Lines wrap at 10,000 units unless the setting says otherwise; no source gives the default. |
@@ -164,18 +193,21 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `text.displayStrings` (behavior) | M5 | docs | – | A `/name` the font lacks and a character no glyph encodes are kept in the text and take half the em with nothing drawn; opening such a string in the reference app settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | A stored string over the 10,000-item tab limit opens cut to its first 10,000 items, with a warning in the log and the status bar, and a string that cannot be read (a `/name` longer than a glyph name may be) opens no tab; a file from the reference app with such a string settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | Opening a document adds its tabs after the open ones and leaves Font View showing; opening a file with display strings in the reference app settles which tab shows. |
+| `text.findUnicodeMode` (behavior) | M5 | handbook | – | A Unicode term matches when a code point's hexadecimal form contains it, so `228` finds U+228E; whether the reference needs the whole code point would settle it. |
 | `textPreview.fallbackFont` (behavior) | M5 | handbook | – | Characters the font lacks are drawn in the interface font of the app. |
+| `textPreview.fallbackFont` (behavior) | M5 | handbook | – | Each character the font lacks takes half an em, the advance the Edit View layout gives a missing character, whatever its width in the interface font. |
+| `text.selectionTargets` (behavior) | M5 | inferred | – | Glyph commands in text mode take the glyphs of the text selection in the tab's master, as Font View's batch commands take the selected glyphs; the handbook does not say, and the reference app with a selected text would settle it. |
 | `preview.singleLine` (behavior) | M5 | handbook | – | On the preview line a line break takes no room; a tab of several lines in the reference app's Preview Area settles it. |
-| `textPreview.setStyle` | M5 | handbook | no | Until instances are interpolated (M9) the style list holds the masters and the instances that sit at a master location. |
-| `edit.selectSampleText` | M5 | handbook | no | Choosing a sample string replaces the whole text of the tab; the handbook says the string goes into the text without saying where. |
-| `edit.selectNextSampleString` | M5 | handbook | no | Next and Previous wrap around at the ends of the list. |
-| `view.setMeasurementLineHeight` | M5 | handbook | no | The text-mode measurement line height is kept per tab and starts at half the x-height of the tab master; no source gives the default or where it is kept. |
-| `preview.setBlur` | M5 | handbook | no | The blur amount runs from 0 to 10 screen points of blur radius; the handbook gives no range or unit. |
+| `preview.singleLine` (behavior) | M5 | handbook | – | Vertical text previews on a horizontal line, and right-to-left text from the right; the reference app with a vertical tab settles it. |
 | `infoBox.glyph` (panel) | M5 | handbook | – | With several glyphs selected in the text, the Info box describes the glyph after the cursor only, and the Unicode value is shown, not edited. |
 | `infoBox.glyph` (panel) | M5 | handbook | – | At each outer edge the kern field sits on the sidebearing row and the group field with its lock on the width row; a screenshot of the reference app's Info box in text mode would settle it. |
 | `infoBox.glyph` (panel) | M5 | handbook | – | The preceding glyph's box sits beside the glyph box, on the side where the preceding glyph is drawn; the reference app with the Text tool would settle it. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The swatch row opens the glyph section of the menu, under a Glyph Color caption (Layer Color while Alt is held). Settled by observation. |
 | `editView.contextMenu` (panel) | M4 | handbook | – | The glyph section offers Exports, Locked and Show Glyph in Font View, and the menu ends with Copy Glyph Names, as the Glyphs 3 video lists them; the other entries of that list follow with their milestones. Settled by observation. |
+| `window.textPreview` (panel) | M5 | handbook | – | The text is edited in a plain field above the area that draws it in the font, since FontCraft has no text field that draws in the font being edited; the field edits texts of up to 100,000 characters, longer ones change through Set Preview Text and Find and Replace. The reference field both edits and draws; a FontCraft field that draws in the font would settle it. |
+| `window.textPreview` (panel) | M5 | handbook | – | The style pop-up starts on the master of the showing Edit View tab and follows it until a style is picked; the reference app's first choice would settle it. |
+| `window.textPreview` (panel) | M5 | handbook | – | Find opens with Cmd+F while the pointer is over the window and with the window's Find button, because Edit › Find… with Cmd+F belongs to the Edit View Find command; a focused Text Preview in the reference app would settle it. |
+| `editView.sampleStrings` (panel) | M5 | handbook | – | Up and Down put the previous or next string into the text at once and keep the window open; a click closes it unless it is pinned; Return and Escape close it. |
 | `text` (tool) | M5 | handbook | – | Return types a line break; the handbook allows several lines but does not name the key. |
 | `text` (tool) | M5 | handbook | – | Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it. |
 | `text` (tool) | M5 | handbook | – | Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them. |
@@ -400,11 +432,21 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
 | `file.exportAll` | M2 | handbook | yes | The reference's settings for Export All are not documented; using each document's last-used export settings is our assumption, and until FontCraft remembers settings the command takes them as parameters. |
+| `file.exportMetrics` | M5 | handbook | yes | The `metrics` format is our kerning-text format (`kerning-text` in 30-formats.toml), because the reference does not document its own metrics file; files in the reference format are neither read nor written. |
+| `file.exportMetrics` | M5 | handbook | yes | A metrics file holds the pairs of one direction (left to right by default, `direction` for the others), because kerning-text has one direction line; an export of a master with right-to-left or vertical pairs needs one file per direction. A reference metrics file with such pairs would settle it. |
+| `file.exportMetrics` | M5 | handbook | yes | The metrics file's extension is .tsv; the reference's own extension is not documented. |
 | `file.open` | M1 | handbook | yes | The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither. |
 | `file.importOutlines` | M3 | handbook | yes | An SVG reads as one font unit per SVG unit with SVG y = 0 at the ascender; the handbook does not say how a drawing is scaled. |
+| `file.importMetrics` | M5 | handbook | yes | The import goes to the master given, else the first master, and `sourceMaster` defaults to the first master of the source file. |
+| `file.importMetrics` | M5 | handbook | yes | Importing kerning replaces the master's pairs in each imported direction, so export then import gives back the same table; the handbook does not say whether it merges. Importing into a master with pairs in the reference app would settle it. |
+| `file.importMetrics` | M5 | handbook | yes | Import Kerning and Import Kerning Classes default to on (Import Kerning off for a Glyphs file, which cannot give kerning values), and Import Metrics to off; the handbook states no defaults. |
+| `file.importMetrics` | M5 | handbook | yes | A metrics file also sets the left, right and width keys as it gives them, an empty key field removing the key the field shows; an AFM leaves the keys as they are. |
+| `file.importMetrics` | M5 | handbook | yes | Width, Outline Centred rounds the new LSB half up, so the outline stays on whole units; the handbook does not say. |
+| `file.importMetrics` | M5 | handbook | yes | Selected Glyphs limits glyph metrics and kerning classes; kerning values are imported whole. |
 | `export.fileNaming` (behavior) | M2 | memory | – | The PostScript-name stem is recalled from the reference, not read in a source; dropping characters a file name cannot hold and falling back to the source file's name are ours. |
 | `export.flavourSubfolders` (behavior) | M2 | inferred | – | An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented. |
 | `export.afmIsLossy` (behavior) | M5 | handbook | – | Group pairs are expanded to glyph pairs with the exceptions applied, so the AFM file holds the kerning that applies to every covered glyph pair; the handbook does not say. |
+| `export.afmIsLossy` (behavior) | M5 | handbook | – | AFM values stay in the font's units and are not scaled to 1,000 units per em, so a round trip loses nothing; Adobe's note assumes 1,000. An AFM exported by the reference from a 2,048-unit font would settle it. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A class read from a compiled font becomes a kerning group named after its first glyph in glyph order; no source says how the reference names recovered groups. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A glyph keeps the first class it is in on each side, and pairs of a later class with other members are stored as glyph pairs; opening a font whose subtables use overlapping classes in the reference app would settle it. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A `kern` feature record used only by right-to-left scripts fills the right-to-left kerning, any other the left-to-right kerning; opening an Arabic font in the reference app would settle it. |
@@ -412,9 +454,12 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `import.outlinesSingleInEditView` (behavior) | M3 | handbook | – | A single file imported in Edit View is appended to the active layer; the handbook does not say whether existing shapes are kept or which layer receives them. |
 | `import.metricsModes` (behavior) | M5 | handbook | – | The default mode is LSB and width (the RSB follows); the handbook gives no default. |
 | `paste.strokeAndFillMayDouble` (behavior) | M3 | inferred | – | A pasted shape with both fill and stroke may arrive as two contours; this is our reading of the handbook's advice, which gives no cause. |
-| `file.exportMetrics` | M5 | handbook | no | The `metrics` format is our kerning-text format (`kerning-text` in 30-formats.toml), because the reference does not document its own metrics file; files in the reference format are neither read nor written. |
-| `file.importMetrics` | M5 | handbook | no | The import goes to the master given, else the first master, and `sourceMaster` defaults to the first master of the source file. |
+| `dialog.exportMetrics` (panel) | M5 | handbook | – | The format, file name and folder sit on the tab, with the folder chooser for the folder, because the dialog framework has no save-file chooser; the handbook puts them in a save dialog after Next…. A save-file chooser in the shell would settle it. |
+| `dialog.exportMetrics` (panel) | M5 | handbook | – | The tab shows a Master pop-up that starts on the toolbar's master, so a master can be exported without changing the toolbar; the handbook names no such control. |
 | `dialog.importOutlinesMissingGlyph` (panel) | M3 | handbook | – | One question covers every unmatched file, with the buttons Add Glyphs and Skip; the handbook asks once per file, with Add Glyph and OK (skip). |
+| `dialog.importMetricsFile` (panel) | M5 | handbook | – | The two dialogs are two tabs of one window opened from the menu, with the file typed as a path, because the dialog framework has no file chooser field; the handbook asks for the file first and then shows the dialog that fits it. A file field with a chooser would settle it. |
+| `dialog.importMetricsFont` (panel) | M5 | handbook | – | The tab can import from another open document as well as from a file; the handbook names files only. |
+| `dialog.importMetricsFont` (panel) | M5 | handbook | – | The tab offers Selected Glyphs and a Source Master field; the handbook does not say whether this dialog has them. |
 | `dialog.pastedOutlineBounds` (panel) | M3 | handbook | – | The correction only translates: it moves the pasted box's bottom left to the origin. |
 | `dialog.pastedOutlineBounds` (panel) | M3 | handbook | – | The buttons read Move and Keep Position, with the line "The pasted outline lies outside the glyph box." above the fields. |
 
@@ -613,7 +658,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `settings.set` | M4 | inferred | yes | Our own command; the reference has no headless access to settings, so there is nothing to settle. |
 | `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | On shows the code point, off the small marker, as the handbook's wording implies. Settled by observation. |
 | `appearance.displayUnicodeValue` (setting) | M4 | handbook | – | Off by default (the small marker), as the handbook gives no default. Settled by observing a fresh install. |
-| `sampleStrings.groups` (setting) | M5 | handbook | – | The built-in default holds groups of our own writing: Latin spacing strings built around n and o, and a pangram per script the glyph sets of M4 cover; no source lists the reference defaults we may copy. |
+| `sampleStrings.groups` (setting) | M5 | handbook | – | The built-in default holds groups of our own choosing: spacing strings built around n, o, H and O with placeholders, figures, and traditional pangrams for Latin, Greek and Cyrillic; no source lists the reference defaults we may copy. |
 
 ## `18-custom-parameters.toml`
 
@@ -623,6 +668,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `Default Layer Width` (parameter) | M5 | handbook | – | A value that is not a number from 0 to 65535 is ignored; the reference app with such a value would settle it. |
 | `Default Layer Width` (parameter) | M5 | handbook | – | The CJK scripts are han, hangul, kana and bopomofo; a new layer of a glyph of each script in the reference app would settle it. |
 | `Link Metrics With First Master` (parameter) | M5 | handbook | – | Spacing and kerning commands refuse to edit a linked master and name the master it follows; no source says what the reference does with such an edit. |
+| `Preview Descender` (parameter) | M5 | handbook | – | The default reads winAscent as the handbook says, though winDescent is likely meant; the reference app with a font whose winAscent and winDescent differ settles it. |
+| `Preview Descender` (parameter) | M5 | handbook | – | A value of either sign is a distance below the baseline; the reference app with a positive and a negative value settles it. |
 
 ## `21-qa-checks.toml`
 
@@ -646,6 +693,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 |---|---|---|---|---|
 | `ufo.openTypeCategories` (behavior) | M4 | docs | – | glyphsLib classifies after propagating anchors into composites; a layer without anchors of its own counts its components' attaching anchors, which gives the same class for the usual accented composites. Settled by comparing with glyphsLib's UFOs of the corpus. |
 | `ufo.openTypeCategories` (behavior) | M4 | docs | – | Custom glyph data files do not change the classes, as glyphsLib reads only its built-in data here. Settled by a reference export with a custom GlyphData file. |
+| `afm` (format) | M5 | docs | – | A glyph's code is its first Unicode value when that is at most 255, else -1; Adobe's note means a code in the font's encoding. An AFM exported by the reference would settle it. |
 
 ## `40-tables.toml`
 

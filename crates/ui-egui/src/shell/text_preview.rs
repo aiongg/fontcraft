@@ -270,6 +270,19 @@ impl Default for TextPreviewState {
     }
 }
 
+/// `n` with a comma between groups of three digits.
+fn grouped(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn next_revision() -> u64 {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     NEXT.fetch_add(1, Ordering::Relaxed)
@@ -960,7 +973,8 @@ fn find_bar(ui: &mut egui::Ui, tp: &TextPreviewState, tokens: &Tokens, pending: 
 
 fn text_field(ui: &mut egui::Ui, tp: &mut TextPreviewState, tokens: &Tokens, pending: &mut Pending) {
     if tp.length > FIELD_LIMIT {
-        let note = format!("{} characters: the field edits texts of up to {FIELD_LIMIT}; Find and Replace change any text.", tp.length);
+        let note =
+            format!("{} characters: the field edits texts of up to {}; Find and Replace change any text.", grouped(tp.length), grouped(FIELD_LIMIT));
         ui.label(egui::RichText::new(note).color(tokens.text_dim));
         return;
     }
@@ -1041,7 +1055,8 @@ fn area(
     let lh = (layout.line_height as f32) * scale;
     let extent = pad * 2.0 + lh * layout.lines.len().max(1) as f32;
     let content = if vertical { vec2(extent.max(size.x), size.y) } else { vec2(size.x, extent.max(size.y)) };
-    let matches = tp.cache.matches.clone();
+    // Matches are highlighted only while the find bar shows.
+    let matches = if tp.find.open { tp.cache.matches.clone() } else { Arc::default() };
     let qlen = tp.find.query.chars().count();
     let current = tp.find.current;
     let length = tp.length;

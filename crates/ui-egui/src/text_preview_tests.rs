@@ -28,7 +28,8 @@ impl Window {
     fn events(&self, app: &mut FontcraftApp, events: Vec<egui::Event>, modifiers: egui::Modifiers) {
         let mut events = events;
         events.insert(0, egui::Event::ModifiersChanged(modifiers));
-        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
+        let input =
+            egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
         let mut output = self.ctx.run_ui(input, |ui| app.ui(ui));
         output.textures_delta.clear();
     }
@@ -261,6 +262,7 @@ fn text_preview_find_searches_highlights_and_replaces() {
     assert_eq!(&*app.state.panels.text_preview.text, "cp cap that");
     refused(&mut app, "textPreview.find", json!({"options": {"index": 99}}));
     assert_eq!(exec(&mut app, "textPreview.find", json!({"open": false}))["find"]["open"], false);
+    assert_eq!(w.drawn(&mut app).matches, 0, "no highlights without the find bar");
 }
 
 #[test]
@@ -351,7 +353,8 @@ fn cmd_f_opens_the_find_bar_only_while_the_text_preview_has_the_keyboard() {
 
     exec(&mut app, "textPreview.find", json!({"open": false}));
     let outside = Pos2::new(5.0, 790.0);
-    let button = |pressed| egui::Event::PointerButton { pos: outside, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+    let button =
+        |pressed| egui::Event::PointerButton { pos: outside, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
     w.events(&mut app, vec![egui::Event::PointerMoved(outside), button(true)], egui::Modifiers::NONE);
     w.events(&mut app, vec![button(false)], egui::Modifiers::NONE);
     assert!(!app.state.panels.text_preview.keyboard);

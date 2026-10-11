@@ -564,9 +564,8 @@ fn draw(pen: &mut Pen, icon: Icon) {
         }
         Icon::Preview => {
             // Two arcs meeting at the corners of the eye, and the pupil.
-            let lid = |sign: f32| -> Vec<P> {
-                (0..=16).map(|i| i as f32 / 16.0).map(|t| (0.1 + 0.8 * t, 0.5 + sign * 0.28 * (PI * t).sin())).collect()
-            };
+            let lid =
+                |sign: f32| -> Vec<P> { (0..=16).map(|i| i as f32 / 16.0).map(|t| (0.1 + 0.8 * t, 0.5 + sign * 0.28 * (PI * t).sin())).collect() };
             pen.line(&lid(-1.0));
             pen.line(&lid(1.0));
             pen.circle((0.5, 0.5), 0.13);

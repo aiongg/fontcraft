@@ -372,7 +372,14 @@ pub fn line_layout(session: &mut Session, tab: &Tab) -> Option<Layout> {
     let index = if tab.kerning.shows_kerning() { session.kern_index().ok() } else { None };
     let font = session.font().ok()?;
     let master = view::tab_master(font, tab)?.id.clone();
-    let options = Options { direction: direction(tab), kerning: tab.kerning, single_line: true, index: index.as_deref(), layers: Some(&tab.layers), ..Default::default() };
+    let options = Options {
+        direction: direction(tab),
+        kerning: tab.kerning,
+        single_line: true,
+        index: index.as_deref(),
+        layers: Some(&tab.layers),
+        ..Default::default()
+    };
     fontcraft_textlayout::layout(font, &master, &tab.text, &options).ok()
 }
 

@@ -24,6 +24,9 @@ const MAX_REPORTED: usize = 1000;
 /// Longest file name `fileName` may give, in bytes.
 const MAX_FILE_NAME: usize = 200;
 
+/// A field, the key it gets (`None`: no key) and the scope of the key it shows now.
+type KeyPlan = (Field, Option<(Scope, String)>, Option<Scope>);
+
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(
@@ -689,7 +692,7 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
             };
             let (dx, width) = plan_glyph(mode, want, lsb, rsb, layer.width);
             // The keys: what each field gets (`Some(None)`: no key) and the key it shows now.
-            let mut keys: Vec<(Field, Option<(Scope, String)>, Option<Scope>)> = Vec::new();
+            let mut keys: Vec<KeyPlan> = Vec::new();
             if let Some(texts) = &want.keys {
                 for (field, text) in KEY_FIELDS.into_iter().zip(texts) {
                     let shown = spacing::effective_key(g, layer, field).map(|(scope, _)| scope);
