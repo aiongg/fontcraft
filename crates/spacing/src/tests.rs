@@ -266,6 +266,79 @@ fn the_cache_recomputes_only_what_an_edit_reaches() {
     assert_eq!(cache.all(&font).cloned().collect::<Vec<_>>(), scan(&font));
 }
 
+/// Brings `cache` up to date and checks it against a fresh scan.
+fn same_as_scan(cache: &mut SyncCache, font: &Arc<Font>, step: &str) {
+    cache.update(font);
+    assert_eq!(cache.all(font).cloned().collect::<Vec<_>>(), scan(font), "after {step}");
+}
+
+#[test]
+fn the_cache_equals_a_full_scan_after_renames_additions_removals_and_edits() {
+    let mut f = font();
+    set_glyph_key(&mut f, "o", Field::Left, "=n");
+    set_glyph_key(&mut f, "A", Field::Left, "=n.alt");
+    set_glyph_key(&mut f, "x", Field::Right, "=n");
+    // Unlinked until a glyph takes that name.
+    set_glyph_key(&mut f, "ka", Field::Left, "=later");
+    // Reads ka-deva less 10 until a glyph called ka-deva-10 appears.
+    set_glyph_key(&mut f, "hyphen", Field::Left, "=ka-deva-10");
+    // A chain whose second key is unlinked.
+    set_glyph_key(&mut f, "H", Field::Left, "=koKai-thai");
+    set_glyph_key(&mut f, "koKai-thai", Field::Left, "=zz");
+    let mut font = Arc::new(f);
+    let mut cache = SyncCache::default();
+    same_as_scan(&mut cache, &font, "the first update");
+
+    Arc::make_mut(&mut font).glyph_mut("n").unwrap().layers[0].shapes = vec![Shape::Path(Path::rect(70.0, 0.0, 430.0, 500.0))];
+    same_as_scan(&mut cache, &font, "an edit to a glyph many keys read");
+
+    Arc::make_mut(&mut font).add_glyph("ka-deva-10", vec![], 300.0).unwrap();
+    Arc::make_mut(&mut font).glyph_mut("ka-deva-10").unwrap().layers[0].shapes = vec![Shape::Path(Path::rect(5.0, 0.0, 200.0, 100.0))];
+    same_as_scan(&mut cache, &font, "adding a glyph a key looked up without finding");
+
+    // zz reads H, so H's chain comes back to H.
+    let f = Arc::make_mut(&mut font);
+    f.add_glyph("zz", vec![], 300.0).unwrap();
+    set_glyph_key(f, "zz", Field::Left, "=H");
+    same_as_scan(&mut cache, &font, "adding the glyph a chain's unlinked key names");
+    assert!(cache.glyph("H").iter().any(|x| x.problem == Problem::Error(EvalError::Cycle)), "{:?}", cache.glyph("H"));
+
+    Arc::make_mut(&mut font).remove_glyph("ka-deva-10").unwrap();
+    same_as_scan(&mut cache, &font, "removing a glyph a key read");
+
+    fontcraft_model::rename_glyphs(Arc::make_mut(&mut font), &[("ka-deva".into(), "later".into()), ("o".into(), "o.ss01".into())]).unwrap();
+    same_as_scan(&mut cache, &font, "renames");
+    assert!(!cache.glyph("ka").iter().any(|x| matches!(x.problem, Problem::Unlinked { .. })), "{:?}", cache.glyph("ka"));
+
+    Arc::make_mut(&mut font).remove_glyph("n").unwrap();
+    same_as_scan(&mut cache, &font, "removing a glyph keys and a component read");
+}
+
+#[test]
+fn a_rename_rescans_only_the_glyphs_that_name_it() {
+    let mut f = font();
+    set_glyph_key(&mut f, "o", Field::Left, "=n");
+    set_glyph_key(&mut f, "x", Field::Left, "=hyphen");
+    set_glyph_key(&mut f, "ka", Field::Left, "=dash");
+    f.glyph_mut("koKai-thai").unwrap().layers[0].shapes.push(Shape::Component(Component::new("hyphen", 0.0, 0.0)));
+    let mut font = Arc::new(f);
+    let mut cache = SyncCache::default();
+    same_as_scan(&mut cache, &font, "the first update");
+    let before = cache.computed();
+
+    // Nothing names H: only H is scanned again.
+    fontcraft_model::rename_glyphs(Arc::make_mut(&mut font), &[("H".into(), "H.ss01".into())]).unwrap();
+    same_as_scan(&mut cache, &font, "renaming a glyph nothing names");
+    assert_eq!(cache.computed(), before + 1);
+
+    // dash itself, x (its key is rewritten), koKai-thai (its component is) and ka (its unlinked
+    // key now finds dash).
+    fontcraft_model::rename_glyphs(Arc::make_mut(&mut font), &[("hyphen".into(), "dash".into())]).unwrap();
+    same_as_scan(&mut cache, &font, "renaming a glyph keys and a component name");
+    assert_eq!(cache.computed(), before + 5);
+    assert!(cache.glyph("ka").iter().all(|x| !matches!(x.problem, Problem::Unlinked { .. })), "{:?}", cache.glyph("ka"));
+}
+
 #[test]
 fn update_order_puts_what_a_key_reads_first() {
     let mut f = font();

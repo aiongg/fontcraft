@@ -6,15 +6,14 @@
 //! from the layer's metric rounded half up. A sidebearing key on an empty layer has nothing to
 //! compare with and is not listed.
 
-use std::collections::hash_map::DefaultHasher;
+use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 
 use fontcraft_model::{Font, Glyph, Layer, MAX_COMPONENT_DEPTH, Master, MetricDef, Shape};
 
 use crate::eval::{Ctx, EvalError, effective_key};
-use crate::keys::{Body, Scope, parse_stored};
+use crate::keys::{Body, Key, Scope, parse_stored};
 use crate::{Field, metrics_source, referenced_layer, round_half_up};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,11 +43,37 @@ fn scanned(font: &Font, layer: &Layer) -> bool {
     (layer.is_master_layer() || !layer.info.attrs.is_empty()) && metrics_source(font, &layer.master).is_some_and(|m| m.id == layer.master)
 }
 
-fn scan_into(ctx: &mut Ctx<'_>, glyph: &Glyph, out: &mut Vec<Finding>) {
-    for layer in glyph.layers.iter().filter(|l| scanned(ctx.font, l)) {
+/// The metrics a glyph's scan measured on its own layers: (layer index, field, result).
+type Measured = Vec<(usize, Field, Result<Option<f64>, EvalError>)>;
+
+/// The own-layer measurements of one glyph's scan: those of an earlier scan that still hold, and
+/// those of this one.
+struct Own<'p> {
+    prior: &'p [(usize, Field, Result<Option<f64>, EvalError>)],
+    measured: Measured,
+}
+
+impl Own<'_> {
+    fn none() -> Own<'static> {
+        Own { prior: &[], measured: Vec::new() }
+    }
+
+    /// The metric of layer `index` of `glyph`, from the earlier scan when it has it.
+    fn metric(&mut self, ctx: &mut Ctx<'_>, glyph: &Glyph, layer: &Layer, index: usize, field: Field) -> Result<Option<f64>, EvalError> {
+        let result = match self.prior.iter().find(|(i, f, _)| *i == index && *f == field) {
+            Some((_, _, r)) => r.clone(),
+            None => ctx.metric(glyph, layer, field),
+        };
+        self.measured.push((index, field, result.clone()));
+        result
+    }
+}
+
+fn scan_into(ctx: &mut Ctx<'_>, glyph: &Glyph, out: &mut Vec<Finding>, own: &mut Own<'_>) {
+    for (index, layer) in glyph.layers.iter().enumerate().filter(|(_, l)| scanned(ctx.font, l)) {
         for field in Field::ALL {
             let Some((scope, text)) = effective_key(glyph, layer, field) else { continue };
-            let problem = match check(ctx, glyph, layer, field, scope, text) {
+            let problem = match check(ctx, own, glyph, (index, layer), field, scope, text) {
                 Ok(None) => continue,
                 Ok(Some(p)) => p,
                 Err(EvalError::Unlinked(name)) => Problem::Unlinked { glyph: name },
@@ -59,10 +84,18 @@ fn scan_into(ctx: &mut Ctx<'_>, glyph: &Glyph, out: &mut Vec<Finding>) {
     }
 }
 
-fn check(ctx: &mut Ctx<'_>, glyph: &Glyph, layer: &Layer, field: Field, scope: Scope, text: &str) -> Result<Option<Problem>, EvalError> {
+fn check(
+    ctx: &mut Ctx<'_>,
+    own: &mut Own<'_>,
+    glyph: &Glyph,
+    (index, layer): (usize, &Layer),
+    field: Field,
+    scope: Scope,
+    text: &str,
+) -> Result<Option<Problem>, EvalError> {
     let key = parse_stored(text, scope, field, |n| ctx.exists(n))?;
     let value = ctx.value(glyph, layer, field, &key)?;
-    let Some(actual) = ctx.metric(glyph, layer, field)? else { return Ok(None) };
+    let Some(actual) = own.metric(ctx, glyph, layer, index, field)? else { return Ok(None) };
     Ok((round_half_up(actual) != value).then_some(Problem::OutOfSync { value, actual }))
 }
 
@@ -71,7 +104,7 @@ pub fn scan(font: &Font) -> Vec<Finding> {
     let mut ctx = Ctx::new(font);
     let mut out = Vec::new();
     for g in font.glyphs.as_arcs() {
-        scan_into(&mut ctx, g, &mut out);
+        scan_into(&mut ctx, g, &mut out, &mut Own::none());
     }
     out
 }
@@ -79,15 +112,18 @@ pub fn scan(font: &Font) -> Vec<Finding> {
 /// [`scan`] for one glyph.
 pub fn scan_glyph(font: &Font, glyph: &Glyph) -> Vec<Finding> {
     let mut out = Vec::new();
-    scan_into(&mut Ctx::new(font), glyph, &mut out);
+    scan_into(&mut Ctx::new(font), glyph, &mut out, &mut Own::none());
     out
 }
 
 /// The scan's result kept across edits. Copy-on-write keeps the `Arc` of every glyph an edit did
-/// not touch, so [`SyncCache::update`] recomputes only the glyphs whose `Arc` changed and the
-/// glyphs whose results read one of them (keys, the chains behind them, and the components of
-/// every layer measured). A change to the masters, the metrics, the units per em or the glyph
-/// names recomputes everything.
+/// not touch, so [`SyncCache::update`] recomputes only the glyphs whose `Arc` changed, the glyphs
+/// that appeared, and the glyphs whose results read a changed, added or removed glyph name: the
+/// glyphs a key reads (and the chains behind them), the glyphs every measured layer shows through
+/// components, and every name a key looked up, found or not. A renamed glyph counts as one name
+/// removed and one added. A glyph scanned again reuses its own measured metrics when neither it
+/// nor any glyph its components show changed. A change to the masters, the metrics or the units
+/// per em recomputes everything.
 #[derive(Default)]
 pub struct SyncCache {
     /// The font of the last update; the `Weak` keeps its address from being reused.
@@ -95,9 +131,8 @@ pub struct SyncCache {
     masters: Option<Arc<Vec<Master>>>,
     metrics: Option<Arc<Vec<MetricDef>>>,
     units_per_em: u16,
-    names: u64,
     entries: HashMap<String, Kept>,
-    /// Glyph → the glyphs whose results read it.
+    /// Glyph name → the glyphs whose results read it or looked it up.
     readers: HashMap<String, HashSet<String>>,
     computed: u64,
 }
@@ -105,15 +140,61 @@ pub struct SyncCache {
 struct Kept {
     glyph: Arc<Glyph>,
     findings: Vec<Finding>,
+    /// The names this glyph's results depend on (see [`SyncCache`]).
     deps: Vec<String>,
+    /// The glyphs this glyph's layers show through components, all the way down.
+    shows: Vec<String>,
+    measured: Measured,
 }
 
-fn names_hash(font: &Font) -> u64 {
-    let mut h = DefaultHasher::new();
-    for g in font.glyphs.as_arcs() {
-        g.name.hash(&mut h);
+/// The names that parsing `glyph`'s keys looks up (found or not), with the glyph each key names.
+/// Every key of every layer is read, so this covers the keys a chain through `glyph` parses.
+fn lookups(font: &Font, glyph: &Glyph, out: &mut HashSet<String>) {
+    let sets = glyph.layers.iter().map(|l| (Scope::Local, &l.info.metrics_keys)).chain(std::iter::once((Scope::Glyph, &glyph.info.metrics_keys)));
+    let asked: Cell<Vec<String>> = Cell::new(Vec::new());
+    for (scope, keys) in sets {
+        for field in Field::ALL {
+            let Some(text) = field.key_in(keys).filter(|t| !t.trim().is_empty()) else { continue };
+            let parsed = parse_stored(text, scope, field, |n| {
+                let mut v = asked.take();
+                v.push(n.to_string());
+                asked.set(v);
+                font.glyph(n).is_some()
+            });
+            if let Some(name) = parsed.as_ref().ok().and_then(Key::glyph) {
+                out.insert(name.to_string());
+            }
+            out.extend(asked.take());
+        }
     }
-    h.finish()
+}
+
+/// The glyphs `glyph`'s layers show through components (each layer reading its bases' layers of
+/// its master), named whether or not they exist. One level deeper than outlines go, and each
+/// base once per layer.
+fn shows(font: &Font, glyph: &Glyph) -> Vec<String> {
+    let mut out: HashSet<String> = HashSet::new();
+    for layer in &glyph.layers {
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut stack: Vec<(&Layer, usize)> = vec![(layer, 0)];
+        while let Some((l, depth)) = stack.pop() {
+            for shape in &l.shapes {
+                let Shape::Component(c) = shape else { continue };
+                if !seen.insert(c.glyph.as_str()) {
+                    continue;
+                }
+                if !out.contains(&c.glyph) {
+                    out.insert(c.glyph.clone());
+                }
+                if depth <= MAX_COMPONENT_DEPTH
+                    && let Some(base) = font.glyph(&c.glyph).and_then(|g| g.layer(&layer.master))
+                {
+                    stack.push((base, depth + 1));
+                }
+            }
+        }
+    }
+    out.into_iter().collect()
 }
 
 impl SyncCache {
@@ -122,52 +203,101 @@ impl SyncCache {
         if std::ptr::eq(self.font.as_ptr(), Arc::as_ptr(font)) {
             return;
         }
-        let names = names_hash(font);
         let same = self.masters.as_ref().is_some_and(|m| Arc::ptr_eq(m, &font.masters))
             && self.metrics.as_ref().is_some_and(|m| Arc::ptr_eq(m, &font.metrics))
-            && self.units_per_em == font.units_per_em
-            && self.names == names;
-        let dirty: HashSet<String> = if same {
-            let mut dirty = HashSet::new();
-            for g in font.glyphs.as_arcs() {
-                if self.entries.get(&g.name).is_some_and(|k| Arc::ptr_eq(&k.glyph, g)) {
-                    continue;
-                }
-                if let Some(readers) = self.readers.get(&g.name) {
-                    dirty.extend(readers.iter().cloned());
-                }
-                dirty.insert(g.name.clone());
-            }
-            dirty
-        } else {
+            && self.units_per_em == font.units_per_em;
+        if !same {
             self.entries.clear();
             self.readers.clear();
-            font.glyphs.as_arcs().iter().map(|g| g.name.clone()).collect()
-        };
-        let mut ctx = Ctx::new(font);
-        for g in font.glyphs.as_arcs().iter().filter(|g| dirty.contains(&g.name)) {
-            ctx.forget_reads();
-            let mut findings = Vec::new();
-            scan_into(&mut ctx, g, &mut findings);
-            let deps: Vec<String> = ctx.deps.drain().collect();
-            if let Some(old) = self.entries.remove(&g.name) {
-                for d in &old.deps {
-                    if let Some(r) = self.readers.get_mut(d) {
-                        r.remove(&g.name);
+        }
+        // The names whose glyph is new, edited or gone.
+        let mut touched: HashSet<String> = HashSet::new();
+        let mut matched = 0usize;
+        for g in font.glyphs.as_arcs() {
+            match self.entries.get(&g.name) {
+                Some(k) => {
+                    matched += 1;
+                    if !Arc::ptr_eq(&k.glyph, g) {
+                        touched.insert(g.name.clone());
                     }
                 }
+                None => {
+                    touched.insert(g.name.clone());
+                }
             }
+        }
+        let mut dirty = touched.clone();
+        if matched != self.entries.len() {
+            let gone: Vec<String> = self.entries.keys().filter(|n| font.glyph(n).is_none()).cloned().collect();
+            for name in gone {
+                if let Some(old) = self.entries.remove(&name) {
+                    self.unlink(&name, &old.deps);
+                }
+                touched.insert(name);
+            }
+        }
+        for name in &touched {
+            if let Some(readers) = self.readers.get(name) {
+                dirty.extend(readers.iter().cloned());
+            }
+        }
+        let mut ctx = Ctx::new(font);
+        let mut looked_up: HashMap<String, HashSet<String>> = HashMap::new();
+        for g in font.glyphs.as_arcs().iter().filter(|g| dirty.contains(&g.name)) {
+            let old = self.entries.remove(&g.name);
+            let prior = match &old {
+                Some(k) if Arc::ptr_eq(&k.glyph, g) && !k.shows.iter().any(|s| touched.contains(s)) => k.measured.as_slice(),
+                _ => &[],
+            };
+            ctx.forget_reads();
+            let mut own = Own { prior, measured: Vec::new() };
+            let mut findings = Vec::new();
+            scan_into(&mut ctx, g, &mut findings, &mut own);
+            let measured = own.measured;
+            let mut names: HashSet<String> = ctx.deps.drain().collect();
+            // A reused measurement read the glyph and what it shows without telling `ctx`.
+            let shown = if measured.is_empty() { Vec::new() } else { shows(font, g) };
+            if !measured.is_empty() {
+                names.insert(g.name.clone());
+                names.extend(shown.iter().cloned());
+            }
+            let mut read: Vec<String> = names.iter().cloned().collect();
+            read.push(g.name.clone());
+            for r in &read {
+                let Some(rg) = font.glyph(r) else { continue };
+                let found = looked_up.entry(r.clone()).or_insert_with(|| {
+                    let mut out = HashSet::new();
+                    lookups(font, rg, &mut out);
+                    out
+                });
+                names.extend(found.iter().cloned());
+            }
+            if let Some(old) = &old {
+                self.unlink(&g.name, &old.deps);
+            }
+            let deps: Vec<String> = names.into_iter().collect();
             for d in &deps {
                 self.readers.entry(d.clone()).or_default().insert(g.name.clone());
             }
-            self.entries.insert(g.name.clone(), Kept { glyph: g.clone(), findings, deps });
+            self.entries.insert(g.name.clone(), Kept { glyph: g.clone(), findings, deps, shows: shown, measured });
             self.computed = self.computed.saturating_add(1);
         }
         self.masters = Some(font.masters.clone());
         self.metrics = Some(font.metrics.clone());
         self.units_per_em = font.units_per_em;
-        self.names = names;
         self.font = Arc::downgrade(font);
+    }
+
+    /// Takes `reader` off the reader lists of `deps`.
+    fn unlink(&mut self, reader: &str, deps: &[String]) {
+        for d in deps {
+            if let Some(r) = self.readers.get_mut(d) {
+                r.remove(reader);
+                if r.is_empty() {
+                    self.readers.remove(d);
+                }
+            }
+        }
     }
 
     /// The findings of one glyph as of the last update.
