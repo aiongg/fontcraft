@@ -2042,6 +2042,7 @@ milestone = "M5"
 summary = "A metrics key whose target glyph does not exist is shown in turquoise. It is repaired by pointing it at another glyph, replacing it with a number, or creating the missing glyph."
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.8a for the Edit View Info box: a key that `spacing.listOutOfSyncMetrics` reports as unlinked is drawn turquoise and has no update button."
 
 # ── Glyph database ──
 

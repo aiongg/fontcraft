@@ -27,6 +27,7 @@ milestone = "M5"
 summary = "Floating box drawn under the current glyph in Edit View with its name, Unicode value, sidebearings, width, kerning values and kerning groups. Current glyph means the glyph being edited; with text mode on, it is the glyph immediately following the text cursor. Shown only while View > Show Info is on."
 ref = "Edit View › Info Box"
 status = "handbook"
+notes = "Spacing part built in M5.8a (`panels/info_box_metrics.rs`): the name and Unicode value are shown, not edited; LSB, RSB and width are fields. Still to build: editing the name, the Unicode arrow button, the colour swatch in this box (it sits in the selection box), and the kerning values and groups (M5.8b)."
 guesses = [
   "With several glyphs selected in the text, the Info box describes the glyph after the cursor only, and the Unicode value is shown, not edited.",
 ]
@@ -49,6 +50,7 @@ milestone = "M5"
 summary = "Variant of the glyph Info box that replaces the horizontal one when the text is laid out top to bottom. It exposes the vertical metrics (top and bottom sidebearing, vertical origin, vertical advance) and top and bottom kerning values and groups."
 ref = "Edit View › Info Box › Vertical Layout"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.8a: T and B are fields running `spacing.setTopSidebearing` and `spacing.setBottomSidebearing`; O and H are shown, not edited, since no command sets the vertical origin or the vertical width yet. K and G belong to M5.8b."
 
 [[panel]]
 id = "infoBox.selection"
@@ -240,6 +242,7 @@ milestone = "M5"
 summary = "The glyph Info box always describes the current glyph: the glyph open for editing, or in text mode the glyph that follows the text cursor."
 ref = "Edit View › Info Box"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.8a: the box reads the tab's edited glyph and its active layer, and its fields target that glyph."
 
 [[behavior]]
 id = "infoBox.metricsFieldsAcceptKeys"
@@ -248,6 +251,7 @@ milestone = "M5"
 summary = "The LSB, RSB and width fields of the Info box accept either a plain number or a metrics key expression."
 ref = "Edit View › Info Box › Horizontal Layout"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.8a: text that reads as a number is sent as a number, anything else as a key, and the setter checks it."
 
 [[behavior]]
 id = "infoBox.fieldEditing"

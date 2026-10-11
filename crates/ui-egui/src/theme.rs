@@ -251,6 +251,11 @@ pub struct Tokens {
     pub toolbar_icon: f32,
     pub toolbar_gap: f32,
     pub toolbar_menu_width: f32,
+    /// The glyph Info box: a metrics key out of sync with its metric, a key naming a missing
+    /// glyph, and the space between the glyph's descender and the top of the box.
+    pub info_box_key_out_of_sync: Color32,
+    pub info_box_key_unlinked: Color32,
+    pub info_box_glyph_gap: f32,
 }
 
 impl Tokens {
@@ -419,6 +424,9 @@ impl Tokens {
             toolbar_icon: 18.0,
             toolbar_gap: 2.0,
             toolbar_menu_width: 200.0,
+            info_box_key_out_of_sync: Color32::from_rgb(0xe8, 0x3a, 0x3a),
+            info_box_key_unlinked: Color32::from_rgb(0x1f, 0xbf, 0xb8),
+            info_box_glyph_gap: 8.0,
         }
     }
 

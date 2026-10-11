@@ -30,6 +30,13 @@ milestone = "M5"
 summary = "The part of the Edit View Info box (View › Show Info, Cmd+Shift+I) that shows and edits the sidebearings and width of the current glyph. Horizontal scripts, both left-to-right and right-to-left, show left and right sidebearings; top-to-bottom text shows top and bottom sidebearings."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.8a (`panels/info_box_metrics.rs`): each field shows the key that applies, else the number, from `spacing.getMetrics`, and typing runs the field's setter on the current glyph's active layer. The auto-aligned display waits for M6."
+guesses = [
+  "The glyph box hangs under the current glyph's descender, centred on its advance, separate from the selection box at the foot of the canvas; a screenshot of the reference app with a selection settles it.",
+  "Emptying a field that holds a key stores the metric's current number, so the key goes and nothing moves; emptying such a field in the reference app settles it.",
+  "A key that cannot be evaluated (a cycle, a division by zero, a result out of range) is drawn red like an out-of-sync key, without the update button; a cyclic key in the reference app settles it.",
+  "A master that takes its metrics from another master shows that master's values read only, with a line naming it; a linked master in the reference app settles it.",
+]
 
 [[behavior]]
 id = "spacing.metricsOverlayInTextMode"
@@ -62,6 +69,7 @@ milestone = "M5"
 summary = "The Info box shows left/right sidebearings on either side of a central metrics icon for horizontal text in both directions, and top/bottom sidebearings labelled T and B for top-to-bottom text."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M5.8a: the tab's writing direction picks the layout; left-to-right and right-to-left text show LSB, RSB and width, top-to-bottom text T and B."
 
 [[behavior]]
 id = "spacing.infoBoxArrowSteps"
@@ -70,7 +78,7 @@ milestone = "M5"
 summary = "With the caret in a numeric Info box field, Up raises and Down lowers the value by 1 unit; with Shift the step is 10 and with Cmd+Shift it is 100. What the keys do in a field holding a metrics key is not stated."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "handbook"
-notes = "Documented, not yet observed: Up and Down raise and lower an Info box value, by 10 with Shift and by 100 with Cmd+Shift. The kern fields are Info box values and take the same steps; a user report on the reference forum (thread \"Glyphs 3 bug report: arrow keys in kerning\") describes the 1 and 10 steps in a kern field."
+notes = "Documented, not yet observed: Up and Down raise and lower an Info box value, by 10 with Shift and by 100 with Cmd+Shift. The kern fields are Info box values and take the same steps; a user report on the reference forum (thread \"Glyphs 3 bug report: arrow keys in kerning\") describes the 1 and 10 steps in a kern field. Built in M5.8a for the metrics fields: each press commits at once."
 guesses = [
   "Up and Down in a field that holds a metrics key leave the key unchanged; no source says what they do there, and pressing Up in such a field in the reference app settles it.",
 ]
@@ -432,7 +440,7 @@ milestone = "M5"
 summary = "In Edit View a metrics key whose evaluated value differs from the layer's actual metric is drawn in red with an update button next to it; pressing the button brings that one metric in line."
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
-notes = "Documented, not yet observed: an out-of-sync key is shown in red with an update button."
+notes = "Documented, not yet observed: an out-of-sync key is shown in red with an update button. Built in M5.8a: the Info box draws the key red, and its update button runs `spacing.updateMetricsKey` for that field."
 
 [[behavior]]
 id = "metricsKey.outOfSyncInFontView"
