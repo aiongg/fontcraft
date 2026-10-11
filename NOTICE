@@ -199,6 +199,8 @@ bundled, the file says so in its header and the project is listed here with its 
   and ligature carets (fea-rs/src/compile/feature_writer.rs and fea-rs/src/compile/tables/gdef.rs).
   fontc's writer follows ufo2ft's markFeatureWriter.py, cursFeatureWriter.py and
   gdefFeatureWriter.py (MIT License).
+  The glyph range size estimate of the feature compiler's checks (crates/fea/src/check.rs, M8.2)
+  follows fea-rs's fea-rs/src/compile/glyph_range.rs (MIT OR Apache-2.0) at version 1.0.0.
 
   The PostScript autohinter (crates/autohint, M10) is ported from otfautohint in AFDKO 5.0.1
   (https://github.com/adobe-type-tools/afdko), Apache License 2.0, Copyright 2021 Adobe: its

@@ -44,12 +44,18 @@
 //! and marks).
 #![forbid(unsafe_code)]
 
+mod check;
 mod diagnostic;
 mod files;
 mod generated;
 mod glyphs;
 mod limits;
 mod output;
+mod provider;
+mod resolve;
+#[cfg(test)]
+mod rows_tests;
+mod run;
 mod variations;
 
 pub use diagnostic::{Diagnostic, Severity};
@@ -96,21 +102,18 @@ impl<'a> CompileRequest<'a> {
 /// Compiles the request's files to layout tables. Errors and warnings fea-rs reports, and
 /// refusals of the pre-checks, come back as diagnostics; at most [`Limits::diagnostics`] of them.
 pub fn compile(req: &CompileRequest) -> Result<Compiled, Vec<Diagnostic>> {
-    // M8.2: resolver, pre-checks, fea-rs on the big-stack thread, tables to bytes.
-    let _ = req;
-    Err(vec![Diagnostic::request(Severity::Error, NOT_BUILT)])
+    run::run(req, true)
 }
 
 /// Parses and validates the request's files without building tables: the diagnostics
-/// [`compile`] would report about the code itself (`font.features.listErrors`). An empty list
-/// means the code is valid.
+/// [`compile`] would report about the code itself (`font.features.listErrors`). A list without
+/// errors means the code is valid.
 pub fn validate(req: &CompileRequest) -> Vec<Diagnostic> {
-    // M8.2: the same pre-checks, then fea-rs's `validate`.
-    let _ = req;
-    vec![Diagnostic::request(Severity::Error, NOT_BUILT)]
+    match run::run(req, false) {
+        Ok(compiled) => compiled.warnings,
+        Err(diagnostics) => diagnostics,
+    }
 }
-
-const NOT_BUILT: &str = "compiling feature code is not available yet";
 
 #[cfg(test)]
 mod tests {
@@ -118,7 +121,7 @@ mod tests {
 
     #[test]
     fn a_request_fails_with_a_message_not_a_panic() {
-        let files = VirtualFiles::new("features.fea", "feature liga { sub f i by f_i; } liga;").unwrap();
+        let files = VirtualFiles::new("features.fea", "feature liga { sub f i by f_x; } liga;").unwrap();
         let order = GlyphOrder::new(vec![".notdef".into(), "f".into(), "i".into(), "f_i".into()]).unwrap();
         let result = compile(&CompileRequest::new(&files, &order));
         assert!(result.is_err_and(|d| !d.is_empty()));

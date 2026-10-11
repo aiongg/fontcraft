@@ -673,7 +673,7 @@ milestone = "M8"
 summary = "Feature include() paths are resolved relative to the source file; fontmake needs --expand-features-to-instances or --fea-include-dir when instances are compiled from another directory. Our compiler always resolves includes against the original source location, so no flag is needed."
 ref = "fontmake USAGE.md; fontmake Lib/fontmake/__main__.py (--fea-include-dir)"
 status = "inferred"
-notes = "M8 resolves includes through fea-rs's resolver interface against a closed set of files read relative to the source file, at most 4,096 files and 50 levels deep (M8 planning pass)."
+notes = "Includes resolve through fea-rs's resolver interface against a closed set of files: the request's files, then the source's folder on disk, looked up from the root file's folder and then the including file's folder; at most 4,096 files and 50 levels deep, no path outside the folder."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: outline preparation
@@ -1488,6 +1488,7 @@ milestone = "M8"
 summary = "Feature code is lexed, parsed, validated once and compiled to GSUB, GPOS and GDEF plus any head, hhea, vhea, OS/2, name, BASE and STAT blocks, against the final glyph order (fontc uses fea-rs). When masters carry different feature files each is compiled separately and the results merged into one variable compilation; generated kerning and marks are then added once."
 ref = "fontc fea-rs/README.md, fea-rs/src/compile/output.rs, fontbe/src/features.rs"
 status = "docs"
+notes = "The fea-rs wrapper (crates/fea) checks the code first (sizes, nesting, includes, class and rule growth, inputs on which fea-rs panics), then parses, validates and compiles it on a thread with a 64 MB stack; a panic that gets through is reported as a message."
 
 [[behavior]]
 id = "compile.featureWriterModes"
@@ -1595,6 +1596,7 @@ milestone = "M8"
 summary = "write-fonts resolves subtable offsets with a graph packer that reorders subtables, deduplicates identical ones, splits some oversized subtables and promotes lookups to extension lookups when 16-bit offsets overflow. A table that still cannot be packed is a build error naming the table, never a silently truncated font."
 ref = "write-fonts src/graph.rs, src/graph/splitting.rs; fontc fontbe/src/font.rs (failure_to_pack_a_table_is_an_error)"
 status = "docs"
+notes = "A layout table write-fonts cannot write (for example offsets that overflow even after splitting) is reported as an error message for that table."
 
 [[behavior]]
 id = "compile.skipFeatures"
