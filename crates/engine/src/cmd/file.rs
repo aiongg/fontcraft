@@ -121,6 +121,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
         );
     }
     let (font, mut warnings) = crate::io::open(&path, face)?;
+    let font = crate::linked::resolve(&font, Some(&path), &mut warnings)?.unwrap_or(font);
     let (font, aligned) = align_imported(s, font, &mut warnings);
     let glyph_data = crate::glyph_data::source_files(&path, &mut warnings);
     // Every reader checks the font it returns.

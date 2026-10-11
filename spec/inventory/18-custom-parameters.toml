@@ -985,9 +985,10 @@ effect = "other"
 summary = "References another source file; glyphs it has that the host lacks appear in the host as if copied, in layer and master order, visible and typeable but locked. Used to split work across people or share smart components. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12. 3 corpus sources (the GlyphsSDK samples) use it."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12. 3 corpus sources (the GlyphsSDK samples) use it; their value is a dictionary whose `Path` names the file (`files/LinkedFontv3.glyphs`, beside the samples), and the version 2 sample's dictionary is empty. FontCraft also reads a plain string."
 guesses = [
   "The path is relative to the host file's folder unless absolute; the imported glyphs are read when the host opens and before each export, shown locked, never saved into the host; a missing or unreadable file is a warning on opening and at export, not an error; the reference app settles the path form and the missing-file case.",
+  "A linked glyph's layers go to the host master with the same id, else the one at the same position, and layers of other masters are left out; the linked file's kerning, features and groups are not imported; the reference app settles both with font B (m7-two) linked into font A (m7-one).",
 ]
 observe = [
   "Add Import Font naming font B (m7-two) by relative path, then by absolute path, then rename font B (m7-two)'s file: note which glyphs are shown, whether they are locked, and the message for the missing file.",
@@ -1003,9 +1004,10 @@ effect = "other"
 summary = "References a master in another source file so it behaves like a master of the host. Both files need mutually compatible axis values, and each linked master takes a parameter of its own. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12."
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12. No sample file uses it."
 guesses = [
-  "The value is the other file's path, a semicolon and the master's name, resolved as Import Font resolves paths; the linked master is read-only and its glyphs' layers are not saved into the host; the reference app settles the value syntax.",
+  "The value is the other file's path, a semicolon and the master's name or id, or a dictionary with `Path` and `Master` (the form Import Font's samples suggest), resolved as Import Font resolves paths; with no master named, the file's first master; the reference app settles the value syntax.",
+  "The linked master keeps its id unless the host uses it (then it gets a fresh one), takes its axis values by axis tag, its metric and stem values by definition, its layers for every glyph the host has and its kerning; its layers can be edited but are not saved into the host; the reference app settles whether it is read-only.",
 ]
 observe = [
   "Add Import Master naming font B (m7-two)'s Bold master: note the master added and what is saved in the host file.",
