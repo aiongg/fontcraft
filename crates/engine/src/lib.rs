@@ -110,15 +110,21 @@ const MAX_DEPTH: u32 = 16;
 
 /// `new` with the composites that follow its changes since `old` re-aligned
 /// (`fontcraft_components::metrics::realign`), checked as every edit is; `None` when nothing
-/// moves. `what` names the command or interaction in the error.
-fn realigned(what: &str, old: &Arc<Font>, new: &Arc<Font>) -> Result<Option<Arc<Font>>> {
+/// moves. `what` names the command or interaction in the error. The glyphs re-aligned get
+/// `stamp` as their last change, as edited glyphs do.
+fn realigned(what: &str, old: &Arc<Font>, new: &Arc<Font>, stamp: Option<&str>) -> Result<Option<Arc<Font>>> {
     if Arc::ptr_eq(old, new) {
         return Ok(None);
     }
-    let next = fontcraft_components::metrics::realign(old, Font::clone(new))
+    let mut next = fontcraft_components::metrics::realign(old, Font::clone(new))
         .map_err(|e| EngineError::Disabled(what.to_string(), format!("the composites that follow this change cannot be aligned: {e}")))?;
     if next.same_as(new) {
         return Ok(None);
+    }
+    if let Some(stamp) = stamp
+        && clock::writes_last_change(&next)
+    {
+        clock::stamp_changed(&mut next, new, stamp);
     }
     next.check_changed(new)?;
     Ok(Some(Arc::new(next)))
@@ -353,7 +359,7 @@ impl Session {
     /// `command.batch` the step is not pushed: the batch makes one step of all its edits.
     pub fn edit<T>(&mut self, label: &str, f: impl FnOnce(&mut Font) -> Result<T>) -> Result<T> {
         let i = self.active.filter(|i| *i < self.docs.len()).ok_or(EngineError::NoDocument)?;
-        let now = self.clock.as_ref().and_then(|c| c());
+        let stamp = self.stamp();
         let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
         let mut next = Font::clone(&doc.font);
         let out = f(&mut next)?;
@@ -363,7 +369,7 @@ impl Session {
         if let Some(name) = locked_glyph_changed(&next, &doc.font) {
             return Err(EngineError::Locked(name));
         }
-        if let Some(stamp) = now.and_then(clock::last_change_text)
+        if let Some(stamp) = stamp
             && clock::writes_last_change(&next)
         {
             clock::stamp_changed(&mut next, &doc.font, &stamp);
@@ -385,6 +391,11 @@ impl Session {
     /// No `command.batch` is running (for tests and the command sweep).
     pub fn batch_is_idle(&self) -> bool {
         self.batch.is_none()
+    }
+
+    /// The last-change text for an edit made now; `None` without a clock.
+    fn stamp(&self) -> Option<String> {
+        self.clock.as_ref().and_then(|c| c()).and_then(clock::last_change_text)
     }
 
     /// Sets the clock [`Session::edit`] reads to stamp Last Changed on the glyphs an edit
@@ -622,9 +633,10 @@ impl Session {
         if matches!(id, "edit.undo" | "edit.redo") {
             return Ok(());
         }
+        let stamp = self.stamp();
         for doc in &mut self.docs {
             let Some(old) = before.iter().find(|d| d.id == doc.id) else { continue };
-            if let Some(font) = realigned(id, &old.font, &doc.font)? {
+            if let Some(font) = realigned(id, &old.font, &doc.font, stamp.as_deref())? {
                 doc.font = font;
             }
         }
@@ -704,6 +716,7 @@ impl Session {
     pub fn commit(&mut self) -> Result<bool> {
         let it = self.interaction.take().ok_or_else(|| EngineError::Interaction("no interaction is running".into()))?;
         let Some(i) = self.position_of(it.doc) else { return Ok(false) };
+        let stamp = self.stamp();
         let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
         if Arc::ptr_eq(&doc.font, &it.before) || doc.font.same_as(&it.before) {
             doc.font = it.before;
@@ -711,8 +724,11 @@ impl Session {
         }
         // Each preview was aligned as it ran (`run_command`); this catches a font changed by
         // other means meanwhile. A failure ends the interaction as a cancel would.
-        match realigned(&it.label, &it.before, &doc.font) {
-            Ok(Some(font)) => doc.font = font,
+        match realigned(&it.label, &it.before, &doc.font, stamp.as_deref()) {
+            Ok(Some(font)) => {
+                doc.font = font;
+                doc.revision += 1;
+            }
             Ok(None) => {}
             Err(e) => {
                 doc.font = it.before;

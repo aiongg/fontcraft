@@ -253,3 +253,17 @@ fn hostile_placements_fail_with_an_error() {
     let f = font(vec![composite("loop", vec![part("loop")])]);
     let _ = align_layer(&f, "loop", M);
 }
+
+#[test]
+fn a_layer_of_many_marks_with_many_anchors_hits_the_work_limit() {
+    // Each mark's plain anchors replace those of the mark before, so the targets stay few while
+    // every mark still reads all its anchors.
+    let names: Vec<String> = (0..4_095).map(|i| format!("x{i}")).collect();
+    let mut anchors: Vec<(&str, f64, f64)> = names.iter().map(|n| (n.as_str(), 0.0, 0.0)).collect();
+    anchors.push(("_top", 0.0, 500.0));
+    let mark = drawn("heavycomb", 0.0, (-50.0, 520.0, 50.0, 620.0), &anchors);
+    let parts: Vec<Component> = std::iter::once(part("A")).chain((0..300).map(|_| part("heavycomb"))).collect();
+    let f = font(vec![letter_a(), mark, composite("Aheavy", parts)]);
+    let e = aligned_placement(&f, "Aheavy", M).unwrap_err();
+    assert_eq!(e, crate::ComponentsError::LimitExceeded { what: "alignment steps on one layer", limit: crate::MAX_ALIGN_WORK });
+}

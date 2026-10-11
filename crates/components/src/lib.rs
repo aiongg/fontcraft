@@ -35,8 +35,8 @@ pub mod propagate;
 pub mod recipe;
 
 pub use error::{
-    ComponentsError, MAX_ANCHOR_NAME_LEN, MAX_COMPONENT_DEPTH, MAX_COMPOSE_GLYPHS, MAX_LAYER_ANCHORS, MAX_LAYER_COMPONENTS, MAX_RECIPE_BYTES,
-    MAX_RECIPE_PARTS,
+    ComponentsError, MAX_ALIGN_WORK, MAX_ANCHOR_NAME_LEN, MAX_COMPONENT_DEPTH, MAX_COMPOSE_GLYPHS, MAX_LAYER_ANCHORS, MAX_LAYER_COMPONENTS,
+    MAX_RECIPE_BYTES, MAX_RECIPE_PARTS,
 };
 pub use index::ComponentIndex;
 pub use propagate::{AnchorCache, AnchorSource, EffectiveAnchor};

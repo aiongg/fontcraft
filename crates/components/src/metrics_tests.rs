@@ -5,8 +5,9 @@ use std::sync::Arc;
 use fontcraft_model::{Font, Layer, Master, Path, Shape};
 
 use crate::ComponentsError;
-use crate::align_tests::{M, composite, drawn, font, letter_a, part, part_at, pos, top_mark};
+use crate::align_tests::{M, composite, drawn, font, letter_a, part, part_at, pos, top_mark, with_info};
 use crate::metrics::{DerivedMetrics, changed_glyphs, derived_metrics, parse_offset, realign, realign_glyphs};
+use crate::propagate::effective_anchors;
 
 fn layer(f: &Font, glyph: &str) -> Layer {
     f.glyph(glyph).unwrap().layers[0].clone()
@@ -186,4 +187,68 @@ fn a_composite_past_the_coordinate_limit_fails_the_realignment() {
     let mut new = old.clone();
     new.glyphs.get_mut("wide").unwrap().layers[0].width = 600_000.0;
     assert!(matches!(realign(&old, new), Err(ComponentsError::BadPlacement { .. })));
+}
+
+#[test]
+fn turning_the_alignment_setting_off_realigns_what_changed_meanwhile() {
+    let aligned = accents();
+    let mut on = aligned.clone();
+    Arc::make_mut(&mut on.info).settings.disables_automatic_alignment = Some(true);
+    let on = realign(&aligned, on).unwrap();
+    let mut edited = on.clone();
+    edited.glyphs.get_mut("A").unwrap().layers[0].width = 650.0;
+    let edited = realign(&on, edited).unwrap();
+    assert_eq!(layer(&edited, "Aacute").width, 600.0, "the setting stops alignment");
+    let mut off = edited.clone();
+    Arc::make_mut(&mut off.info).settings.disables_automatic_alignment = None;
+    let out = realign(&edited, off).unwrap();
+    assert_eq!(layer(&out, "Aacute").width, 650.0, "turning it off realigns the composites");
+    assert_eq!(layer(&out, "Aacute.ss01").width, 650.0);
+}
+
+#[test]
+fn a_dependent_past_a_limit_is_skipped_and_the_rest_follow() {
+    let names: Vec<String> = (0..=crate::MAX_LAYER_ANCHORS).map(|i| format!("x{i}")).collect();
+    let anchors: Vec<(&str, f64, f64)> = names.iter().map(|n| (n.as_str(), 0.0, 0.0)).collect();
+    let mut f = accents();
+    f.glyphs.push(drawn("many", 100.0, (0.0, 0.0, 100.0, 100.0), &anchors));
+    f.glyphs.push(composite("Amany", vec![part("A"), part_at("many", 5.0, 0.0)]));
+    let mut new = f.clone();
+    new.glyphs.get_mut("A").unwrap().layers[0].width = 650.0;
+    let out = realign(&f, new).unwrap();
+    assert_eq!(layer(&out, "Aacute").width, 650.0, "the edit goes through and the other composites follow");
+    assert_eq!(layer(&out, "Amany"), layer(&f, "Amany"), "the layer past the anchor limit keeps what it stored");
+}
+
+#[test]
+fn a_component_pinned_to_another_master_follows_that_master() {
+    let mut f = accents();
+    let mut second = f.masters[0].clone();
+    second.id = "m02".into();
+    Arc::make_mut(&mut f.masters).push(Master { name: "Bold".into(), ..second });
+    {
+        let mut a = f.glyphs.get_mut("A").unwrap();
+        let mut l = a.layers[0].clone();
+        (l.id, l.master, l.width) = ("m02".into(), "m02".into(), 700.0);
+        l.anchors.iter_mut().filter(|an| an.name == "top").for_each(|an| an.x = 350.0);
+        a.layers.push(l);
+    }
+    let info = fontcraft_model::ComponentInfo { master_id: Some("m02".into()), ..Default::default() };
+    f.glyphs.push(composite("Apinned", vec![with_info(part("A"), info), part("acutecomb")]));
+    let all: Vec<String> = f.glyphs.iter().map(|g| g.name.clone()).collect();
+    let f = realign_glyphs(f, &all).unwrap();
+    assert_eq!(pos(&layer(&f, "Apinned"), 1), (350.0, 200.0), "the mark sits on the pinned master's top");
+    let top = |f: &Font| effective_anchors(f, "Apinned", M).unwrap().into_iter().find(|a| a.name == "top").map(|a| a.x);
+    assert_eq!(top(&f), Some(350.0), "propagation reads the pinned master's layer too");
+
+    let mut new = f.clone();
+    {
+        let mut a = new.glyphs.get_mut("A").unwrap();
+        a.layers[1].width = 720.0;
+        a.layers[1].anchors.iter_mut().filter(|an| an.name == "top").for_each(|an| an.x = 360.0);
+    }
+    let out = realign(&f, new).unwrap();
+    let l = layer(&out, "Apinned");
+    assert_eq!((l.width, pos(&l, 1)), (720.0, (360.0, 200.0)), "an edit of the pinned master moves the composite on its own master");
+    assert_eq!(layer(&out, "Aacute").width, 600.0, "composites reading their own master stay");
 }
