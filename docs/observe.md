@@ -32,37 +32,40 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**809 rows to check: 930 guesses and 8 observe steps.**
+**871 rows to check: 1006 guesses and 56 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **417** |
+| **Built milestones (M0 to M6)** | all | **436** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 95 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
-| Built milestones (M0 to M6) | Components and anchors | 37 |
+| Built milestones (M0 to M6) | Components and anchors | 50 |
 | Built milestones (M0 to M6) | Filters | 36 |
-| Built milestones (M0 to M6) | Spacing and metrics keys | 21 |
+| Built milestones (M0 to M6) | Spacing and metrics keys | 22 |
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 103 |
-| Built milestones (M0 to M6) | Font Info and features | 6 |
-| Built milestones (M0 to M6) | Files: open, import, export | 34 |
+| Built milestones (M0 to M6) | Font Info and features | 8 |
+| Built milestones (M0 to M6) | Files: open, import, export | 37 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **392** |
-| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 8 |
+| **Later milestones (after M6)** | all | **435** |
+| Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 12 |
 | Later milestones (after M6) | Edit View: text mode and preview | 8 |
-| Later milestones (after M6) | Components and anchors | 3 |
-| Later milestones (after M6) | Font View | 5 |
-| Later milestones (after M6) | Font Info and features | 171 |
+| Later milestones (after M6) | Components and anchors | 26 |
+| Later milestones (after M6) | Filters | 1 |
+| Later milestones (after M6) | Spacing and metrics keys | 3 |
+| Later milestones (after M6) | Kerning and the Kerning window | 3 |
+| Later milestones (after M6) | Font View | 6 |
+| Later milestones (after M6) | Font Info and features | 172 |
 | Later milestones (after M6) | Interpolation | 25 |
 | Later milestones (after M6) | Hinting | 55 |
 | Later milestones (after M6) | Colour fonts | 29 |
-| Later milestones (after M6) | Files: open, import, export | 10 |
-| Later milestones (after M6) | Settings and the window | 9 |
-| Later milestones (after M6) | Scripts, plug-ins and URLs | 64 |
+| Later milestones (after M6) | Files: open, import, export | 11 |
+| Later milestones (after M6) | Settings and the window | 11 |
+| Later milestones (after M6) | Scripts, plug-ins and URLs | 68 |
 | Later milestones (after M6) | Elsewhere | 5 |
 
-## Built milestones (M0 to M6) (417)
+## Built milestones (M0 to M6) (436)
 
 ### Edit View: drawing, guides, layers and the Palette (95)
 
@@ -383,7 +386,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.
   - Guess: Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.
 
-### Components and anchors (37)
+### Components and anchors (50)
 
 - [ ] `export.underscoreGlyphsOmitted` (behavior, M2, inferred): Non-exporting glyphs, which underscore-named part glyphs are by default, are left out…
   - Guess: Components that use non-exporting glyphs are decomposed at export; our inference from the non-export rule.
@@ -395,12 +398,29 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Renaming an anchor to a name already on the layer is refused with a message; the reference app settles it.
 - [ ] `glyph.setAnchors` (M6, handbook): Set Anchors
   - Guess: Set Anchors adds only the default anchors the layer lacks and leaves existing anchors where they are; Set Anchors on a glyph with a moved anchor in the reference app settles it.
-  - Guess: The default anchors come from our table keyed by category, subcategory and case: letters get top (at the x-height for lowercase, the cap height for uppercase) and bottom (on the baseline), centred on the outline's bounding box and corrected for the italic angle; combining marks get the underscore anchor at the matching metric and, for marks that stack, the plain anchor above the outline; anchors the corpus sources saved by the reference app hold for the same glyph names measure the table (M6 plan § 5).
+  - Guess: The default anchors come from our table in `components::default_anchors` (M6.3): letters get top (cap height for uppercase; x-height for lowercase, or the ascender when the outline rises above the middle between the two; the outline's top without a case) and bottom (baseline), centred on the outline and slanted by the italic angle, plus ogonek for A E I O U a e i idotless o u, center for D H L O T d h l o t and topright for L O U d l o t u; marks above get _top at the x-height (cap height for .case) and top on the outline's top, marks below _bottom on the baseline and bottom on the outline's bottom, ogonekcomb _ogonek, horncomb and caroncomb.alt _topright; Han, Hangul, Kana, Yi and Bopomofo letters get none; the anchors stored in corpus sources saved by the reference app measure the table (M6 plan § 5).
   - Guess: A ligature named after its parts gets caret_1 to caret_(n-1) on the baseline, dividing the advance width equally; Set Anchors on f_f_l in the reference app settles it.
 - [ ] `glyph.resetAnchorsForAllMasters` (M6, handbook): Reset Anchors for All Masters
   - Guess: The shortcut is Cmd+Alt+Shift+U, Reset Anchors with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.
+- [ ] `components.liveUpdateFromBaseGlyph` (behavior, M6, handbook): A component is a live reference to its base glyph: editing the…
+  - Guess: Re-alignment after an edit touches only the masters whose layers the edit changed, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.
+  - Guess: A locked composite is not re-aligned when its base changes, because a lock keeps the glyph's drawing; locking a composite in the reference app and editing its base settles it.
+- [ ] `components.autoComposeOnAddGlyph` (behavior, M6, handbook): When a glyph that the glyph info database describes as a composite…
+  - Guess: The Unicode decomposition is expanded fully (Aringacute is A, ringcomb, acutecomb), except that a letter with a horn stays whole when the font has it (Ohornacute is Ohorn, acutecomb); the composites stored in corpus sources saved by the reference app measure it (M6 plan § 5).
+  - Guess: Our exceptions to Unicode: a name containing commaaccent takes commaaccentcomb where Unicode has the cedilla, gcommaaccent takes commaturnedabovecomb, and dcaron, lcaron, Lcaron and tcaron prefer caroncomb.alt; composing these in the reference app settles it.
+  - Guess: Two marks in a row become their mark ligature (circumflexcomb_gravecomb, with the same suffix preferences) when the font has it; composing Acircumflexgrave in the reference app with the mark ligature present settles it.
+  - Guess: A base of a decomposition takes the composite's suffix and is required (agrave.sc needs a.sc), while a ligature part takes the suffix only when the font has the suffixed glyph (f_f_l.ss01 from f.ss01 and l); composing suffixed glyphs in the reference app settles it.
+- [ ] `components.autoComposeNeedsAllParts` (behavior, M6, handbook): Automatic composition is all-or-nothing: if any one of the components the database…
+  - Guess: The refusal names every missing part once: a mark by its plain name, a base by the name it needed (a.sc for agrave.sc); the message of the reference app settles it.
+- [ ] `components.preferMarkWithSameSuffix` (behavior, M6, handbook): While composing a glyph automatically, a mark glyph carrying the same dot…
+  - Guess: For an uppercase composite with a suffix the marks are tried as the suffixed mark, the .case mark, then the plain mark (Agrave.ss01: gravecomb.ss01, gravecomb.case, gravecomb); composing it in the reference app with all three present settles it.
+- [ ] `components.preferNarrowMarksForIJ` (behavior, M6, handbook): Composites built on i or j (imacron, jcircumflex and the like) prefer…
+  - Guess: A mark ending in .i is tried before one ending in .narrow, and both only on the dotless lowercase i and j, not on I or J; composing imacron in the reference app with both marks present settles it.
+- [ ] `components.ijBuiltFromDotless` (behavior, M6, handbook): The default composition of i and j is the dotless letter (idotless,…
+  - Guess: Composites lose the dot of i and j only before a mark above (Unicode combining class 230), so iogonek is i plus ogonekcomb; a suffixed i or j is composed only when the font has the suffixed dotless letter; composing iogonek and i.sc in the reference app settles it.
 - [ ] `components.recipeBasePlusMarks` (behavior, M6, handbook): Add Glyphs accepts the recipe form base+mark=glyph: names joined by plus signs…
   - Guess: A part whose glyph has category Mark is a mark and attaches to the base before it; any other part is a base; a recipe holds only glyph names, no spaces (spaces separate items in Add Glyphs) and any number of plus signs; typing recipes with code points or spaces into the reference app settles it.
+  - Guess: The first part of a recipe is a base even when its glyph is a mark (dotaccentcomb+dotaccentcomb=dieresiscomb sets the second on the first), and the category stored in the font wins over the database's; typing such a recipe in the reference app settles it.
 - [ ] `components.tabCyclesComponents` (behavior, M6, handbook): With a component selected, Tab moves the selection to the next component…
   - Guess: Tab steps through the layer's nodes in path order, then the components in shape order, then the anchors, then the guides; Tab on a layer with components and anchors in the reference app settles it.
 - [ ] `components.infoBoxExtraControls` (behavior, M6, handbook): Beyond the fields listed for the component Info box in the Edit…
@@ -411,32 +431,50 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The base glyph goes into the tab text to the left of the composite, as the Info box section of the Measuring page says; the Components page says only next to it. Double-clicking a component in the reference app settles it.
 - [ ] `components.lockedCannotMove` (behavior, M6, handbook): A locked component rejects every move, from mouse, arrow keys or Info…
   - Guess: A lock blocks Info box position edits and the Palette's transformations as well as moves, and leaves the component's other settings editable; a locked component in the reference app settles it.
+- [ ] `components.placeholderCircularReference` (behavior, M6, handbook): A component whose base glyph, directly or through nesting, contains the glyph…
+  - Guess: Anchor propagation reports a glyph on or above a component cycle as an error, where glyphsLib gives glyphs on the cycle their own anchors and glyphs above it none; a cycle in the reference app settles what it shows.
 - [ ] `components.topBottomAnchorsPropagate` (behavior, M6, handbook): Anchors named top and bottom on a component's base glyph count as…
   - Guess: The editor and the compiler propagate anchors exactly as fontc does, every name included, since its algorithm gives top and bottom as the handbook says and also the other names both reference compilers export; a composite that inherits an ogonek or a cedilla anchor in the reference app settles it.
+  - Guess: A non-master layer whose base glyph has no layer with the same id reads the base's master layer of the same master, where glyphsLib interpolates the base's anchors at the layer's axis location; a brace layer in the reference app whose base lacks it settles it.
+  - Guess: A base glyph without a layer for the composite's master passes no anchors on, where glyphsLib stops with an error; the reference app with such a font settles it.
+- [ ] `components.underscoreAnchorSnapsToPlainAnchor` (behavior, M6, handbook): A component whose base glyph has an anchor with a leading underscore…
+  - Guess: A component whose underscore anchors find no plain anchor among the components before it is set after them as another base, as if typed; a mark added to a base without the matching anchor in the reference app settles it.
+- [ ] `components.alternativeAnchorSuffix` (behavior, M6, handbook): A layer may carry several anchors of one type, told apart by…
+  - Guess: The component's anchor attribute is matched by its plain name, the part before the first underscore or period, against the mark's underscore anchor; the target is the attribute's anchor, else for a numbered name (top_2) the plain anchor of that base, else the plain anchor; a ligature with a mark set to top_1 after its second base in the reference app settles it.
+- [ ] `components.autoAlignDefaultOnWhenComponentsOnly` (behavior, M6, handbook): Automatic alignment is on by default for a glyph layer whose shapes…
+  - Guess: A component that is not aligned keeps its stored position but still counts: its anchors serve the marks after it and, as a base, it moves the next base to follow its stored place; a composite with one disabled base among aligned ones in the reference app settles it.
 - [ ] `components.fontWideDisableAutoAlign` (behavior, M6, handbook): The Font Info › Other option Disable Automatic Alignment turns off automatic…
   - Guess: The font-wide option also overrides components whose alignment is forced (1); a forced component in a font with the option on, in the reference app, settles it.
 - [ ] `components.singleNumberComponentShiftsVertically` (behavior, M6, handbook): When a composite's only component has the glyph category Number (zero to…
   - Guess: A Number-category single component with alignment 0 behaves as alignment 3, and alignment 3 gives the same horizontal-only alignment to any component; the corpus alignment measure (M6 plan § 5) checks the stored positions of both.
+- [ ] `components.autoAlignMetricsFromBase` (behavior, M6, handbook): The sidebearings of an auto-aligned composite are derived from its base components,…
+  - Guess: A layer with a path keeps its stored width even when it holds forced components, which are still placed; a forced component next to a path in the reference app, with the base's width changed, settles it.
 - [ ] `components.autoAlignSingleComponent` (behavior, M6, handbook): A composite may consist of one auto-aligned component and then mirrors the…
-  - Guess: A single aligned component keeps its transform; the composite takes the base glyph's width, and a horizontally flipped component is shifted so its outline keeps the base glyph's sidebearings mirrored (nine from six keeps six's width); the corpus alignment measure (M6 plan § 5) checks the flipped single components the sources hold.
+  - Guess: A single aligned component keeps its transform; the composite takes the base glyph's width times the length of the component's transformed x axis (so a scaled component gives a scaled width), and a horizontally flipped component is shifted so its outline keeps the base glyph's sidebearings mirrored (nine from six keeps six's width); the corpus alignment measure (M6 plan § 5) checks the flipped single components the sources hold.
 - [ ] `components.autoAlignBaseThenMarks` (behavior, M6, handbook): In a base-plus-marks composite the base component comes first in the shape…
-  - Guess: The first base sits at x = 0 and y = 0 and keeps its scale, slant and rotation; only its offset is computed; the corpus alignment measure (M6 plan § 5) checks it.
+  - Guess: The first base sits at x = 0 and y = 0 and keeps its scale, slant and rotation; only its offset is computed; a base flipped vertically keeps its stored vertical offset, since y = 0 would hang it below the baseline; the corpus alignment measure (M6 plan § 5) checks it.
 - [ ] `components.marksStackInOrder` (behavior, M6, handbook): Several marks on one base stack in the order they were added:…
   - Guess: A mark's underscore anchor attaches to the anchor of that name the components before it give, as propagation computes it after each component (the most recent component that offers the name wins); a composite with two stacked marks and a third in the reference app settles it.
 - [ ] `components.multipleBasesSetSideBySide` (behavior, M6, handbook): Several base components in one composite are laid out next to each…
   - Guess: Each base after the first is placed at the sum of the advance widths before it, with no kerning, and the composite's width is the sum of the bases' widths; right-to-left glyphs are laid out the same way, in shape order; the corpus alignment measure (M6 plan § 5) checks it on the sources' ligatures.
+- [ ] `components.marksBelongToPrecedingBase` (behavior, M6, handbook): With several bases, shape order assigns marks: each base component is followed…
+  - Guess: A mark looks for its anchor only on the nearest base before it and the marks attached since, never on an earlier base; a ligature whose second base lacks the mark's anchor, in the reference app, settles it.
 - [ ] `components.exitEntryAnchorsConnectBases` (behavior, M6, handbook): Base components can be chained with cursive-attachment anchors: when one component's glyph…
   - Guess: Only the #-prefixed anchors connect components; the plain exit and entry anchors serve cursive attachment alone; the composite's width is the connected bases' widths after the shift, ending at the last base's advance. The corpus alignment measure (M6 plan § 5) checks it where sources use it.
 - [ ] `smart.handlesFromPropertyAnchors` (behavior, M6, handbook): An anchor whose name equals a property name exactly (case included), present…
   - Guess: Dragging a handle sets the value whose interpolated anchor position is nearest the pointer, found by projecting the pointer on the line between the anchor's positions at the property's two poles, with no clamp; dragging a handle in the reference app settles it.
+- [ ] `corner.glyphNaming` (behavior, M6, handbook): A glyph is a corner glyph when its name starts with _corner
+  - Guess: Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it.
 - [ ] `corner.copyPasteOntoNodes` (behavior, M6, handbook): A selected corner component can be copied with Edit › Copy and,…
   - Guess: Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.
 - [ ] `corner.entryAnchor` (behavior, M6, handbook): The entry point, where the stem runs into the corner, defaults to…
-  - Guess: The entry anchor shifts the corner along the line through the origin and the start node by the anchor's distance from the origin before the corner is fitted, and the host segment is trimmed at the shifted point; a corner glyph with a left anchor on a diagonal stem in the reference app settles it.
+  - Guess: The entry anchor slides the fitted corner along its own baseline until the anchor lies on the incoming stroke, and the corner is then fitted as without it; the reference app's output for `av_left_anchoroffpath` agrees, and a left anchor on a curved stem in the reference app settles the rest.
+  - Guess: A corner path faces right when its second node lies right of its start node; it then takes `right` as its entry anchor and `left` as its exit anchor. A right-facing corner glyph with both anchors in the reference app settles it.
+  - Guess: A mirrored corner (one negative scale) ignores its entry and exit anchors; a mirrored corner with a left anchor in the reference app settles it.
 - [ ] `corner.exitAnchor` (behavior, M6, handbook): The exit point, where the outline leaves the corner back into the…
-  - Guess: The outline leaves the corner at the exit anchor's fitted position and joins the host's outgoing segment where that segment is nearest to it; a cupped serif in the reference app settles it.
+  - Guess: The exit anchor stands in for the end node when the corner is rotated and when the outgoing segment is cut (where it is nearest to the anchor); the end node stays where it is drawn and the outgoing segment runs on from it. A cupped serif in the reference app settles it.
 - [ ] `corner.scaleInterpolatesWithIntermediateLayers` (behavior, M6, handbook): If the corner glyph has Intermediate layers tagged with a Width and…
-  - Guess: The percentages are read from the intermediate layer's name (for example `Width 150 Height 100`) and interpolated linearly per axis, with scales beyond the layers extrapolated and negative scales mirrored after interpolation; a corner glyph saved by the reference app with such a layer settles it.
+  - Guess: The percentages are read from the intermediate layer's name (for example `Width 150 Height 100`, a missing one is 100); on each axis the layers that vary it with the other axis at 100 % are interpolated piecewise linearly with the master layer at 100 %, scales beyond them are extrapolated, negative scales mirror after interpolation, and layers that vary both axes are not used. A corner glyph saved by the reference app with such a layer settles it.
 - [ ] `pixel.requiresGridSpacingTwoOrMore` (behavior, M6, handbook): The Pixel tool works only when the font's Grid Spacing (Font Info…
   - Guess: With a grid spacing below 2 a click of the Pixel tool shows a message naming Font Info › Other › Grid Spacing and changes nothing; the reference app settles it.
 - [ ] `pixel.usesGlyphNamedPixel` (behavior, M6, handbook): Every pixel the tool paints is a component referencing the glyph named…
@@ -556,7 +594,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The width field starts at half the units per em; the reference app's first opening would settle it.
   - Guess: Each checkbox and its value field are two rows of the form ("LSB", "LSB value") instead of one row; observing the reference dialog would settle the layout.
 
-### Spacing and metrics keys (21)
+### Spacing and metrics keys (22)
 
 - [ ] `spacing.metricsOverlayInTextMode` (behavior, M5, handbook): While View › Show Metrics (Cmd+Shift+M) is on and the Text tool…
   - Guess: Under the descender, the left sidebearing sits at the glyph's left edge, the right one at its right edge and the width centred below them; in vertical text they run along the column's left edge; a screenshot of the reference app settles it.
@@ -621,6 +659,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Emptying a field that holds a key stores the metric's current number, so the key goes and nothing moves; emptying such a field in the reference app settles it.
   - Guess: A key that cannot be evaluated (a cycle, a division by zero, a result out of range) is drawn red like an out-of-sync key, without the update button; a cyclic key in the reference app settles it.
   - Guess: A master that takes its metrics from another master shows that master's values read only, with a line naming it; a linked master in the reference app settles it.
+- [ ] `metricsKey.autoAlignedOffset` (behavior, M6, handbook): An automatically aligned metric can be adjusted without giving up alignment by…
+  - Guess: Offsets apply to the left and right sidebearing keys only: a left offset moves every component right and widens the glyph, a right offset widens it; a width key with an offset is not applied; entering =+N in the width field of an aligned glyph in the reference app settles it.
 
 ### Kerning and the Kerning window (42)
 
@@ -1025,7 +1065,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `glyph.decomposeGlyphForAllMasters` (M6, handbook): Decompose Components for All Masters
   - Guess: The shortcut is Cmd+Alt+Shift+D, Decompose with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.
 
-### Font Info and features (6)
+### Font Info and features (8)
 
 - [ ] `glyph.updateGlyphInfo` (M4, handbook, live): Update Glyph Info
   - Guess: Stored overrides of category, subcategory, script, production name, case and direction are dropped, so those properties follow the database again; the sort name, tags, colour labels, note and export flag stay. Settled by observing a glyph with a custom category before and after the command (05 question 5).
@@ -1045,8 +1085,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Preview Descender` (parameter, M5, handbook): Master parameter, float, the counterpart of Preview Ascender for the lower edge
   - Guess: The default reads winDescent, not the winAscent the handbook names, because that text reads as a misprint; the reference app with a font whose winAscent and winDescent differ settles it.
   - Guess: A value of either sign is a distance below the baseline; the reference app with a positive and a negative value settles it.
+- [ ] `Decompose Components` (parameter, M6, handbook): Decomposes all components at export, for environments that mishandle composites; file size…
+  - Guess: A decomposed glyph keeps its own contours first, then its components' contours in the order the compiler decomposes a glyph that mixes contours and components (fontc's order); a composite exported by the reference app with the parameter on would settle it.
+- [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
+  - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (34)
+### Files: open, import, export (37)
 
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
@@ -1142,6 +1186,13 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The featureWriters setting is read from the font's user data, then from the built master's; fontc reads only a .glyphs font's user data, while glyphsLib also carries a master's into its UFO lib.
 - [ ] `open.alignsCompositeMetrics` (behavior, M6, handbook): On opening a font file, composite glyphs are put under automatic alignment…
   - Guess: A UFO counts as an imported file and is aligned on opening, because the Source Formats page points a UFO to the importing behaviours and gives it its own Disable Automatic Alignment option in Font Info; the running app opening a UFO with an out-of-date composite would settle it.
+- [ ] `compile.markFeatureWriter` (behavior, M6, docs): Anchors generate mark (mark to base and mark to ligature), mkmk (mark…
+  - Guess: A top-level include in the feature code keeps all five generated features out until M8, as it keeps the generated kerning out, since the included file may hold any of them; compiling the included file (M8) settles it.
+  - Guess: Anchors whose names the reference compilers refuse (`_`, `_top_1`, a number 0), whose ligature number is above 1,024, or whose positions do not fit 16 bits are left out with a warning, where fontc stops the build; an export of such anchors from the reference app would settle it.
+- [ ] `compile.gdefClasses` (behavior, M6, docs): GDEF glyph classes come from an explicit GDEF block in feature code…
+  - Guess: A static master's classes are worked out from that master's anchors only, as fontmake does for each master's UFO, where fontc looks at the anchors of every master; a source whose masters differ in anchor names would settle it.
+- [ ] `compile.gdefLigatureCarets` (behavior, M6, docs): Ligature caret positions in GDEF come from anchors named caret_N (horizontal text,…
+  - Guess: Carets at the same position are all kept, as fontc keeps them, where ufo2ft keeps one; a ligature with two carets at one position in the reference app's export would settle it.
 
 ### Settings and the window (8)
 
@@ -1173,9 +1224,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (392)
+## Later milestones (after M6) (435)
 
-### Edit View: drawing, guides, layers and the Palette (8)
+### Edit View: drawing, guides, layers and the Palette (12)
 
 - [ ] `image.supportedFormats` (behavior, M11, handbook): The reference accepts every image type its operating system can decode and…
   - Guess: PDF and PSD images are kept as references and drawn as an unsupported-image marker with a message, not decoded. Settled by the owner's answer to M11 § 7 question 3.
@@ -1191,6 +1242,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The crop rectangle is in image pixels, measured from the image's bottom-left corner, as origin and size. Settled by cropping an image in the reference and reading `crop` in the saved file.
 - [ ] `image.setCropToLayerBounds` (M11, handbook): Set Crop to Layer Bounds
   - Guess: The layer bounds are the rectangle from 0 to the advance width and from the master's descender to its ascender. Settled by Set Crop to Layer Bounds on an image larger than the glyph in the reference.
+- [ ] `palette.pluginSections` (behavior, M13, handbook): Plug-ins can register their own Palette sections, which appear alongside the built-in…
+  - Observe: Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.
+- [ ] `path.setCurveTension` (M13, docs): Set Curve Tension
+  - Guess: Where a segment's handles are parallel or diverge, so they have no intersection, tension is shown as a dash and Set Curve Tension leaves the segment unchanged with a warning; FontLab does not say (open question 9 in docs/spec/90-secondary-references.md).
+- [ ] `guide.makePowerGuide` (M13, docs): Make Power Guide
+  - Guess: Moving a power guide is one undo step for every glyph it reshapes, and locked glyphs keep their outline while the rest move, with a warning naming them (open question 3).
+- [ ] `path.findOutlinePattern` (M13, docs): Find Outline…
+  - Guess: Matching is point for point only, as FontForge documents; shapes that are equal with another point structure do not match (open question 12).
 - [ ] `path.setPenPoint` (fidelity, inferred): Set Pen Point
   - Open (our design, not confirmed): Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields.
 
@@ -1215,16 +1274,97 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `preview.render` (M9, inferred): Render Preview
   - Open (our design, not confirmed): Renders the preview line to an image so an agent can inspect what the Preview Area would show. Not a reference feature.
 
-### Components and anchors (3)
+### Components and anchors (26)
 
 - [ ] `anchor.setContext` (M8, inferred): Set Context
   - Open (our design, not confirmed): Stores the context code of a contextual anchor, the action behind the Anchor Context field. The reference exposes it only as that field.
-- [ ] `anchor.positionExpressions` (behavior, M13, memory): An anchor coordinate may be an expression rather than a number, re-evaluated…
-  - Open (recalled, not confirmed): An anchor coordinate may be an expression rather than a number, re-evaluated when the glyph changes (for example centred on the advance width or placed at a metric height). The expression grammar was not on the pages read and must be settled before implementation.
-- [ ] `constructions.ruleGrammar` (behavior, M13, memory): Recalled shape of a construction rule: target name, an equals sign, a…
-  - Open (recalled, not confirmed): Recalled shape of a construction rule: target name, an equals sign, a base glyph, then plus-separated parts each with an at-sign position (anchor name, metric keyword, percentage or coordinates), optional width expressions before and after a bar, plus variables and comments. The grammar was not on the pages read and must be designed against the published Glyph Construction documentation, which is permissively licensed.
+- [ ] `cap.attachesToTwoAdjacentNodes` (behavior, M13, handbook): A cap component is bound to two nodes that are neighbours on…
+  - Observe: Select two nodes that are not neighbours on one path, then two nodes on different paths, and open the context menu: note whether Add Cap Component is shown, disabled or missing.
+- [ ] `cap.node1Node2AnchorSetup` (behavior, M13, handbook): Flexible anchor setup for a cap glyph: two anchors named node1 and…
+  - Guess: With node1 and node2 anchors the cap is mapped by the similarity transform that sends node1 onto the first host node and node2 onto the second (uniform scale, rotation, translation); settled by exporting `_cap.round` on the 80- and 120-unit stems.
+  - Observe: Add `_cap.round` (anchors node1 and node2 50 units apart) to the 80-unit stem of `l` and the 120-unit stem of `i`, export and send back: compare the cap's height in both to see whether scaling is uniform or along the stem end only.
+- [ ] `cap.highlightAndSelection` (behavior, M13, handbook): A cap component is tinted with a faint blue background in Edit…
+  - Observe: Screenshot a selected and an unselected cap at 400% zoom to record the highlight colour and how the selection is drawn.
+- [ ] `cap.copyPasteOntoSegments` (behavior, M13, handbook): A selected cap component can be copied and then pasted onto other…
+  - Observe: Copy a selected cap, select two adjacent nodes on another stem and paste; then select a single node and paste: note what is pasted in each case.
+- [ ] `segment.startEndAnchors` (behavior, M13, handbook): The start and end anchors belong on the first and last node…
+  - Observe: Move the end anchor of `_segment.wave` 40 units left of the end node and look at an attached segment component: note how much shorter it is.
+- [ ] `brush.glyphNaming` (behavior, M13, handbook): A glyph is a brush glyph when its name starts with _brush
+  - Observe: Give `_brush.arrow` a second closed path and add the brush: note whether it is refused, uses the first path only, or merges both.
+- [ ] `brush.startEndAnchors` (behavior, M13, handbook): Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end…
+  - Guess: Set Anchors puts a brush glyph's start at (0, 0) and its end at (advance width, 0); Set Anchors on a brush glyph in the reference app settles it.
+- [ ] `capComponent.add` (M13, handbook): Add Cap Component
+  - Guess: The cap's open path replaces the host segment between the two nodes and is joined to the path at both ends, as a corner's open path replaces part of the host outline; settled by exporting a cap test font from the reference app and comparing the outline.
+  - Observe: In the cap test font (a `_cap.flag` glyph with an `origin` anchor and an open path, an `l` with an 80-unit stem), select the two top nodes of the stem, choose Add Cap Component from the context menu, pick `_cap.flag`, then export an OTF and send it back: its `l` outline shows where the cap's path goes and whether the stem's top segment is replaced.
+- [ ] `capComponent.decompose` (M13, handbook): Decompose Cap
+  - Guess: Decompose Cap writes the fitted outline into the host path in place of the cap and keeps the node order of the host before the cap; settled by decomposing a cap in the reference app and comparing node order with the exported outline.
+  - Observe: After adding `_cap.flag` to `l`, right-click the cap, choose Decompose Cap and save the file: compare the stem path's nodes with those of the exported OTF from the Add Cap Component check.
+- [ ] `capComponent.setFit` (M13, handbook): Fit Cap to Stroke
+  - Guess: With Fit on, the cap is scaled along the stroke-end direction by the ratio of the host's node distance to the cap's reference width (the distance between node1 and node2, or the cap's advance width with only an origin anchor); its other direction is not scaled. Settled by the Fit export check.
+  - Observe: Add `_cap.flag` (origin anchor only) to the 80-unit stem of `l` and to the 120-unit stem of `i`, export with Fit off and again with Fit on: compare the cap outlines in the four results for scale along and across the stem end.
+- [ ] `capComponent.setGlyph` (M13, handbook): Replace Cap Component
+  - Observe: Click the name of an attached cap in its Info box and note what opens (the cap picker, a text field or a menu) and whether the new cap keeps the old one's scale and alignment.
+- [ ] `capComponent.setScale` (M13, handbook): Set Cap Scale
+  - Guess: The cap Info box has the corner Info box's horizontal and vertical scale fields, applied after fitting and before placement; settled by the Info box check.
+  - Observe: Select an attached cap with View › Show Info on and list every control of its Info box, with default values; type 50 into each scale field you find and export, to see whether scale applies before or after Fit.
+- [ ] `capComponent.setAlignment` (M13, handbook): Set Cap Alignment
+  - Guess: For a cap, left aligns to the incoming segment of the first node, right to the outgoing segment of the second, both to their mean direction and none keeps the cap unrotated; settled by exporting the slanted-stem cap with each mode.
+  - Observe: Add `_cap.flag` to the slanted stem of `slash` and export once per alignment mode the Info box offers: note the cap's rotation in each export.
+- [ ] `segmentComponent.add` (M13, handbook): Add Segment Component
+  - Guess: On a straight host segment the segment glyph's path is scaled along the baseline so start lands on the first node and end on the second, and is not scaled across; settled by the straight-segment export check.
+  - Guess: On a curved host segment each point of the segment glyph, handles included, is moved to the host curve at the same fraction of its length and offset along the curve's normal by its distance from the baseline; settled by the curved-segment export check.
+  - Observe: In the segment test font (`_segment.wave`: a three-node open path on the baseline with start and end anchors on its end nodes), add the segment component to the bottom straight segment of a square and to one curved segment of an `o`, export an OTF and send it back: the outlines show the length and normal mapping, and whether the node count stays three.
+- [ ] `segmentComponent.decompose` (M13, handbook): Decompose Segment Component
+  - Observe: Decompose a segment component on the `o` and save: compare the resulting path with the exported outline of the Add Segment Component check.
+- [ ] `segmentComponent.setGlyph` (M13, handbook): Replace Segment Component
+  - Observe: Click the name in a segment component's Info box: note what opens and whether the replacement keeps the attachment.
+- [ ] `segmentComponent.editGlyph` (M13, handbook): Edit Segment Glyph
+  - Observe: Click the arrow button in a segment component's Info box: note whether the segment glyph opens in the same tab after the current glyph or in a new tab.
+- [ ] `brush.add` (M13, handbook): Add Brush
+  - Guess: The brush outline between start and end follows the host segment as segments do; the parts before start and after end are moved rigidly with the host's direction at its two ends; settled by the brush export check.
+  - Guess: With nodes selected, each selected node becomes the end node of a brush on the segment that ends there; a node at the start of an open path gets no brush. Settled by the node-selection check.
+  - Observe: In the brush test font (`_brush.arrow`: one closed arrow outline, start anchor at the tail, end anchor where the head begins), add the brush to a straight open path and to a curved open path, export an OTF and send it back: the head should keep its shape and the shaft follow the curve.
+  - Observe: Select only the last node of a three-segment open path and choose Add Brush: count how many brushes are added and on which segments.
+- [ ] `brush.decompose` (M13, handbook): Decompose Brush
+  - Observe: Decompose a brush on the curved open path and save: note whether the open host path is removed and replaced by the closed outline.
+- [ ] `brush.setGlyph` (M13, handbook): Replace Brush
+  - Observe: Click the name in a brush's Info box and note what opens.
+- [ ] `brush.editGlyph` (M13, handbook): Edit Brush Glyph
+  - Observe: Click the arrow button in a brush's Info box: note where the brush glyph opens.
+- [ ] `infoBox.capComponent` (panel, M13, handbook): Cap component Info box
+  - Observe: Screenshot the Info box of a selected cap, segment component and brush with View › Show Info on; list each control and its default.
+- [ ] `dialog.capPicker` (panel, M13, handbook): Cap glyph picker
+  - Observe: Open Add Cap Component on a font with three cap glyphs and two corner glyphs: confirm only cap glyphs are listed and note the sort order and what the search field matches.
+- [ ] `anchor.positionExpressions` (behavior, M13, docs): An anchor's x and y may each be an expression instead of…
+  - Guess: FontCraft's variable names are ascender, descender, xHeight, capHeight, baseline and width, plus `anchor:<name>.x`, `guide:<name>`, `zone:<name>` and `param:<name>` references; the reference's spellings (x_height, caps_height) are read as aliases. Nothing settles it in the primary reference, which has no anchor expressions.
+  - Guess: An expression that names something missing, divides by zero or gives a value that is not finite leaves the anchor where it was and is reported in the command's warnings; the reference's handling is not documented.
+- [ ] `font.detectComposites` (M13, docs): Detect Composites
+  - Guess: A match needs every point of the other glyph's outline within 0.5 unit after the best translation, or after a translation and flip when allowTransformed is on; FontLab gives no tolerance.
 
-### Font View (5)
+### Filters (1)
+
+- [ ] `filter.nonLinearTransform` (M13, docs): Non-Linear Transform…
+  - Guess: The expressions use anchor expressions' grammar (M13.16) with the variables x and y and the functions sin, cos, tan, sqrt, abs, min and max; segments are split so no segment covers more than 1/32 of the glyph's height before mapping. FontForge's grammar is not followed.
+
+### Spacing and metrics keys (3)
+
+- [ ] `spaceCenter.inputSyntax` (behavior, M13, docs): The spacing text accepts plain characters, /name for a glyph by name,…
+  - Guess: Space Center takes the reference spellings /name, /name@layer, /?, /!, /:group and \n unchanged; Edit View's text mode keeps the primary reference's escapes only.
+- [ ] `spacing.autoSpace` (M13, docs): Auto Space
+  - Guess: Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the white area between the glyph's side profile, clipped to a depth below its extreme, and the sidebearing line, measured over a band from the baseline to the reference height plus overshoot, is made equal to a target area; target, depth, band and sampling step are parameters, with defaults calibrated on the control glyphs n, o, H and O of the font itself. Neither FontLab nor FontForge documents its method.
+- [ ] `view.showMetricsBeam` (M13, docs): Metrics Beam
+  - Guess: The beam is one height per font, shared by Edit View and Space Center, and sidebearing commands take it as an optional `beam` parameter; FontLab's and RoboFont's pages do not say whether it is per font or per window.
+
+### Kerning and the Kerning window (3)
+
+- [ ] `kerning.autoKern` (M13, docs): Auto Kern
+  - Guess: The proposed value is the target separation minus the pair's optical gap, the mean horizontal distance between the left glyph's right profile and the right glyph's left profile over the same band and depth clipping as auto-spacing, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. FontLab documents neither K1 nor K2 (open decision D11).
+- [ ] `kerning.kernToDistance` (M13, docs): Kern to Distance
+  - Guess: The gap is the smallest horizontal distance between the two outlines at any height, measured on the decomposed and overlap-removed outlines; FontLab says only that the pair's minimum horizontal gap becomes the value.
+- [ ] `kerning.buildGroups` (M13, docs): Build Kerning Groups…
+  - Guess: Two glyphs fall in one group while the root mean square of their side profiles' differences over the band stays under maxDifference; FontForge does not describe its grouping rule.
+
+### Font View (6)
 
 - [ ] `smartFilter.rule.custom` (behavior, M8, handbook): Rule Custom holds a free-form glyph predicate written in the same expression…
   - Guess: The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.
@@ -1234,10 +1374,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Files with no glyph of their name are skipped and listed in the result; no glyph is created. Settled by Add Image with an unmatched file in the reference.
 - [ ] `fontView.image.caseSensitivity` (behavior, M11, handbook): Glyph names are case-sensitive but many file systems are not, so A.png…
   - Guess: File names are matched to glyph names exactly, case included, on every platform. Settled by Add Image with `a.png` in a font with `A` and `a` in the reference.
-- [ ] `glyph.setStatus` (M13, memory): Set Status
-  - Open (recalled, not confirmed): Assigns a defined status to glyph sources; a display option tints each glyph on canvas with its status colour. The docs confirm the tint and the definitions; that the status is stored per glyph source is recalled.
+- [ ] `font.setStatusDefinitions` (M13, docs): Status Definitions…
+  - Guess: The definitions are stored in the font's user data as a list of code, name, colour and default flag; Fontra's storage is not documented.
+- [ ] `glyph.setStatus` (M13, docs): Set Status
+  - Guess: FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say.
 
-### Font Info and features (171)
+### Font Info and features (172)
 
 - [ ] `fontInfo.familyName.allowedCharacters` (behavior, M7, handbook): The Family Name should contain only A-Z, a-z, 0-9 and spaces; other…
   - Guess: Other characters are accepted with a warning, not refused; typing an ampersand or an accented letter in the reference app settles whether it warns, refuses or neither.
@@ -1589,6 +1731,9 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form.
 - [ ] `color.layered.toColr` (behavior, M11, handbook): Color Layers to COLR on an instance converts a layered setup into…
   - Guess: The masters with a Master Color become palette layers of one glyph in master order, the last master at the bottom and the first on top (as Edit View stacks them), each in a palette entry made from its Master Color; the fallback outline is the instance's own master. Settled by exporting the layered test font with Color Layers to COLR from the reference.
+- [ ] `filter.customParameter.thirdParty` (behavior, M13, handbook): Plug-in filters define their own argument strings and are not guaranteed to…
+  - Guess: FontCraft applies include and exclude itself for module filters, where the reference leaves it to each plug-in; settled by nothing in the reference, since our modules cannot see glyph lists.
+  - Observe: Open that filter plug-in's dialog and, if it has a gear menu, copy its export string and paste it into a text file: compare it with the built-in filters' export strings (separator, key spelling).
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
@@ -1821,7 +1966,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `palette.layers.paletteColorChooser` (panel, M11, handbook): Palette color chooser
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
 
-### Files: open, import, export (10)
+### Files: open, import, export (11)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment or a path of more than 32 segments is refused for that instance with a message, and the report names every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -1839,17 +1984,25 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A full-colour Color layer exports as COLR version 1 without any parameter, as both oracles do; the handbook names only SVG for these layers. Settled by exporting the full-colour test font from the reference with no parameters.
 - [ ] `color.export.colrVersionChoice` (behavior, M11, docs): The compiler writes COLR version 0 when every colour glyph is a…
   - Guess: Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.
-- [ ] `pfm` (format, M13, memory): Printer Font Metrics (Windows)
-  - Open (recalled, not confirmed): Binary companion of a Type 1 font holding widths, a few global metrics, Windows naming data and a pair-kerning table indexed by character code. Read only, as a metrics and kerning source when a PFB is opened without an AFM; kerning is limited to the encoded glyphs. The layout is recalled from Adobe Technical Note 5178 and the Windows driver documentation; no stable public URL was found, so the reader must be checked against AFDKO-produced sample files.
+- [ ] `glyphsproject` (format, M13, handbook): Glyphs project
+  - Observe: Make a Project from the instances test font (two masters, three instances, one with a custom parameter), set an export destination, save it, and send back the `.glyphsproject` file: its keys show where the instances, the link to the source and the destination are stored.
 - [ ] `vfj` (format, M13, memory): FontLab JSON source
   - Open (recalled, not confirmed): The JSON flavour of FontLab's native source. FontLab's own help pages only call it a human-readable JSON file and link to no schema, and we found no public key-by-key description, so import is planned for the self-evident core only (masters, glyph layers with contours and components, anchors, kerning, classes, features) and everything else is reported as skipped.
+- [ ] `glyph.exportArtwork` (M13, docs): Export Artwork…
+  - Guess: SVG uses the io-svg writer, PNG the render crate and PDF a minimal writer of our own; FontLab's options beyond the three formats are not followed.
 
-### Settings and the window (9)
+### Settings and the window (11)
 
+- [ ] `addons.repo.httpBasicAuth` (behavior, M13, handbook): An alternate repository URL may require a user name and password, sent…
+  - Guess: Credentials are taken from the URL itself and stored with the setting, not in the operating system's keychain; the reference's storage is not described.
+- [ ] `settings.addons` (panel, M13, handbook): Addons
+  - Guess: The section is called Extensions, because FontCraft has no add-on kinds that need Python; the reference calls it Addons.
+  - Observe: Screenshot Settings › Addons in the trial and list its controls in order, with defaults.
 - [ ] `window.macroPanel` (M13, inferred): Macro Panel
-  - Open (our design, not confirmed): Opens the Macro Panel, whose console receives the log output of scripts and plug-ins unless output is redirected to the system console; this chapter and the Settings chapter say nothing more about it. FontCraft: opens a Command Console where command invocations are typed as JSON or CLI syntax, with the log of commands and module output below.
+  - Open (our design, not confirmed): Opens the Macro Panel, whose console receives the log output of scripts and plug-ins unless output is redirected to the system console; this chapter and the Settings chapter say nothing more about it. FontCraft: opens the Command Console, where a command is typed as an id followed by JSON parameters, or as a `fontcraft-cli run` style line, with the log of commands and module output below.
+  - Observe: Open Window › Macro Panel: screenshot it, note how code is run (a button, a shortcut, both), whether it has tabs, and whether the typed text is still there after closing and reopening the panel and after relaunching.
 - [ ] `window.macroPanel` (panel, M13, inferred): Macro Panel
-  - Open (our design, not confirmed): Window with a console showing script and plug-in log output; in the reference it also runs ad-hoc Python (recalled, not stated in these chapters). FontCraft: a Command Console with command-id completion, parameter docs from the registry, history and a log pane; no Python.
+  - Guess: The console's input is one line with a history, not a multi-line editor, because commands are one line of JSON; the reference's panel layout is not described (open question).
 - [ ] `app.quit` (M14, memory): Quit FontCraft
   - Open (recalled, not confirmed): Quits after asking about each document with unsaved changes. Background saves and exports finish first.
 - [ ] `sharing.fontcraftEquivalent` (behavior, M14, inferred): FontCraft has no companion app planned; the same need can be met…
@@ -1865,28 +2018,38 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `settings.listShortcuts` (M14, inferred): List Shortcuts
   - Open (our design, not confirmed): Read-only query returning each action with its section, default shortcut and current shortcut. Proposed for agents; equals the content of the list.
 
-### Scripts, plug-ins and URLs (64)
+### Scripts, plug-ins and URLs (68)
 
+- [ ] `app.launchWithoutPlugins` (behavior, M13, handbook): Holding Option and Shift while the application starts launches it with every…
+  - Observe: Hold Option and Shift while launching: note any dialog or message, and whether plug-ins can be turned back on without relaunching.
+- [ ] `filter.menu.pluginFiltersListed` (behavior, M13, handbook): Filters installed through the Plugin Manager appear in the Filter menu next…
+  - Observe: Install a free filter plug-in from the Plugin Manager and relaunch: note where it appears in the Filter menu (below a separator, sorted with the built-in filters, or in a submenu) and whether its item ends with an ellipsis.
 - [ ] `url.scheme` (behavior, M13, inferred): The reference answers to two URL schemes, one generic and one tied…
   - Open (our design, not confirmed): The reference answers to two URL schemes, one generic and one tied to a major version, so web pages and other apps can open it. FontCraft registers `fontcraft://`.
 - [ ] `url.show` (behavior, M13, inferred): `fontcraft://show/?...` opens files and adds a new tab listing given glyph layers;…
   - Open (our design, not confirmed): `fontcraft://show/?...` opens files and adds a new tab listing given glyph layers; it mirrors the reference's show path and takes the query parameters path, glyph, production and layer.
+  - Observe: In the trial, open `glyphsapp://show/?path=<test font>&glyph=A&glyph=B` from a browser or Terminal (`open '…'`): note whether a new tab opens with A and B on the main master, and whether the window comes to the front.
 - [ ] `url.show.path` (behavior, M13, inferred): `path` is an absolute file path and comes first
   - Open (our design, not confirmed): `path` is an absolute file path and comes first. It may be repeated; each occurrence starts a new file with its own glyph list.
+  - Observe: Open a show URL whose path names a file that does not exist, and one whose path is not absolute: note any message and whether the rest of the URL is still processed.
 - [ ] `url.show.glyph` (behavior, M13, inferred): `glyph` adds a glyph to the current file's list by its glyph…
   - Open (our design, not confirmed): `glyph` adds a glyph to the current file's list by its glyph name; glyphs appear in the tab in URL order.
+  - Observe: Open a show URL naming a glyph the font lacks between two that exist: note whether the tab shows the two, shows a placeholder, or nothing opens.
 - [ ] `url.show.production` (behavior, M13, inferred): `production` adds a glyph by its production name (e.g
   - Open (our design, not confirmed): `production` adds a glyph by its production name (e.g. uni01F4) instead of its source name.
 - [ ] `url.show.layer` (behavior, M13, inferred): `layer` follows a glyph and selects one of its layers by layer…
   - Open (our design, not confirmed): `layer` follows a glyph and selects one of its layers by layer ID; repeating it shows several layers of the same glyph. A master layer's ID equals the master ID.
+  - Observe: Open a show URL with a layer id that does not belong to the glyph: note what the tab shows for that glyph.
 - [ ] `url.show.defaultLayer` (behavior, M13, inferred): A glyph with no layer parameter is shown on the layer of…
   - Open (our design, not confirmed): A glyph with no layer parameter is shown on the layer of the main master.
 - [ ] `url.show.alreadyOpen` (behavior, M13, inferred): A file that is already open is not opened a second time;…
   - Open (our design, not confirmed): A file that is already open is not opened a second time; it only gets the new tab.
+  - Observe: With the test font open and edited but unsaved, open a show URL naming it: confirm no second window opens and the edits are kept.
 - [ ] `url.show.encoding` (behavior, M13, inferred): Query values are percent-decoded as UTF-8, and unknown glyphs or layer IDs…
-  - Open (our design, not confirmed): Query values are percent-decoded as UTF-8, and unknown glyphs or layer IDs are skipped with a warning rather than aborting the whole URL. Not specified by the reference.
+  - Guess: Query values are percent-decoded as UTF-8 and unknown glyphs or layer ids are skipped with a warning; the reference does not say.
+  - Observe: Open a show URL whose path contains a space written as %20 and a glyph name with a non-ASCII character percent-encoded: note whether both work.
 - [ ] `url.safety` (behavior, M13, inferred): URL handling is limited to opening and showing; it never runs arbitrary…
-  - Open (our design, not confirmed): URL handling is limited to opening and showing; it never runs arbitrary commands, writes files or loads plug-ins, and paths must be local.
+  - Guess: URLs only open and show; any other path after `fontcraft://` is refused, so a web page cannot run commands; the reference documents only `show`.
 - [ ] `url.open` (M13, inferred): Open URL
   - Open (our design, not confirmed): Parses a `fontcraft://` URL and runs the action it names; the entry point registered with the operating system. Proposed counterpart of the reference's URL scheme handler.
 - [ ] `url.show` (M13, inferred): Show Glyphs in New Tab
@@ -1896,43 +2059,47 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `extensions.pythonBased` (behavior, M13, inferred): In the reference every script and the majority of plug-ins are Python,…
   - Open (our design, not confirmed): In the reference every script and the majority of plug-ins are Python, so a working Python must be chosen in Settings › Addons before they run. FontCraft: no interpreter is embedded; automation is written in any language against the command surfaces and in-app extensions are compiled to WebAssembly, so there is nothing to configure.
 - [ ] `pluginManager.relaunchForPluginsAndModules` (behavior, M13, inferred): A plug-in or module installed during a session is usable only once…
-  - Open (our design, not confirmed): A plug-in or module installed during a session is usable only once the app has been relaunched. FontCraft: modules are loaded and unloaded at run time, so installing never needs a relaunch.
+  - Open (our design, not confirmed): A plug-in or module installed during a session is usable only once the app has been relaunched. FontCraft: modules are loaded and unloaded while the app runs, so installing never needs a relaunch; a module is compiled when installed and instantiated fresh for each run.
 - [ ] `pluginManager.scriptsLoadWithoutRelaunch` (behavior, M13, inferred): Newly installed scripts appear without relaunching once the Script menu is reloaded…
-  - Open (our design, not confirmed): Newly installed scripts appear without relaunching once the Script menu is reloaded (hold Option, Script › Reload Scripts). FontCraft: the macro list is watched and refreshed automatically; a reload command exists for completeness.
+  - Guess: Folders are checked by comparing file names, sizes and modification times when the window regains focus and every 5 seconds, rather than with an operating-system file watcher, so the same code works on every platform; a reference behaviour is not involved.
 - [ ] `pluginManager.automaticUpdates` (behavior, M13, inferred): Installed extensions are updated to newer versions automatically
-  - Open (our design, not confirmed): Installed extensions are updated to newer versions automatically. FontCraft: updates are automatic only when the new version requests no additional capabilities; otherwise the user is asked, and versions can be pinned.
+  - Guess: Updates are offered, not installed silently, unless the user turns automatic updates on per index; the reference installs them automatically and does not say whether that can be turned off (open question in docs/spec/17-extensions.md).
+  - Observe: In Settings › Addons and the Plugin Manager, look for any switch that turns automatic extension updates off, globally or per extension.
 - [ ] `pluginManager.repositories` (behavior, M13, inferred): The catalogue is the main public repository plus any alternate repositories entered…
-  - Open (our design, not confirmed): The catalogue is the main public repository plus any alternate repositories entered in Settings › Addons; entries of an alternate repository are visible only to users who registered that repository. FontCraft: a default registry index plus user-added index URLs or local paths, merged the same way.
+  - Guess: When two indexes list the same id, the index listed first in the settings wins; the reference does not say how it merges entries.
 - [ ] `pluginManager.submission` (behavior, M13, inferred): New entries reach the main catalogue through a pull request on the…
-  - Open (our design, not confirmed): New entries reach the main catalogue through a pull request on the public plug-in repository or by contacting the vendor. FontCraft: the registry index is a public repository accepting pull requests; entries name a module URL, checksum and declared capabilities.
+  - Open (our design, not confirmed): New entries reach the main catalogue through a pull request on the public plug-in repository or by contacting the vendor. FontCraft: an index is a JSON file anyone can host; whether a public main index exists, and how entries reach it, is the owner's answer to docs/plans/M13.md § 7 question 5.
 - [ ] `extensions.modules` (behavior, M13, inferred): Modules are shared libraries (Python itself and Python packages) that some scripts…
   - Open (our design, not confirmed): Modules are shared libraries (Python itself and Python packages) that some scripts and plug-ins depend on; they are installed from the Modules tab of the Plugin Manager and need a relaunch. FontCraft: no equivalent, because there is no embedded Python and each WebAssembly module is self-contained; shared functionality is exposed as commands instead.
 - [ ] `script.scope` (behavior, M13, inferred): Scripts are Python files that can automate every part of the app…
-  - Open (our design, not confirmed): Scripts are Python files that can automate every part of the app through its Python API. FontCraft: everything a script could do is a command, so a script is either a macro (a stored list of command invocations with parameters) or an external program in any language calling the CLI, control channel or MCP server.
+  - Open (our design, not confirmed): Scripts are Python files that can automate every part of the app through its Python API. FontCraft: everything a script could do is a command, so a script is either a macro (a stored list of command invocations with parameters, the same file as an action set) or an external program in any language calling the CLI, control channel or MCP server.
 - [ ] `script.menu.mirrorsFolder` (behavior, M13, inferred): The Script menu is a picture of the Scripts folder: one item…
-  - Open (our design, not confirmed): The Script menu is a picture of the Scripts folder: one item per script file. FontCraft: the Script menu mirrors the macros folder in the same way.
+  - Guess: Script menu items are sorted by title, case-insensitively and with numbers in numeric order, folders before items; the handbook does not give the order.
+  - Observe: Put three scripts in the Scripts folder: `b.py` titled Alpha, `a.py` titled Zulu and `c.py` without a MenuTitle, plus a subfolder `Tools` with one script; reload and record the order of items and submenus, and what the untitled script is called.
 - [ ] `script.menu.subfolders` (behavior, M13, inferred): Subfolders of the Scripts folder become submenus, which is how scripts are…
   - Open (our design, not confirmed): Subfolders of the Scripts folder become submenus, which is how scripts are grouped. FontCraft: same rule for the macros folder.
+  - Observe: Give two scripts in different subfolders the same MenuTitle, and two in one folder the same MenuTitle: note how the menu shows each clash.
 - [ ] `script.menu.tooltip` (behavior, M13, inferred): Hovering briefly over a script in the menu shows the script's short…
   - Open (our design, not confirmed): Hovering briefly over a script in the menu shows the script's short description, when it has one. FontCraft: a macro's description field is shown as the tooltip and returned as the command's params doc.
+  - Observe: Rest the pointer on a script item that has a __doc__ string and time how long the tooltip takes to appear; check whether a multi-line description keeps its line breaks.
 - [ ] `script.shortcutAssignable` (behavior, M13, inferred): A script can be given a keyboard shortcut in Settings › Shortcuts
   - Open (our design, not confirmed): A script can be given a keyboard shortcut in Settings › Shortcuts. FontCraft: macros are commands, so they appear in the shortcut editor like any other.
 - [ ] `script.requiresModules` (behavior, M13, inferred): Some scripts only work after particular modules have been installed from the…
-  - Open (our design, not confirmed): Some scripts only work after particular modules have been installed from the Modules tab. FontCraft: a macro can only call commands, so its only dependency is a list of required module ids that the manager installs with it.
+  - Open (our design, not confirmed): Some scripts only work after particular modules have been installed from the Modules tab. FontCraft: a macro calls only commands; when it calls a filter, reporter or check module, its `requires` list names the module ids, the Extension Manager installs them with it, and running it without them refuses before any step runs.
 - [ ] `script.file.pyExtension` (behavior, M13, inferred): A script is a file ending in .py placed in the Scripts…
-  - Open (our design, not confirmed): A script is a file ending in .py placed in the Scripts folder; the rest of the file name is free, by convention the menu title. FontCraft: a macro is a plain-text data file in the macros folder (format to be specified), never executable code.
+  - Guess: Macro files end in `.fcmacro` and hold JSON; nothing in the reference decides it (the format is ours, open decision D8).
 - [ ] `script.file.menuTitleHeader` (behavior, M13, inferred): The menu title comes from a comment at the top of the…
-  - Open (our design, not confirmed): The menu title comes from a comment at the top of the file of the form '# MenuTitle: Script Name'. FontCraft: a title field in the macro file, falling back to the file name.
+  - Open (our design, not confirmed): The menu title comes from a comment at the top of the file of the form '# MenuTitle: Script Name'. FontCraft: the macro's `title` field, falling back to the file name without its extension.
 - [ ] `script.file.docString` (behavior, M13, inferred): The tooltip text is the script's __doc__ string assigned below the MenuTitle…
-  - Open (our design, not confirmed): The tooltip text is the script's __doc__ string assigned below the MenuTitle line; it may be a triple-quoted string spanning several lines. FontCraft: a description field in the macro file, multi-line allowed.
+  - Open (our design, not confirmed): The tooltip text is the script's __doc__ string assigned below the MenuTitle line; it may be a triple-quoted string spanning several lines. FontCraft: the macro's `description` field, which may hold line breaks; it is the menu tooltip and the description agents read.
 - [ ] `script.importExistingPython` (behavior, M13, inferred): Existing scripts are Python against the reference's API and cannot run elsewhere
-  - Open (our design, not confirmed): Existing scripts are Python against the reference's API and cannot run elsewhere. FontCraft: they are not loadable; a porting guide maps common API calls to command ids, and a Python client package for the control channel lets authors keep writing Python outside the app.
+  - Guess: The repository ships no Python client package, only documented examples, because the code base is Rust only; nothing in the reference decides it.
 - [ ] `plugin.kind.reporter` (behavior, M13, inferred): Reporter plug-ins (.glyphsReporter) draw extra information in Edit View and each gets…
-  - Open (our design, not confirmed): Reporter plug-ins (.glyphsReporter) draw extra information in Edit View and each gets a Show … entry at the foot of the View menu that switches it. FontCraft: a live-reporter WebAssembly module receives read-only layer data and returns drawing primitives; each registers a view.show… toggle command at the end of the View menu.
+  - Open (our design, not confirmed): Reporter plug-ins (.glyphsReporter) draw extra information in Edit View and each gets a Show … entry at the foot of the View menu that switches it. FontCraft: a reporter module receives one layer as read-only JSON with the view scale and whether the glyph is the active one, and returns drawing primitives (paths, lines, circles, text) for the foreground and background; results are cached per layer revision and scale. Each installed reporter gets a Show entry at the foot of the View menu (view.showReporter).
 - [ ] `plugin.kind.filter` (behavior, M13, inferred): Filter plug-ins (.glyphsFilter) process glyph layers and are listed in the Filter…
-  - Open (our design, not confirmed): Filter plug-ins (.glyphsFilter) process glyph layers and are listed in the Filter menu (and usable as export-time filter parameters). FontCraft: an object-filter WebAssembly module takes layer objects plus parameters and returns replacements; each registers a filter.* command, so it is in the Filter menu, the CLI, MCP and export filter strings alike.
+  - Open (our design, not confirmed): Filter plug-ins (.glyphsFilter) process glyph layers and are listed in the Filter menu (and usable as export-time filter parameters). FontCraft: a filter module receives one layer as JSON with its parameters and returns the layer's new paths, components and anchors; plugin.runFilter calls it once per target layer and applies all results as one undo step. Installed filters are listed in the Filter menu and can be named in the Filter export parameter.
 - [ ] `plugin.kind.palette` (behavior, M13, inferred): Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette,…
-  - Open (our design, not confirmed): Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette, Cmd+Shift+P). FontCraft: not a module kind at first; a module may declare a parameter form for its commands which the app renders as a palette section, without running custom UI code.
+  - Open (our design, not confirmed): Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette, Cmd+Shift+P). FontCraft: no module kind runs interface code; a filter module that declares parameters can be shown as a Palette section holding its parameter form and an Apply button, drawn by the app.
 - [ ] `plugin.kind.fileFormat` (behavior, M13, inferred): File Format plug-ins (.glyphsFileFormat) add formats to open and export
   - Open (our design, not confirmed): File Format plug-ins (.glyphsFileFormat) add formats to open and export. FontCraft: not a module kind at first; formats are built in, and other formats are handled by external converters calling the CLI. Import/export modules may follow once the module interface is stable.
 - [ ] `plugin.kind.tool` (behavior, M13, inferred): Tool plug-ins (.glyphsTool) add tools to the toolbar that extend Edit View
@@ -1940,19 +2107,20 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `plugin.kind.general` (behavior, M13, inferred): General plug-ins (.glyphsPlugin) cover anything the other five types do not
   - Open (our design, not confirmed): General plug-ins (.glyphsPlugin) cover anything the other five types do not. FontCraft: no catch-all kind; such needs are met by macros, by external programs on the control channel or MCP, or by proposing a new narrowly scoped module kind.
 - [ ] `plugin.loadedAtLaunch` (behavior, M13, inferred): Plug-ins are loaded once when the app starts, hence the relaunch after…
-  - Open (our design, not confirmed): Plug-ins are loaded once when the app starts, hence the relaunch after installing. FontCraft: modules are instantiated on install and on demand, and can be reloaded while documents are open.
+  - Open (our design, not confirmed): Plug-ins are loaded once when the app starts, hence the relaunch after installing. FontCraft: modules in the modules folder are validated and compiled at launch and whenever the folder changes; each run uses a fresh instance, so nothing needs a relaunch.
 - [ ] `plugin.requiresModules` (behavior, M13, inferred): A plug-in may depend on modules that have to be installed separately…
   - Open (our design, not confirmed): A plug-in may depend on modules that have to be installed separately from the Modules tab. FontCraft: a module is a single self-contained .wasm file with a manifest; nothing else needs installing.
 - [ ] `plugin.pluginsFolder` (behavior, M13, inferred): Installed plug-ins live in a Plugins folder that sits beside the Scripts…
-  - Open (our design, not confirmed): Installed plug-ins live in a Plugins folder that sits beside the Scripts folder. FontCraft: a modules folder beside the macros folder in the per-user data directory.
+  - Guess: The folders are `Macros` and `Modules` in the per-user application data folder; the reference's folder names and location are not given in the handbook (open question).
 - [ ] `plugin.noManualMove` (behavior, M13, inferred): Plug-ins must not be copied into the Plugins folder by hand because…
-  - Open (our design, not confirmed): Plug-ins must not be copied into the Plugins folder by hand because that conflicts with the operating system's security checks; installation has to go through the app. FontCraft: copying a file into the modules folder is allowed, but an unknown module stays disabled until the user approves its capabilities.
+  - Open (our design, not confirmed): Plug-ins must not be copied into the Plugins folder by hand because that conflicts with the operating system's security checks; installation has to go through the app. FontCraft: copying a module into the Modules folder is allowed; a module the app has not seen before is listed as new and stays off until the user turns it on in the Extension Manager or runs plugin.installFromFile on it.
 - [ ] `plugin.uninstall` (behavior, M13, inferred): Plug-ins from the manager are removed there; any plug-in can also be…
-  - Open (our design, not confirmed): Plug-ins from the manager are removed there; any plug-in can also be removed by deleting its file in the Plugins folder. FontCraft: both ways work, and deleting the file unregisters the module's commands at the next folder scan.
+  - Open (our design, not confirmed): Plug-ins from the manager are removed there; any plug-in can also be removed by deleting its file in the Plugins folder. FontCraft: both ways work; deleting the file removes the module's menu entries at the next folder check.
+  - Observe: Install a plug-in by dropping it on the Dock icon, then open the Plugin Manager: note whether it is listed as installed and whether its Remove button works.
 - [ ] `sdk.templates` (behavior, M13, inferred): The open-source Glyphs SDK supplies plug-in templates in two languages, Python and…
-  - Open (our design, not confirmed): The open-source Glyphs SDK supplies plug-in templates in two languages, Python and Objective-C, and plug-ins start from those. FontCraft: a module SDK with templates for the two module kinds (object filter, live reporter), Rust first, usable from any language that compiles to WebAssembly.
+  - Open (our design, not confirmed): The open-source Glyphs SDK supplies plug-in templates in two languages, Python and Objective-C, and plug-ins start from those. FontCraft: a module template in Rust for each module kind (filter, reporter, check) and the ABI documentation, so any language that compiles to WebAssembly can be used.
 - [ ] `api.python` (behavior, M13, inferred): A documented Python API exposes the application and its font objects to…
-  - Open (our design, not confirmed): A documented Python API exposes the application and its font objects to scripts and plug-ins; the chapter refers to that documentation rather than listing the API. FontCraft: the API is the command registry itself, documented from the same metadata (id, params doc) for all surfaces; an optional thin Python client wraps the control channel outside the app.
+  - Open (our design, not confirmed): A documented Python API exposes the application and its font objects to scripts and plug-ins; the chapter refers to that documentation rather than listing the API. FontCraft: the API is the command registry, documented from the same metadata (id, label, parameters, result) for the CLI, the control channel, MCP and macros; modules see the layer JSON of the native format.
 - [ ] `api.objectiveC` (behavior, M13, inferred): A documented Objective-C API serves compiled plug-ins
   - Open (our design, not confirmed): A documented Objective-C API serves compiled plug-ins. FontCraft: the native counterpart is the module ABI, a small versioned interface that passes layer data and parameters into the sandbox and results back.
 - [ ] `api.externalInterop` (behavior, M13, inferred): The SDK also provides ways for a separate application to work with…
@@ -1962,39 +2130,50 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `extensions.authoringDocs` (behavior, M13, inferred): Authors are pointed to API references, a scripting tutorial series, a plug-in…
   - Open (our design, not confirmed): Authors are pointed to API references, a scripting tutorial series, a plug-in writing tutorial, existing scripts as examples and the vendor's forum. FontCraft: generated command reference, module SDK guide with worked examples, and a porting table from common reference-API tasks to commands.
 - [ ] `extensions.sandboxCapabilities` (behavior, M13, inferred): The chapter mentions no permission model for extensions beyond the operating system's…
-  - Open (our design, not confirmed): The chapter mentions no permission model for extensions beyond the operating system's check on installed plug-ins. FontCraft: a module gets no file, network or UI access by default and sees only the data passed to it; anything more is a declared capability the user approves at install time.
+  - Open (our design, not confirmed): The chapter mentions no permission model for extensions beyond the operating system's check on installed plug-ins. FontCraft: a module may import nothing (no files, network, clock, randomness or interface) and sees only the JSON passed to it; each run has an instruction budget, a memory cap and a time limit, and a module that breaks a limit fails with a message and changes nothing. ABI version 1 grants no capabilities; the manifest's `capabilities` list must be empty.
 - [ ] `window.pluginManager` (M13, inferred): Plugin Manager
   - Open (our design, not confirmed): Opens the Plugin Manager window, the catalogue of installable scripts, plug-ins and modules. FontCraft: opens an Extension Manager listing WebAssembly modules and command macros from the registry index; every action in it is also a command.
+  - Observe: Open Window › Plugin Manager in the trial: note the window's default size, whether it is a separate window or a sheet, which filter buttons are selected at first, and whether the Window menu item has a shortcut.
 - [ ] `pluginManager.filterByInstallState` (M13, inferred): All / Installed / Not Installed
   - Open (our design, not confirmed): Restricts the catalogue by whether an extension is installed. FontCraft: same filter in the Extension Manager, also available as an argument of the listing query.
 - [ ] `pluginManager.filterByType` (M13, inferred): Plugins / Scripts / Modules
-  - Open (our design, not confirmed): Shows one extension type at a time: plug-ins, scripts or modules. FontCraft: types are filter modules, reporter modules and macros; there is no modules tab because WebAssembly extensions carry their dependencies.
+  - Open (our design, not confirmed): Shows one extension type at a time: plug-ins, scripts or modules. FontCraft: Filters, Reporters, Checks or Macros; there is no modules type because each WebAssembly module is self-contained.
 - [ ] `pluginManager.search` (M13, inferred): Search
   - Open (our design, not confirmed): Filters the catalogue by a keyword matched against extension name, description and vendor name. FontCraft: same three fields are searched.
-- [ ] `pluginManager.list` (M13, inferred): List Extensions
-  - Open (our design, not confirmed): The reference has no headless listing; the catalogue is only visible in the window. FontCraft: a read-only query returns catalogue entries (id, type, title, vendor, version, installed, requested capabilities) so agents and the CLI can browse and choose.
+  - Observe: Type part of a vendor name into the Plugin Manager's search field: confirm entries match on vendor, and note whether matching is case-insensitive and whether it matches inside words.
 - [ ] `pluginManager.install` (M13, inferred): Install
-  - Open (our design, not confirmed): Downloads and installs the extension whose green Install button is clicked; plug-ins and modules become usable after a relaunch, scripts after reloading the Script menu. FontCraft: installs a WebAssembly module or macro and registers its commands immediately, with no relaunch, after showing the capabilities it asks for.
+  - Guess: An install from an index entry whose checksum does not match the downloaded bytes is refused and nothing is written; the reference's handling of a failed download is not documented.
 - [ ] `pluginManager.remove` (M13, inferred): Remove
-  - Open (our design, not confirmed): Uninstalls an extension that was installed through the manager. FontCraft: unloads the module, removes its commands from the registry and deletes its files.
+  - Open (our design, not confirmed): Uninstalls an extension that was installed through the manager. FontCraft: unloads the module or forgets the macro, removes its menu entries and moves its file out of the folder; documents that use a removed filter in an export parameter report it at export.
 - [ ] `pluginManager.enlargePreview` (M13, inferred): Enlarge Preview
   - Open (our design, not confirmed): Clicking an entry's preview image shows it at full size. FontCraft: same, as a view-only action.
 - [ ] `pluginManager.openWebsite` (M13, inferred): Open Website
   - Open (our design, not confirmed): The grey link under an entry's description opens the extension's website. FontCraft: same, opening the URL from the registry entry in the system browser.
 - [ ] `pluginManager.openDonationPage` (M13, inferred): Donate
-  - Open (our design, not confirmed): Entries whose vendor accepts donations show PayPal or Ko-fi icons that open the donation page. FontCraft: a generic funding link field in the registry entry, opened in the system browser.
+  - Open (our design, not confirmed): Entries whose vendor accepts donations show PayPal or Ko-fi icons that open the donation page. FontCraft: one generic `funding` link per index entry, shown as a Donate button and opened in the system browser.
 - [ ] `script.run` (M13, inferred): (script name)
-  - Open (our design, not confirmed): Each installed script is a Script menu item; choosing it runs the script. FontCraft: each macro is a Script menu item and a command; running it dispatches its command list in order as one undo group and reports the first failing step.
+  - Guess: A macro runs as one undo step that is undone as a whole, like command.batch; the reference undoes script edits per glyph and does not say how a script's changes group.
 - [ ] `script.rerunLast` (M13, inferred): Re-run Last Script
-  - Open (our design, not confirmed): Runs the most recently run script again; also offered as the last item of the Script menu (its exact label is not stated). FontCraft: repeats the last macro with the same arguments.
+  - Guess: The label of the item at the foot of the Script menu is Re-run Last Script followed by the script's title; the handbook gives no label.
+  - Observe: Run any script from the Script menu, then open the Script menu again: copy the exact label of the last item and confirm Cmd+Alt+R runs it.
 - [ ] `script.openScriptsFolder` (M13, inferred): Open Scripts Folder
-  - Open (our design, not confirmed): Shows the Scripts folder in the file manager. FontCraft: opens the user's macros folder; the command also returns its path for headless callers.
+  - Open (our design, not confirmed): Shows the Scripts folder in the file manager. FontCraft: opens the macros folder in the file manager, creating it when missing; the engine part returns the folder's path so headless callers can use it.
+  - Observe: Choose Script › Open Scripts Folder and note the folder's full path, and whether a Plugins folder sits beside it.
 - [ ] `script.reloadScripts` (M13, inferred): Reload Scripts
   - Open (our design, not confirmed): Rebuilds the Script menu from the Scripts folder; the item is shown in the menu only while Option is held. FontCraft: rescans the macros folder and re-registers the macro commands; normally unnecessary because the folder is watched.
+  - Observe: Open the Script menu without and then with Option held: note whether Reload Scripts replaces Open Scripts Folder or is added below it, and where it sits in the menu.
 - [ ] `plugin.installFromFile` (M13, inferred): Install Plug-in from File
-  - Open (our design, not confirmed): A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a module file on the window, or calling this command with a path, validates the manifest, shows the requested capabilities and copies it into the modules folder.
+  - Open (our design, not confirmed): A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a `.wasm` or `.fcmacro` file on the window, opening it with File › Open, or calling this command with a path validates it (manifest, ABI version, no imports, limits) and copies it into its folder; on the web the file's bytes are stored in the browser.
+- [ ] `view.showReporter` (M13, inferred): Show (reporter name)
+  - Guess: Reporter entries are listed at the foot of the View menu in the order of their names, below a separator; the handbook does not give the order.
+  - Observe: Install two reporter plug-ins from the Plugin Manager, relaunch and open the View menu: note where their Show entries are, their order, and whether they have check marks.
 - [ ] `window.pluginManager` (panel, M13, inferred): Plugin Manager
-  - Open (our design, not confirmed): Window that lists the extensions of the main repository and of any registered alternate repository, with two filter groups, a search field and per-entry install controls. FontCraft: same layout for WebAssembly modules and macros, with the type buttons reduced to the kinds we support (filters, reporters, macros) and each entry showing the capabilities the module requests.
+  - Guess: The type buttons are Filters, Reporters, Checks and Macros in place of Plugins, Scripts and Modules, because FontCraft has no Python modules; settled by nothing in the reference (our own extension model, decision 0005).
+  - Observe: Screenshot the Plugin Manager with All and Plugins selected and an entry that has a preview image and donation icons: record the order of title, description, link, image and buttons in an entry.
+- [ ] `script.runActionSet` (M13, docs): Run Action Set
+  - Guess: Action sets and macros are one file format and one command; FontLab keeps action sets in its Actions folder apart from scripts, a split FontCraft does not copy.
+- [ ] `dialog.actions` (panel, M13, docs): Actions
+  - Guess: Each action's parameter form is the command's own dialog when it has one, and otherwise a JSON editor checked against the command's params doc; FontLab's dialog lists only its own actions, each with a form.
 
 ### Elsewhere (5)
 
