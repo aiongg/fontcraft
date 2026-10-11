@@ -363,6 +363,7 @@ impl Session {
         let doc = self.docs.get_mut(i).ok_or(EngineError::NoDocument)?;
         let mut next = Font::clone(&doc.font);
         let out = f(&mut next)?;
+        cmd::color_layers_follow_master(&mut next, &doc.font);
         if next.same_as(&doc.font) {
             return Ok(out);
         }

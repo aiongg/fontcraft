@@ -137,14 +137,15 @@ label = "Color Palette"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyph?: name, layer?: id, index?: int | "*"}'
+params = '{glyph: name, layer: id, index?: int | "*"}'
 area = "color"
 milestone = "M11"
 summary = "Turns a layer (normally one just added with the Layers palette plus button) into a Color Palette layer that paints its outlines in one palette colour. Chosen from the context menu of the layer entry; the layer is then labelled Color plus its colour index."
 ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers"
 status = "handbook"
+notes = "Built in M11.3. Converting replaces any other colour kind and gives the layer its master layer's width. Documented, not yet observed."
 guesses = [
-  "Without `index` the layer gets colour index 0. Settled by choosing Color Palette on a new layer in the reference.",
+  "Without `index` the layer gets colour index 0, and a layer that already is a palette layer keeps its index. Settled by choosing Color Palette on a new layer in the reference.",
   "A master layer cannot become a colour layer, and converting a colour layer to another kind replaces its kind. Settled by the Layers palette context menu on a master layer and on a colour layer.",
 ]
 context = [
@@ -158,12 +159,16 @@ label = "Set Palette Color of Layer"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyph?: name, layer?: id, index: int | "*"}'
+params = '{glyph: name, layer: id, index: int | "*"}'
 area = "color"
 milestone = "M11"
 summary = "Assigns a palette colour to a Color Palette layer: either a colour index from the Color Palettes parameter or the asterisk, which stands for the text colour chosen by the font user. Done from the swatch at the right of the layer name; the layer name follows the new index."
 ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers"
 status = "handbook"
+notes = "Built in M11.3. Refused on a layer that is not a Color Palette layer. Documented, not yet observed."
+guesses = [
+  "The headless command accepts any index up to 65,533, also one beyond the rows of the font's palettes, so layers can be set up before the palettes grow. Settled by opening a file whose colorPalette index is beyond its palettes in the reference.",
+]
 
 [[command]]
 id = "layer.convertToIColor"
@@ -171,12 +176,13 @@ label = "iColor"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, size?: int}"
+params = '{glyph: name, layer: id, size?: int}'
 area = "color"
 milestone = "M11"
 summary = "Turns a layer into an iColor layer, the bitmap layer type that feeds the sbix table; chosen from the context menu of the layer entry. The layer carries a pixel size and is labelled iColor plus that size; the default size of a fresh iColor layer is not documented."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "handbook"
+notes = "Built in M11.3. Without `size` a layer that already is an iColor layer keeps its size. Documented, not yet observed."
 guesses = [
   "Without `size` a new iColor layer gets 128 pixels per em. Settled by the label of a new iColor layer in the reference.",
 ]
@@ -191,12 +197,16 @@ label = "Set iColor Size"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, size: int}"
+params = '{glyph: name, layer: id, size: int}'
 area = "color"
 milestone = "M11"
 summary = "Changes the pixel size of an iColor layer; in the UI by double-clicking the layer entry and editing the number. The size is the strike's pixels-per-em, so raising it above the image's own resolution makes the image draw smaller and lowering it makes the image draw larger."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "handbook"
+notes = "Built in M11.3. Refused on a layer that is not an iColor layer. Documented, not yet observed."
+guesses = [
+  "The layer's placed image is rescaled about its bottom-left corner so it keeps unitsPerEm ÷ size units per pixel. Settled by the size change in the observe step.",
+]
 observe = ["sbix font: double-click an iColor layer entry and type 256; note the new label and whether the image is drawn half as large as at 128."]
 
 [[command]]
@@ -205,14 +215,16 @@ label = "Set iColor Image"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, path: string}"
+params = '{glyph: name, layer: id, path: string}'
 area = "color"
 milestone = "M11"
 summary = "References a PNG, JPEG or TIFF file as the image of an iColor layer and positions it using the bounding box of the master layer's paths. The chapter does not name the gesture (the general image commands, drag-and-drop or Glyph › Add Image, are assumed), so this explicit headless form is ours."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "inferred"
+notes = "Built in M11.3. Takes a .png, .jpg, .jpeg, .tif or .tiff path and stores it relative to the document's folder; the file is not read. Refused on a layer that is not an iColor layer."
 own = true
 guesses = [
+  "Only the master layer's paths set the bounds, not its components. Settled by dropping an image on an iColor layer of a glyph made of components in the reference.",
   "The image is placed with its bottom-left corner at the bottom-left of the master layer's path bounds (the origin when the master layer has no paths) and scaled to unitsPerEm ÷ size units per pixel, so the iColor size alone sets its scale. Settled by dropping an image on an iColor layer in the reference.",
 ]
 observe = ["sbix font: drop E 64.png on the iColor 64 layer of E; note where the image lands relative to the two corner paths and whether it fills their box."]
@@ -223,12 +235,13 @@ label = "svg"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id}"
+params = '{glyph: name, layer: id}'
 area = "color"
 milestone = "M11"
 summary = "Turns a layer into an svg layer, which holds one referenced SVG document that is written to the SVG table for this glyph; chosen from the context menu of the layer entry."
 ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files"
 status = "handbook"
+notes = "Built in M11.3. Documented, not yet observed."
 context = [
   "layers.row",
 ]
@@ -239,12 +252,13 @@ label = "Set SVG Image"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, path: string}"
+params = '{glyph: name, layer: id, path: string}'
 area = "color"
 milestone = "M11"
 summary = "References an SVG file as the artwork of an svg layer; in the UI the file is dragged onto the layer. The file is linked by path, not embedded, and can afterwards be moved and scaled like any placed image."
 ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files"
 status = "handbook"
+notes = "Built in M11.3. Takes an .svg path and stores it relative to the document's folder; the file is not read. Refused on a layer that is not an svg layer. Documented, not yet observed."
 guesses = [
   "The SVG's viewBox is placed with its bottom-left corner at the layer origin, one SVG user unit per font unit, y pointing up. Settled by dropping an SVG file on an svg layer in the reference.",
 ]
@@ -256,12 +270,13 @@ label = "Color"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id}"
+params = '{glyph: name, layer: id}'
 area = "color"
 milestone = "M11"
 summary = "Turns a layer into a full-colour layer, labelled Color and marked with a colour-spectrum disc, on which each path carries its own fill, stroke or gradient. Chosen from the context menu of the layer entry."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
 status = "handbook"
+notes = "Built in M11.3. Documented, not yet observed."
 context = [
   "layers.row",
 ]
@@ -279,6 +294,7 @@ milestone = "M11"
 summary = "Query: for each glyph returns its colour layers with type (palette, iColor, svg, full colour), palette index or pixel size, referenced image path and whether that file exists. Our addition so agents can audit a colour setup without the Layers palette."
 ref = "Color Fonts"
 status = "inferred"
+notes = "Built in M11.3. Without `glyphs` it lists every glyph with a colour layer; `exists` asks the document's asset store."
 own = true
 
 # ───────────────────────────── Commands: path attributes on full-colour layers ─────────────────────────────
@@ -1184,7 +1200,7 @@ milestone = "M11"
 summary = "iColor and svg layers have no advance width of their own: a new width on the master layer applies to all its iColor layers and to its svg layer as well."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs; SVG Color Fonts › Importing Existing SVG Files"
 status = "handbook"
-notes = "FontCraft keeps the widths equal in the engine: a width change on a master layer writes the same width to its colour layers in the same undo step, and export reads the master layer's width."
+notes = "Built in M11.3. FontCraft keeps the widths equal in the engine: a width change on a master layer writes the same width to its colour layers in the same undo step, and export reads the master layer's width."
 guesses = [
   "Palette and full-colour layers follow the master's width as iColor and svg layers do. Settled by changing a master width in the reference with a palette layer present.",
 ]

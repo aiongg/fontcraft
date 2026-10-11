@@ -2,6 +2,11 @@
 //! (`docs/spec/18-custom-parameters.md`), else the built-in widths. New Glyph, Add Glyphs,
 //! Generate, pasted and imported glyphs and the master layers that drawing commands add all
 //! take their width from here.
+//!
+//! Colour layers carry their master layer's width (`color.layers.widthFollowsMaster`):
+//! [`color_layers_follow_master`] runs inside every edit.
+
+use std::sync::Arc;
 
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::plist::Value as PValue;
@@ -76,4 +81,42 @@ fn width_entry(v: &PValue) -> Option<(Option<String>, f64)> {
         _ => return None,
     };
     (number.is_finite() && WIDTH_RANGE.contains(&number)).then_some((script, number))
+}
+
+/// Gives the colour layers of every glyph `next` changed the width of their master layer, where
+/// that master layer's width differs from `before`'s. Called by [`crate::Session::edit`] on the
+/// edited copy, so the colour layers move in the same undo step as the master layer. Glyphs the
+/// edit did not touch are not looked into, and only glyphs with a colour layer to change are
+/// copied.
+pub(crate) fn color_layers_follow_master(next: &mut Font, before: &Font) {
+    let (new, old) = (next.glyphs.as_arcs(), before.glyphs.as_arcs());
+    if std::ptr::eq(new, old) {
+        return;
+    }
+    let changed: Vec<usize> = new
+        .iter()
+        .enumerate()
+        .filter(|(i, g)| {
+            let was = match old.get(*i) {
+                Some(b) if b.name == g.name => Some(b),
+                _ => before.glyph(&g.name),
+            };
+            let Some(was) = was.filter(|b| !Arc::ptr_eq(b, g)) else { return false };
+            g.layers.iter().any(|l| {
+                !l.is_master_layer()
+                    && fontcraft_color::layers::kind(l).is_some()
+                    && g.layer(&l.master).is_some_and(|m| m.width != l.width && was.layer(&m.id).is_some_and(|b| b.width != m.width))
+            })
+        })
+        .map(|(i, _)| i)
+        .collect();
+    for i in changed {
+        let Some(mut g) = next.glyphs.get_mut_at(i) else { continue };
+        let widths: Vec<(String, f64)> = g.layers.iter().filter(|l| l.is_master_layer()).map(|l| (l.id.clone(), l.width)).collect();
+        for layer in g.layers.iter_mut().filter(|l| !l.is_master_layer() && fontcraft_color::layers::kind(l).is_some()) {
+            if let Some((_, width)) = widths.iter().find(|(id, _)| *id == layer.master) {
+                layer.width = *width;
+            }
+        }
+    }
 }
