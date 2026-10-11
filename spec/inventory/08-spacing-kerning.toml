@@ -30,7 +30,7 @@ milestone = "M5"
 summary = "The part of the Edit View Info box (View › Show Info, Cmd+Shift+I) that shows and edits the sidebearings and width of the current glyph. Horizontal scripts, both left-to-right and right-to-left, show left and right sidebearings; top-to-bottom text shows top and bottom sidebearings."
 ref = "Spacing & Kerning › Spacing › Info Box"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M5.8a (`panels/info_box_metrics.rs`): each field shows the key that applies, else the number, from `spacing.getMetrics`, and typing runs the field's setter on the current glyph's active layer. The auto-aligned display waits for M6."
+notes = "Documented, not yet observed. Built in M5.8a (`panels/info_box_metrics.rs`): each field shows the key that applies, else the number, from `spacing.getMetrics`, and typing runs the field's setter on the current glyph's active layer. On an automatically aligned layer `spacing.getMetrics` lists the derived fields (`derived`) for the panel to grey out."
 guesses = [
   "The glyph box hangs under the current glyph's descender, centred on its advance, separate from the selection box at the foot of the canvas; a screenshot of the reference app with a selection settles it.",
   "Emptying a field that holds a key stores the metric's current number, so the key goes and nothing moves; emptying such a field in the reference app settles it.",

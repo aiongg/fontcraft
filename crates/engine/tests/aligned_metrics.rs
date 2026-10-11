@@ -101,6 +101,8 @@ fn spacing_set_on_an_aligned_composite_takes_offsets_only_and_get_derived_metric
     );
     let m = run(&mut s, "spacing.getMetrics", json!({"glyph": "Aacute"}));
     assert_eq!((&m["left"], &m["right"]), (&json!(-100.0), &json!(-100.0)), "the outline's sidebearings include the mark");
+    assert_eq!(m["derived"], json!(["left", "right", "width"]), "{m}");
+    assert_eq!(run(&mut s, "spacing.getMetrics", json!({"glyph": "A"}))["derived"], json!([]));
     let d = run(&mut s, "spacing.getDerivedMetrics", json!({"glyph": "A"}));
     assert_eq!((&d["aligned"], &d["left"]), (&json!(false), &Value::Null), "a glyph with a path is not aligned");
 

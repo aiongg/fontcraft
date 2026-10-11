@@ -57,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Metrics",
             [],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer)} the layer's width and sidebearings (null for a sidebearing of an empty layer), and for each field the metrics key that applies, where it is stored, its value and whether the metric matches it → {glyph, layer, master, linkedTo: master id | null, width, left, right, top, bottom, keys: {left|right|width|top|bottom: {key (as a field shows it, `==` for a layer's own key), scope: \"glyph\" | \"local\", value: number | null, inSync: bool | null, error: string | null} | null}}",
+            "{glyph: name, layer?: id (default: the first master's layer)} the layer's width and sidebearings (null for a sidebearing of an empty layer), and for each field the metrics key that applies, where it is stored, its value and whether the metric matches it → {glyph, layer, master, linkedTo: master id | null, width, left, right, top, bottom, keys: {left|right|width|top|bottom: {key (as a field shows it, `==` for a layer's own key), scope: \"glyph\" | \"local\", value: number | null, inSync: bool | null, error: string | null} | null}, derived: [fields that automatic alignment sets on this layer, shown greyed: width, left, right]}",
             has_doc,
             get_metrics
         )
@@ -371,6 +371,8 @@ fn get_metrics(s: &mut Session, v: &Value) -> Result<Value> {
     out.insert("master".into(), json!(l.master));
     out.insert("linkedTo".into(), json!(linked_to(font, &l.master).map(|m| m.id.clone())));
     out.insert("keys".into(), Value::Object(keys));
+    let derived: Vec<&str> = Field::ALL.iter().filter(|&&f| fontcraft_spacing::derived_field(font, l, f)).map(|f| f.name()).collect();
+    out.insert("derived".into(), json!(derived));
     Ok(Value::Object(out))
 }
 
