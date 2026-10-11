@@ -54,7 +54,6 @@ fn oracle_font() -> Font {
     ] {
         group(&mut f, glyph, side, name);
     }
-    f.add_glyph("x", vec![], 500.0).unwrap();
     let k = Arc::make_mut(&mut f.kerning);
     k.ltr.set("m01", "A", "@MMK_R_V", -30.0);
     k.ltr.set("m01", "@MMK_L_A", "V", -40.0);
