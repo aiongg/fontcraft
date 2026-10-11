@@ -89,6 +89,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             let tool = args.string("tool")?.ok_or_else(|| args.err("`tool` (a tool id, see tool.list) is required"))?;
             let switch = app.tools.toolbox.select(tool).map_err(|e| args.err(e))?;
             tools_glue::apply(app, switch.output);
+            super::text::tab_follows_tool(app, switch.tool);
             tools_glue::sync(app);
             Ok(json!({"tool": switch.tool, "previous": switch.previous}))
         }

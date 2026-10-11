@@ -367,6 +367,7 @@ milestone = "M5"
 summary = "The spacing shortcuts act only while the Text tool is active, on the current glyph (the one after the cursor). They are disabled in the locked kerning mode."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts; Kerning › Kerning Modes"
 status = "handbook"
+notes = "Documented, not yet observed. The commands take `glyphs` and `layer`; in text mode the shell fills them with the current glyph and the tab's master. Outside text mode the keys run nothing; in locked kerning mode and in top-to-bottom text the key changes nothing and the status line says why."
 guesses = [
   "A spacing shortcut on a metric that holds a metrics key changes the number and keeps the key, which then shows as out of sync; no source says whether the reference keeps the key, removes it or ignores the keypress.",
 ]
@@ -962,7 +963,7 @@ milestone = "M5"
 summary = "The kerning shortcuts work with the Text tool, with the cursor between the two glyphs to be kerned, and only while the kerning mode is not 'no kerning'. They adjust the pair selected by the lock states; that a missing pair is created on the first keypress is assumed."
 ref = "Spacing & Kerning › Kerning › Kerning Shortcuts; Kerning Modes"
 status = "handbook"
-notes = "Documented, not yet observed: the shortcuts work with the Text tool and the cursor between the two glyphs. The commands take the pair as `left` and `right` in logical order; the shell fills them from the cursor and offers the keys only in text mode outside no-kerning mode. A master that takes its kerning from another master is refused."
+notes = "Documented, not yet observed: the shortcuts work with the Text tool and the cursor between the two glyphs. The commands take the pair as `left` and `right` in logical order; the shell fills them from the cursor (Ctrl: the glyphs before and after it; Cmd: the glyph after it and the next one; in right-to-left text the other way round, so the keys follow the visual side), with the tab's master and direction. In no-kerning mode and in top-to-bottom text the key changes nothing and the status line says why; outside text mode it runs nothing. A master that takes its kerning from another master is refused."
 guesses = [
   "A keypress changes the kerning that applies by the step and stores the result on the sides the locks choose, creating that pair when it does not exist; no source says, and the Kerning window after the first keypress on an unkerned pair settles it.",
 ]

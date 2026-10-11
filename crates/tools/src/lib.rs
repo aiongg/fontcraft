@@ -49,6 +49,7 @@ pub mod select;
 pub mod selection;
 pub mod snap;
 pub mod snap_guides;
+pub mod text;
 pub mod tool;
 pub mod toolbox;
 pub mod view;

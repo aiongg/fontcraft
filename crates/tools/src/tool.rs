@@ -115,6 +115,7 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "pencil", label: "Pencil", shortcut: "B", group: "pencil" },
     ToolInfo { id: "rectangle", label: "Primitives (Rectangle)", shortcut: "F", group: "primitives" },
     ToolInfo { id: "ellipse", label: "Primitives (Ellipse)", shortcut: "F", group: "primitives" },
+    ToolInfo { id: "text", label: "Text", shortcut: "T", group: "" },
     ToolInfo { id: "hand", label: "Hand", shortcut: "H", group: "" },
     ToolInfo { id: "zoom", label: "Zoom", shortcut: "Z", group: "" },
     ToolInfo { id: "knife", label: "Knife", shortcut: "E", group: "erase" },
@@ -134,6 +135,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
     let tool: Box<dyn Tool> = match id {
         "select" => Box::new(SelectTool::default()),
         "lasso" => Box::new(LassoTool::default()),
+        "text" => Box::new(crate::text::TextTool),
         "hand" => Box::new(HandTool::default()),
         "zoom" => Box::new(ZoomTool::default()),
         "draw" => Box::new(DrawTool::default()),

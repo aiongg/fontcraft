@@ -125,7 +125,9 @@ impl Toolbox {
                 return out;
             }
             if self.temporary.is_none() && !self.active.busy() {
-                self.temporary = make_tool(if ev.mods.cmd { "zoom" } else { "hand" });
+                // In text mode a plain Space types (the shell takes it first) and Cmd+Space pans.
+                let zoom = ev.mods.cmd && self.active.id() != "text";
+                self.temporary = make_tool(if zoom { "zoom" } else { "hand" });
             }
             return Output::handled();
         }

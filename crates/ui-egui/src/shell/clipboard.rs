@@ -18,6 +18,9 @@
 //! text the same way) opens `dialog.pasteSpecial` on copied glyphs, with the selected glyphs as
 //! its `targets` and the master shown.
 //!
+//! In text mode Copy and Cut put the selected text on the clipboard, a glyph without a
+//! character as `/name`, and Paste types the clipboard's text at the cursor (`text.clipboard`).
+//!
 //! Nothing here runs while a text field has the keyboard (it copies and pastes text itself) or a
 //! dialog is open.
 
@@ -54,6 +57,10 @@ pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str,
             i.events.iter().filter(|e| matches!(e, egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_))).cloned().collect::<Vec<_>>();
         (events, i.modifiers.alt)
     });
+    if super::text::in_text_mode(app) {
+        text_mode_events(app, events);
+        return Vec::new();
+    }
     let font_view = app.state.tab().is_none();
     let mut out = Vec::new();
     for event in events {
@@ -154,6 +161,29 @@ pub fn after_run(app: &mut FontcraftApp, id: &str, result: &Value) {
         && let Some(text) = result.get("json").and_then(Value::as_str)
     {
         app.clipboard_out = Some(text.to_string());
+    }
+}
+
+/// Copy, Cut and Paste in text mode, on the tab's text.
+fn text_mode_events(app: &mut FontcraftApp, events: Vec<egui::Event>) {
+    for event in events {
+        let result = match event {
+            egui::Event::Copy | egui::Event::Cut => {
+                if let Some(text) = super::text::selected_text(app) {
+                    app.clipboard_out = Some(text);
+                }
+                if matches!(event, egui::Event::Cut) { super::text::delete_selection(app) } else { Ok(()) }
+            }
+            egui::Event::Paste(text) if text.len() > MAX_PASTE_BYTES => Err(format!("Paste: the clipboard holds more than {MAX_PASTE_BYTES} bytes")),
+            egui::Event::Paste(text) if holds_glyphs(&text) => {
+                Err("Paste: the clipboard holds copied glyphs, not text; leave text mode to paste them".into())
+            }
+            egui::Event::Paste(text) => super::text::paste(app, &text),
+            _ => Ok(()),
+        };
+        if let Err(e) = result {
+            app.state.status = e;
+        }
     }
 }
 

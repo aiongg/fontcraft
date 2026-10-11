@@ -102,11 +102,13 @@ pub enum Key {
     Tab,
     Escape,
     Space,
+    Home,
+    End,
 }
 
 impl Key {
     /// A key from its name as `ui.key` spells it: `ArrowLeft` or `Left`, `Return` or `Enter`,
-    /// `Delete`, `Backspace`, `Tab`, `Escape` or `Esc`, `Space`, or a single character.
+    /// `Delete`, `Backspace`, `Tab`, `Escape` or `Esc`, `Space`, `Home`, `End`, or a single character.
     pub fn parse(name: &str) -> Option<Key> {
         let mut chars = name.chars();
         if let (Some(c), None) = (chars.next(), chars.next()) {
@@ -123,6 +125,8 @@ impl Key {
             "tab" => Key::Tab,
             "escape" | "esc" => Key::Escape,
             "space" => Key::Space,
+            "home" => Key::Home,
+            "end" => Key::End,
             _ => return None,
         };
         Some(key)

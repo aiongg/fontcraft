@@ -213,6 +213,8 @@ pub fn sync(app: &mut FontcraftApp) {
             tab.selection = valid;
         }
     }
+    // A tab shown in text mode has the Text tool, and the Text tool needs a tab in text mode.
+    crate::shell::text::tool_follows_tab(app);
     app.preview_tool = matches!(app.tools.toolbox.active_id(), "hand" | "zoom" | "text");
 }
 
@@ -253,10 +255,22 @@ pub fn modifiers(app: &mut FontcraftApp, mods: Modifiers) -> Vec<String> {
 
 /// A key for the tools: their own keys, the tool letters and the Edit View keys (decision 0004,
 /// D1). `None` when the key is not theirs, so it goes on to the menu shortcuts.
+/// In text mode the Text tool's keys come first, and a character key types itself.
 pub fn key(app: &mut FontcraftApp, ev: KeyEvent) -> Option<Vec<String>> {
+    key_typing(app, ev, true)
+}
+
+/// [`key`]; `types` false for a frame's keys, whose text events do the typing.
+fn key_typing(app: &mut FontcraftApp, ev: KeyEvent, types: bool) -> Option<Vec<String>> {
     app.state.tab()?;
-    let out = with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)).ok()?;
-    out.handled.then(|| apply(app, out))
+    if let Some(errors) = crate::shell::text::key(app, &ev, types) {
+        return Some(errors);
+    }
+    let out = with_tool(app, |toolbox, cx| toolbox.key(cx, &ev)).ok();
+    match out {
+        Some(out) if out.handled => Some(apply(app, out)),
+        _ => crate::shell::text::escape_to_text(app, &ev),
+    }
 }
 
 /// Carries out a tool's actions in order. Returns the errors; each also goes to the status bar.
@@ -498,9 +512,21 @@ pub fn keys(app: &mut FontcraftApp, ctx: &egui::Context) {
     let events = ctx.input(|i| i.events.clone());
     let mut used = Vec::new();
     for (index, event) in events.iter().enumerate() {
+        if let Event::Text(text) = event {
+            // Text mode types what the keyboard gives; a Space held to pan types nothing.
+            if crate::shell::text::in_text_mode(app) {
+                if !crate::shell::text::panning(app)
+                    && let Err(e) = crate::shell::text::type_chars(app, text)
+                {
+                    app.state.status = e;
+                }
+                used.push(index);
+            }
+            continue;
+        }
         let Event::Key { key, pressed, modifiers, .. } = event else { continue };
         let Some(k) = Key::parse(key.name()) else { continue };
-        if self::key(app, KeyEvent { key: k, mods: key_mods(*modifiers), pressed: *pressed }).is_some() {
+        if key_typing(app, KeyEvent { key: k, mods: key_mods(*modifiers), pressed: *pressed }, false).is_some() {
             used.push(index);
         }
     }

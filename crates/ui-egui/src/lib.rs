@@ -65,6 +65,8 @@ mod stroke_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod text_keys_tests;
+#[cfg(test)]
 mod text_mode_tests;
 #[cfg(test)]
 mod text_tests;

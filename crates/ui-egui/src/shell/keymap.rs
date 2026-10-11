@@ -1,6 +1,8 @@
 //! Menu shortcuts: the default shortcut of every engine and shell command that has one with a
 //! modifier. Keys without a modifier (tool letters, arrows, Return, Delete, Tab) belong to the
-//! tools' keymap, which knows the focus (decision 0004, D1).
+//! tools' keymap, which knows the focus (decision 0004, D1). The `textMode` shortcuts (the
+//! spacing and kerning keys) are left out here: in text mode `shell::text::key` runs them with
+//! the targets the cursor gives, and elsewhere they do nothing.
 //!
 //! Shortcuts are written in Mac notation; `Cmd` is the platform's command key (Ctrl off the Mac).
 
@@ -11,10 +13,14 @@ use serde_json::{Value, json};
 
 use super::UI_COMMANDS;
 
+/// The `when` of the shortcuts that work only while the Text tool is active.
+pub const TEXT_MODE: &str = "textMode";
+
 /// Every shortcut, the most specific first: egui matches a shortcut while extra Shift or Alt are
 /// held, so `Cmd+Shift+W` must be tried before a `Cmd+W` would be.
 static KEYMAP: LazyLock<Vec<(&'static str, KeyboardShortcut)>> = LazyLock::new(|| {
-    let engine = fontcraft_engine::command_specs().iter().filter_map(|c| Some((c.id, c.shortcut?)));
+    // The `textMode` shortcuts work only in text mode, where [`text_mode_command`] finds them.
+    let engine = fontcraft_engine::command_specs().iter().filter(|c| c.when != Some(TEXT_MODE)).filter_map(|c| Some((c.id, c.shortcut?)));
     let shell = UI_COMMANDS.iter().map(|c| (c.0, c.3));
     let mut map: Vec<(&'static str, KeyboardShortcut)> = Vec::new();
     for (id, text) in engine.chain(shell) {
@@ -116,4 +122,38 @@ pub fn command_for(key: Key, modifiers: Modifiers) -> Option<(&'static str, Valu
         return Some(("view.selectMaster", json!({"master": n})));
     }
     None
+}
+
+/// The `textMode` shortcuts (the spacing and kerning keys of the Text tool): the key, the exact
+/// modifiers and the command.
+static TEXT_MODE_KEYS: LazyLock<Vec<(fontcraft_tools::Key, fontcraft_tools::Modifiers, &'static str)>> = LazyLock::new(|| {
+    fontcraft_engine::command_specs()
+        .iter()
+        .filter(|c| c.when == Some(TEXT_MODE))
+        .filter_map(|c| {
+            let (key, mods) = parse_tool_key(c.shortcut?)?;
+            Some((key, mods, c.id))
+        })
+        .collect()
+});
+
+/// A shortcut such as `Cmd+Ctrl+Shift+Left` as a key of the tools and its modifiers.
+fn parse_tool_key(text: &str) -> Option<(fontcraft_tools::Key, fontcraft_tools::Modifiers)> {
+    let mut mods = fontcraft_tools::Modifiers::NONE;
+    let mut key = None;
+    for part in text.split('+') {
+        match part {
+            "Cmd" => mods.cmd = true,
+            "Ctrl" => mods.ctrl = true,
+            "Alt" | "Option" => mods.alt = true,
+            "Shift" => mods.shift = true,
+            other => key = Some(fontcraft_tools::Key::parse(other)?),
+        }
+    }
+    Some((key?, mods))
+}
+
+/// The `textMode` command whose shortcut is exactly `key` with `mods`.
+pub fn text_mode_command(key: fontcraft_tools::Key, mods: fontcraft_tools::Modifiers) -> Option<&'static str> {
+    TEXT_MODE_KEYS.iter().find(|(k, m, _)| *k == key && *m == mods).map(|(_, _, id)| *id)
 }

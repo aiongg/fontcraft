@@ -29,6 +29,7 @@ pub const KEYMAP: &[KeyBinding] = &[
     KeyBinding { keys: "H", when: "editView", command: "tool.select", note: "Hand" },
     KeyBinding { keys: "Z", when: "editView", command: "tool.select", note: "Zoom" },
     KeyBinding { keys: "L", when: "editView", command: "tool.select", note: "Measurement" },
+    KeyBinding { keys: "T", when: "editView", command: "tool.select", note: "Text: text mode" },
     KeyBinding { keys: "A", when: "editView", command: "tool.select", note: "the annotation sub-tool in use, else Annotation Selection" },
     KeyBinding { keys: "Space (held)", when: "editView", command: "", note: "the Hand tool while held" },
     KeyBinding { keys: "Cmd+Space (held)", when: "editView", command: "", note: "the Zoom tool while held; Alt+click zooms out" },
@@ -55,6 +56,40 @@ pub const KEYMAP: &[KeyBinding] = &[
     },
     KeyBinding { keys: "Delete", when: "tool:annotation", command: "annotation.delete", note: "the selected annotations" },
     KeyBinding { keys: "G", when: "tool:measurement", command: "command.batch", note: "while dragging the ruler: a measurement guide along it" },
+    KeyBinding { keys: "Escape", when: "editView", command: "editView.toggleTextMode", note: "with no gesture in progress: text mode" },
+    KeyBinding { keys: "Escape", when: "textMode", command: "editView.toggleTextMode", note: "edit the current glyph with the Select tool" },
+    KeyBinding {
+        keys: "characters, Space, Return",
+        when: "textMode",
+        command: "editView.insertText",
+        note: "typed at the cursor, in place of the selection",
+    },
+    KeyBinding {
+        keys: "Backspace, Delete",
+        when: "textMode",
+        command: "editView.insertText",
+        note: "the selection, else the item before / after the cursor",
+    },
+    KeyBinding {
+        keys: "Left, Right, Up, Down",
+        when: "textMode",
+        command: "editView.setCursor",
+        note: "move the cursor in the writing direction and between lines; Shift extends the selection",
+    },
+    KeyBinding { keys: "Cmd+A", when: "textMode", command: "editView.setCursor", note: "select the whole text" },
+    KeyBinding {
+        keys: "Home, End",
+        when: "textMode",
+        command: "editView.previousGlyph",
+        note: "the previous / next glyph of the font in place of the current one",
+    },
+    KeyBinding {
+        keys: "Shift+Home, Shift+End",
+        when: "textMode",
+        command: "editView.previousVisibleGlyph",
+        note: "the previous / next glyph Font View lists",
+    },
+    KeyBinding { keys: "Cmd+Space (held)", when: "textMode", command: "", note: "the Hand tool while Space is held; Cmd may be let go" },
 ];
 
 fn run(id: &str, params: Map<String, Value>) -> Action {

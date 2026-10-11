@@ -489,6 +489,7 @@ milestone = "M5"
 summary = "In text mode the Space bar types a space instead of invoking the Hand tool. To pan without inserting one, press Cmd+Space and then let go of Cmd."
 ref = "Edit View › Glyph Display › Panning"
 status = "handbook"
+notes = "Documented, not yet observed. In text mode Space types a space; Cmd+Space holds the Hand tool until Space comes up, whether or not Cmd is still held, and a Space repeated while it is held types nothing."
 
 # ───────────────────────────── View options ─────────────────────────────
 
@@ -893,6 +894,12 @@ milestone = "M5"
 summary = "Switches Edit View to text mode, where the tab holds an editable string of glyphs: a character, a word, a sentence or several lines. Standard text editing applies (cursor keys, selection, cut, copy, paste to and from other apps). The glyph that follows the cursor counts as the current glyph."
 ref = "Edit View › Entering Text › Text Tool"
 status = "handbook"
+notes = "Documented, not yet observed. The tool and the tab's text mode go together: choosing the Text tool puts the tab in text mode, choosing any other tool ends it, and a tab shown in text mode has the Text tool. In text mode, letters type instead of choosing tools; Backspace and Delete remove the selection or the item before or after the cursor; Shift with an arrow extends the selection and Cmd+A selects the whole text; Home and End (Shift: as Font View lists the glyphs) run editView.previousGlyph and editView.nextGlyph. The spacing and kerning shortcuts (`when = textMode`) take their targets from the cursor."
+guesses = [
+  "Return types a line break; the handbook allows several lines but does not name the key.",
+  "Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.",
+  "Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.",
+]
 
 [[command]]
 id = "editView.toggleTextMode"
@@ -907,7 +914,7 @@ milestone = "M5"
 summary = "Switches between typing text and editing the current glyph. The handbook states the Escape toggle but not which tool becomes active when leaving text mode."
 ref = "Edit View › Entering Text"
 status = "handbook"
-notes = "Documented, not yet observed: Escape switches between entering text and editing the current glyph, the glyph after the cursor (spacing.currentGlyphFollowsCursor). Built in M5.7a as tab state (`Tab::text_mode`); the tool switch and the Escape key come with the Text tool."
+notes = "Documented, not yet observed: Escape switches between entering text and editing the current glyph, the glyph after the cursor (spacing.currentGlyphFollowsCursor). The mode is tab state (`Tab::text_mode`) and goes with the Text tool. Outside text mode Escape first cancels a gesture in progress; with none, it enters text mode."
 guesses = [
   "Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either, and the toolbar after Escape, in the running app or a video, settles it.",
 ]
@@ -965,14 +972,14 @@ label = "Set Text Cursor"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{tab?: id, index: number, selectionLength?: number}"
+params = "{tab?: id, index: number, selectionLength?: number, anchor?: number}"
 area = "edit-text"
 milestone = "M5"
 summary = "Places the text cursor before the glyph at the given index, optionally selecting a run of glyphs, which also changes the current glyph. Headless form of clicking in the text or using the arrow keys."
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
 own = true
-notes = "The selection runs from the cursor over the `selectionLength` items after it, so the current glyph is the first selected glyph. In text mode a click runs it at the item boundary nearest the click and a drag selects from the press to the pointer; documented, not yet observed: a double-click on a glyph edits it (Edit View's two modes)."
+notes = "The selection runs from the cursor over the `selectionLength` items after it, so the current glyph is the first selected glyph, or from `anchor` to the cursor, which is how Shift with an arrow key and Cmd+A select. In text mode a click runs it at the item boundary nearest the click and a drag selects from the press to the pointer; documented, not yet observed: a double-click on a glyph edits it (Edit View's two modes)."
 guesses = [
   "Shift+click extends the selection to the click, keeping the end of the selection away from it; the reference app settles it.",
   "A double-click on a glyph in text mode also makes the Select tool active; the reference app settles it.",
@@ -1386,6 +1393,10 @@ milestone = "M5"
 summary = "Text can be copied out of Edit View and pasted into it as plain characters, and the usual Edit-menu text commands work on the tab string."
 ref = "Edit View › Entering Text › Text Tool"
 status = "handbook"
+notes = "Documented, not yet observed. In text mode Copy and Cut put the selected items on the system clipboard as characters, and Paste types the clipboard text at the cursor in place of the selection; a line break pastes as a line break. Clipboard text that holds copied glyphs is not pasted as text."
+guesses = [
+  "A glyph without a character is copied as `/name`, as display strings write it, and pasted text reads `/name` as that glyph, so a copy pastes back unchanged; copying unencoded glyphs from the reference app into a plain-text editor settles it.",
+]
 
 [[behavior]]
 id = "text.systemServices"
