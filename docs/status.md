@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-11, M5 in progress: M5.0–M5.6, M5.15 and M5.16 built; M5.7 next._
+_Updated: 2026-10-11, M5 in progress: M5.0–M5.7, M5.15 and M5.16 built; the UI wave M5.8–M5.14 and M5.17 next._
 
 ## State of the tree
 
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
-- 317 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
-  are all live, and 49 of M5's 97. Feature parity is about 15% (ROADMAP.md › Parity estimate). 506 guesses on 339
+- 329 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
+  are all live, and 61 of M5's 97. Feature parity is about 16% (ROADMAP.md › Parity estimate). 526 guesses on 348
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -19,7 +19,8 @@ _Updated: 2026-10-11, M5 in progress: M5.0–M5.6, M5.15 and M5.16 built; M5.7 n
 
 ## Where to start
 
-1. **M5**, in the order of `docs/plans/M5.md` § 6: M5.7 (text mode) by the builder, then the UI wave M5.8–M5.14 and M5.17 (the kern writer).
+1. **M5**, in the order of `docs/plans/M5.md` § 6: the UI wave M5.8–M5.14 in worktrees and M5.17
+   (the kern writer) by the builder.
 
 M4, Font View and glyph management (`docs/plans/M4.md`), as built:
 
@@ -374,4 +375,12 @@ Append one terse entry per session: what landed, numbers, what is still open.
   one kerning entry per master. M5.16: exported masters that link their metrics take the linked
   master's widths (17 of 17 master builds equal fontmake's hmtx and vmtx); new glyphs take
   Default Layer Width (1000 for CJK, 200 for `_corner.` glyphs without the parameter).
+  M5.7: text mode in Edit View. Tabs hold typed text (cursor, selection, direction, kerning
+  mode); the Text tool (T), typing, cursor keys, Escape between text entry and editing,
+  Cmd+Space panning, copy and paste as text; the canvas draws the caret, the selection, kerned
+  gaps (negative light blue, positive yellow) and metrics labels; clicks place the cursor; the
+  bottom bar's direction and kerning-mode buttons; spacing and kerning shortcuts act at the
+  cursor; tabs open from the document's display strings and are written on save. The § 5
+  end-to-end test runs up to the Kerning window step. A frame with 10,000 items takes about
+  8–15 ms (target 16). 329 of 933 commands live.
 
