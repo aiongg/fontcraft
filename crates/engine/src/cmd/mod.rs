@@ -84,6 +84,33 @@ mod tokens;
 pub mod transform;
 mod transform_metrics;
 mod widths;
+// M12: whole-file tools and the audit services; file plumbing in `file_io`.
+mod audit_fix_binary;
+mod audit_fix_glyph;
+mod audit_fix_info;
+mod audit_profiles;
+mod audit_reports;
+pub mod audit_services;
+mod collection;
+mod convert_file;
+mod dehint;
+mod diff;
+mod dump;
+pub mod file_io;
+mod glyph_order_file;
+mod instance;
+mod layout_file;
+mod merge_file;
+mod metrics_report;
+mod optimize;
+mod outlines_file;
+mod proof;
+mod sources;
+mod subset;
+mod tables_file;
+mod tables_import;
+mod transform_file;
+mod variations_file;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -283,6 +310,31 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(attributes::specs());
         v.extend(image::specs());
         v.extend(color_export::specs());
+        v.extend(tables_file::specs());
+        v.extend(tables_import::specs());
+        v.extend(dump::specs());
+        v.extend(collection::specs());
+        v.extend(layout_file::specs());
+        v.extend(glyph_order_file::specs());
+        v.extend(metrics_report::specs());
+        v.extend(convert_file::specs());
+        v.extend(subset::specs());
+        v.extend(instance::specs());
+        v.extend(merge_file::specs());
+        v.extend(transform_file::specs());
+        v.extend(optimize::specs());
+        v.extend(dehint::specs());
+        v.extend(outlines_file::specs());
+        v.extend(diff::specs());
+        v.extend(variations_file::specs());
+        v.extend(proof::specs());
+        v.extend(sources::specs());
+        v.extend(audit_services::specs());
+        v.extend(audit_profiles::specs());
+        v.extend(audit_reports::specs());
+        v.extend(audit_fix_binary::specs());
+        v.extend(audit_fix_glyph::specs());
+        v.extend(audit_fix_info::specs());
         v
     })
 }

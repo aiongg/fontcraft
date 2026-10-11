@@ -52,6 +52,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("decompile", Class::Layer(3)),
     ("oracle", Class::Layer(3)),
     ("render", Class::Layer(3)),
+    ("tables", Class::Layer(3)),
+    ("proof", Class::Layer(3)),
     ("tools", Class::Layer(4)),
     ("engine", Class::Layer(5)),
     ("ui-egui", Class::Layer(6)),
@@ -67,13 +69,17 @@ pub const TABLE: &[(&str, Class)] = &[
 /// Explicit orderings within a layer: a crate may use the ones before it in its chain.
 /// `textlayout` and `features` read kerning through `spacing`; `textlayout` shapes through
 /// `shaping`; `features` evaluates glyph predicates through `glyphquery`; `hinting` reads TT zone
-/// and stem filters through `glyphquery`.
+/// and stem filters through `glyphquery`. `tables` uses the glyph encoders of `compile` and the
+/// decoders of `decompile`; `proof` draws through `render` and reads `tables`.
 pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["spacing", "textlayout"],
     &["spacing", "features"],
     &["shaping", "textlayout"],
     &["glyphquery", "features"],
     &["glyphquery", "hinting"],
+    &["compile", "tables", "proof"],
+    &["decompile", "tables", "proof"],
+    &["render", "proof"],
 ];
 
 /// External crates that are a UI toolkit, windowing or GPU dependency. A trailing `*` is a prefix.

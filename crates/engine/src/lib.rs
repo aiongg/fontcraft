@@ -82,6 +82,10 @@ pub enum EngineError {
     Decompile(#[from] fontcraft_decompile::DecompileError),
     #[error(transparent)]
     Settings(#[from] settings::SettingsError),
+    #[error(transparent)]
+    Tables(#[from] fontcraft_tables::TablesError),
+    #[error(transparent)]
+    Proof(#[from] fontcraft_proof::ProofError),
     #[error("{0}")]
     Io(String),
     #[error("not supported yet: {0}")]

@@ -476,3 +476,106 @@ fn hostile_layers_do_not_panic() {
         }
     }
 }
+
+/// The smallest font read-fonts accepts: an sfnt header with no tables.
+const EMPTY_SFNT: [u8; 12] = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+fn tables_count(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
+    let n = ctx.font.table_directory.num_tables();
+    if n == 0 {
+        let place = Location { table: Some("head".into()), ..Location::default() };
+        sink.push(Hit::new("no-tables", "The font has no tables.").data("tables", f64::from(n)).place(place));
+    }
+}
+
+fn family_size(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
+    if ctx.fonts.len() < 3 {
+        sink.push(Hit::new("small-family", format!("{} fonts", ctx.fonts.len())).severity(Severity::Info));
+    }
+}
+
+static BINARY_CHECK: CheckSpec = CheckSpec {
+    id: "check.tables.testNoTables",
+    label: "No tables",
+    description: "",
+    group: CheckGroup::Tables,
+    scope: CheckScope::Binary,
+    family: None,
+    severity: Severity::Fail,
+    profile: Profile::Opentype,
+    thresholds: &[],
+    fix: None,
+    skip_variable: false,
+    capped: false,
+    codes: &["no-tables"],
+    code_severities: &[],
+    preconditions: &[],
+    run: Runner::Binary(tables_count),
+};
+
+static FAMILY_CHECK: CheckSpec = CheckSpec {
+    id: "check.family.testSize",
+    label: "Family size",
+    description: "",
+    group: CheckGroup::Family,
+    scope: CheckScope::Family,
+    family: None,
+    severity: Severity::Warn,
+    profile: Profile::Universal,
+    thresholds: &[],
+    fix: None,
+    skip_variable: false,
+    capped: false,
+    codes: &["small-family"],
+    code_severities: &[],
+    preconditions: &[],
+    run: Runner::Family(family_size),
+};
+
+#[test]
+fn binary_and_family_checks_run_through_their_runners() {
+    let services = NoServices;
+    let a = BinaryCtx::new("f0", &EMPTY_SFNT, 0, &services).unwrap();
+    let b = BinaryCtx::new("f1", &EMPTY_SFNT, 0, &services).unwrap();
+    let checks: Vec<&'static CheckSpec> = vec![&BINARY_CHECK, &FAMILY_CHECK];
+
+    let r = audit_binary(&a, &checks, &Config::default());
+    assert_eq!(r.findings.len(), 1, "the family check does not run on one font");
+    let f = &r.findings[0];
+    assert_eq!((f.check, f.severity), ("check.tables.testNoTables", Severity::Fail));
+    assert_eq!(f.location.font.as_deref(), Some("f0"));
+    assert_eq!(f.location.table.as_deref(), Some("head"));
+    let json = serde_json::to_value(&f.location).unwrap();
+    assert_eq!(json["font"], "f0", "table-level keys serialise under their result-format names");
+
+    let fonts = [a, b];
+    let family = FamilyCtx { fonts: &fonts, services: &services };
+    let r = audit_family(&family, &checks, &Config::default());
+    assert_eq!(r.findings.len(), 1);
+    assert_eq!(r.findings[0].location.fonts, vec!["f0".to_string(), "f1".to_string()]);
+    assert_eq!(r.findings[0].severity, Severity::Info);
+
+    assert!(services.compatibility(&Font::new("Test")).is_err(), "no services: every one is unavailable");
+}
+
+/// Open decision D9: every registry entry has an inventory row with the same severity and scope.
+#[test]
+fn registry_matches_the_inventory_rows() {
+    let text = include_str!("../../../spec/inventory/21-qa-checks.toml");
+    let mut rows = std::collections::HashMap::new();
+    for block in text.split("[[") {
+        let get = |key: &str| {
+            let prefix = format!("{key} = \"");
+            block.lines().find_map(|l| l.strip_prefix(prefix.as_str()).and_then(|r| r.strip_suffix('"')).map(str::to_string))
+        };
+        if let (Some(id), Some(severity), Some(scope)) = (get("id"), get("severity"), get("scope")) {
+            rows.insert(id, (severity, scope));
+        }
+    }
+    for spec in CHECKS {
+        let (severity, scope) = rows.get(spec.id).unwrap_or_else(|| panic!("{} has no [[check]] row", spec.id));
+        assert_eq!(spec.severity.as_str(), severity, "{}", spec.id);
+        assert_eq!(spec.scope.row_scope(), scope, "{}", spec.id);
+        assert!(spec.id.starts_with(&format!("check.{}.", spec.group.as_str())), "{} is filed under {:?}", spec.id, spec.group);
+    }
+}

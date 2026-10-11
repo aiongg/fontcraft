@@ -1,0 +1,132 @@
+//! `fontcraft-cli compile`.
+
+use super::Subcommand;
+use crate::io::{Failure, Outcome, execute, open, out, usage};
+use fontcraft_engine::Session;
+use serde_json::{Value, json};
+
+pub const SUBCOMMAND: Subcommand =
+    Subcommand { name: "compile", summary: "Compile sources to static fonts", usage: USAGE, options: &[], actions: &[], run: compile };
+
+const USAGE: &str = "\
+  fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
+                        [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
+                        [--keep-overlaps] [--keep-direction] [--conversion-error EM]
+                        [--timestamp SECS|now] [--plan]
+      Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
+      without instances builds its first master), plus each master with --masters-as-instances,
+      once per format (default ttf) and container (default plain). Files are named by PostScript
+      name in DIR (default: the current folder); with both formats each goes into a ttf or otf
+      subfolder. -o names the one file a single SOURCE builds. Instances between masters are
+      skipped until interpolation exists. Overlapping contours are merged unless --keep-overlaps is
+      given. --plan prints what would be built, without building.
+      One JSON line per SOURCE.
+";
+
+/// `compile`: each source is opened as a document and built by `font.compile` (or described by
+/// `font.compilePlan` with `--plan`).
+fn compile(args: &[String]) -> Outcome {
+    let mut sources: Vec<&String> = Vec::new();
+    let (mut formats, mut containers): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
+    let (mut output, mut output_dir): (Option<&String>, Option<&String>) = (None, None);
+    let mut params = serde_json::Map::new();
+    let mut outlines = serde_json::Map::new();
+    let mut plan = false;
+    let mut it = args.iter();
+    let list = |v: &str| -> Vec<String> { v.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect() };
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--format" => formats.extend(list(it.next().ok_or_else(|| usage("--format needs ttf or otf"))?)),
+            "--container" => containers.extend(list(it.next().ok_or_else(|| usage("--container needs plain, woff or woff2"))?)),
+            "-o" | "--output" => output = Some(it.next().ok_or_else(|| usage("-o needs a file"))?),
+            "--output-dir" => output_dir = Some(it.next().ok_or_else(|| usage("--output-dir needs a folder"))?),
+            "--instances" => {
+                params.insert("instances".into(), json!(true));
+            }
+            "--masters-as-instances" => {
+                params.insert("mastersAsInstances".into(), json!(true));
+            }
+            "--keep-overlaps" => {
+                outlines.insert("removeOverlaps".into(), json!(false));
+            }
+            "--remove-overlaps" => {
+                outlines.insert("removeOverlaps".into(), json!(true));
+            }
+            "--keep-direction" => {
+                outlines.insert("keepDirection".into(), json!(true));
+            }
+            "--conversion-error" => {
+                let v = it.next().ok_or_else(|| usage("--conversion-error needs a number"))?;
+                let e = v
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|e| e.is_finite())
+                    .ok_or_else(|| usage(format!("--conversion-error must be a number, got `{v}`")))?;
+                outlines.insert("conversionError".into(), json!(e));
+            }
+            "--timestamp" => {
+                let v = it.next().ok_or_else(|| usage("--timestamp needs seconds since 1970 or `now`"))?;
+                let t = if v == "now" {
+                    json!("now")
+                } else {
+                    json!(v.parse::<i64>().map_err(|_| usage(format!("--timestamp must be whole seconds or `now`, got `{v}`")))?)
+                };
+                params.insert("timestamp".into(), t);
+            }
+            "--plan" => plan = true,
+            other => match other.strip_prefix("--instances=") {
+                Some(names) => {
+                    params.insert("instances".into(), json!(list(names)));
+                }
+                None if other.starts_with('-') => return Err(usage(format!("unknown compile option `{other}`"))),
+                None => sources.push(arg),
+            },
+        }
+    }
+    if sources.is_empty() {
+        return Err(usage("compile needs at least one SOURCE"));
+    }
+    let destination = match (output, output_dir) {
+        (Some(_), Some(_)) => return Err(usage("use either -o or --output-dir")),
+        (Some(_), None) if sources.len() > 1 => return Err(usage("-o names one file; with several sources use --output-dir")),
+        (Some(file), None) => file.clone(),
+        (None, Some(dir)) => dir.clone(),
+        (None, None) => ".".to_string(),
+    };
+    params.insert("destination".into(), json!(destination));
+    if !formats.is_empty() {
+        params.insert("formats".into(), json!(formats));
+    }
+    if !containers.is_empty() {
+        params.insert("containers".into(), json!(containers));
+    }
+    if !outlines.is_empty() {
+        params.insert("outlines".into(), Value::Object(outlines));
+    }
+    let command = if plan { "font.compilePlan" } else { "font.compile" };
+    if plan {
+        params.remove("timestamp");
+    }
+    let params = Value::Object(params);
+    let build = |source: &str| -> Result<Value, Failure> {
+        let mut session = Session::new();
+        open(&mut session, source)?;
+        execute(&mut session, command, &params)
+    };
+    if let [source] = sources.as_slice() {
+        let result = build(source)?;
+        return out(&json!({"source": source, "result": result}).to_string());
+    }
+    // Several sources: one failing does not stop the others.
+    let mut failed = 0usize;
+    for source in &sources {
+        match build(source) {
+            Ok(result) => out(&json!({"source": source, "result": result}).to_string())?,
+            Err(e) => {
+                eprintln!("fontcraft-cli: {source}: {}", e.message());
+                failed += 1;
+            }
+        }
+    }
+    if failed > 0 { Err(Failure::Failed(format!("{failed} of {} sources did not build", sources.len()))) } else { Ok(()) }
+}

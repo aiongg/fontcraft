@@ -14,3 +14,8 @@ workspace = true
 fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
 serde.workspace = true
+read-fonts.workspace = true
+skrifa.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
