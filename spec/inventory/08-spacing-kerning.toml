@@ -1361,7 +1361,7 @@ label = "Rename Kerning Group"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{side: "left"|"right", from: string, to: string, scope: "pair"|"font", pair?: {left, right}, master?: id}'
+params = '{side: "left"|"right", from: string, to: string, scope: "pair"|"font", pair?: {left, right}, master?: id, direction?: "ltr"|"rtl"|"vertical"}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Renames a kerning group from the Kerning window by editing its name in a row. With scope 'pair' only the selected pair is pointed at the new name; with scope 'font' the group is renamed everywhere. Only groups on the edited side are affected."
@@ -1370,6 +1370,8 @@ status = "handbook"
 notes = "Documented, not yet observed: double-clicking a group name in the Kerning window starts the rename, and the app asks whether to rename it for the selected pair only or in the whole font. Left and right groups are renamed independently."
 guesses = [
   "With scope `pair`, only the side of the selected pair changes to the new name and the glyphs keep their group; no source says whether the reference also moves glyphs into the new group, and the Group fields after a pair-only rename settle it.",
+  "With scope `font`, a new name that is already a group of that side is refused rather than merging the two groups; renaming onto an existing group in the reference app settles it.",
+  "With scope `font`, the rename reaches every master and both writing directions, since groups are shared between them; reading another master's pairs after a rename in the reference app settles it.",
 ]
 
 [[panel]]
@@ -1458,8 +1460,9 @@ milestone = "M5"
 summary = "Actions-menu command: deletes every obsolete kerning pair, meaning pairs that name a glyph no longer in the font or a group that no glyph belongs to any more. Whether it covers all masters or only the current one is not stated."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning Pairs"
 status = "handbook"
+notes = "Documented, not yet observed."
 guesses = [
-  "Clean Up acts on the given master and direction only, like the Kerning window list.",
+  "Clean Up acts on the given master and direction only, like the Kerning window list; running it on a font with two masters and reading the other master's pairs settles it.",
 ]
 
 [[command]]
@@ -1581,7 +1584,8 @@ ref = "Spacing & Kerning › Kerning › Kerning Window › Maintaining Kerning 
 status = "handbook"
 notes = "Documented, not yet observed: Compress keeps an exception unless its value equals the group value."
 guesses = [
-  "When two pairs would lift to the same group pair with different values, neither is lifted; running Compress on such a pair list in the reference app settles it.",
+  "Within one run the pairs are taken in stored order and each sees the lifts made before it, so when two pairs would lift to the same group pair the first is lifted and the second meets it (absorbed with an equal value, kept as an exception with another); running Compress on such a pair list in the reference app settles it.",
+  "A glyph–group pair is not lifted or absorbed while group–glyph pairs stored for members of its group would take over those glyphs once it is gone; a pair list with T–@n and @T–m in the reference app settles it.",
 ]
 
 [[behavior]]

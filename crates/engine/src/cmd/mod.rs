@@ -28,6 +28,7 @@ mod guide;
 mod inspect;
 mod kerning;
 mod kerning_groups;
+mod kerning_maintain;
 mod layer;
 mod layers;
 mod measure;
@@ -179,6 +180,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(transform_metrics::specs());
         v.extend(kerning::specs());
         v.extend(kerning_groups::specs());
+        v.extend(kerning_maintain::specs());
         v.extend(font::specs());
         v.extend(compile::specs());
         v.extend(meta::specs());

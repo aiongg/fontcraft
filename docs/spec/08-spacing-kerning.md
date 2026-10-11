@@ -413,9 +413,11 @@ is in `07-import-export.md`, section 4.2).
 15. Compress: order of side promotion, and what happens when promoted pairs collide with
     different values.
    **Answered for M5 (source and our decision):** the handbook example lifts the left side first.
-   When two pairs would lift to the same group pair with different values, neither is lifted; a
-   lifted pair that meets a stored group pair follows the handbook rule (kept as an exception when
-   the values differ).
+   A run takes the pairs in stored order, and each pair sees the lifts made before it. A pair that
+   meets a stored group pair follows the handbook rule: absorbed when the values are equal, kept
+   as an exception when they differ. So when two pairs would lift to the same group pair, the
+   first is lifted and the second meets it. With T–m and T–ň this gives @T–@n and the exception
+   @T–ň, which keeps every value the two pairs had.
 16. Rename with scope "pair": does it create a new group, and what membership does it get?
    **Answered for M5 (our decision):** no new group: only the selected pair's side is renamed and
    the glyphs keep their group (`kerning.renameGroup`).
