@@ -547,6 +547,14 @@ fn measure_font_view_on_the_largest_corpus_source() {
         sidebar_refresh.push(start.elapsed());
         window.frame(&mut app);
     }
+    // Frames after a width edit to `n`, which other glyphs' metrics keys read: the out-of-sync
+    // badges are scanned again for the glyphs that read it.
+    let n_width = app.run("spacing.getMetrics", &json!({"glyph": "n"})).unwrap()["width"].as_f64().unwrap();
+    let mut spaced = Vec::new();
+    for i in 0..6 {
+        app.run("spacing.setWidth", &json!({"glyphs": ["n"], "value": n_width + f64::from(i % 2) * 10.0})).unwrap();
+        spaced.push(timed_frame(&mut app));
+    }
     let spread = |mut v: Vec<std::time::Duration>| {
         v.sort();
         format!("median {:?}, max {:?}", v[v.len() / 2], v.last().unwrap())
@@ -576,12 +584,13 @@ fn measure_font_view_on_the_largest_corpus_source() {
     let sidebar = start.elapsed();
     queries.sort();
     println!(
-        "{} glyphs ({count} custom): effective properties {props:?}; first frame {first:?}; later frames median {:?}, max {:?}; cache refresh after an edit {refresh:?}, frame after an edit {after_edit:?}; frame after a rename {}; frame after a colour {}; sidebar refresh after an edit {}; list frame {list:?}; three-rule query ({shown} glyphs) first {first_query:?}, median {:?}, max {:?}; sidebar entries with counts {sidebar:?}",
+        "{} glyphs ({count} custom): effective properties {props:?}; first frame {first:?}; later frames median {:?}, max {:?}; cache refresh after an edit {refresh:?}, frame after an edit {after_edit:?}; frame after a rename {}; frame after a colour {}; frame after a width edit {}; sidebar refresh after an edit {}; list frame {list:?}; three-rule query ({shown} glyphs) first {first_query:?}, median {:?}, max {:?}; sidebar entries with counts {sidebar:?}",
         font.glyphs.len(),
         frames[frames.len() / 2],
         frames.last().unwrap(),
         spread(renamed),
         spread(coloured),
+        spread(spaced),
         spread(sidebar_refresh),
         queries[queries.len() / 2],
         queries.last().unwrap()
