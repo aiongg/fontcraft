@@ -708,6 +708,9 @@ summary = "Returns the custom parameters set on the font, on one master or on on
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
 notes = "M7 plan § 4: M7.2. Disabled rows are listed with `enabled: false`; rows the catalogue does not know with `known: false`; for a parameter that takes one value, every enabled row after the first with `duplicate: true`; a row spelled another way with the catalogue's `canonical` name."
+guesses = [
+  "The result lists rows in stored order with `enabled` and `known` flags and the values as stored; the reference app's scripting access to custom parameters would settle the shape.",
+]
 
 [[command]]
 id = "font.customParameters.describe"
@@ -722,6 +725,9 @@ summary = "Searches the catalogue of known custom parameters and returns name, v
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
 notes = "The catalogue is generated from the rows of spec/inventory/18-custom-parameters.toml (name, kind, scopes, our own summary) and the parameter rows of the other chapters. M7 plan § 4: M7.2."
+guesses = [
+  "The search matches the query against names, aliases and summaries, case ignored; the Font Info parameter picker's filter in the running app would settle it.",
+]
 
 [[command]]
 id = "font.customParameters.add"
@@ -760,6 +766,9 @@ summary = "Changes the value of an existing custom parameter row."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
 notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2."
+guesses = [
+  "A value is checked against the catalogue's kind before it is stored, and an unknown name is refused rather than stored as is; editing a row in the running app's Font Info would settle it.",
+]
 
 [[command]]
 id = "font.customParameters.remove"
@@ -836,6 +845,9 @@ summary = "Returns the masters in list order with id, name, icon and axis coordi
 ref = "Font Info › Masters › Managing Masters"
 status = "inferred"
 notes = "M7 plan § 4: M7.5."
+guesses = [
+  "The list gives id, name, icon and axis coordinates only, our choice of the fields a script needs to pick a master; the reference app's scripting access to masters would settle it.",
+]
 
 [[command]]
 id = "font.master.get"
@@ -850,6 +862,9 @@ summary = "Returns every property of one master: name, icon, axis coordinates, m
 ref = "Font Info › Masters"
 status = "inferred"
 notes = "With several masters, a value they do not share is null (fontInfo.masters.multipleValues). Metrics are keyed by their name, else their kind, with the glyph filter in brackets; unnamed stems by `#index`. M7 plan § 4: M7.5."
+guesses = [
+  "Several masters report null for a value they do not share, as the Font Info window shows multiple values; the window with two masters selected would settle it.",
+]
 
 [[command]]
 id = "font.master.set"
@@ -1193,6 +1208,9 @@ summary = "Returns the metric definitions (category, name, scope) and, when a ma
 ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "inferred"
 notes = "M7 plan § 4: M7.6."
+guesses = [
+  "Metrics are listed in the font's order with category, name and scope, plus one master's positions when asked; the Masters tab in the running app would settle the order.",
+]
 
 [[command]]
 id = "font.metrics.add"
@@ -1371,6 +1389,9 @@ summary = "Returns the stem definitions (name, orientation, scope) and, when a m
 ref = "Font Info › Masters › Stems"
 status = "inferred"
 notes = "M7 plan § 4: M7.6."
+guesses = [
+  "Stems are listed in the font's order with name, orientation and scope, plus one master's values when asked; the Masters tab in the running app would settle the order.",
+]
 
 [[command]]
 id = "font.stems.add"
@@ -1467,6 +1488,9 @@ milestone = "M8"
 summary = "Returns the named numbers of the font and, when a master is given, that master's value for each."
 ref = "Font Info › Masters › Number Values"
 status = "inferred"
+guesses = [
+  "Numbers are listed in the font's order, plus one master's values when asked; the Masters tab in the running app would settle the order.",
+]
 
 [[command]]
 id = "font.numbers.add"
@@ -1568,6 +1592,9 @@ summary = "Returns the entries of the Exports tab in order with type, style name
 ref = "Font Info › Exports"
 status = "inferred"
 notes = "M7 plan § 4: M7.7. An instance whose source states no class reports 400 and 5, the format's defaults; a class an older source writes as a name (`Bold`) is reported as that name."
+guesses = [
+  "An instance whose source states no class reports the format's defaults (400 and 5); the Exports tab showing such an instance in the running app would settle it.",
+]
 
 [[command]]
 id = "font.instance.get"
@@ -1582,6 +1609,9 @@ summary = "Returns every property of one export entry including its added Genera
 ref = "Font Info › Exports"
 status = "inferred"
 notes = "M7 plan § 4: M7.7."
+guesses = [
+  "The result includes every General field the entry has and its custom parameters in stored order; the Exports tab in the running app would settle which fields are shown.",
+]
 
 [[command]]
 id = "font.instance.set"
@@ -1596,6 +1626,9 @@ summary = "Writes built-in properties of one or several export entries in one st
 ref = "Font Info › Exports"
 status = "inferred"
 notes = "`axes` writes the stored coordinates; the M9 command font.instance.setAxisLocation adds the axis rules. M7 plan § 4: M7.7."
+guesses = [
+  "Several entries change in one undo step, and a value one of them cannot take refuses the whole call; editing several exports at once in the running app would settle it.",
+]
 
 [[command]]
 id = "font.instance.add"
@@ -2050,6 +2083,9 @@ milestone = "M8"
 summary = "Returns the sidebar entries in order: kind, name or tag, automatic flag and whether the entry currently has compile errors."
 ref = "Font Info › Features › Editing Feature Code"
 status = "inferred"
+guesses = [
+  "Entries are listed prefixes, classes, then features, each in stored order, with a flag for current compile errors; the Features tab sidebar in the running app would settle the order.",
+]
 
 [[command]]
 id = "font.features.get"
@@ -2063,6 +2099,9 @@ milestone = "M8"
 summary = "Returns one prefix, class or feature with its code, automatic flag, notes and, for stylistic sets, the localized names."
 ref = "Font Info › Features › Editing Feature Code"
 status = "inferred"
+guesses = [
+  "Stylistic set names are returned as language and value pairs in stored order; the Features tab with a named stylistic set would settle it.",
+]
 
 [[command]]
 id = "font.features.listAvailable"
@@ -2076,6 +2115,9 @@ milestone = "M8"
 summary = "Searches the registered feature tags by tag or by descriptive name, the data behind the Add Feature picker, and reports for each whether automatic code generation is possible in this font."
 ref = "Font Info › Features › Editing Feature Code"
 status = "inferred"
+guesses = [
+  "A tag is offered as generatable when one of our generators can write an entry of that name in this font; the Add Feature picker in the running app would settle which tags it marks.",
+]
 
 [[command]]
 id = "font.features.addPrefix"
@@ -2705,6 +2747,9 @@ summary = "Returns the font note as plain text."
 ref = "Font Info › Notes"
 status = "inferred"
 notes = "M7 plan § 4: M7.3."
+guesses = [
+  "The note is returned as plain text, as stored; the Notes tab in the running app would settle whether formatting is kept.",
+]
 
 [[command]]
 id = "font.note.set"
@@ -2719,6 +2764,9 @@ summary = "Replaces the font note. The same text is what the font's note custom 
 ref = "Font Info › Notes"
 status = "inferred"
 notes = "The note is the font's `note` key (the `note` custom parameter in files of format version 2, which M1 reads and writes). M7 plan § 4: M7.3."
+guesses = [
+  "Setting the note replaces it whole in one undo step; editing the Notes tab in the running app would settle how undo groups typing.",
+]
 
 [[behavior]]
 id = "fontInfo.notes.notExported"

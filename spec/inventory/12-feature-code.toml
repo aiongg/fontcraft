@@ -163,6 +163,9 @@ summary = "Query: returns the complete standard feature file for one export targ
 ref = "Feature Code › Tokens; Feature Code › Conditional Feature Code"
 status = "inferred"
 notes = "Expands the code for a master (`target: {master}`); instances, the variable font and the implicit features are refused until their values and writers can be written as code."
+guesses = [
+  "The expanded code is the assembled feature file for one master, includes inlined; the feature file the reference app writes when exporting would settle the layout.",
+]
 
 [[command]]
 id = "font.features.showSnippetFolder"
@@ -197,6 +200,9 @@ summary = "Query: returns a text field value with every triple-brace token repla
 ref = "Appendix › Text Tokens"
 status = "inferred"
 notes = "Our own query. Returns the expanded text, the tokens that named nothing and the context used; `master` and `instance` take an id, a name or an index. M7 plan § 4: M7.13."
+guesses = [
+  "Tokens that name nothing are left as written and listed; a name field with an unknown token exported from the running app would settle it.",
+]
 
 [[command]]
 id = "url.open"
