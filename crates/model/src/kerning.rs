@@ -5,7 +5,7 @@
 //! prefixes). [`side_group`] reads a side either way. Tables keep the order they were read in at
 //! every level, because the reference's files keep kerning in the order it was made, not sorted.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -72,12 +72,13 @@ pub struct KernFirst {
 impl KernTable {
     /// A table from entries as a file stores them, with each master's later entries merged into
     /// its first: first sides keep the order they first appear in, and a first side met again
-    /// appends its pairs to the earlier one's. A pair stored twice keeps both copies in stored
-    /// order, so a lookup that takes the first match finds the value it found before the merge.
+    /// appends its pairs to the earlier one's. A pair stored twice keeps its first copy, the one
+    /// a lookup found before the merge.
     pub fn new(entries: Vec<MasterKerning>) -> Self {
         let mut out: Vec<MasterKerning> = Vec::with_capacity(entries.len());
         let mut masters: HashMap<String, usize> = HashMap::new();
-        let mut firsts: Vec<HashMap<String, usize>> = Vec::with_capacity(entries.len());
+        // Per master: first side → its index and the second sides it holds.
+        let mut firsts: Vec<HashMap<String, (usize, HashSet<String>)>> = Vec::with_capacity(entries.len());
         for m in entries {
             let mi = match masters.get(&m.master) {
                 Some(i) => *i,
@@ -90,13 +91,12 @@ impl KernTable {
             };
             let (Some(target), Some(at)) = (out.get_mut(mi), firsts.get_mut(mi)) else { continue };
             for f in m.firsts {
-                match at.get(&f.first).and_then(|i| target.firsts.get_mut(*i)) {
-                    Some(earlier) => earlier.seconds.extend(f.seconds),
-                    None => {
-                        at.insert(f.first.clone(), target.firsts.len());
-                        target.firsts.push(f);
-                    }
-                }
+                let (index, seen) = at.entry(f.first.clone()).or_insert_with(|| {
+                    target.firsts.push(KernFirst { first: f.first.clone(), seconds: Vec::new() });
+                    (target.firsts.len() - 1, HashSet::new())
+                });
+                let Some(kept) = target.firsts.get_mut(*index) else { continue };
+                kept.seconds.extend(f.seconds.into_iter().filter(|(second, _)| seen.insert(second.clone())));
             }
         }
         KernTable(out)
@@ -250,8 +250,8 @@ mod tests {
         assert_eq!(masters, ["m01", "m02"]);
         let m01: Vec<(&str, &str, f64)> =
             t.0[0].firsts.iter().flat_map(|f| f.seconds.iter().map(|(s, v)| (f.first.as_str(), s.as_str(), *v))).collect();
-        assert_eq!(m01, [("A", "V", -50.0), ("A", "V", -99.0), ("A", "W", -40.0), ("T", "o", -70.0), ("F", "a", -20.0)]);
-        assert_eq!(t.get("m01", "A", "V"), Some(-50.0), "the earlier copy of a pair stored twice wins");
+        assert_eq!(m01, [("A", "V", -50.0), ("A", "W", -40.0), ("T", "o", -70.0), ("F", "a", -20.0)], "a pair stored twice keeps its first copy");
+        assert_eq!(t.get("m01", "A", "V"), Some(-50.0));
         assert_eq!(t.get("m01", "A", "W"), Some(-40.0));
         assert_eq!(t.get("m01", "F", "a"), Some(-20.0));
         t.set("m01", "F", "a", -25.0);
