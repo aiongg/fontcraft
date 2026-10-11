@@ -607,6 +607,15 @@ Against fontmake (and so for CFF fonts, which fontc does not write), every field
 references derive differently keeps fontc's value; `crates/oracle/allow.toml` lists those
 differences for fontmake with their reasons (`docs/plans/M2.md` › M2.3b).
 
+**Private DICT defaults, against fontmake** (from M10.14). When a master has alignment zones and
+the source sets no blueScale or blueFuzz parameter, FontCraft writes BlueScale 0.037 and
+BlueFuzz 1, the defaults the handbook's parameter descriptions give (the answer to
+`docs/plans/M10.md` § 7, question 6). fontmake writes BlueScale as 3 / (4 × the tallest zone)
+and BlueFuzz 0, so every CFF build from such a source differs in these two Private DICT entries;
+`crates/oracle/allow.toml` lists them for fontmake. Where a source sets blueFuzz or Family
+Alignment Zones, FontCraft writes them as the handbook says, and fontmake ignores both. The reference app's own export is not yet observed (`hinting.ps.blueScale`,
+`hinting.ps.blueFuzz`).
+
 ---
 
 ## 5. Commands and data touched

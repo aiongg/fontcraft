@@ -2697,10 +2697,10 @@ before implementation.
    **Answered:** recorded in `21-qa.md` § 6; the illustrated report stays out of M12 (`21-qa.md` question 10).
 10. **Adobe CMap resources.** makeotf finds default CMap files in its installed shared data. Decide
     whether FontCraft bundles the cmap-resources files or requires `--cmap-*` paths.
-   **For the owner:** `docs/plans/M12.md` § 7, question 6 (recommendation: CMap files given by path in M12; bundled data decided with M7's ROS row).
+   **Answer (`docs/plans/M12.md` § 7, question 6):** CMap files given by path in M12; whether data is bundled is decided with M7's ROS row.
 11. **Type 1 output.** PFA/PFB writing is kept for parity with `tx` and `mergefonts` workflows. Decide
     whether it is in scope for 1.0 or reading alone suffices.
-   **For the owner:** `docs/plans/M12.md` § 7, question 5 (recommendation: read only).
+   **Answer (`docs/plans/M12.md` § 7, question 5):** Type 1 is read, never written.
 12. **Resource-fork fonts.** Reading `.dfont` (data-fork suitcases) is listed as not carried over along
     with the other Mac containers; reconsider if users still need it.
    **Answered (M12 plan, our decision):** not carried over; nothing in the corpus or the rows needs it.

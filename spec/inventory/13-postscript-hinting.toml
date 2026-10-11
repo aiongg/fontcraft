@@ -67,6 +67,7 @@ ref = "PostScript Hinting › Font-Wide Hints; AFDKO otfautohint --doc-fontinfo"
 status = "docs"
 notes = "Checked by the M10 planning pass: FontCraft's CFF writer has used this mapping since M2 (compile.cffPrivateDictValues, observed), following glyphsLib's blue_values.py and ufo2ft's OutlineOTFCompiler, and fontmake's CFF builds of the corpus agree. The reference app's own export has not been observed. StdHW, StdVW, StemSnapH and StemSnapV are written only when the master has stems in both directions, as ufo2ft does."
 guesses = ["More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it."]
+observe = ["T5 (13 vertical stems): export as CFF and read the Private dict; count the StemSnapV values, note which stems are left out, and note any warning in the export results."]
 
 [[behavior]]
 id = "hinting.ps.measureStems"
@@ -117,6 +118,7 @@ ref = "PostScript Hinting › Alignment Zones; AFDKO otfautohint --doc-fontinfo"
 status = "docs"
 notes = "Checked by the M10 planning pass: FontCraft's CFF writer has used this mapping since M2 (compile.cffPrivateDictValues, observed), following glyphsLib's blue_values.py and ufo2ft's OutlineOTFCompiler, and fontmake's CFF builds of the corpus agree. The reference app's own export has not been observed. The ordering rule is glyphsLib's: zones sorted by position, a zone at 0 or with a positive size goes to BlueValues."
 guesses = ["Too many zones (more than seven BlueValues pairs or five OtherBlues pairs): the export keeps the first pairs in ascending order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with eight top zones would settle it."]
+observe = ["T5 (8 top zones): export as CFF and read the Private dict; count the BlueValues pairs, note which zones are left out, and note any warning in the export results."]
 
 [[behavior]]
 id = "hinting.ps.alignmentZones.metricDerived"
@@ -130,10 +132,15 @@ status = "handbook"
 id = "hinting.ps.blueScale"
 area = "hinting-ps"
 milestone = "M10"
-summary = "blueScale is an optional custom parameter written to the Private dict as BlueScale. It fixes the size below which overshoots are suppressed and thereby caps the zone size (see hinting.ps.alignmentZones.limits). The handbook gives no default; the CFF default of 0.039625 is recalled, not confirmed here."
+summary = "blueScale is an optional custom parameter written to the Private dict as BlueScale. It fixes the size below which overshoots are suppressed and thereby caps the zone size (see hinting.ps.alignmentZones.limits). When the source sets none, the export writes 0.037, the default the parameter's description gives (overshoots show from 40 pixels per em)."
 ref = "PostScript Hinting › Custom Parameters"
 status = "handbook"
-guesses = ["Absent blueScale: the export computes the value from the largest zone as ufo2ft does (FontCraft since M2), not the 0.037 the parameter description gives (M10 § 7, question 6); a reference export without the parameter would show which value it writes."]
+guesses = ["As in fontmake, BlueScale, BlueFuzz and BlueShift are written only when the master has alignment zones; a reference export of a font with no zone settings would settle it."]
+notes = "The default is documented in the parameter description (Appendix › Custom Parameters) and not yet observed. fontmake computes BlueScale as 3 / (4 × the tallest zone) instead; FontCraft follows the handbook (docs/plans/M10.md § 7, question 6) and docs/spec/40-compile.md § 4a records the difference."
+observe = [
+  "T5 (no blueScale, blueFuzz or blueShift parameter): export as CFF and read the Private dict with fontTools; note the BlueScale, BlueFuzz and BlueShift values (FontCraft writes 0.037, 1 and 7).",
+  "T1 with every alignment zone removed from the master and no blue parameters: export as CFF and read the Private dict; note whether BlueScale, BlueFuzz and BlueShift are written at all, and with which values.",
+]
 
 [[behavior]]
 id = "hinting.ps.blueShift"
@@ -147,10 +154,14 @@ status = "handbook"
 id = "hinting.ps.blueFuzz"
 area = "hinting-ps"
 milestone = "M10"
-summary = "blueFuzz is an optional custom parameter written to the Private dict as BlueFuzz; it widens every zone by that many units at both ends when the rasterizer and the autohinter test whether an edge is inside a zone. The handbook only names it; the meaning is taken from otfautohint, which also uses 2 x BlueFuzz + 1 as the minimum gap between zones."
-ref = "PostScript Hinting › Custom Parameters; AFDKO otfautohint fdTools.py"
+summary = "blueFuzz is an optional custom parameter written to the Private dict as BlueFuzz; it widens every zone by that many units at both ends when the rasterizer and the autohinter test whether an edge is inside a zone. When the source sets none, the export writes 1, the Type 1 default the parameter's description quotes. The meaning is taken from otfautohint, which also uses 2 x BlueFuzz + 1 as the minimum gap between zones."
+ref = "PostScript Hinting › Custom Parameters; Appendix › Custom Parameters; AFDKO otfautohint fdTools.py"
 status = "docs"
-guesses = ["Absent blueFuzz: the export writes BlueFuzz 0 as ufo2ft does (FontCraft since M2), although the parameter description quotes the Type 1 default of 1 (M10 § 7, question 6); a reference export without the parameter would settle it."]
+notes = "The default is documented in the parameter description (Appendix › Custom Parameters) and not yet observed. fontmake writes BlueFuzz 0 instead; FontCraft follows the handbook (docs/plans/M10.md § 7, question 6) and docs/spec/40-compile.md § 4a records the difference."
+observe = [
+  "T5 (no blueScale, blueFuzz or blueShift parameter): export as CFF and read the Private dict with fontTools; note the BlueScale, BlueFuzz and BlueShift values (FontCraft writes 0.037, 1 and 7).",
+  "T1 with every alignment zone removed from the master and no blue parameters: export as CFF and read the Private dict; note whether BlueScale, BlueFuzz and BlueShift are written at all, and with which values.",
+]
 
 [[behavior]]
 id = "hinting.ps.familyAlignmentZones"
@@ -160,6 +171,7 @@ summary = "Family Alignment Zones is an optional custom parameter holding a seco
 ref = "PostScript Hinting › Custom Parameters"
 status = "handbook"
 guesses = ["Family Alignment Zones is read from the font's custom parameters and written as FamilyBlues and FamilyOtherBlues with the same ordering rule as the master zones; an export from the reference app would confirm the split."]
+observe = ["T1: add a Family Alignment Zones parameter with one top zone and two bottom zones, export as CFF and read the Private dict; note which zones go to FamilyBlues and which to FamilyOtherBlues."]
 
 [[command]]
 id = "hint.ps.validateFontHints"
@@ -209,6 +221,7 @@ summary = "An Autohint custom parameter forces the autohint setting for an expor
 ref = "PostScript Hinting › Autohinting"
 status = "handbook"
 guesses = ["The Autohint parameter is read on the instance first, then the font; when neither has it the export dialog's checkbox (default off) decides; a reference export would show whether a font-level parameter counts."]
+observe = ["T1: add the Autohint parameter to the font only (not to an instance), export as CFF with the Export dialog's Autohint off, and read the charstrings; note whether the glyphs carry hints."]
 
 [[behavior]]
 id = "hinting.ps.export.manualGlyphsSkipped"
@@ -234,6 +247,7 @@ summary = "Stem hints of one direction may overlap in the source (the two bowls 
 ref = "PostScript Hinting › Manual hinting"
 status = "handbook"
 guesses = ["Manual hints that overlap go through the same mask builder as autohinted ones (the port of otfautohint's hint substitution), so the masks match what the autohinter would write for those stems; the reference's masks for a hand-hinted 8 would settle it."]
+observe = ["T1: hint eight by hand on its two overlapping vertical stems, export as CFF and read its charstring; note where hintmask operators appear and which stems each mask holds."]
 
 [[behavior]]
 id = "hinting.ps.flex.automatic"
@@ -243,6 +257,7 @@ summary = "Flex hints flatten very shallow curves (cupped serifs, slightly taper
 ref = "PostScript Hinting › Flex Hints"
 status = "handbook"
 guesses = ["Flex is added to every exported glyph that qualifies, hand-hinted glyphs included, with otfautohint's flex test (the handbook's conditions plus its length ratio); an export from the reference app of a cupped serif under 20 units, hinted by hand, would settle both points."]
+observe = ["T1: set blueShift to 6, hint n.serif by hand, export as CFF and read its charstring; note whether the 5-unit cupped serifs are written with a flex operator."]
 
 [[behavior]]
 id = "hinting.ps.flex.conditions"
@@ -300,6 +315,9 @@ summary = "Edit View context-menu item. Runs the autohinter on the current layer
 ref = "PostScript Hinting › Manual hinting"
 status = "handbook"
 guesses = ["Autohint replaces any hints the layer already has and acts on every glyph selected in Edit View or Font View; the reference app would settle both."]
+observe = [
+  "T1: give n two manual hints and choose Autohint from the context menu; note whether the old hints are replaced or kept. Then select n, m and o and choose Autohint again; note whether only one glyph or all three get hints.",
+]
 
 [[command]]
 id = "hint.ps.addHorizontalHint"
@@ -314,6 +332,7 @@ summary = "Edit View context-menu item that adds a horizontal stem hint (a band 
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
 guesses = ["With no node selected the new hint sits at the vertical centre of the glyph's bounding box with the master's first horizontal stem as its size (50 units without stems); doing it in the reference app would settle it."]
+observe = ["T1: open n with nothing selected and choose Add Horizontal Hint; note where the new hint starts and how wide it is (centred on the bounding box, the first stem's width, or something else)."]
 
 [[command]]
 id = "hint.ps.addVerticalHint"
@@ -328,6 +347,7 @@ summary = "Edit View context-menu item that adds a vertical stem hint (a band be
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
 guesses = ["With no node selected the new hint sits at the horizontal centre of the glyph's bounding box with the master's first vertical stem as its size (50 units without stems); doing it in the reference app would settle it."]
+observe = ["T1: open n with nothing selected and choose Add Vertical Hint; note where the new hint starts and how wide it is (centred on the bounding box, the first stem's width, or something else)."]
 
 [[command]]
 id = "hint.ps.makeGhostHint"
@@ -342,6 +362,9 @@ summary = "Context-menu item on the badge of an existing hint that converts it i
 ref = "PostScript Hinting › Ghost Hints"
 status = "handbook"
 guesses = ["Make Ghost Hint keeps the hint's origin edge and makes a top ghost when that edge is the upper one of a stem that reaches a top zone, else a bottom ghost; a ghost hint becomes a stem hint again when hint.ps.setHintValues gives it a size; the reference app would settle both."]
+observe = [
+  "T1: in n, select the hint on the x-height stem and choose Make Ghost Hint; note whether it becomes a top or a bottom ghost. Then type a size for the ghost in the Info box and note whether it turns back into a stem hint.",
+]
 
 [[command]]
 id = "hint.ps.setGhostDirection"
@@ -369,6 +392,7 @@ summary = "Changes the origin and/or size of a hint numerically; this is what ty
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
 guesses = ["Typing a value for a linked end unlinks that end and keeps the typed number; the reference app would settle it."]
+observe = ["T1: select a hint linked to two nodes, type a new origin in the Info box, then move one of the nodes; note whether the hint follows the node (link kept) or stays at the typed value (link broken)."]
 
 [[command]]
 id = "hint.ps.attachHintToNode"
@@ -383,6 +407,7 @@ summary = "Links one end of a hint to a node so that the hint edge follows the n
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "inferred"
 guesses = ["Dropping a marker on a node links that end, and dragging it off onto empty space unlinks it, keeping the current number; the reference app would settle the unlinking gesture."]
+observe = ["T1: drag a linked hint marker off its node to empty space, then move that node; note whether that end of the hint is now unlinked."]
 
 [[command]]
 id = "hint.ps.deleteHints"
@@ -440,6 +465,7 @@ summary = "With a hint selected, moves the selection to the following hint of th
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
 guesses = ["Tab wraps from the last hint to the first; the reference app would settle it."]
+observe = ["T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next."]
 
 [[command]]
 id = "hint.ps.selectPreviousHint"
@@ -498,6 +524,7 @@ summary = "In Edit View a stem hint is drawn as a gray bar across the glyph with
 ref = "PostScript Hinting › Stem Hints; Ghost Hints"
 status = "handbook"
 guesses = ["PostScript hints are shown and edited with the Select tool while View › Show Hints is on; whether another tool is needed would be settled in the reference app."]
+observe = ["T1: turn on View › Show Hints, open n and try to drag a hint marker with the Select tool, then with each other tool; note which tools can move or edit a hint."]
 
 [[behavior]]
 id = "hinting.ps.manual.select"
@@ -507,6 +534,7 @@ summary = "Clicking a hint's number badge selects the hint; Shift+click adds to 
 ref = "PostScript Hinting › Stem Hints"
 status = "handbook"
 guesses = ["Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the last selected one; trying it in the reference app would settle it."]
+observe = ["T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next."]
 
 [[behavior]]
 id = "hinting.ps.manual.dragMarkers"
@@ -552,6 +580,7 @@ guesses = ["A ghost hint made from one node is a top ghost when the node lies in
 # ---------------------------------------------------------------------------------------------
 # Multiple masters and variable CFF2
 # ---------------------------------------------------------------------------------------------
+observe = ["T1: in I, select one node at the cap height and choose Add Horizontal Hint, then do the same with one node on the baseline; note whether each new hint is a top or a bottom ghost hint."]
 
 [[behavior]]
 id = "hinting.ps.masters.mainMasterOnly"
@@ -569,6 +598,7 @@ summary = "For an interpolated instance, each main-master hint is rebuilt from t
 ref = "PostScript Hinting › Hinting Multiple Masters; Manual hinting"
 status = "handbook"
 guesses = ["An unlinked hint end keeps its main-master number in every master and instance, and a link whose node no longer exists in a master falls back to that number; an export of an interpolated instance with one unlinked hint would settle it."]
+observe = ["T2: export the instance halfway between masters 1 and 2 as CFF and read I; note the position of its unlinked hint (master 1's value, an interpolated value, or dropped)."]
 
 [[behavior]]
 id = "hinting.ps.masters.fallbackToOtherMasters"
@@ -578,6 +608,7 @@ summary = "Manual hints placed on a glyph in a master other than the main one ar
 ref = "PostScript Hinting › Hinting Multiple Masters"
 status = "handbook"
 guesses = ["When the main master has no hints for a glyph and several other masters do, the first of them in master order is used; a reference export of such a glyph would settle it."]
+observe = ["T2: export the three masters as CFF and read e in the master 1 font (e has manual hints only in masters 2 and 3); note whether its hints come from master 2, from master 3, or from the autohinter."]
 
 [[behavior]]
 id = "hinting.ps.masters.specialLayers"
@@ -595,6 +626,7 @@ summary = "In a variable CFF2 font a glyph has one hint list and one set of hint
 ref = "AFDKO docs/otfautohint_Notes.md › Some notes on hinting glyphs in a variable font"
 status = "inferred"
 guesses = ["In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every master, or else from the multiple-master autohinter; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it."]
+observe = ["T2: export as a variable CFF2 font and read the charstrings; note whether all masters share one hint structure and what happens to I's unlinked hint."]
 
 [[behavior]]
 id = "hinting.ps.cff2.privateDictBlends"
@@ -621,6 +653,9 @@ summary = "Runs the PostScript autohinter on a source or a compiled CFF/CFF2 fon
 ref = "AFDKO otfautohint --help"
 status = "docs"
 guesses = ["The autohinter is a port of otfautohint with its defaults; which autohinter the reference app runs is not documented, and a reference export compared with otfautohint's output on the same font would show whether they agree."]
+observe = [
+  "T1: export as CFF with Autohint on; export it again unhinted and run otfautohint on that file; compare the hstem and vstem lists and the hint masks glyph by glyph and note every glyph where they differ.",
+]
 
 [[command]]
 id = "autohint.ps.reportStems"

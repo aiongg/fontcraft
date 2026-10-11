@@ -19,10 +19,10 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
    L5   engine: Session ── execute(id, params) ── command registry ── history, journal, guard
               │
    L4   tools: pointer and key events → commands (begin / preview / commit)        (4 tools today)
-   L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (8 of 9 today)
-   L2   pathops · interp · spacing · textlayout · components · features · hinting · audit · glyphquery · plugins   (pathops, spacing, textlayout, components, features, audit, glyphquery today)
-   L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
-   L0   geom (kurbo)  ·  standalone crates: plist, cff, ttinstr, container, glyphdata  (all but ttinstr today)
+   L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables · proof   (8 of 10 today)
+   L2   pathops · interp · spacing · textlayout · components · features · hinting · color · audit · glyphquery · plugins   (pathops, spacing, textlayout, components, features, audit, glyphquery today)
+   L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)  ·  autohint (M10)
+   L0   geom (kurbo)  ·  standalone crates: plist, cff, ttasm, container, glyphdata, imagery  (all but ttasm and imagery today)
 ```
 
 Everything a person does goes through `app.run(id, params)`, which is the same call the control
@@ -36,14 +36,17 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 
 | Layer | Crate | State | Holds |
 |---|---|---|---|
-| L0 | `geom` | today | kurbo re-exports; cubic → quadratic; rounding. Later: extremes, inflections, curve fitting |
+| L0 | `geom` | today | kurbo re-exports; cubic → quadratic; rounding. Later: extremes, inflections, curve fitting, quadratic → cubic (qu2cu, M12) |
 | L0 alone | `plist` | today (OpenStep); XML in M1 | OpenStep and XML property lists, reading and writing, keeping spelling, key order and layout (for `.glyphs` and UFO) |
 | L0 alone | `glyphdata` | today (M4.1) | the glyph database: record lookup by nice, alternative and production name and code point, synthesis for suffixes, ligatures and code-point names, production names, nice and canonical names, the naming rules, direction, the default sort key, search, and custom `GlyphData.xml` files read within limits. Built-in tables (`data/glyphdata.bin`) compiled from GlyphsInfo, the Adobe Glyph List and the UCD by `cargo xtask glyphdata`; equal to fontc's and glyphsLib's answers on the cross-check apart from listed causes |
 | L0 alone | `cff` | today (M2.3a: static CFF writer) | CFF tables from plain data: DICTs, INDEXes, charsets, Type 2 charstrings with the reference's specialiser, width optimisation and FontBBox; byte-identical to fontTools on the cross-check. Later: subroutiniser, hints (M10), CFF2 (M9), CID-keyed fonts (M12). Not in any crate we can use |
 | L0 alone | `container` | today (M2.4a: WOFF 1, untransformed WOFF2) | WOFF and WOFF2 wrapping and unwrapping of sfnt fonts, as fontTools writes them; `crates/decompile` reads WOFF through it. Later: the WOFF2 glyf/loca and hmtx transforms (M2.4b), collections (M12) |
 | L0 alone | `ttinstr` | M10 | TrueType instruction assembler and disassembler |
 | L0 alone | `fea` | M8 (created by M8.1) | the wrapper around fea-rs 1.0.0: virtual feature files, pre-checks and limits before every call, compiling on a large-stack thread, generated lookups taken in neutral types, tables handed out as bytes. The only crate that sees fea-rs's `write-fonts` version ([decision 0007](decisions/0007-feature-compiler-and-shaper.md)) |
+| L0 alone | `ttasm` | M10 | TrueType bytecode assembler, disassembler and stack analysis |
+| L0 alone | `imagery` | M11 | image decoding over the `image` crate's PNG, JPEG and TIFF decoders only: format and size sniffed from the header, decoded within the pixel and file-size limits, TIFF converted to PNG for sbix. PDF and PSD are not decoded |
 | L1 | `model` | today (M0 subset) | the font source model, pure data |
+| L1 | `autohint` | M10 | the PostScript autohinter, ported from AFDKO's otfautohint: pure functions from contours and a set of zones and stems to stem hints, hint masks, counter masks and flex. Depends on `geom` only |
 | L2 | `pathops` | M3 | overlap removal, booleans, offset, corner operations, clean-up (on linesweeper) |
 | L2 | `interp` | M9 (created by M9.1) | the designspace (axes, internal and external coordinates, Axis Location and Axis Mappings, virtual masters, the origin), glyph sources with intermediate and alternate layers, compatibility checks, static instances with extrapolation, and the alternate-layer region overlay. Depends on `model` and `geom` (whose `VariationModel` it builds on) |
 | L2 | `spacing` | metrics keys and sidebearings built (M5.1); kerning by M5.2 | metrics keys, sidebearings, kerning lookup, groups, locks, Clean Up and Compress, the kerning-text and AFM formats. Depends on `model` and `geom` |
@@ -53,17 +56,20 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L2 | `features` | partly built (M5.17: pair kerning); the mark writer M6.17; the rest M8 | the generated pair kerning as `GPOS`, ported from fontc's kern writer: pairs resolved per master in lookup order, split into lookups by script and direction, `kern` and `dist`; a reader of the pair kerning of compiled fonts for tests and the oracle. Depends on `model` and `spacing` (a same-layer chain in `xtask/src/layers.rs`). In M6.17: the mark writer (mark, mkmk, abvm, blwm, curs) and the `GDEF` classes and carets, ported from fontc. Later (M8): feature-code preprocessing (tokens), automatic features, compiling (on fea-rs) |
 | L2 | `fontinfo` | M7 (created by M7.1) | the custom-parameter catalogue (generated from the inventory by `cargo xtask paramcatalog`) and value checks, the General field catalogue, master and instance addressing by id, name or index, the Font Info row clipboard format, text tokens, scaling a font to a new UPM, and the parsers of the glyph-set parameters (Remove, Keep, Rename, Reencode Glyphs). Pure functions on `model`, `plist` and `geom`; the compiler, the engine and the UI use it |
 | L2 | `hinting` | M10 | PostScript and TrueType hinting models and autohinters |
+| L2 | `hinting` | M10 | typed views of PostScript hints and TrueType instructions over the stored hint values, node references and their upkeep, hint settings with defaults and scopes, the font-hint checks, the TrueType execution model, the compiler from instructions to bytecode with FontCraft's own `fpgm`, `prep` and `cvt `, and the TrueType autohinter. Depends on `model`, `geom`, `autohint`, `ttasm` and `glyphquery` (a same-layer chain in `xtask/src/layers.rs`) |
+| L2 | `color` | M11 | palettes, the colour layer kinds and their paint order, the paint graph built from the layers (one graph for Edit View, Font View, the previews and every colour table), the instance switches resolved into one export plan, strike selection, the SVG document writer and the asset-store trait through which image bytes arrive. Pure functions on `model` and `geom`, no I/O |
 | L2 | `glyphquery` | today (M4.5) | which glyphs Font View shows: the search matcher, smart-filter rule trees compiled to the glyph predicate language (the Custom rule, global-guide filters and, in M8, the feature-code glyph tokens), list filters and folders, sidebar entries (categories, scripts and languages, `Groups*.plist` entries) and how a selection of them combines, and the glyphs an entry expects that the font lacks. Rule trees, predicates and patterns are read within depth, length and regex size limits |
-| L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them |
+| L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them. In M12: five check scopes (layer, glyph, source, binary, family), one registry file per check group, compiled fonts read through read-fonts and skrifa, and an `AuditServices` trait for what L2 cannot compute (an in-memory compile, a TTX round trip, shaping, the master-compatibility report), which the engine implements |
 | L2 | `plugins` | M13 | sandboxed WebAssembly plug-ins (same manifest as the sibling apps) |
 | L3 | `format` | today | the native `.fontcraft` format, atomic writes |
 | L3 | `compile` | today (M2.1: staged pipeline) | model → OpenType binary |
-| L3 | `decompile` | M1 | OpenType binary → model, for opening compiled fonts |
+| L3 | `decompile` | M1 | OpenType binary → model, for opening compiled fonts. In M12: Type 1 (PFA, PFB) and bare CFF reading |
 | L3 | `io-glyphs` | M1 | `.glyphs` 2, 3, 4 and `.glyphspackage`, reading and writing, lossless |
 | L3 | `io-ufo` | M1 | UFO and designspace, reading and writing, lossless |
-| L3 | `io-svg` | today (M3.8) | SVG outlines in and out, and the clipboard fragment format. Reading runs on usvg, after a first pass that checks the limits and rewrites the document as geometry only |
+| L3 | `io-svg` | today (M3.8) | SVG outlines in and out, and the clipboard fragment format. Reading runs on usvg, after a first pass that checks the limits and rewrites the document as geometry only. In M12: SVG fonts |
 | L3 | `oracle` | M2 | compiled fonts compared table by table with a reference compiler's build (the oracle harness behind `fontcraft-cli oracle`); runs the reference tools as subprocesses |
-| L3 | `tables` | M1/M12 | dump, table edit, subset, merge, instance: the engine behind the CLI tools |
+| L3 | `tables` | M12 | the binary tool engine behind the command line: sfnt reading and writing with untouched tables copied byte for byte, table actions, collections, the TTX writer and reader, text views, layout normalising, glyph rename and reorder, subset, instance, merge, transform, optimize, dehint, outline rewriting, conversion, diff and the variation utilities, one module per tool. Depends on `model`, `geom`, `pathops`, `cff`, `container`, `compile` and `decompile` (same-layer chains `compile` → `tables` and `decompile` → `tables` in `xtask/src/layers.rs`) |
+| L3 | `proof` | M12 | proof sheets: page layout and the SVG, HTML and PDF writers (PDF through `pdf-writer`), drawing through `render`. Depends on `model`, `render` and `tables` (same-layer chains `render` → `proof` and `tables` → `proof`) |
 | L3 | `render` | today (M3.2) | glyph layers and lines of glyphs to RGBA images and PNG (tiny-skia, nonzero fill): `ui.render`, Edit View's filled glyphs, coverage measures |
 | L4 | `tools` | today (M3.3: Select, Lasso Select, Hand, Zoom) | pointer tools: events in, commands and overlays out; hit testing, snapping, the selection and the Edit View keys |
 | L5 | `engine` | today | sessions, history, the command registry |

@@ -31,7 +31,7 @@ owner, are the substitute, and a row a video confirms becomes `observed` (D13) (
 
 | Source | Where | Licence | Role | Status |
 |---|---|---|---|---|
-| AFDKO | https://github.com/adobe-type-tools/afdko (`docs/`, `python/afdko/`, `c/`) | Apache-2.0 | **primary** for the command line: makeotf, otfautohint, tx, spot, sfntedit, sfntdiff, mergefonts, rotatefont, otf2ttf, ttfcomponentizer, buildmasterotfs, buildcff2vf, checkoutlinesufo, comparefamily and the rest; **oracle** for the CFF path | verified 2026-10-07 |
+| AFDKO | https://github.com/adobe-type-tools/afdko (`docs/`, `python/afdko/`, `c/`) | Apache-2.0 | **primary** for the command line: makeotf, otfautohint, tx, spot, sfntedit, sfntdiff, mergefonts, rotatefont, otf2ttf, ttfcomponentizer, buildmasterotfs, buildcff2vf, checkoutlinesufo, comparefamily and the rest; **oracle** for the CFF path; otfautohint's algorithm is ported into `crates/autohint` (M10), with a credit in each file and in `NOTICE` | verified 2026-10-07 |
 | OpenType Feature File Specification | in AFDKO: `docs/OpenTypeFeatureFileSpecification.md`, plus `Feature_Parser_Notes.md`, `Variable_Feature_Guide.md` | Apache-2.0 | **spec** for `.fea` | verified 2026-10-07 |
 | Adobe Glyph List, AGLFN | https://github.com/adobe-type-tools/agl-aglfn | BSD-3-Clause | glyph name ↔ Unicode | verified 2026-10-07 |
 | fonttools | https://github.com/fonttools/fonttools | MIT | **oracle** (ttx, subset, merge, varLib, instancer, feaLib, cu2qu, interpolatable) and reference for those tools' options; designspace documentation | verified 2026-10-07 |
@@ -39,6 +39,7 @@ owner, are the substitute, and a row a video confirms becomes `observed` (D13) (
 | fontc | https://github.com/googlefonts/fontc (crates `fontc`, `fontir`, `fontbe`, `fea-rs`, `glyphs-reader`, `ufo2fontir`, `glyphs2fontir`, tools `ttx_diff`, `otl-normalizer`, `fontc_crater`) | repository Apache-2.0; the published 1.0.0 crates declare MIT/Apache-2.0 | **oracle** for TrueType-flavoured output; possible **dependency** ([decision 0002](decisions/0002-compile-pipeline.md)); source of the comparison method | verified 2026-10-07 |
 | glyphsLib | https://github.com/googlefonts/glyphsLib | Apache-2.0 (6.15.0) | **oracle** through fontmake for `.glyphs` sources; its `propagate_all_anchors` is the reference output of the M6 anchor-propagation measure | verified 2026-10-11 |
 | fontbakery | https://github.com/fonttools/fontbakery | Apache-2.0 | the check catalogue behind `docs/spec/21-qa.md` | verified 2026-10-07 |
+| ttfautohint | https://freetype.org/ttfautohint/ (documentation and command-line help) | FreeType License or GPLv2, at the user's choice | **oracle** for the TrueType autohinter measure (M10), and an optional external program that FontCraft runs on a finished font when the TTFAutohint binary path parameter names one. Its source is never read and it is never linked: the GPL alternative puts the code outside the clean-room rules | from the M10 plan, 2026-10-11 |
 
 **Code derived from a reference app's source.** fontc's anchor propagation
 (`fontir/src/propagate_anchors.rs`, in `glyphs-reader/src/` at older commits) says in a comment

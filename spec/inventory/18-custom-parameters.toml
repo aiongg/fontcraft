@@ -278,6 +278,7 @@ summary = "List of colour palettes exported as the CPAL table of a COLR/CPAL col
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "A master may carry its own Color Palettes, which wins over the font's for that master (`color.palette.perMaster`); both oracles read it so. Values are stored as `\"r,g,b,a\"` strings in version 2, integer lists in version 3 and floats in version 4."
+observe = ["Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integers or version 4 floats)."]
 
 [[parameter]]
 name = "Compatible name Table"
@@ -1996,6 +1997,7 @@ summary = "Option string for ttfautohint, edited through a dialog: hint set rang
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 guesses = ["No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form."]
+observe = ["T3: fill in the TTFAutohint options sheet on an instance and save; note how the parameter's value is stored in the .glyphs file (one string, long or short options, or a dictionary)."]
 
 [[parameter]]
 name = "TTFBlueFuzz"

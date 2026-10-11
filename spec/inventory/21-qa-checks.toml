@@ -308,6 +308,9 @@ milestone = "M3"
 summary = "A contour is open. Open paths are left out of exported fonts and block interpolation. The fix closes the path by joining its ends when they coincide and by adding a line otherwise."
 ref = "Editor audit convention (open paths); fontTools varLib.interpolatable open_path"
 status = "inferred"
+observe = [
+  "Fault font (one master: an open path, a glyph named with a space, two glyphs with U+0041, a component of a missing glyph, two glyphs that use each other as components, a glyph name of 70 characters): export OTF and TTF; note the export result message for the open path, its wording, and whether the export stops or continues.",
+]
 
 [[check]]
 id = "check.outlines.strayPoint"
@@ -527,6 +530,9 @@ milestone = "M12"
 summary = "A component names a glyph that is not in the font."
 ref = "Editor audit convention (orphaned components)"
 status = "inferred"
+observe = [
+  "Fault font (one master: an open path, a glyph named with a space, two glyphs with U+0041, a component of a missing glyph, two glyphs that use each other as components, a glyph name of 70 characters): export OTF and TTF; note the export result message for the component of a missing glyph, its wording, and whether the export stops or continues.",
+]
 
 [[check]]
 id = "check.components.circular"
@@ -538,6 +544,9 @@ milestone = "M12"
 summary = "A component chain leads back to the glyph it started from."
 ref = "Editor audit convention (component cycles)"
 status = "inferred"
+observe = [
+  "Fault font (one master: an open path, a glyph named with a space, two glyphs with U+0041, a component of a missing glyph, two glyphs that use each other as components, a glyph name of 70 characters): export OTF and TTF; note the export result message for the two glyphs that use each other, its wording, and whether the export stops or continues.",
+]
 
 [[check]]
 id = "check.components.nonExportingBase"
@@ -667,6 +676,7 @@ milestone = "M12"
 summary = "The .notdef glyph is missing, is not the first glyph, has a codepoint (all warnings) or is blank (failure). The fix adds a standard .notdef drawing as glyph 0 and removes its codepoint."
 ref = "fontbakery mandatory_glyphs; comparefamily single-face test 26 (glyph 0)"
 status = "docs"
+observe = ["Glyph-order font (A, B and space, no .notdef, space last in the glyph order): export a TTF and read its glyph order; note whether .notdef is added and placed first."]
 
 [[check]]
 id = "check.glyphset.whitespaceGlyphs"
@@ -711,6 +721,7 @@ milestone = "M12"
 summary = "In a TrueType font the first four glyphs are not .notdef, NULL, CR and space in that order, or NULL, CR and space are not mapped from U+0000, U+000D and U+0020; the names .null and nonmarkingreturn draw a warning. Also reports an OS/2 default character other than 0."
 ref = "comparefamily single-face test 26 (glyph IDs 0-3, usDefaultChar)"
 status = "docs"
+observe = ["Glyph-order font (A, B and space, no .notdef, space last in the glyph order): export a TTF and read its glyph order; note which glyphs follow .notdef and where space ends up."]
 
 [[check]]
 id = "check.glyphset.uniqueGlyphNames"
@@ -733,6 +744,9 @@ milestone = "M12"
 summary = "A glyph name contains characters other than A-Z, a-z, 0-9, period and underscore, starts with a digit or period (.notdef, .null and .ttfautohint are exempt), or is longer than 63 characters; names of 32-63 characters only warn. Skipped when the font stores no names (post format 3)."
 ref = "fontbakery valid_glyphnames"
 status = "docs"
+observe = [
+  "Fault font (one master: an open path, a glyph named with a space, two glyphs with U+0041, a component of a missing glyph, two glyphs that use each other as components, a glyph name of 70 characters): export OTF and TTF; note the export result message for the glyph named with a space, its wording, and whether the export stops or continues.",
+]
 
 [[check]]
 id = "check.glyphset.glyphNameBufferSize"
@@ -744,6 +758,9 @@ milestone = "M12"
 summary = "The glyph names together exceed 32767 bytes, a limit that crashed old Mac OS X versions; a warning is given when the total comes close."
 ref = "comparefamily single-face test 26 (total glyph name size)"
 status = "docs"
+observe = [
+  "Fault font (one master: an open path, a glyph named with a space, two glyphs with U+0041, a component of a missing glyph, two glyphs that use each other as components, a glyph name of 70 characters): export OTF and TTF; note the export result message for the 70-character glyph name, its wording, and whether the export stops or continues.",
+]
 
 [[check]]
 id = "check.glyphset.productionNames"
@@ -909,6 +926,9 @@ milestone = "M12"
 summary = "Two exporting glyphs of a source claim the same codepoint, so only one can be reached."
 ref = "Editor audit convention (duplicate Unicode values)"
 status = "inferred"
+observe = [
+  "Fault font (one master: an open path, a glyph named with a space, two glyphs with U+0041, a component of a missing glyph, two glyphs that use each other as components, a glyph name of 70 characters): export OTF and TTF; note the export result message for the two glyphs with U+0041, its wording, and whether the export stops or continues.",
+]
 
 [[check]]
 id = "check.glyphset.nameCodepointMismatch"
@@ -1035,6 +1055,7 @@ milestone = "M12"
 summary = "hhea ascent, descent or lineGap differs from OS/2 sTypoAscender, sTypoDescender or sTypoLineGap, so line spacing differs between platforms. Skipped for CJK fonts. The fix copies the typo values into hhea."
 ref = "fontbakery os2_metrics_match_hhea; comparefamily single-face test 16 (hhea vs OS/2); MS Font Validator W1405/W1406 (afdko MSFontValidatorIssues.md 4.e)"
 status = "docs"
+observe = ["Tall font (ascender 750, descender -250, Aringacute reaching 1,042): export and read hhea and OS/2; note the hhea ascender, descender and line gap next to the typo values."]
 
 [[check]]
 id = "check.metrics.winAscentDescent"
@@ -1046,6 +1067,7 @@ milestone = "M12"
 summary = "OS/2.usWinAscent is smaller than the font's yMax or usWinDescent smaller than |yMin|, which clips glyphs on Windows, or either is more than twice that extent. Skipped for CJK fonts. The fix sets both to the bounding box extents."
 ref = "fontbakery family/win_ascent_and_descent; comparefamily single-face test 16 (usWin vs bounding box)"
 status = "docs"
+observe = ["Tall font (ascender 750, descender -250, Aringacute reaching 1,042): export and read OS/2; note usWinAscent and usWinDescent."]
 
 [[check]]
 id = "check.metrics.lineGaps"
@@ -1068,6 +1090,7 @@ milestone = "M12"
 summary = "OS/2.fsSelection bit 7 (USE_TYPO_METRICS) is not set, or it is set while the OS/2 table version is below 4 (a failure). The fix sets the bit and raises the table version to 4."
 ref = "comparefamily single-face test 16 (USE_TYPO_METRICS); fontbakery googlefonts/use_typo_metrics"
 status = "docs"
+observe = ["Tall font (ascender 750, descender -250, Aringacute reaching 1,042): export and read OS/2; note whether the fsSelection use-typo-metrics bit (bit 7) is set."]
 
 [[check]]
 id = "check.metrics.typoAscenderVsAgrave"
@@ -1123,6 +1146,7 @@ milestone = "M12"
 summary = "A non-spacing combining mark has a non-zero advance, or a spacing mark has none. The fix zeroes the advance of non-spacing marks."
 ref = "fontbakery typenetwork/marks_width"
 status = "docs"
+observe = ["Mark font (acutecomb U+0301 with width 200, a, aacute): export and read hmtx; note whether acutecomb keeps its 200 advance or is written with 0."]
 
 [[check]]
 id = "check.metrics.whitespaceWidths"
@@ -1380,6 +1404,7 @@ milestone = "M12"
 summary = "The Windows subfamily name (ID 2) is not the one the bold and italic bits call for: Regular, Bold, Italic or Bold Italic. Any other style word belongs in the family name (ID 1) or in IDs 16/17. The fix rewrites ID 2 from the bits."
 ref = "comparefamily single-face test 8; fontbakery microsoft/office_ribz_req; fontbakery fontwerk/style_linking"
 status = "docs"
+observe = ["Style font (instances Light, Regular, Semibold and Bold, each with an Italic): link Semibold as the bold of Light, export, and note whether name ID 2 of Semibold and its fsSelection bold bit agree."]
 
 [[check]]
 id = "check.names.noMacRecords"
@@ -1442,7 +1467,7 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "The family name is already in use by another published typeface according to an online name registry. Needs network access; off unless requested."
 ref = "fontbakery fontdata_namecheck"
 status = "docs"
@@ -1450,6 +1475,7 @@ status = "docs"
 # ---------------------------------------------------------------------------
 # tables: Table structure and flags
 # ---------------------------------------------------------------------------
+notes = "Moved from M12 to M13 by the answer to docs/plans/M12.md § 7, question 4: it needs a network request, FontCraft makes none, and the check is informational."
 
 [[check]]
 id = "check.tables.requiredTables"
@@ -1931,6 +1957,7 @@ status = "inferred"
 # ---------------------------------------------------------------------------
 # variations: Variations and master compatibility
 # ---------------------------------------------------------------------------
+observe = ["Feature font (a liga feature substituting f i by f_i, no f_i glyph): compile the features; copy the message's wording and note where it points (line, feature, glyph name)."]
 
 [[check]]
 id = "check.variations.glyphMissingInMaster"
@@ -1964,6 +1991,9 @@ milestone = "M12"
 summary = "A glyph has a different number of contours in two masters. Each master is compared with its parent master along the designspace, not with every other master."
 ref = "fontTools varLib.interpolatable path_count"
 status = "docs"
+observe = [
+  "Incompatible font (two masters; O has two paths in one master and one in the other; n has a different node count): export a variable font; note the message about O, whether it names the glyph, the path or both, and whether the export stops.",
+]
 
 [[check]]
 id = "check.variations.nodeCount"
@@ -1975,6 +2005,9 @@ milestone = "M12"
 summary = "Matching contours have a different number of nodes in two masters."
 ref = "fontTools varLib.interpolatable node_count"
 status = "docs"
+observe = [
+  "Incompatible font (two masters; O has two paths in one master and one in the other; n has a different node count): export a variable font; note the message about n, whether it names the glyph, the path or the node, and whether the export stops.",
+]
 
 [[check]]
 id = "check.variations.nodeTypeMismatch"
@@ -2577,6 +2610,7 @@ milestone = "M12"
 summary = "A kerning pair or kerning group names a glyph that is not in the font. The fix deletes the dangling entries."
 ref = "Editor audit convention (kerning clean-up)"
 status = "inferred"
+observe = ["Kerning font (A and V kerned, then V removed): export; note whether the A V pair is reported, dropped without a message, or exported."]
 
 [[check]]
 id = "check.kerning.glyphInSeveralGroups"
@@ -2636,6 +2670,9 @@ milestone = "M12"
 summary = "Two fonts with the same family name (ID 1) have the same combination of bold and italic bits, so applications cannot tell them apart."
 ref = "fontbakery opentype/family/bold_italic_unique_for_nameid1; comparefamily family test 5"
 status = "docs"
+observe = [
+  "Style font (instances Light, Regular, Semibold and Bold, each with an Italic): link Semibold as the bold of Light while Bold is linked to Regular; note whether the app warns about two fonts linked in one role.",
+]
 
 [[check]]
 id = "check.family.consistentFamilyName"
@@ -3021,7 +3058,7 @@ severity = "info"
 scope = "binary"
 fixable = false
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "The auditor is older than the latest published release, so its rules may be out of date. Needs network access. A failure upstream; informational here by design, so that an offline or pinned tool never fails a run."
 ref = "fontbakery fontbakery_version"
 status = "docs"
@@ -3029,6 +3066,7 @@ status = "docs"
 # ---------------------------------------------------------------------------
 # sources: Source files
 # ---------------------------------------------------------------------------
+notes = "Moved from M12 to M13 by the answer to docs/plans/M12.md § 7, question 4: it needs a network request, FontCraft makes none, and the check is informational."
 
 [[check]]
 id = "check.sources.designspaceLoads"
@@ -3963,7 +4001,145 @@ notes = "Settled by the M12 planning pass (20-cli.md question 20): 3 for an unre
 [[behavior]]
 id = "audit.networkOptIn"
 area = "qa"
-milestone = "M12"
+milestone = "M13"
 summary = "Checks that need network access (name registry lookup, auditor version) never run unless the run explicitly allows network use."
 ref = "fontbakery network condition"
 status = "docs"
+
+# ───────────────────────────── Fix commands (M12 spec pass) ─────────────────────────────
+notes = "Moved from M12 to M13 with the two network checks (docs/plans/M12.md § 7, question 4): M12 has no check that needs the network."
+
+[[command]]
+id = "path.eraseOpenCorners"
+label = "Erase Open Corners"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: foreground|background, points?: [[shape, node]]} → {erased: count, selection}"
+area = "path-ops"
+milestone = "M12"
+summary = "Trims each open corner (two segments that cross just before they meet at a node, leaving a small loop outside the outline) back to the crossing point, so the corner is one node again. Without points, every open corner on the layer is trimmed."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix eraseOpenCorners)"
+status = "inferred"
+own = true
+notes = "The audit fix eraseOpenCorners runs it; added by the M12 spec pass because no other chapter has the command."
+
+[[command]]
+id = "component.flatten"
+label = "Flatten Components"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph?: name, layer?: id, components?: [indices]} → {replaced: count, skipped: [index]}"
+area = "components"
+milestone = "M12"
+summary = "Replaces each nested component (one whose base glyph is itself made only of components) by components of the innermost glyphs, with the transformations combined, so the drawn outline stays the same. A component whose base glyph also has paths is left as it is and listed in `skipped`."
+ref = "Our design; ufo2ft flattenComponents filter; docs/spec/21-qa.md § 5 (fix flattenComponents)"
+status = "inferred"
+own = true
+notes = "The audit fix flattenComponents runs it; added by the M12 spec pass."
+
+[[command]]
+id = "path.setShapeOrder"
+label = "Set Shape Order"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, layer?: id, side?: foreground|background, order: [index]} → {selection}"
+area = "path-ops"
+milestone = "M12"
+summary = "Reorders the shapes (paths and components) of a layer. `order` lists every current shape index exactly once, in the new order; anything else is refused."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix fixCompatibility)"
+status = "inferred"
+own = true
+notes = "The audit fix fixCompatibility uses it, with path.makeNodeFirst and path.reverseContours, to give a master the contour order of the reference master; added by the M12 spec pass."
+
+[[command]]
+id = "tables.recalculate"
+label = "Recalculate Table Fields"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: int|name, fields?: [string], output?: path, inPlace?: bool} → {changed: [{field, old, new}]}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Recomputes the fields of a compiled font that are derived from its other data: the head and glyph bounding boxes, maxp counts, hhea and vhea extents, OS/2 xAvgCharWidth, Unicode and code-page range bits and first and last character index, the head flags and the checksums. `fields` limits it to the named fields, written `table.field`; every other byte stays as it was."
+ref = "Our design; fontTools ttLib (recalcBBoxes, OS/2 range helpers); docs/spec/21-qa.md § 5 (fix patchTable)"
+status = "inferred"
+own = true
+notes = "The audit fix patchTable runs it on compiled fonts; added by the M12 spec pass."
+
+[[command]]
+id = "tables.cleanNameRecords"
+label = "Clean Name Records"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: int|name, dropMac?: bool, output?: path, inPlace?: bool} → {removed: count, changed: count}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Trims and collapses white space in name records, removes empty and repeated records and, unless `dropMac` is false, the Macintosh-platform records, and makes the PostScript name records agree with name ID 6."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix cleanNameRecords)"
+status = "inferred"
+own = true
+notes = "The audit fix cleanNameRecords runs it on compiled fonts; added by the M12 spec pass."
+
+[[command]]
+id = "tables.rebuildCmap"
+label = "Rebuild cmap"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: int|name, output?: path, inPlace?: bool} → {mappings: count, conflicts: [{codepoint, kept, dropped}]}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Rebuilds the cmap subtables from one mapping: the union of the existing Unicode subtables, where the platform 3 subtables win a conflict. It writes format 4 for the Basic Multilingual Plane, adds format 12 when a code point lies above it, and keeps format 14 variation sequences as they are."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix rebuildCmap)"
+status = "inferred"
+own = true
+notes = "The audit fix rebuildCmap runs it on compiled fonts; added by the M12 spec pass."
+
+[[command]]
+id = "tables.recompileCff"
+label = "Recompile CFF"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: int|name, output?: path, inPlace?: bool} → {glyphs: count, removedKeys: [string]}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Rewrites the CFF table without the charstring operators and dictionary keys the current CFF specification marks obsolete, keeping outlines, hints and widths; an accented glyph drawn with the endchar accent form is written as plain outlines."
+ref = "Our design; Adobe Technical Note 5176 and 5177; docs/spec/21-qa.md § 5 (fix recompileCff)"
+status = "inferred"
+own = true
+notes = "The audit fix recompileCff runs it on compiled fonts; added by the M12 spec pass."
+
+[[command]]
+id = "tables.cleanInstances"
+label = "Clean Named Instances"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: int|name, output?: path, inPlace?: bool} → {removed: count, reordered: bool}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Sorts the named instances of fvar by their coordinates, removes repeated ones, writes every record in the same form (all with a PostScript name ID or all without), and points the instance at the default location at the font's own subfamily name."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix cleanInstances)"
+status = "inferred"
+own = true
+notes = "The audit fix cleanInstances runs it on compiled fonts; added by the M12 spec pass."
+
+[[command]]
+id = "tables.dropAxis"
+label = "Drop Axis"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font: path, face?: int|name, axis: tag, output?: path, inPlace?: bool}"
+area = "cli-tools"
+milestone = "M12"
+summary = "Removes a variation axis whose minimum equals its maximum: its fvar record and instance coordinates, its avar segment map, its STAT records, and its column in every variation region. An axis with a range is refused."
+ref = "Our design; docs/spec/21-qa.md § 5 (fix dropAxis)"
+status = "inferred"
+own = true
+notes = "The audit fix dropAxis runs it on compiled fonts; added by the M12 spec pass."

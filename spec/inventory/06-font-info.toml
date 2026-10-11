@@ -1967,6 +1967,9 @@ ref = "Font Info › Exports › Style Linking"
 status = "handbook"
 
 # ───────────────────────────── Features tab ─────────────────────────────
+observe = [
+  "Style font (instances Light, Regular, Semibold and Bold, each with an Italic): in the Exports tab link Semibold as the bold of Light; note whether the app warns, then export and read name IDs 1, 2, 16 and 17 and fsSelection of both.",
+]
 
 [[panel]]
 id = "fontInfo.features"
