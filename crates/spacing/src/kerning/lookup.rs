@@ -65,7 +65,9 @@ pub enum KernError {
     UnknownGlyph(String),
     #[error("the kerning amount must be a finite number")]
     NotFinite,
-    #[error("the left lock of {first} {second} cannot close alone: the pair {pair} applies before the group pair it would leave; close both locks, or delete {pair} first")]
+    #[error(
+        "the left lock of {first} {second} cannot close alone: the pair {pair} applies before the group pair it would leave; close both locks, or delete {pair} first"
+    )]
     LockShadowed { first: String, second: String, pair: String },
 }
 
@@ -91,6 +93,9 @@ impl Hasher for IdHasher {
 }
 
 type IdMap<V> = HashMap<u64, V, BuildHasherDefault<IdHasher>>;
+
+/// The first and second side keys one lookup step reads, when the glyphs have those sides.
+type StepKeys = (Option<u32>, Option<u32>, Step);
 
 /// Set on a side key that is a group id; glyph ids are below it.
 const GROUP_BIT: u32 = 1 << 31;
@@ -298,7 +303,7 @@ impl<'a> Table<'a> {
     }
 
     /// The side keys each step looks up, in lookup order.
-    fn steps(&self, first: usize, second: usize) -> Option<[(Option<u32>, Option<u32>, Step); 4]> {
+    fn steps(&self, first: usize, second: usize) -> Option<[StepKeys; 4]> {
         let f = u32::try_from(first).ok().filter(|id| *id < GROUP_BIT)?;
         let s = u32::try_from(second).ok().filter(|id| *id < GROUP_BIT)?;
         let fg = self.index.group_at(first, facing(self.direction, Position::First)).map(|g| g | GROUP_BIT);

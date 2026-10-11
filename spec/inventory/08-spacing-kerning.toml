@@ -1602,7 +1602,7 @@ notes = "Documented, not yet observed: Compress keeps an exception unless its va
 guesses = [
   "Within one run the pairs are taken in stored order and each sees the lifts made before it, so when two pairs would lift to the same group pair the first is lifted and the second meets it (absorbed with an equal value, kept as an exception with another); running Compress on such a pair list in the reference app settles it.",
   "A glyph–group pair is not lifted or absorbed while group–glyph pairs stored for members of its group would take over those glyphs once it is gone; a pair list with T–@n and @T–m in the reference app settles it.",
-  "A later pair with the same sides as an earlier one (one group in two spellings, or two entries for one master) never applies, so it is removed together with the earlier pair when that one is lifted or absorbed; the reference app's own files store one spelling per group, so only a file from another tool can settle it.",
+  "A later pair with the same sides as an earlier one (one group in two spellings, or two entries for one master) never applies, so it is removed together with the earlier pair when that one is lifted or absorbed; compressing such a pair list in the reference app settles it.",
 ]
 
 [[behavior]]

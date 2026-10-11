@@ -328,10 +328,11 @@ pub fn compress(font: &mut Font, direction: Direction, master: &str, runs: usize
     let mut work = Work { by_sides: HashMap::new(), shadows: HashMap::new(), member_pairs: HashMap::new(), list };
     for (i, e) in work.list.iter().enumerate() {
         let key = (e.first.clone(), e.second.clone());
-        if work.by_sides.contains_key(&key) {
-            work.shadows.entry(key).or_default().push(i);
-        } else {
-            work.by_sides.insert(key, i);
+        match work.by_sides.entry(key) {
+            std::collections::hash_map::Entry::Occupied(slot) => work.shadows.entry(slot.key().clone()).or_default().push(i),
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(i);
+            }
         }
         if let (Side::Group(a), Some(b)) = (&e.first, group(&e.second, sg)) {
             *work.member_pairs.entry((a.clone(), b)).or_default() += 1;

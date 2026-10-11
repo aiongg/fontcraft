@@ -472,8 +472,29 @@ mod tests {
     fn what_write_gives_always_reads_back() {
         let long = "n".repeat(MAX_NAME_LEN + 1);
         let names = [
-            "a", " ", "a b", " a", "a\tb", "a\nb", "a\r", "\r", "\u{0}", "\u{85}", "\u{2028}", "@x", "@", "kerning-text", "group", "metrics",
-            "master", "direction", "ü", "-1", "=H", "", &long,
+            "a",
+            " ",
+            "a b",
+            " a",
+            "a\tb",
+            "a\nb",
+            "a\r",
+            "\r",
+            "\u{0}",
+            "\u{85}",
+            "\u{2028}",
+            "@x",
+            "@",
+            "kerning-text",
+            "group",
+            "metrics",
+            "master",
+            "direction",
+            "ü",
+            "-1",
+            "=H",
+            "",
+            &long,
         ];
         let mut written = 0;
         for name in names {
@@ -485,7 +506,17 @@ mod tests {
                     pairs: vec![NewPair { left: Side::Glyph(name.into()), right: Side::Glyph(other.into()), value: -5.0 }],
                     ..Default::default()
                 };
-                let doc = KerningText { metrics: doc.metrics.into_iter().map(|mut m| { m.left_key = m.left_key.filter(|k| !k.is_empty()); m }).collect(), ..doc };
+                let doc = KerningText {
+                    metrics: doc
+                        .metrics
+                        .into_iter()
+                        .map(|mut m| {
+                            m.left_key = m.left_key.filter(|k| !k.is_empty());
+                            m
+                        })
+                        .collect(),
+                    ..doc
+                };
                 if let Ok(text) = write(&doc) {
                     assert_eq!(read(&text).as_ref(), Ok(&doc), "{name:?} {other:?}: {text:?}");
                     written += 1;
@@ -505,9 +536,14 @@ mod tests {
             }
         }
         assert!(written > 20, "{written}");
-        assert!(write(&KerningText { pairs: vec![NewPair { left: Side::Glyph("a\nb".into()), right: Side::Glyph("b".into()), value: 1.0 }], ..Default::default() })
+        assert!(
+            write(&KerningText {
+                pairs: vec![NewPair { left: Side::Glyph("a\nb".into()), right: Side::Glyph("b".into()), value: 1.0 }],
+                ..Default::default()
+            })
             .unwrap_err()
             .to_string()
-            .contains("control character"));
+            .contains("control character")
+        );
     }
 }

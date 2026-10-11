@@ -107,8 +107,8 @@ pub use groups::{GroupNameError, MAX_GROUP_NAME_LEN, check_group_name, group_lis
 pub use locks::{Close, Edit, Lock, Locks, Which, close_locks, locked_pair, locks, open_locks, shortcut_edit};
 pub use lookup::{Applied, KernError, KernIndex, Step, StoredPair, Table, stored_pair};
 pub use maintain::{
-    Absorbed, CompressReport, Kept, KeptWhy, Lift, MAX_COMPRESS_RUNS, MaintainError, Obsolete, Pair, Removed, RenameReport, RenameScope,
-    Shadowed, check_editable, clean_up, compress, obsolete_pairs, rename_group,
+    Absorbed, CompressReport, Kept, KeptWhy, Lift, MAX_COMPRESS_RUNS, MaintainError, Obsolete, Pair, Removed, RenameReport, RenameScope, Shadowed,
+    check_editable, clean_up, compress, obsolete_pairs, rename_group,
 };
 pub use sides::{GroupSide, Side, SideError, facing, prefix};
 
