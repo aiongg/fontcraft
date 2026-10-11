@@ -34,7 +34,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO, designspace or compiled font has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. warnings lists what reading a compiled font left out and the glyph data files that could not be used → {title, path, format, version?, glyphs, masters, viewOnly, aligned, warnings}",
+            "{path: string, face?: number} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. warnings lists what reading a compiled font left out and the glyph data files that could not be used → {title, path, format, version?, glyphs, masters, viewOnly, aligned, warnings}",
             always,
             open
         ),
@@ -151,18 +151,18 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(crate) const DISABLE_ALIGNMENT_FOR_IMPORTED: &str = "user.disableAutomaticAlignmentForImportedFiles";
 
-/// What opening an imported font (UFO, designspace, compiled) does to its composites
+/// What opening an imported source (UFO, designspace) does to its composites
 /// (`open.alignsCompositeMetrics`, `components.importedFilesDisableAutoAlignSetting`): with the
 /// user setting Disable Automatic Alignment for Imported Files on, the font's own Disable
 /// Automatic Alignment option is switched on, so its components stay where the file puts them;
 /// otherwise every composite is aligned, so its metrics follow its bases. A font whose own option
 /// is already on is left as read. `.fontcraft` and `.glyphs` sources store aligned positions and
-/// are not touched. Alignment that fails, or gives a font that does not pass the model's checks,
+/// are not touched; nor is a compiled font, which is view-only and has no anchors to align by. Alignment that fails, or gives a font that does not pass the model's checks,
 /// leaves the font as read with a warning. Returns the font and how many glyphs alignment changed.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(crate) fn align_imported(s: &Session, mut font: Font, warnings: &mut Vec<String>) -> (Font, usize) {
     use fontcraft_model::SourceFormat;
-    if !matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Ufoz | SourceFormat::Designspace | SourceFormat::Binary) {
+    if !matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Ufoz | SourceFormat::Designspace) {
         return (font, 0);
     }
     if s.settings().get_bool(DISABLE_ALIGNMENT_FOR_IMPORTED) == Some(true) {

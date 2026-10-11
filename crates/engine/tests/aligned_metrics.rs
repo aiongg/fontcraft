@@ -235,5 +235,13 @@ fn file_open_aligns_an_imported_ufo_unless_the_user_setting_disables_it() {
     assert_eq!(r["aligned"], json!(0), "{r}");
     assert_eq!(aacute(&kept), (1.0, 0.0, 0.0), "the components stay where the file puts them");
     assert_eq!(kept.font().unwrap().info.settings.disables_automatic_alignment, Some(true));
+
+    // A compiled font opens view-only and without anchors: its composites stay as compiled.
+    let ttf = dir.join("Stale.ttf");
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf }));
+    let mut compiled = Session::new();
+    let r = run(&mut compiled, "file.open", json!({ "path": ttf }));
+    assert_eq!((&r["viewOnly"], &r["aligned"]), (&json!(true), &json!(0)), "{r}");
+    assert_eq!(compiled.font().unwrap().info.settings.disables_automatic_alignment, None);
     let _ = std::fs::remove_dir_all(&dir);
 }
