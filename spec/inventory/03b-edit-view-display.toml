@@ -2290,6 +2290,9 @@ summary = "Enables language-specific substitutions for the tab's text and picks 
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), turn on Localized Forms in Edit View, choose Turkish and type i: write down the menu's script and language entries and note the glyph shown.",
+]
 
 [[command]]
 id = "editView.getFeatures"
@@ -2344,6 +2347,11 @@ guesses = [
   "A glyph typed by name is shaped as a private-use character that maps to that glyph, so substitutions apply to it as to typed characters; typing /a.sc next to a feature that substitutes it in the reference app would settle it.",
   "Kerning is applied by the tab's kerning mode to the glyphs after substitution, and the compiled kern feature is not used in Edit View; a font whose hand-written kern feature has a contextual rule would settle it.",
 ]
+observe = [
+  "In F2 (Arabic), type Arabic text in an Edit View tab with no feature active: note whether positional forms show.",
+  "In F1 (Latin features), type `/a /a.sc /f /i` in Edit View and turn on smcp and liga: note whether the glyphs typed by name are substituted.",
+  "In F1 (Latin features), write a contextual rule in a hand-written kern feature, compile and view the pair in Edit View: note whether the contextual value shows.",
+]
 
 [[behavior]]
 id = "textPreview.shaping"
@@ -2356,6 +2364,9 @@ notes = "Documented, not yet observed. The reference uses the operating system's
 guesses = [
   "The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.",
 ]
+observe = [
+  "In F1 (Latin features), edit a feature without pressing Compile while Text Preview shows text the feature affects: note whether the preview follows the edit, and when.",
+]
 
 [[behavior]]
 id = "textPreview.unicodeBidi"
@@ -2365,6 +2376,9 @@ summary = "Text Preview orders mixed right-to-left and left-to-right text by the
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
 notes = "Documented, not yet observed. Settles the M5 guesses on `textPreview.setWritingDirection` about digits and neutral characters."
+observe = [
+  "In F2 (Arabic), type \"12 34\" inside right-to-left text in Text Preview: note the order of the digits.",
+]
 
 [[command]]
 id = "view.togglePreviewArea"
@@ -2609,6 +2623,9 @@ ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
 guesses = [
   "The preview of an instance applies the instance's interpolation parameters (Local Interpolation, InterpolationWeightY, manual interpolation), Rename Glyphs and Remove Glyphs, and no filters; settle by previewing an instance with a filter parameter in the reference app.",
+]
+observe = [
+  "In F1 (two masters), put a filter parameter on the Regular instance and preview Regular: note whether the preview applies the filter.",
 ]
 
 [[behavior]]

@@ -118,6 +118,9 @@ status = "inferred"
 guesses = [
   "Entries are dragged within their group, and the order of features is the order of feature blocks and of chained suffixes; the running app would settle whether dragging exists.",
 ]
+observe = [
+  "In F1 (Latin features), drag a feature entry to another place in the sidebar: note whether it moves and whether the order is kept on save.",
+]
 
 [[command]]
 id = "font.features.showErrorDetails"
@@ -175,6 +178,9 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "The snippet folder is `snippets/` inside FontCraft's configuration folder, created on first use; the reference's folder is inside its application support folder, which the running app would show.",
+]
+observe = [
+  "In any font, choose Show Snippet Folder from the snippets menu: note which folder opens.",
 ]
 
 [[command]]
@@ -243,6 +249,9 @@ notes = "Checked in the M8 planning pass: glyphsLib (`builder/features.py`) and 
 guesses = [
   "Classes come before prefixes, as both reference compilers assemble them; the expanded code of a reference export whose prefix uses a class would settle the reference app's own order.",
 ]
+observe = [
+  "In F1 (Latin features), add a prefix that uses a class, export, then export again with that class broken: note from the error position the order in which classes, prefixes and features are assembled.",
+]
 
 [[behavior]]
 id = "featureEditor.featureBody"
@@ -275,6 +284,9 @@ status = "inferred"
 notes = "Checked in the M8 planning pass: glyphsLib and fontc append `# Automatic Code` to a manual kern feature that lacks it; ufo2ft's and fontc's writers skip a generated feature the code already has."
 guesses = [
   "Generated kerning follows a hand-written kern feature and a hand-written mark-family feature replaces the generated one, as glyphsLib and fontc do; a reference export of a font with a hand-written mark feature without the line would settle it.",
+]
+observe = [
+  "In F6 (contextual anchors), add a mark feature with one hand-written rule and no `# Automatic Code` line, export and read GPOS: note whether the generated mark lookups remain.",
 ]
 
 [[behavior]]
@@ -345,6 +357,9 @@ status = "docs"
 guesses = [
   "Results are rounded half away from zero, as fea-rs rounds, where glyphsLib truncates, and division by zero is a compile error at the token; an expression giving 2.5 exported from the reference app would settle the rounding.",
 ]
+observe = [
+  "In F5 (tokens), use `${tracking/4}` where it gives 2.5, export and read GPOS: note how the value was rounded.",
+]
 
 [[behavior]]
 id = "token.numberValue.variable"
@@ -373,6 +388,9 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "Option-click evaluates the token for the master of the active Edit View tab, else the first master; Option-clicking a token in a two-master font with the second master showing in the reference app would settle it.",
+]
+observe = [
+  "In F5 (tokens), with the second master showing in Edit View, Option-click `$tracking` in a feature: note which master's value is shown.",
 ]
 
 [[behavior]]
@@ -421,6 +439,9 @@ status = "inferred"
 notes = "glyphsLib reads the glyph's layer of the master being built and any layer attribute by name; an unknown property or a missing anchor stops the build (`builder/tokens.py`). fea-rs has no glyph property tokens."
 guesses = [
   "Only the documented properties (width, LSB, RSB, TSB, BSB, anchors.<name>.x and .y) are accepted and any other is an error naming it; Option-clicking a token with another layer property in the reference app would show what else exists.",
+]
+observe = [
+  "In F5 (tokens), Option-click `${b:bounds}` and `${b:LSB}` in a feature: note the values shown and whether other layer properties are offered.",
 ]
 
 [[behavior]]
@@ -547,6 +568,9 @@ summary = "Predicates combine with AND and OR, NOT negates the predicate that fo
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "In F5 (tokens), write `$[note contains \"x\" OR \"ipa\" in tags AND case == upper]` and Option-click it: note the glyphs listed, which shows whether AND binds tighter than OR.",
+]
 
 [[behavior]]
 id = "token.predicate.classFunction"
@@ -624,6 +648,9 @@ status = "inferred"
 guesses = [
   "Only `#ifdef VARIABLE` and `#ifndef VARIABLE` blocks are read, without nesting or `#else`; an unterminated `#ifndef VARIABLE` runs to the end of the code, as glyphsLib reads it. Settle with nested blocks in the reference app.",
 ]
+observe = [
+  "In F1 (two masters), write a feature with `#ifdef VARIABLE` nested inside `#ifndef VARIABLE`, and one with `#else`; export a static and a variable font: read GSUB and note which branches each kept.",
+]
 
 [[behavior]]
 id = "featureCode.condition"
@@ -667,6 +694,9 @@ status = "docs"
 notes = "Taken in the M9 planning pass from glyphsLib 6.15.0 `builder/variable_features.py` (Apache-2.0), which converts this syntax for fontmake; the handbook does not say. No corpus source uses it."
 guesses = [
   "The scope and coordinate rules follow glyphsLib's converter; settle with a feature holding two conditions and a bare `condition;` in the reference app.",
+]
+observe = [
+  "In F1 (two masters), write a `calt` feature with two `condition` lines and a bare `condition;`, export the variable font and read its FeatureVariations: note the condition sets and which rules each covers.",
 ]
 
 [[behavior]]
@@ -774,6 +804,9 @@ status = "inferred"
 guesses = [
   "The split-block lowering keeps the lookup's place in lookup order and leaves it out of the feature; a reference export of a feature with a standalone lookup, read back with a font tool, would settle it.",
 ]
+observe = [
+  "In F1 (Latin features), write a feature with a standalone lookup, export and read GSUB: note where the lookup is placed and that the feature does not reference it.",
+]
 
 [[behavior]]
 id = "featureCode.optionalLookupEndName"
@@ -877,6 +910,9 @@ guesses = [
 # ----------------------------------------------------------------------------
 # Behaviours: Automatic feature generation
 # ----------------------------------------------------------------------------
+observe = [
+  "In F1 (Latin features) plus a few Greek and Cyrillic letters, press Update in Font Info › Features: copy the automatic classes it creates and their contents.",
+]
 
 [[behavior]]
 id = "autoFeature.generalRule"
@@ -888,6 +924,9 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "A ligature name goes to liga when it is on the handbook's list or has `.liga`, to dlig with `.dlig`, to hlig when it contains longs or has `.hlig` or `.hist`, to rlig with `.rlig` or on the lam-alef list, and to dlig otherwise, the first match winning in that order; Update on a font with f_f_i.dlig and longs_t would settle it.",
+]
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of every entry it creates: compare each with FontCraft's generators and note the order in which the entries are added.",
 ]
 
 [[behavior]]
@@ -901,6 +940,9 @@ notes = "The reference's stored output in the corpus has an automatic prefix nam
 guesses = [
   "Besides DFLT dflt, one `dflt` line per script of the font's exporting glyphs in script-tag order, then the locl languages of each script; Update on a font with Latin, Cyrillic and Greek glyphs would settle the order.",
 ]
+observe = [
+  "In F1 (Latin features) plus a few Greek and Cyrillic letters, press Update in Font Info › Features: copy the Languagesystems prefix and note its script list and order.",
+]
 
 [[behavior]]
 id = "autoFeature.aalt"
@@ -912,6 +954,9 @@ status = "handbook"
 notes = "The reference's stored output in the corpus (7 sources): only `feature xxxx;` lines, one per substituting feature in the font's feature order (M8 planning pass)."
 guesses = [
   "Generated as one `feature xxxx;` line per other feature with substitutions, in sidebar order, leaving the grouping to the compiler, as the corpus shows; cv features and features listed after aalt included.",
+]
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the aalt entry: compare it with FontCraft's generator for the same font, or note that no aalt entry is created.",
 ]
 
 [[behavior]]
@@ -925,6 +970,9 @@ notes = "The reference's stored output in the corpus (3 sources): `lookupflag Ig
 guesses = [
   "Generated code starts with `lookupflag IgnoreMarks;`, as the newer corpus files have it, and lists longer ligatures first; Update on a font with f_f_i, fi and a mark would settle it.",
 ]
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the liga entry: compare it with FontCraft's generator for the same font, or note that no liga entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.dlig"
@@ -936,6 +984,9 @@ status = "handbook"
 notes = "The reference's stored output in the corpus (2 sources): as liga, `lookupflag IgnoreMarks;` in the newer file (M8 planning pass)."
 guesses = [
   "Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with f_odieresis would settle it.",
+]
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the dlig entry: compare it with FontCraft's generator for the same font, or note that no dlig entry is created.",
 ]
 
 [[behavior]]
@@ -949,6 +1000,9 @@ guesses = [
   "Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with such ligatures would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the hlig entry: compare it with FontCraft's generator for the same font, or note that no hlig entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.rlig"
@@ -961,6 +1015,9 @@ guesses = [
   "Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with such ligatures would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F2 (Arabic), press Update in Font Info › Features and copy the code of the rlig entry: compare it with FontCraft's generator for the same font, or note that no rlig entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.c2sc"
@@ -973,6 +1030,9 @@ guesses = [
   "With a shared `.sc` set each capital maps to the small cap named after its lowercase letter (`sub A by a.sc;`), with a `.c2sc` set to its own suffix; Update on a font with A, a and a.sc would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the c2sc entry: compare it with FontCraft's generator for the same font, or note that no c2sc entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.smcp"
@@ -985,6 +1045,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the smcp entry: compare it with FontCraft's generator for the same font, or note that no smcp entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.c2pc"
@@ -997,6 +1060,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the c2pc entry: compare it with FontCraft's generator for the same font, or note that no c2pc entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.pcap"
@@ -1009,6 +1075,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the pcap entry: compare it with FontCraft's generator for the same font, or note that no pcap entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.sups"
@@ -1030,6 +1099,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the subs entry: compare it with FontCraft's generator for the same font, or note that no subs entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.sinf"
@@ -1042,6 +1114,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the sinf entry: compare it with FontCraft's generator for the same font, or note that no sinf entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.afrc"
@@ -1054,6 +1129,9 @@ guesses = [
   "One ligature rule per nut fraction from the figures, slash and figures it names; Update on a font with oneovertwo would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the afrc entry: compare it with FontCraft's generator for the same font, or note that no afrc entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.frac"
@@ -1065,6 +1143,9 @@ status = "handbook"
 notes = "The reference's stored output in the corpus (3 Oswald sources): only the fallback, ligature rules onto precomposed fractions (`sub one slash four by onequarter;`); no source stores the numerator and denominator form (M8 planning pass)."
 guesses = [
   "With `.numr` and `.dnom` figures, fraction gets three lookups: figures to numerators, figures after fraction or a numerator to denominators, slash between figures to fraction; Update on a font with both sets would settle it.",
+]
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the frac entry: compare it with FontCraft's generator for the same font, or note that no frac entry is created.",
 ]
 
 [[behavior]]
@@ -1078,6 +1159,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the dnom entry: compare it with FontCraft's generator for the same font, or note that no dnom entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.numr"
@@ -1090,6 +1174,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the numr entry: compare it with FontCraft's generator for the same font, or note that no numr entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.onum"
@@ -1102,6 +1189,9 @@ guesses = [
   "Default and `.tf` figures map to `.osf` and `.tosf`, keeping proportional or tabular width; Update on a font with lf, tf, osf and tosf figures would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the onum entry: compare it with FontCraft's generator for the same font, or note that no onum entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.tnum"
@@ -1132,6 +1222,9 @@ guesses = [
   "`.osf` and `.tosf` figures map back to the default and `.tf` figures, keeping width; Update on a font with all four figure sets would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the lnum entry: compare it with FontCraft's generator for the same font, or note that no lnum entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.ordn"
@@ -1153,6 +1246,9 @@ guesses = [
   "`sub bullet from [A.ornm …];` with the ornaments in glyph order, then `sub A by A.ornm;` per letter; Update on a font with bullet and A.ornm would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the ornm entry: compare it with FontCraft's generator for the same font, or note that no ornm entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.hist"
@@ -1165,6 +1261,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the hist entry: compare it with FontCraft's generator for the same font, or note that no hist entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.case"
@@ -1186,6 +1285,9 @@ guesses = [
   "The amount is a number value named after the feature if the font has one, else 5 units per side, written `pos @Uppercase <5 0 10 0>;`; adding Capital Spacing in the reference app would settle the amount.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), add Capital Spacing from the plus menu in Font Info › Features: copy its code and note the spacing amount.",
+]
 
 [[behavior]]
 id = "autoFeature.locl"
@@ -1197,6 +1299,9 @@ status = "handbook"
 notes = "The reference's stored output in the corpus (6 sources) differs by version: per-script `script`/`language` sections with named lookups referenced from each further language, or one lookup holding several languages, or the non-standard `language AZE CRT KAZ TAT TRK;` in a version 4 file (M8 planning pass)."
 guesses = [
   "One named lookup per rule set (`locl_latn_0`) inside `script latn; language XXX;`, referenced from each further language that shares it, as the Oswald files have it; Update on a font with idotaccent and Scommaaccent would settle the current form.",
+]
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the locl entry: compare it with FontCraft's generator for the same font, or note that no locl entry is created.",
 ]
 
 [[behavior]]
@@ -1210,6 +1315,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the cv01 entry: compare it with FontCraft's generator for the same font, or note that no cv01 entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.ssXX"
@@ -1231,6 +1339,9 @@ guesses = [
   "salt copies the rules of ss01 only, as the handbook says; Update on a font with ss01 and ss02 would settle whether other sets join.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the salt entry: compare it with FontCraft's generator for the same font, or note that no salt entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.swsh"
@@ -1243,6 +1354,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the swsh entry: compare it with FontCraft's generator for the same font, or note that no swsh entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.titl"
@@ -1255,6 +1369,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the titl entry: compare it with FontCraft's generator for the same font, or note that no titl entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.init"
@@ -1267,6 +1384,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F2 (Arabic), press Update in Font Info › Features and copy the code of the init entry: compare it with FontCraft's generator for the same font, or note that no init entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.medi"
@@ -1279,6 +1399,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F2 (Arabic), press Update in Font Info › Features and copy the code of the medi entry: compare it with FontCraft's generator for the same font, or note that no medi entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.med2"
@@ -1291,6 +1414,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features) with Syriac glyphs with `.med2` added, press Update in Font Info › Features and copy the code of the med2 entry: compare it with FontCraft's generator for the same font, or note that no med2 entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.fina"
@@ -1303,6 +1429,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F2 (Arabic), press Update in Font Info › Features and copy the code of the fina entry: compare it with FontCraft's generator for the same font, or note that no fina entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.fin2"
@@ -1315,6 +1444,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features) with Syriac glyphs with `.fin2` added, press Update in Font Info › Features and copy the code of the fin2 entry: compare it with FontCraft's generator for the same font, or note that no fin2 entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.fin3"
@@ -1327,6 +1459,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features) with Syriac glyphs with `.fin3` added, press Update in Font Info › Features and copy the code of the fin3 entry: compare it with FontCraft's generator for the same font, or note that no fin3 entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.fwid"
@@ -1339,6 +1474,9 @@ guesses = [
   "Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the fwid entry: compare it with FontCraft's generator for the same font, or note that no fwid entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.hkna"
@@ -1351,6 +1489,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the hkna entry: compare it with FontCraft's generator for the same font, or note that no hkna entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.hojo"
@@ -1363,6 +1504,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features) with a few kanji with `.hojo` added, press Update in Font Info › Features and copy the code of the hojo entry: compare it with FontCraft's generator for the same font, or note that no hojo entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.hwid"
@@ -1375,6 +1519,9 @@ guesses = [
   "Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the hwid entry: compare it with FontCraft's generator for the same font, or note that no hwid entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.ital"
@@ -1387,6 +1534,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features) with a few letters with `.italic` added, press Update in Font Info › Features and copy the code of the ital entry: compare it with FontCraft's generator for the same font, or note that no ital entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.pkna"
@@ -1399,6 +1549,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the pkna entry: compare it with FontCraft's generator for the same font, or note that no pkna entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.pwid"
@@ -1411,6 +1564,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the pwid entry: compare it with FontCraft's generator for the same font, or note that no pwid entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.qwid"
@@ -1423,6 +1579,10 @@ guesses = [
   "Update recognises both `.qartwidth`, the handbook's spelling, and `.quartwidth`; a font with both suffixes updated in the reference app would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), which has both a `.qartwidth` and a `.quartwidth` glyph, press Update in Font Info › Features: note which spelling the qwid entry uses, or that none is created.",
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the qwid entry: compare it with FontCraft's generator for the same font, or note that no qwid entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.ruby"
@@ -1435,6 +1595,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features) with a few kana with `.ruby` added, press Update in Font Info › Features and copy the code of the ruby entry: compare it with FontCraft's generator for the same font, or note that no ruby entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.twid"
@@ -1447,6 +1610,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the twid entry: compare it with FontCraft's generator for the same font, or note that no twid entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.vkna"
@@ -1459,6 +1625,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the vkna entry: compare it with FontCraft's generator for the same font, or note that no vkna entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.vrt2"
@@ -1471,6 +1640,9 @@ guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F4 (widths and kana), press Update in Font Info › Features and copy the code of the vrt2 entry: compare it with FontCraft's generator for the same font, or note that no vrt2 entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.abvs"
@@ -1483,6 +1655,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the abvs entry: compare it with FontCraft's generator for the same font, or note that no abvs entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.akhn"
@@ -1495,6 +1670,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the akhn entry: compare it with FontCraft's generator for the same font, or note that no akhn entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.blwf"
@@ -1507,6 +1685,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blwf entry: compare it with FontCraft's generator for the same font, or note that no blwf entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.blws"
@@ -1519,6 +1700,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blws entry: compare it with FontCraft's generator for the same font, or note that no blws entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.cjct"
@@ -1531,6 +1715,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the cjct entry: compare it with FontCraft's generator for the same font, or note that no cjct entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.half"
@@ -1543,6 +1730,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the half entry: compare it with FontCraft's generator for the same font, or note that no half entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.nukt"
@@ -1555,6 +1745,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the nukt entry: compare it with FontCraft's generator for the same font, or note that no nukt entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.pref"
@@ -1567,6 +1760,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pref entry: compare it with FontCraft's generator for the same font, or note that no pref entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.pres"
@@ -1579,6 +1775,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pres entry: compare it with FontCraft's generator for the same font, or note that no pres entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.psts"
@@ -1591,6 +1790,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the psts entry: compare it with FontCraft's generator for the same font, or note that no psts entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.rkrf"
@@ -1603,6 +1805,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rkrf entry: compare it with FontCraft's generator for the same font, or note that no rkrf entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.rphf"
@@ -1615,6 +1820,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rphf entry: compare it with FontCraft's generator for the same font, or note that no rphf entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.vatu"
@@ -1627,6 +1835,9 @@ guesses = [
   "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
 ]
 notes = "Documented, not yet observed."
+observe = [
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the vatu entry: compare it with FontCraft's generator for the same font, or note that no vatu entry is created.",
+]
 
 [[behavior]]
 id = "autoFeature.ccmp"
@@ -1638,6 +1849,10 @@ status = "handbook"
 notes = "The reference's stored output in the corpus (5 sources): a lookup `ccmp_DFLT_1` with `lookupflag 0;` and ligatures of stacked marks (`sub brevecomb acutecomb by brevecomb_acutecomb;`), and lookups `ccmp_Other_N` with an inline `@CombiningTopAccents = [...]`, `lookupflag UseMarkFilteringSet @CombiningTopAccents;` and `sub i' @CombiningTopAccents by idotless;` (M8 planning pass)."
 guesses = [
   "Latin ccmp is generated in the corpus's form: mark-ligature lookup first, then the dotless lookups with the top-accent filtering set; scripts other than Latin get no ccmp until a source shows their form.",
+]
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features and copy the code of the ccmp entry: compare it with FontCraft's generator for the same font, or note that no ccmp entry is created.",
+  "In F3 (Devanagari), press Update in Font Info › Features and copy the code of the ccmp entry: compare it with FontCraft's generator for the same font, or note that no ccmp entry is created.",
 ]
 
 [[behavior]]
@@ -1724,6 +1939,9 @@ notes = "Documented, not yet observed. glyphsLib reads tokens with the pattern `
 guesses = [
   "A token FontCraft cannot resolve stays in the text as written, and the compile report names it, as glyphsLib leaves it; a misspelt token in the reference app settles it.",
 ]
+observe = [
+  "In font A (m7-one), type `{{{familyName}}} {{{nonsense}}}` into the description field, export and read name ID 10: note what the unknown token becomes.",
+]
 
 [[behavior]]
 id = "textToken.versionString"
@@ -1753,6 +1971,9 @@ status = "handbook"
 notes = "Documented, not yet observed. glyphsLib resolves the key as an attribute of its font or instance object. M7 plan § 4: M7.13."
 guesses = [
   "The supported key paths are the font's familyName, versionMajor, versionMinor, unitsPerEm, date, copyright, designer, designerURL, manufacturer, manufacturerURL and the instance's name, familyName, fullName (family and style name with a space), postscriptFontName, postscriptFullName, weightClass, widthClass; this is the set glyphsLib's objects expose under those names, and tokens tried in the reference app settle more.",
+]
+observe = [
+  "In font A (m7-one), type `{{{familyName}}} {{{fullName}}} {{{designer}}} {{{nonsense}}}` into the description field, export and read name ID 10: note which tokens expand.",
 ]
 
 [[behavior]]
@@ -1976,6 +2197,9 @@ notes = "Documented, not yet observed."
 guesses = [
   "The built-in snippets are `# Automatic Code`, a named lookup block, a contextual substitution, a languagesystem line and a stylistic set with a featureNames block; opening the snippets menu in the reference app would settle the list.",
 ]
+observe = [
+  "In any font, open the snippets menu of the feature editor: write down the built-in snippets.",
+]
 
 [[behavior]]
 id = "snippet.fileNaming"
@@ -2004,6 +2228,9 @@ ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
 guesses = [
   "A snippet is inserted at the caret and replaces the selection; inserting one over a selection in the reference app would settle it.",
+]
+observe = [
+  "In any font, select some feature code and insert a snippet: note whether it replaces the selection or goes in beside it.",
 ]
 
 [[behavior]]

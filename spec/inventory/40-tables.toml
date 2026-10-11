@@ -656,6 +656,7 @@ milestone = "M9"
 summary = "Static instances are produced by interpolating masters at the instance location before compiling. fontmake's default interpolator does not extrapolate outside the masters and does not support anisotropic locations; those need the optional MutatorMath path. Outline rounding at this stage is optional (--round-instances)."
 ref = "fontmake USAGE.md (Options for instance generation)"
 status = "docs"
+notes = "FontCraft extrapolates static instances that lie outside the masters, as the handbook says (`fontInfo.instance.extrapolation`; docs/plans/M9.md § 7, question 6 (a)); the difference from fontmake is in docs/spec/40-compile.md § 4a."
 
 [[behavior]]
 id = "compile.instanceLayoutInterpolation"

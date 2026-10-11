@@ -566,6 +566,22 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | The `include` and `exclude` lists of a `flattenComponents` or `decomposeTransformedComponents` entry | ignored: the filter reaches every glyph | the filter reaches only the glyphs the list allows, as in ufo2ft | the lists are part of ufo2ft's filter definition. No corpus source has one |
 | Where the ufo2ft filter list is read for a `.glyphs` master that is not the default one | the default master's user data | the built master's user data, else the font's | FontCraft builds one master statically until M9, and fontmake builds each master from its own lib, where glyphsLib puts that master's user data |
 
+**Where the handbook decides against an oracle.** The M7, M8 and M9 plans follow the handbook on
+these points (§ 7 of each plan, decided by the orchestrator on the owner's behalf). The oracle
+comparison allow-lists each difference for the corpus sources it shows in.
+
+| What | fontc | fontmake | FontCraft | Plan |
+|---|---|---|---|---|
+| `postscriptFullName` or `postscriptFullNames` on an instance | not read | the singular form only, written to the CFF FullName | either form sets name ID 4 and the CFF FullName (4 corpus sources differ) | M7, question 2 |
+| `styleNames`, `styleMapFamilyNames`, `styleMapStyleNames` and `compatibleFullNames` properties | not read | not read | written to the name IDs the handbook gives them (14 corpus sources hold `styleNames`) | M7, question 2 |
+| An instance's Width Class without a width axis | no static instances | OS/2 `usWidthClass` stays 5 | the instance's value | M7, question 2 |
+| Automatic feature code whose stored text is older than the glyph set | compiled as stored | compiled as stored | regenerated for each export target unless Update Features is off; a source last updated in the reference app gives the same code | M8, question 4 |
+| The origin of a variable font without Variable Font Origin | the master named by the words all master names share (Regular when none), else the first | the same | the first master; designs at every location agree, `fvar` defaults and `glyf` differ (22 corpus sources name their origin and agree) | M9, question 3 |
+| A static instance outside the masters | no static instances | clamped to the axis range | extrapolated, named in the export report, left out of variable fonts (25 instances in 11 corpus sources); compared with fontTools' model with extrapolation on | M9, question 6 |
+
+Macintosh name records stay off unless Export Mac Name Table Entries is on, as both oracles
+write them and against the handbook's default (the M2 decision, kept by M7 question 2).
+
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping
 Components and Keep Transformed Components parameters imply that the reference app decomposes
@@ -573,6 +589,12 @@ such composites unless the parameter is set; FontCraft does not, so the two para
 nothing (the owner's answer to `docs/plans/M6.md` § 7, question 5). No allow-list entry is
 needed: both oracles agree with FontCraft. A compile test checks that a build with both
 parameters set is byte for byte the build without them.
+
+In variable fonts, composites whose base glyph has intermediate layers stay composites, as both
+oracles keep them; the handbook's Decompose Brace Layers default decomposes them. The parameter
+set to on decomposes them (`docs/plans/M9.md` § 7, question 4 (a)). Alternate layers are switched
+in `rvrn`, as the appendix and both oracles say, against the Switching Shapes page's `rlig`
+(question 2 (a)).
 
 The readers follow fontc where a source leaves a value out (`docs/spec/30-source-formats.md` ›
 Values a source leaves out): a `.glyphs` layer without a `width` is 600 wide; a designspace
@@ -646,8 +668,9 @@ the binary only; compilation never changes the source.
     **Checked in the M9 planning pass:** fontmake clamps rather than refuses: ufo2ft's
     instantiator normalises with fontTools' `normalizeLocation`, which clamps to the axis range.
     The handbook says the reference extrapolates static instances. 25 static instances in 11
-    corpus sources lie outside their masters. The owner decides (`docs/plans/M9.md` § 7,
-    question 6); the plan recommends extrapolating, with a note in the export report.
+    corpus sources lie outside their masters. **Decided** (`docs/plans/M9.md` § 7, question 6 (a),
+    decided by the orchestrator on the owner's behalf): the instancer extrapolates, the export
+    report names each extrapolated instance, and variable fonts leave such instances out (§ 4a).
 16. **VORG, hdmx in write-fonts.** Both have generated code that is not compiled into 0.54.0.
     Check newer write-fonts releases before writing our own.
 17. **STAT format 4.** write-fonts can write it and fontc does not emit it; decide whether our

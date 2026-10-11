@@ -38,6 +38,9 @@ notes = "Documented, not yet observed. The Features tab is M8's (fontInfo.featur
 guesses = [
   "Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it.",
 ]
+observe = [
+  "In font A (m7-one), open Font Info, switch to the Exports tab, close the window and open it again: note which tab it opens on.",
+]
 
 [[command]]
 id = "font.info"
@@ -113,6 +116,9 @@ notes = "The keys come from the file format's property list (GlyphsSDK `infoProp
 guesses = [
   "The Font tab offers familyNames, designers, designerURL, manufacturers, manufacturerURL, copyrights, versionString, vendorID, uniqueID, licenses, licenseURL, trademarks, descriptions, sampleTexts, postscriptFontName, postscriptFullNames, compatibleFullNames, WWSFamilyName, WWSSubfamilyName and variationsPostScriptNamePrefix; the Exports tab the same plus styleNames, styleMapFamilyNames, styleMapStyleNames, preferredFamilyNames, preferredSubfamilyNames and variableStyleNames; the Masters tab offers none and keeps master properties as read. The pickers of the reference app settle the three lists.",
 ]
+observe = [
+  "In font A (m7-one), click the plus button beside General on the Font tab: write down the fields offered, in their order.",
+]
 
 [[command]]
 id = "font.info.addField"
@@ -130,6 +136,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.3."
 guesses = [
   "Adding a field that is already present on a target is refused with a message pointing to Set Localized Value; the reference app settles it.",
   "A new localizable field gets one entry in the default language (dflt) holding the given value, or else the built-in value it overrides (familyNames takes the Family Name, styleNames the Style Name), else empty text; adding the field in the reference app settles it.",
+]
+observe = [
+  "In font A (m7-one), add familyNames from the plus button beside General, then try to add it again: note the new row's language and value, and whether the second add is offered or refused.",
 ]
 
 [[command]]
@@ -165,6 +174,9 @@ notes = "Documented, not yet observed. Languages are OpenType language system ta
 guesses = [
   "A language tag the name table cannot map to a Windows language id is refused, except dflt (the default); the language menu of the reference app settles which tags it offers.",
 ]
+observe = [
+  "In font A (m7-one), open the language menu of a familyNames row: write down the languages offered, then save and note how each language is written in the file.",
+]
 
 [[command]]
 id = "font.info.removeLocalizedValue"
@@ -181,6 +193,9 @@ status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.3."
 guesses = [
   "Removing the last language entry of a field removes the field; removing its default (dflt) entry while others remain is allowed, and export then uses the English entry as the default name; the reference app settles both.",
+]
+observe = [
+  "In font A (m7-one), give familyNames a default-language row and a German row, remove the default-language row, then remove the last row: note what remains each time and whether the field disappears.",
 ]
 
 [[command]]
@@ -199,6 +214,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.3."
 guesses = [
   "Rows are copied as our own JSON (scope, kind, key, value, enabled) and, for custom parameters and fields, also as property-list text in the file format's spelling, so a text editor or another document can read them; copying rows in the reference app and pasting into a text editor settles the format.",
 ]
+observe = [
+  "In font A (m7-one), select a field row and a custom-parameter row together, choose Copy and paste into a text editor: keep the clipboard text.",
+]
 
 [[command]]
 id = "font.info.pasteRows"
@@ -215,6 +233,9 @@ status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.3."
 guesses = [
   "A pasted row whose field or single-valued parameter is already present replaces its value, a repeatable parameter is appended, a row not allowed in the target scope is skipped and listed, and pasting between tabs and between documents is allowed; pasting in the reference app settles all four.",
+]
+observe = [
+  "In font A (m7-one), copy a field row and a parameter row, then paste them into the Exports tab, into font B (m7-two)'s Font tab, and back into font A (m7-one)'s Font tab where they already exist: note for each whether the rows are added, replaced, duplicated or refused.",
 ]
 
 [[behavior]]
@@ -298,6 +319,9 @@ status = "handbook"
 notes = "Documented, not yet observed. The fields offered per tab are listed in font.info.listFields. M7 plan § 4: M7.15."
 guesses = [
   "The picker lists only the fields not yet present on the selected font, masters or exports, in the order of font.info.listFields, and allows several to be selected; the picker of each tab in the reference app settles it.",
+]
+observe = [
+  "In font A (m7-one), click the plus button beside General on the Font tab: note the fields offered in order, and which of them get a language menu once added.",
 ]
 
 [[parameter]]
@@ -398,6 +422,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.3 (warning in the result
 guesses = [
   "Other characters are accepted with a warning, not refused; typing an ampersand or an accented letter in the reference app settles whether it warns, refuses or neither.",
 ]
+observe = [
+  "In font A (m7-one), type the family name `Café & Co`: note any warning, refusal or nothing.",
+]
 
 [[behavior]]
 id = "fontInfo.familyName.derivedNames"
@@ -428,6 +455,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.3."
 guesses = [
   "font.info.set refuses values outside 16–16384 and returns a warning above 3000, above 4096 when the font is exported with CFF outlines, and above 5000; the reference app settles whether it warns at all.",
 ]
+observe = [
+  "In font A (m7-one), type 3500 and then 6000 as Units per Em: note any warning or refusal for each.",
+]
 
 [[command]]
 id = "font.info.scaleToUnitsPerEm"
@@ -445,6 +475,9 @@ notes = "Documented, not yet observed. The same scaling serves the Scale to UPM 
 guesses = [
   "Scaling by new/old covers every layer of every glyph (paths, component offsets but not component scales, anchors, guides, hints, backgrounds, special layers), the advance widths and vertical metrics, master metric positions and zone sizes, stems, kerning, global guides, and the custom parameters whose catalogue entry is measured in units (typoAscender, hheaAscender, winAscent, underlinePosition and the like); metrics keys, italic angles and percentages are kept; the reference app on a font holding all of these settles the list.",
   "Scaled coordinates are rounded to the font's grid (none when the grid spacing is 0), and a scale that would put a coordinate beyond ±32768 is refused; the reference app settles the rounding.",
+]
+observe = [
+  "In font A (m7-one), click the double arrow beside Units per Em, scale to 2048 and save: note which of outlines, component offsets, anchors, the guide, kerning, metrics, zones, stems and typoAscender changed, and how half units were rounded.",
 ]
 
 [[behavior]]
@@ -481,6 +514,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.3."
 guesses = [
   "One step is 1 on the minor version; a step above 999 or below 0 is refused with a message and nothing changes, and the major part has no stepper; the stepper of the reference app settles both ends.",
 ]
+observe = [
+  "In font A (m7-one), set the version to 1.999 and step it up, then set 1.000 and step it down: note the result at each end and whether the major part has a stepper of its own.",
+]
 
 [[behavior]]
 id = "fontInfo.version.headAndNameId5"
@@ -492,6 +528,9 @@ status = "handbook"
 notes = "fontc 1.0.0 writes name ID 5 as `Version <major>.<minor, three digits>;fontc 1.0.0`, which matches the handbook's form; fontmake writes no suffix; FontCraft's compiler writes none today (docs/spec/40-compile.md: fontc style, stamp optional). M7.8 appends `;FontCraft <version>` as the handbook and fontc do, with an export option to leave it out, and the oracle comparisons ignore the suffix. A versionString parameter or property replaces the whole string, with `%d` templates filled."
 guesses = [
   "The suffix is `;FontCraft <version>`, without a build number while FontCraft has none; an export from the reference app shows only its own form.",
+]
+observe = [
+  "In font C (m7-export), export with versionString `Version %d.%03d;beta`, then with no versionString; read the exported TTF with ttx: note name ID 5 and head fontRevision in both.",
 ]
 
 [[command]]
@@ -509,6 +548,9 @@ status = "handbook"
 notes = "Documented, not yet observed. The date is stored as the file format writes it (`2026-10-11 12:00:00 +0000`). M7 plan § 4: M7.3."
 guesses = [
   "The update button stores the current time in UTC (+0000); the date the reference app saves after the button settles the time zone.",
+]
+observe = [
+  "In font A (m7-one), click the date's update button and save: note how the date is displayed and which time zone the saved value has.",
 ]
 
 [[behavior]]
@@ -551,6 +593,9 @@ guesses = [
   "A new axis is named Weight with tag wght when the font has no such axis, else a private axis `Axis N` with tag `AXSN`; settle by pressing the plus button in the reference app.",
   "Existing masters, instances and virtual masters get coordinate 0 on the new axis, and intermediate layers inherit it from their master; settle in the reference app's Masters tab after adding an axis.",
 ]
+observe = [
+  "In F1 (two masters), press the plus button beside Axes in Font Info › Font once, then a second time: note each new axis's name and tag, and the coordinate the masters and instances get on it.",
+]
 
 [[command]]
 id = "font.axes.set"
@@ -580,6 +625,9 @@ status = "handbook"
 guesses = [
   "Removing an axis drops its coordinate from every master, instance, virtual master, intermediate layer and alternate range; an alternate range that becomes empty on every axis stays an alternate layer `[]`. Settle in the reference app.",
 ]
+observe = [
+  "In F2 (special layers) with a second axis added, remove that axis: note the intermediate layer's coordinates and the alternate layers' ranges afterwards.",
+]
 
 [[command]]
 id = "font.axes.listPredefined"
@@ -593,6 +641,9 @@ milestone = "M9"
 summary = "Returns the predefined axis names offered by the name field together with the tag each one sets. The chapter says such a list exists but does not enumerate it."
 ref = "Font Info › Font › Axes"
 status = "inferred"
+observe = [
+  "In any font, open the list of predefined axes in Font Info › Font: write down every name and tag offered.",
+]
 
 [[behavior]]
 id = "fontInfo.axes.predefinedNameSetsTag"
@@ -631,6 +682,9 @@ notes = "Documented, not yet observed. The list and descriptions come from the p
 guesses = [
   "The list shows every catalogue parameter allowed in the tab's scope, in alphabetical order, including those already present; the search matches any part of the name, ignoring case; the picker in the reference app settles order and matching.",
   "A parameter whose appendix entry names no scope is offered in all three tabs; the picker of each tab in the reference app settles it.",
+]
+observe = [
+  "In font A (m7-one), click the plus button beside Custom Parameters on the Font, Masters and Exports tabs: note which of typoAscender, Remove Glyphs, Filter, glyphOrder, versionString, familyNames and copyrights each tab offers, the order of the list, and whether the search matches inside names.",
 ]
 
 [[command]]
@@ -678,6 +732,9 @@ guesses = [
   "One scope may hold the same parameter more than once; for a parameter that takes one value the first enabled row counts and the list marks the others; adding a duplicate in the reference app settles whether it is refused.",
   "Without a value the new row holds the kind's empty value (off, 0, empty text, empty list); the new rows of the reference app settle it.",
   "A parameter whose appendix entry names its scopes is refused in other scopes; one whose entry names none is allowed in all three.",
+]
+observe = [
+  "In font A (m7-one), add typoAscender twice, then add a yes-or-no parameter and a list parameter: note whether the duplicate is allowed or refused and the empty value each new row gets.",
 ]
 
 [[command]]
@@ -728,6 +785,9 @@ status = "handbook"
 # ───────────────────────────── Masters tab ─────────────────────────────
 guesses = [
   "A parameter interpolates when its value is a number, or a list of numbers of the same length, on every master; other values are taken from the origin master. Settle with a parameter that is text on one master in the reference app.",
+]
+observe = [
+  "In F1 (two masters), set a custom parameter to a number on Thin and to text on Black, export Regular and read the value written: note whether it was interpolated, taken from one master, or dropped.",
 ]
 
 [[panel]]
@@ -811,6 +871,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.5."
 guesses = [
   "The new master is called Regular, takes the first master's axis coordinates and the file format's default metric values scaled to the UPM (ascender 800, cap height 700, x-height 500, descender −200 at 1000 UPM, zones 16 and −16 at 1000 UPM), has no stem values, number values or parameters, and goes to the end of the list; every glyph gets an empty layer for it; adding a master in the reference app settles name, coordinates, values and position.",
 ]
+observe = [
+  "In font B (m7-two), choose Add Master on the Masters tab: note the new master's name, icon, coordinates, metric and zone values, and its position in the list.",
+]
 
 [[command]]
 id = "font.master.addFromOtherFont"
@@ -826,6 +889,9 @@ ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
 guesses = [
   "Glyphs missing in the imported master get an empty layer for it; glyphs only the other font has are not added; axis coordinates come from the other font's master by axis tag, 0 for tags it lacks. Settle by adding a master from a font with different glyphs in the reference app.",
+]
+observe = [
+  "In F7 (two documents), choose Add Other Font on the Masters tab and pick the second document: note what happens to glyphs only one font has, and the new master's coordinates.",
 ]
 
 [[panel]]
@@ -855,6 +921,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.5."
 guesses = [
   "Each copy goes right after its original with a new id and the same name; the original's master layers, their backgrounds, the special layers tied to it and its kerning are copied and tied to the copy; duplicating in the reference app settles position and special layers.",
 ]
+observe = [
+  "In font B (m7-two), choose Duplicate Selected on Bold: note the copy's position and whether the brace layer and the kerning are copied.",
+]
 
 [[command]]
 id = "font.master.remove"
@@ -871,6 +940,9 @@ status = "handbook"
 notes = "Documented, not yet observed. Removing the last master is refused (the file format needs one). M7 plan § 4: M7.5."
 guesses = [
   "Removing a master removes its layers in every glyph, the special layers tied to it and its kerning; instances stay; parameters that name it (Link Metrics With Master, Get Hints From Master, Variable Font Origin) stay and the command's result names them in a warning; removing such a master in the reference app settles both.",
+]
+observe = [
+  "In font B (m7-two), remove Bold, then try to remove the last master: note what happens to the instances, the brace layer and the Link Metrics With Master parameter, and whether the last removal is refused.",
 ]
 
 [[command]]
@@ -914,6 +986,9 @@ status = "handbook"
 notes = "Documented, not yet observed. FontCraft draws its own 25 icons in code, a lowercase n at each weight and width; no reference asset is used (ASSETS.md row added with the code). Corpus files store iconName values Bold, Light, SemiBold, Medium, Light_Condensed and Light_Extended."
 guesses = [
   "The 25 built-in icons are five weights (Light, Regular, Medium, SemiBold, Bold) by five widths (Condensed, SemiCondensed, normal, SemiExtended, Extended), named `Weight` or `Weight_Width` as the corpus files spell them; the names the reference app writes for each icon of its picker settle the set.",
+]
+observe = [
+  "In font B (m7-two), open the master icon picker, pick each icon in turn and save each time: write down the 25 saved iconName values.",
 ]
 
 [[command]]
@@ -1066,6 +1141,9 @@ summary = "With several masters selected, name, metrics, stems, numbers and cust
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.5 (font.master.get with several masters returns `null` for a value that differs), M7.17 (placeholder)."
+observe = [
+  "In font B (m7-two), select both masters on the Masters tab: note which fields show Multiple Values, then edit a metric and check whether both masters get it.",
+]
 
 [[behavior]]
 id = "fontInfo.masters.firstMasterHints"
@@ -1116,6 +1194,9 @@ notes = "M7 plan § 4: M7.6."
 guesses = [
   "Add Metric appends a definition of the given category and gives every master position 0 and zone 0; the reference app settles whether the Metrics heading has a plus button and what it adds.",
 ]
+observe = [
+  "In font B (m7-two), look for a plus button beside Metrics on the Masters tab: note whether it exists and what it adds.",
+]
 
 [[command]]
 id = "font.metrics.set"
@@ -1147,6 +1228,9 @@ notes = "M7 plan § 4: M7.6."
 guesses = [
   "Every metric can be removed, Baseline and Italic Angle included, and its values go from every master; the reference app settles whether the built-in metrics can be deleted.",
 ]
+observe = [
+  "In font B (m7-two), try to delete the Baseline and Italic Angle metrics: note whether each deletion is allowed.",
+]
 
 [[command]]
 id = "font.master.setMetric"
@@ -1164,6 +1248,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.6."
 guesses = [
   "Zone sizes may be negative (zones below a line, such as at the baseline and the descender); Italic Angle takes a position only, between −89 and 89 degrees; typing a negative zone in the reference app settles it.",
 ]
+observe = [
+  "In font B (m7-two), type −16 as the baseline zone's size: note whether a negative zone is accepted.",
+]
 
 [[panel]]
 id = "fontInfo.metricEditor"
@@ -1179,6 +1266,9 @@ notes = "Documented, not yet observed. Categories are the metric types of the fi
 guesses = [
   "The category menu offers the file format's metric types (ascender, cap height, slant height, x-height, midHeight, bodyHeight, descender, baseline, italic angle) with readable labels, and the scope uses the smart-filter rule editor of M4; the menu of the reference app settles the list and the labels.",
 ]
+observe = [
+  "In font B (m7-two), click the name of x-Height on the Masters tab: write down the items and labels of the category menu.",
+]
 
 [[behavior]]
 id = "fontInfo.metrics.defaultsByScript"
@@ -1190,6 +1280,9 @@ status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.6."
 guesses = [
   "A new font whose chosen scripts include Arabic and not Latin gets the metrics Ascender 800, Alef Height 700, Joining Line 150, Baseline 0, Descender −200 and Meem Depth −250 at 1000 UPM; a new Arabic font in the reference app settles names, order and values.",
+]
+observe = [
+  "Choose File › New with Arabic chosen: write down the default metrics, their order and their values.",
 ]
 
 [[behavior]]
@@ -1218,6 +1311,9 @@ summary = "A metric with a glyph scope is drawn only in glyphs matching the scop
 ref = "Font Info › Masters › Metrics & Alignment Zones"
 status = "handbook"
 notes = "Documented, not yet observed. The scope is the metric's `filter`, evaluated with the smart-filter rules of crates/glyphquery (M4). M7 plan § 4: M7.6 (canvas hook)."
+observe = [
+  "In font B (m7-two), scope x-Height to the script greek and look at A in Edit View: note whether the x-height line is hidden.",
+]
 
 [[behavior]]
 id = "fontInfo.metrics.shownInEditView"
@@ -1268,6 +1364,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.6."
 guesses = [
   "A stem added without a name is called `Stem` with `.1`, `.2` appended while taken, names are unique, and every master gets 0 unless `values` gives its value; adding a stem in the reference app settles the default name and value.",
 ]
+observe = [
+  "In font B (m7-two), add a stem: note its default name and value.",
+]
 
 [[command]]
 id = "font.stems.set"
@@ -1282,6 +1381,9 @@ summary = "Changes a stem's name, orientation or glyph scope. The scope is set f
 ref = "Font Info › Masters › Stems"
 status = "handbook"
 notes = "Documented, not yet observed. A name already used by another stem is refused. M7 plan § 4: M7.6."
+observe = [
+  "In font B (m7-two), add a second stem and give it the first stem's name: note whether the duplicate name is refused.",
+]
 
 [[command]]
 id = "font.stems.remove"
@@ -1370,6 +1472,9 @@ ref = "Font Info › Masters › Number Values"
 status = "inferred"
 guesses = [
   "Renaming a number value leaves tokens in feature code unchanged, so they then name an unknown value and the next compile reports them; renaming one used in feature code in the reference app would settle it.",
+]
+observe = [
+  "In F5 (tokens), rename the number value `tracking` while a feature uses `$tracking`: note whether the token in the feature follows the new name.",
 ]
 
 [[command]]
@@ -1481,6 +1586,9 @@ notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Begin
 guesses = [
   "The new instance has Weight Class 400, Width Class 5, the first master's axis coordinates, Active on, no style linking, and goes to the end of the list; adding an instance in the reference app settles the defaults and the position.",
 ]
+observe = [
+  "In font B (m7-two), choose Add Instance on the Exports tab: note the new instance's name, weight and width class, coordinates and position.",
+]
 
 [[command]]
 id = "font.instance.addForEachMaster"
@@ -1494,6 +1602,9 @@ milestone = "M9"
 summary = "Adds one static instance per master, each named after its master and placed at the master's axis coordinates (a Thin master at weight 100 yields a Thin instance at weight 100). Whether existing instances at those locations are skipped is not stated."
 ref = "Font Info › Exports"
 status = "handbook"
+observe = [
+  "In F1 (two masters), choose Add Instance for each Master: note the names the new instances get.",
+]
 
 [[command]]
 id = "font.instance.toMaster"
@@ -1507,6 +1618,9 @@ milestone = "M9"
 summary = "Creates a new master from the interpolated outlines and metrics of the selected instance and adds it to the Masters tab. Instances on either side then interpolate against the new master, and the source instance uses it directly."
 ref = "Font Info › Exports"
 status = "handbook"
+observe = [
+  "In F1 (two masters), select the Regular instance and choose Instance as Master: note the new master's name and position, and which instances now use it.",
+]
 
 [[command]]
 id = "font.instance.addVariableFontSetting"
@@ -1592,6 +1706,9 @@ notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Begin
 guesses = [
   "An empty base field with Bold or Italic checked links to Regular; exporting such an instance from the reference app settles it.",
 ]
+observe = [
+  "In font B (m7-two), export Bold Italic, whose style-linking base field is empty; read the exported TTF with ttx: note name IDs 1, 2, 16 and 17, fsSelection and macStyle.",
+]
 
 [[command]]
 id = "font.instance.setWeightClass"
@@ -1606,6 +1723,9 @@ summary = "Sets the Weight Class to any integer from 1 to 1000; the disclosure m
 ref = "Font Info › Exports › Weight & Width"
 status = "handbook"
 notes = "Documented, not yet observed. Values outside 1–1000 are refused. M7 plan § 4: M7.7."
+observe = [
+  "In font B (m7-two), type weight classes 0, 350 and 1001 on an instance: note which are accepted and which refused.",
+]
 
 [[command]]
 id = "font.instance.setWidthClass"
@@ -1622,6 +1742,9 @@ status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.7."
 guesses = [
   "Values outside 1–9 are refused, typed or not; typing 10 into the field of the reference app settles it.",
+]
+observe = [
+  "In font B (m7-two), type width class 10 on an instance: note whether it is accepted or refused.",
 ]
 
 [[parameter]]
@@ -1666,7 +1789,7 @@ milestone = "M7"
 summary = "Width Class, 1 to 9 following the OS/2 table definition. Used by other applications to categorise fonts; independent of the width axis coordinate. Glyphs source key: instances[].widthClass (default 5)."
 ref = "Font Info › Exports › Weight & Width; GlyphsSDK GlyphsFileFormatv3.md"
 status = "handbook"
-notes = "Stored by the model and kept by every source format since M1. Edited with font.instance.setWidthClass (M7.7). M7.8 writes it to OS/2 usWidthClass for a static instance, as the handbook says; fontmake keeps 5 without a width axis (M7 plan § 7, question 2)."
+notes = "Stored by the model and kept by every source format since M1. Edited with font.instance.setWidthClass (M7.7). M7.8 writes it to OS/2 usWidthClass for a static instance, as the handbook says; fontmake keeps 5 without a width axis (M7 plan § 7, question 2 (a), decided by the orchestrator on the owner's behalf; docs/spec/40-compile.md § 4a)."
 
 [[parameter]]
 name = "instance.axesValues"
@@ -1801,6 +1924,9 @@ notes = "Documented, not yet observed. M7 plan § 4: M7.7."
 guesses = [
   "font.instance.set and the Exports tab warn, without refusing, when the style name has characters outside ASCII letters, digits, spaces and hyphens, or when family and style name together exceed 20 characters without a postscriptFontName; the reference app settles whether it warns.",
 ]
+observe = [
+  "In font B (m7-two), type an instance style name of 30 characters, then one containing `é`: note any warning for each.",
+]
 
 [[behavior]]
 id = "fontInfo.weightClass.range"
@@ -1818,7 +1944,10 @@ milestone = "M9"
 summary = "An instance whose coordinates lie inside the range covered by masters is interpolated; one outside is extrapolated. With masters at weight 40 and 120, weight 80 interpolates while 20 and 150 extrapolate."
 ref = "Font Info › Exports › Axes Coordinates"
 status = "handbook"
-notes = "fontmake does not extrapolate: ufo2ft's instantiator normalises the location with fontTools' `normalizeLocation`, which clamps to the axis range. How FontCraft treats extrapolated static instances is the owner's decision (docs/plans/M9.md § 7, question 6)."
+notes = "fontmake does not extrapolate: ufo2ft's instantiator normalises the location with fontTools' `normalizeLocation`, which clamps to the axis range. FontCraft follows the handbook (docs/plans/M9.md § 7, question 6 (a), decided by the orchestrator on the owner's behalf): static instances outside the masters are extrapolated, named in the export report, and left out of variable fonts. The difference from fontmake is in docs/spec/40-compile.md § 4a."
+observe = [
+  "In F1 (two masters), export ExtraBlack (1000, outside the masters) as a static font and as part of a variable font: note whether the outlines are extrapolated, any warning, and whether `fvar` lists it.",
+]
 
 [[behavior]]
 id = "fontInfo.styleLinking.sameFamily"
@@ -1985,6 +2114,9 @@ status = "inferred"
 guesses = [
   "A double-click on a sidebar entry's name renames it; a feature tag must be four characters and a name may not be taken in its group, else the command is refused; the running app would settle it.",
 ]
+observe = [
+  "In F1 (Latin features), double-click a feature entry's name, then try a name another entry has and a tag that is not four characters: note whether renaming exists and what each attempt does.",
+]
 
 [[command]]
 id = "font.features.setCode"
@@ -2000,6 +2132,9 @@ ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
 guesses = [
   "Set Feature Code refuses an automatic entry instead of switching it to manual; typing into an automatic entry in the reference app would settle it.",
+]
+observe = [
+  "In F1 (Latin features), select an automatic feature and type into the editor: note whether the code is read-only or the entry switches to manual.",
 ]
 
 [[command]]
@@ -2043,6 +2178,9 @@ summary = "Regenerates every automatic prefix, class and feature in one step and
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "In any font, look for a shortcut or menu item for Update in Font Info › Features: note both.",
+]
 
 [[command]]
 id = "font.features.updateEntry"
@@ -2071,6 +2209,9 @@ summary = "Compiles the feature code so that Edit View can preview it and return
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.",
+]
 
 [[command]]
 id = "font.features.listErrors"
@@ -2100,6 +2241,9 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "Three fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a missing semicolon at the end of a statement, and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.",
+]
+observe = [
+  "In F1 (Latin features), write a misspelt glyph name, drop a semicolon, and use a class before its entry: note which errors show a wrench and what Fix does for each.",
 ]
 
 [[command]]
@@ -2238,6 +2382,9 @@ summary = "Update inspects glyph names for features it can newly generate: under
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), press Update in Font Info › Features: note which entries it adds and their order in the sidebar.",
+]
 
 [[behavior]]
 id = "fontInfo.features.optionalAutomatic"
@@ -2247,6 +2394,9 @@ summary = "Some entries can be generated but are not added by Update, among them
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), add the class All by hand, then press Update: note All's content and whether Update keeps, refreshes or replaces it.",
+]
 
 [[behavior]]
 id = "fontInfo.features.manualNotUpdated"
@@ -2473,6 +2623,9 @@ status = "handbook"
 guesses = [
   "Default and Variable both use the variable-font model (fontTools' VariationModel); they agree on one axis and on full grids, and the Multiple Master model of the reference is not documented for other setups. Settle by comparing an instance of an irregular two-axis setup under both settings in the reference app (docs/plans/M9.md § 8).",
 ]
+observe = [
+  "In F3 (irregular two axes), export the instance at (650, 60) with Font Type Default, then with Font Type Variable: compare the two outlines.",
+]
 
 [[panel]]
 id = "fontInfo.notes"
@@ -2531,6 +2684,9 @@ summary = "The note field highlights Markdown as plain text styling: italic with
 ref = "Font Info › Notes"
 status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.16."
+observe = [
+  "In font A (m7-one), type `# Head`, `*it*`, `**bold**` and `<https://example.org>` in the Notes tab: note how each is highlighted.",
+]
 
 [[behavior]]
 id = "fontInfo.exports.instancePreview"
@@ -2542,4 +2698,7 @@ status = "handbook"
 notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18."
 guesses = [
   "The preview sits above the instance's fields, one line high, and an instance between masters is drawn with its nearest master until M9 interpolates; the Exports tab of the reference app settles placement.",
+]
+observe = [
+  "In font B (m7-two), look at an instance's preview on the Exports tab: note where it is and what it shows.",
 ]

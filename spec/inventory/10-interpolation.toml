@@ -41,6 +41,9 @@ status = "inferred"
 guesses = [
   "Reordering permutes every master, instance, virtual master and special-layer coordinate list with the axes, so no location changes; settle by dragging axes in the reference app's Font Info, if it allows it.",
 ]
+observe = [
+  "In F2 (special layers) with two axes, try to reorder the axes: note whether a drag or a button does it, and how the layer labels read afterwards.",
+]
 
 [[behavior]]
 id = "axes.definition"
@@ -120,6 +123,9 @@ status = "handbook"
 guesses = [
   "Static instances use the same variation model as the variable font, anchored at the variable origin; the result does not depend on the origin for the variable model. Settle by comparing instances of an irregular two-axis setup in the reference app (docs/plans/M9.md § 8).",
 ]
+observe = [
+  "In F3 (irregular two axes), export the instance at (650, 60) with Font Type Default, then Variable: note whether the outlines differ, which shows whether a static export picks its origin automatically.",
+]
 
 [[behavior]]
 id = "masters.cornerAndIntermediateSetups"
@@ -164,6 +170,9 @@ ref = "Interpolation › Working with Multiple Fonts › Glyphs Files, Masters, 
 status = "handbook"
 guesses = [
   "One new document per instance, as the Several Fonts section of the handbook says (a file per instance), holding one master with the instance's outlines, metrics, kerning and features and no special layers; settle by running the command in the reference app.",
+]
+observe = [
+  "In F1 (two masters), choose File › Generate Instances: count the documents made and look in them for special layers, kerning and feature code.",
 ]
 
 [[command]]
@@ -260,6 +269,9 @@ summary = "A Disable Masters parameter on a variable font setting lists master n
 ref = "Interpolation › Setting up Instances › Subsetting the Designspace"
 status = "handbook"
 notes = "Neither oracle reads Disable Masters (fontc 1.0.0, glyphsLib 6.15.0); the measure builds the oracle from a copy of the source without those masters (docs/plans/M9.md § 5)."
+observe = [
+  "In F1 (two masters), add Disable Masters naming Black on a variable font setting and export it: read `fvar` and note the axis range and named instances.",
+]
 
 [[behavior]]
 id = "variableFontSetting.splitFamily"
@@ -317,6 +329,9 @@ status = "handbook"
 guesses = [
   "Masters needed by an instance are those with a non-zero scalar at the instance's location in the variation model; variable font settings count as needing every master they do not disable. Settle by observing the indicators with an instance between two of three masters.",
 ]
+observe = [
+  "In F1 (two masters) with a third master at 400 and only a Thin instance, give Black an incompatible glyph: note whether that glyph shows the red indicators.",
+]
 
 [[behavior]]
 id = "compatibility.exportBlocked"
@@ -340,6 +355,9 @@ ref = "Interpolation › Outline Compatibility"
 status = "inferred"
 guesses = [
   "The 20° warning measures the angle of each segment's chord from its start node to its end node; settle with the Master Compatibility view on a segment that turns by 19° and 21°.",
+]
+observe = [
+  "In F5 (incompatible), open the glyphs whose segment turns by 19° and by 21° between masters: note the segment colours of each.",
 ]
 
 [[command]]
@@ -370,6 +388,9 @@ status = "inferred"
 guesses = [
   "A drag that ends on no other line end changes nothing; settle by observing the drag in the Master Compatibility view.",
 ]
+observe = [
+  "In F5 (incompatible), in Show Master Compatibility, drag a line end onto empty space: note what happens to the shape order.",
+]
 
 [[panel]]
 id = "window.shapeOrder"
@@ -385,6 +406,9 @@ milestone = "M9"
 summary = "Shows every path and component of every layer of the current glyph and lets the shapes be rearranged until all layers use the same order. The exact layout and whether it colours shapes like Master Compatibility view are not described."
 ref = "Interpolation › Outline Compatibility › Reordering Shapes"
 status = "handbook"
+observe = [
+  "In F5 (incompatible), open Filter › Shape Order: note the layout, whether special layers appear, and how a drag reorders shapes.",
+]
 
 [[command]]
 id = "view.showMasterCompatibility"
@@ -400,6 +424,9 @@ ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
 guesses = [
   "Shape tints cycle through eight theme colours by shape index; settle by observing the view with nine shapes.",
+]
+observe = [
+  "In F5 (incompatible), open the glyph with nine shapes and choose Show Master Compatibility: note the tint of shape 9 next to shape 1.",
 ]
 
 [[panel]]
@@ -522,6 +549,9 @@ status = "handbook"
 guesses = [
   "Coordinates outside the axis range of the masters and virtual masters are refused with a message; settle by typing one in the reference app's popover.",
 ]
+observe = [
+  "In F2 (special layers), type 2000 into the intermediate layer's coordinate popover: note whether it is accepted, clamped or refused.",
+]
 
 [[command]]
 id = "layers.clearIntermediate"
@@ -537,6 +567,9 @@ ref = "Interpolation › Intermediate Layers › Intermediate Layer Setup"
 status = "inferred"
 guesses = [
   "Unticking Intermediate in the layer's context menu runs this command; settle in the reference app's Layers palette.",
+]
+observe = [
+  "In F2 (special layers), untick Intermediate on `e`'s intermediate layer: note the layer's label afterwards.",
 ]
 
 [[panel]]
@@ -588,6 +621,9 @@ status = "inferred"
 guesses = [
   "An intermediate layer is checked against every master layer of its glyph, not only its neighbours, because the variable font needs all of them compatible. Settle by observing the indicators with an incompatible intermediate layer between unrelated masters.",
 ]
+observe = [
+  "In F2 (special layers), add an extra contour to `e`'s intermediate layer: note the compatibility indicators.",
+]
 
 [[behavior]]
 id = "intermediateLayer.sparseInExport"
@@ -596,7 +632,7 @@ milestone = "M9"
 summary = "In a variable font an intermediate layer adds variation data only for its own glyph; static instances interpolate that glyph with the extra support point. Components that reference a glyph with intermediate layers are decomposed in variable export by default (Decompose Brace Layers, appendix)."
 ref = "Interpolation › Intermediate Layers; Appendix › Custom Parameters › Decompose Brace Layers"
 status = "handbook"
-notes = "Observed with both oracles on a probe (fontc's `IntermediateLayer.glyphs` plus a composite of `H`): a composite whose base glyph has intermediate layers stays a composite with no variation data of its own. The Decompose Brace Layers default is the owner's decision (docs/plans/M9.md § 7, question 4)."
+notes = "Observed with both oracles on a probe (fontc's `IntermediateLayer.glyphs` plus a composite of `H`): a composite whose base glyph has intermediate layers stays a composite with no variation data of its own. FontCraft keeps such composites as the oracles do, and decomposes them only when Decompose Brace Layers is on (docs/plans/M9.md § 7, question 4 (a), decided by the orchestrator on the owner's behalf); the handbook's default is to decompose them (docs/spec/40-compile.md § 4a)."
 
 [[behavior]]
 id = "virtualMaster.concept"
@@ -637,6 +673,9 @@ status = "handbook"
 # ───────────────────────────────────────────────────────────────────────────────
 # Alternate (bracket) layers and switching shapes
 # ───────────────────────────────────────────────────────────────────────────────
+observe = [
+  "In F1 (two masters), add a Virtual Master parameter on a second axis: note the dialog's fields and buttons, and whether the parameter is also offered on a variable font setting.",
+]
 
 [[command]]
 id = "layers.setAlternate"
@@ -653,6 +692,9 @@ status = "handbook"
 guesses = [
   "Choosing Alternate on a master layer with no `[]` partner under the same master adds no partner layer; the partner is made by hand as the handbook describes. Settle in the reference app.",
 ]
+observe = [
+  "In F1 (two masters), choose Alternate on a master layer: note whether a `[]` layer is added by itself.",
+]
 
 [[command]]
 id = "layers.clearAlternate"
@@ -668,6 +710,9 @@ ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "inferred"
 guesses = [
   "Unticking Alternate in the layer's context menu runs this command; settle in the reference app's Layers palette.",
+]
+observe = [
+  "In F2 (special layers), untick Alternate on a `dollar` alternate layer: note the layer's label afterwards.",
 ]
 
 [[command]]
@@ -764,6 +809,9 @@ notes = "Checked in the M9 planning pass: fontTools 4.66.1 `designspaceLib.evalu
 guesses = [
   "Both bounds inclusive, as the oracles; the handbook does not say. Settle with an instance exactly on a bound in the reference app (docs/plans/M9.md § 8).",
 ]
+observe = [
+  "In F2 (special layers), export instances at exactly 600 and at 599 and preview them: note which shows the alternate `dollar`.",
+]
 
 [[behavior]]
 id = "alternateLayer.staticExport"
@@ -780,7 +828,10 @@ milestone = "M9"
 summary = "In a variable font, alternate layers are switched on by an OpenType feature whose substitution applies only inside the stated region (a feature variation). The feature is chosen by the Feature for Feature Variations parameter; without it a default is used (the chapter says rlig, the appendix says rvrn). Compiling the alternate outlines as extra glyphs that the feature swaps in is our implementation choice, following fontc and fonttools."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
-notes = "Both oracles default to `rvrn` (fontc `glyphs2fontir/src/source.rs` `make_feature_variations`, glyphsLib `builder/bracket_layers.py`); fontc's comment notes the reference's own tutorial says `rlig`. The default is the owner's decision (docs/plans/M9.md § 7, question 2)."
+notes = "Both oracles default to `rvrn` (fontc `glyphs2fontir/src/source.rs` `make_feature_variations`, glyphsLib `builder/bracket_layers.py`); fontc's comment notes the reference's own tutorial says `rlig`. FontCraft's default is `rvrn` (docs/plans/M9.md § 7, question 2 (a), decided by the orchestrator on the owner's behalf)."
+observe = [
+  "In F2 (special layers), export the variable font with no Feature for Feature Variations parameter and read GSUB: note the feature that holds the `dollar` swap (rvrn or rlig).",
+]
 
 [[behavior]]
 id = "switching.threeMethods"
@@ -856,6 +907,9 @@ guesses = [
   "The layer's own drawing is left out of the sources it is interpolated from; settle by observing an item of this name in the reference app's Layers palette, if it has one.",
   "With no location given, a master layer uses its master's location and an intermediate layer its coordinates; a backup layer needs a location and is refused without one.",
 ]
+observe = [
+  "In any font, look for a Re-Interpolate item in the Layers palette's context menu and actions menu: note where it exists.",
+]
 
 [[behavior]]
 id = "mastersAsLayers.paletteListing"
@@ -882,10 +936,11 @@ gestures = [
   "pop-up button at the bottom right of the window: choose the axis being edited",
 ]
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "Edits, per node and per axis, the path a node follows between neighbouring layers: straight (default), through one intermediate point, shaped by two handles, or rotating about a centre. It requires a font with one axis or more and no fewer than two masters. The result affects static and variable export alike."
 ref = "Interpolation › Higher-Order Interpolation"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[command]]
 id = "hoi.setInterpolationType"
@@ -895,10 +950,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag, toward: up|down, type: linear|intermediatePoint|handles|rotation}"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "Sets how the given nodes travel from this layer to the next layer along the axis. Offered in the tool's Info box and in the Interpolation submenu of the context menu; linear removes any custom curve. Whether a curve belongs to the segment between two layers or to one layer's node needs observing."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[command]]
 id = "hoi.setControlPoints"
@@ -908,10 +964,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer: id, node: nodeRef, axis: tag, toward: up|down, points: [[x, y]]}"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "inferred"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[command]]
 id = "hoi.convertToHandles"
@@ -922,10 +979,11 @@ when = "tool:higherOrderInterpolation"
 kind = "engine"
 params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "With an intermediate point selected in the HOI tool, Return replaces it with two handles for finer control of the curve. Shortcut active only inside the tool."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[command]]
 id = "hoi.centerRotation"
@@ -935,10 +993,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "Info-box button that moves a rotation knob to the centre of the bounding box of the node's path, which is also where a new rotation centre starts."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[command]]
 id = "hoi.setRotationDirection"
@@ -948,10 +1007,11 @@ shortcut = ""
 kind = "engine"
 params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag, direction: automatic|clockwise|counterclockwise}"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "Chooses the sense of a rotation-type interpolation. Automatic takes the smaller angle; the other two force a direction."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[command]]
 id = "hoi.removeCurve"
@@ -962,10 +1022,11 @@ when = "tool:higherOrderInterpolation"
 kind = "engine"
 params = "{glyph: name, layer: id, nodes: [nodeRef], axis: tag}"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "With a HOI knob selected, Delete discards the custom curve so the node interpolates linearly again; equal to choosing Linear as the type."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[command]]
 id = "hoi.selectAxis"
@@ -975,10 +1036,11 @@ shortcut = ""
 kind = "ui"
 params = "{axis: tag}"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "The pop-up button at the bottom right of the window while the HOI tool is active: picks the axis along which neighbouring layers are found and curves are edited."
 ref = "Interpolation › Higher-Order Interpolation › Node Visualization"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[panel]]
 id = "infoBox.higherOrderInterpolation"
@@ -991,10 +1053,11 @@ controls = [
   "timing graph beside the box (read-only) with a white linear-time dot and a green dot following the graph",
 ]
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "Info box shown for a selected HOI knob. Sets the interpolation type and rotation options and displays the resulting timing curve, which cannot be edited directly."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves; Interpolation Timing"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[behavior]]
 id = "hoi.defaultLinear"
@@ -1007,18 +1070,20 @@ status = "handbook"
 [[behavior]]
 id = "hoi.nodeMarkers"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "The tool draws small diamonds at node positions: blue for the current layer, light yellow for the next layer below along the chosen axis, dark purple for the next layer above; layers further away are not drawn. With masters Light, Regular, Medium, Bold on Weight and Regular current: yellow at Light, blue at Regular, purple at Medium, nothing for Bold; with Bold current only yellow and blue appear."
 ref = "Interpolation › Higher-Order Interpolation › Node Visualization"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[behavior]]
 id = "hoi.knobOnDottedLine"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "Each node's default path to its neighbour is drawn as a grey dotted line with a grey knob at its midpoint; the knob is the handle for creating a curve."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[behavior]]
 id = "hoi.curveTypes"
@@ -1027,27 +1092,30 @@ milestone = "M9"
 summary = "Three non-linear types exist: a curve through one intermediate point, a curve steered by two handles, and a rotation about a centre point whose default is the centre of the path's bounding box. Each node may use a different type."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
+notes = "The file format stores HOI per node: GlyphsSDK's version 4 description (Apache-2.0) gives the node attribute `hoi`, keyed by axis tag and kept in the lower node of a span, holding an intermediate point (`ip`), a rotation centre and direction (`rc`, `rd`) or a Bézier timing (`tl`, `tu`, `al`, `au`). No corpus source uses it, neither oracle reads it, and no source documents how a variable font encodes it. M9 reads, keeps and writes this data so files round-trip (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf); editing it, drawing it and using it at export are M13's."
 
 [[behavior]]
 id = "hoi.rotationApproximation"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "When the two node positions and the chosen centre do not admit a true circular arc (unequal radii), the rotation is approximated; the method is not described."
 ref = "Interpolation › Higher-Order Interpolation › Editing Interpolation Curves"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[behavior]]
 id = "hoi.timingGraph"
 area = "interpolation"
-milestone = "M9"
+milestone = "M13"
 summary = "The timing graph plots progress against axis position for the selected curve: a straight diagonal from bottom-left to top-right for linear motion, shallow stretches where the node moves slowly and steep ones where it moves fast. It is derived from the curve and read-only; a white dot animates at constant speed beside a green dot that follows the graph."
 ref = "Interpolation › Higher-Order Interpolation › Interpolation Timing"
 status = "handbook"
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[behavior]]
 id = "hoi.appliesToAllExports"
 area = "compile"
-milestone = "M9"
+milestone = "M13"
 summary = "HOI curves must be honoured by both the static instance interpolator and the variable font compiler. How the reference encodes them in a variable font is not documented."
 ref = "Interpolation › Higher-Order Interpolation"
 status = "handbook"
@@ -1055,7 +1123,7 @@ status = "handbook"
 # ───────────────────────────────────────────────────────────────────────────────
 # Variable font options: origin, axis location, axis mappings, STAT
 # ───────────────────────────────────────────────────────────────────────────────
-notes = "The file format stores HOI per node: GlyphsSDK's version 4 description (Apache-2.0) gives the node attribute `hoi`, keyed by axis tag and kept in the lower node of a span, holding an intermediate point (`ip`), a rotation centre and direction (`rc`, `rd`) or a Bézier timing (`tl`, `tu`, `al`, `au`). No corpus source uses it, neither oracle reads it, and no source documents how a variable font encodes it. Its milestone is the owner's decision (docs/plans/M9.md § 7, question 5)."
+notes = "Moved from M9 to M13 by the M9 plan (docs/plans/M9.md § 7, question 5 (b), decided by the orchestrator on the owner's behalf): no source gives the curve mathematics or how a variable font encodes the curves, so the tool, its commands, the Info box and the export wait for a tutorial video or a written source. M9 reads, keeps and writes the per-node data (`hoi.curveTypes`)."
 
 [[behavior]]
 id = "variable.originMaster"
@@ -1064,7 +1132,10 @@ milestone = "M9"
 summary = "A variable font stores the outlines of one origin master in full and every other master as differences from it. The origin is the first master in the Masters tab unless a Variable Font Origin parameter names another."
 ref = "Interpolation › Variable Font Options › Variable Font Origin"
 status = "handbook"
-notes = "Both oracles pick a different default when no parameter names the origin: the master named by the words all master names share (Regular when none), else the first (fontc `glyphs-reader/src/font.rs` `default_master_idx`, glyphsLib `find_base_style`). The handbook's first-master rule against the oracles' is the owner's decision (docs/plans/M9.md § 7, question 3)."
+notes = "Both oracles pick a different default when no parameter names the origin: the master named by the words all master names share (Regular when none), else the first (fontc `glyphs-reader/src/font.rs` `default_master_idx`, glyphsLib `find_base_style`). FontCraft follows the handbook's first-master rule (docs/plans/M9.md § 7, question 3 (a), decided by the orchestrator on the owner's behalf); the difference from both oracles is in docs/spec/40-compile.md § 4a, and the variable-font measure allow-lists `fvar` defaults and `glyf` where the origins differ."
+observe = [
+  "In F4 (three named masters), export the variable font without Variable Font Origin and read `fvar`: note whether the default is Light (the first master) or Regular.",
+]
 
 [[behavior]]
 id = "variable.originIsFallback"
@@ -1116,6 +1187,9 @@ milestone = "M9"
 summary = "Editor opened by clicking the value of an Axis Location parameter on a master; assigns each axis the coordinate the master represents in variable fonts. Layout is not described beyond that."
 ref = "Interpolation › Variable Font Options › Axis Location"
 status = "handbook"
+observe = [
+  "In F1 (two masters), open an Axis Location value on a master: note the dialog's layout and fields.",
+]
 
 [[behavior]]
 id = "axisMappings.identityByDefault"
@@ -1208,6 +1282,9 @@ status = "handbook"
 guesses = [
   "A change that breaks the increasing order on either coordinate is refused with a message and changes nothing; settle by dragging a point past its neighbour in the reference app.",
 ]
+observe = [
+  "In F1 (two masters) with an Axis Mappings value, drag a point past its neighbour: note whether it is stopped, refused or allowed to cross.",
+]
 
 [[command]]
 id = "axisMappings.nudgePoint"
@@ -1223,6 +1300,9 @@ ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "handbook"
 guesses = [
   "The base step is 1 unit, Up and Down move the external value and Left and Right the internal value; settle in the reference app's Axis Mappings dialog.",
+]
+observe = [
+  "In F1 (two masters) with an Axis Mappings value, select a point in the dialog and press each arrow key without modifiers, with Shift and with Cmd: note which coordinate moves and by how much.",
 ]
 
 [[command]]
@@ -1275,6 +1355,9 @@ summary = "By default the style attributes are derived from the instances: their
 ref = "Interpolation › Variable Font Options › Style Attributes Table"
 status = "handbook"
 notes = "Both oracles reproduce the derivation from the exported fonts they observed: fontc `glyphs2fontir/src/stat.rs` follows glyphsLib `builder/stat.py` (both Apache-2.0, no note of being derived from the reference app's source). FontCraft ports fontc's (docs/plans/M9.md § 3)."
+observe = [
+  "In F6 (style names), export the variable fonts of both documents (without and with an `ital` axis), dump `STAT` and compare it with fontc's for the same sources.",
+]
 
 [[behavior]]
 id = "stat.manualOverrides"
@@ -1335,6 +1418,9 @@ status = "handbook"
 guesses = [
   "For a glyph row, Use Left copies the master layer's shapes, anchors and width; the copy is one undo step in the receiving document only. Settle in the reference app's Compare Fonts window.",
 ]
+observe = [
+  "In F7 (two documents), open Compare Fonts, select a glyph row and choose Use Left: note what changed (outline, width, anchors) and what Undo reverts in each document.",
+]
 
 [[command]]
 id = "compareFonts.useRight"
@@ -1376,6 +1462,9 @@ ref = "Interpolation › Working with Multiple Fonts › Compare Family"
 status = "handbook"
 guesses = [
   "Each column shows the document's first master; settle by opening Compare Family on documents with several masters.",
+]
+observe = [
+  "In F7 (two documents) with two masters in each document, open Compare Family: note which master is shown and the column order.",
 ]
 
 [[panel]]

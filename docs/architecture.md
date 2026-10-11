@@ -42,13 +42,16 @@ Nothing below L6 may depend on a UI toolkit. Everything from L0 to L6 builds for
 | L0 alone | `cff` | today (M2.3a: static CFF writer) | CFF tables from plain data: DICTs, INDEXes, charsets, Type 2 charstrings with the reference's specialiser, width optimisation and FontBBox; byte-identical to fontTools on the cross-check. Later: subroutiniser, hints (M10), CFF2 (M9), CID-keyed fonts (M12). Not in any crate we can use |
 | L0 alone | `container` | today (M2.4a: WOFF 1, untransformed WOFF2) | WOFF and WOFF2 wrapping and unwrapping of sfnt fonts, as fontTools writes them; `crates/decompile` reads WOFF through it. Later: the WOFF2 glyf/loca and hmtx transforms (M2.4b), collections (M12) |
 | L0 alone | `ttinstr` | M10 | TrueType instruction assembler and disassembler |
+| L0 alone | `fea` | M8 (created by M8.1) | the wrapper around fea-rs 1.0.0: virtual feature files, pre-checks and limits before every call, compiling on a large-stack thread, generated lookups taken in neutral types, tables handed out as bytes. The only crate that sees fea-rs's `write-fonts` version ([decision 0007](decisions/0007-feature-compiler-and-shaper.md)) |
 | L1 | `model` | today (M0 subset) | the font source model, pure data |
 | L2 | `pathops` | M3 | overlap removal, booleans, offset, corner operations, clean-up (on linesweeper) |
-| L2 | `interp` | M9 | variation model, interpolation of every master-bound value, compatibility checks |
+| L2 | `interp` | M9 (created by M9.1) | the designspace (axes, internal and external coordinates, Axis Location and Axis Mappings, virtual masters, the origin), glyph sources with intermediate and alternate layers, compatibility checks, static instances with extrapolation, and the alternate-layer region overlay. Depends on `model` and `geom` (whose `VariationModel` it builds on) |
 | L2 | `spacing` | metrics keys and sidebearings built (M5.1); kerning by M5.2 | metrics keys, sidebearings, kerning lookup, groups, locks, Clean Up and Compress, the kerning-text and AFM formats. Depends on `model` and `geom` |
+| L2 | `shaping` | M8 (created by M8.1) | text shaping with harfrust on a layout-only preview font, UAX #9 ordering with unicode-bidi, and script itemisation from `icu_properties`. Glyphs typed by name reach the shaper as private-use code points; advances come live from the model. `textlayout` uses it (a same-layer order `shaping` → `textlayout`) ([decision 0007](decisions/0007-feature-compiler-and-shaper.md)) |
 | L2 | `textlayout` | built (M5.6) | text as a list of items (glyph, missing character, placeholder, line break) with a cursor, a selection and the current glyph; display strings read and written with `/name` escapes and `/Placeholder`; the layout of those items with advances from the linked metrics source, kerning by mode, the three writing directions, line breaks and wrapping at the line width, and hit testing. Edit View, the previews, Text Preview, `ui.render` and hit testing use it. Depends on `model` and `spacing` (a same-layer chain in `xtask/src/layers.rs`) |
 | L2 | `components` | M6 (created by M6.1) | the reverse component index and dependency order, anchor propagation (M6.1), automatic alignment and derived metrics (M6.2), composition from the glyph database and recipes and the default-anchor table (M6.3), decomposition helpers. Pure functions on `model`, `geom` and `glyphdata`. Smart and corner components are drawn by `model`'s outline resolution (M6.4); caps, segments and brushes wait for M13 |
 | L2 | `features` | partly built (M5.17: pair kerning); the mark writer M6.17; the rest M8 | the generated pair kerning as `GPOS`, ported from fontc's kern writer: pairs resolved per master in lookup order, split into lookups by script and direction, `kern` and `dist`; a reader of the pair kerning of compiled fonts for tests and the oracle. Depends on `model` and `spacing` (a same-layer chain in `xtask/src/layers.rs`). In M6.17: the mark writer (mark, mkmk, abvm, blwm, curs) and the `GDEF` classes and carets, ported from fontc. Later (M8): feature-code preprocessing (tokens), automatic features, compiling (on fea-rs) |
+| L2 | `fontinfo` | M7 (created by M7.1) | the custom-parameter catalogue (generated from the inventory by `cargo xtask paramcatalog`) and value checks, the General field catalogue, master and instance addressing by id, name or index, the Font Info row clipboard format, text tokens, scaling a font to a new UPM, and the parsers of the glyph-set parameters (Remove, Keep, Rename, Reencode Glyphs). Pure functions on `model`, `plist` and `geom`; the compiler, the engine and the UI use it |
 | L2 | `hinting` | M10 | PostScript and TrueType hinting models and autohinters |
 | L2 | `glyphquery` | today (M4.5) | which glyphs Font View shows: the search matcher, smart-filter rule trees compiled to the glyph predicate language (the Custom rule, global-guide filters and, in M8, the feature-code glyph tokens), list filters and folders, sidebar entries (categories, scripts and languages, `Groups*.plist` entries) and how a selection of them combines, and the glyphs an entry expects that the font lacks. Rule trees, predicates and patterns are read within depth, length and regex size limits |
 | L2 | `audit` | today (M3.17: 34 outline checks); the rest M12 | the checks of `spec/inventory/21-qa-checks.toml`: a registry with ids, severities, profiles, thresholds and fixes, and pure check functions from one layer to findings. The `audit.*` commands run them |
@@ -181,6 +184,19 @@ each a function of what the stages before it produced:
 | Glyph order | `order.rs` | the font's order, `.notdef` first and drawn when absent, at most 65,535 glyphs |
 | Outline preparation | `outline.rs` | mixed glyphs and transforms beyond ±2 decomposed (everything for CFF), cu2qu, contours reversed |
 | Table builders, assembly | `build.rs` | `glyf` with composites, `loca`, `cmap`, `head`, `hhea`, `hmtx`, `maxp`, `name`, `OS/2`, `post` |
+
+The milestones add these stages:
+
+| Stage | Where | What it does |
+|---|---|---|
+| Export steps (M7) | `crates/engine/src/export_steps.rs`, before the compiler, on a copy of the font | linked sources (Import Font, Import Master), PreFilter, Scale to UPM, Filter (components decomposed first), Export Folder |
+| Export parameters (M7) | `crates/compile/src/export_params.rs`, right after resolving | Export, Keep, Remove, Rename and Reencode Glyphs and Arabic presentation forms change the resolved glyphs and hand a rename map to the kerning writer |
+| Names and legacy `kern` (M7) | `info.rs`, `kern_table.rs` | the name parameters and properties, OS/2 classes, and the `kern` table when Export kern Table asks for it |
+| Layout (M8) | `layout.rs`, through the `fea` crate | feature code assembled, tokens expanded and lowered, automatic features regenerated per target, compiled by fea-rs with the generated kerning and marks; `preview.rs` builds the layout-only preview font |
+| Variations (M9) | `crates/compile/src/var/` | the variable compile: one table builder per module (`fvar`, `avar`, `gvar`, `HVAR`, `VVAR`, `MVAR`, `STAT`, feature variations), each from plain data rather than the font |
+
+The CLI, the control channel and the oracle harness all export through the engine, so the export
+steps run for every export.
 
 It is a pure function: the timestamp is an input, the same font gives the same bytes. The resolved
 projection lives in the model because it reads every part of the font and nothing outside it; the

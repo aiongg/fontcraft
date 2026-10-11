@@ -376,6 +376,9 @@ notes = "Documented, not yet observed. The Export Folder parameter itself is an 
 guesses = [
   "The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment or a path of more than 32 segments is refused for that instance with a message, and the report names every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.",
 ]
+observe = [
+  "In font C (m7-export), export with Export Folder `../trial`, then `/tmp/x`: note where the files go.",
+]
 
 [[behavior]]
 id = "export.variableUsesSettingsOrDefault"
@@ -683,6 +686,9 @@ summary = "OpenType layout from a compiled font is turned back into feature code
 ref = "Import & Export › Opening Font Files › Importing OpenType Features"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "Open a compiled OTF exported from F1 (Latin features) with a lookup used by two features and contextual kerning: note whether a prefix named Prefix holds the shared lookup, and what happens to the contextual kerning.",
+]
 
 [[behavior]]
 id = "open.kerningMostlyPreserved"
@@ -903,6 +909,9 @@ summary = "Reads a feature file in AFDKO syntax (.fea) and adds the features it 
 ref = "Import & Export › Importing Font Data › Importing Feature Files"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "In F1 (Latin features), import a `.fea` file whose class and feature names already exist in the font: note how each clash is resolved.",
+]
 
 [[panel]]
 id = "dialog.importFeatures"
@@ -1003,6 +1012,9 @@ notes = "Documented, not yet observed. The project file format of the reference 
 guesses = [
   "A new project is saved as a native FontCraft project file (`.fontcraftproject`, JSON: the linked font's path relative to the project, the instances in the native format, the export destination); reading and writing `.glyphsproject` waits for a sample file from the reference app.",
 ]
+observe = [
+  "Choose File › New Project, link font B (m7-two) and save: keep the `.glyphsproject` file and hand it over (our own font, so it may be read); it is the sample the project reader and writer wait for.",
+]
 
 [[command]]
 id = "project.linkFont"
@@ -1019,6 +1031,9 @@ status = "handbook"
 notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 guesses = [
   "The link is stored relative to the project file when both share a folder tree, else absolute; linking copies the font's instances into the project only when the project has none; saving a project in the reference app settles the path form.",
+]
+observe = [
+  "Choose File › New Project, link font B (m7-two) and save: note in the saved file whether the link is a relative or an absolute path.",
 ]
 
 [[command]]

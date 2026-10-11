@@ -551,8 +551,9 @@ the check in the reference app that would settle it.
 
 1. Default feature for alternate-layer switching: the chapter says `rlig`, the appendix says
    `rvrn`. Observe an export.
-   **Oracles:** fontc and glyphsLib both default to `rvrn`. The default is the owner's decision
-   (`docs/plans/M9.md` § 7, question 2).
+   **Oracles:** fontc and glyphsLib both default to `rvrn`. **Decided** (`docs/plans/M9.md` § 7,
+   question 2 (a), decided by the orchestrator on the owner's behalf): `rvrn`. An export from the
+   reference app would still settle which page is right.
 2. Direction of the mapping wording: the chapter calls internal coordinates the master values and
    external the result of mapping, and also says external values are "used for interpolation".
    We assume the OpenType sense (user picks external; font maps it to internal). Confirm with an
@@ -606,8 +607,9 @@ the check in the reference app that would settle it.
     variable font; interplay with intermediate layers; which key moves knobs.
     **Partly answered (format):** per node, keyed by axis tag, in the lower node of a span
     (GlyphsSDK version 4 description: `ip`, `rc`/`rd`, `tl`/`tu`/`al`/`au`). The mathematics,
-    the variable encoding and the keys stay open; the milestone is the owner's decision
-    (`docs/plans/M9.md` § 7, question 5).
+    the variable encoding and the keys stay open. **Decided** (`docs/plans/M9.md` § 7,
+    question 5 (b), decided by the orchestrator on the owner's behalf): M9 reads, keeps and
+    writes the data; the tool, its commands, the Info box and the export are M13's.
 15. Axis Mappings dialog: base arrow-key step, which arrow pair moves which coordinate, whether
     internal values of a point are editable and constrained to master positions, what happens
     with non-monotonic points.
@@ -622,8 +624,9 @@ the check in the reference app that would settle it.
 18. Extrapolation limits: whether the reference clamps or warns, and how extrapolation behaves
     with more than two masters on an axis and with the Variable interpolation model.
     **Handbook and oracle differ:** the handbook extrapolates static instances; fontmake clamps.
-    The owner's decision (`docs/plans/M9.md` § 7, question 6); with more masters, the variation
-    model's outermost regions extend.
+    **Decided** (`docs/plans/M9.md` § 7, question 6 (a), decided by the orchestrator on the
+    owner's behalf): FontCraft extrapolates, and the difference from fontmake is in
+    `40-compile.md` § 4a. With more masters, the variation model's outermost regions extend.
 19. Compare Fonts: whether identical rows are listed, how outline differences are shown, what
     Use Left/Right copies for a glyph row (outline only, or metrics and anchors too), undo scope
     across two documents.
