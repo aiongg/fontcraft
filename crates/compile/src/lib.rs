@@ -49,7 +49,7 @@ use std::time::Duration;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ModelError, Resolved, Target};
 
-pub use kern::has_hand_written_kern;
+pub use kern::has_kern_feature_code;
 pub use outline::Flavour;
 
 /// Largest coordinate, in font units, an outline point may have in a TrueType outline. `glyf`

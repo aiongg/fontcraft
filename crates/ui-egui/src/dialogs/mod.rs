@@ -553,11 +553,8 @@ fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>,
         Fields::Filter => form::filter_fields(&filter_entry(dialog.command).ok_or_else(|| format!("`{}` is not a filter", dialog.command))?)?,
         Fields::Fixed(list) => list(&app.session),
         Fields::Targeted(list) => {
-            // These fields may measure the font on a preview of their own, which a running drag
-            // would refuse: the drag ends first.
-            if app.session.interaction().is_some() {
-                end_tool(app);
-            }
+            // The fields are built with a running drag left as it is: one that measures the font
+            // does so on a scratch session, so a dialog that does not open leaves the drag running.
             let mut targets = given.clone();
             if !targets.contains_key("glyph") && !targets.contains_key("glyphs") {
                 targets.extend(selection_targets(app, dialog.command));

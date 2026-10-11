@@ -49,16 +49,21 @@ fn fields(session: &mut Session, targets: &Map<String, Value>) -> Result<Vec<Fie
     ])
 }
 
-/// The paste's report with `onConflict: "ask"`, run on a preview that is put back at once, so
+/// The paste's report with `onConflict: "ask"`, run in a scratch session on a copy of the font
+/// the paste will act on: the font a running drag began from, which ending the drag gives back.
+/// The app's session is left alone, so a dialog that does not open leaves the drag running, and
 /// the font does not change even when nothing conflicts.
 fn asked(session: &mut Session, targets: &Map<String, Value>) -> Result<Value, String> {
     let mut params = targets.clone();
     params.insert("onConflict".into(), json!("ask"));
     params.remove("conflicts");
-    session.begin("Paste Kerning Pairs").map_err(|e| e.to_string())?;
-    let report = session.preview("kerning.pastePairs", &Value::Object(params));
-    session.cancel().map_err(|e| e.to_string())?;
-    report.map_err(|e| e.to_string())
+    let font = match session.interaction_start() {
+        Some(font) => font.clone(),
+        None => session.font().map_err(|e| e.to_string())?.clone(),
+    };
+    let mut scratch = Session::new();
+    scratch.add_document(font, None).map_err(|e| e.to_string())?;
+    scratch.execute("kerning.pastePairs", &Value::Object(params)).map_err(|e| e.to_string())
 }
 
 /// One conflict as a list row: `left  right  pasted (now existing)`.

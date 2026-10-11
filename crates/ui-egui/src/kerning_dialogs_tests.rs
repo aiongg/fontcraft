@@ -290,3 +290,23 @@ fn a_dialog_that_does_not_open_leaves_the_drag_running() {
     assert!(!error.is_empty());
     assert!(app.session.interaction().is_some(), "the drag still runs");
 }
+
+#[test]
+fn a_dialog_whose_fields_depend_on_its_targets_leaves_the_drag_running_when_it_does_not_open() {
+    let mut app = kerned_app();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["T"]})).unwrap();
+    app.run("view.setZoom", &json!({"size": 1000, "center": [300, 300]})).unwrap();
+    let r = call(&mut app, "ui.pointer", json!({"events": [{"kind": "down", "x": 50, "y": 500}, {"kind": "drag", "x": 80, "y": 520}]}));
+    assert_eq!(r["errors"], json!([]), "{r}");
+    let dragged = app.session.font().unwrap().clone();
+    for (dialog, params) in [
+        ("dialog.pasteKerningConflict", json!({})),
+        ("dialog.pasteKerningConflict", json!({"pairs": [{"left": "T", "value": -80}]})),
+        ("dialog.renameKerningGroup", json!({"side": "up", "from": "o"})),
+    ] {
+        let error = fails(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"dialog": dialog, "params": params}}));
+        assert!(!error.is_empty());
+        assert!(app.session.interaction().is_some(), "{dialog} {params}: the drag still runs");
+        assert_eq!(*app.session.font().unwrap(), dragged, "{dialog} {params}: the drag's preview is still shown");
+    }
+}

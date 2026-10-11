@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**625 guesses on 394 rows (190 of them live commands).**
+**626 guesses on 394 rows (190 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -567,6 +567,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `kerning.compressRules` (behavior) | M5 | handbook | – | A later pair with the same sides as an earlier one (one group in two spellings, or two entries for one master) never applies, so it is removed together with the earlier pair when that one is lifted or absorbed; compressing such a pair list in the reference app settles it. |
 | `kerning.compressOneStepPerRun` (behavior) | M5 | handbook | – | A run lifts the left side of every pair that can lift it, else its right side; one run on a pair list where both sides can lift, in the reference app, settles it. |
 | `kerning.implicitKernFeature` (behavior) | M5 | handbook | – | The generated lookups follow fontc's kern writer (split by script and direction, glyph pairs before class pairs, values rounded half up); the handbook gives no rules, and the GPOS of a font the reference app exports from a test source settles it. |
+| `kerning.implicitKernFeature` (behavior) | M5 | handbook | – | Until feature code is compiled (M8), a top-level include in enabled feature code leaves the generated kerning out with a warning naming the file, because the file may hold a kern feature; following the include would settle it, and an export from the reference app of a source whose included file has no kern feature shows what it writes. |
 | `infoBox.spacing` (panel) | M5 | handbook | – | The glyph box hangs under the current glyph's descender, centred on its advance, separate from the selection box at the foot of the canvas; a screenshot of the reference app with a selection settles it. |
 | `infoBox.spacing` (panel) | M5 | handbook | – | Emptying a field that holds a key stores the metric's current number, so the key goes and nothing moves; emptying such a field in the reference app settles it. |
 | `infoBox.spacing` (panel) | M5 | handbook | – | A key that cannot be evaluated (a cycle, a division by zero, a result out of range) is drawn red like an out-of-sync key, without the update button; a cyclic key in the reference app settles it. |

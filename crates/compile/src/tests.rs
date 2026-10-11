@@ -1560,7 +1560,7 @@ fn only_a_hand_written_kern_feature_keeps_the_generated_kerning_out() {
     let out = compile_ttf(&hand, &Options::default()).unwrap();
     assert!(FontRef::new(&out.bytes).unwrap().gpos().is_err());
     assert!(out.warnings.iter().any(|w| w.contains("hand-written kern feature")), "{:?}", out.warnings);
-    assert!(crate::has_hand_written_kern(&hand));
+    assert!(crate::has_kern_feature_code(&hand));
 
     // A UFO's features.fea read as one text: its kern block is found in it.
     let mut ufo = f.clone();
@@ -1569,5 +1569,48 @@ fn only_a_hand_written_kern_feature_keeps_the_generated_kerning_out() {
         code: "languagesystem DFLT dflt; # feature kern {\nfeature liga{ sub f i by f_i; } liga;\nfeature kern {pos A V -100;} kern;".into(),
         ..Default::default()
     }];
-    assert_eq!(crate::kern::feature_code(&ufo), crate::kern::FeatureCode { hand_written_kern: true, features: vec!["liga".into(), "kern".into()] });
+    assert_eq!(
+        crate::kern::feature_code(&ufo),
+        crate::kern::FeatureCode { hand_written_kern: true, includes: vec![], features: vec!["liga".into(), "kern".into()] }
+    );
+}
+
+#[test]
+fn a_kern_feature_with_use_extension_or_through_an_include_keeps_the_generated_kerning_out() {
+    use crate::kern::{FeatureCode, feature_code};
+    use fontcraft_model::Snippet;
+    let mut f = Font::new("Kern Sans");
+    Arc::make_mut(&mut f.kerning).ltr.set("m01", "A", "V", -80.0);
+    // A UFO's features.fea, read as one text.
+    let with = |code: &str| {
+        let mut g = f.clone();
+        Arc::make_mut(&mut g.features).prefixes = vec![Snippet { code: code.into(), ..Default::default() }];
+        g
+    };
+    let compiled = |g: &Font| {
+        let out = compile_ttf(g, &Options::default()).unwrap();
+        (FontRef::new(&out.bytes).unwrap().gpos().is_ok(), out.warnings)
+    };
+
+    let extension = with("feature kern useExtension {\n  pos A V -100;\n} kern;\n");
+    assert_eq!(feature_code(&extension), FeatureCode { hand_written_kern: true, includes: vec![], features: vec!["kern".into()] });
+    let (gpos, warnings) = compiled(&extension);
+    assert!(!gpos && warnings.iter().any(|w| w.contains("hand-written kern feature")), "{warnings:?}");
+
+    // Only a top-level include may bring a kern feature; one inside a feature block cannot.
+    let include = with("languagesystem DFLT dflt;\ninclude(../common.fea);\nfeature liga { include(liga.fea); } liga;\n");
+    assert_eq!(
+        feature_code(&include),
+        FeatureCode { hand_written_kern: false, includes: vec!["../common.fea".into()], features: vec!["liga".into()] }
+    );
+    let (gpos, warnings) = compiled(&include);
+    assert!(!gpos && warnings.iter().any(|w| w.contains("includes ../common.fea")), "{warnings:?}");
+    assert!(crate::has_kern_feature_code(&include));
+
+    // A kern block that holds only comments is no kern feature.
+    let comments = with("feature kern {\n# Automatic Code\n} kern;\nfeature liga { sub f i by f_i; } liga;\n");
+    assert_eq!(feature_code(&comments), FeatureCode { hand_written_kern: false, includes: vec![], features: vec!["liga".into()] });
+    let (gpos, warnings) = compiled(&comments);
+    assert!(gpos, "{warnings:?}");
+    assert!(!crate::has_kern_feature_code(&comments));
 }

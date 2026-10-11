@@ -214,17 +214,34 @@ struct KernSplitContext {
     limits: KernLimits,
 }
 
-/// What one lookup holds, for the class-table limits.
+/// The distinct classes of one lookup, for the cap on classes per side.
 #[derive(Default)]
 struct LookupSize {
     first_classes: HashSet<IntSet<GlyphId16>>,
     second_classes: HashSet<IntSet<GlyphId16>>,
 }
 
-impl LookupSize {
-    fn cells(&self) -> usize {
-        self.first_classes.len().saturating_add(1).saturating_mul(self.second_classes.len().saturating_add(1))
+/// The cells of the class tables `builder` will allocate. Each class subtable holds a record for
+/// every first class times every second class plus one (the first side uses class 0). The builder
+/// starts a new subtable where a class overlaps one already in the current subtable, so one class
+/// can count in several subtables.
+fn class_cells(builder: &PairPosBuilder, budget: &mut Budget) -> Result<usize, FeatureError> {
+    let mut total = 0usize;
+    for subtable in builder.iter_class_subtables() {
+        let (mut firsts, mut seconds) = (0usize, HashSet::new());
+        let mut last: Option<&IntSet<GlyphId16>> = None;
+        // The rules come grouped by first class, each group borrowing the same set.
+        for (first, second, _, _) in subtable {
+            budget.spend(1)?;
+            if !last.is_some_and(|l| std::ptr::eq(l, first)) {
+                firsts = firsts.saturating_add(1);
+                last = Some(first);
+            }
+            seconds.insert(second);
+        }
+        total = total.saturating_add(firsts.saturating_mul(seconds.len().saturating_add(1)));
     }
+    Ok(total)
 }
 
 /// What the lookups made so far hand the table builder.
@@ -301,7 +318,15 @@ impl KernSplitContext {
                 }
                 self.add_to(pair, &mut builder, &mut size, totals, budget)?;
             }
-            let cells = size.cells();
+            // The class tables are allocated when the lookup is built: their cells are counted
+            // from the builder's subtables, before that.
+            let cells = class_cells(&builder, budget)?;
+            if cells > self.limits.class_cells {
+                return Err(FeatureError::TooMany { what: "kerning class cells in one lookup", limit: self.limits.class_cells });
+            }
+            if totals.class_cells.saturating_add(cells) > self.limits.total_class_cells {
+                return Err(FeatureError::TooMany { what: "kerning class cells", limit: self.limits.total_class_cells });
+            }
             budget.spend(cells)?;
             totals.class_cells = totals.class_cells.saturating_add(cells);
             let lookup = self.make_lookup(builder, !are_marks);
@@ -460,7 +485,8 @@ impl KernSplitContext {
     }
 
     /// Adds a rule to a lookup's builder; a rule between a glyph and a group becomes one glyph
-    /// pair per member of the group. The caps are checked before the builder is given anything.
+    /// pair per member of the group. The caps on glyph pairs and classes are checked before the
+    /// builder is given the rule.
     fn add_to(
         &self,
         pair: KernPair,
@@ -507,13 +533,6 @@ impl KernSplitContext {
                 }
                 if size.first_classes.len().max(size.second_classes.len()) > limits.classes_per_lookup {
                     return Err(FeatureError::TooMany { what: "kerning classes on one side of a lookup", limit: limits.classes_per_lookup });
-                }
-                let cells = size.cells();
-                if cells > limits.class_cells {
-                    return Err(FeatureError::TooMany { what: "kerning class cells in one lookup", limit: limits.class_cells });
-                }
-                if totals.class_cells.saturating_add(cells) > limits.total_class_cells {
-                    return Err(FeatureError::TooMany { what: "kerning class cells", limit: limits.total_class_cells });
                 }
                 builder.insert_classes(side1, value, side2, Default::default());
             }

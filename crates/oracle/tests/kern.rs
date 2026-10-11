@@ -1,5 +1,6 @@
-//! The kern measure of M5.17 (`docs/plans/M5.md` § 5): for every corpus source without a
-//! hand-written `kern` feature that both reference compilers build, the effective value of every
+//! The kern measure of M5.17 (`docs/plans/M5.md` § 5): for every corpus source without a `kern`
+//! feature in its feature code (or a top-level include that may hold one) that both reference
+//! compilers build, the effective value of every
 //! pair of glyphs that a stored pair of the compiled master covers (groups expanded, at most 1,000,000 pairs per
 //! source) is the same in FontCraft's `GPOS` as in fontc's (built with features) and fontmake's.
 //! Pairs are compared in every script either font has records for. The sources are the oracle
@@ -31,27 +32,34 @@ const MAX_PAIRS: usize = 1_000_000;
 const SHOWN: usize = 20;
 
 /// Differences with a known cause, written down in `docs/spec/40-compile.md` § 4a: the source's
-/// file name, the reference, the script, and the cause. They are reported and do not fail the
-/// measure.
-const KNOWN: &[(&str, &str, &str, &str)] = &[
+/// file name, the reference, the script, how many pair values differ in that script, and the
+/// cause. They are reported and do not fail the measure; another count does.
+const KNOWN: &[(&str, &str, &str, usize, &str)] = &[
     (
         "KerningRtlOnlyMaster.glyphs",
         "fontc",
         "hebr",
+        1,
         "fontc builds the variable font of both masters: the second master's right-to-left pairs give its font a hebr script whose lookups hold only them, and a Latin pair read in hebr gets 0; FontCraft builds the first master, which has no right-to-left pairs, so hebr falls back to DFLT",
     ),
-    ("Oswald.glyphs", "fontc", "cyrl", OSWALD_LIGATURES),
-    ("Oswald.glyphs", "fontmake", "cyrl", OSWALD_LIGATURES),
+    ("Oswald.glyphs", "fontc", "cyrl", 13, OSWALD_LIGATURES),
+    ("Oswald.glyphs", "fontmake", "cyrl", 13, OSWALD_LIGATURES),
 ];
 
 const OSWALD_LIGATURES: &str = "the unencoded ligature f_f gets the Latin script from the liga substitution that makes it, so the references put its pairs in the Latin lookup; FontCraft compiles no feature code before M8, so f_f has no script and its pairs are common, in every script's lookups";
 
-/// Sources whose compiled kerning differs from the stored pairs `KernIndex` reads, with the
-/// cause: the lookup measure reports them and does not fail on them.
-const LOOKUP_KNOWN: &[(&str, &str)] = &[
-    ("FeatureWritersEmpty.glyphs", "the source's feature-writer setting turns the kern writer off, so the compiled fonts have no pair kerning"),
-    ("FeaInc-Bold.ufo", "the hand-written kern feature, in an included file, gives the pair another value than the stored pair"),
+/// Sources whose compiled kerning differs from the stored pairs `KernIndex` reads: the file
+/// name, the reference, how many pairs differ, and the cause. The lookup measure reports them and
+/// fails when the count is another.
+const LOOKUP_KNOWN: &[(&str, &str, usize, &str)] = &[
+    ("FeatureWritersEmpty.glyphs", "fontc", 1, WRITER_OFF),
+    ("FeatureWritersEmpty.glyphs", "fontmake", 1, WRITER_OFF),
+    ("FeaInc-Bold.ufo", "fontc", 1, FEAINC_KERN),
+    ("FeaInc-Bold.ufo", "fontmake", 1, FEAINC_KERN),
 ];
+
+const WRITER_OFF: &str = "the source's feature-writer setting turns the kern writer off, so the compiled fonts have no pair kerning";
+const FEAINC_KERN: &str = "the kern feature written in the source's features.fea gives the pair another value than the stored pair";
 
 /// Sources of the measure outside the oracle corpus, when fetched.
 const EXTRA: &[&str] = &["inter/src/Inter-Roman.glyphspackage"];
@@ -59,7 +67,11 @@ const EXTRA: &[&str] = &["inter/src/Inter-Roman.glyphspackage"];
 fn known(label: &str, d: &Difference) -> Option<&'static str> {
     let name = Path::new(label).file_name()?.to_str()?;
     let script = d.script.to_string();
-    KNOWN.iter().find(|(n, o, s, _)| *n == name && *o == d.oracle && *s == script).map(|(_, _, _, cause)| *cause)
+    KNOWN.iter().find(|(n, o, s, _, _)| *n == name && *o == d.oracle && *s == script).map(|(_, _, _, _, cause)| *cause)
+}
+
+fn file_name(label: &str) -> &str {
+    Path::new(label).file_name().and_then(|n| n.to_str()).unwrap_or(label)
 }
 
 fn corpus() -> PathBuf {
@@ -136,6 +148,7 @@ fn generated_kerning_equals_both_references() {
     let (mut compared, mut skipped) = (0usize, Vec::new());
     let mut pairs_compared: HashMap<&str, usize> = HashMap::new();
     let mut with_code = 0usize;
+    let mut compared_names: BTreeSet<String> = BTreeSet::new();
     let mut all: Vec<(String, Difference)> = Vec::new();
     for (n, source) in sources.iter().enumerate() {
         let label = source.display().to_string();
@@ -153,8 +166,8 @@ fn generated_kerning_equals_both_references() {
         if pairs.is_empty() {
             continue;
         }
-        if fontcraft_compile::has_hand_written_kern(&font) {
-            eprintln!("not compared, a hand-written kern feature: {label}");
+        if fontcraft_compile::has_kern_feature_code(&font) {
+            eprintln!("not compared, a kern feature in the feature code or an include: {label}");
             with_code += 1;
             continue;
         }
@@ -200,6 +213,7 @@ fn generated_kerning_equals_both_references() {
             continue;
         }
         compared += 1;
+        compared_names.insert(file_name(&label).to_string());
         eprintln!("compared: {label} ({} pairs)", pairs.len());
         for (oracle, bytes) in &built {
             let Some(their_ids) = ids_by_name(bytes) else {
@@ -239,7 +253,7 @@ fn generated_kerning_equals_both_references() {
         }
     }
     let _ = std::fs::remove_dir_all(&scratch);
-    eprintln!("sources with kerning and a hand-written kern feature (not compared): {with_code}");
+    eprintln!("sources with kerning and kern feature code or an include (not compared): {with_code}");
     eprintln!("sources compared: {compared}; pairs compared: {pairs_compared:?}; differences: {}", all.len());
     for s in &skipped {
         eprintln!("skipped: {s}");
@@ -255,6 +269,16 @@ fn generated_kerning_equals_both_references() {
     for (label, d) in &expected {
         eprintln!("known: {label} {} {} {} {}: {}", d.oracle, d.script, d.first, d.second, known(label, d).unwrap_or_default());
     }
+    let changed: Vec<String> = KNOWN
+        .iter()
+        .filter(|(name, ..)| compared_names.contains(*name))
+        .filter_map(|(name, oracle, script, count, _)| {
+            let tag = Tag::new_checked(script.as_bytes()).ok();
+            let seen = expected.iter().filter(|(label, d)| file_name(label) == *name && d.oracle == *oracle && Some(d.script) == tag).count();
+            (seen != *count).then(|| format!("{name} {oracle} {script}: {seen} known differences, {count} expected"))
+        })
+        .collect();
+    assert!(changed.is_empty(), "the known differences changed: {changed:?}");
     if let Some((label, d)) = unexpected.first() {
         panic!(
             "{} pair values differ from the references without a known cause; the first: {label} {} {} {} {}: ours {}, theirs {}",
@@ -270,11 +294,11 @@ fn generated_kerning_equals_both_references() {
 }
 
 /// The lookup half of the § 5 kerning measure: for every corpus source with kerning that both
-/// references build, hand-written `kern` feature or not, the value `KernIndex` gives each covered
+/// references build, `kern` feature code or not, the value `KernIndex` gives each covered
 /// pair of the compiled master (rounded half up) equals the references' effective value. A pair
 /// is read in the OpenType scripts of its glyphs' code points, or in `DFLT` when both glyphs are
 /// common or unencoded. A source that differs fails the measure unless `LOOKUP_KNOWN` gives the
-/// cause.
+/// cause and the count.
 #[test]
 #[ignore = "builds every corpus source with fontc and fontmake: the M5 kerning lookup measure"]
 fn index_lookup_equals_both_references() {
@@ -291,7 +315,7 @@ fn index_lookup_equals_both_references() {
     sources.extend(EXTRA.iter().map(|p| corpus().join(p)).filter(|p| p.exists()));
     let scratch = std::env::temp_dir().join(format!("fontcraft-kern-lookup-{}", std::process::id()));
     let mut skipped = Vec::new();
-    // label, hand-written kern, oracle, pairs compared, differences
+    // label, kern feature code, oracle, pairs compared, differences
     let mut rows: Vec<(String, bool, &str, usize, usize)> = Vec::new();
     for (n, source) in sources.iter().enumerate() {
         let label = source.display().to_string();
@@ -307,7 +331,7 @@ fn index_lookup_equals_both_references() {
         if pairs.is_empty() {
             continue;
         }
-        let hand_written = fontcraft_compile::has_hand_written_kern(&font);
+        let hand_written = fontcraft_compile::has_kern_feature_code(&font);
         let options = Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, ..Default::default() };
         // Our build gives the production names that match unencoded glyphs.
         let ours = match compile(&font, &fontcraft_model::Target::Master(master.clone()), fontcraft_compile::Flavour::TrueType, &options) {
@@ -399,7 +423,7 @@ fn index_lookup_equals_both_references() {
         eprintln!("skipped: {s}");
     }
     for (label, hand_written, oracle, compared, differ) in &rows {
-        eprintln!("row: {label}\t{}\t{oracle}\t{compared}\t{differ}", if *hand_written { "hand-written kern" } else { "generated" });
+        eprintln!("row: {label}\t{}\t{oracle}\t{compared}\t{differ}", if *hand_written { "kern feature code" } else { "generated" });
     }
     for oracle in ["fontc", "fontmake"] {
         for hand_written in [false, true] {
@@ -407,19 +431,20 @@ fn index_lookup_equals_both_references() {
             let (c, d) = these.iter().fold((0, 0), |(c, d), r| (c + r.3, d + r.4));
             eprintln!(
                 "total: {oracle}, {}: {} sources, {c} pairs, {d} differ",
-                if hand_written { "hand-written kern" } else { "generated" },
+                if hand_written { "kern feature code" } else { "generated" },
                 these.len()
             );
         }
     }
-    let unexplained: Vec<&String> = rows
+    let unexplained: Vec<String> = rows
         .iter()
-        .filter(|r| r.4 > 0)
-        .map(|r| &r.0)
-        .filter(|label| !LOOKUP_KNOWN.iter().any(|(name, _)| Path::new(label).file_name().and_then(|n| n.to_str()) == Some(*name)))
+        .filter_map(|(label, _, oracle, _, differ)| {
+            let known = LOOKUP_KNOWN.iter().find(|(name, o, ..)| *name == file_name(label) && o == oracle).map_or(0, |k| k.2);
+            (*differ != known).then(|| format!("{label} {oracle}: {differ} pairs differ, {known} known"))
+        })
         .collect();
-    for (name, cause) in LOOKUP_KNOWN {
-        eprintln!("known: {name}: {cause}");
+    for (name, oracle, count, cause) in LOOKUP_KNOWN {
+        eprintln!("known: {name} {oracle}, {count} pairs: {cause}");
     }
-    assert!(unexplained.is_empty(), "lookup values differ from the references without a known cause: {unexplained:?}");
+    assert!(unexplained.is_empty(), "lookup values differ from the references other than the known differences: {unexplained:?}");
 }

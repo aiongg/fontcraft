@@ -27,9 +27,11 @@
 //! [`evaluate::PairEvaluator`] reads the pair kerning of a compiled font back, for tests and the
 //! oracle comparison.
 //!
-//! Every count the work grows with is capped ([`KernLimits`]): the rules, the glyph pairs and
-//! class cells handed to the table builder, the classes of a lookup, the groups of scripts, and
-//! the work as a whole. Each cap is checked before the work it bounds.
+//! Every count the work grows with is capped ([`KernLimits`]): the rules, the glyph pairs handed
+//! to the table builder, the classes of a lookup, the class-table cells, the groups of scripts,
+//! and the work as a whole. Each cap is checked before the work it bounds. The class-table cells
+//! are counted from the builder's subtables once a lookup's rules are in, before the build
+//! allocates the tables; the rules themselves are bounded by the rule and glyph-pair caps.
 #![forbid(unsafe_code)]
 
 pub mod evaluate;
@@ -52,13 +54,15 @@ pub use writers::{FEATURE_WRITERS_KEY, KernTags, kern_tags};
 /// members.
 pub const MAX_KERN_RULES: usize = 2_000_000;
 /// Most glyph pairs the lookups of one master may hold, group–glyph rules expanded to their
-/// members. The table builder keeps a few hundred bytes for each.
-pub const MAX_GLYPH_PAIRS: usize = 4_000_000;
-/// Most cells of the class tables of one lookup: first classes times second classes, each plus
-/// one. A class-pair subtable holds a record for every cell.
-pub const MAX_CLASS_CELLS: usize = 4_000_000;
-/// Most class-table cells of all the lookups of one master together.
-pub const MAX_TOTAL_CLASS_CELLS: usize = 8_000_000;
+/// members. The table builder keeps about 400 bytes for each, so the cap bounds it at about
+/// 200 MB; the largest corpus font, Inter, has 11,442.
+pub const MAX_GLYPH_PAIRS: usize = 500_000;
+/// Most cells of the class tables of one lookup: in each class subtable, first classes times
+/// second classes plus one. The built table holds a 112-byte record for every cell.
+pub const MAX_CLASS_CELLS: usize = 1_000_000;
+/// Most class-table cells of all the lookups of one master together: about 220 MB of records.
+/// Inter, the largest corpus font, has 25,317.
+pub const MAX_TOTAL_CLASS_CELLS: usize = 2_000_000;
 /// Most first classes, and most second classes, of one lookup: a class definition numbers its
 /// classes with 16 bits, class 0 included.
 pub const MAX_CLASSES_PER_LOOKUP: usize = 65_534;

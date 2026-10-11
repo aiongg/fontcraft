@@ -299,7 +299,7 @@ fn each_cap_refuses_kerning_that_multiplies_past_it() {
     set(&mut g, Direction::Ltr, "period", "@MMK_R_caps", -10.0);
     assert_eq!(refused(build_with(&g, &[], KernLimits { rules: 20, ..limits })), "kerning rules");
 
-    // Two first classes and two second classes: (2 + 1) × (2 + 1) cells.
+    // Two first classes and two second classes in one subtable: 2 × (2 + 1) cells.
     let mut f = font(&[]);
     for (glyph, right, left) in [("A", "A", "A"), ("V", "V", "V"), ("o", "o", "o"), ("e", "e", "e")] {
         group(&mut f, glyph, GroupSide::Right, right);
@@ -307,11 +307,11 @@ fn each_cap_refuses_kerning_that_multiplies_past_it() {
     }
     set(&mut f, Direction::Ltr, "@MMK_L_A", "@MMK_R_V", -50.0);
     set(&mut f, Direction::Ltr, "@MMK_L_o", "@MMK_R_e", -5.0);
-    assert!(build_with(&f, &[], KernLimits { class_cells: 9, ..limits }).is_ok());
-    assert_eq!(refused(build_with(&f, &[], KernLimits { class_cells: 8, ..limits })), "kerning class cells in one lookup");
+    assert!(build_with(&f, &[], KernLimits { class_cells: 6, ..limits }).is_ok());
+    assert_eq!(refused(build_with(&f, &[], KernLimits { class_cells: 5, ..limits })), "kerning class cells in one lookup");
     assert_eq!(refused(build_with(&f, &[], KernLimits { classes_per_lookup: 1, ..limits })), "kerning classes on one side of a lookup");
 
-    // A Latin and a Cyrillic lookup of one class pair each: 4 cells each, 8 together.
+    // A Latin and a Cyrillic lookup of one class pair each: 2 cells each, 4 together.
     let mut f = font(&[("A-cy", Some(0x410)), ("U-cy", Some(0x423))]);
     for glyph in ["A", "V", "A-cy", "U-cy"] {
         group(&mut f, glyph, GroupSide::Right, glyph);
@@ -319,9 +319,40 @@ fn each_cap_refuses_kerning_that_multiplies_past_it() {
     }
     set(&mut f, Direction::Ltr, "@MMK_L_A", "@MMK_R_V", -50.0);
     set(&mut f, Direction::Ltr, "@MMK_L_A-cy", "@MMK_R_U-cy", -50.0);
-    assert!(build_with(&f, &[], KernLimits { class_cells: 4, total_class_cells: 8, ..limits }).is_ok());
-    assert_eq!(refused(build_with(&f, &[], KernLimits { class_cells: 4, total_class_cells: 7, ..limits })), "kerning class cells");
+    assert!(build_with(&f, &[], KernLimits { class_cells: 2, total_class_cells: 4, ..limits }).is_ok());
+    assert_eq!(refused(build_with(&f, &[], KernLimits { class_cells: 2, total_class_cells: 3, ..limits })), "kerning class cells");
     assert_eq!(refused(build_with(&f, &[], KernLimits { script_sets: 1, ..limits })), "script combinations in the kerning");
+}
+
+#[test]
+fn class_cells_are_counted_in_every_subtable_the_builder_starts() {
+    // A Coptic epact digit has the Arabic and the Coptic script, so a group with it and Y splits
+    // into a left-to-right part {Y, epact} and a right-to-left part {epact}, both in one lookup.
+    // Each first class kerned against both overlapping parts makes the builder start a new
+    // subtable for each rule: 8 first classes give 16 subtables of 1 × (1 + 1) cells, 32 in all,
+    // where the distinct classes of the lookup would give (8 + 1) × (2 + 1) = 27.
+    let firsts = [
+        ("period", 0x2E),
+        ("comma", 0x2C),
+        ("colon", 0x3A),
+        ("semicolon", 0x3B),
+        ("hyphen", 0x2D),
+        ("exclam", 0x21),
+        ("question", 0x3F),
+        ("slash", 0x2F),
+    ];
+    let mut glyphs: Vec<(&str, Option<u32>)> = firsts.iter().map(|(n, cp)| (*n, Some(*cp))).collect();
+    glyphs.extend([("epact", Some(0x102E1)), ("alef-ar", Some(0x0627)), ("alfa-copt", Some(0x2C80))]);
+    let mut f = font(&glyphs);
+    group(&mut f, "Y", GroupSide::Left, "S");
+    group(&mut f, "epact", GroupSide::Left, "S");
+    for (name, _) in firsts {
+        group(&mut f, name, GroupSide::Right, name);
+        set(&mut f, Direction::Ltr, &format!("@MMK_L_{name}"), "@MMK_R_S", -10.0);
+    }
+    let limits = KernLimits::default();
+    assert!(build_with(&f, &[], KernLimits { class_cells: 32, ..limits }).is_ok());
+    assert_eq!(refused(build_with(&f, &[], KernLimits { class_cells: 31, ..limits })), "kerning class cells in one lookup");
 }
 
 #[test]
@@ -371,4 +402,13 @@ fn joining_right_to_left_kerning_into_left_to_right_is_reported() {
     set(&mut f, Direction::Rtl, "@MMK_R_alef", "@MMK_L_bet", -77.0);
     let (_, _, warnings) = build(&f, &[]);
     assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
+fn the_default_caps_bound_the_builder_memory() {
+    // About 400 bytes for each glyph pair in the table builder, and one record for each
+    // class-table cell in the built table.
+    let cell = std::mem::size_of::<write_fonts::tables::gpos::Class2Record>();
+    let bytes = crate::MAX_GLYPH_PAIRS.saturating_mul(400).saturating_add(crate::MAX_TOTAL_CLASS_CELLS.saturating_mul(cell));
+    assert!(bytes <= 512 << 20, "{bytes} bytes");
 }

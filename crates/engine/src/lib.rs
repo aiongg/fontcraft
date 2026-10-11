@@ -578,6 +578,11 @@ impl Session {
         self.interaction.as_ref().map(|i| i.label.as_ref())
     }
 
+    /// The font the running interaction began from, which cancelling it gives back.
+    pub fn interaction_start(&self) -> Option<&Font> {
+        self.interaction.as_ref().map(|i| i.before.as_ref())
+    }
+
     /// Runs an editing command on the interaction's snapshot, replacing the previous preview,
     /// without history or journal. A preview that fails changes nothing: the previous one stays
     /// shown. Undo, redo and commands that open, close or switch documents cannot be previewed.
