@@ -87,6 +87,8 @@ mod tests {
                 let l = g.layer_mut("m01").unwrap();
                 let mut c = Component::new("A", 13.0, -9.0);
                 c.transform = Transform::Decomposed { pos: (13.0, -9.0), scale: (0.75, 0.5), angle: 10.0, slant: (0.0, 0.0) };
+                // Kept where it is: automatic alignment would place it at the origin.
+                c.info.alignment = fontcraft_model::Alignment::Disabled;
                 l.shapes.push(Shape::Component(c));
             }
             font.stems = Arc::new(vec![StemDef { name: "Stem".into(), ..Default::default() }]);
