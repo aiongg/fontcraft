@@ -38,6 +38,12 @@ milestone = "M5"
 summary = "While View › Show Metrics (Cmd+Shift+M) is on and the Text tool is in use, every glyph in the Edit View line is labelled with its left sidebearing, right sidebearing and advance width."
 ref = "Spacing & Kerning › Spacing"
 status = "handbook"
+notes = "Documented, not yet observed. Edit View labels every glyph on the canvas (`canvas/text.rs`); in vertical text the labels are the top and bottom sidebearings and the vertical width."
+guesses = [
+  "Under the descender, the left sidebearing sits at the glyph's left edge, the right one at its right edge and the width centred below them; in vertical text they run along the column's left edge; a screenshot of the reference app settles it.",
+  "A label keeps to the part of the advance a negatively kerned neighbour does not cover, so neighbouring labels do not overlap; a tightly kerned pair in the reference app settles it.",
+  "Glyphs less than 24 screen points wide get no labels; the reference app zoomed out settles it.",
+]
 
 [[behavior]]
 id = "spacing.currentGlyphFollowsCursor"
@@ -670,7 +676,10 @@ milestone = "M5"
 summary = "With the Text tool active, a kerned gap between two glyphs is tinted: light blue when the kerning value is negative, yellow when it is positive. Both colours are user-configurable in the Appearance settings."
 ref = "Spacing & Kerning › Kerning"
 status = "handbook"
-notes = "Documented, not yet observed: negative kerning is highlighted light blue and positive kerning yellow. FontCraft takes the colours from the four appearance.color.kerning… settings (negative and positive, light and dark)."
+notes = "Documented, not yet observed: negative kerning is highlighted light blue and positive kerning yellow. Edit View tints each kerned gap in text mode while the mode shows kerning (`canvas/text.rs`), in the theme tokens `kerning_negative` and `kerning_positive`. The four appearance.color.kerning… settings (negative and positive, light and dark) are to feed those tokens; the settings store does not hold them yet."
+guesses = [
+  "The tint fills the gap between the two advances, from the descender to the ascender, behind the glyphs; a screenshot of the reference app in text mode settles it.",
+]
 
 [[command]]
 id = "kerning.setMode"
@@ -698,6 +707,10 @@ milestone = "M5"
 summary = "Button in the lower right of the Edit View canvas that shows the current kerning mode and cycles through the three modes when clicked."
 ref = "Spacing & Kerning › Kerning › Kerning Modes"
 status = "handbook"
+notes = "Built in the Edit View bottom bar: its icon shows the mode, and a click runs `kerning.setMode` without a mode, which goes to the next one."
+guesses = [
+  "The button sits between the writing direction buttons and the zoom controls; the reference app's bottom bar settles it.",
+]
 
 [[behavior]]
 id = "kerning.modeNone"

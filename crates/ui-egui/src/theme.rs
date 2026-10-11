@@ -48,6 +48,20 @@ pub struct Tokens {
     pub metric_name: Color32,
     /// Selected nodes, handles and segments.
     pub selection: Color32,
+    /// The text cursor in text mode.
+    pub text_cursor: Color32,
+    pub text_cursor_width: f32,
+    /// Behind the selected items of the tab text.
+    pub text_selection: Color32,
+    /// The gap of a negatively and of a positively kerned pair in text mode
+    /// (`kerning.highlightColors`; the defaults of the `appearance.color.kerning…` settings for
+    /// the light canvas).
+    pub kerning_negative: Color32,
+    pub kerning_positive: Color32,
+    /// The sidebearings and widths under each glyph in text mode with Show Metrics on
+    /// (`spacing.metricsOverlayInTextMode`).
+    pub sidebearing_label: Color32,
+    pub sidebearing_label_size: f32,
     /// Inside of a marquee or a Zoom tool rectangle.
     pub marquee_fill: Color32,
     /// Edge of a marquee, a lasso or a Zoom tool rectangle.
@@ -269,6 +283,13 @@ impl Tokens {
             zone_fill: Color32::from_rgba_unmultiplied(0x9a, 0xb8, 0xdc, 0x38),
             metric_name: Color32::from_rgb(0x80, 0x88, 0x94),
             selection: Color32::from_rgb(0xf0, 0x8c, 0x1e),
+            text_cursor: Color32::from_rgb(0x2d, 0x8c, 0xeb),
+            text_cursor_width: 1.5,
+            text_selection: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0x40),
+            kerning_negative: Color32::from_rgba_unmultiplied(0x8c, 0xc8, 0xf5, 0x90),
+            kerning_positive: Color32::from_rgba_unmultiplied(0xf5, 0xdc, 0x46, 0xa0),
+            sidebearing_label: Color32::from_rgb(0x60, 0x68, 0x74),
+            sidebearing_label_size: 10.0,
             marquee_fill: Color32::from_rgba_unmultiplied(0x2d, 0x8c, 0xeb, 0x24),
             marquee_stroke: Color32::from_rgb(0x2d, 0x8c, 0xeb),
             snap_line: Color32::from_rgb(0xd0, 0x2c, 0x9c),

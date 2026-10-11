@@ -26,8 +26,9 @@ pub fn of(font: &Font, master: &Master) -> (Vec<(String, f64)>, Metrics) {
 }
 
 /// Draws zones as bands and metric lines across the canvas, the edited glyph's side lines from
-/// `span.0` (descender) to `span.1` (ascender), and the names when `names` is set.
-pub fn draw(c: &super::Painting, lines: &[(String, f64)], metrics: &Metrics, width: f64, span: (f64, f64), names: bool) {
+/// `span.0` (descender) to `span.1` (ascender) when its `width` is given, and the names when
+/// `names` is set.
+pub fn draw(c: &super::Painting, lines: &[(String, f64)], metrics: &Metrics, width: Option<f64>, span: (f64, f64), names: bool) {
     let (rect, tokens) = (c.rect, c.tokens);
     let y = |v: f64| c.view.to_screen(Point::new(0.0, v)).y as f32;
     let x = |v: f64| c.view.to_screen(Point::new(v, 0.0)).x as f32;
@@ -44,7 +45,7 @@ pub fn draw(c: &super::Painting, lines: &[(String, f64)], metrics: &Metrics, wid
             c.painter.text(Pos2::new(rect.left() + 4.0, at_y - 2.0), Align2::LEFT_BOTTOM, format!("{name} {at}"), font, tokens.metric_name);
         }
     }
-    for side in [0.0, width] {
+    for side in width.map(|w| [0.0, w]).into_iter().flatten() {
         c.painter.line_segment([Pos2::new(x(side), y(span.0)), Pos2::new(x(side), y(span.1))], stroke);
     }
 }

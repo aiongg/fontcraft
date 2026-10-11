@@ -41,7 +41,7 @@ pub const METHODS: &[(&str, &str)] = &[
     ("ui.tool.list", "{} the pointer tools and the active one (the command tool.list)"),
     (
         "ui.pointer",
-        "{events: [{kind: down | drag | up | move | doubleclick, x, y, space?: font | screen (default font), mods?: [shift, alt, cmd, ctrl]}]} drive the active tool like the mouse; returns {tool, busy, interaction, selection, overlays, errors}",
+        "{events: [{kind: down | drag | up | move | doubleclick, x, y, space?: font | screen (default font: the edited glyph's units; in text mode the text's), mods?: [shift, alt, cmd, ctrl]}]} drive the active tool like the mouse; returns {tool, busy, interaction, selection, overlays, errors}",
     ),
     (
         "ui.key",

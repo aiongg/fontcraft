@@ -14,6 +14,7 @@
 //! | [`bbox`] | the selection's bounding box and knobs, and the transformation origin |
 //! | [`annotations`] | notes and correction marks |
 //! | [`audit_markers`] | audit results on the edited layer; also runs live audit |
+//! | [`text`] | text mode: kerned gaps, the text selection and cursor, metrics labels; the pointer in text mode |
 //!
 //! Every colour and size comes from [`Tokens`]. Wheel and gestures act through `view.scrollTo`
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
@@ -29,6 +30,7 @@ pub mod guides;
 pub mod metrics;
 pub mod nodes;
 pub mod selection;
+pub mod text;
 pub mod view;
 
 use egui::{Pos2, Rect, Sense, Stroke};
@@ -76,25 +78,54 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         crate::tools_glue::collect(tools, ui, &response, rect);
         let painter = ui.painter_at(rect);
         let c = Painting { painter: &painter, rect, view: v, tokens };
+        // Text mode draws the text as text: every glyph filled, kerned gaps and the selection
+        // behind them, the cursor and the metrics labels in front, no nodes.
+        let text_mode = tab.text_mode;
+        let tc = Painting { painter: &painter, rect, view: text::text_view(&tab.view, center), tokens };
         if tab.edit_background {
             background::tint(&c);
         }
         let (lines, marks) = metrics::of(font, master);
-        if state.display.metrics {
-            metrics::draw(&c, &lines, &marks, width, view::vertical_span(font, master), state.display.metrics_names);
+        let span = view::vertical_span(font, master);
+        // Vertical text has no horizontal metric lines to share: each column is its own.
+        let vertical_text = text_mode && tab.direction == crate::state::WritingDirection::Ttb;
+        if state.display.metrics && !vertical_text {
+            metrics::draw(&c, &lines, &marks, (!text_mode).then_some(width), span, state.display.metrics_names);
         }
         guides::draw_lines(&c, &extras, &state.display);
         // The edited side as a layer: while the background is edited, its background is the
         // foreground, which `background::draw` shows as the reference outline.
         let edited = view::edited_layer(font, &tab);
-        if let Some(glyph) = tab.edited_glyph().and_then(|g| font.glyph(g))
+        if !text_mode
+            && let Some(glyph) = tab.edited_glyph().and_then(|g| font.glyph(g))
             && let Some(layer) = edited.as_deref()
         {
             background::draw(&c, font, glyph, layer, &state.display);
         }
         let doc = session.active().map(|d| (d.id, d.revision)).unwrap_or_default();
-        let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && *preview_tool };
+        if text_mode && let Some(layout) = layout.as_deref() {
+            text::draw_behind(&tc, layout, &tab, span.0);
+        }
+        let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && (*preview_tool || text_mode) };
         fill::draw(&c, fill_cache, font, &tab, layout.as_deref(), origin, what);
+        if text_mode {
+            if let Some(layout) = layout.as_deref() {
+                let overlay = text::Overlay { font, doc, descender: span.0, labels: state.display.metrics };
+                text::draw_front(&tc, layout, &tab, &overlay, &mut layouts.sidebearings.borrow_mut());
+            }
+            if !what.edited
+                && let Some(glyph) = tab.edited_glyph()
+                && let Some(layer) = edited.as_deref()
+                && let Some(composite) = fill_cache.outlines.get(doc, font, glyph, layer)
+            {
+                let to_screen = Affine::translate(v.origin.to_vec2()) * Affine::scale_non_uniform(v.scale(), -v.scale());
+                for contour in flatten(&(to_screen * composite.outline.clone())) {
+                    painter.add(egui::Shape::line(contour, Stroke::new(tokens.metric_line_width, tokens.glyph_fill)));
+                }
+            }
+            guides::draw_measurement(&c, &extras);
+            return;
+        }
         let Some(layer) = edited.as_deref() else { return };
         let to_screen = Affine::translate(v.origin.to_vec2()) * Affine::scale_non_uniform(v.scale(), -v.scale());
         if tab.edit_background {

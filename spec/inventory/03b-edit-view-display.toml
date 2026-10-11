@@ -972,7 +972,11 @@ summary = "Places the text cursor before the glyph at the given index, optionall
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
 own = true
-notes = "The selection runs from the cursor over the `selectionLength` items after it, so the current glyph is the first selected glyph."
+notes = "The selection runs from the cursor over the `selectionLength` items after it, so the current glyph is the first selected glyph. In text mode a click runs it at the item boundary nearest the click and a drag selects from the press to the pointer; documented, not yet observed: a double-click on a glyph edits it (Edit View's two modes)."
+guesses = [
+  "Shift+click extends the selection to the click, keeping the end of the selection away from it; the reference app settles it.",
+  "A double-click on a glyph in text mode also makes the Select tool active; the reference app settles it.",
+]
 
 [[command]]
 id = "edit.emojiAndSymbols"
@@ -1130,6 +1134,10 @@ milestone = "M5"
 summary = "Sets the layout of the tab text to left to right, right to left or top to bottom. Bound to the three direction buttons at the bottom right of the Edit View window; top to bottom also switches the Info box to its vertical form."
 ref = "Edit View › Entering Text › Writing Direction"
 status = "handbook"
+notes = "Documented, not yet observed. The three bottom-bar buttons show the tab's direction and run the command."
+guesses = [
+  "Vertical text in text mode draws no horizontal metric lines, since every column has its own; a vertical tab in the reference app settles it.",
+]
 
 [[command]]
 id = "window.textPreview"

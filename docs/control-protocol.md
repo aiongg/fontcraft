@@ -65,7 +65,7 @@ Every event is checked before the first one runs.
 |---|---|
 | `kind` | `down`, `drag`, `up`, `move` (hover), `doubleclick` (send it after the two clicks' `down` and `up`) |
 | `x`, `y` | the position |
-| `space` | `font` (default): font units of the edited glyph. `screen`: window points, as the mouse reports them |
+| `space` | `font` (default): font units of the edited glyph; in text mode, font units of the laid-out text (the first line's baseline at y = 0, its start at x = 0). `screen`: window points, as the mouse reports them |
 | `mods` | modifier names held: `shift`, `alt`, `cmd`, `ctrl`. `cmd` is Command on a Mac and Control elsewhere; `ctrl` is the key that suspends snapping |
 
 At most 10,000 events per request. The reply is `{tool, busy, interaction, selection, overlays,

@@ -68,6 +68,13 @@ pub enum Icon {
     // Font View's mode buttons.
     GridView,
     ListView,
+    // Edit View's bottom bar: writing direction and kerning mode.
+    LeftToRight,
+    RightToLeft,
+    TopToBottom,
+    KerningOff,
+    KerningOn,
+    KerningLocked,
 }
 
 /// Every icon, for tests and previews.
@@ -125,6 +132,12 @@ pub const ALL: &[Icon] = &[
     Icon::CapAxisAligned,
     Icon::GridView,
     Icon::ListView,
+    Icon::LeftToRight,
+    Icon::RightToLeft,
+    Icon::TopToBottom,
+    Icon::KerningOff,
+    Icon::KerningOn,
+    Icon::KerningLocked,
 ];
 
 /// The icon of the pointer tool `id` (an id of `fontcraft_tools::TOOLS`).
@@ -314,6 +327,37 @@ impl Pen {
 
     /// Two bars aligned on an axis at `at` (0 left or top, 0.5 centre, 1 right or bottom);
     /// `vertical` lays the picture on its side for the vertical alignments.
+    /// Three lines of text set from one edge with an arrow along them: left to right, right to
+    /// left, or (vertical) columns from the top.
+    fn writing(&mut self, rtl: bool, vertical: bool) {
+        let place = |(x, y): P| {
+            let x = if rtl { 1.0 - x } else { x };
+            if vertical { (1.0 - y, x) } else { (x, y) }
+        };
+        for (y, len) in [(0.2, 0.7), (0.4, 0.5), (0.6, 0.62)] {
+            self.line(&[place((0.14, y)), place((0.14 + len, y))]);
+        }
+        self.line(&[place((0.14, 0.82)), place((0.7, 0.82))]);
+        let dir = if vertical {
+            (0.0, 1.0)
+        } else if rtl {
+            (-1.0, 0.0)
+        } else {
+            (1.0, 0.0)
+        };
+        self.head(place((0.88, 0.82)), dir, 0.18);
+    }
+
+    /// A V and an A between heights `top` and `bottom`, their boxes apart (a positive `gap`) or
+    /// overlapping (a negative one).
+    fn kern_pair(&mut self, gap: f32, top: f32, bottom: f32) {
+        let (v0, a1) = (0.5 - gap / 2.0, 0.5 + gap / 2.0);
+        let bar = top + (bottom - top) * 0.62;
+        self.line(&[(v0 - 0.4, top), (v0 - 0.2, bottom), (v0, top)]);
+        self.line(&[(a1, bottom), (a1 + 0.2, top), (a1 + 0.4, bottom)]);
+        self.line(&[(a1 + 0.08, bar), (a1 + 0.32, bar)]);
+    }
+
     fn align(&mut self, at: f32, vertical: bool) {
         let place = |(x, y): P| if vertical { (y, x) } else { (x, y) };
         let axis = 0.16 + at * 0.68;
@@ -496,6 +540,17 @@ fn draw(pen: &mut Pen, icon: Icon) {
                     pen.rect_fill((x, y), (x + 0.3, y + 0.3), 0.0);
                 }
             }
+        }
+        Icon::LeftToRight => pen.writing(false, false),
+        Icon::RightToLeft => pen.writing(true, false),
+        Icon::TopToBottom => pen.writing(false, true),
+        Icon::KerningOff => pen.kern_pair(0.12, 0.22, 0.78),
+        Icon::KerningOn => pen.kern_pair(-0.16, 0.22, 0.78),
+        Icon::KerningLocked => {
+            pen.kern_pair(-0.16, 0.06, 0.5);
+            let arc: Vec<P> = (0..=12).map(|i| PI + PI * i as f32 / 12.0).map(|a| (0.5 + 0.11 * a.cos(), 0.7 + 0.11 * a.sin())).collect();
+            pen.line(&arc);
+            pen.rect_fill((0.33, 0.7), (0.67, 0.95), 0.04);
         }
         Icon::ListView => {
             for y in [0.2, 0.5, 0.8] {

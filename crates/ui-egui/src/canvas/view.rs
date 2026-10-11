@@ -73,6 +73,8 @@ struct LayoutKey {
 #[derive(Default)]
 pub struct LayoutCache {
     inner: RefCell<LayoutCacheInner>,
+    /// The sidebearings the text-mode metrics labels show.
+    pub sidebearings: RefCell<super::text::Sidebearings>,
 }
 
 #[derive(Default)]

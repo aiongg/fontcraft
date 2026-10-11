@@ -106,6 +106,8 @@ pub struct ToolsState {
     ctrl_press: Option<(Pos2, egui::Modifiers)>,
     /// The open canvas context menu.
     pub(crate) context_menu: Option<ContextMenu>,
+    /// A press on the text in text mode, while the button is down.
+    pub(crate) text_drag: crate::canvas::text::TextDrag,
 }
 
 impl ToolsState {
@@ -117,6 +119,11 @@ impl ToolsState {
             None => Point::new(size[0] / 2.0, size[1] / 2.0),
         }
     }
+}
+
+/// The canvas centre in window points, as the last frame drew it.
+pub(crate) fn canvas_center(app: &FontcraftApp) -> Point {
+    app.tools.center(app.state.canvas_size)
 }
 
 /// The settings the tools work with: distances from the tokens, arrow steps from the font.
@@ -213,6 +220,9 @@ pub fn sync(app: &mut FontcraftApp) {
 /// also go to the status bar).
 pub fn pointer(app: &mut FontcraftApp, ev: RawPointer) -> Vec<String> {
     app.tools.mods = ev.mods;
+    if let Some(errors) = crate::canvas::text::pointer(app, ev) {
+        return errors;
+    }
     let out = with_tool(app, |toolbox, cx| {
         let pos = match ev.space {
             Space::Font => ev.at,
