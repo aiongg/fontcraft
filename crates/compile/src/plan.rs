@@ -51,7 +51,7 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let gpos = match font {
-        Some(font) => crate::kern::generate(font, &resolved, &glyphs, &mut warnings)?.is_some(),
+        Some(font) => crate::kern::generate(font, &resolved, &glyphs, &mut warnings).is_some(),
         None => false,
     };
     let final_names = if flavour == Flavour::Cff || glyphs.len() <= crate::MAX_POST_NAMES {

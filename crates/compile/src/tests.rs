@@ -1523,13 +1523,51 @@ fn kerning_is_written_to_gpos_with_the_values_that_apply() {
         }
     }
 
-    // Feature code is compiled from M8: until then its font gets no kerning, and is told so.
-    Arc::make_mut(&mut f.features).features.push(fontcraft_model::Snippet {
-        name: "liga".into(),
-        code: "sub f i by f_i;".into(),
+    // Past one of the writer's caps the font is written without kerning, with a warning.
+    let limits = fontcraft_features::KernLimits { rules: 2, ..Default::default() };
+    crate::kern::TEST_LIMITS.with(|l| l.set(Some(limits)));
+    let out = compile_ttf(&f, &Options::default());
+    crate::kern::TEST_LIMITS.with(|l| l.set(None));
+    let out = out.unwrap();
+    assert!(FontRef::new(&out.bytes).unwrap().gpos().is_err());
+    assert!(out.warnings.iter().any(|w| w.starts_with("the kerning was not written") && w.contains("kerning rules")), "{:?}", out.warnings);
+}
+
+#[test]
+fn only_a_hand_written_kern_feature_keeps_the_generated_kerning_out() {
+    use fontcraft_model::Snippet;
+    let mut f = Font::new("Kern Sans");
+    Arc::make_mut(&mut f.kerning).ltr.set("m01", "A", "V", -80.0);
+    // What a `.glyphs` source usually carries: code the editor writes itself.
+    let features = Arc::make_mut(&mut f.features);
+    features.prefixes.push(Snippet {
+        name: "Languagesystems".into(),
+        code: "languagesystem DFLT dflt;".into(),
+        automatic: true,
         ..Default::default()
     });
+    features.features.push(Snippet { name: "liga".into(), code: "sub f i by f_i;".into(), automatic: true, ..Default::default() });
+    features.features.push(Snippet { name: "kern".into(), code: "# Automatic Code\n".into(), ..Default::default() });
     let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert!(FontRef::new(&out.bytes).unwrap().gpos().is_ok(), "{:?}", out.warnings);
+    let not_compiled = "feature code is compiled from M8: these features were not written to the font: liga";
+    assert!(out.warnings.iter().any(|w| w == not_compiled), "{:?}", out.warnings);
+
+    let mut hand = f.clone();
+    let features = Arc::make_mut(&mut hand.features);
+    features.features.retain(|s| s.name != "kern");
+    features.features.push(Snippet { name: "kern".into(), code: "pos A V -100;".into(), ..Default::default() });
+    let out = compile_ttf(&hand, &Options::default()).unwrap();
     assert!(FontRef::new(&out.bytes).unwrap().gpos().is_err());
-    assert!(out.warnings.iter().any(|w| w.contains("feature code")), "{:?}", out.warnings);
+    assert!(out.warnings.iter().any(|w| w.contains("hand-written kern feature")), "{:?}", out.warnings);
+    assert!(crate::has_hand_written_kern(&hand));
+
+    // A UFO's features.fea read as one text: its kern block is found in it.
+    let mut ufo = f.clone();
+    Arc::make_mut(&mut ufo.features).features.clear();
+    Arc::make_mut(&mut ufo.features).prefixes = vec![Snippet {
+        code: "languagesystem DFLT dflt; # feature kern {\nfeature liga{ sub f i by f_i; } liga;\nfeature kern {pos A V -100;} kern;".into(),
+        ..Default::default()
+    }];
+    assert_eq!(crate::kern::feature_code(&ufo), crate::kern::FeatureCode { hand_written_kern: true, features: vec!["liga".into(), "kern".into()] });
 }

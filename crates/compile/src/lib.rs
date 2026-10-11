@@ -9,7 +9,7 @@
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
 //! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
-//! | Pair kerning | `kern` | the master's kerning as `GPOS` (`fontcraft_features`), for a source without feature code |
+//! | Pair kerning | `kern` | the master's kerning as `GPOS` (`fontcraft_features`), for a source without a hand-written `kern` feature |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
 //! | Table builders and assembly | `build`, [`cff`], [`names`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning, then the font file |
 //!
@@ -49,6 +49,7 @@ use std::time::Duration;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ModelError, Resolved, Target};
 
+pub use kern::has_hand_written_kern;
 pub use outline::Flavour;
 
 /// Largest coordinate, in font units, an outline point may have in a TrueType outline. `glyf`
@@ -212,7 +213,7 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let gpos = match font {
-        Some(font) => kern::generate(font, &resolved, &glyphs, &mut warnings)?,
+        Some(font) => kern::generate(font, &resolved, &glyphs, &mut warnings),
         None => None,
     };
     let upm = f64::from(resolved.units_per_em);
