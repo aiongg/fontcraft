@@ -1,5 +1,6 @@
-//! FontCraft features (L2): the generated pair kerning a compiled font gets, as a `GPOS` table.
-//! Feature-code compiling, the other automatic features and the mark writer follow in M8.
+//! FontCraft features (L2): the generated pair kerning a compiled font gets, as a `GPOS` table,
+//! and the mark writer ([`marks`], M6.17). Feature-code compiling and the other automatic
+//! features follow in M8.
 //!
 //! [`kern_feature`] writes one master's kerning (`compile.kernValueLookup`,
 //! `compile.kernFeatureWriter`, `kerning.implicitKernFeature`, `autoFeature.kern`,
@@ -37,6 +38,7 @@
 pub mod evaluate;
 mod gpos;
 mod kern;
+pub mod marks;
 mod properties;
 mod resolve;
 mod unicode18;

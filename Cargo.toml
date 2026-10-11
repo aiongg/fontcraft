@@ -37,6 +37,7 @@ fontcraft-glyphquery = { path = "crates/glyphquery" }
 fontcraft-spacing = { path = "crates/spacing" }
 fontcraft-textlayout = { path = "crates/textlayout" }
 fontcraft-features = { path = "crates/features" }
+fontcraft-components = { path = "crates/components" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }

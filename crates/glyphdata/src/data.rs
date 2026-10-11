@@ -597,6 +597,17 @@ impl GlyphData {
         })
     }
 
+    // ── Unicode canonical decomposition (M6.3) ──
+
+    /// The Unicode canonical decomposition mapping of `cp`, one level (the mapping in
+    /// `UnicodeData.txt` without a compatibility tag): U+00C0 → [U+0041, U+0300]. `None` when the
+    /// code point has none.
+    pub fn canonical_decomposition(&self, cp: u32) -> Option<Vec<u32>> {
+        // M6.3: generate the mappings into the tables and read them here.
+        let _ = cp;
+        None
+    }
+
     // ── Unicode properties and the Adobe Glyph List ──
 
     pub fn general_category(&self, cp: u32) -> GeneralCategory {

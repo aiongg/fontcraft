@@ -20,7 +20,7 @@ milestones add. Decisions with alternatives are recorded in [`decisions/`](decis
               │
    L4   tools: pointer and key events → commands (begin / preview / commit)        (4 tools today)
    L3   format · compile · decompile · io-glyphs · io-ufo · io-svg · oracle · render · tables   (8 of 9 today)
-   L2   pathops · interp · spacing · textlayout · components · features · hinting · audit · glyphquery · plugins   (pathops, spacing, textlayout, features, audit, glyphquery today)
+   L2   pathops · interp · spacing · textlayout · components · features · hinting · audit · glyphquery · plugins   (pathops, spacing, textlayout, components, features, audit, glyphquery today)
    L1   model: Font ─ masters ─ glyphs ─ layers ─ shapes (pure data, Arc-shared)
    L0   geom (kurbo)  ·  standalone crates: plist, cff, ttinstr, container, glyphdata  (all but ttinstr today)
 ```

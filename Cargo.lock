@@ -886,6 +886,7 @@ name = "fontcraft-compile"
 version = "0.0.1"
 dependencies = [
  "fontcraft-cff",
+ "fontcraft-components",
  "fontcraft-features",
  "fontcraft-geom",
  "fontcraft-model",
@@ -895,6 +896,16 @@ dependencies = [
  "thiserror 2.0.21",
  "unicode-normalization",
  "write-fonts 0.54.0",
+]
+
+[[package]]
+name = "fontcraft-components"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-geom",
+ "fontcraft-glyphdata",
+ "fontcraft-model",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -928,6 +939,7 @@ dependencies = [
  "base64 0.22.1",
  "fontcraft-audit",
  "fontcraft-compile",
+ "fontcraft-components",
  "fontcraft-container",
  "fontcraft-decompile",
  "fontcraft-format",
