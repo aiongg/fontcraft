@@ -555,7 +555,7 @@ fn cross(a0: (f64, f64), a1: (f64, f64), b0: (f64, f64), b1: (f64, f64)) -> Opti
     }
     let t = ((b0.0 - a0.0) * dby - (b0.1 - a0.1) * dbx) / den;
     let u = ((b0.0 - a0.0) * day - (b0.1 - a0.1) * dax) / den;
-    (t > 1e-6 && t < 1.0 - 1e-6 && u > 1e-6 && u < 1.0 - 1e-6).then(|| (t, (a0.0 + t * dax, a0.1 + t * day)))
+    (t > 1e-6 && t < 1.0 - 1e-6 && u > 1e-6 && u < 1.0 - 1e-6).then_some((t, (a0.0 + t * dax, a0.1 + t * day)))
 }
 
 /// A small square used to tell variants apart, `n` steps down from `top`.

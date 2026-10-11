@@ -53,9 +53,12 @@ pub fn set_axis_location(params: &Params, entries: &[AxisLocationEntry]) -> Resu
     Ok(params.clone())
 }
 
+/// One axis's mapping: the axis tag and its `(external, internal)` points.
+pub type AxisMapping = (String, Vec<(f64, f64)>);
+
 /// The font's Axis Mappings, as (axis tag, `(external, internal)` points sorted by external
 /// value), in the parameter's order.
-pub fn axis_mappings(font: &Font) -> Result<Vec<(String, Vec<(f64, f64)>)>, InterpError> {
+pub fn axis_mappings(font: &Font) -> Result<Vec<AxisMapping>, InterpError> {
     // M9.2
     let _ = font;
     Ok(Vec::new())

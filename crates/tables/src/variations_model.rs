@@ -35,9 +35,12 @@ pub fn plot(locations: &[Vec<(Tag, f64)>]) -> Result<String> {
     Err(TablesError::NotBuilt("variations plot"))
 }
 
+/// One axis's `avar` segment map: the axis tag and its `(from, to)` points.
+pub type AvarSegments = (Tag, Vec<(f64, f64)>);
+
 /// The `avar` segment maps fontTools' planner proposes for the weight, width, slant and optical
 /// size axes of `font`, per axis tag.
-pub fn plan_avar(font: &SfntFont) -> Result<Vec<(Tag, Vec<(f64, f64)>)>> {
+pub fn plan_avar(font: &SfntFont) -> Result<Vec<AvarSegments>> {
     // M12.34
     let _ = font;
     Err(TablesError::NotBuilt("variations plan-avar"))

@@ -450,6 +450,7 @@ impl Sink {
 /// Builds `jobs` of `font` into `sink`, adding to `report`. `source` is the document's title (its
 /// file name without extension), which names the files of a font without a family name. `data` is
 /// the document's glyph data, which gives production names and categories.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn build(
     font: &Font,
     source: &str,

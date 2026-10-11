@@ -92,12 +92,11 @@ const LAYER_OUTLINES: CheckSpec = CheckSpec {
 
 fn no_layer_check(_: &crate::LayerInput<'_>, _: &crate::Params<'_>, _: &mut crate::Sink) {}
 
-const fn count(parts: &[&[CheckSpec]]) -> usize {
+const fn count(mut parts: &[&[CheckSpec]]) -> usize {
     let mut n = 0;
-    let mut p = 0;
-    while p < parts.len() {
-        n += parts[p].len();
-        p += 1;
+    while let [first, rest @ ..] = parts {
+        n += first.len();
+        parts = rest;
     }
     n
 }

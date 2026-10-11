@@ -6,7 +6,7 @@ use fontcraft_engine::Session;
 use serde_json::{Value, json};
 
 pub const SUBCOMMAND: Subcommand =
-    Subcommand { name: "run", summary: "Run engine commands headless on a source", usage: USAGE, options: &[], actions: &[], run: run };
+    Subcommand { name: "run", summary: "Run engine commands headless on a source", usage: USAGE, options: &[], actions: &[], run };
 
 const USAGE: &str = "\
   fontcraft-cli run [--in FILE] [--cmd ID [--params JSON]]... [--save [FILE]] [--export FILE]

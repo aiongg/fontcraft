@@ -124,6 +124,6 @@ mod tests {
         assert_eq!(ImageFormat::from_extension("sun 48.PNG"), ImageFormat::Png);
         assert_eq!(ImageFormat::from_extension("noext"), ImageFormat::Other);
         assert!(!ImageFormat::Pdf.decodable());
-        assert!(matches!(decode_rgba(&[], MAX_PIXELS), Err(_)));
+        assert!(decode_rgba(&[], MAX_PIXELS).is_err());
     }
 }
