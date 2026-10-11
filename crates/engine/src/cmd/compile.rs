@@ -622,7 +622,22 @@ impl Stage {
 
     fn put(&mut self, name: &str, bytes: &[u8], warnings: &mut Vec<String>) -> Result<std::path::PathBuf> {
         use std::io::Write as _;
-        let target = if self.single { self.root.clone() } else { name.split('/').fold(self.root.clone(), |p, part| p.join(part)) };
+        // `..` (an Export Folder above the destination) is resolved here, so no folder is
+        // created on the way up.
+        let target = if self.single {
+            self.root.clone()
+        } else {
+            name.split('/').fold(self.root.clone(), |mut p, part| {
+                match part {
+                    ".." => {
+                        p.pop();
+                    }
+                    "" | "." => {}
+                    part => p.push(part),
+                }
+                p
+            })
+        };
         if let Some(i) = self.staged.iter().position(|(_, f)| same_output(f, &target)) {
             let (tmp, _) = self.staged.remove(i);
             let _ = std::fs::remove_file(tmp);
