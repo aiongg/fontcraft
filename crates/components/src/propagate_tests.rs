@@ -365,7 +365,8 @@ fn the_cache_reuses_results_until_a_reached_glyph_changes() {
 /// The smart-components example font: `_part.shoulder` has two properties and three pole layers
 /// whose `connect` anchor moves with `shoulderWidth`. A component of it passes on its anchors
 /// interpolated at its values, not the master layer's. Expected values from glyphsLib on the
-/// same font, and on a copy with `m`'s second shoulder removed (`m_one`).
+/// same font, and on a copy with `m`'s second shoulder removed (`m.one` here: a name with an
+/// underscore would make it a ligature).
 #[test]
 fn smart_components_pass_on_anchors_interpolated_at_their_values() {
     use fontcraft_model::{ComponentInfo, ComponentInfoBox, LayerAttrs, LayerInfo, LayerInfoBox, PartProperty, Path, SmartPole, SmartValue};
@@ -417,13 +418,13 @@ fn smart_components_pass_on_anchors_interpolated_at_their_values() {
     let stem = Shape::Component(Component::new("_part.stem", 0.0, 0.0));
     let f = font(vec![
         user("m", vec![stem.clone(), piece(17.0, 0.0, 28.78011, -44.28304), piece(180.0, 1.0, 0.0, -81.24796)]),
-        user("m_one", vec![stem, piece(17.0, 0.0, 28.78011, -44.28304)]),
+        user("m.one", vec![stem, piece(17.0, 0.0, 28.78011, -44.28304)]),
         user("n", vec![Shape::Path(Path::rect(26.0, 1.0, 193.0, 365.0)), piece(0.0, 0.0, 0.0, -100.0)]),
         shoulder,
         glyph("_part.stem", "Letter", "Lowercase", &[("connect", 153.0, 0.0)], &[]),
     ]);
     assert_anchors(&f, "m", &[("connect", 470.0, 2.0)]);
-    assert_anchors(&f, "m_one", &[("connect", 315.634033, 1.0)]);
+    assert_anchors(&f, "m.one", &[("connect", 315.634033, 1.0)]);
     assert_anchors(&f, "n", &[("_connect", 136.0, 0.0), ("connect", 290.0, 1.0)]);
     assert_anchors(&f, "_part.shoulder", &[("_connect", 136.0, 0.0), ("connect", 320.0, 1.0)]);
 }

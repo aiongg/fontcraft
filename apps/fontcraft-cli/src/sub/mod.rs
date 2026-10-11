@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn every_inventory_subcommand_is_registered() {
         let text = include_str!("../../../../spec/inventory/20-cli.toml");
-        for block in text.split("[[cli]]").skip(1) {
+        for block in text.split("\n[[cli]]").skip(1) {
             let Some(id) = block.lines().find_map(|l| l.strip_prefix("id = \"").and_then(|r| r.strip_suffix('"'))) else { continue };
             let mut words = id.split(' ');
             let name = words.next().unwrap_or_default();
