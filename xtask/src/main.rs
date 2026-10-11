@@ -18,6 +18,7 @@ mod parity;
 mod roundtrip;
 mod sha256;
 mod spec;
+mod testfonts;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -61,6 +62,9 @@ commands:
                   remove overlaps on every glyph layer of the corpus comparison set and measure it
                   (--quadratic: convert the input to quadratic curves first)
                   (inputs for crates/pathops/crosscheck/reference.py go to DIR/layers.jsonl)
+  testfonts [--out DIR]
+                  build the synthetic test fonts for the checks in the reference app and write them
+                  as .glyphs files with a README (default DIR: plan/local/testfonts/)
 ";
 
 fn main() -> ExitCode {
@@ -82,6 +86,7 @@ fn main() -> ExitCode {
         Some("roundtrip") => roundtrip::run(&root(), &rest),
         Some("audit") => audit::run(&root(), &rest),
         Some("overlap") => overlap::run(&root(), &rest),
+        Some("testfonts") => testfonts::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");
             Ok(())
