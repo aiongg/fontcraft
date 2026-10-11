@@ -463,3 +463,32 @@ fn edit_menu_copy_and_paste_reach_the_list_that_had_the_keyboard() {
     let r = crate::control::handle(&mut app, &json!({"id": 1, "method": "ui.menu.invoke", "params": {"command": "edit.copy"}}));
     assert!(r["error"].as_str().is_some_and(|e| e.contains("nothing to copy")), "the empty glyph selection is copied: {r}");
 }
+
+#[test]
+fn menu_shortcuts_work_while_a_list_has_the_keyboard() {
+    let mut app = kern_app();
+    app.run("view.newTab", &json!({"glyphs": ["H"]})).unwrap();
+    app.run("window.kerning", &json!({})).unwrap();
+    let w = Window::new();
+    w.frame(&mut app, Vec::new());
+    let at = row_rect(&app, "V", "A").center();
+    w.click(&mut app, at, Modifiers::NONE);
+    w.frame(&mut app, Vec::new());
+    assert!(w.ctx.memory(|m| m.has_focus(crate::shell::kerning_window::list_id())), "the clicked list has the keyboard");
+    app.run("kerning.setPair", &json!({"left": "A", "right": "V", "value": -5})).unwrap();
+    w.key(&mut app, Key::Z, Modifiers::COMMAND);
+    assert_eq!(value(&mut app, "A", "V", None), json!(-100.0), "Cmd+Z undoes with the Kerning list focused");
+    // The list keeps its own Select All.
+    w.key(&mut app, Key::A, Modifiers::COMMAND);
+    assert_eq!(app.state.panels.kerning_window.selected.len(), app.state.panels.kerning_window.listing.rows.len());
+
+    // Select Sample Text holds the keyboard in its list while it is open.
+    app.run("window.kerning", &json!({})).unwrap();
+    app.run("edit.selectSampleText", &json!({})).unwrap();
+    w.frame(&mut app, Vec::new());
+    w.frame(&mut app, Vec::new());
+    assert!(w.ctx.egui_wants_keyboard_input() && !w.ctx.text_edit_focused(), "the sample list has the keyboard");
+    app.run("kerning.setPair", &json!({"left": "A", "right": "V", "value": -7})).unwrap();
+    w.key(&mut app, Key::Z, Modifiers::COMMAND);
+    assert_eq!(value(&mut app, "A", "V", None), json!(-100.0), "Cmd+Z undoes with the sample list focused");
+}

@@ -152,6 +152,13 @@ fn selected_glyphs_passes_the_font_view_selection() {
     assert_eq!(given["params"]["glyphs"], json!(["B"]));
     assert_eq!(given["params"]["importMetrics"], "widthCentered");
     call(&mut app, "ui.dialog.cancel", json!({}));
+
+    // While an Edit View tab shows, the Font View selection is still the one ticked.
+    app.run("view.newTab", &json!({"glyphs": ["V"]})).unwrap();
+    call(&mut app, "engine.execute", json!({"command": "dialog.open", "params": {"command": "file.importMetrics"}}));
+    let ticked = call(&mut app, "ui.dialog.set", json!({"field": "selectedGlyphs", "value": true}));
+    assert_eq!(ticked["params"]["glyphs"], json!(["A"]), "ticked in a tab: the Font View selection");
+    call(&mut app, "ui.dialog.cancel", json!({}));
 }
 
 #[test]

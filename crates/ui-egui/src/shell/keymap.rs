@@ -64,11 +64,13 @@ pub fn parse(text: &str) -> Option<KeyboardShortcut> {
 }
 
 /// The commands whose shortcuts were pressed this frame. Nothing fires while a text field has
-/// the keyboard, or had it when the last frame ended (`text_focus`).
+/// the keyboard, or had it when the last frame ended (`text_focus`). Another focused widget,
+/// such as a list, leaves the menu shortcuts working and keeps only its own.
 pub fn pressed(ctx: &egui::Context, text_focus: bool) -> Vec<(&'static str, Value)> {
-    if text_focus || ctx.egui_wants_keyboard_input() {
+    if text_focus || ctx.text_edit_focused() {
         return Vec::new();
     }
+    let kept = kept_by_focus(ctx);
     let mut out = Vec::new();
     ctx.input_mut(|input| {
         // `Cmd+Alt+2` … `Cmd+Alt+9` show tabs 2 to 9; `Cmd+Alt+1` is Font View's own shortcut.
@@ -79,7 +81,7 @@ pub fn pressed(ctx: &egui::Context, text_focus: bool) -> Vec<(&'static str, Valu
             }
         }
         for (id, shortcut) in KEYMAP.iter() {
-            if !NUMBERED.contains(id) && input.consume_shortcut(shortcut) {
+            if !NUMBERED.contains(id) && !kept.contains(shortcut) && input.consume_shortcut(shortcut) {
                 out.push((*id, json!({})));
             }
         }
@@ -92,6 +94,11 @@ pub fn pressed(ctx: &egui::Context, text_focus: bool) -> Vec<(&'static str, Valu
         }
     });
     out
+}
+
+/// The shortcuts the focused widget handles itself: Select All in the Kerning window's list.
+fn kept_by_focus(ctx: &egui::Context) -> Vec<KeyboardShortcut> {
+    if ctx.memory(|m| m.has_focus(super::kerning_window::list_id())) { vec![KeyboardShortcut::new(Modifiers::COMMAND, Key::A)] } else { Vec::new() }
 }
 
 /// Commands whose shortcut stands for a numbered series and carries the number as a parameter.

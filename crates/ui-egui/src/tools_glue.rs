@@ -103,6 +103,9 @@ pub struct ToolsState {
     /// away before the frame starts, so without this the shortcuts would take the field's
     /// Escape.
     pub(crate) text_focus_at_end: bool,
+    /// A text edit, not just any focusable widget, had the keyboard when the last frame ended:
+    /// the menu shortcuts stay off for it alone.
+    pub(crate) text_edit_at_end: bool,
     /// Text from `ui.text` for the focused text field, typed at the next frame.
     pending_text: String,
     /// A Mac Ctrl+press on the canvas, held back until it turns out to be a click (the context

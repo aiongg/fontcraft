@@ -290,7 +290,7 @@ impl FontcraftApp {
         tools_glue::keys(self, ui.ctx());
         let mut pending: Vec<(&'static str, Value)> = Vec::new();
         shell::text_preview::find_shortcut(self, ui.ctx(), &mut pending);
-        pending.extend(shell::keymap::pressed(ui.ctx(), self.tools.text_focus));
+        pending.extend(shell::keymap::pressed(ui.ctx(), self.tools.text_edit_at_end));
         pending.extend(shell::clipboard::events(self, ui.ctx()));
         self.menu_bar(ui, &mut pending);
         shell::tabs::strip(self, ui, &mut pending);
@@ -340,6 +340,7 @@ impl FontcraftApp {
             ui.ctx().copy_text(text);
         }
         self.tools.text_focus_at_end = ui.ctx().egui_wants_keyboard_input();
+        self.tools.text_edit_at_end = ui.ctx().text_edit_focused();
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {

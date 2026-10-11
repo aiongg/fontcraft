@@ -542,6 +542,11 @@ fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>,
     if let Some(d) = &app.dialog {
         return Err(format!("the dialog `{}` is open: confirm or cancel it first", d.title));
     }
+    // The canvas takes no input while the dialog is open: end what the tool was doing and drop
+    // its hover marker, which would otherwise stay drawn under the dialog. First, because fields
+    // that measure the font run a preview of their own, which a running drag would refuse.
+    let out = app.tools.toolbox.cancel();
+    crate::tools_glue::apply(app, out);
     let mut shaped = None;
     let mut given = given.clone();
     let fields = match dialog.fields {
@@ -597,10 +602,6 @@ fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>,
     if dialog.mode == Mode::Preview && targets.is_empty() {
         return Err(format!("{}: select a glyph first", dialog.title));
     }
-    // The canvas takes no input while the dialog is open: end what the tool was doing and drop
-    // its hover marker, which would otherwise stay drawn under the dialog.
-    let out = app.tools.toolbox.cancel();
-    crate::tools_glue::apply(app, out);
     match dialog.mode {
         Mode::Preview => app.session.begin(dialog.title).map_err(|e| e.to_string())?,
         // The command acts on the active document as a whole.
@@ -676,6 +677,15 @@ fn switch_tab(app: &mut FontcraftApp, index: usize) -> Result<Value, String> {
 /// What the command acts on when the dialog names nothing: the Edit View selection, else the
 /// glyphs selected in Font View.
 fn selection_targets(app: &FontcraftApp, command: &str) -> Map<String, Value> {
+    // Import Metrics' Selected Glyphs are the glyphs selected in Font View, also while a tab
+    // shows.
+    if command == import_metrics::FILE.command {
+        let mut m = Map::new();
+        if !app.state.selected_glyphs.is_empty() {
+            m.insert("glyphs".into(), json!(app.state.selected_glyphs));
+        }
+        return m;
+    }
     let from_view = crate::tools_glue::with_targets(app, command, Value::Null);
     match from_view {
         Value::Object(m) if !m.is_empty() => m,

@@ -15,8 +15,6 @@
 //!
 //! In Font View, `edit.find` gives the keyboard to Font View's search field instead.
 
-use std::sync::Arc;
-
 use egui::{Modifiers, Rect, Sense, vec2};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -60,7 +58,8 @@ pub struct Found {
 struct Key {
     query: String,
     mode: String,
-    font: Option<usize>,
+    /// The document's id and revision: every change, and every other document, gives a new one.
+    font: Option<(u64, u64)>,
 }
 
 /// The pop-up's state.
@@ -124,8 +123,7 @@ fn quoted(s: &str) -> String {
 }
 
 fn key(app: &FontcraftApp, query: &str, mode: &str) -> Key {
-    // A changed font is a new pointer.
-    let font = app.session.active().map(|d| Arc::as_ptr(&d.font) as usize);
+    let font = app.session.active().map(|d| (d.id, d.revision));
     Key { query: query.to_string(), mode: mode.to_string(), font }
 }
 
@@ -400,4 +398,27 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         }
     }
     st.laid_out = laid_out;
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    #[test]
+    fn a_document_opened_after_another_closed_is_searched_again() {
+        let mut app = FontcraftApp::default();
+        let mut font = fontcraft_model::Font::new("First");
+        font.add_glyph("zzz", vec![], 500.0).unwrap();
+        app.session.add_document(font, None).unwrap();
+        app.state.panels.find_glyphs.query = "zzz".into();
+        refresh(&mut app);
+        assert_eq!(app.state.panels.find_glyphs.total, 1);
+        // The next font is often allocated where the closed one was.
+        app.session.execute("file.close", &json!({"discard": true})).unwrap();
+        app.session.add_document(fontcraft_model::Font::new("Second"), None).unwrap();
+        refresh(&mut app);
+        assert_eq!(app.state.panels.find_glyphs.total, 0, "the second document has no zzz");
+    }
 }

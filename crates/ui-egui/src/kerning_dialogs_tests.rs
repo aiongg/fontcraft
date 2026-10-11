@@ -257,3 +257,19 @@ fn view_show_group_members_draws_the_facing_groups_of_the_edited_pair() {
     app.run("editView.setCursor", &json!({"index": 0})).unwrap();
     assert!(members(&mut app).is_empty(), "T is edited and has no left group: {:?}", members(&mut app));
 }
+
+#[test]
+fn the_paste_conflict_question_opens_in_the_middle_of_a_drag() {
+    let mut app = kerned_app();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["T"]})).unwrap();
+    app.run("view.setZoom", &json!({"size": 1000, "center": [300, 300]})).unwrap();
+    let r = call(&mut app, "ui.pointer", json!({"events": [{"kind": "down", "x": 50, "y": 500}, {"kind": "drag", "x": 80, "y": 520}]}));
+    assert_eq!(r["errors"], json!([]), "{r}");
+    assert!(app.session.interaction().is_some(), "the node drag is running");
+    open(&mut app, "dialog.pasteKerningConflict", json!({"pairs": [{"left": "T", "right": "@o", "value": -80}]}));
+    let asked = inspect(&mut app);
+    assert_eq!(asked["dialog"], "dialog.pasteKerningConflict", "{asked}");
+    assert_eq!(asked["fields"][0]["value"], json!(["T  @o  -80 (now -60)"]), "{asked}");
+    call(&mut app, "ui.dialog.cancel", json!({}));
+    assert!(app.session.interaction().is_none());
+}
