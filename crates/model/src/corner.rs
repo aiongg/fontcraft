@@ -57,10 +57,10 @@ impl CornerAlignment {
     /// as fontc reads it.
     pub fn from_option(value: f64) -> Self {
         match value {
-            v if v == 1.0 => Self::Right,
-            v if v == 2.0 => Self::Both,
-            v if v == 3.0 => Self::Unused,
-            v if v == 4.0 => Self::Unaligned,
+            1.0 => Self::Right,
+            2.0 => Self::Both,
+            3.0 => Self::Unused,
+            4.0 => Self::Unaligned,
             _ => Self::Left,
         }
     }
@@ -154,7 +154,7 @@ pub fn corner_hint(hint: &Hint) -> Result<Option<CornerHint>, String> {
     let Some(d) = hint.value.as_dict() else { return Ok(None) };
     let name = d.get("name").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or("the hint names no corner glyph")?;
     let origin = numbers(d.get("origin").ok_or("the hint has no origin")?).ok_or("the hint's origin is not a list of numbers")?;
-    let index = |v: f64| (v.is_finite() && v >= 0.0 && v.fract() == 0.0 && v <= f64::from(u32::MAX)).then(|| v as usize);
+    let index = |v: f64| (v.is_finite() && v >= 0.0 && v.fract() == 0.0 && v <= f64::from(u32::MAX)).then_some(v as usize);
     let indices: Option<Vec<usize>> = origin.iter().map(|&v| index(v)).collect();
     let target = match indices.as_deref() {
         Some(&[shape, node]) => CornerTarget::Node { shape, node },

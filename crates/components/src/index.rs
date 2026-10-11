@@ -230,8 +230,8 @@ fn strongly_connected(bases: &[Vec<usize>], nodes: &[usize]) -> Vec<Vec<usize>> 
             let succ = bases.get(v).and_then(|b| b.get(edge)).copied();
             match succ {
                 Some(w) if in_set.contains(&w) => {
-                    if !index.contains_key(&w) {
-                        index.insert(w, next);
+                    if let std::collections::hash_map::Entry::Vacant(slot) = index.entry(w) {
+                        slot.insert(next);
                         low.insert(w, next);
                         next += 1;
                         stack.push(w);
