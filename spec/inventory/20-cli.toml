@@ -531,6 +531,7 @@ status = "docs"
 
 [[cli]]
 id = "tables extract"
+notes = "Checked with AFDKO sfntedit 5.0.1 on a font built with fontTools: naming a table the font does not have prints a warning and exits 0, for extraction and deletion alike; we do the same. The default file name strips any extension, not only .otf and .ttf."
 usage = "fontcraft-cli tables extract FONT TAG[=FILE]... [--output-dir DIR]"
 options = [
   "TAG[=FILE]...: tables to extract; several tags may also be given comma-separated",
@@ -549,6 +550,7 @@ status = "docs"
 
 [[cli]]
 id = "tables add"
+notes = "Without -o or --in-place the result is written beside the input as FONT.edited.EXT (our naming; the reference tool edits in place). The output of add, delete and edit was compared byte for byte with sfntedit 5.0.1 on a font built in code (test `tables_edit_matches_the_reference_tool`)."
 usage = "fontcraft-cli tables add FONT TAG=FILE... [-o OUT | --in-place]"
 options = [
   "TAG=FILE...: table tag and the file holding its bytes",
@@ -623,6 +625,7 @@ guesses = ["Copying a table the target already has replaces it without a prompt,
 
 [[cli]]
 id = "tables checksum"
+notes = "Checked with AFDKO sfntedit 5.0.1: a wrong table checksum is reported for that table only; the expected head.checkSumAdjustment is computed with the directory's checksums corrected, so it is not reported as well. --fix writes FONT.fixed.EXT by default."
 usage = "fontcraft-cli tables checksum FONT... [--fix] [-o OUT | --in-place]"
 options = [
   "--fix: write a corrected copy",
@@ -659,6 +662,7 @@ status = "docs"
 
 [[cli]]
 id = "tables reorder"
+notes = "Our recommended order is fontTools' (DSIG last). sfntedit 5.0.1 puts DSIG before tables outside its order list (seen with an unknown tag `zzzz`); without DSIG both give the same bytes. Default output FONT.reordered.EXT."
 usage = "fontcraft-cli tables reorder FONT [--order recommended|TAG,...] [-o OUT | --in-place]"
 options = [
   "--order recommended|TAG,...: target order; default recommended",
@@ -2737,6 +2741,7 @@ own = true
 
 [[cli]]
 id = "tables show"
+notes = "Decoded tables: head, hhea, maxp, OS/2, post, name, cmap, hmtx, loca, glyf, GDEF, GSUB, GPOS, fvar, avar, gasp, DSIG (header); others are listed with their length. Glyph names come from post formats 1 and 2; CFF charset names are not read yet. Offsets are given for subtables, not for every field. Lookup subtables show their glyphs and values for single, pair and mark-to-base positioning and single, multiple, alternate and ligature substitution; contextual subtables show formats and coverages."
 usage = "fontcraft-cli tables show FONT [TAG...] [--path PATH] [--depth N] [--offsets] [--format json|text]"
 options = [
   "TAG...: the tables to show (default: every table the reader decodes; the others are listed with their size only)",
