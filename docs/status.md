@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-11, M5 in progress: M5.0–M5.16 built; M5.17 (the kern writer) and the close next._
+_Updated: 2026-10-11, M5 in progress: M5.0–M5.17 built; the close (M5.18) next._
 
 ## State of the tree
 
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
-  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 621 guesses on 391
+  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 625 guesses on 394
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -19,8 +19,7 @@ _Updated: 2026-10-11, M5 in progress: M5.0–M5.16 built; M5.17 (the kern writer
 
 ## Where to start
 
-1. **M5**: M5.17 (the pair-kerning writer, ported from fontc) by the builder, then M5.18 (the
-   close: § 5 measures and results).
+1. **M5.18**, M5's close: the § 5 measures and their results in `docs/plans/M5.md`.
 
 M4, Font View and glyph management (`docs/plans/M4.md`), as built:
 
@@ -398,4 +397,10 @@ Append one terse entry per session: what landed, numbers, what is still open.
   leaves italic masters unchanged; nested composites import after their components; menu
   shortcuts work while a list has the keyboard; Selected Glyphs works in Edit View tabs; the Find
   Glyphs cache follows the document revision; dialogs open during a drag).
+  M5.17: exported fonts get generated pair kerning (GPOS `kern` and `dist`) for sources without
+  feature code, ported from fontc 4504578 into `crates/features`, following the ufo2ft
+  feature-writer setting. Against the oracles on the 37 corpus sources without feature code:
+  129 pairs each, 0 differences with fontmake, 1 known difference with fontc (written in
+  `docs/spec/40-compile.md` § 4a). Sources with feature code (21 kerned ones) get no generated
+  kerning until M8.
 
