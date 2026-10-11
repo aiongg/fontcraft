@@ -981,9 +981,10 @@ milestone = "M8"
 summary = "aalt (All Alternatives). Trigger: At least one other feature in the font substitutes glyphs. Generated: Built from every substituting feature in the list; expected form is one `feature <tag>;` line per such feature, leaving the grouping to the compiler (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (7 sources): only `feature xxxx;` lines, one per substituting feature in the font's feature order (M8 planning pass)."
+notes = "The reference's stored output in the corpus (7 sources): only `feature xxxx;` lines, one per substituting feature in the font's feature order (M8 planning pass). The corpus's aalt entries never list ccmp, liga or dlig, though they list frac made of ligature rules (Oswald) and a manual calt (Markow); features whose code only includes a file are not listed (Inter)."
 guesses = [
   "Generated as one `feature xxxx;` line per other feature with substitutions, in sidebar order, leaving the grouping to the compiler, as the corpus shows; cv features and features listed after aalt included.",
+  "Left out: ccmp and all four ligature features (hlig and rlig by analogy with liga and dlig), and disabled features; Update on a font with hlig and a disabled ss01 would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the aalt entry: compare it with FontCraft's generator for the same font, or note that no aalt entry is created.",
@@ -996,9 +997,12 @@ milestone = "M8"
 summary = "liga (Standard Ligatures). Trigger: A ligature glyph, i.e. a name made of component names joined by underscores. Only f_f_i, f_f_l, f_f, fi, fl, lu_lakkhangyao-thai and ru_lakkhangyao-thai land here by default; any other ligature is forced in by a `.liga` suffix (f_b.liga, yi_yi-cy.liga). Generated: One ligature rule per glyph, `sub <components> by <ligature>;`, with the components read from the name parts (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (3 sources): `lookupflag IgnoreMarks;` in the newer files, then one ligature rule per glyph, longest sequences first (`sub f f i by f_f_i;` before `sub f i by fi;`) (M8 planning pass)."
+notes = "The reference's stored output in the corpus (3 sources): `lookupflag IgnoreMarks;` in the newer files, then one ligature rule per glyph, longest sequences first (`sub f f i by f_f_i;` before `sub f i by fi;`) (M8 planning pass). Oswald's mark ligatures (brevecomb_acutecomb) get no rule. Rules of equal length keep the glyph order."
 guesses = [
   "Generated code starts with `lookupflag IgnoreMarks;`, as the newer corpus files have it, and lists longer ligatures first; Update on a font with f_f_i, fi and a mark would settle it.",
+  "A ligature goes to the first feature that claims it: its routing suffix, then the lam-alef set (rlig), then a longs component (hlig), then the default list (liga), else dlig; Update on a font with longs_t.liga would settle it.",
+  "A ligature with another suffix joins components carrying that suffix (`sub f.sc i.sc by f_i.sc;`) and gets no rule when one is missing; Update on a font with f_i.sc would settle it.",
+  "A second ligature with the same component sequence in one feature gets no rule, and ligatures whose components are all marks get none; Update on a font with lam_alef-ar and lam_alef-ar.fina but no positional forms would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the liga entry: compare it with FontCraft's generator for the same font, or note that no liga entry is created.",
@@ -1043,6 +1047,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with such ligatures would settle it.",
+  "Ligatures of joining scripts take positional components where the font has them: `sub lam-ar.init alef-ar.fina by lam_alef-ar;` and `sub lam-ar.medi alef-ar.fina by lam_alef-ar.fina;`; Update on F2 would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1160,7 +1165,7 @@ summary = "afrc (Alternative Fractions). Trigger: The font has figures, slash an
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "One ligature rule per nut fraction from the figures, slash and figures it names; Update on a font with oneovertwo would settle it.",
+  "One ligature rule per nut fraction from the figures, slash and figures it names, in the handbook's list order; Update on a font with oneovertwo and oneoverten would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1174,9 +1179,10 @@ milestone = "M8"
 summary = "frac (Fractions). Trigger: `.numr` and `.dnom` figures plus the fraction glyph. Without them, the feature falls back to whatever precomposed fractions exist. Generated: With numerators and denominators: contextual rules that turn figures before the fraction slash into numerators and figures after it into denominators, and slash into fraction; in the fallback case: ligature rules onto the precomposed fractions (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-notes = "The reference's stored output in the corpus (3 Oswald sources): only the fallback, ligature rules onto precomposed fractions (`sub one slash four by onequarter;`); no source stores the numerator and denominator form (M8 planning pass)."
+notes = "The reference's stored output in the corpus (3 Oswald sources): only the fallback, ligature rules onto precomposed fractions (`sub one slash four by onequarter;`); no source stores the numerator and denominator form (M8 planning pass). The handbook says the fallback uses the fractions listed for afrc; the corpus shows the Unicode vulgar fractions, in code point order (onequarter before onehalf, against Oswald's glyph order)."
 guesses = [
-  "With `.numr` and `.dnom` figures, fraction gets three lookups: figures to numerators, figures after fraction or a numerator to denominators, slash between figures to fraction; Update on a font with both sets would settle it.",
+  "With `.numr` and `.dnom` figures and a fraction glyph, frac gets three lookups: slash between figures to fraction, figures to numerators, numerators after fraction or a denominator to denominators; Update on a font with both sets would settle it.",
+  "The fallback takes the Unicode vulgar fractions in code point order, then the nut fractions in the handbook's order, one rule per input sequence; Update on a font with onehalf and oneovertwo would settle it.",
 ]
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the frac entry: compare it with FontCraft's generator for the same font, or note that no frac entry is created.",
@@ -1268,6 +1274,9 @@ summary = "ordn (Ordinals). Trigger: The default figures together with numero, o
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 notes = "The reference's stored output in the corpus (5 sources): the same three lines everywhere: `sub [zero … nine] [A a]' by ordfeminine;`, the same with `[O o]` and ordmasculine, then `sub N o period by numero;` (M8 planning pass)."
+guesses = [
+  "Letters missing from the font are left out of the `[A a]` and `[O o]` classes, and the numero rule needs N, o and period; Update on a font without capital A would settle it.",
+]
 
 [[behavior]]
 id = "autoFeature.ornm"
@@ -1277,7 +1286,7 @@ summary = "ornm (Ornaments). Trigger: Glyphs named with `.ornm` on a base name f
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "`sub bullet from [A.ornm …];` with the ornaments in glyph order, then `sub A by A.ornm;` per letter; Update on a font with bullet and A.ornm would settle it.",
+  "`sub bullet from [A.ornm …];` with the ornaments in glyph order, then `sub A by A.ornm;` per letter whose base glyph exists; Update on a font with bullet and A.ornm would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
