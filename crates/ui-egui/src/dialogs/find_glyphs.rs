@@ -43,7 +43,7 @@ pub const COMMANDS: &[UiCommand] = &[(
     "edit.find",
     "Find…",
     &["Edit", "Find"],
-    "",
+    "Cmd+F",
     "{tab?: id, query?: string, mode?: \"name\" | \"unicode\" | \"all\", select?: [names], insert?: bool, open?: bool (default true)} in Edit View, show the Find Glyphs pop-up for the tab and search the font as glyph.search does (query and mode left out keep their value; a new search selects its first result); select picks results; insert puts the selected results, in list order, into the tab's text at the cursor and closes the pop-up. In Font View, give the keyboard to Font View's search field → {open, tab, query, mode, results: [names], total, selected} | with insert, the tab's text as editView.getText gives it, with inserted: [names]",
 )];
 

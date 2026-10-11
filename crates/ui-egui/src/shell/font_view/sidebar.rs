@@ -64,7 +64,7 @@ pub const COMMANDS: &[UiCommand] = &[
         "fontView.focusSearch",
         "Find (Search Glyphs)",
         &[],
-        "Cmd+F",
+        "",
         "{} give the keyboard to Font View's search field; in Edit View it does nothing → {focused: bool}",
     ),
 ];

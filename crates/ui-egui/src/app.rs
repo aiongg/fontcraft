@@ -16,7 +16,7 @@ use crate::tools_glue::{self, ToolsState};
 
 /// Commands that report nothing in the status bar when they succeed: wheel and gesture input
 /// runs them many times a second.
-const QUIET: &[&str] = &["view.scrollTo", "view.setZoom", "fontView.setSearch"];
+const QUIET: &[&str] = &["view.scrollTo", "view.setZoom", "fontView.setSearch", "preview.setOffset"];
 
 pub struct FontcraftApp {
     pub session: Session,
@@ -288,7 +288,9 @@ impl FontcraftApp {
         // The tools take their keys first (the Edit View keys have a `when`); the rest go to
         // the menu shortcuts.
         tools_glue::keys(self, ui.ctx());
-        let mut pending: Vec<(&'static str, Value)> = shell::keymap::pressed(ui.ctx(), self.tools.text_focus);
+        let mut pending: Vec<(&'static str, Value)> = Vec::new();
+        shell::text_preview::find_shortcut(self, ui.ctx(), &mut pending);
+        pending.extend(shell::keymap::pressed(ui.ctx(), self.tools.text_focus));
         pending.extend(shell::clipboard::events(self, ui.ctx()));
         self.menu_bar(ui, &mut pending);
         shell::tabs::strip(self, ui, &mut pending);

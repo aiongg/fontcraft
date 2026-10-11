@@ -288,7 +288,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             let tab = args.string("tab")?.unwrap_or("otf");
             match export::TABS.iter().position(|t| t.id == tab) {
                 Some(index) => open_tab(app, &export::TABS, index, &params, &Map::new()).map_err(|e| args.err(e)),
-                None if matches!(tab, "variable" | "metrics") => Err(args.err(format!("the `{tab}` tab is not built yet"))),
+                None if tab == "variable" => Err(args.err(format!("the `{tab}` tab is not built yet"))),
                 None => Err(args.err(format!("unknown tab `{tab}`: otf, variable, ufo or metrics"))),
             }
         }

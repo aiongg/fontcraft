@@ -329,8 +329,9 @@ fn preview_ascender_and_descender_set_the_strip_edges() {
             })
             .unwrap();
     };
-    set(&mut app, "winDescent", 250);
-    assert_eq!(range(&app), (-250.0, 1000.0));
+    set(&mut app, "winDescent", 270);
+    set(&mut app, "winAscent", 250);
+    assert_eq!(range(&app), (-250.0, 1000.0), "winAscent, as documented");
     set(&mut app, "Preview Descender", -300);
     set(&mut app, "Preview Ascender", 1200);
     assert_eq!(range(&app), (-300.0, 1200.0));

@@ -115,7 +115,9 @@ bundled, the file says so in its header and the project is listed here with its 
   output rules of its glifLib (crates/io-ufo/src/glif.rs: element and attribute order, number
   formatting, and how a note is written and read), and crates/io-ufo/src/names.rs ports its
   user-name-to-file-name rule. crates/io-ufo/src/kerning.rs ports ufoLib's renaming of UFO 2
-  kerning groups (converters.py). The piecewise-linear map of crates/model/src/axes.rs ports varLib's piecewiseLinearMap, and the
+  kerning groups (converters.py). The AFM reader and writer (crates/spacing/src/afm.rs) were
+  written with its afmLib read for reference on what common readers expect: whole numbers, a
+  `B` field on every `C` line, and `KPX` pairs. The piecewise-linear map of crates/model/src/axes.rs ports varLib's piecewiseLinearMap, and the
   designspace writer follows the element order of designspaceLib. crates/io-ufo/src/designspace/rules.rs
   ports varLib's overlayFeatureVariations, overlayBox and cleanupBox (featureVars.py), and
   crates/io-glyphs/src/lib.rs (quadratic_roots) the quadratic solver of misc/bezierTools.py.

@@ -349,8 +349,9 @@ fn load_source(s: &Session, p: &Params) -> Result<Source> {
     match (file, text, doc) {
         (Some(f), None, None) => read_file(p, f),
         (None, Some(t), None) => {
-            if t.len() > kerning_text::MAX_TEXT_BYTES {
-                return Err(p.bad(format!("`text` is {} bytes long; at most {} are allowed", t.len(), kerning_text::MAX_TEXT_BYTES)));
+            // The larger of the two formats' limits; each reader checks its own.
+            if t.len() > afm::MAX_TEXT_BYTES {
+                return Err(p.bad(format!("`text` is {} bytes long; at most {} are allowed", t.len(), afm::MAX_TEXT_BYTES)));
             }
             parse_text(p, "text", t)
         }
@@ -440,7 +441,8 @@ fn in_scope(scope: Option<&HashSet<String>>, name: &str) -> bool {
 
 // ── Kerning ────────────────────────────────────────────────────────────────────────────────────
 
-/// The pairs to import, by direction, at most [`kerning_text::MAX_PAIRS`] in all.
+/// The pairs to import, by direction, at most [`afm::MAX_PAIRS`] in all from AFM and
+/// [`kerning_text::MAX_PAIRS`] from anything else.
 fn kerning_plan(p: &Params, source: &Source, src_master: Option<&str>) -> Result<Vec<(Direction, Vec<NewPair>)>> {
     let plan = match source {
         Source::Text(doc) => vec![(doc.direction.unwrap_or(Direction::Ltr), doc.pairs.clone())],
@@ -469,8 +471,9 @@ fn kerning_plan(p: &Params, source: &Source, src_master: Option<&str>) -> Result
         }
     };
     let total: usize = plan.iter().map(|(_, l)| l.len()).sum();
-    if total > kerning_text::MAX_PAIRS {
-        return Err(p.bad(format!("the source holds {total} pairs; one import takes at most {}", kerning_text::MAX_PAIRS)));
+    let limit = if matches!(source, Source::Afm(_)) { afm::MAX_PAIRS } else { kerning_text::MAX_PAIRS };
+    if total > limit {
+        return Err(p.bad(format!("the source holds {total} pairs; one import takes at most {limit}")));
     }
     Ok(plan)
 }

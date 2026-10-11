@@ -243,6 +243,9 @@ pub struct TextPreviewState {
     /// Ranges with their own direction, sorted, not overlapping.
     pub runs: Vec<Run>,
     pub find: FindState,
+    /// The window has the keyboard: it opened or was clicked last, so Cmd+F opens its find bar.
+    #[serde(skip)]
+    pub keyboard: bool,
     #[serde(skip)]
     pub cache: Cache,
 }
@@ -261,6 +264,7 @@ impl Default for TextPreviewState {
             direction: BaseDirection::Default,
             runs: Vec::new(),
             find: FindState::default(),
+            keyboard: false,
             cache: Cache::default(),
         }
     }
@@ -607,7 +611,10 @@ fn replaced(text: &str, starts: &[usize], len: usize, with: &str) -> String {
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
     match id {
         "window.textPreview" => {
-            app.state.panels.text_preview.open = args.flag("open")?.unwrap_or(true);
+            let open = args.flag("open")?.unwrap_or(true);
+            let tp = &mut app.state.panels.text_preview;
+            tp.keyboard = open;
+            tp.open = open;
         }
         "textPreview.setText" => {
             let text = args.string("text")?.ok_or_else(|| args.err("`text` is required"))?;
@@ -804,6 +811,15 @@ impl Placement {
     }
 }
 
+/// Cmd+F while the window has the keyboard opens its find bar; it runs before the menu
+/// shortcuts, where Cmd+F is the Edit View's and Font View's Find.
+pub fn find_shortcut(app: &FontcraftApp, ctx: &egui::Context, pending: &mut Pending) {
+    let tp = &app.state.panels.text_preview;
+    if tp.open && tp.keyboard && ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::F)) {
+        pending.push(("textPreview.find", json!({})));
+    }
+}
+
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     if !app.state.panels.text_preview.open {
         return;
@@ -818,7 +834,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let order = if tp.pinned { Order::Foreground } else { Order::Middle };
     let mut open = true;
     let ctx = ui.ctx().clone();
-    egui::Window::new("Text Preview")
+    let shown = egui::Window::new("Text Preview")
         .id(window_id())
         .open(&mut open)
         .order(order)
@@ -828,9 +844,6 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         .pivot(Align2::CENTER_TOP)
         .default_pos(pos2(ctx.content_rect().center().x, tokens.dialog_top))
         .show(&ctx, |ui| {
-            if ui.ui_contains_pointer() && ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::F)) {
-                pending.push(("textPreview.find", json!({})));
-            }
             top_row(ui, tp, tokens, &style_list, pending);
             if tp.find.open {
                 find_bar(ui, tp, tokens, pending);
@@ -846,6 +859,10 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
             }
             tp.cache.drawn.order = Some(order);
         });
+    // A press inside the window gives it the keyboard; a press anywhere else takes it away.
+    if let (Some(shown), Some(at)) = (shown, ctx.input(|i| i.pointer.any_pressed().then(|| i.pointer.press_origin()).flatten())) {
+        tp.keyboard = shown.response.rect.contains(at);
+    }
     if !open {
         pending.push(("window.textPreview", json!({ "open": false })));
     }

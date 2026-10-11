@@ -29,6 +29,7 @@ use super::{Args, UiCommand};
 use crate::app::FontcraftApp;
 use crate::canvas::composite::CompositeCache;
 use crate::canvas::view;
+use crate::icons::Icon;
 use crate::panels::{Pending, widgets};
 use crate::state::{Tab, WritingDirection};
 use crate::theme::Tokens;
@@ -44,7 +45,7 @@ pub const MAX_BLUR: f64 = 10.0;
 pub const MAX_AREA_HEIGHT: f64 = 4000.0;
 /// The largest offset, in screen points either way.
 pub const MAX_OFFSET: f64 = 1.0e6;
-/// Largest absolute value read from `Preview Ascender`, `Preview Descender` and `winDescent`.
+/// Largest absolute value read from `Preview Ascender`, `Preview Descender` and `winAscent`.
 const MAX_EDGE: f64 = 65_535.0;
 /// Box blur passes: three approximate a Gaussian.
 const BLUR_PASSES: usize = 3;
@@ -265,14 +266,14 @@ fn number_param(params: &Params, name: &str) -> Option<f64> {
 }
 
 /// The strip's lower and upper edge in font units for a master: `Preview Descender` (a distance
-/// below the baseline, of either sign), else the font's `winDescent`, else the master's
-/// descender; and `Preview Ascender`, else 1000. Falls back to the master's descender and
+/// below the baseline, of either sign), else the master's or the font's `winAscent` (the
+/// documented default, though `winDescent` is likely meant), else the master's descender; and `Preview Ascender`, else 1000. Falls back to the master's descender and
 /// ascender when the edges would not enclose the baseline.
 pub fn vertical_range(font: &Font, master: &Master) -> (f64, f64) {
     let ascender = number_param(&master.params, PREVIEW_ASCENDER).unwrap_or(DEFAULT_PREVIEW_ASCENDER);
     let descender = number_param(&master.params, PREVIEW_DESCENDER)
-        .or_else(|| number_param(&master.params, "winDescent"))
-        .or_else(|| number_param(&font.info.params, "winDescent"))
+        .or_else(|| number_param(&master.params, "winAscent"))
+        .or_else(|| number_param(&font.info.params, "winAscent"))
         .map(|d| -d.abs())
         .unwrap_or_else(|| font.metric_pos(master, metric::DESCENDER, -f64::from(font.units_per_em) * 0.2).min(0.0));
     if ascender > 0.0 && ascender > descender { (descender, ascender) } else { view::vertical_span(font, master) }
@@ -371,7 +372,7 @@ pub fn line_layout(session: &mut Session, tab: &Tab) -> Option<Layout> {
     let index = if tab.kerning.shows_kerning() { session.kern_index().ok() } else { None };
     let font = session.font().ok()?;
     let master = view::tab_master(font, tab)?.id.clone();
-    let options = Options { direction: direction(tab), kerning: tab.kerning, single_line: true, index: index.as_deref(), ..Default::default() };
+    let options = Options { direction: direction(tab), kerning: tab.kerning, single_line: true, index: index.as_deref(), layers: Some(&tab.layers), ..Default::default() };
     fontcraft_textlayout::layout(font, &master, &tab.text, &options).ok()
 }
 
@@ -666,7 +667,7 @@ pub fn area(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
 pub fn bottom_bar_button(app: &FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let Some(tab) = app.state.tab() else { return };
     let on = app.state.panels.preview.area_tabs.contains(&tab.id);
-    if widgets::button(ui, widgets::id("bottomBar.preview"), "Preview", "Show or hide the Preview Area", true, on) {
+    if widgets::icon_button(ui, widgets::id("bottomBar.preview"), Icon::Preview, "Show or hide the Preview Area", true, on) {
         pending.push(("view.togglePreviewArea", json!({ "tab": tab.id })));
     }
 }

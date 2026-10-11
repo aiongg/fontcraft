@@ -47,12 +47,13 @@ use crate::kerning::pairs::stored_pairs;
 use crate::kerning::{Direction, KernIndex, Position, Side, facing};
 use crate::{WIDTH_RANGE, kerning_text, metrics_source, round_half_up};
 
-/// Largest AFM text, in bytes.
-pub const MAX_TEXT_BYTES: usize = kerning_text::MAX_TEXT_BYTES;
+/// Largest AFM text, in bytes: room for [`MAX_PAIRS`] pair lines of about 30 bytes.
+pub const MAX_TEXT_BYTES: usize = 64 * 1024 * 1024;
 /// Longest line, in bytes, without the line break.
 pub const MAX_LINE_BYTES: usize = kerning_text::MAX_LINE_BYTES;
-/// Most kerning pairs one AFM text may hold.
-pub const MAX_PAIRS: usize = kerning_text::MAX_PAIRS;
+/// Most kerning pairs one AFM text may hold: AFM lists every covered glyph pair, so a large
+/// font needs many more than kerning-text does. Opening a compiled font takes as many.
+pub const MAX_PAIRS: usize = 2_000_000;
 /// Most glyphs one AFM text may hold.
 pub const MAX_CHARS: usize = MAX_GLYPHS;
 /// Most glyph pairs [`covered_pairs`] looks at (counting a pair once for every stored pair that

@@ -77,6 +77,8 @@ pub enum Icon {
     KerningLocked,
     // The Info box's update button for a metrics key out of sync.
     Update,
+    // The bottom bar's Preview Area button: an eye.
+    Preview,
 }
 
 /// Every icon, for tests and previews.
@@ -141,6 +143,7 @@ pub const ALL: &[Icon] = &[
     Icon::KerningOn,
     Icon::KerningLocked,
     Icon::Update,
+    Icon::Preview,
 ];
 
 /// The icon of the pointer tool `id` (an id of `fontcraft_tools::TOOLS`).
@@ -558,6 +561,16 @@ fn draw(pen: &mut Pen, icon: Icon) {
             let arc: Vec<P> = (0..=12).map(|i| PI + PI * i as f32 / 12.0).map(|a| (0.5 + 0.11 * a.cos(), 0.7 + 0.11 * a.sin())).collect();
             pen.line(&arc);
             pen.rect_fill((0.33, 0.7), (0.67, 0.95), 0.04);
+        }
+        Icon::Preview => {
+            // Two arcs meeting at the corners of the eye, and the pupil.
+            let lid = |sign: f32| -> Vec<P> {
+                (0..=16).map(|i| i as f32 / 16.0).map(|t| (0.1 + 0.8 * t, 0.5 + sign * 0.28 * (PI * t).sin())).collect()
+            };
+            pen.line(&lid(-1.0));
+            pen.line(&lid(1.0));
+            pen.circle((0.5, 0.5), 0.13);
+            pen.dot((0.5, 0.5), 0.05);
         }
         Icon::ListView => {
             for y in [0.2, 0.5, 0.8] {

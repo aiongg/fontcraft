@@ -24,6 +24,20 @@ impl Window {
         Self { ctx }
     }
 
+    /// One frame with these input events.
+    fn events(&self, app: &mut FontcraftApp, events: Vec<egui::Event>, modifiers: egui::Modifiers) {
+        let mut events = events;
+        events.insert(0, egui::Event::ModifiersChanged(modifiers));
+        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
+        let mut output = self.ctx.run_ui(input, |ui| app.ui(ui));
+        output.textures_delta.clear();
+    }
+
+    fn cmd_f(&self, app: &mut FontcraftApp) {
+        let key = egui::Event::Key { key: egui::Key::F, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND };
+        self.events(app, vec![key], egui::Modifiers::COMMAND);
+    }
+
     /// One frame; the shapes it drew, nested lists flattened.
     fn frame(&self, app: &mut FontcraftApp) -> Vec<Shape> {
         let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
@@ -321,4 +335,27 @@ fn text_preview_lays_out_a_million_characters_within_the_target() {
     if !cfg!(debug_assertions) {
         assert!(best.as_millis() < 500, "1,000,000 characters took {best:?}");
     }
+}
+
+#[test]
+fn cmd_f_opens_the_find_bar_only_while_the_text_preview_has_the_keyboard() {
+    let mut app = preview_app();
+    app.run("view.newTab", &json!({"glyphs": ["A", "V"]})).unwrap();
+    exec(&mut app, "window.textPreview", json!({}));
+    let w = Window::new();
+    w.frame(&mut app);
+    w.frame(&mut app);
+    w.cmd_f(&mut app);
+    assert!(app.state.panels.text_preview.find.open, "the window opened last and has the keyboard");
+    assert!(!app.state.panels.find_glyphs.open);
+
+    exec(&mut app, "textPreview.find", json!({"open": false}));
+    let outside = Pos2::new(5.0, 790.0);
+    let button = |pressed| egui::Event::PointerButton { pos: outside, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+    w.events(&mut app, vec![egui::Event::PointerMoved(outside), button(true)], egui::Modifiers::NONE);
+    w.events(&mut app, vec![button(false)], egui::Modifiers::NONE);
+    assert!(!app.state.panels.text_preview.keyboard);
+    w.cmd_f(&mut app);
+    assert!(!app.state.panels.text_preview.find.open);
+    assert!(app.state.panels.find_glyphs.open, "Cmd+F is the Edit View's Find again");
 }

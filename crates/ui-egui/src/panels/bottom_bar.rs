@@ -34,6 +34,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
     let frame = egui::Frame::NONE.fill(tokens.app_bar).inner_margin(tokens.bottom_bar_margin);
     egui::Panel::bottom("edit_view_bottom_bar").frame(frame).show(ui, |ui| {
         ui.horizontal(|ui| {
+            crate::shell::preview::bottom_bar_button(app, ui, pending);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::button(ui, widgets::id("bottomBar.zoomIn"), "+", "Zoom In", true, false) {
                     pending.push(("view.zoomIn", json!({ "tab": tab })));

@@ -1023,7 +1023,7 @@ milestone = "M5"
 summary = "In Edit View, opens a live glyph search and inserts the chosen glyphs into the text on Return. A query with spaces matches glyphs whose name contains every term; a typed character finds its glyph. The same shortcut searches text in the Text Preview window."
 ref = "Edit View › Entering Text › Find Glyphs to Insert"
 status = "handbook"
-notes = "Built in M5.13 (`dialogs/find_glyphs.rs`): the pop-up searches with `glyph.search` and inserts with `editView.insertText`. Cmd+F stays with Font View's search field until the shortcut is shared between the two views; in Font View, `edit.find` runs `fontView.focusSearch`. Documented, not yet observed."
+notes = "Built in M5.13 (`dialogs/find_glyphs.rs`): the pop-up searches with `glyph.search` and inserts with `editView.insertText`. Cmd+F runs `edit.find` in both views; in Font View it runs `fontView.focusSearch`, which has no shortcut of its own. While the Text Preview window has the keyboard, Cmd+F opens that window's find bar instead. Documented, not yet observed."
 guesses = [
   "The pop-up opens with an empty search field each time; whether the reference keeps the last query would settle it.",
   "Up and Down in the search field move the selection to the result above or below; the handbook names only clicks.",
@@ -1324,7 +1324,7 @@ milestone = "M5"
 summary = "With the Text Preview focused, Edit > Find > Find… searches and optionally replaces text inside the preview field. Search options sit behind the magnifying-glass icon."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
-notes = "Documented, not yet observed. The command has no menu item or shortcut of its own: Cmd+F over the window and the window's Find button open the find bar (see the panel row). Matches are highlighted in the drawn text."
+notes = "Documented, not yet observed. The command has no menu item or shortcut of its own: Cmd+F while the window has the keyboard (it opened or was clicked last) and the window's Find button open the find bar (see the panel row). Matches are highlighted in the drawn text."
 guesses = [
   "The search options are Ignore Case (on at first) and Contains, Starts With or Full Word, as the system find bar of the reference offers them; matches do not overlap.",
   "Replace changes the current match, All changes every match; a replacement that would take the text past 1,000,000 characters is refused.",
