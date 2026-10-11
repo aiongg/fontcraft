@@ -147,6 +147,14 @@ pairs in each lookup; write-fonts splits subtables and moves lookups to extensio
 offsets overflow. Vertical kerning is not written: neither reference writes `vkrn`. A source with
 feature code gets no `GPOS` until M8, with a warning when its master has kerning.
 
+The source's feature-writer setting (the `com.github.googlei18n.ufo2ft.featureWriters` key of
+the font's user data or the master's UFO lib) is read as fontc reads it: without the key the
+kerning is written; with it, only when the list has a valid kern writer entry, whose `features`
+option can limit it to `kern` or `dist`. An entry with an unknown option, or a malformed one, is
+dropped. Where fontc refuses to build (a value that is not a list, `ignoreMarks` off, a
+quantization other than 1, the legacy `kernFeatureWriter2`), FontCraft builds with the standard
+settings and warns; a value that is not a list turns the kerning off, as in fontmake.
+
 ### 1.7 Variation tables
 
 Only when at least one axis has a range (`compile.variableOnlyTables`).
@@ -527,6 +535,7 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | Generated pair kerning of a source with feature code | compiled next to the feature code | not written, with a warning | feature code is compiled from M8; where the generated lookups go depends on the code (`compile.featureWriterModes`) |
 | Lookups of the generated kerning that skip marks | `IgnoreMarks`, or a mark filtering set of the spacing marks when the font has any; `GDEF` written | `IgnoreMarks`; no `GDEF` | `GDEF` comes with the mark writer (M8); without it neither flag changes what a shaper does |
 | Marks of a UFO source in the kern writer's split | from `public.openTypeCategories` | from the glyph's stored category and subcategory | the compiler does not fill a UFO's categories from the glyph database (`compile.nonSpacingMarkWidth`); the rules with marks land in other lookups, with the same values |
+| The scripts of the generated kerning of a source whose masters kern in different directions | taken from every master's pairs: the variable font gets a script for pairs only another master has, holding only those pairs | taken from the built master's pairs | FontCraft builds one master statically until M9. In `KerningRtlOnlyMaster.glyphs` only the second master has right-to-left pairs, so a Latin pair read in `hebr` is 0 in fontc's font and the `DFLT` value in FontCraft's; `latn` and `DFLT` agree. The kern measure lists this difference (`KNOWN` in `crates/oracle/tests/kern.rs`), not the allow-list |
 | Yes-or-no custom parameters of a `.glyphs` source (`Use Typo Metrics`, `Has WWS Names`, `isFixedPitch`, `postscriptForceBold`) | on only when the value is exactly 1 | on for any number, or text that reads as a number, other than 0 (`fontcraft_model::param_flag`) | glyphsLib applies `bool(value)`, so fontmake builds a hand-written 2 as on; the reference app writes only 0 and 1. No corpus source has another value, so this row has no allow-list entry |
 
 The readers follow fontc where a source leaves a value out (`docs/spec/30-source-formats.md` ›

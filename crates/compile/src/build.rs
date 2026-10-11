@@ -340,6 +340,7 @@ struct CffInput<'a> {
 
 /// Builds every table and the font file. `synthesised_notdef`: glyph 0 is the compiler's own
 /// `.notdef`.
+#[allow(clippy::too_many_arguments)]
 pub fn assemble(
     font: &Resolved,
     order: &[ResolvedGlyph],

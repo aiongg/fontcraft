@@ -11,7 +11,7 @@
 //! Combining` (after the glyph database filled what the glyph does not state); it is spacing when
 //! it has an advance.
 
-use fontcraft_features::{KernGlyph, KernRequest, MarkSpacing, kern_feature};
+use fontcraft_features::{FEATURE_WRITERS_KEY, KernGlyph, KernRequest, MarkSpacing, kern_feature, kern_tags};
 use fontcraft_model::{Font, Resolved, ResolvedGlyph};
 use fontcraft_spacing::kerning::{Direction, KernIndex};
 use write_fonts::tables::gpos::Gpos;
@@ -43,8 +43,12 @@ pub(crate) fn generate(font: &Font, resolved: &Resolved, order: &[ResolvedGlyph]
         warnings.push("the font has feature code, which is compiled from M8: its kerning was not written to the font".to_string());
         return Ok(None);
     }
+    // The font's setting first: a designspace's lib, a `.glyphs` font's user data. Then the
+    // master's: a UFO's lib, where glyphsLib also puts a `.glyphs` master's user data.
+    let setting = font.info.user_data.get(FEATURE_WRITERS_KEY).or_else(|| font.master(&resolved.master).ok()?.user_data.get(FEATURE_WRITERS_KEY));
+    let tags = kern_tags(setting, warnings);
     let glyphs: Vec<KernGlyph> = order.iter().map(|g| KernGlyph { name: &g.name, codepoints: &g.unicodes, mark: mark(g) }).collect();
-    let request = KernRequest { font, index: &index, master: &resolved.master, glyphs: &glyphs };
+    let request = KernRequest { font, index: &index, master: &resolved.master, glyphs: &glyphs, tags };
     let kern = kern_feature(&request).map_err(|e| CompileError::Table { table: "GPOS", message: e.to_string() })?;
     warnings.extend(kern.warnings);
     Ok(kern.gpos)

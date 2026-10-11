@@ -28,6 +28,22 @@ const MAX_PAIRS: usize = 1_000_000;
 /// Differences printed per source and reference.
 const SHOWN: usize = 20;
 
+/// Differences with a known cause, written down in `docs/spec/40-compile.md` § 4a: the source's
+/// file name, the reference, the script, and the cause. They are reported and do not fail the
+/// measure.
+const KNOWN: &[(&str, &str, &str, &str)] = &[(
+    "KerningRtlOnlyMaster.glyphs",
+    "fontc",
+    "hebr",
+    "fontc builds the variable font of both masters: the second master's right-to-left pairs give its font a hebr script whose lookups hold only them, and a Latin pair read in hebr gets 0; FontCraft builds the first master, which has no right-to-left pairs, so hebr falls back to DFLT",
+)];
+
+fn known(label: &str, d: &Difference) -> Option<&'static str> {
+    let name = Path::new(label).file_name()?.to_str()?;
+    let script = d.script.to_string();
+    KNOWN.iter().find(|(n, o, s, _)| *n == name && *o == d.oracle && *s == script).map(|(_, _, _, cause)| *cause)
+}
+
 fn corpus() -> PathBuf {
     std::env::var_os("FONTCRAFT_CORPUS").map_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus"), PathBuf::from)
 }
@@ -96,7 +112,9 @@ fn generated_kerning_equals_both_references() {
     };
     let sources = fontcraft_oracle::corpus::discover(&corpus()).unwrap();
     let scratch = std::env::temp_dir().join(format!("fontcraft-kern-measure-{}", std::process::id()));
-    let (mut compared, mut pairs_compared, mut skipped) = (0usize, 0usize, Vec::new());
+    let (mut compared, mut skipped) = (0usize, Vec::new());
+    let mut pairs_compared: HashMap<&str, usize> = HashMap::new();
+    let mut with_code = 0usize;
     let mut all: Vec<(String, Difference)> = Vec::new();
     for (n, source) in sources.iter().enumerate() {
         let label = source.display().to_string();
@@ -104,13 +122,14 @@ fn generated_kerning_equals_both_references() {
             skipped.push(format!("{label}: not read"));
             continue;
         };
-        if has_feature_code(&font) {
-            continue;
-        }
         let Ok(master) = font.default_master().map(|m| m.id.clone()) else { continue };
         let index = KernIndex::new(&font);
         let pairs = covered(&font, &index, &master);
         if pairs.is_empty() {
+            continue;
+        }
+        if has_feature_code(&font) {
+            with_code += 1;
             continue;
         }
         let options = Options { timestamp: fontcraft_oracle::DEFAULT_TIMESTAMP, ..Default::default() };
@@ -168,7 +187,7 @@ fn generated_kerning_equals_both_references() {
                 let [Some(oa), Some(ob)] = ours_ab else { continue };
                 let names = [&our_names[usize::from(oa)], &our_names[usize::from(ob)]];
                 let (Some(ta), Some(tb)) = (their_ids.get(names[0]), their_ids.get(names[1])) else { continue };
-                pairs_compared += 1;
+                *pairs_compared.entry(oracle).or_default() += 1;
                 for script in &scripts {
                     let (o, t) = (our_eval.value(*script, oa, ob), their_eval.value(*script, *ta, *tb));
                     if o != t {
@@ -183,7 +202,8 @@ fn generated_kerning_equals_both_references() {
         }
     }
     let _ = std::fs::remove_dir_all(&scratch);
-    eprintln!("sources compared: {compared}; pairs compared (per reference): {pairs_compared}; differences: {}", all.len());
+    eprintln!("sources with kerning and feature code (not compared): {with_code}");
+    eprintln!("sources compared: {compared}; pairs compared: {pairs_compared:?}; differences: {}", all.len());
     for s in &skipped {
         eprintln!("skipped: {s}");
     }
@@ -194,10 +214,14 @@ fn generated_kerning_equals_both_references() {
     for ((label, oracle), count) in &by_source {
         eprintln!("{label}: {count} differences from {oracle}");
     }
-    if let Some((label, d)) = all.first() {
+    let (expected, unexpected): (Vec<_>, Vec<_>) = all.iter().partition(|(label, d)| known(label, d).is_some());
+    for (label, d) in &expected {
+        eprintln!("known: {label} {} {} {} {}: {}", d.oracle, d.script, d.first, d.second, known(label, d).unwrap_or_default());
+    }
+    if let Some((label, d)) = unexpected.first() {
         panic!(
-            "{} pair values differ from the references; the first: {label} {} {} {} {}: ours {}, theirs {}",
-            all.len(),
+            "{} pair values differ from the references without a known cause; the first: {label} {} {} {} {}: ours {}, theirs {}",
+            unexpected.len(),
             d.oracle,
             d.script,
             d.first,

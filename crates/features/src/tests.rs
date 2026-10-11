@@ -11,7 +11,7 @@ use write_fonts::FontBuilder;
 use write_fonts::types::Tag;
 
 use crate::evaluate::PairEvaluator;
-use crate::{KernGlyph, KernRequest, MarkSpacing, kern_feature};
+use crate::{KernGlyph, KernRequest, KernTags, MarkSpacing, kern_feature};
 
 const LATN: Tag = Tag::new(b"latn");
 const CYRL: Tag = Tag::new(b"cyrl");
@@ -53,7 +53,7 @@ fn build(f: &Font, marks: &[(&str, MarkSpacing)]) -> (Vec<u8>, Vec<String>, Vec<
         .zip(&unicodes)
         .map(|(n, u)| KernGlyph { name: n, codepoints: u, mark: marks.iter().find(|(m, _)| m == n).map(|(_, s)| *s) })
         .collect();
-    let out = kern_feature(&KernRequest { font: f, index: &index, master: "m01", glyphs: &glyphs }).unwrap();
+    let out = kern_feature(&KernRequest { font: f, index: &index, master: "m01", glyphs: &glyphs, tags: KernTags::ALL }).unwrap();
     let gpos = out.gpos.expect("a GPOS");
     let bytes = FontBuilder::new().add_table(&gpos).unwrap().build();
     (bytes, names, out.warnings)
@@ -233,6 +233,34 @@ fn a_font_without_pairs_gets_no_table() {
     let f = font(&[("A", Some(0x41))]);
     let index = KernIndex::new(&f);
     let glyphs: Vec<KernGlyph> = f.glyphs.iter().map(|g| KernGlyph { name: &g.name, codepoints: &[], mark: None }).collect();
-    let out = kern_feature(&KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs }).unwrap();
+    let out = kern_feature(&KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs, tags: KernTags::ALL }).unwrap();
     assert!(out.gpos.is_none());
+}
+
+#[test]
+fn the_feature_writer_setting_decides_which_kern_features_are_written() {
+    use crate::kern_tags;
+    let tags = |text: Option<&str>| {
+        let value = text.map(|t| fontcraft_model::plist::openstep::parse_value(t).unwrap());
+        let mut warnings = Vec::new();
+        (kern_tags(value.as_ref(), &mut warnings), warnings.len())
+    };
+    assert_eq!(tags(None), (KernTags::ALL, 0), "without the setting every writer runs");
+    assert_eq!(tags(Some("()")), (KernTags::NONE, 0), "an empty list runs none");
+    assert_eq!(tags(Some("({class = MarkFeatureWriter;})")), (KernTags::NONE, 0));
+    assert_eq!(tags(Some("({class = KernFeatureWriter;})")), (KernTags::ALL, 0));
+    let only_dist = "({class = KernFeatureWriter; module = ufo2ft.featureWriters.kernFeatureWriter; options = {features = (dist); mode = append;};})";
+    assert_eq!(tags(Some(only_dist)), (KernTags { kern: false, dist: true }, 0));
+    assert_eq!(tags(Some("({class = KernFeatureWriter; options = {other = 1;};})")), (KernTags::NONE, 0), "an unknown option drops the entry");
+    assert_eq!(tags(Some("({class = KernFeatureWriter; options = {ignoreMarks = 0;};})")), (KernTags::ALL, 1), "written, with a warning");
+    assert_eq!(tags(Some("{class = KernFeatureWriter;}")), (KernTags::NONE, 1), "not a list");
+
+    let mut f = font(&[]);
+    set(&mut f, Direction::Ltr, "A", "V", -80.0);
+    let index = KernIndex::new(&f);
+    let glyphs: Vec<KernGlyph> = f.glyphs.iter().map(|g| KernGlyph { name: &g.name, codepoints: &g.unicodes, mark: None }).collect();
+    let request = |tags| KernRequest { font: &f, index: &index, master: "m01", glyphs: &glyphs, tags };
+    assert!(kern_feature(&request(KernTags::NONE)).unwrap().gpos.is_none());
+    assert!(kern_feature(&request(KernTags { kern: false, dist: true })).unwrap().gpos.is_none(), "Latin kerning goes to kern only");
+    assert!(kern_feature(&request(KernTags::ALL)).unwrap().gpos.is_some());
 }

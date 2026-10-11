@@ -176,7 +176,9 @@ bundled, the file says so in its header and the project is listed here with its 
   lookup, script and direction splitting, mark splitting, feature assignment, lookup pruning),
   the script and direction properties and OpenType script tags (fontbe/src/features/properties.rs
   and ot_tags.rs, which follow fontTools' unicodedata, MIT License), the Unicode 18 overlay of
-  the ICU4X data (fontdrasil/src/unicode18.rs), the joining of right-to-left kerning and the kern
+  the ICU4X data (fontdrasil/src/unicode18.rs, whose tables fontc generated from the Unicode
+  Character Database 18.0.0: Unicode License v3, Copyright (c) 1991-2026 Unicode, Inc.,
+  crates/glyphdata/data/LICENSE-Unicode.txt), the joining of right-to-left kerning and the kern
   groups of a Glyphs source (glyphs2fontir/src/source.rs, which follows glyphsLib's
   builder/kerning.py and builder/groups.py), and the script, language system and feature records
   (fea-rs/src/compile/lookups.rs). fontc's kern writer follows ufo2ft's kernFeatureWriter.py (MIT

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**621 guesses on 391 rows (190 of them live commands).**
+**625 guesses on 394 rows (190 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -649,6 +649,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `autoFeature.kern` (behavior) | M5 | handbook | – | The kern lookups are split by script and direction as fontc splits them; the GPOS of a font with Latin and Cyrillic kerning exported from the reference app settles it. |
+| `autoFeature.dist` (behavior) | M5 | handbook | – | The scripts whose kerning goes to dist are fontc's (Indic, Universal Shaping Engine, Khmer, Myanmar); a font with Devanagari kerning exported from the reference app settles it. |
 | `regex.engine` (behavior) | M4 | inferred | – | Patterns use the Rust regex crate, which has no look-around and no back-references inside a pattern; the reference's engine may accept them. Settled by observation. |
 
 ## `16-settings.toml`
@@ -703,4 +705,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `compile.removeOverlapsStatic` (behavior) | M2 | docs | – | A composite glyph keeps its components at export, so components that overlap each other keep their overlaps, following fontmake; how the reference app exports such a glyph is not documented. |
 | `compile.productionNames` (behavior) | M4 | docs | – | Use Custom Naming (disablesNiceNames) keeps the source names at export, as the handbook's Don't use Production Names entry says it has the same effect; the reference compilers ignore it. Settled by exporting a font with Use Custom Naming on from the reference app. |
 | `compile.productionNameSanitising` (behavior) | M4 | docs | – | A name that is empty after cleaning, or longer than the 255 bytes post can store, becomes glyphNNNNN (by glyph id) with a warning; fontc would write the empty or long name. Settled only by a reference that writes such a font. |
+| `compile.kernFeatureWriter` (behavior) | M5 | docs | – | Where the featureWriters setting asks for what fontc refuses to build (ignoreMarks off, a quantization other than 1, kernFeatureWriter2), FontCraft writes the kerning with the standard settings and warns; a build with fontmake would settle what the setting does there. |
+| `compile.kernFeatureWriter` (behavior) | M5 | docs | – | The featureWriters setting is read from the font's user data, then from the built master's; fontc reads only a .glyphs font's user data, while glyphsLib also carries a master's into its UFO lib. |
 

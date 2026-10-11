@@ -25,7 +25,7 @@ use crate::properties::{
     guess_font_scripts, script_to_ot_tags, scripts_by_glyph,
 };
 use crate::resolve::{KernPair, KernSide};
-use crate::{Budget, FeatureError, MAX_CLASS_CELLS, MAX_SCRIPT_SETS, MarkSpacing};
+use crate::{Budget, FeatureError, KernTags, MAX_CLASS_CELLS, MAX_SCRIPT_SETS, MarkSpacing};
 
 pub(crate) const KERN: Tag = Tag::new(b"kern");
 pub(crate) const DIST: Tag = Tag::new(b"dist");
@@ -72,6 +72,7 @@ pub(crate) fn finalize_kerning(
     pairs: &[KernPair],
     char_map: &HashMap<u32, GlyphId16>,
     marks: HashMap<GlyphId16, MarkSpacing>,
+    tags: KernTags,
     budget: &mut Budget,
     skipped: &mut Skipped,
 ) -> Result<Kerns, FeatureError> {
@@ -82,8 +83,11 @@ pub(crate) fn finalize_kerning(
     let split_ctx = KernSplitContext::new(char_map, &known_scripts, marks);
     let lookups = split_ctx.make_lookups(pairs, budget, skipped)?;
     let (lookups_by_script, lookups) = split_lookups_by_script(lookups);
-    let features: BTreeMap<FeatureKey, Vec<usize>> =
-        assign_lookups_to_scripts(lookups_by_script.clone(), KERN).into_iter().chain(assign_lookups_to_scripts(lookups_by_script, DIST)).collect();
+    let features: BTreeMap<FeatureKey, Vec<usize>> = assign_lookups_to_scripts(lookups_by_script.clone(), KERN)
+        .into_iter()
+        .chain(assign_lookups_to_scripts(lookups_by_script, DIST))
+        .filter(|(key, _)| if key.feature == KERN { tags.kern } else { tags.dist })
+        .collect();
     let (lookups, features) = prune_unreferenced_lookups(lookups, features);
     Ok(Kerns { lookups, features })
 }
@@ -216,12 +220,7 @@ impl KernSplitContext {
     }
 
     /// The lookups of each set of scripts: the rules between bases first, then those with marks.
-    fn make_lookups(
-        &self,
-        pairs: &[KernPair],
-        budget: &mut Budget,
-        skipped: &mut Skipped,
-    ) -> Result<LookupsByScripts, FeatureError> {
+    fn make_lookups(&self, pairs: &[KernPair], budget: &mut Budget, skipped: &mut Skipped) -> Result<LookupsByScripts, FeatureError> {
         let (base_pairs, mark_pairs) = self.split_base_and_mark_pairs(pairs, budget)?;
         let mut result = BTreeMap::new();
         if !base_pairs.is_empty() {
@@ -358,11 +357,7 @@ impl KernSplitContext {
 
     /// The rules between bases, and those with a mark on a side. A group with bases and marks is
     /// split into its bases and its marks.
-    fn split_base_and_mark_pairs<'b>(
-        &self,
-        pairs: &'b [KernPair],
-        budget: &mut Budget,
-    ) -> Result<SplitPairs<'b>, FeatureError> {
+    fn split_base_and_mark_pairs<'b>(&self, pairs: &'b [KernPair], budget: &mut Budget) -> Result<SplitPairs<'b>, FeatureError> {
         enum Content {
             Empty,
             BasesOnly,

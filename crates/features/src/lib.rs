@@ -20,6 +20,8 @@
 //!    each lookup; offsets that overflow are resolved when write-fonts writes the table
 //!    (`gpos`).
 //!
+//! The source's feature-writer setting ([`kern_tags`]) can turn `kern` or `dist` off.
+//!
 //! Vertical kerning is not written: neither reference compiler writes `vkrn`.
 //!
 //! [`evaluate::PairEvaluator`] reads the pair kerning of a compiled font back, for tests and the
@@ -35,6 +37,7 @@ mod kern;
 mod properties;
 mod resolve;
 mod unicode18;
+mod writers;
 
 use std::collections::HashMap;
 
@@ -42,6 +45,7 @@ use fontcraft_model::Font;
 use fontcraft_spacing::kerning::KernIndex;
 use write_fonts::tables::gpos::Gpos;
 use write_fonts::types::GlyphId16;
+pub use writers::{FEATURE_WRITERS_KEY, KernTags, kern_tags};
 
 /// Most rules the kerning of one master may resolve to, glyph–group pairs expanded to their
 /// members.
@@ -88,6 +92,8 @@ pub struct KernRequest<'a> {
     pub master: &'a str,
     /// The glyphs in the compiled font's order: a glyph's index is its glyph id.
     pub glyphs: &'a [KernGlyph<'a>],
+    /// The features the source's feature-writer setting asks for ([`kern_tags`]).
+    pub tags: KernTags,
 }
 
 /// The generated kerning.
@@ -121,6 +127,9 @@ impl Budget {
 pub fn kern_feature(req: &KernRequest) -> Result<KernFeature, FeatureError> {
     let mut budget = Budget::new(MAX_KERN_WORK);
     let mut warnings = Vec::new();
+    if !req.tags.any() {
+        return Ok(KernFeature { gpos: None, lookups: 0, warnings });
+    }
     let mut pairs = resolve::kern_pairs(req, &mut budget, &mut warnings)?;
     if pairs.is_empty() {
         return Ok(KernFeature { gpos: None, lookups: 0, warnings });
@@ -141,7 +150,7 @@ pub fn kern_feature(req: &KernRequest) -> Result<KernFeature, FeatureError> {
     }
 
     let mut skipped = kern::Skipped::default();
-    let kerns = kern::finalize_kerning(&pairs, &char_map, marks, &mut budget, &mut skipped)?;
+    let kerns = kern::finalize_kerning(&pairs, &char_map, marks, req.tags, &mut budget, &mut skipped)?;
     if skipped.ambiguous_direction > 0 {
         warnings.push(format!(
             "{} kerning rules were left out: their glyphs mix left-to-right and right-to-left characters",
