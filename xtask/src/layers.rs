@@ -31,6 +31,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("pathops", Class::Layer(2)),
     ("audit", Class::Layer(2)),
     ("glyphquery", Class::Layer(2)),
+    ("spacing", Class::Layer(2)),
     ("format", Class::Layer(3)),
     ("compile", Class::Layer(3)),
     ("io-glyphs", Class::Layer(3)),

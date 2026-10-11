@@ -14,3 +14,6 @@ workspace = true
 fontcraft-model.workspace = true
 fontcraft-plist.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+fontcraft-spacing.workspace = true

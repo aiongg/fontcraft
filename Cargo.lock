@@ -985,6 +985,7 @@ version = "0.0.1"
 dependencies = [
  "fontcraft-model",
  "fontcraft-plist",
+ "fontcraft-spacing",
  "thiserror 2.0.21",
 ]
 
@@ -1068,6 +1069,15 @@ dependencies = [
  "fontcraft-model",
  "thiserror 2.0.21",
  "tiny-skia",
+]
+
+[[package]]
+name = "fontcraft-spacing"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-geom",
+ "fontcraft-model",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

@@ -1064,7 +1064,7 @@ effect = "other"
 summary = "Like Link Metrics With First Master, but the value names the master to follow. Master names should be unique when this is used."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "fontc and glyphsLib take a linked master advance widths (horizontal, vertical width and vertical origin) and its kerning from the master it follows, for master layers only, not intermediate layers (fontc `glyphs2fontir/src/source.rs` and `glyphs-reader/src/font.rs`, glyphsLib `builder/kerning.py`). A staff answer on the reference forum says metrics and kerning cannot be linked separately (thread \"Link Metrics With Master but not the kerning\"). The value is a master id or name; fontc tries the id first. With both parameters on a master, Link Metrics With First Master wins (fontc)."
+notes = "fontc and glyphsLib take a linked master advance widths (horizontal, vertical width and vertical origin) and its kerning from the master it follows, for master layers only, not intermediate layers (fontc `glyphs2fontir/src/source.rs` and `glyphs-reader/src/font.rs`, glyphsLib `builder/kerning.py`). A staff answer on the reference forum says metrics and kerning cannot be linked separately (thread \"Link Metrics With Master but not the kerning\"). The value is a master id or name; fontc tries the id first. With both parameters on a master, Link Metrics With First Master wins (fontc). The source master's own link parameters are not followed (fontc)."
 
 [[parameter]]
 name = "Local Interpolation"

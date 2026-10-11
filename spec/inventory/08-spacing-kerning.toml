@@ -474,6 +474,11 @@ summary = "Query, our addition: lists glyph, layer and field for each metrics ke
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "inferred"
 own = true
+notes = "In a master with an italic angle, sidebearings are measured along lines at that angle through half the x-height (the handbook says the italic angle feeds the sidebearing calculation, `fontInfo.metrics.italicAngleUses`). With that rule, of the corpus keys on master layers 17,217 values equal the stored metric; 1,994 differ on glyphs aligned automatically (M6); 15 differ in files that are out of sync (Andika Mini 4 `W`, the format document's sample, Oswald `ae`); 12 differ by at most 1.4 units in Inter Italic, cause not settled; 48 are unlinked and 4 read empty glyphs in fontc's test data."
+guesses = [
+  "A key is out of sync when its value differs from the layer's metric rounded half up.",
+  "Master layers and layers with attributes (intermediate, alternate, colour, smart) are scanned; backup layers and the layers of a master that takes its metrics from another master are not.",
+]
 
 [[behavior]]
 id = "metricsKey.calculationSyntax"
@@ -506,6 +511,7 @@ ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Key Calculatio
 status = "handbook"
 guesses = [
   "The glyph name is the longest leading part of the key that names a glyph in the font; what follows must be nothing, an operation, or `@` and a number. So `=ka-deva/1.4` reads ka-deva even when a glyph `ka` exists.",
+  "When no leading part names a glyph, the key is unlinked and names the shortest leading part after which the rest is valid: `=xa-deva-5` names `xa-deva`.",
 ]
 
 [[behavior]]
@@ -588,6 +594,7 @@ ref = "Spacing & Kerning › Spacing › Metrics Keys › Metrics Keys at Baseli
 status = "handbook"
 guesses = [
   "When the line at the given height does not cross the outline, the key uses the bounding-box sidebearing; no source says.",
+  "In a master with an italic angle, the crossing at the given height is moved along the italic angle to half the x-height, where the bounding-box sidebearings are measured; no source says.",
 ]
 
 [[behavior]]
