@@ -158,7 +158,7 @@ fn kerning_copy_pairs_and_paste_pairs_into_another_master() {
     // The JSON form pastes the same way.
     let out = run(&mut s, "kerning.pastePairs", json!({"pairs": [{"left": "@T", "right": "@o", "value": -12.5}], "master": "m02"}));
     assert_eq!(out["added"], 1);
-    assert_eq!(ltr(&s, "m02", "@MMK_L_T", "@MMK_R_o"), Some(-12.5));
+    assert_eq!(ltr(&s, "m02", "@MMK_L_T", "@MMK_R_o"), Some(-12.0), "rounded half up, as a typed value");
 }
 
 #[test]
@@ -206,6 +206,20 @@ fn kerning_paste_conflict_choice_ask_overwrite_keep_existing() {
     // A pair named twice: the later value counts.
     run(&mut s, "kerning.pastePairs", json!({"text": "o\tA\t-1\no\tA\t-2", "master": "m02"}));
     assert_eq!(ltr(&s, "m02", "o", "A"), Some(-2.0));
+}
+
+#[test]
+fn kerning_paste_takes_values_as_set_pair_does_and_refuses_control_characters() {
+    let mut s = session();
+    run(&mut s, "kerning.pastePairs", json!({"text": "A\tW\t-7.5\nW\tA\t2.5\nT\tW\t32767", "master": "m02"}));
+    assert_eq!((ltr(&s, "m02", "A", "W"), ltr(&s, "m02", "W", "A"), ltr(&s, "m02", "T", "W")), (Some(-7.0), Some(3.0), Some(32767.0)));
+    for (pairs, text) in [(json!(null), "A\tW\t-32768"), (json!([{"left": "A", "right": "W", "value": -32768}]), "")] {
+        let p = if text.is_empty() { json!({"pairs": pairs}) } else { json!({"text": text}) };
+        let e = refused(&mut s, "kerning.pastePairs", p);
+        assert!(e.contains("-32767 to 32767"), "{e}");
+    }
+    let e = refused(&mut s, "kerning.pastePairs", json!({"pairs": [{"left": "a\nb", "right": "V", "value": -10}]}));
+    assert!(e.contains("control character (byte 1)"), "{e}");
 }
 
 #[test]

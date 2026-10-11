@@ -201,10 +201,13 @@ pub fn write(doc: &KerningText) -> Result<String, WriteError> {
     for p in &doc.pairs {
         let (left, right) = (p.left.command(), p.right.command());
         for (side, text) in [(&p.left, &left), (&p.right, &right)] {
-            if Side::parse(text).ok().as_ref() != Some(side) {
-                let what = if side.is_group() { "group" } else { "glyph" };
-                return Err(WriteError::Name { what, name: side.name().to_string(), problem: "it does not read back as the same side".into() });
-            }
+            let problem = match Side::parse(text) {
+                Ok(read) if read == *side => continue,
+                Ok(_) => "it does not read back as the same side".to_string(),
+                Err(e) => e.to_string(),
+            };
+            let what = if side.is_group() { "group" } else { "glyph" };
+            return Err(WriteError::Name { what, name: side.name().chars().take(40).collect(), problem });
         }
         if !(p.value.is_finite() && VALUE_RANGE.contains(&p.value)) {
             return Err(WriteError::Value { left, right, value: p.value });
@@ -215,8 +218,8 @@ pub fn write(doc: &KerningText) -> Result<String, WriteError> {
 }
 
 fn check_name(what: &'static str, name: &str) -> Result<(), WriteError> {
-    let problem = if name.is_empty() {
-        "it is empty"
+    let problem = if name.trim().is_empty() {
+        "it is empty or blank"
     } else if name.len() > MAX_NAME_LEN {
         "it is longer than 255 bytes"
     } else if name.chars().any(char::is_control) {
@@ -334,6 +337,9 @@ pub fn read(text: &str) -> Result<KerningText, ReadError> {
                 for (b, k) in fields.iter().skip(5) {
                     if k.len() > MAX_KEY_LEN {
                         return Err(bad(*b, format!("a metrics key may be at most {MAX_KEY_LEN} bytes long")));
+                    }
+                    if let Some((at, _)) = k.char_indices().find(|(_, c)| c.is_control()) {
+                        return Err(bad(b + at, "a metrics key may not hold a control character".into()));
                     }
                 }
                 doc.metrics.push(MetricsLine {
@@ -459,5 +465,49 @@ mod tests {
         assert!(read(&format!("metrics\ta\t\t\t\t{}\t\t", "k".repeat(300))).unwrap_err().to_string().contains("metrics key"));
         assert!(read("master\ta\nmaster\tb").is_err());
         assert_eq!(read("").unwrap(), KerningText::default());
+    }
+
+    /// Names that are hard to write: whatever `write` accepts, `read` gives back unchanged.
+    #[test]
+    fn what_write_gives_always_reads_back() {
+        let long = "n".repeat(MAX_NAME_LEN + 1);
+        let names = [
+            "a", " ", "a b", " a", "a\tb", "a\nb", "a\r", "\r", "\u{0}", "\u{85}", "\u{2028}", "@x", "@", "kerning-text", "group", "metrics",
+            "master", "direction", "ü", "-1", "=H", "", &long,
+        ];
+        let mut written = 0;
+        for name in names {
+            for other in ["b", name] {
+                let doc = KerningText {
+                    master: Some(name.into()),
+                    groups: vec![GroupLine { side: GroupSide::Left, name: "g".into(), members: vec![name.into(), other.into()] }],
+                    metrics: vec![MetricsLine { glyph: name.into(), left_key: Some(other.into()), lsb: Some(1.0), ..Default::default() }],
+                    pairs: vec![NewPair { left: Side::Glyph(name.into()), right: Side::Glyph(other.into()), value: -5.0 }],
+                    ..Default::default()
+                };
+                let doc = KerningText { metrics: doc.metrics.into_iter().map(|mut m| { m.left_key = m.left_key.filter(|k| !k.is_empty()); m }).collect(), ..doc };
+                if let Ok(text) = write(&doc) {
+                    assert_eq!(read(&text).as_ref(), Ok(&doc), "{name:?} {other:?}: {text:?}");
+                    written += 1;
+                }
+                // Each kind of line on its own, so one bad field does not hide the others.
+                for part in [
+                    KerningText { master: doc.master.clone(), ..Default::default() },
+                    KerningText { groups: doc.groups.clone(), ..Default::default() },
+                    KerningText { metrics: doc.metrics.clone(), ..Default::default() },
+                    KerningText { pairs: doc.pairs.clone(), ..Default::default() },
+                ] {
+                    if let Ok(text) = write(&part) {
+                        assert_eq!(read(&text).as_ref(), Ok(&part), "{name:?} {other:?}: {text:?}");
+                        written += 1;
+                    }
+                }
+            }
+        }
+        assert!(written > 20, "{written}");
+        assert!(write(&KerningText { pairs: vec![NewPair { left: Side::Glyph("a\nb".into()), right: Side::Glyph("b".into()), value: 1.0 }], ..Default::default() })
+            .unwrap_err()
+            .to_string()
+            .contains("control character"));
     }
 }

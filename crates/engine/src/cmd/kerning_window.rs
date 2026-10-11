@@ -8,10 +8,11 @@ use std::sync::Arc;
 use fontcraft_model::{Font, MAX_NAME_LEN};
 use fontcraft_spacing::kerning::pairs::{self, Column, EntryKind, Filter, Match, NewPair, SearchSide};
 use fontcraft_spacing::kerning::{Direction, GroupSide, Position, Side, facing};
-use fontcraft_spacing::kerning_text::{self, KerningText, MAX_PAIRS, MAX_TEXT_BYTES, VALUE_RANGE};
-use fontcraft_spacing::metrics_source;
+use fontcraft_spacing::kerning_text::{self, KerningText, MAX_PAIRS, MAX_TEXT_BYTES};
+use fontcraft_spacing::{metrics_source, round_half_up};
 use serde_json::{Value, json};
 
+use super::kerning::MAX_KERN_VALUE;
 use super::*;
 use crate::params::Params;
 
@@ -44,7 +45,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste Kerning Pairs",
             [],
             None,
-            "{text?: kerning-text, pairs?: [{left, right, value}] (exactly one of the two), master?: id (default: the first master), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default: the text's direction line, else ltr), onConflict?: \"ask\"|\"overwrite\"|\"keepExisting\" (default ask)} adds the pairs to the master. A pair the master has with another value is a conflict: overwrite replaces it, keepExisting leaves it, ask changes nothing when there is one and lists them. Glyphs and groups the font lacks are pasted and listed. At most 500000 pairs → {master, direction, asked, added, overwritten, kept, unchanged, conflictCount, conflicts: [{left, right, value, existing}], unknownGlyphs, unknownGroups}",
+            "{text?: kerning-text, pairs?: [{left, right, value}] (exactly one of the two), master?: id (default: the first master), direction?: \"ltr\"|\"rtl\"|\"vertical\" (default: the text's direction line, else ltr), onConflict?: \"ask\"|\"overwrite\"|\"keepExisting\" (default ask)} adds the pairs to the master. A pair the master has with another value is a conflict: overwrite replaces it, keepExisting leaves it, ask changes nothing when there is one and lists them. Values are rounded half up to whole units and must be from -32767 to 32767. Glyphs and groups the font lacks are pasted and listed. At most 500000 pairs → {master, direction, asked, added, overwritten, kept, unchanged, conflictCount, conflicts: [{left, right, value, existing}], unknownGlyphs, unknownGroups}",
             has_doc,
             paste_pairs
         ),
@@ -101,16 +102,19 @@ fn pairs_param(p: &Params, key: &str, with_value: bool) -> Result<Option<Vec<New
         let (left, right) = (side("left")?, side("right")?);
         let value = if with_value {
             let v = obj.get("value").and_then(Value::as_f64).ok_or_else(|| p.bad(format!("`{key}[{i}].value` must be a number")))?;
-            if !(v.is_finite() && VALUE_RANGE.contains(&v)) {
-                return Err(p.bad(format!("`{key}[{i}].value` must be from -32768 to 32767, got {v}")));
-            }
-            v
+            pasted_value(v).ok_or_else(|| p.bad(format!("`{key}[{i}].value` must be from -{MAX_KERN_VALUE} to {MAX_KERN_VALUE}, got {v}")))?
         } else {
             0.0
         };
         out.push(NewPair { left, right, value });
     }
     Ok(Some(out))
+}
+
+/// A pasted value as a typed one: rounded half up to a whole unit, within [`MAX_KERN_VALUE`].
+fn pasted_value(v: f64) -> Option<f64> {
+    let v = round_half_up(v);
+    (v.is_finite() && v.abs() <= MAX_KERN_VALUE).then_some(v)
 }
 
 fn clip(text: &str) -> String {
@@ -224,7 +228,17 @@ fn paste_pairs(s: &mut Session, p: &Value) -> Result<Value> {
             if text.len() > MAX_TEXT_BYTES {
                 return Err(p.bad(format!("`text` is {} bytes long; at most {MAX_TEXT_BYTES} are allowed", text.len())));
             }
-            let doc = kerning_text::read(text).map_err(|e| p.bad(format!("`text`: {e}")))?;
+            let mut doc = kerning_text::read(text).map_err(|e| p.bad(format!("`text`: {e}")))?;
+            for pair in &mut doc.pairs {
+                pair.value = pasted_value(pair.value).ok_or_else(|| {
+                    p.bad(format!(
+                        "`text`: the pair {} {} has the value {}; pasted values must be from -{MAX_KERN_VALUE} to {MAX_KERN_VALUE}",
+                        pair.left.command(),
+                        pair.right.command(),
+                        pair.value
+                    ))
+                })?;
+            }
             (doc.pairs, doc.direction)
         }
     };

@@ -87,13 +87,16 @@ pub enum SideError {
     Empty,
     #[error("a glyph name may be at most {MAX_NAME_LEN} bytes long")]
     TooLong,
+    #[error("a glyph name may not hold a control character (byte {0})")]
+    Control(usize),
     #[error(transparent)]
     Group(#[from] GroupNameError),
 }
 
 impl Side {
     /// Reads a command side: `@X` is the group X, anything else a glyph name. The group name is
-    /// checked; whether the glyph exists is for the caller to decide.
+    /// checked, and a glyph name may not hold control characters; whether the glyph exists is for
+    /// the caller to decide.
     pub fn parse(text: &str) -> Result<Side, SideError> {
         if let Some(group) = text.strip_prefix('@') {
             check_group_name(group)?;
@@ -104,6 +107,10 @@ impl Side {
         }
         if text.len() > MAX_NAME_LEN {
             return Err(SideError::TooLong);
+        }
+        // Tabs and line breaks would split a kerning-text line.
+        if let Some((at, _)) = text.char_indices().find(|(_, c)| c.is_control()) {
+            return Err(SideError::Control(at));
         }
         Ok(Side::Glyph(text.to_string()))
     }

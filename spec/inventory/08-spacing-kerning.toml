@@ -1420,7 +1420,7 @@ milestone = "M5"
 summary = "Adds the kerning pairs on the clipboard to the current master, which may be a different master or a different font than the one they were copied from. In the UI this is Edit › Paste (Cmd+V) in the Kerning window. Pairs that already exist are handled according to the conflict choice."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
-notes = "The engine has no clipboard: the pairs come as kerning-text (`text`) or as JSON (`pairs`). `ask`, the default, changes nothing when a pair conflicts and returns the conflicts, which is what the dialog shows; without conflicts it pastes at once. A linked master is refused. At most 500,000 pairs."
+notes = "The engine has no clipboard: the pairs come as kerning-text (`text`) or as JSON (`pairs`). `ask`, the default, changes nothing when a pair conflicts and returns the conflicts, which is what the dialog shows; without conflicts it pastes at once. A linked master is refused. At most 500,000 pairs. Values are rounded half up to whole units and must be from −32,767 to 32,767, as for `kerning.setPair`; glyph names with control characters are refused."
 guesses = [
   "A pasted group side keeps its name; a group the target font lacks is pasted as it is and reported.",
   "A glyph the target font lacks is pasted as it is and reported, like a missing group.",
