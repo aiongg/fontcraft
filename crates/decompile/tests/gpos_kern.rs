@@ -315,6 +315,32 @@ fn a_huge_class_table_is_skipped_with_a_warning() {
     assert!(d.warnings.iter().any(|w| w.contains("class pairs were skipped")), "{:?}", d.warnings);
 }
 
+/// A script list whose 6,000 records all lead to one Script, whose 6,000 language systems all
+/// lead to one empty LangSys: 36 million language systems from a small table. Walking them
+/// costs work, so the walk stops with a warning.
+#[test]
+fn shared_script_and_language_records_spend_the_budget() {
+    let (ttf, _) = base_font();
+    const N: u16 = 6000;
+    // Header, then an empty feature list and lookup list, then the script list.
+    let mut words: Vec<u16> = vec![1, 0, 14, 10, 12, 0, 0];
+    words.push(N);
+    for _ in 0..N {
+        words.extend([0x6C61, 0x746E, 2 + 6 * N]);
+    }
+    words.extend([0, N]);
+    for _ in 0..N {
+        words.extend([0x5452, 0x4B20, 4 + 6 * N]);
+    }
+    words.extend([0, 0xFFFF, 0]);
+    let gpos: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+    let base = FontRef::new(&ttf).unwrap();
+    let bytes = write_fonts::FontBuilder::new().add_raw(WTag::new(b"GPOS"), gpos).copy_missing_tables(base).build();
+    let d = decompile(&bytes, None).unwrap();
+    assert!(d.font.kerning.is_empty());
+    assert!(d.warnings.iter().any(|w| w.contains("script and feature lists are too large")), "{:?}", d.warnings);
+}
+
 fn fonts(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for e in entries.flatten() {

@@ -126,6 +126,11 @@ fn kern_records(gpos: &Gpos, budget: &mut Budget) -> Vec<KernRecord> {
     let mut used: HashMap<u16, (bool, bool, bool)> = HashMap::new();
     if let Ok(scripts) = gpos.script_list() {
         for rec in scripts.script_records() {
+            // Records may share one Script and one LangSys, so every record is charged, not only
+            // the feature indices it leads to.
+            if !budget.step(1) {
+                return Vec::new();
+            }
             let tag = rec.script_tag();
             let rtl = RTL_SCRIPTS.iter().any(|t| Tag::new(t) == tag);
             let dflt = tag == Tag::new(b"DFLT");
@@ -133,6 +138,9 @@ fn kern_records(gpos: &Gpos, budget: &mut Budget) -> Vec<KernRecord> {
             let defaults = script.default_lang_sys().into_iter().flatten();
             let others = script.lang_sys_records().iter().filter_map(|l| l.lang_sys(script.offset_data()).ok());
             for lang in defaults.chain(others) {
+                if !budget.step(1) {
+                    return Vec::new();
+                }
                 let required = Some(lang.required_feature_index()).filter(|&i| i != 0xFFFF);
                 for fi in lang.feature_indices().iter().map(|i| i.get()).chain(required) {
                     if !budget.step(1) {
