@@ -247,7 +247,7 @@ fn hostile_predicates_rules_and_patterns_fail_with_a_message() {
         ("name ==", "value"),
         ("name == 'A", "quote"),
         ("weight > 3", "unknown attribute"),
-        ("hasHints == true", "not supported"),
+        ("mastersCompatible == true", "not supported"),
         ("countOfPaths contains 'x'", "number"),
         ("case == huge", "one of"),
         ("name == 'A')", "after the end"),

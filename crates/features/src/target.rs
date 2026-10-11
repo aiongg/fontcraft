@@ -165,9 +165,17 @@ impl TargetValues for MasterValues<'_> {
         &self.glyphs
     }
 
+    /// Layer attributes read this master; `class(…)` reads the font's enabled feature classes;
+    /// non-exporting glyphs are left out.
     fn select(&self, predicate: &Predicate) -> Result<Vec<String>, String> {
-        // M8.6: `fontcraft_glyphquery::predicate::evaluate` on this master, with the font's classes.
-        let _ = predicate;
-        Err("glyph predicate tokens are not available yet".into())
+        let master = match &self.target {
+            Target::Master(id) => Some(id.as_str()),
+            _ => None,
+        };
+        let wanted = predicate.classes();
+        let classes = fontcraft_glyphquery::feature_classes(self.font, self.data, master, Some(wanted.as_slice())).map_err(|e| e.to_string())?;
+        let env = fontcraft_glyphquery::Env::new(self.font, self.data, master).map_err(|e| e.to_string())?.with_classes(classes);
+        let names = fontcraft_glyphquery::predicate::evaluate(predicate, &env).map_err(|e| e.to_string())?;
+        Ok(names.into_iter().filter(|n| self.font.glyph(n).is_some_and(|g| g.export)).collect())
     }
 }

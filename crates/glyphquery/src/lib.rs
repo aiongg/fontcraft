@@ -8,6 +8,7 @@
 //! the limits below and fails with a [`QueryError`], never a panic.
 #![forbid(unsafe_code)]
 
+mod classes;
 mod filters;
 pub mod predicate;
 mod replace;
@@ -20,11 +21,12 @@ mod tests;
 use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use fontcraft_glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph, GlyphProps, Layer, PropsCache, glyph_props, keeps_alternates};
 
+pub use classes::{MAX_CLASS_DEPTH, MAX_CLASS_GLYPH_TESTS, MAX_CLASS_MEMBERS, feature_classes};
 pub use filters::{
     Filter, add_filter, check_filter_name, filter_at, list_names, move_filter, remove_filter, rename_filter, replace_filter, validate_filters,
 };
@@ -115,7 +117,10 @@ pub struct Env<'a> {
     master: Option<&'a str>,
     first_master: Option<&'a str>,
     keep_alternates: bool,
-    classes: HashMap<String, HashSet<String>>,
+    /// The classes `name in class(X)` reads: given by the caller, or else the font's feature
+    /// classes, read when a predicate first asks.
+    classes: Option<HashMap<String, HashSet<String>>>,
+    font_classes: OnceLock<HashMap<String, HashSet<String>>>,
     props: Option<&'a PropsCache>,
     out_of_sync: Option<&'a HashSet<String>>,
 }
@@ -131,12 +136,23 @@ impl<'a> Env<'a> {
             },
             None => first_master,
         };
-        Ok(Env { font, data, master, first_master, keep_alternates: keeps_alternates(font), classes: HashMap::new(), props: None, out_of_sync: None })
+        Ok(Env {
+            font,
+            data,
+            master,
+            first_master,
+            keep_alternates: keeps_alternates(font),
+            classes: None,
+            font_classes: OnceLock::new(),
+            props: None,
+            out_of_sync: None,
+        })
     }
 
-    /// Gives `name in class(X)` the members of each feature class.
+    /// Gives `name in class(X)` these members of each class instead of the font's feature
+    /// classes.
     pub fn with_classes(mut self, classes: HashMap<String, HashSet<String>>) -> Self {
-        self.classes = classes;
+        self.classes = Some(classes);
         self
     }
 
@@ -174,8 +190,15 @@ impl<'a> Env<'a> {
         self.first_master.and_then(|m| glyph.layer(m))
     }
 
+    /// Whether `name` is a member of `class`. Without classes from the caller, the font's
+    /// enabled feature classes are read once; when they cannot be read (a reference cycle, a cap
+    /// reached), no glyph is in any class.
     pub(crate) fn in_class(&self, class: &str, name: &str) -> bool {
-        self.classes.get(class).is_some_and(|members| members.contains(name))
+        let classes = match &self.classes {
+            Some(classes) => classes,
+            None => self.font_classes.get_or_init(|| feature_classes(self.font, self.data, self.master, None).unwrap_or_default()),
+        };
+        classes.get(class).is_some_and(|members| members.contains(name))
     }
 }
 
@@ -184,11 +207,18 @@ impl<'a> Env<'a> {
 pub struct Subject<'a> {
     pub glyph: &'a Glyph,
     props: OnceCell<Arc<GlyphProps>>,
+    bounds: OnceCell<Option<[f64; 4]>>,
 }
 
 impl<'a> Subject<'a> {
     pub fn new(glyph: &'a Glyph) -> Self {
-        Subject { glyph, props: OnceCell::new() }
+        Subject { glyph, props: OnceCell::new(), bounds: OnceCell::new() }
+    }
+
+    /// The bounds of the glyph's outline on the shown master (min x, min y, max x, max y),
+    /// computed at most once.
+    pub(crate) fn bounds(&self, env: &Env) -> Option<[f64; 4]> {
+        *self.bounds.get_or_init(|| env.master.and_then(|m| predicate::outline_bounds(env.font, self.glyph, m)))
     }
 
     pub(crate) fn props(&self, env: &Env) -> &GlyphProps {

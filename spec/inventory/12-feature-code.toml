@@ -472,7 +472,7 @@ milestone = "M8"
 summary = "`$[predicate]` expands to the names, separated by spaces, of all glyphs for which the predicate is true."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A token ends at the `]` that closes it outside quoted text, so `$[name matches \"[a-z]\"]` is one token (`features::tokens_predicate::token_len`); glyphsLib ends it at the first `]`."
 
 [[behavior]]
 id = "token.predicate.inClassEntry"
@@ -490,7 +490,7 @@ milestone = "M8"
 summary = "In prefix and feature code the token must sit inside class brackets: `@Minuscule = [$[case == lower]];`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. `features::tokens_predicate::check_placement` refuses a token in a prefix or feature that is not inside class brackets; comments, quoted text and other tokens are skipped when the brackets are counted."
 
 [[behavior]]
 id = "token.predicate.boolean"
@@ -499,7 +499,12 @@ milestone = "M8"
 summary = "Boolean glyph properties are compared with true or false: `isAligned == false`, `hasHints == true`, `isColorGlyph == false`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Also accepted: hasPostScriptHints, hasTrueTypeHints, hasCorners, hasComponents, hasAnnotations, hasSpecialLayers, isAnyColorGlyph, isAppleColorGlyph, isSVGColorGlyph, isFullColorGlyph, isColorPaletteGlyph, isSmartGlyph, locked; yes and no stand for true and false; a yes-or-no attribute alone means `== true`."
+guesses = [
+  "isAligned holds when every master layer has a component placed automatically (a forced or horizontal component, or one left to the usual rule on a layer without paths), with the font setting off; a composite with one master unaligned in the reference app would settle it.",
+  "hasHints counts stem and TrueType hints on any layer and not corner components, caps, brushes or segments; a glyph with only a corner component in the reference app would settle it.",
+  "isColorGlyph holds for glyphs with colour palette layers only, and isAnyColorGlyph for every kind of colour layer; an SVG colour glyph in the reference app would settle it.",
+]
 
 [[behavior]]
 id = "token.predicate.numeric"
@@ -553,6 +558,7 @@ milestone = "M8"
 summary = "Further operators accepted by fea-rs for this syntax: =, != and <> , beginswith, single-quoted strings, and case-insensitive operator keywords. Listed there but rejected: matches and like."
 ref = "fea-rs test-data/parse-tests/good/glyphsapp_predicate.fea"
 status = "docs"
+notes = "FontCraft expands every predicate before fea-rs sees the code, so it also accepts `like` (`*` and `?` wildcards over the whole value), `matches` (a regular expression over the whole value), `=<` and `=>`, `in {…}` lists and `between {low, high}`, as Apple's predicate format has them. glyphsLib finds a `matches` expression anywhere in the value and refuses `=>`."
 
 [[behavior]]
 id = "token.predicate.keyPaths"
@@ -561,7 +567,7 @@ milestone = "M8"
 summary = "Nested data is reached with dotted paths: `layer.anchors.center.y > 250`, `layer.maxX > 520`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Layer paths read the target's master (Font View: the shown master): layer.width, layer.minX, layer.maxX, layer.minY, layer.maxY (the outline with components resolved and curve extremes included; none for an empty layer), layer.LSB, layer.RSB, layer.isAligned, layer.colorIndex, layer.hasAnnotations, layer.countOfPaths, layer.countOfComponents, layer.countOfAnchors, layer.anchors.<name>.x and .y. Glyph attributes besides the handbook's: productionName (also production), unicode (upper-case hexadecimal), string, sortName, description, the four kerning groups, the six metrics keys, countOfTags, countOfPartsSettings. Any other path is an error naming it."
 
 [[behavior]]
 id = "token.predicate.tags"
@@ -579,7 +585,10 @@ milestone = "M8"
 summary = "Predicates combine with AND and OR, NOT negates the predicate that follows, and parentheses group: `\"draft\" in tags OR (\"math\" in tags AND case == upper)`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. glyphsLib reads AND and OR right to left without precedence, so `a AND b OR c` means `a AND (b OR c)` there; the comparison test in `features/src/tokens_predicate_tests.rs` lists the difference."
+guesses = [
+  "NOT binds tighter than AND, and AND tighter than OR, as in Apple's predicate format that the reference's language follows; this row's observe step would settle it.",
+]
 observe = [
   "In F5 (tokens), write `$[note contains \"x\" OR \"ipa\" in tags AND case == upper]` and Option-click it: note the glyphs listed, which shows whether AND binds tighter than OR.",
 ]
@@ -591,7 +600,11 @@ milestone = "M8"
 summary = "`class(Name)` stands for the members of the feature class @Name, so `name in class(Round) AND name in class(Tall)` yields the intersection of two classes."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A class entry is read as glyph names, `@Other` references (16 levels at most, a cycle is an error) and predicate tokens; disabled classes are left out."
+guesses = [
+  "In feature code a class name the font has no enabled class for is an error naming it, and in the Custom smart-filter rule it matches nothing; writing `class(Missing)` in the reference app would settle it.",
+  "Predicate tokens inside a class count non-exporting glyphs as members; only the token's own result leaves them out. A class built from a predicate in a font with a non-exporting match would settle it.",
+]
 
 [[behavior]]
 id = "token.predicate.resultOrder"
