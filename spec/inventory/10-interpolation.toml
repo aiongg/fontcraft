@@ -312,6 +312,10 @@ milestone = "M9"
 summary = "Two layers of a glyph can interpolate only when they match in: the number of paths and, per path, the order of nodes (which we read as node count plus the sequence of line and curve segments); anchors, by count and by name; components, by count and by the glyph each one references; and the order of shapes, paths and components counted together."
 ref = "Interpolation › Outline Compatibility"
 status = "handbook"
+guesses = [
+  "An open path against a closed one with the same nodes is incompatible, images are left out of the shape order, and shapes the model keeps unread match each other. Settle by opening the Master Compatibility view on such layers in the reference app.",
+  "Anchors match by their set of names, in any order. Settle by giving two masters the same anchors in a different order and looking for the red indicator.",
+]
 
 [[behavior]]
 id = "compatibility.editViewRedBar"
@@ -338,6 +342,7 @@ ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outl
 status = "handbook"
 guesses = [
   "Masters needed by an instance are those with a non-zero scalar at the instance's location in the variation model; variable font settings count as needing every master they do not disable. Settle by observing the indicators with an instance between two of three masters.",
+  "The scope is the union of the masters of every instance that needs two or more masters, rather than the pairs each instance needs; as compatibility is an equivalence the two differ only when two groups of masters share no instance. Settle with two instances, each between a different pair of four masters, and one pair incompatible with the other.",
 ]
 observe = [
   "In F1 (two masters) with a third master at 400 and only a Thin instance, give Black an incompatible glyph: note whether that glyph shows the red indicators.",
@@ -770,6 +775,7 @@ milestone = "M9"
 summary = "Alternate layers are per glyph, and one must be added under each master so the alternate shape can itself interpolate across the whole designspace; all carry the same range."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "The handbook asks for one alternate layer under every master and does not say what happens without one. Both oracles (fontc `glyphs2fontir/src/source.rs`, glyphsLib `builder/bracket_layers.py`) take the master layer where a range set has no layer under a master, and `fontcraft_interp::sources` does the same."
 
 [[behavior]]
 id = "alternateLayer.bracketLabel"
@@ -810,6 +816,11 @@ milestone = "M9"
 summary = "A master layer can itself be given an axis range. Its counterpart is an extra layer under the same master marked Alternate with both bounds empty, shown as []; in that case the master layer holds the alternate outline while the [] layer holds the normal one. Which arrangement is used changes nothing in exported fonts."
 ref = "Interpolation › Switching Shapes › Alternate Layers"
 status = "handbook"
+notes = "fontc reads no range on a master layer (glyphs-reader 1.0.0 clears it), so in its builds the master layer stays the normal shape and the `[]` layer becomes an alternate that covers every axis."
+guesses = [
+  "A master layer with a range and no `[]` partner is both the master's normal shape and its alternate shape. Settle by exporting such a font from the reference app at a location inside the range.",
+  "A `[]` layer whose master layer has no range is not a source. Settle by exporting such a font from the reference app and comparing the glyph with and without the `[]` layer.",
+]
 
 [[behavior]]
 id = "alternateLayer.rangeSemantics"

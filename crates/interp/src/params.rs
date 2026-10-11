@@ -265,9 +265,7 @@ pub fn set_disabled_masters(params: &Params, names: &[String]) -> Params {
 /// The Enforce Compatibility Check setting: `Some(true)` widens the check to every master,
 /// `Some(false)` hides the indicators, `None` is the default scope.
 pub fn enforce_compatibility(font: &Font) -> Option<bool> {
-    // M9.3
-    let _ = font;
-    None
+    font.info.params.get(ENFORCE_COMPATIBILITY_CHECK).and_then(fontcraft_model::param_flag)
 }
 
 #[cfg(test)]
