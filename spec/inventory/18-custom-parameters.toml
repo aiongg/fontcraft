@@ -57,6 +57,9 @@ summary = "Adds an OpenType glyph class at export. The value is the class name w
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "A leading @ on the class name is dropped, and the white space after the semicolon is not part of the code (glyphsLib's split); exporting with the parameter in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Add Feature"
@@ -1376,6 +1379,10 @@ summary = "Five semicolon-separated values: design size in decipoints; subfamily
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "The values are whole decipoints from 0 to 65535 and the code is a `size` feature added at the end of the list, replacing the code of a `size` feature the font already has; exporting with the parameter in the reference app and reading GPOS settles it.",
+  "The menu name is written for Windows (English) and, when it is plain ASCII, for the Mac (Roman, English); a subfamily of 0 writes no range and no name, as the feature file specification asks; the exported name table of the reference app settles it.",
+]
 
 [[parameter]]
 name = "Optimize Variable Deltas"
@@ -1608,6 +1615,9 @@ summary = "List of feature tags not to export, for an unwanted auto-generated fe
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "Besides a list, one text with the names separated by commas or line breaks is accepted, and every entry of a listed name is left out; the reference app's parameter editor settles which forms it stores.",
+]
 
 [[parameter]]
 name = "Remove Glyphs"
@@ -1695,6 +1705,10 @@ summary = "Value is the four-letter feature tag, a semicolon, then the new code.
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "Only the first feature of that tag is replaced, its labels are kept and it counts as hand-written from then on, so a replaced `kern` still gets the generated kerning after it; exporting a font with a stylistic-set name and a replaced `kern` in the reference app settles it.",
+  "A Replace parameter that names no entry does nothing, without a message, as the handbook limits these parameters to existing entries and glyphsLib skips them; the reference app's export report settles it.",
+]
 
 [[parameter]]
 name = "Replace Prefix"

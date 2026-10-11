@@ -108,6 +108,7 @@ bundled, the file says so in its header and the project is listed here with its 
   component matrix and contour reversal) are ported from its smart-component and component
   builders (crates/model/src/smart.rs, from builder/smart_components.py and components.py), with
   the reversal of its path class (GSPath.reverse).
+  The text written around feature-code entries and the reading of the Replace Feature and Replace Prefix values follow its feature builder (crates/features/src/assemble.rs and params.rs, from builder/features.py and custom_params.py).
 
   fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data

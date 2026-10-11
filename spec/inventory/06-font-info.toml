@@ -2481,7 +2481,10 @@ milestone = "M8"
 summary = "Selecting one of ss01 to ss20 shows name rows above the editor, each with a language and a text. The Default language is the fallback, which many systems treat as English, so the usual set-up is Default for English plus rows for other languages. The texts accept text tokens."
 ref = "Font Info › Features › Naming Stylistic Sets"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The names are written as a `featureNames` block at the start of the feature, the default language as `name \"…\";` and the others as Windows names in their language, as glyphsLib writes them."
+guesses = [
+  "A name in a language without a Windows language id is left out, as fontc does (glyphsLib stops with an error), and text tokens in names are not expanded yet; a name in such a language exported from the reference app settles it.",
+]
 
 [[behavior]]
 id = "fontInfo.features.implicit"
