@@ -204,6 +204,21 @@ fn bidi_lines_start_at_their_edge_and_a_trailing_space_kerns_with_nothing() {
 }
 
 #[test]
+fn bidi_trailing_space_before_a_break_and_blank_lines_measure_their_own_items() {
+    let mut f = bidi_font();
+    kern(&mut f, Direction::Ltr, "x", "space", -100.0);
+    // alef ␣ f o x ␣ ⏎ | ⏎ | ␣ ␣ ␣ ⏎ | bet
+    let t = text(&f, "\u{5d0} fox \n\n   \n\u{5d1}");
+    let opts = Options { direction: Direction::Rtl, bidi: true, line_height: Some(1000.0), ..Options::default() };
+    let l = layout(&f, "m01", &t, &opts).unwrap();
+    let ranges: Vec<_> = l.lines.iter().map(|line| line.items.clone()).collect();
+    assert_eq!(ranges, [0..7, 7..8, 8..12, 12..13]);
+    assert_eq!(l.placed[5].kern, 0.0, "the space before the break does not kern with x");
+    assert_eq!(l.lines[1].length, 0.0, "an empty line has no length");
+    assert_eq!(l.lines[2].length, 3.0 * 250.0, "a line of blanks is as long as its spaces");
+}
+
+#[test]
 fn bidi_reverses_a_right_to_left_run_in_left_to_right_text_and_off_changes_nothing() {
     let f = bidi_font();
     let t = text(&f, "ab \u{5d0}\u{5d1}\u{5d2} cd");

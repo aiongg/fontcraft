@@ -91,7 +91,8 @@ fn item_class(item: &Item) -> Option<Class> {
 }
 
 /// The level of every item: even runs left to right, odd right to left; `None` when every item
-/// runs in the paragraph's direction. Linear in the items plus the embeddings.
+/// runs in the paragraph's direction. Linear in the items, plus sorting at most
+/// `MAX_EMBEDDINGS` embeddings.
 pub(crate) fn levels(items: &[Item], base_rtl: bool, embeddings: &[Embedding]) -> Option<Vec<u8>> {
     let n = items.len();
     let embeddings = embeddings.get(..MAX_EMBEDDINGS).unwrap_or(embeddings);
