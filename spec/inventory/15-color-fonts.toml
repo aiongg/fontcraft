@@ -305,14 +305,16 @@ label = "Add Attribute"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{glyph?: name, layer?: id, paths?: [index], attribute: "gradient" | "shadow" | "innerShadow" | "patternImage"}'
+params = '{glyph: name, layer: id, shapes?: [index], attribute: "gradient" | "shadow" | "innerShadow" | "patternImage", blur?: number, offset?: [x, y], color?: "#RRGGBBAA", image?: path, type?, stops?, extend?}'
 area = "color"
 milestone = "M11"
 summary = "Adds a further style control to the selected paths from the plus button beside the Attributes heading. Gradient is exportable; Shadow, Inner Shadow and Pattern Image only affect PNG/PDF output from Filter › Glyph as Image and are never written to a font."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 guesses = [
   "Shadow and Inner Shadow have blur, offset and colour fields, as the file format stores them; Pattern Image has an image reference. Settled by adding each in the reference's inspector.",
+  "A new Shadow or Inner Shadow is black at 50 % opacity with blur 10 and offset (10, −10) font units; Pattern Image keeps only a file reference, in a FontCraft key. Settled by adding each in the reference and reading the saved file.",
 ]
 observe = ["Full-colour font: add Shadow, Inner Shadow and Pattern Image to a path; note the controls each one shows."]
 
@@ -322,12 +324,13 @@ label = "Set Stroke Width"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], width: number}"
+params = "{glyph: name, layer: id, shapes?: [index], width: number | null}"
 area = "color"
 milestone = "M11"
 summary = "Sets the stroke width of the selected paths in font units, from the field beside the Stroke heading. An empty field counts as 0, which means no visible stroke."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 guesses = [
   "A stroke added to a path without one is opaque black. Settled by entering a stroke width in the reference's Attributes inspector.",
 ]
@@ -339,12 +342,13 @@ label = "Set Stroke Alignment"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], alignment: \"center\" | \"inside\" | \"outside\"}"
+params = "{glyph: name, layer: id, shapes?: [index], alignment: \"center\" | \"inside\" | \"outside\"}"
 area = "color"
 milestone = "M11"
 summary = "Chooses where the stroke sits relative to the path: centred on it (the default), inside the shape or outside it. The inspector's left and right buttons are inside and outside; the file format stores the choice as the stroke position."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 guesses = [
   "The left button is inside and the right button outside, for paths in the usual direction. Settled by choosing each in the reference and reading `strokePos` in the saved file.",
 ]
@@ -356,12 +360,13 @@ label = "Set Stroke Color"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], color: \"#RRGGBBAA\"}"
+params = "{glyph: name, layer: id, shapes?: [index], color: \"#RRGGBBAA\"}"
 area = "color"
 milestone = "M11"
 summary = "Sets the stroke colour of the selected paths, from the swatch button in the Stroke row."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 
 [[command]]
 id = "attributes.removeStroke"
@@ -369,12 +374,16 @@ label = "Remove Stroke"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index]}"
+params = "{glyph: name, layer: id, shapes?: [index]}"
 area = "color"
 milestone = "M11"
 summary = "The minus button of the Stroke row: on the selected paths, zeroes the stroke width and makes the stroke colour fully transparent."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Stroke"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
+guesses = [
+  "The removed stroke's colour is transparent black. Settled by reading `strokeColor` in a file saved after the minus button.",
+]
 
 [[command]]
 id = "attributes.setFillColor"
@@ -382,12 +391,13 @@ label = "Set Fill Color"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], color: \"#RRGGBBAA\"}"
+params = "{glyph: name, layer: id, shapes?: [index], color: \"#RRGGBBAA\"}"
 area = "color"
 milestone = "M11"
 summary = "Sets the solid fill colour of the selected paths, from the swatch button in the Fill row. Not available while the paths carry a gradient."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Fill"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 
 [[command]]
 id = "attributes.removeFill"
@@ -395,12 +405,13 @@ label = "Remove Fill"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index]}"
+params = "{glyph: name, layer: id, shapes?: [index]}"
 area = "color"
 milestone = "M11"
 summary = "The minus button of the Fill row: makes the fill of the selected paths fully transparent."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Fill"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 
 [[command]]
 id = "attributes.removeGradient"
@@ -408,7 +419,7 @@ label = "Remove Gradient"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index]}"
+params = "{glyph: name, layer: id, shapes?: [index]}"
 area = "color"
 milestone = "M11"
 summary = "Removes the gradient from the selected paths of a full-colour layer and shows the Fill row again with the fill colour the paths had."
@@ -426,15 +437,17 @@ label = "Add Gradient"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], type?: \"linear\" | \"radial\" | \"conic\", stops?: [{offset: 0..1, color}], extend?: \"pad\" | \"repeat\" | \"reflect\"}"
+params = "{glyph: name, layer: id, shapes?: [index], type?: \"linear\" | \"radial\" | \"conic\", stops?: [{offset: 0..1, color}], extend?: \"pad\" | \"repeat\" | \"reflect\"}"
 area = "color"
 milestone = "M11"
 summary = "Gives the selected paths a gradient, which takes the place of their solid fill. A gradient always has at least two colour stops; the initial type, stop colours and position are not documented."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 guesses = [
   "A new gradient is linear, from the path's fill colour at offset 0 to the same colour fully transparent at offset 1, running from the left middle to the right middle of the path's bounds. Settled by adding a gradient in the reference.",
   "Conic gradients and the extend mode, which the version 4 file format has and the handbook does not describe, are accepted as parameters; the inspector shows only linear and radial. Settled by looking for them in the reference's inspector.",
+  "A new radial gradient is centred in the path's bounds and runs from radius 0 to half the bounds' width; a new conic gradient is centred and turns 360°. Settled by switching a new gradient to radial in the reference and reading the saved file.",
 ]
 observe = ["Full-colour font: add a gradient to a path; note its type, its stop colours and its start and end positions."]
 
@@ -444,12 +457,16 @@ label = "Set Gradient Type"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], type: \"linear\" | \"radial\" | \"conic\"}"
+params = "{glyph: name, layer: id, shapes?: [index], type?: \"linear\" | \"radial\" | \"conic\", extend?: \"pad\" | \"repeat\" | \"reflect\"}"
 area = "color"
 milestone = "M11"
 summary = "Switches the gradient of the selected paths between linear and radial by clicking the matching icon in the Gradient row."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
+guesses = [
+  "Switching the type places the gradient as a new gradient of that type and keeps its stops and extend mode. Settled by switching a moved gradient between linear and radial in the reference.",
+]
 
 [[command]]
 id = "attributes.addGradientStop"
@@ -457,12 +474,13 @@ label = "Add Gradient Stop"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], offset: 0..1, color?: \"#RRGGBBAA\"}"
+params = "{glyph: name, layer: id, shapes?: [index], offset: 0..1, color?: \"#RRGGBBAA\"}"
 area = "color"
 milestone = "M11"
 summary = "Inserts a colour stop at a position along the gradient; in the UI, a click at any spot on the gradient bar does this. The colour a new stop starts with is not documented (interpolating the bar at that position is our default)."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 guesses = [
   "A new stop takes the colour of the gradient at its offset. Settled by clicking the gradient bar in the reference.",
 ]
@@ -474,12 +492,13 @@ label = "Remove Gradient Stop"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], stop: int}"
+params = "{glyph: name, layer: id, shapes?: [index], stop: int}"
 area = "color"
 milestone = "M11"
 summary = "Deletes a colour stop; in the UI by dragging its knob off the gradient bar. Must refuse to go below two stops."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 
 [[command]]
 id = "attributes.setGradientStopColor"
@@ -487,12 +506,13 @@ label = "Set Gradient Stop Color"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], stop: int, color?: \"#RRGGBBAA\", offset?: 0..1}"
+params = "{glyph: name, layer: id, shapes?: [index], stop: int, color?: \"#RRGGBBAA\", offset?: 0..1}"
 area = "color"
 milestone = "M11"
 summary = "Edits one colour stop: clicking its knob under the gradient bar opens the colour picker for that stop. Moving a stop along the bar is assumed (not stated in the chapter) and is covered by the optional offset."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
 guesses = [
   "A stop can be moved along the bar, which `offset` does. Settled by dragging a stop knob sideways in the reference.",
 ]
@@ -504,12 +524,16 @@ label = "Set Gradient Position"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, paths?: [index], start: [x, y], end?: [x, y]}"
+params = "{glyph: name, layer: id, shapes?: [index], start: [x, y], end?: [x, y], relative?: bool}"
 area = "color"
 milestone = "M11"
 summary = "Places the gradient on the shape, the headless form of dragging the gradient knobs in Edit View: start and end for a linear gradient, a single origin for a radial one. The Glyphs file format stores these points relative to the shape's bounds."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient"
 status = "handbook"
+notes = "Documented in the handbook; not yet observed in the reference app."
+guesses = [
+  "Without `end`, the end moves by as much as the start, so the gradient moves as a whole. Settled by dragging the start knob of a linear gradient in the reference's Edit View.",
+]
 
 [[command]]
 id = "color.describeExport"

@@ -1153,6 +1153,7 @@ fn add_primitive(s: &mut Session, v: &Value, command: &'static str, is_ellipse: 
         }
         drop(g);
         t.edit_layer(font, |l| {
+            let path = super::attributes::style_new_path(l, path);
             let shapes = l.parts_mut(t.side).shapes;
             shapes.push(Shape::Path(path));
             Ok(shapes.len() - 1)
