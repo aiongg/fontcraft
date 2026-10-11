@@ -211,6 +211,21 @@ impl<'a> Ctx<'a> {
     }
 }
 
+/// The pole layers of the smart glyph `base` for `master` (every master when it is empty), in
+/// the glyph's layer order.
+pub fn pole_layers<'a, 'm>(base: &'a Glyph, master: &'m str) -> impl Iterator<Item = &'a Layer> + use<'a, 'm> {
+    base.layers.iter().filter(move |l| !l.info.attrs.smart_poles.is_empty() && (master.is_empty() || l.master == master))
+}
+
+/// An upper bound on the steps [`component_anchors`] takes for a component of `base` in
+/// `master`, for callers that budget their work before calling it: reading every pole layer's
+/// anchors, building the variation model and adding up the weighted poles.
+pub fn anchor_interpolation_cost(base: &Glyph, master: &str) -> usize {
+    let (poles, anchors) = pole_layers(base, master).fold((0usize, 0usize), |(n, a), l| (n.saturating_add(1), a.max(l.anchors.len())));
+    let model = poles.saturating_mul(poles).saturating_mul(base.info.parts.len().saturating_add(1));
+    poles.saturating_mul(anchors.saturating_mul(3)).saturating_add(model)
+}
+
 /// A smart component's pole layers for one master, default first, with the variation model
 /// over them and the component's location in it.
 struct Interpolation<'a> {
@@ -223,8 +238,7 @@ struct Interpolation<'a> {
 /// glyph has one pole layer there.
 fn interpolation<'a>(base: &'a Glyph, c: &Component, master: &str) -> Result<Option<Interpolation<'a>>, String> {
     // glyphsLib lists a glyph's master layers before its other layers.
-    let mut poles: Vec<&'a Layer> =
-        base.layers.iter().filter(|l| !l.info.attrs.smart_poles.is_empty() && (master.is_empty() || l.master == master)).collect();
+    let mut poles: Vec<&'a Layer> = pole_layers(base, master).collect();
     poles.sort_by_key(|l| !l.is_master_layer());
     let Some(&default) = poles.first() else {
         return Err("the smart glyph has no pole layers for this master".into());

@@ -101,6 +101,13 @@ fn input(font: Option<&Font>, data: Option<&GlyphData>, resolved: &Resolved, ord
                         "anchors were not passed on from components to `{glyph}`{others}, so it uses its own anchors for mark attachment: {e}"
                     ));
                 }
+                if let Some((glyph, e)) = master.smart_fallbacks.first() {
+                    let more = master.smart_fallbacks.len().saturating_sub(1);
+                    let others = if more == 0 { String::new() } else { format!(" (and {more} more)") };
+                    warnings.push(format!(
+                        "a smart component in `{glyph}`{others} passes on its glyph's master-layer anchors for mark attachment, not anchors at its values: {e}"
+                    ));
+                }
                 Some(master.anchors)
             }
             Err(e) => {

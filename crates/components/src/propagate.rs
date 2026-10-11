@@ -26,8 +26,11 @@
 //!   without any of these passes nothing on.
 //! - A component of a smart glyph passes on the anchors of the glyph's pole layers for the
 //!   master the component names, else the composite layer's master, interpolated at the component's values
-//!   ([`fontcraft_model::smart::component_anchors`]). With one pole layer, or pole layers that
-//!   cannot be interpolated, the base's layer is read as for any component.
+//!   ([`fontcraft_model::smart::component_anchors`]). With one pole layer, pole layers that
+//!   hold components, or pole layers that cannot be interpolated, the base's layer is read as
+//!   for any component; for a whole master, the last case is listed in
+//!   [`MasterAnchors::smart_fallbacks`]. Each interpolation is charged to the layer's work
+//!   budget before it runs, and its result is reused for components with the same values.
 //! - When [`propagate_anchors_enabled`] is false the result is the layer's own anchors.
 //! - Errors: a cycle ([`ComponentsError::Cycle`]), nesting past [`MAX_COMPONENT_DEPTH`], more
 //!   than [`MAX_LAYER_ANCHORS`] anchors or [`MAX_LAYER_COMPONENTS`] components, a transform that
@@ -39,7 +42,10 @@
 //!   [`MAX_MASTER_PROPAGATION_WORK`] for all its layers; past it, the glyphs not yet worked out
 //!   keep their own anchors and are listed as failed.
 //! - Nesting is measured as the longest chain of components below a layer, wherever the layer
-//!   is reached from, so a whole master gives every glyph the same result in any glyph order.
+//!   is reached from, and a layer's work budget counts only its own steps (a base's steps go to
+//!   the base), so a whole master within [`MAX_MASTER_PROPAGATION_WORK`] gives every glyph the
+//!   same result in any glyph order. Past that limit, which glyphs are left out depends on the
+//!   order.
 //! - Propagated anchors are computed, never stored in the font.
 //! - [`AnchorCache`] keeps results across edits. An entry stays valid while the glyph's `Arc`
 //!   and the `Arc`s of every glyph it reaches through components are pointer-equal to those it
@@ -164,7 +170,7 @@ pub(crate) fn master_anchors(font: &Font, data: Option<&GlyphData>, master: &str
         };
         anchors.insert(g.name.clone(), list);
     }
-    Ok(MasterAnchors { anchors, failed: run.failed })
+    Ok(MasterAnchors { anchors, failed: run.failed, smart_fallbacks: run.smart_fallbacks })
 }
 
 /// What [`effective_anchors_for_master`] works out for one master.
@@ -175,6 +181,9 @@ pub struct MasterAnchors {
     /// The glyphs whose anchors could not be worked out, with the reason. Each keeps its own
     /// anchors, and composites using it take those.
     pub failed: Vec<(String, ComponentsError)>,
+    /// Glyphs with a smart component whose pole layers could not be interpolated, with the
+    /// reason; the component passes on its base layer's anchors instead.
+    pub smart_fallbacks: Vec<(String, String)>,
 }
 
 /// One cached result and what it was computed from.
@@ -252,6 +261,12 @@ struct Kind {
 /// the layer.
 type Worked = (Arc<[EffectiveAnchor]>, usize);
 
+/// A smart component's interpolation: its base glyph, master and values (property, value bits),
+/// sorted by property.
+type SmartKey = (String, String, Vec<(String, u64)>);
+/// What a smart component passes on: `None` when its base's layer is read as for any component.
+type SmartResult = Result<Option<Arc<[EffectiveAnchor]>>, String>;
+
 /// One propagation computation: memoised results per (glyph, layer id).
 struct Run<'a> {
     font: &'a Font,
@@ -272,6 +287,9 @@ struct Run<'a> {
     /// A whole-master run's steps so far, all layers together, and their limit.
     master_work: usize,
     master_limit: usize,
+    /// Smart-component interpolations already made.
+    smart: HashMap<SmartKey, SmartResult>,
+    smart_fallbacks: Vec<(String, String)>,
 }
 
 /// An anchor on its way through one component: its name now, its position, its name before the
@@ -300,6 +318,8 @@ impl<'a> Run<'a> {
             failed: Vec::new(),
             master_work: 0,
             master_limit: MAX_MASTER_PROPAGATION_WORK,
+            smart: HashMap::new(),
+            smart_fallbacks: Vec::new(),
         }
     }
 
@@ -420,7 +440,7 @@ impl<'a> Run<'a> {
             let Some(base) = self.glyph(&comp.glyph) else { continue };
             let Some(base_layer) = base_layer(base, layer, comp) else { continue };
             let master = comp.info.master_id.as_deref().unwrap_or(&layer.master);
-            let inherited = match self.smart_anchors(base, comp, master) {
+            let inherited = match self.smart_anchors(&g.name, base, comp, master)? {
                 Some(anchors) => anchors,
                 None => {
                     let (anchors, below) = self.anchors_of(base, base_layer, depth + 1)?;
@@ -466,15 +486,50 @@ impl<'a> Run<'a> {
         Ok((out.into_vec(), height))
     }
 
-    /// The anchors a smart component passes on: its base's pole layers' anchors interpolated at
-    /// its values. `None` when `base` is not a smart glyph, has one pole layer for `master`, or
-    /// cannot be interpolated; the base's layer then passes on its anchors as for any component.
-    fn smart_anchors(&mut self, base: &Glyph, comp: &Component, master: &str) -> Option<Arc<[EffectiveAnchor]>> {
+    /// The anchors a smart component of `glyph` passes on: its base's pole layers' anchors
+    /// interpolated at its values. `None` when `base` is not a smart glyph, has one pole layer for
+    /// `master`, has pole layers holding components, or cannot be interpolated; the base's layer
+    /// then passes on its anchors as for any component. Fails only when the work budget runs out.
+    fn smart_anchors(
+        &mut self,
+        glyph: &str,
+        base: &Glyph,
+        comp: &Component,
+        master: &str,
+    ) -> Result<Option<Arc<[EffectiveAnchor]>>, ComponentsError> {
         if base.info.parts.is_empty() {
-            return None;
+            return Ok(None);
         }
-        let anchors = smart::component_anchors(self.font, comp, master).ok().flatten()?;
-        Some(anchors.into_iter().map(|a| own_anchor(a.name, a.x, a.y)).collect())
+        // Pole layers drawn with components would pass on their components' anchors, which the
+        // interpolation does not read.
+        if smart::pole_layers(base, master).any(|l| l.shapes.iter().any(|s| matches!(s, Shape::Component(_)))) {
+            return Ok(None);
+        }
+        // Charged on every use, cached or not, so each layer's budget does not depend on which
+        // layer interpolated first.
+        self.charge(smart::anchor_interpolation_cost(base, master).saturating_add(comp.info.smart_values.len()))?;
+        let mut values: Vec<(String, u64)> = comp.info.smart_values.iter().map(|v| (v.property.clone(), v.value.to_bits())).collect();
+        values.sort();
+        let key = (base.name.clone(), master.to_string(), values);
+        let result = match self.smart.get(&key) {
+            Some(r) => r.clone(),
+            None => {
+                let r: SmartResult = smart::component_anchors(self.font, comp, master)
+                    .map(|found| found.map(|list| list.into_iter().map(|a| own_anchor(a.name, a.x, a.y)).collect()));
+                self.smart.insert(key, r.clone());
+                r
+            }
+        };
+        match result {
+            Ok(found) => Ok(found),
+            Err(e) => {
+                let note = (glyph.to_string(), format!("smart component `{}`: {e}", base.name));
+                if self.smart_fallbacks.last() != Some(&note) {
+                    self.smart_fallbacks.push(note);
+                }
+                Ok(None)
+            }
+        }
     }
 
     /// How many ligature parts `g`'s layer counts as when it is a component of a ligature, and

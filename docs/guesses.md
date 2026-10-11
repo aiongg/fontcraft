@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1055 guesses on 782 rows (190 of them live commands).**
+**1056 guesses on 782 rows (190 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -697,6 +697,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `components.topBottomAnchorsPropagate` (behavior) | M6 | handbook | – | A non-master layer whose base glyph has no layer with the same id reads the base's master layer of the same master, where glyphsLib interpolates the base's anchors at the layer's axis location; a brace layer in the reference app whose base lacks it settles it. |
 | `components.topBottomAnchorsPropagate` (behavior) | M6 | handbook | – | A base glyph without a layer for the composite's master passes no anchors on, where glyphsLib stops with an error; the reference app with such a font settles it. |
 | `components.topBottomAnchorsPropagate` (behavior) | M6 | handbook | – | A component pinned to another master (`masterId`) passes on the anchors of that master's layer of its base, the layer alignment places it from; a composite with a pinned component in the reference app, read through a mark attached to it, settles it. |
+| `components.topBottomAnchorsPropagate` (behavior) | M6 | handbook | – | A smart component whose glyph's pole layers hold components passes on the anchors its base layer propagates, not anchors interpolated at its values; glyphsLib on a smart glyph whose pole layers are composites settles what the reference compilers do. |
 | `components.underscoreAnchorSnapsToPlainAnchor` (behavior) | M6 | handbook | – | A component whose underscore anchors find no plain anchor among the components before it is set after them as another base, as if typed; a mark added to a base without the matching anchor in the reference app settles it. |
 | `components.alternativeAnchorSuffix` (behavior) | M6 | handbook | – | The component's anchor attribute is matched by its plain name, the part before the first underscore or period, against the mark's underscore anchor; the target is the attribute's anchor, else for a numbered name (top_2) the plain anchor of that base, else the plain anchor; a ligature with a mark set to top_1 after its second base in the reference app settles it. |
 | `components.autoAlignDefaultOnWhenComponentsOnly` (behavior) | M6 | handbook | – | A component that is not aligned keeps its stored position but still counts: its anchors serve the marks after it and, as a base, it moves the next base to follow its stored place; a composite with one disabled base among aligned ones in the reference app settles it. |

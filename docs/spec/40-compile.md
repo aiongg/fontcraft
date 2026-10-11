@@ -56,8 +56,10 @@ Input: the source model plus export options. Output: a list of errors and warnin
 - Glyphs-style pre-steps when the source enables them: erase open corners, propagate anchors;
   propagation precedes any flattening (`compile.glyphsOutlinePreSteps`). Propagation reads the
   source as stored, so a smart component passes on its glyph's anchors, interpolated at the
-  component's values. A glyph whose anchors
-  cannot be worked out keeps its own, with a warning; the rest of the master propagates.
+  component's values. A smart component whose pole layers hold components, or cannot be
+  interpolated, passes on its glyph's layer anchors instead; the second gives a warning. A glyph
+  whose anchors cannot be worked out keeps its own, with a warning; the rest of the master
+  propagates.
 
 ### 1.3 Outline preparation
 

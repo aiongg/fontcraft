@@ -474,3 +474,106 @@ fn nesting_past_the_limit_fails_the_same_glyphs_in_any_order() {
     assert_eq!(failed, want);
     assert!(forward.failed.iter().all(|(g, e)| *e == ComponentsError::TooDeep { glyph: g.clone(), limit: MAX_COMPONENT_DEPTH }));
 }
+
+/// A smart glyph with one property per entry of `ends` and one pole layer per `(id, ends,
+/// anchors, shapes)`; the first is the master layer.
+/// One pole layer: its id, which end of each property it draws, its anchors and its shapes.
+type Pole = (String, Vec<bool>, Vec<Anchor>, Vec<Shape>);
+
+fn smart_base(name: &str, properties: usize, poles: Vec<Pole>) -> Glyph {
+    use fontcraft_model::{LayerAttrs, LayerInfo, LayerInfoBox, PartProperty, SmartPole};
+    let mut g = Glyph::new(name);
+    g.info.category = Some("Letter".into());
+    g.info.sub_category = Some("Lowercase".into());
+    g.info.parts = (0..properties)
+        .map(|i| PartProperty {
+            name: format!("p{i}"),
+            bottom_value: 0.0,
+            top_value: 100.0,
+            bottom_name: None,
+            top_name: None,
+            extra: Default::default(),
+        })
+        .collect();
+    for (id, ends, anchors, shapes) in poles {
+        let mut l = Layer::new(M, 600.0);
+        l.id = id;
+        l.anchors = anchors;
+        l.shapes = shapes;
+        let smart_poles = ends.into_iter().enumerate().map(|(i, top)| SmartPole { property: format!("p{i}"), top }).collect();
+        l.info = LayerInfoBox::new(LayerInfo { attrs: LayerAttrs { smart_poles, ..Default::default() }, ..Default::default() });
+        g.layers.push(l);
+    }
+    g
+}
+
+/// A component of `base` with every property `p0`, `p1`… at `value`.
+fn smart_use(base: &str, properties: usize, value: f64) -> Shape {
+    use fontcraft_model::{ComponentInfo, ComponentInfoBox, SmartValue};
+    let mut c = Component::new(base, 0.0, 0.0);
+    let smart_values = (0..properties).map(|i| SmartValue { property: format!("p{i}"), value }).collect();
+    c.info = ComponentInfoBox::new(ComponentInfo { smart_values, ..Default::default() });
+    Shape::Component(c)
+}
+
+fn user(name: &str, shapes: Vec<Shape>) -> Glyph {
+    let mut g = Glyph::new(name);
+    g.info.category = Some("Letter".into());
+    g.info.sub_category = Some("Lowercase".into());
+    let mut l = Layer::new(M, 600.0);
+    l.shapes = shapes;
+    g.layers.push(l);
+    g
+}
+
+/// A crafted smart glyph (64 pole layers of 4,096 anchors) used at many different values: each
+/// interpolation is charged before it runs, so a layer and the master stop at their limits.
+#[test]
+fn hostile_smart_anchor_interpolation_stops_at_the_work_limits() {
+    let props = 6;
+    let poles = (0..64usize)
+        .map(|i| {
+            let id = if i == 0 { M.to_string() } else { format!("pole{i}") };
+            let ends = (0..props).map(|b| i >> b & 1 == 1).collect();
+            let anchors = (0..4096).map(|k| Anchor::new(format!("a{k}"), (k + i) as f64, 0.0)).collect();
+            (id, ends, anchors, Vec::new())
+        })
+        .collect();
+    let mut glyphs = vec![smart_base("_big", props, poles)];
+    glyphs.push(user("many", (0..40).map(|i| smart_use("_big", props, f64::from(i))).collect()));
+    for i in 0..160 {
+        glyphs.push(user(&format!("one{i}"), vec![smart_use("_big", props, f64::from(i) / 3.0)]));
+    }
+    let f = font(glyphs);
+    let all = effective_anchors_for_master(&f, M).unwrap();
+    let limit = |name: &str| all.failed.iter().find(|(g, _)| g == name).map(|(_, e)| e);
+    assert_eq!(
+        limit("many"),
+        Some(&ComponentsError::LimitExceeded { what: "anchor propagation steps", limit: crate::propagate::MAX_PROPAGATION_WORK })
+    );
+    assert_eq!(all.anchors["one0"].len(), 4096);
+    assert!(matches!(limit("one159"), Some(ComponentsError::LimitExceeded { what: "anchor propagation steps on one master", .. })));
+}
+
+/// A smart glyph whose pole layers are drawn with components passes on what its master layer's
+/// components give, and one whose pole layers cannot be interpolated is reported.
+#[test]
+fn smart_glyphs_built_from_components_or_not_interpolable_pass_on_their_layer_anchors() {
+    let a_at = |dx| vec![Shape::Component(Component::new("a", dx, 0.0))];
+    let built = smart_base("_built", 1, vec![(M.into(), vec![false], vec![], a_at(10.0)), ("wide".into(), vec![true], vec![], a_at(40.0))]);
+    let broken = smart_base(
+        "_broken",
+        1,
+        vec![
+            (M.into(), vec![false], vec![Anchor::new("top", 100.0, 500.0)], vec![]),
+            ("wide".into(), vec![true], vec![Anchor::new("bottom", 100.0, 0.0)], vec![]),
+        ],
+    );
+    let f = with(vec![built, broken, user("x", vec![smart_use("_built", 1, 50.0)]), user("y", vec![smart_use("_broken", 1, 50.0)])]);
+    assert_anchors(&f, "x", &[("top", 260.0, 500.0), ("bottom", 260.0, 0.0), ("ogonek", 410.0, 0.0)]);
+    assert_anchors(&f, "y", &[("top", 100.0, 500.0)]);
+    let all = effective_anchors_for_master(&f, M).unwrap();
+    assert!(all.failed.is_empty());
+    let noted: Vec<&str> = all.smart_fallbacks.iter().map(|(g, _)| g.as_str()).collect();
+    assert_eq!(noted, ["y"]);
+}
