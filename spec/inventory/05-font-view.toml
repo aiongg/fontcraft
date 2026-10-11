@@ -2711,6 +2711,7 @@ milestone = "M13"
 summary = "Plug-ins and scripts may operate on the Font View glyph selection, so the selection must be exposed to extensions as the default target set."
 ref = "Font View › Batch-Processing › Plug-ins & Scripts"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M13.6): the shell passes the Font View selection as the `glyphs` of plugin.runFilter and as the `glyphs` argument of script.run."
 
 [[behavior]]
 id = "findReplace.plainMode"

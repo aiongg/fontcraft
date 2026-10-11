@@ -80,6 +80,9 @@ summary = "Sets both handles of the selected curve segments to a proportional te
 ref = "FontLab 8 What's new › Edit & refine › Curve segments (Node panel: Set proportional curve tension)"
 status = "docs"
 origin = "fontlab"
+guesses = [
+  "Where a segment's handles are parallel or diverge, so they have no intersection, tension is shown as a dash and Set Curve Tension leaves the segment unchanged with a warning; FontLab does not say (open question 9 in docs/spec/90-secondary-references.md).",
+]
 
 [[command]]
 id = "view.showCurveTension"
@@ -604,6 +607,9 @@ summary = "Links the given nodes (or all nodes lying on the guide) to a guide, t
 ref = "FontLab 7 manual › Power Guides; FontLab 8 What's new › Test & adjust › Power guides"
 status = "docs"
 origin = "fontlab"
+guesses = [
+  "Moving a power guide is one undo step for every glyph it reshapes, and locked glyphs keep their outline while the rest move, with a warning naming them (open question 3).",
+]
 
 [[command]]
 id = "guide.addPowerGuides"
@@ -695,6 +701,7 @@ summary = "An element reference is a shared shape with no owning glyph: every gl
 ref = "FontLab 8 What's new › Build & assemble › Elements and components"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[behavior]]
 id = "element.perOccurrenceTransform"
@@ -704,6 +711,7 @@ summary = "Each occurrence of a shared element keeps its own live scale, rotatio
 ref = "FontLab 8 What's new › Build & assemble › Elements and components"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.newFromSelection"
@@ -718,6 +726,7 @@ summary = "Moves the selected paths into a new named shared element, leaving a r
 ref = "FontLab 8 What's new › Build & assemble › Elements (To New Element)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.detectReferences"
@@ -732,6 +741,7 @@ summary = "Finds identical copies of the selected paths in other glyphs and repl
 ref = "FontLab 8 What's new › Build & assemble › Elements (Detect Element Reference)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.linkReference"
@@ -746,6 +756,7 @@ summary = "Joins a stand-alone element to an existing shared element when their 
 ref = "FontLab 8 What's new › Build & assemble › Elements (Link Reference)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.componentToReference"
@@ -760,6 +771,7 @@ summary = "Converts components into element references to the same shapes, detac
 ref = "FontLab 8 What's new › Build & assemble › Boolean operations (Component to Reference); Test & adjust › Delta filter (Derived glyphs)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.toggleLocked"
@@ -774,6 +786,7 @@ summary = "Locks the nodes of one occurrence of a shared element so the shape ca
 ref = "FontLab 8 What's new › Build & assemble › Elements (Lock element references)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.copyTransformation"
@@ -788,6 +801,7 @@ summary = "Copies the position and live scale, rotation and slant of one element
 ref = "FontLab 8 What's new › Build & assemble › Elements (Copy transformation)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed rename to `component.copyTransformation` by docs/plans/M13.md § 7 question 3: copy a component's transform to other components, without element references."
 
 [[command]]
 id = "element.addDeltaFilter"
@@ -802,6 +816,7 @@ summary = "Attaches a non-destructive delta filter to an element: a few nodes re
 ref = "FontLab 8 What's new › Test & adjust › Delta filter"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[behavior]]
 id = "delta.nodeStates"
@@ -811,6 +826,7 @@ summary = "In delta-editing mode, untouched nodes show as pale circles and nodes
 ref = "FontLab 8 What's new › Test & adjust › Delta filter (Visual states; Editing controls)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.setDeltaStrength"
@@ -825,6 +841,7 @@ summary = "Scales the effect of an element's delta filter from 0 percent (ignore
 ref = "FontLab 8 What's new › Test & adjust › Delta filter (Strength slider)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.copyDeltasToMasters"
@@ -839,6 +856,7 @@ summary = "Copies an element's delta setup to the same element on all compatible
 ref = "FontLab 8 What's new › Test & adjust › Delta filter (Copy to masters)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.expandFilters"
@@ -853,6 +871,7 @@ summary = "Bakes every live, non-destructive filter on the selected glyphs into 
 ref = "FontLab 8 What's new › Test & adjust › Delta filter (Batch expand or remove); Build & assemble"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.removeFilters"
@@ -867,6 +886,7 @@ summary = "Discards the live filters on the selected glyphs and restores the unf
 ref = "FontLab 8 What's new › Test & adjust › Delta filter (Batch expand or remove)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "element.setFusion"
@@ -881,6 +901,7 @@ summary = "Marks a shape or component as a live boolean operand acting on everyt
 ref = "FontLab 8 What's new › Build & assemble › Boolean operations (Fusion filter)"
 status = "docs"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
 
 [[command]]
 id = "font.detectComposites"
@@ -896,6 +917,9 @@ ref = "FontLab 8 What's new › Build & assemble › Components (Detect Composit
 status = "docs"
 origin = "fontlab"
 notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+guesses = [
+  "A match needs every point of the other glyph's outline within 0.5 unit after the best translation, or after a translation and flip when allowTransformed is on; FontLab gives no tolerance.",
+]
 
 [[command]]
 id = "path.detectComponent"
@@ -965,17 +989,21 @@ summary = "Replaces formula-driven anchor positions with their current numeric c
 ref = "FontLab 8 What's new › Build & assemble › Anchors"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). FontCraft: deletes the expression keys from the anchors' user data and keeps their current positions (M13.16)."
 
 [[behavior]]
 id = "anchor.positionExpressions"
 area = "components"
 milestone = "M13"
-summary = "An anchor coordinate may be an expression rather than a number, re-evaluated when the glyph changes (for example centred on the advance width or placed at a metric height). The expression grammar was not on the pages read and must be settled before implementation."
-ref = "FontLab 8 What's new › Build & assemble › Anchors (Remove anchors expressions)"
-status = "memory"
+summary = "An anchor's x and y may each be an expression instead of a number, re-evaluated whenever what it names changes. Expressions use + - * / and parentheses over numbers, the vertical metrics (ascender, descender, x-height, cap height, baseline), the glyph's advance width, other guides, anchors and zones by name, and user-defined font parameters. FontCraft keeps the expressions in the anchor's user data, so `.glyphs` and UFO files keep them, and re-evaluates them after every font-changing command, in the step that re-aligns components."
+ref = "FontLab 7 manual › Using Expressions; FontLab 8 What's new › Build & assemble › Anchors"
+status = "docs"
 origin = "fontlab"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Still recalled, not read: verify against that reference's own documentation before M13 builds it."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Verified by the M13 planning pass against the FontLab 7 manual page Using Expressions, which gives the operators, the variables and examples but no formal grammar."
+guesses = [
+  "FontCraft's variable names are ascender, descender, xHeight, capHeight, baseline and width, plus `anchor:<name>.x`, `guide:<name>`, `zone:<name>` and `param:<name>` references; the reference's spellings (x_height, caps_height) are read as aliases. Nothing settles it in the primary reference, which has no anchor expressions.",
+  "An expression that names something missing, divides by zero or gives a value that is not finite leaves the anchor where it was and is reported in the command's warnings; the reference's handling is not documented.",
+]
 
 # =====================================================================================================
 # FontLab — FontAudit (live outline auditing)
@@ -1075,6 +1103,9 @@ summary = "One dialog for running any batch operation on a chosen glyph and laye
 ref = "FontLab 7 manual › Actions; FontLab 8 What's new › Test & adjust › Actions"
 status = "docs"
 origin = "fontlab"
+guesses = [
+  "Each action's parameter form is the command's own dialog when it has one, and otherwise a JSON editor checked against the command's params doc; FontLab's dialog lists only its own actions, each with a form.",
+]
 
 [[command]]
 id = "script.runActionSet"
@@ -1085,10 +1116,13 @@ kind = "engine"
 params = "{set: path | [{command: id, params: object}], glyphs?, layers?: 'active' | 'visible' | 'masters' | [id]}"
 area = "automation"
 milestone = "M13"
-summary = "Runs an ordered list of commands with stored parameters over a glyph and layer scope as one undoable step. A set is a small JSON file and can be passed inline, so the same file serves the dialog, the CLI and agents."
+summary = "Runs an ordered list of commands with stored parameters over a glyph and layer scope as one undoable step. FontCraft: an action set is a macro (the same `.fcmacro` file, open decision D8), so this command is an alias of script.run; the dialog, the CLI and agents pass a file or the steps inline."
 ref = "FontLab 8 What's new › Test & adjust › Actions (Action sets; Save/Open sets)"
 status = "docs"
 origin = "fontlab"
+guesses = [
+  "Action sets and macros are one file format and one command; FontLab keeps action sets in its Actions folder apart from scripts, a split FontCraft does not copy.",
+]
 
 [[command]]
 id = "script.saveActionSet"
@@ -1099,7 +1133,7 @@ kind = "engine"
 params = "{name: string, steps: [{command: id, params: object}], path?: path}"
 area = "automation"
 milestone = "M13"
-summary = "Writes an action set as JSON into the user's action-set folder, or to a given path."
+summary = "Writes an action set as JSON into the user's action-set folder, or to a given path. FontCraft: writes the steps as a macro file in the macros folder, or to the given path, and returns its path; a step naming an unknown command is refused before anything is written."
 ref = "FontLab 8 What's new › Test & adjust › Actions (Save/Open sets)"
 status = "docs"
 origin = "fontlab"
@@ -1113,7 +1147,7 @@ kind = "engine"
 params = "{glyphs?, layers?}"
 area = "automation"
 milestone = "M13"
-summary = "Runs the most recent action or action set again with the same parameters on the current scope."
+summary = "Runs the most recent action or action set again with the same parameters on the current scope. FontCraft: an alias of script.rerunLast."
 ref = "FontLab 7 manual › Actions (Tools › Repeat Actions)"
 status = "docs"
 origin = "fontlab"
@@ -1201,6 +1235,9 @@ ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Auto-spacing; Aut
 status = "docs"
 origin = "fontlab"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+guesses = [
+  "Method optical is FontCraft's own (open decision D11, docs/plans/M13.md § 3): for each side, the white area between the glyph's side profile, clipped to a depth below its extreme, and the sidebearing line, measured over a band from the baseline to the reference height plus overshoot, is made equal to a target area; target, depth, band and sampling step are parameters, with defaults calibrated on the control glyphs n, o, H and O of the font itself. Neither FontLab nor FontForge documents its method.",
+]
 
 [[setting]]
 id = "spacing.autoSpaceMethod"
@@ -1229,6 +1266,9 @@ ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Metrics line); Ro
 status = "docs"
 origin = "fontlab"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+guesses = [
+  "The beam is one height per font, shared by Edit View and Space Center, and sidebearing commands take it as an optional `beam` parameter; FontLab's and RoboFont's pages do not say whether it is per font or per window.",
+]
 
 [[command]]
 id = "spacing.centerInWidth"
@@ -1259,6 +1299,9 @@ ref = "FontLab 8 What's new › Metrics & kerning › Kerning (autokerning); Fon
 status = "docs"
 origin = "fontlab"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+guesses = [
+  "The proposed value is the target separation minus the pair's optical gap, the mean horizontal distance between the left glyph's right profile and the right glyph's left profile over the same band and depth clipping as auto-spacing, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. FontLab documents neither K1 nor K2 (open decision D11).",
+]
 
 [[command]]
 id = "kerning.kernToDistance"
@@ -1274,6 +1317,9 @@ ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Kern to Distance)
 status = "docs"
 origin = "fontlab"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+guesses = [
+  "The gap is the smallest horizontal distance between the two outlines at any height, measured on the decomposed and overlap-removed outlines; FontLab says only that the pair's minimum horizontal gap becomes the value.",
+]
 
 [[command]]
 id = "kerning.auditExceptions"
@@ -1690,6 +1736,9 @@ summary = "Writes one image file per glyph, named after the glyph, for the chose
 ref = "FontLab 8 What's new › Formats (Artwork as PDF, SVG, or PNG; Artwork Collection)"
 status = "docs"
 origin = "fontlab"
+guesses = [
+  "SVG uses the io-svg writer, PNG the render crate and PDF a minimal writer of our own; FontLab's options beyond the three formats are not followed.",
+]
 
 [[command]]
 id = "view.filterByEncodingFile"
@@ -1921,6 +1970,9 @@ summary = "Returns every place where the pattern occurs in the glyphs searched, 
 ref = "FontForge dialogs › Finding shapes within glyphs"
 status = "docs"
 origin = "fontforge"
+guesses = [
+  "Matching is point for point only, as FontForge documents; shapes that are equal with another point structure do not match (open question 12).",
+]
 
 [[command]]
 id = "path.replaceOutlinePattern"
@@ -2117,6 +2169,9 @@ summary = "Maps every point through two expressions in x and y that give the new
 ref = "FontForge Element menu › Transformations › Non-Linear Transform; FontForge dialogs › Transform Dialog"
 status = "docs"
 origin = "fontforge"
+guesses = [
+  "The expressions use anchor expressions' grammar (M13.16) with the variables x and y and the functions sin, cos, tan, sqrt, abs, min and max; segments are split so no segment covers more than 1/32 of the glyph's height before mapping. FontForge's grammar is not followed.",
+]
 
 [[command]]
 id = "glyph.autotraceImage"
@@ -2131,6 +2186,7 @@ summary = "Converts the placed image of each glyph into outlines. FontForge dele
 ref = "FontForge Element menu › AutoTrace; FontLab 8 What's new › Draft & draw (Autotrace); Explore & prepare › Element menu (Optically Separate)"
 status = "docs"
 origin = "fontforge"
+notes = "M13.30 writes its own tracer from published descriptions of outline tracing; GPL tracers, potrace among them, are not read."
 
 [[tool]]
 id = "spiro"
@@ -2148,6 +2204,7 @@ summary = "Draws a contour as a sequence of on-curve control points through whic
 ref = "FontForge main views › Outline Glyph View (Spiro point tools; Spiro mode toggle)"
 status = "docs"
 origin = "fontforge"
+notes = "M13.37 writes the curve fitting from Raph Levien's published thesis on spiral splines; libspiro (GPL) is not read."
 
 # =====================================================================================================
 # FontForge — comparing, merging, interpolating whole fonts
@@ -2323,6 +2380,7 @@ summary = "Runs a glyph's TrueType program one instruction at a time at a chosen
 ref = "FontForge main views › Outline Glyph View (Debugger pane); FontForge Hints menu › Debug"
 status = "docs"
 origin = "fontforge"
+notes = "As hint.tt.debugStep (M13.52)."
 
 [[command]]
 id = "hint.tt.debugStep"
@@ -2337,6 +2395,7 @@ summary = "Drives a debugging session and returns the interpreter state after th
 ref = "FontForge main views › Outline Glyph View (Debugger pane)"
 status = "docs"
 origin = "fontforge"
+notes = "Needs a TrueType interpreter that can stop after each instruction. M13.52 is built on M10's interpreter if it allows that; otherwise it waits (docs/plans/M13.md § 3)."
 
 [[command]]
 id = "hint.tt.suggestDeltas"
@@ -2390,6 +2449,7 @@ summary = "Records a diagonal stem from four selected nodes that form its two ed
 ref = "FontForge Hints menu › Add DHint, Clear DStem"
 status = "docs"
 origin = "fontforge"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2: diagonal stems have no place in CFF hints or in the primary reference's sources, so nothing would use them."
 
 # =====================================================================================================
 # FontForge — bitmap strikes
@@ -2655,6 +2715,9 @@ ref = "FontForge dialogs › Manipulating OpenType Lookups (kerning classes: gue
 status = "docs"
 origin = "fontforge"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+guesses = [
+  "Two glyphs fall in one group while the root mean square of their side profiles' differences over the band stays under maxDifference; FontForge does not describe its grouping rule.",
+]
 
 [[panel]]
 id = "dialog.kerningGroupsEditor"
@@ -2828,7 +2891,10 @@ summary = "The spacing text accepts plain characters, /name for a glyph by name,
 ref = "RoboFont reference › Space Center › Text input syntax"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5). The M13 planning pass confirmed the tokens on RoboFont's Space Center page; none clashes with the primary reference's text escapes, because `?`, `!` and `:` cannot start a glyph name."
+guesses = [
+  "Space Center takes the reference spellings /name, /name@layer, /?, /!, /:group and \\n unchanged; Edit View's text mode keeps the primary reference's escapes only.",
+]
 
 [[behavior]]
 id = "spaceCenter.matrixEntry"
@@ -3018,17 +3084,17 @@ summary = "Builds or rebuilds composite glyphs from a text file of construction 
 ref = "RoboFont topics › Accented glyphs (Glyph Construction positioning); RoboFont technical specification (embedded libraries: glyphConstruction)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). M13.17; rules follow constructions.ruleGrammar; anchors come from M6's propagation."
 
 [[behavior]]
 id = "constructions.ruleGrammar"
 area = "components"
 milestone = "M13"
-summary = "Recalled shape of a construction rule: target name, an equals sign, a base glyph, then plus-separated parts each with an at-sign position (anchor name, metric keyword, percentage or coordinates), optional width expressions before and after a bar, plus variables and comments. The grammar was not on the pages read and must be designed against the published Glyph Construction documentation, which is permissively licensed."
-ref = "RoboFont topics › Accented glyphs (links to the Glyph Construction project)"
-status = "memory"
+summary = "A construction rule names a target glyph, an equals sign and the parts it is built from, joined by plus signs. A part may be placed with an at sign: by coordinates, percentages, a transform matrix, keywords such as center and top, or an anchor of another glyph, and a backtick formula may compute a coordinate; an ampersand sets parts side by side, optionally kerned. A caret sets the width or the margins from numbers or other glyphs, a bar sets code points, an exclamation mark a colour label, and a hash starts a comment or a glyph note. Prefixes ask to decompose the result or to skip glyphs that exist; dollar variables are declared once and used in braces; flag comments set options for the whole file."
+ref = "Glyph Construction README (github.com/typemytype/GlyphConstruction, MIT), linked from RoboFont topics › Accented glyphs"
+status = "docs"
 origin = "robofont"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Still recalled, not read: verify against that reference's own documentation before M13 builds it."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Verified by the M13 planning pass against the project's README. M13.17 ports the project's parser (MIT) to Rust with credit in the file header and NOTICE; the README's examples become tests."
 
 [[command]]
 id = "app.openPreferencesEditor"
@@ -3052,6 +3118,7 @@ summary = "A start-up mode, entered by holding Shift while launching, that loads
 ref = "RoboFont reference › Safe Mode"
 status = "docs"
 origin = "robofont"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2 as a duplicate of app.launchWithoutPlugins, which gains a `--safe-mode` start option."
 
 # =====================================================================================================
 # Fontra — per-glyph design space, references, collaboration
@@ -3177,6 +3244,9 @@ summary = "Defines the project's list of development statuses (for example draft
 ref = "Fontra reference › Font menu › Status definitions"
 status = "docs"
 origin = "fontra"
+guesses = [
+  "The definitions are stored in the font's user data as a list of code, name, colour and default flag; Fontra's storage is not documented.",
+]
 
 [[command]]
 id = "glyph.setStatus"
@@ -3187,10 +3257,14 @@ kind = "engine"
 params = "{glyphs?, sources?: [id], status: number}"
 area = "font-view"
 milestone = "M13"
-summary = "Assigns a defined status to glyph sources; a display option tints each glyph on canvas with its status colour. The docs confirm the tint and the definitions; that the status is stored per glyph source is recalled."
+summary = "Assigns one of the font's defined statuses to glyphs; a display option tints each glyph on the canvas with its status colour. The documentation confirms the definitions and the tint but does not say whether a status belongs to a glyph or to each of its sources."
 ref = "Fontra reference › Glyph editor appearance (Development status color); Font menu › Status definitions"
-status = "memory"
+status = "docs"
 origin = "fontra"
+notes = "Verified by the M13 planning pass against Fontra's documentation (Font menu › Status definitions; Glyph editor appearance), which does not say where a status is stored."
+guesses = [
+  "FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say.",
+]
 
 [[behavior]]
 id = "drag.ghostOutline"
@@ -3209,6 +3283,7 @@ summary = "When a project is served from one machine, several people can open it
 ref = "Fontra documentation › Introduction"
 status = "docs"
 origin = "fontra"
+notes = "Kept or dropped by the owner's answer to docs/plans/M13.md § 7 question 4."
 
 [[command]]
 id = "collab.serveProject"
@@ -3223,6 +3298,7 @@ summary = "Starts serving the open document so other editor instances and agents
 ref = "Fontra documentation › Introduction"
 status = "inferred"
 origin = "fontra"
+notes = "Kept or dropped by the owner's answer to docs/plans/M13.md § 7 question 4."
 
 [[command]]
 id = "collab.showServerInfo"
@@ -3237,6 +3313,7 @@ summary = "Reports the application version, when the document server started, wh
 ref = "Fontra reference › Fontra menu › Server info"
 status = "docs"
 origin = "fontra"
+notes = "Proposed rename to `app.info` by docs/plans/M13.md § 7 question 4: a query for the version, start time, control-channel and MCP state and the loaded modules, useful without shared editing."
 
 [[behavior]]
 id = "app.browserClient"

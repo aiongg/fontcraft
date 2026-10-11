@@ -58,6 +58,10 @@ milestone = "M13"
 summary = "Plug-ins can register their own Palette sections, which appear alongside the built-in ones and collapse the same way."
 ref = "Palette"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M13.6): a filter module that declares parameters may be shown as a Palette section with its parameter form and an Apply button; modules run no interface code (plugin.kind.palette)."
+observe = [
+  "Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.",
+]
 
 # ───────────────────────────── Dimensions ─────────────────────────────
 
@@ -543,6 +547,7 @@ milestone = "M13"
 summary = "Plug-ins may introduce further kinds of special layers, which the list shows like the built-in ones."
 ref = "Palette › Layers › Special Layers"
 status = "handbook"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2: no FontCraft module kind adds layer kinds, so nothing would implement it."
 
 # ───────────────────────────── Transformations ─────────────────────────────
 

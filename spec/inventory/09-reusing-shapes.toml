@@ -1416,7 +1416,7 @@ milestone = "M13"
 summary = "A glyph is a cap glyph when its name starts with _cap. followed by any name (_cap.flag)."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
-notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "cap.attachesToTwoAdjacentNodes"
@@ -1425,7 +1425,10 @@ milestone = "M13"
 summary = "A cap component is bound to two nodes that are neighbours on the same path (a corner is bound to one). It models stroke endings: spurs, terminals, flag serifs."
 ref = "Reusing Shapes › Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Select two nodes that are not neighbours on one path, then two nodes on different paths, and open the context menu: note whether Add Cap Component is shown, disabled or missing.",
+]
 
 [[behavior]]
 id = "cap.originAnchorSetup"
@@ -1434,7 +1437,7 @@ milestone = "M13"
 summary = "Simple anchor setup for a cap glyph: a single anchor named origin gives the spot in the cap shape on which the first stem node of the pair lands."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "cap.node1Node2AnchorSetup"
@@ -1443,7 +1446,13 @@ milestone = "M13"
 summary = "Flexible anchor setup for a cap glyph: two anchors named node1 and node2 stand for the two stem nodes, so both the position and the scaling of the cap are controlled relative to both nodes. This lets one cap fit stems of different widths."
 ref = "Reusing Shapes › Cap Components › Creating Cap Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "With node1 and node2 anchors the cap is mapped by the similarity transform that sends node1 onto the first host node and node2 onto the second (uniform scale, rotation, translation); settled by exporting `_cap.round` on the 80- and 120-unit stems.",
+]
+observe = [
+  "Add `_cap.round` (anchors node1 and node2 50 units apart) to the 80-unit stem of `l` and the 120-unit stem of `i`, export and send back: compare the cap's height in both to see whether scaling is uniform or along the stem end only.",
+]
 
 [[command]]
 id = "capComponent.add"
@@ -1457,7 +1466,13 @@ milestone = "M13"
 summary = "Attaches a cap component to two selected adjacent nodes of one path. In the UI it is a context-menu item that opens a glyph picker listing only cap glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "The cap's open path replaces the host segment between the two nodes and is joined to the path at both ends, as a corner's open path replaces part of the host outline; settled by exporting a cap test font from the reference app and comparing the outline.",
+]
+observe = [
+  "In the cap test font (a `_cap.flag` glyph with an `origin` anchor and an open path, an `l` with an 80-unit stem), select the two top nodes of the stem, choose Add Cap Component from the context menu, pick `_cap.flag`, then export an OTF and send it back: its `l` outline shows where the cap's path goes and whether the stem's top segment is replaced.",
+]
 
 [[command]]
 id = "capComponent.decompose"
@@ -1471,7 +1486,13 @@ milestone = "M13"
 summary = "Context-menu item that bakes a cap component into the host path and removes the component."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "Decompose Cap writes the fitted outline into the host path in place of the cap and keeps the node order of the host before the cap; settled by decomposing a cap in the reference app and comparing node order with the exported outline.",
+]
+observe = [
+  "After adding `_cap.flag` to `l`, right-click the cap, choose Decompose Cap and save the file: compare the stem path's nodes with those of the exported OTF from the Add Cap Component check.",
+]
 
 [[command]]
 id = "capComponent.setFit"
@@ -1485,7 +1506,13 @@ milestone = "M13"
 summary = "Toggles the Fit option of a cap component. When on, the cap is resized automatically to the width of the stroke end it sits on, that is the distance between its two nodes."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "With Fit on, the cap is scaled along the stroke-end direction by the ratio of the host's node distance to the cap's reference width (the distance between node1 and node2, or the cap's advance width with only an origin anchor); its other direction is not scaled. Settled by the Fit export check.",
+]
+observe = [
+  "Add `_cap.flag` (origin anchor only) to the 80-unit stem of `l` and to the 120-unit stem of `i`, export with Fit off and again with Fit on: compare the cap outlines in the four results for scale along and across the stem end.",
+]
 
 [[command]]
 id = "capComponent.setGlyph"
@@ -1499,7 +1526,10 @@ milestone = "M13"
 summary = "Swaps the cap glyph used by an attached cap component. The handbook says caps are replaced the same way as corners, that is through the name in the Info box."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Click the name of an attached cap in its Info box and note what opens (the cap picker, a text field or a menu) and whether the new cap keeps the old one's scale and alignment.",
+]
 
 [[command]]
 id = "capComponent.setScale"
@@ -1513,7 +1543,13 @@ milestone = "M13"
 summary = "Sets the horizontal and vertical scale of a cap component; negative values flip it. The handbook states only that caps transform like corners, so the field set is taken from the corner Info box."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "The cap Info box has the corner Info box's horizontal and vertical scale fields, applied after fitting and before placement; settled by the Info box check.",
+]
+observe = [
+  "Select an attached cap with View › Show Info on and list every control of its Info box, with default values; type 50 into each scale field you find and export, to see whether scale applies before or after Fit.",
+]
 
 [[command]]
 id = "capComponent.setAlignment"
@@ -1527,7 +1563,13 @@ milestone = "M13"
 summary = "Sets the alignment mode of a cap component using the same four modes as corners. The handbook says caps align like corners without describing what each mode does on a two-node attachment."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "For a cap, left aligns to the incoming segment of the first node, right to the outgoing segment of the second, both to their mean direction and none keeps the cap unrotated; settled by exporting the slanted-stem cap with each mode.",
+]
+observe = [
+  "Add `_cap.flag` to the slanted stem of `slash` and export once per alignment mode the Info box offers: note the cap's rotation in each export.",
+]
 
 [[panel]]
 id = "infoBox.capComponent"
@@ -1542,7 +1584,10 @@ milestone = "M13"
 summary = "Shown for a selected cap component when View › Show Info is on. Only the Fit checkbox is described explicitly; the remaining controls follow from the statement that caps are replaced, transformed and aligned like corners."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Screenshot the Info box of a selected cap, segment component and brush with View › Show Info on; list each control and its default.",
+]
 
 [[panel]]
 id = "dialog.capPicker"
@@ -1554,7 +1599,10 @@ milestone = "M13"
 summary = "Glyph picker opened by Add Cap Component."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Open Add Cap Component on a font with three cap glyphs and two corner glyphs: confirm only cap glyphs are listed and note the sort order and what the search field matches.",
+]
 
 [[behavior]]
 id = "cap.highlightAndSelection"
@@ -1563,7 +1611,10 @@ milestone = "M13"
 summary = "A cap component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected caps."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Screenshot a selected and an unselected cap at 400% zoom to record the highlight colour and how the selection is drawn.",
+]
 
 [[behavior]]
 id = "cap.copyPasteOntoSegments"
@@ -1572,7 +1623,10 @@ milestone = "M13"
 summary = "A selected cap component can be copied and then pasted onto other selected segments (node pairs) with the standard Copy and Paste commands."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Copy a selected cap, select two adjacent nodes on another stem and paste; then select a single node and paste: note what is pasted in each case.",
+]
 
 # =====================================================================================
 # Segment components
@@ -1585,7 +1639,7 @@ milestone = "M13"
 summary = "A glyph is a segment glyph when its name starts with _segment. followed by any name (_segment.stem). Its contents are a single open path laid on the baseline plus the anchors start and end."
 ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
 status = "handbook"
-notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "segment.startEndAnchors"
@@ -1594,7 +1648,10 @@ milestone = "M13"
 summary = "The start and end anchors belong on the first and last node of the open path; Glyph › Set Anchors (Cmd+U) puts them there. If they sit elsewhere, the fitted component will not span the full length of the host segment. The path's two end nodes should both be on the baseline or both at one equal distance from it."
 ref = "Reusing Shapes › Segment Components › Creating Segment Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed."
+observe = [
+  "Move the end anchor of `_segment.wave` 40 units left of the end node and look at an attached segment component: note how much shorter it is.",
+]
 
 [[behavior]]
 id = "segment.appliesToStraightAndCurved"
@@ -1603,7 +1660,7 @@ milestone = "M13"
 summary = "A segment component replaces one straight or curved host segment with its open path, which may be a single bent segment or a long path with many nodes."
 ref = "Reusing Shapes › Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "segment.bendingAddsNoNodes"
@@ -1612,7 +1669,7 @@ milestone = "M13"
 summary = "Bending a segment component along a curved host segment moves its existing points only and never inserts nodes. Fidelity to the curve can suffer, but the node count is identical in every master, which keeps the result interpolatable."
 ref = "Reusing Shapes › Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[command]]
 id = "segmentComponent.add"
@@ -1626,7 +1683,14 @@ milestone = "M13"
 summary = "Attaches a segment component to a selected path segment (a segment counts as selected after a click on it or when its two nodes are both selected). In the UI it is a context-menu item that opens a picker listing only segment glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "On a straight host segment the segment glyph's path is scaled along the baseline so start lands on the first node and end on the second, and is not scaled across; settled by the straight-segment export check.",
+  "On a curved host segment each point of the segment glyph, handles included, is moved to the host curve at the same fraction of its length and offset along the curve's normal by its distance from the baseline; settled by the curved-segment export check.",
+]
+observe = [
+  "In the segment test font (`_segment.wave`: a three-node open path on the baseline with start and end anchors on its end nodes), add the segment component to the bottom straight segment of a square and to one curved segment of an `o`, export an OTF and send it back: the outlines show the length and normal mapping, and whether the node count stays three.",
+]
 
 [[command]]
 id = "segmentComponent.decompose"
@@ -1640,7 +1704,10 @@ milestone = "M13"
 summary = "Context-menu item that replaces the host segment with the fitted path of the segment component and removes the component."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Decompose a segment component on the `o` and save: compare the resulting path with the exported outline of the Add Segment Component check.",
+]
 
 [[command]]
 id = "segmentComponent.setGlyph"
@@ -1654,7 +1721,10 @@ milestone = "M13"
 summary = "Swaps the segment glyph used by an attached segment component; in the UI by clicking the component name in its Info box."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Click the name in a segment component's Info box: note what opens and whether the replacement keeps the attachment.",
+]
 
 [[command]]
 id = "segmentComponent.editGlyph"
@@ -1668,7 +1738,10 @@ milestone = "M13"
 summary = "The arrow button of the segment Info box: adds the segment glyph to the Edit View text and activates it."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Click the arrow button in a segment component's Info box: note whether the segment glyph opens in the same tab after the current glyph or in a new tab.",
+]
 
 [[panel]]
 id = "infoBox.segmentComponent"
@@ -1680,7 +1753,7 @@ milestone = "M13"
 summary = "Shown for a selected segment component when View › Show Info is on."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[panel]]
 id = "dialog.segmentPicker"
@@ -1692,7 +1765,7 @@ milestone = "M13"
 summary = "Glyph picker opened by Add Segment Component."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "segment.highlightAndSelection"
@@ -1701,7 +1774,7 @@ milestone = "M13"
 summary = "A segment component is tinted with a faint blue background in Edit View. Click selects, Shift-click selects several, Delete removes the selected ones."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "segment.copyPasteOntoSegments"
@@ -1710,7 +1783,7 @@ milestone = "M13"
 summary = "A selected segment component can be copied and pasted onto other selected segments with the standard Copy and Paste commands."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 # =====================================================================================
 # Brushes
@@ -1723,7 +1796,10 @@ milestone = "M13"
 summary = "A glyph is a brush glyph when its name starts with _brush. followed by any name (_brush.arrow). It must contain exactly one closed path plus two anchors, start and end; several closed shapes have to be merged into one with Remove Overlap first."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Neither oracle supports this hint type and no corpus source uses it (M6 planning pass); its geometry has no written source. Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Give `_brush.arrow` a second closed path and add the brush: note whether it is refused, uses the first path only, or merges both.",
+]
 
 [[behavior]]
 id = "brush.startEndAnchors"
@@ -1732,7 +1808,7 @@ milestone = "M13"
 summary = "Glyph › Set Anchors (Cmd+U) places a brush glyph's start and end anchors at the left and right of the layer. They normally sit on the baseline or at one equal distance from it."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. The anchor rule is already in `components::default_anchors` (M6.3); documented, not yet observed."
 guesses = [
   "Set Anchors puts a brush glyph's start at (0, 0) and its end at (advance width, 0); Set Anchors on a brush glyph in the reference app settles it.",
 ]
@@ -1744,7 +1820,7 @@ milestone = "M13"
 summary = "Only the part of the brush outline lying between the start and end anchors stretches and bends to follow the host segment. Outline before start and after end keeps its shape, which is how fixed ends such as an arrowhead are made."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "brush.bendingNeedsHandles"
@@ -1753,7 +1829,7 @@ milestone = "M13"
 summary = "A segment of the brush outline bends along a curved host segment only if it is a curve segment with handles; straight line segments stay straight. Handles are added to a line segment by Option-clicking it."
 ref = "Reusing Shapes › Brushes › Creating Brush Glyphs"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "brush.expandsSegments"
@@ -1762,7 +1838,7 @@ milestone = "M13"
 summary = "A brush turns a host path segment, straight or curved, into the brush's closed outline laid along it. It works on any segment but is intended mainly for open paths, most often an open path of a single segment."
 ref = "Reusing Shapes › Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[command]]
 id = "brush.add"
@@ -1776,7 +1852,15 @@ milestone = "M13"
 summary = "Attaches a brush to every selected segment. If nodes are selected in place of segments, brushes are added so that each selected node is the end node of a new brush. In the UI it is a context-menu item that opens a picker listing only brush glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+guesses = [
+  "The brush outline between start and end follows the host segment as segments do; the parts before start and after end are moved rigidly with the host's direction at its two ends; settled by the brush export check.",
+  "With nodes selected, each selected node becomes the end node of a brush on the segment that ends there; a node at the start of an open path gets no brush. Settled by the node-selection check.",
+]
+observe = [
+  "In the brush test font (`_brush.arrow`: one closed arrow outline, start anchor at the tail, end anchor where the head begins), add the brush to a straight open path and to a curved open path, export an OTF and send it back: the head should keep its shape and the shaft follow the curve.",
+  "Select only the last node of a three-segment open path and choose Add Brush: count how many brushes are added and on which segments.",
+]
 
 [[command]]
 id = "brush.decompose"
@@ -1790,7 +1874,10 @@ milestone = "M13"
 summary = "Context-menu item that replaces a brush with the outline it produces and removes the brush."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Decompose a brush on the curved open path and save: note whether the open host path is removed and replaced by the closed outline.",
+]
 
 [[command]]
 id = "brush.setGlyph"
@@ -1804,7 +1891,10 @@ milestone = "M13"
 summary = "Swaps the brush glyph used by an attached brush; in the UI by clicking the component name in its Info box."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Click the name in a brush's Info box and note what opens.",
+]
 
 [[command]]
 id = "brush.editGlyph"
@@ -1818,7 +1908,10 @@ milestone = "M13"
 summary = "The arrow button of the brush Info box: adds the brush glyph to the Edit View text and activates it."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+observe = [
+  "Click the arrow button in a brush's Info box: note where the brush glyph opens.",
+]
 
 [[panel]]
 id = "infoBox.brush"
@@ -1830,7 +1923,7 @@ milestone = "M13"
 summary = "Shown for a selected brush when View › Show Info is on."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[panel]]
 id = "dialog.brushPicker"
@@ -1842,7 +1935,7 @@ milestone = "M13"
 summary = "Glyph picker opened by Add Brush."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "brush.highlightAndSelection"
@@ -1851,7 +1944,7 @@ milestone = "M13"
 summary = "A brush is tinted with a faint blue background in Edit View. Clicking on the brush's outline selects it, Shift-click selects several, Delete removes the selected brushes."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 [[behavior]]
 id = "brush.copyPasteOntoSegments"
@@ -1860,7 +1953,7 @@ milestone = "M13"
 summary = "The standard Copy and Paste commands carry a selected brush over to other segments that are selected."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)): it waits until a tutorial video or written source shows how caps, segments and brushes fit."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
 
 # =====================================================================================
 # Pixel tool and pixel fonts

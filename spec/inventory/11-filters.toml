@@ -75,6 +75,10 @@ milestone = "M13"
 summary = "Filters installed through the Plugin Manager appear in the Filter menu next to the built-in ones and can be used as export-time custom parameters in the same way."
 ref = "Filters (chapter introduction)"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (M13.4, M13.6): installed filter modules are listed in the Filter menu below a separator and are accepted by name or id in the Filter and PreFilter export parameters."
+observe = [
+  "Install a free filter plug-in from the Plugin Manager and relaunch: note where it appears in the Filter menu (below a separator, sorted with the built-in filters, or in a submenu) and whether its item ends with an ellipsis.",
+]
 
 [[behavior]]
 id = "filter.target.fontViewSelection"
@@ -949,6 +953,13 @@ milestone = "M13"
 summary = "Plug-in filters define their own argument strings and are not guaranteed to understand include: and exclude:."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "FontCraft (M13.4): the export string's first item names the module; `key:value` items become named parameters and bare values become parameters `0`, `1`, … in order, as the reference's plug-in documentation describes (GlyphsSDK, Python Templates › Filter, Apache-2.0); `include:` and `exclude:` are applied by FontCraft before the module runs, so every module understands them."
+guesses = [
+  "FontCraft applies include and exclude itself for module filters, where the reference leaves it to each plug-in; settled by nothing in the reference, since our modules cannot see glyph lists.",
+]
+observe = [
+  "Open that filter plug-in's dialog and, if it has a gear menu, copy its export string and paste it into a text file: compare it with the built-in filters' export strings (separator, key spelling).",
+]
 
 [[behavior]]
 id = "filter.customParameter.addExtremes"

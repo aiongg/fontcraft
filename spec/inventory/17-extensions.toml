@@ -40,6 +40,9 @@ milestone = "M13"
 summary = "Opens the Plugin Manager window, the catalogue of installable scripts, plug-ins and modules. FontCraft: opens an Extension Manager listing WebAssembly modules and command macros from the registry index; every action in it is also a command."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+observe = [
+  "Open Window › Plugin Manager in the trial: note the window's default size, whether it is a separate window or a sheet, which filter buttons are selected at first, and whether the Window menu item has a shortcut.",
+]
 
 [[panel]]
 id = "window.pluginManager"
@@ -53,9 +56,15 @@ controls = [
 ]
 area = "extensions"
 milestone = "M13"
-summary = "Window that lists the extensions of the main repository and of any registered alternate repository, with two filter groups, a search field and per-entry install controls. FontCraft: same layout for WebAssembly modules and macros, with the type buttons reduced to the kinds we support (filters, reporters, macros) and each entry showing the capabilities the module requests."
+summary = "Window that lists the extensions of the main repository and of any registered alternate repository, with two filter groups, a search field and per-entry install controls. FontCraft: the Extension Manager, the same layout over the entries of the extension indexes (modules and macros), with the type buttons Filters, Reporters, Checks and Macros, and each entry showing its kind, size and checksum before install."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+guesses = [
+  "The type buttons are Filters, Reporters, Checks and Macros in place of Plugins, Scripts and Modules, because FontCraft has no Python modules; settled by nothing in the reference (our own extension model, decision 0005).",
+]
+observe = [
+  "Screenshot the Plugin Manager with All and Plugins selected and an entry that has a preview image and donation icons: record the order of title, description, link, image and buttons in an entry.",
+]
 
 [[command]]
 id = "pluginManager.filterByInstallState"
@@ -79,7 +88,7 @@ kind = "ui"
 params = "{type: \"plugins\"|\"scripts\"|\"modules\"}"
 area = "extensions"
 milestone = "M13"
-summary = "Shows one extension type at a time: plug-ins, scripts or modules. FontCraft: types are filter modules, reporter modules and macros; there is no modules tab because WebAssembly extensions carry their dependencies."
+summary = "Shows one extension type at a time: plug-ins, scripts or modules. FontCraft: Filters, Reporters, Checks or Macros; there is no modules type because each WebAssembly module is self-contained."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 
@@ -95,6 +104,9 @@ milestone = "M13"
 summary = "Filters the catalogue by a keyword matched against extension name, description and vendor name. FontCraft: same three fields are searched."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+observe = [
+  "Type part of a vendor name into the Plugin Manager's search field: confirm entries match on vendor, and note whether matching is case-insensitive and whether it matches inside words.",
+]
 
 [[command]]
 id = "pluginManager.list"
@@ -105,9 +117,10 @@ kind = "engine"
 params = "{state?: \"all\"|\"installed\"|\"notInstalled\", type?: string, query?: string}"
 area = "extensions"
 milestone = "M13"
-summary = "The reference has no headless listing; the catalogue is only visible in the window. FontCraft: a read-only query returns catalogue entries (id, type, title, vendor, version, installed, requested capabilities) so agents and the CLI can browse and choose."
+summary = "The reference has no headless listing; the catalogue is only visible in the window. FontCraft: a read-only query returns index entries (id, kind, title, vendor, version, installed, size, checksum) so agents and the CLI can browse and choose; without any index it lists the installed modules and macros only."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+own = true
 
 [[command]]
 id = "pluginManager.install"
@@ -118,9 +131,12 @@ kind = "engine"
 params = "{id: string, version?: string}"
 area = "extensions"
 milestone = "M13"
-summary = "Downloads and installs the extension whose green Install button is clicked; plug-ins and modules become usable after a relaunch, scripts after reloading the Script menu. FontCraft: installs a WebAssembly module or macro and registers its commands immediately, with no relaunch, after showing the capabilities it asks for."
+summary = "Downloads and installs the extension whose green Install button is clicked; plug-ins and modules become usable after a relaunch, scripts after reloading the Script menu. FontCraft: copies a module or macro named by an index entry into its folder after checking its checksum, and makes it usable at once, with no relaunch. Fetching an entry over HTTPS depends on the owner's answer to docs/plans/M13.md § 7 question 5; a local index needs no network."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+guesses = [
+  "An install from an index entry whose checksum does not match the downloaded bytes is refused and nothing is written; the reference's handling of a failed download is not documented.",
+]
 
 [[command]]
 id = "pluginManager.remove"
@@ -131,7 +147,7 @@ kind = "engine"
 params = "{id: string}"
 area = "extensions"
 milestone = "M13"
-summary = "Uninstalls an extension that was installed through the manager. FontCraft: unloads the module, removes its commands from the registry and deletes its files."
+summary = "Uninstalls an extension that was installed through the manager. FontCraft: unloads the module or forgets the macro, removes its menu entries and moves its file out of the folder; documents that use a removed filter in an export parameter report it at export."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 
@@ -170,7 +186,7 @@ kind = "ui"
 params = "{id: string, service?: string}"
 area = "extensions"
 milestone = "M13"
-summary = "Entries whose vendor accepts donations show PayPal or Ko-fi icons that open the donation page. FontCraft: a generic funding link field in the registry entry, opened in the system browser."
+summary = "Entries whose vendor accepts donations show PayPal or Ko-fi icons that open the donation page. FontCraft: one generic `funding` link per index entry, shown as a Donate button and opened in the system browser."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 
@@ -178,7 +194,7 @@ status = "inferred"
 id = "pluginManager.relaunchForPluginsAndModules"
 area = "extensions"
 milestone = "M13"
-summary = "A plug-in or module installed during a session is usable only once the app has been relaunched. FontCraft: modules are loaded and unloaded at run time, so installing never needs a relaunch."
+summary = "A plug-in or module installed during a session is usable only once the app has been relaunched. FontCraft: modules are loaded and unloaded while the app runs, so installing never needs a relaunch; a module is compiled when installed and instantiated fresh for each run."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 
@@ -186,31 +202,43 @@ status = "inferred"
 id = "pluginManager.scriptsLoadWithoutRelaunch"
 area = "extensions"
 milestone = "M13"
-summary = "Newly installed scripts appear without relaunching once the Script menu is reloaded (hold Option, Script › Reload Scripts). FontCraft: the macro list is watched and refreshed automatically; a reload command exists for completeness."
+summary = "Newly installed scripts appear without relaunching once the Script menu is reloaded (hold Option, Script › Reload Scripts). FontCraft: the macros and modules folders are checked for changes when the app regains focus and every few seconds, and the Script menu is rebuilt; Reload Scripts forces it."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+guesses = [
+  "Folders are checked by comparing file names, sizes and modification times when the window regains focus and every 5 seconds, rather than with an operating-system file watcher, so the same code works on every platform; a reference behaviour is not involved.",
+]
 
 [[behavior]]
 id = "pluginManager.automaticUpdates"
 area = "extensions"
 milestone = "M13"
-summary = "Installed extensions are updated to newer versions automatically. FontCraft: updates are automatic only when the new version requests no additional capabilities; otherwise the user is asked, and versions can be pinned."
+summary = "Installed extensions are updated to newer versions automatically. FontCraft: when an index lists a newer version of an installed extension, the Extension Manager offers it; it is installed automatically only when the user turned automatic updates on for that index."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+guesses = [
+  "Updates are offered, not installed silently, unless the user turns automatic updates on per index; the reference installs them automatically and does not say whether that can be turned off (open question in docs/spec/17-extensions.md).",
+]
+observe = [
+  "In Settings › Addons and the Plugin Manager, look for any switch that turns automatic extension updates off, globally or per extension.",
+]
 
 [[behavior]]
 id = "pluginManager.repositories"
 area = "extensions"
 milestone = "M13"
-summary = "The catalogue is the main public repository plus any alternate repositories entered in Settings › Addons; entries of an alternate repository are visible only to users who registered that repository. FontCraft: a default registry index plus user-added index URLs or local paths, merged the same way."
+summary = "The catalogue is the main public repository plus any alternate repositories entered in Settings › Addons; entries of an alternate repository are visible only to users who registered that repository. FontCraft: the entries of every extension index listed in Settings › Extensions (local paths, and HTTPS URLs if the owner allows network access), merged by id with the first index winning."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
+guesses = [
+  "When two indexes list the same id, the index listed first in the settings wins; the reference does not say how it merges entries.",
+]
 
 [[behavior]]
 id = "pluginManager.submission"
 area = "extensions"
 milestone = "M13"
-summary = "New entries reach the main catalogue through a pull request on the public plug-in repository or by contacting the vendor. FontCraft: the registry index is a public repository accepting pull requests; entries name a module URL, checksum and declared capabilities."
+summary = "New entries reach the main catalogue through a pull request on the public plug-in repository or by contacting the vendor. FontCraft: an index is a JSON file anyone can host; whether a public main index exists, and how entries reach it, is the owner's answer to docs/plans/M13.md § 7 question 5."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 
@@ -230,7 +258,7 @@ status = "inferred"
 id = "script.scope"
 area = "extensions"
 milestone = "M13"
-summary = "Scripts are Python files that can automate every part of the app through its Python API. FontCraft: everything a script could do is a command, so a script is either a macro (a stored list of command invocations with parameters) or an external program in any language calling the CLI, control channel or MCP server."
+summary = "Scripts are Python files that can automate every part of the app through its Python API. FontCraft: everything a script could do is a command, so a script is either a macro (a stored list of command invocations with parameters, the same file as an action set) or an external program in any language calling the CLI, control channel or MCP server."
 ref = "Extensions › Scripts"
 status = "inferred"
 
@@ -240,12 +268,15 @@ label = "(script name)"
 menu = ["Script"]
 shortcut = ""
 kind = "engine"
-params = "{script: path | name, args?: object}"
+params = "{macro: name | path | {steps: [{command: id, params?: object}], title?: string}, args?: object, glyphs?: [name], layers?: [id], dryRun?: bool}"
 area = "extensions"
 milestone = "M13"
-summary = "Each installed script is a Script menu item; choosing it runs the script. FontCraft: each macro is a Script menu item and a command; running it dispatches its command list in order as one undo group and reports the first failing step."
+summary = "Each installed script is a Script menu item; choosing it runs the script. FontCraft: each macro in the macros folder is a Script menu item; script.run checks every step's command id and placeholders first, then runs the steps in order as one transaction and one undo step, and on the first failing step changes nothing and names the step. Arguments fill the macro's placeholders; the shell passes the Font View or Edit View selection as `glyphs`."
 ref = "Extensions › Scripts › Run Scripts"
 status = "inferred"
+guesses = [
+  "A macro runs as one undo step that is undone as a whole, like command.batch; the reference undoes script edits per glyph and does not say how a script's changes group.",
+]
 
 [[command]]
 id = "script.rerunLast"
@@ -256,9 +287,15 @@ kind = "engine"
 params = "{}"
 area = "extensions"
 milestone = "M13"
-summary = "Runs the most recently run script again; also offered as the last item of the Script menu (its exact label is not stated). FontCraft: repeats the last macro with the same arguments."
+summary = "Runs the most recently run script again; also offered as the last item of the Script menu (its exact label is not stated). FontCraft: runs the last macro or action set again with the same arguments on the current selection."
 ref = "Extensions › Scripts › Run Scripts"
 status = "inferred"
+guesses = [
+  "The label of the item at the foot of the Script menu is Re-run Last Script followed by the script's title; the handbook gives no label.",
+]
+observe = [
+  "Run any script from the Script menu, then open the Script menu again: copy the exact label of the last item and confirm Cmd+Alt+R runs it.",
+]
 
 [[command]]
 id = "script.openScriptsFolder"
@@ -269,9 +306,12 @@ kind = "ui"
 params = "{}"
 area = "extensions"
 milestone = "M13"
-summary = "Shows the Scripts folder in the file manager. FontCraft: opens the user's macros folder; the command also returns its path for headless callers."
+summary = "Shows the Scripts folder in the file manager. FontCraft: opens the macros folder in the file manager, creating it when missing; the engine part returns the folder's path so headless callers can use it."
 ref = "Extensions › Scripts › The Scripts Folder"
 status = "inferred"
+observe = [
+  "Choose Script › Open Scripts Folder and note the folder's full path, and whether a Plugins folder sits beside it.",
+]
 
 [[command]]
 id = "script.reloadScripts"
@@ -285,6 +325,9 @@ milestone = "M13"
 summary = "Rebuilds the Script menu from the Scripts folder; the item is shown in the menu only while Option is held. FontCraft: rescans the macros folder and re-registers the macro commands; normally unnecessary because the folder is watched."
 ref = "Extensions › Scripts › The Scripts Folder"
 status = "inferred"
+observe = [
+  "Open the Script menu without and then with Option held: note whether Reload Scripts replaces Open Scripts Folder or is added below it, and where it sits in the menu.",
+]
 
 [[behavior]]
 id = "script.menu.mirrorsFolder"
@@ -293,6 +336,12 @@ milestone = "M13"
 summary = "The Script menu is a picture of the Scripts folder: one item per script file. FontCraft: the Script menu mirrors the macros folder in the same way."
 ref = "Extensions › Scripts › The Scripts Folder"
 status = "inferred"
+guesses = [
+  "Script menu items are sorted by title, case-insensitively and with numbers in numeric order, folders before items; the handbook does not give the order.",
+]
+observe = [
+  "Put three scripts in the Scripts folder: `b.py` titled Alpha, `a.py` titled Zulu and `c.py` without a MenuTitle, plus a subfolder `Tools` with one script; reload and record the order of items and submenus, and what the untitled script is called.",
+]
 
 [[behavior]]
 id = "script.menu.subfolders"
@@ -301,6 +350,9 @@ milestone = "M13"
 summary = "Subfolders of the Scripts folder become submenus, which is how scripts are grouped. FontCraft: same rule for the macros folder."
 ref = "Extensions › Scripts › Creating Scripts"
 status = "inferred"
+observe = [
+  "Give two scripts in different subfolders the same MenuTitle, and two in one folder the same MenuTitle: note how the menu shows each clash.",
+]
 
 [[behavior]]
 id = "script.menu.tooltip"
@@ -309,6 +361,9 @@ milestone = "M13"
 summary = "Hovering briefly over a script in the menu shows the script's short description, when it has one. FontCraft: a macro's description field is shown as the tooltip and returned as the command's params doc."
 ref = "Extensions › Scripts › Run Scripts"
 status = "inferred"
+observe = [
+  "Rest the pointer on a script item that has a __doc__ string and time how long the tooltip takes to appear; check whether a multi-line description keeps its line breaks.",
+]
 
 [[behavior]]
 id = "script.shortcutAssignable"
@@ -322,7 +377,7 @@ status = "inferred"
 id = "script.requiresModules"
 area = "extensions"
 milestone = "M13"
-summary = "Some scripts only work after particular modules have been installed from the Modules tab. FontCraft: a macro can only call commands, so its only dependency is a list of required module ids that the manager installs with it."
+summary = "Some scripts only work after particular modules have been installed from the Modules tab. FontCraft: a macro calls only commands; when it calls a filter, reporter or check module, its `requires` list names the module ids, the Extension Manager installs them with it, and running it without them refuses before any step runs."
 ref = "Extensions › Scripts"
 status = "inferred"
 
@@ -330,15 +385,18 @@ status = "inferred"
 id = "script.file.pyExtension"
 area = "extensions"
 milestone = "M13"
-summary = "A script is a file ending in .py placed in the Scripts folder; the rest of the file name is free, by convention the menu title. FontCraft: a macro is a plain-text data file in the macros folder (format to be specified), never executable code."
+summary = "A script is a file ending in .py placed in the Scripts folder; the rest of the file name is free, by convention the menu title. FontCraft: a macro is a JSON file ending in `.fcmacro` in the macros folder: a format marker and version, a title, a description, optional arguments, an optional `requires` list and the steps. It is data, never executable code."
 ref = "Extensions › Scripts › Creating Scripts"
 status = "inferred"
+guesses = [
+  "Macro files end in `.fcmacro` and hold JSON; nothing in the reference decides it (the format is ours, open decision D8).",
+]
 
 [[behavior]]
 id = "script.file.menuTitleHeader"
 area = "extensions"
 milestone = "M13"
-summary = "The menu title comes from a comment at the top of the file of the form '# MenuTitle: Script Name'. FontCraft: a title field in the macro file, falling back to the file name."
+summary = "The menu title comes from a comment at the top of the file of the form '# MenuTitle: Script Name'. FontCraft: the macro's `title` field, falling back to the file name without its extension."
 ref = "Extensions › Scripts › Creating Scripts"
 status = "inferred"
 
@@ -346,7 +404,7 @@ status = "inferred"
 id = "script.file.docString"
 area = "extensions"
 milestone = "M13"
-summary = "The tooltip text is the script's __doc__ string assigned below the MenuTitle line; it may be a triple-quoted string spanning several lines. FontCraft: a description field in the macro file, multi-line allowed."
+summary = "The tooltip text is the script's __doc__ string assigned below the MenuTitle line; it may be a triple-quoted string spanning several lines. FontCraft: the macro's `description` field, which may hold line breaks; it is the menu tooltip and the description agents read."
 ref = "Extensions › Scripts › Creating Scripts"
 status = "inferred"
 
@@ -354,9 +412,12 @@ status = "inferred"
 id = "script.importExistingPython"
 area = "extensions"
 milestone = "M13"
-summary = "Existing scripts are Python against the reference's API and cannot run elsewhere. FontCraft: they are not loadable; a porting guide maps common API calls to command ids, and a Python client package for the control channel lets authors keep writing Python outside the app."
+summary = "Existing scripts are Python against the reference's API and cannot run elsewhere. FontCraft: they are not loadable; a porting guide maps common tasks of the reference's API to command ids, and the control-channel guide shows a short client in Python, among other languages, so authors can keep writing Python outside the app."
 ref = "Extensions › Scripts › Creating Scripts"
 status = "inferred"
+guesses = [
+  "The repository ships no Python client package, only documented examples, because the code base is Rust only; nothing in the reference decides it.",
+]
 
 [[command]]
 id = "window.macroPanel"
@@ -367,23 +428,31 @@ kind = "ui"
 params = "{}"
 area = "extensions"
 milestone = "M13"
-summary = "Opens the Macro Panel, whose console receives the log output of scripts and plug-ins unless output is redirected to the system console; this chapter and the Settings chapter say nothing more about it. FontCraft: opens a Command Console where command invocations are typed as JSON or CLI syntax, with the log of commands and module output below."
+summary = "Opens the Macro Panel, whose console receives the log output of scripts and plug-ins unless output is redirected to the system console; this chapter and the Settings chapter say nothing more about it. FontCraft: opens the Command Console, where a command is typed as an id followed by JSON parameters, or as a `fontcraft-cli run` style line, with the log of commands and module output below."
 ref = "Settings › Addons › Console Output"
 status = "inferred"
+observe = [
+  "Open Window › Macro Panel: screenshot it, note how code is run (a button, a shortcut, both), whether it has tabs, and whether the typed text is still there after closing and reopening the panel and after relaunching.",
+]
 
 [[panel]]
 id = "window.macroPanel"
 label = "Macro Panel"
 location = "window"
 controls = [
-  "code input area (not described in the source)",
-  "console output area",
+  "input line: command id then JSON parameters, or a run-style line; Return runs it, Up and Down walk the history",
+  "completion list of command ids and glyph names with the parameter docs of the chosen command",
+  "log pane: every command run from any surface with its result or error, and module log lines",
+  "Clear and Copy buttons",
 ]
 area = "extensions"
 milestone = "M13"
-summary = "Window with a console showing script and plug-in log output; in the reference it also runs ad-hoc Python (recalled, not stated in these chapters). FontCraft: a Command Console with command-id completion, parameter docs from the registry, history and a log pane; no Python."
+summary = "Window with a console showing script and plug-in log output; in the reference it also runs ad-hoc Python (recalled, not stated in these chapters). FontCraft: the Command Console: an input line with completion of command ids and glyph names and the parameter docs of the command being typed, a history, and a log pane holding each command run, its result or error, and module log lines."
 ref = "Settings › Addons › Console Output"
 status = "inferred"
+guesses = [
+  "The console's input is one line with a history, not a multi-line editor, because commands are one line of JSON; the reference's panel layout is not described (open question).",
+]
 
 # --- Plug-in kinds ---
 
@@ -391,7 +460,7 @@ status = "inferred"
 id = "plugin.kind.reporter"
 area = "extensions"
 milestone = "M13"
-summary = "Reporter plug-ins (.glyphsReporter) draw extra information in Edit View and each gets a Show … entry at the foot of the View menu that switches it. FontCraft: a live-reporter WebAssembly module receives read-only layer data and returns drawing primitives; each registers a view.show… toggle command at the end of the View menu."
+summary = "Reporter plug-ins (.glyphsReporter) draw extra information in Edit View and each gets a Show … entry at the foot of the View menu that switches it. FontCraft: a reporter module receives one layer as read-only JSON with the view scale and whether the glyph is the active one, and returns drawing primitives (paths, lines, circles, text) for the foreground and background; results are cached per layer revision and scale. Each installed reporter gets a Show entry at the foot of the View menu (view.showReporter)."
 ref = "Extensions › Plug-ins"
 status = "inferred"
 
@@ -399,7 +468,7 @@ status = "inferred"
 id = "plugin.kind.filter"
 area = "extensions"
 milestone = "M13"
-summary = "Filter plug-ins (.glyphsFilter) process glyph layers and are listed in the Filter menu (and usable as export-time filter parameters). FontCraft: an object-filter WebAssembly module takes layer objects plus parameters and returns replacements; each registers a filter.* command, so it is in the Filter menu, the CLI, MCP and export filter strings alike."
+summary = "Filter plug-ins (.glyphsFilter) process glyph layers and are listed in the Filter menu (and usable as export-time filter parameters). FontCraft: a filter module receives one layer as JSON with its parameters and returns the layer's new paths, components and anchors; plugin.runFilter calls it once per target layer and applies all results as one undo step. Installed filters are listed in the Filter menu and can be named in the Filter export parameter."
 ref = "Extensions › Plug-ins"
 status = "inferred"
 
@@ -407,7 +476,7 @@ status = "inferred"
 id = "plugin.kind.palette"
 area = "extensions"
 milestone = "M13"
-summary = "Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette, Cmd+Shift+P). FontCraft: not a module kind at first; a module may declare a parameter form for its commands which the app renders as a palette section, without running custom UI code."
+summary = "Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette, Cmd+Shift+P). FontCraft: no module kind runs interface code; a filter module that declares parameters can be shown as a Palette section holding its parameter form and an Apply button, drawn by the app."
 ref = "Extensions › Plug-ins"
 status = "inferred"
 
@@ -441,7 +510,7 @@ status = "inferred"
 id = "plugin.loadedAtLaunch"
 area = "extensions"
 milestone = "M13"
-summary = "Plug-ins are loaded once when the app starts, hence the relaunch after installing. FontCraft: modules are instantiated on install and on demand, and can be reloaded while documents are open."
+summary = "Plug-ins are loaded once when the app starts, hence the relaunch after installing. FontCraft: modules in the modules folder are validated and compiled at launch and whenever the folder changes; each run uses a fresh instance, so nothing needs a relaunch."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
 
@@ -459,10 +528,10 @@ label = "Install Plug-in from File"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{path: string}"
+params = "{path?: string, dataBase64?: string, name?: string, replace?: bool}"
 area = "extensions"
 milestone = "M13"
-summary = "A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a module file on the window, or calling this command with a path, validates the manifest, shows the requested capabilities and copies it into the modules folder."
+summary = "A plug-in outside the catalogue is installed by dropping its bundle on the app's Dock icon; the app moves it into the Plugins folder. FontCraft: dropping a `.wasm` or `.fcmacro` file on the window, opening it with File › Open, or calling this command with a path validates it (manifest, ABI version, no imports, limits) and copies it into its folder; on the web the file's bytes are stored in the browser."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
 
@@ -470,15 +539,18 @@ status = "inferred"
 id = "plugin.pluginsFolder"
 area = "extensions"
 milestone = "M13"
-summary = "Installed plug-ins live in a Plugins folder that sits beside the Scripts folder. FontCraft: a modules folder beside the macros folder in the per-user data directory."
+summary = "Installed plug-ins live in a Plugins folder that sits beside the Scripts folder. FontCraft: a Modules folder beside the Macros folder in the per-user data folder (for example `~/Library/Application Support/FontCraft/` on macOS); Settings › Extensions shows both paths."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
+guesses = [
+  "The folders are `Macros` and `Modules` in the per-user application data folder; the reference's folder names and location are not given in the handbook (open question).",
+]
 
 [[behavior]]
 id = "plugin.noManualMove"
 area = "extensions"
 milestone = "M13"
-summary = "Plug-ins must not be copied into the Plugins folder by hand because that conflicts with the operating system's security checks; installation has to go through the app. FontCraft: copying a file into the modules folder is allowed, but an unknown module stays disabled until the user approves its capabilities."
+summary = "Plug-ins must not be copied into the Plugins folder by hand because that conflicts with the operating system's security checks; installation has to go through the app. FontCraft: copying a module into the Modules folder is allowed; a module the app has not seen before is listed as new and stays off until the user turns it on in the Extension Manager or runs plugin.installFromFile on it."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
 
@@ -486,9 +558,12 @@ status = "inferred"
 id = "plugin.uninstall"
 area = "extensions"
 milestone = "M13"
-summary = "Plug-ins from the manager are removed there; any plug-in can also be removed by deleting its file in the Plugins folder. FontCraft: both ways work, and deleting the file unregisters the module's commands at the next folder scan."
+summary = "Plug-ins from the manager are removed there; any plug-in can also be removed by deleting its file in the Plugins folder. FontCraft: both ways work; deleting the file removes the module's menu entries at the next folder check."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
+observe = [
+  "Install a plug-in by dropping it on the Dock icon, then open the Plugin Manager: note whether it is listed as installed and whether its Remove button works.",
+]
 
 # --- Authoring surface: SDK, APIs, external automation ---
 
@@ -496,7 +571,7 @@ status = "inferred"
 id = "sdk.templates"
 area = "extensions"
 milestone = "M13"
-summary = "The open-source Glyphs SDK supplies plug-in templates in two languages, Python and Objective-C, and plug-ins start from those. FontCraft: a module SDK with templates for the two module kinds (object filter, live reporter), Rust first, usable from any language that compiles to WebAssembly."
+summary = "The open-source Glyphs SDK supplies plug-in templates in two languages, Python and Objective-C, and plug-ins start from those. FontCraft: a module template in Rust for each module kind (filter, reporter, check) and the ABI documentation, so any language that compiles to WebAssembly can be used."
 ref = "Extensions › Plug-ins › Creating Plug-ins"
 status = "inferred"
 
@@ -504,7 +579,7 @@ status = "inferred"
 id = "api.python"
 area = "extensions"
 milestone = "M13"
-summary = "A documented Python API exposes the application and its font objects to scripts and plug-ins; the chapter refers to that documentation rather than listing the API. FontCraft: the API is the command registry itself, documented from the same metadata (id, params doc) for all surfaces; an optional thin Python client wraps the control channel outside the app."
+summary = "A documented Python API exposes the application and its font objects to scripts and plug-ins; the chapter refers to that documentation rather than listing the API. FontCraft: the API is the command registry, documented from the same metadata (id, label, parameters, result) for the CLI, the control channel, MCP and macros; modules see the layer JSON of the native format."
 ref = "Extensions › Scripts › Creating Scripts; Extensions › Plug-ins › Creating Plug-ins"
 status = "inferred"
 
@@ -544,6 +619,85 @@ status = "inferred"
 id = "extensions.sandboxCapabilities"
 area = "extensions"
 milestone = "M13"
-summary = "The chapter mentions no permission model for extensions beyond the operating system's check on installed plug-ins. FontCraft: a module gets no file, network or UI access by default and sees only the data passed to it; anything more is a declared capability the user approves at install time."
+summary = "The chapter mentions no permission model for extensions beyond the operating system's check on installed plug-ins. FontCraft: a module may import nothing (no files, network, clock, randomness or interface) and sees only the JSON passed to it; each run has an instruction budget, a memory cap and a time limit, and a module that breaks a limit fails with a message and changes nothing. ABI version 1 grants no capabilities; the manifest's `capabilities` list must be empty."
 ref = "Extensions › Plug-ins"
 status = "inferred"
+
+# --- FontCraft's module and macro commands (rows added by the M13 planning pass) ---
+
+[[behavior]]
+id = "plugin.kind.check"
+area = "extensions"
+milestone = "M13"
+summary = "The reference has no check plug-in kind; checks come from scripts and third-party plug-ins. FontCraft: a check module receives one layer as JSON and returns findings (check id, severity, message, position); its checks join the audit under `check.plugin.<module id>.<name>` and run with audit.run like the built-in ones."
+ref = "Extensions › Plug-ins"
+status = "inferred"
+own = true
+notes = "Decision 0005 lists checks among the module kinds."
+
+[[behavior]]
+id = "plugin.lockedPathsAndGlyphs"
+area = "extensions"
+milestone = "M13"
+summary = "Filters, plug-ins and scripts can change paths that are hidden by focusing or locked, but never a locked glyph. FontCraft: filter modules and macros follow the engine's lock rules: a locked glyph refuses the edit with a message, while locked and hidden paths are passed to a filter module and may be changed."
+ref = "Editing Paths › Focusing & Locking"
+status = "handbook"
+notes = "Documented, not yet observed."
+
+[[command]]
+id = "plugin.runFilter"
+label = "(filter module name)"
+menu = ["Filter"]
+shortcut = ""
+kind = "engine"
+params = "{id: string, params?: object, glyphs?: [name], layers?: [id], selectionOnly?: bool}"
+area = "extensions"
+milestone = "M13"
+summary = "The reference runs a filter plug-in from the Filter menu on the layer in Edit View or on every selected glyph in Font View. FontCraft: runs an installed filter module on each target layer (the Edit View layer with its selection, or every master layer of the given glyphs) with validated parameters, checks every result against the model's limits and applies them all as one undo step; a module that fails or breaks a limit changes nothing."
+ref = "Extensions › Plug-ins"
+status = "inferred"
+own = true
+
+[[command]]
+id = "plugin.info"
+label = "Extension Info"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{id: string}"
+area = "extensions"
+milestone = "M13"
+summary = "The reference shows extension details only in the Plugin Manager. FontCraft: a read-only query returning an installed module's manifest, parameter schema and defaults, size, checksum, whether it is on, and its last error."
+ref = "Extensions › Plugin Manager"
+status = "inferred"
+own = true
+
+[[command]]
+id = "view.showReporter"
+label = "Show (reporter name)"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{id: string, on?: bool}"
+area = "extensions"
+milestone = "M13"
+summary = "Each reporter plug-in of the reference has a Show entry at the foot of the View menu. FontCraft: one View menu entry per installed reporter module, switching its drawing in Edit View on or off; the switch is view state and is remembered per user."
+ref = "Extensions › Plug-ins; Edit View › Glyph Display › View Options"
+status = "inferred"
+guesses = ["Reporter entries are listed at the foot of the View menu in the order of their names, below a separator; the handbook does not give the order."]
+observe = ["Install two reporter plug-ins from the Plugin Manager, relaunch and open the View menu: note where their Show entries are, their order, and whether they have check marks."]
+
+[[command]]
+id = "script.recordMacro"
+label = "Record Macro"
+menu = ["Script"]
+shortcut = ""
+kind = "engine"
+params = "{action: \"start\" | \"stop\" | \"cancel\", name?: string, title?: string, description?: string}"
+area = "extensions"
+milestone = "M13"
+summary = "The reference has no recorder; scripts are written by hand. FontCraft: start records every font-changing engine command that succeeds, from any surface, with its parameters; stop writes the steps as a macro in the macros folder and returns it; cancel drops them. Queries, interface commands and undo are not recorded."
+ref = "Extensions › Scripts"
+status = "inferred"
+own = true
+notes = "Decision 0005 names recorded actions among the scripting surfaces."

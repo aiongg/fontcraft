@@ -500,6 +500,7 @@ milestone = "M13"
 summary = "Plug-ins can register further source formats for saving and further font formats for opening; they appear alongside the built-in ones."
 ref = "Import & Export › Source Formats; Import & Export › Opening Font Files"
 status = "handbook"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2: FontCraft has no file-format module kind in 1.0; other formats go through external converters calling the CLI."
 
 [[behavior]]
 id = "source.glyphsFileIsFlatPlist"

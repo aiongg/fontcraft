@@ -36,7 +36,7 @@ Cells marked *(m)* are recalled, not read on a page this session.
 - **Menus are our placement**, not the reference's. FontLab's Contour menu maps to our Path menu, its
   Tools › Actions to Script.
 - **Status.** `docs` = read on a public page; `memory` = recalled, not found on a page; `inferred` = our
-  own command shape for a documented capability. Five rows are `memory`, two `inferred` (section 8).
+  own command shape for a documented capability. Two rows are `memory` and two `inferred` (section 8); the M13 planning pass verified three former `memory` rows.
 
 ## 3. FontLab 8
 
@@ -367,11 +367,11 @@ Dropped because another inventory file already has the feature:
 
 | Row | Status | What is unconfirmed |
 |---|---|---|
-| `anchor.positionExpressions` | memory | That anchor coordinates accept expressions, and their grammar. The page read only names a "remove anchor expressions" action |
+| `anchor.positionExpressions` | docs (M13 pass) | Verified against the FontLab 7 manual page Using Expressions: operators, variables and examples, no formal grammar; our grammar is a guess on the row |
 | `dialog.stemHistogram` | memory | The chart's controls. The three histogram kinds are documented |
 | `io.stableSourceSerialization` | memory | That RoboFont normalises on save and writes only changed glyph files. The page read only lists a UFO normaliser among bundled libraries |
-| `constructions.ruleGrammar` | memory | The rule grammar. The page read lists the positioning options and links to the project |
-| `glyph.setStatus` | memory | That status is stored per glyph source. The pages read confirm the definitions and the canvas tint |
+| `constructions.ruleGrammar` | docs (M13 pass) | Verified against the Glyph Construction README (MIT) |
+| `glyph.setStatus` | docs (M13 pass) | The definitions and the tint are documented; where a status is stored is not, so per glyph is our guess |
 | `bitmap.setPixels` | inferred | Our headless form of pixel editing |
 | `collab.serveProject` | inferred | Our command for starting shared editing; the docs state only that hosted projects are edited by several users in real time |
 
@@ -384,26 +384,36 @@ to a paid licence and EULA, not read) are recalled or deduced.
 1. **Element references in the source model.** A shared shape with no owning glyph has no equivalent in
    the primary's file format or in UFO. Decide whether elements are a native-format feature that
    decomposes to hidden glyphs plus components on export to `.glyphs` and UFO, or are dropped.
+   **M13 pass:** proposed for dropping with the delta and Fusion filters (open decision D7, `docs/plans/M13.md` § 7 question 3).
 2. **Live filters versus the primary's attributes.** Delta filter, Fusion and per-node stroke width need
    a place in the shape model next to the primary's mask and stroke attributes. One stack, or two?
+   **M13 pass:** no second stack; the delta filter and Fusion are proposed for dropping with D7. Per-node stroke width (the Thickness tool) is stored in the path's stroke attributes and node user data (M13.38).
 3. **Power guides and the undo model.** Moving a font-level power guide edits many glyphs from one
    drag. Confirm that this is one undo step and how it interacts with locked glyphs.
+   **M13 pass (ours):** one undo step for every glyph a drag reshapes; locked glyphs keep their outline, with a warning (`guide.makePowerGuide` guess).
 4. **Auto-kerning and auto-spacing algorithms.** Neither FontLab nor FontForge documents its method
    beyond "optical" and a target separation. We need our own, with a stated definition of the optical
    gap, and a test corpus.
+   **M13 pass (ours, D11):** a side-profile method of our own, calibrated on each font's control glyphs, with a corpus measure (`docs/plans/M13.md` § 3 and § 5).
 5. **Bitmap strikes in the native format.** Where strikes live (per master? per font?), how grey depth
    is stored, and whether strike editing belongs to M11 or should wait for demand.
 6. **Action sets and command stability.** A saved action set is a list of command ids with parameters,
    so command ids and parameter names become a file format. Needs a versioning rule.
+   **M13 pass (D8):** action sets are macros: JSON `.fcmacro` files with a format version; command ids and parameter names follow decision 0004 item 8 (aliases for renames); a run checks every step before running any.
 7. **Shared editing.** Conflict policy (last writer wins per glyph layer, or operation merging),
    permissions, and whether undo is per client. Fontra's pages do not describe theirs.
+   **M13 pass:** left to the owner (`docs/plans/M13.md` § 7 question 4), with dropping it from 1.0 recommended.
 8. **TrueType debugger scope.** It needs a complete bytecode interpreter of our own. Confirm that the
    interpreter planned for hinting preview is complete enough, or defer the debugger.
+   **M13 pass:** built on M10's interpreter if that can stop after each instruction; otherwise it waits (M13.52).
 9. **Curve tension definition.** FontLab states that the displayed tension equals the Tunni percentage
    (handle length relative to the distance to the handle intersection). Behaviour for segments whose
    handles are parallel or diverge, where no intersection exists, must be observed in the application.
+   **M13 pass (ours, until FontLab is observed):** tension is shown as a dash and left unchanged where handles do not meet (`path.setCurveTension` guess).
 10. **Space Center tokens.** The reference spellings (`/?`, `/!`, `/:group`, `@layer`) may clash with
     the primary's text-mode escapes and placeholders; choose spellings once for both views.
+    **M13 pass:** RoboFont's spellings are kept in Space Center; none clashes with the primary's escapes, since `?`, `!` and `:` cannot start a glyph name (`spaceCenter.inputSyntax`).
 11. **Match Masters heuristics.** "Weak" and "strong" matching are named but not specified.
 12. **Find outline matching.** FontForge matches point for point; decide whether ours should also match
     geometrically equal shapes with different point structure.
+    **M13 pass (ours):** point for point only, as FontForge documents (`path.findOutlinePattern` guess).

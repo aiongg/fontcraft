@@ -203,6 +203,7 @@ milestone = "M13"
 summary = "Parses a `fontcraft://` URL and runs the action it names; the entry point registered with the operating system. Proposed counterpart of the reference's URL scheme handler."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+notes = "Proposed by the reference handbook's URL Scheme page; FontCraft's scheme is `fontcraft://` (docs/plans/M13.md, M13.13). Registering the scheme with the operating system is packaging work for M14."
 
 [[command]]
 id = "url.show"
@@ -216,6 +217,7 @@ milestone = "M13"
 summary = "Opens each listed file unless it is already open and adds a new Edit tab to it containing the listed glyph layers in order. Proposed target of `fontcraft://show/`."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+notes = "Proposed by the reference handbook's URL Scheme page; FontCraft's scheme is `fontcraft://` (docs/plans/M13.md, M13.13). Registering the scheme with the operating system is packaging work for M14."
 
 # ----------------------------------------------------------------------------
 # Behaviours: Feature editor
@@ -1861,6 +1863,7 @@ milestone = "M13"
 summary = "The reference answers to two URL schemes, one generic and one tied to a major version, so web pages and other apps can open it. FontCraft registers `fontcraft://`."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+notes = "Proposed by the reference handbook's URL Scheme page; FontCraft's scheme is `fontcraft://` (docs/plans/M13.md, M13.13). Registering the scheme with the operating system is packaging work for M14."
 
 [[behavior]]
 id = "url.show"
@@ -1869,6 +1872,9 @@ milestone = "M13"
 summary = "`fontcraft://show/?...` opens files and adds a new tab listing given glyph layers; it mirrors the reference's show path and takes the query parameters path, glyph, production and layer."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+observe = [
+  "In the trial, open `glyphsapp://show/?path=<test font>&glyph=A&glyph=B` from a browser or Terminal (`open '…'`): note whether a new tab opens with A and B on the main master, and whether the window comes to the front.",
+]
 
 [[behavior]]
 id = "url.show.path"
@@ -1877,6 +1883,9 @@ milestone = "M13"
 summary = "`path` is an absolute file path and comes first. It may be repeated; each occurrence starts a new file with its own glyph list."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+observe = [
+  "Open a show URL whose path names a file that does not exist, and one whose path is not absolute: note any message and whether the rest of the URL is still processed.",
+]
 
 [[behavior]]
 id = "url.show.glyph"
@@ -1885,6 +1894,9 @@ milestone = "M13"
 summary = "`glyph` adds a glyph to the current file's list by its glyph name; glyphs appear in the tab in URL order."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+observe = [
+  "Open a show URL naming a glyph the font lacks between two that exist: note whether the tab shows the two, shows a placeholder, or nothing opens.",
+]
 
 [[behavior]]
 id = "url.show.production"
@@ -1901,6 +1913,9 @@ milestone = "M13"
 summary = "`layer` follows a glyph and selects one of its layers by layer ID; repeating it shows several layers of the same glyph. A master layer's ID equals the master ID."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+observe = [
+  "Open a show URL with a layer id that does not belong to the glyph: note what the tab shows for that glyph.",
+]
 
 [[behavior]]
 id = "url.show.defaultLayer"
@@ -1917,6 +1932,9 @@ milestone = "M13"
 summary = "A file that is already open is not opened a second time; it only gets the new tab."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+observe = [
+  "With the test font open and edited but unsaved, open a show URL naming it: confirm no second window opens and the edits are kept.",
+]
 
 [[behavior]]
 id = "url.show.encoding"
@@ -1925,6 +1943,12 @@ milestone = "M13"
 summary = "Query values are percent-decoded as UTF-8, and unknown glyphs or layer IDs are skipped with a warning rather than aborting the whole URL. Not specified by the reference."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+guesses = [
+  "Query values are percent-decoded as UTF-8 and unknown glyphs or layer ids are skipped with a warning; the reference does not say.",
+]
+observe = [
+  "Open a show URL whose path contains a space written as %20 and a glyph name with a non-ASCII character percent-encoded: note whether both work.",
+]
 
 [[behavior]]
 id = "url.safety"
@@ -1933,6 +1957,9 @@ milestone = "M13"
 summary = "URL handling is limited to opening and showing; it never runs arbitrary commands, writes files or loads plug-ins, and paths must be local."
 ref = "Appendix › URL Scheme"
 status = "inferred"
+guesses = [
+  "URLs only open and show; any other path after `fontcraft://` is refused, so a web page cannot run commands; the reference documents only `show`.",
+]
 
 # ----------------------------------------------------------------------------
 # Behaviours: Feature snippets

@@ -697,6 +697,7 @@ milestone = "M13"
 summary = "Display plug-ins (reporters) that draw extra information in Edit View add their own toggle entries to the View menu once installed."
 ref = "Edit View › Glyph Display › View Options"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft (docs/plans/M13.md, M13.6): one Show entry per installed reporter module (view.showReporter)."
 
 [[behavior]]
 id = "view.fillColorFromSettings"

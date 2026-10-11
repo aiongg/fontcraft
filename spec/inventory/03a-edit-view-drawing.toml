@@ -12,9 +12,12 @@
 id = "app.launchWithoutPlugins"
 area = "extensions"
 milestone = "M13"
-summary = "Holding Option and Shift while the application starts launches it with every plug-in disabled, as a way out when a plug-in makes the app crash."
+summary = "Holding Option and Shift while the application starts launches it with every plug-in disabled, as a way out when a plug-in makes the app crash. FontCraft: the same keys, or `fontcraft --safe-mode`, start the app with no module enabled and no folder scan; Help › Load Extensions turns them back on for the session."
 ref = "Glyphs › Issues"
 status = "handbook"
+observe = [
+  "Hold Option and Shift while launching: note any dialog or message, and whether plug-ins can be turned back on without relaunching.",
+]
 
 [[behavior]]
 id = "app.crashReportOnNextLaunch"

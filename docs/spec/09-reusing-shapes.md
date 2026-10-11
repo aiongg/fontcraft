@@ -584,12 +584,17 @@ Corners, caps, segments, brushes
   path's nodes and the end node's side of the origin (`corner.pathDirection`).
 - **Q-28** Intermediate layers for corner scaling. **Answered (ours):** percentages read from the
   layer name, linear per axis (`corner.scaleInterpolatesWithIntermediateLayers`).
-- **Q-29** Cap fitting maths. **Deferred with M13:** no written source, neither oracle supports
-  caps, no corpus source uses them. Caps, segments and brushes moved to M13 until a tutorial video
-  or written source shows how they fit (the owner's answer to `docs/plans/M6.md` § 7, question 4).
-- **Q-30** Further controls in the cap, segment and brush Info boxes. **Deferred with M13**, as
-  Q-29.
-- **Q-31** Segment and brush bending maths. **Deferred with M13**, as Q-29.
+- **Q-29** Cap fitting maths. **Planned for M13 with checks in the reference app:** no written
+  source, neither oracle supports caps, no corpus source uses them. The M13 plan
+  (`docs/plans/M13.md`, M13.40 and § 8) records a provisional fitting in the rows' `guesses`
+  (`capComponent.add`, `capComponent.setFit`, `capComponent.setAlignment`,
+  `cap.node1Node2AnchorSetup`) and lists exports of a synthetic cap font from the reference app's
+  trial that settle it; M13.40 starts after those checks.
+- **Q-30** Further controls in the cap, segment and brush Info boxes. **Planned for M13:** a
+  screenshot of each Info box in the trial (`infoBox.capComponent` observe step) settles it.
+- **Q-31** Segment and brush bending maths. **Planned for M13** as Q-29: provisional mapping in
+  the guesses of `segmentComponent.add` and `brush.add`, settled by exported segment and brush
+  test fonts (M13.41 and § 8).
 - **Q-32** Paste onto a selection of the wrong kind. **Answered (ours):** refused with a message
   (`corner.copyPasteOntoNodes`).
 - **Q-33** Attachments across masters and the order at export. **Answered (oracle, ours):** both

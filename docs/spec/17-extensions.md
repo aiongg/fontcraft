@@ -9,7 +9,10 @@ are design, not reference facts; that is why every inventory row of this chapter
 
 Our model in one paragraph: every action is a command in one registry, reachable from the UI, the
 CLI, the JSON control channel and the MCP server. Code that must run inside the app is a sandboxed
-WebAssembly module of one of two kinds, object filter or live reporter. There is no embedded Python.
+WebAssembly module of one of three kinds: filter, reporter or check (decision 0005). A script is a
+macro: a data file of command steps, which is also FontLab's action set (open decision D8). There
+is no embedded Python. The M13 plan (`docs/plans/M13.md`) gives the packages and § 3 there the
+decisions; the module ABI follows the sibling apps' WebAssembly plug-in ABI.
 
 ## Reference: the extension families
 
@@ -38,10 +41,11 @@ Reference (`window.pluginManager`, Window › Plugin Manager; no shortcut given)
 - Content: main public repository plus alternate repositories from Settings › Addons, the latter
   visible only to users who registered them. New public entries are added by pull request.
 
-FontCraft: an Extension Manager over a registry index of WebAssembly modules and command macros.
-Install and remove take effect immediately because modules load at run time. Each entry shows the
-capabilities the module asks for; an update that asks for more needs approval. `pluginManager.list`
-gives agents the catalogue.
+FontCraft: an Extension Manager over extension indexes (JSON files listing modules and macros),
+local and, if the owner allows network access, HTTPS (`docs/plans/M13.md` § 7 question 5).
+Install and remove take effect immediately because modules load at run time. Each entry shows its
+kind, size and checksum; updates are offered, and installed automatically only where the user
+turned that on. `pluginManager.list` gives agents the catalogue.
 
 ## Scripts
 
@@ -81,8 +85,8 @@ completion and parameter docs from the registry; output is the command log and m
 
 | Kind | Suffix | Reference behaviour | FontCraft |
 |---|---|---|---|
-| Reporter | `.glyphsReporter` | draws extra information in Edit View; toggled by its Show … entry at the foot of the View menu | live-reporter module: read-only layer data in, drawing primitives out; registers a `view.show…` toggle |
-| Filter | `.glyphsFilter` | processes glyph layers; in the Filter menu | object-filter module: layer objects and params in, replacements out; registers a `filter.*` command usable from menu, CLI, MCP and export strings |
+| Reporter | `.glyphsReporter` | draws extra information in Edit View; toggled by its Show … entry at the foot of the View menu | reporter module: read-only layer data in, drawing primitives out; a Show entry per module (`view.showReporter`) |
+| Filter | `.glyphsFilter` | processes glyph layers; in the Filter menu | filter module: one layer and params in, the layer's new contents out; run by `plugin.runFilter` from the Filter menu, the CLI, MCP, macros and the Filter export parameter |
 | Palette | `.glyphsPalette` | adds a section to the Palette (Window › Palette, Cmd+Shift+P) | no module kind at first; a module may declare a parameter form that the app renders as a palette section |
 | File Format | `.glyphsFileFormat` | adds formats for opening and exporting | no module kind at first; external converters through the CLI |
 | Tool | `.glyphsTool` | adds a toolbar tool for Edit View | not supported in the sandbox; tools are contributed to the app |
@@ -103,8 +107,9 @@ Reference:
 
 FontCraft: a module is one self-contained `.wasm` file with a manifest, kept in a modules folder
 next to the macros folder. Dropping a file or calling `plugin.installFromFile {path}` validates it
-and asks for approval of its capabilities. A file copied in by hand stays disabled until approved.
-Deleting the file unregisters its commands.
+(manifest, ABI version, no imports, limits) and copies it into the folder. A file copied in by
+hand is listed as new and stays off until the user turns it on. Deleting the file removes its menu
+entries.
 
 ## Authoring surface
 
@@ -121,27 +126,47 @@ Reference:
 FontCraft:
 
 - The scripting API is the command registry; its reference is generated from command metadata.
-- The module ABI is small and versioned: data and parameters in, results out. SDK templates for the
-  two module kinds, Rust first.
+- The module ABI is small and versioned: data and parameters in, results out. Module templates for the
+  three kinds (filter, reporter, check), Rust first.
 - External interoperation is the main path (control channel, MCP), not an extra.
 - No OSA dictionary; the CLI and control channel cover it on all platforms.
-- Sandbox: no file, network or UI access by default; extra capabilities are declared in the
-  manifest and approved by the user (`extensions.sandboxCapabilities`).
+- Sandbox: a module imports nothing (no file, network, clock or interface access), with an
+  instruction budget, a memory cap and a time limit; ABI version 1 grants no capabilities
+  (`extensions.sandboxCapabilities`).
 
 ## Open questions
 
-- Macro Panel: layout, run shortcut, tabs and whether its content persists; not described in these
-  chapters.
-- Exact label of the "re-run last script" item, and whether Reload Scripts replaces Open Scripts
-  Folder in the menu while Option is held.
-- Whether the Script menu shows anything besides scripts and the two folder commands.
-- How script menu order is decided (alphabetical or by file name) and how name clashes are shown.
-- Locations of the Scripts and Plugins folders on disk.
-- How automatic extension updates are scheduled and whether they can be turned off per extension.
-- What Remove does to plug-ins that were installed manually.
-- What data a reporter receives and when it is redrawn; what a filter plug-in's dialog and export
-  string contract look like. These live in the SDK documentation, which is the source to read
-  before fixing the module ABI.
-- Which of the reference's most used palette, tool and general plug-ins our two module kinds cannot
-  express; that list decides whether more kinds are needed.
-- Macro file format, and whether macros need variables or conditionals, is undecided.
+Answered by the M13 planning pass, each with its source; the steps to settle the rest in the
+reference app are in `docs/plans/M13.md` § 8.
+
+- **Macro Panel layout, run shortcut, tabs, persistence.** Open: not in the handbook. FontCraft's
+  Command Console is a one-line input with history (`window.macroPanel` guesses). § 8 checks it.
+- **Label of the re-run item; Reload Scripts and the Option key.** Open: the handbook gives the
+  shortcut and the place (foot of the Script menu) but no label. Our label is a guess
+  (`script.rerunLast`); § 8 checks both.
+- **What else the Script menu shows.** Answered for FontCraft (ours): the macros, then Re-run Last
+  Script, Record Macro, Open Scripts Folder and Reload Scripts. The reference's menu is checked in § 8.
+- **Script menu order and name clashes.** Ours: by title, case-insensitive, numbers in numeric
+  order, folders first (`script.menu.mirrorsFolder` guess); § 8 checks the reference.
+- **Folder locations.** Ours: `Macros` and `Modules` in the per-user application data folder
+  (`plugin.pluginsFolder` guess). § 8 notes the reference's path.
+- **Automatic updates.** Ours: offered, and installed automatically only where the user turned it
+  on per index (`pluginManager.automaticUpdates` guess). § 8 looks for a switch in the reference.
+- **What Remove does to manually installed plug-ins.** Open; § 8 checks it. FontCraft lists every
+  module in its folder, however it got there, and Remove works on all of them.
+- **What a reporter receives and when it is redrawn; a filter's dialog and export-string
+  contract.** Answered from the reference's SDK documentation (GlyphsSDK, Python Templates ›
+  Reporter and › Filter, Apache-2.0): a reporter draws for one layer at a time, in front of and
+  behind the active glyph and the inactive glyphs, whenever the view redraws; a filter is called
+  once per layer, from Edit View (with the selection), from Font View (once per selected glyph's
+  layer) or at export through the `Filter` parameter, whose string is the plug-in name, optional
+  `include:` and `exclude:` lists and `key:value` or bare values passed to the plug-in. FontCraft's
+  ABI keeps that shape: reporter output is cached per layer revision and scale; filter export
+  strings resolve to modules by name or id (`filter.customParameter.thirdParty`).
+- **Which palette, tool and general plug-ins our kinds cannot express.** Answered (ours): tools
+  and general plug-ins, which run interface code; file-format plug-ins. The M13 plan proposes
+  dropping those rows (§ 7 question 2). Palette needs are met by parameter forms of filter modules.
+- **Macro file format, variables, conditionals.** Answered (D8, `docs/plans/M13.md` § 3): JSON
+  `.fcmacro` files with a format marker and version, title, description, declared arguments,
+  `requires` and steps; placeholders fill arguments; no conditionals or loops, which belong in an
+  external program.

@@ -105,6 +105,10 @@ milestone = "M13"
 summary = "A separate file that links to a Glyphs source and holds its own list of instances and an export destination. The handbook describes the behaviour, but the key layout is not covered by the published format documents, so reading it is planned only after the file has been inspected; nothing is preserved beyond the instance list and the link."
 ref = "Import & Export › Projects"
 status = "handbook"
+notes = "The key layout can be learned in the reference app's trial by saving a project file made from our own synthetic font (docs/plans/M13.md § 8); M13.59 builds the reader after that."
+observe = [
+  "Make a Project from the instances test font (two masters, three instances, one with a custom parameter), set an export destination, save it, and send back the `.glyphsproject` file: its keys show where the instances, the link to the source and the destination are stored.",
+]
 
 # ───────────────────────────── UFO and designspace ─────────────────────────────
 
@@ -159,6 +163,7 @@ milestone = "M13"
 summary = "Read-only import of the first UFO version, up-converted on read (font info and features stored in lib keys move to their UFO 3 homes). Saving always produces UFO 3. Not supported yet: opening a UFO 1 is refused."
 ref = "norad src/upconversion.rs, src/font.rs (FormatVersion::V1)"
 status = "docs"
+notes = "M13.53 adds the up-conversion to `crates/io-ufo` as norad and fontTools' ufoLib describe it; test UFO 1 sources are written in code."
 
 [[format]]
 id = "designspace5"
@@ -431,9 +436,10 @@ write = false
 spec = ""
 area = "import-export"
 milestone = "M13"
-summary = "Binary companion of a Type 1 font holding widths, a few global metrics, Windows naming data and a pair-kerning table indexed by character code. Read only, as a metrics and kerning source when a PFB is opened without an AFM; kerning is limited to the encoded glyphs. The layout is recalled from Adobe Technical Note 5178 and the Windows driver documentation; no stable public URL was found, so the reader must be checked against AFDKO-produced sample files."
-ref = "Adobe Technical Note 5178 (not in the adobe-type-tools tech-note archive); AFDKO makeotf documentation mentions PFM only as legacy input"
-status = "memory"
+summary = "Binary companion of a Type 1 font holding widths, a few global metrics, Windows naming data and a pair-kerning table indexed by character code. Read only, as a metrics and kerning source when a PFB is opened without an AFM, or through Import Kerning from Metrics File; kerning is limited to the encoded glyphs."
+ref = "Microsoft Windows 3.1 Device Development Kit, Printer Drivers, chapter 2 \"Printer Font Metrics (PFM) Files\" (PFMHEADER, EXTTEXTMETRIC, KERNPAIR), public copy at https://www.pcjs.org/documents/books/mspl13/win/w3ddkprn; Adobe Technical Note 5178 (no reachable copy found)"
+status = "docs"
+notes = "Verified by the M13 planning pass: the layout is described in the Windows 3.1 DDK chapter named in `ref`. No corpus file is a PFM; tests build PFM files in code (docs/plans/M13.md, M13.54)."
 
 [[format]]
 id = "cff"
@@ -473,6 +479,7 @@ milestone = "M13"
 summary = "Text bitmap font, one pixel size per file, with per-glyph bounding box, advance and hex-encoded rows plus X font properties. Imported as a bitmap strike attached to glyphs matched by name or encoding: a tracing aid and a source for embedded bitmap strikes, never converted to outlines automatically."
 ref = "Adobe TN 5005"
 status = "docs"
+notes = "M13.55; strikes are stored as M11 stores bitmap strikes."
 
 [[format]]
 id = "pcf"
@@ -487,6 +494,7 @@ summary = "Binary sibling of BDF with a table directory (properties, metrics, bi
 ref = "FontForge documentation › PCF format (public docs only)"
 status = "docs"
 origin = "fontforge"
+notes = "M13.55, with BDF."
 
 [[format]]
 id = "vfj"
@@ -501,6 +509,7 @@ summary = "The JSON flavour of FontLab's native source. FontLab's own help pages
 ref = "FontLab help › Font Formats (https://help.fontlab.com/fontlab-vi/Font-Formats/)"
 status = "memory"
 origin = "fontlab"
+notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2. The M13 planning pass found no description of the format by its owner (FontLab's help names the format only); a community library (vfjLib, BSD-3-Clause) shows its top-level keys. The roadmap puts undocumented proprietary formats out of scope; FontLab exports UFO and designspace, which FontCraft reads."
 
 [[format]]
 id = "sfd"
@@ -515,6 +524,7 @@ summary = "ASCII keyword-and-value source file that starts with `SplineFontDB: <
 ref = "FontForge documentation › Spline Font Database File Format (public docs only)"
 status = "docs"
 origin = "fontforge"
+notes = "M13.56, a new reader crate. If the owner installs FontForge on the build machine, running it as a black-box program on our own synthetic fonts produces test files; its source is never read."
 
 # ───────────────────────────── Outline interchange ─────────────────────────────
 
@@ -543,6 +553,7 @@ milestone = "M13"
 summary = "Imports the path-construction operators of the first page's content stream as outlines; stroke width is kept as a stroke attribute on the path, while fill colour and other styling are dropped. Text, images, shadings and clipping are ignored."
 ref = "Import & Export › Importing Outlines"
 status = "handbook"
+notes = "M13.58; needs a PDF parser, a new dependency that docs/plans/M13.md § 7 question 7 asks about."
 
 [[format]]
 id = "eps-outline"
@@ -556,6 +567,7 @@ milestone = "M13"
 summary = "Imports outlines from EPS files of the kind drawing applications save: a small interpreter for path, transform and paint operators, not a full PostScript implementation. Files that rely on procedures beyond that subset are rejected with a message rather than imported wrongly."
 ref = "Import & Export › Importing Outlines; Adobe Technical Note 5002, Encapsulated PostScript File Format 3.0 (no stable public URL verified)"
 status = "handbook"
+notes = "M13.57: our own interpreter for the path, transform and paint operators drawing applications write."
 
 [[format]]
 id = "clipboard"
@@ -669,6 +681,7 @@ milestone = "M13"
 summary = "The reference accepts every image type its operating system can draw, which includes PDF and PSD. We keep the reference for any file type, and render a PDF's first page as a template once a renderer is available; until then, and always for PSD, the missing-image marker is shown and the reference survives saving."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
+notes = "M13.58, with PDF outlines; it uses M11's image references."
 
 # ───────────────────────────── Proof output ─────────────────────────────
 
