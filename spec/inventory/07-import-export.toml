@@ -899,13 +899,19 @@ label = "Features…"
 menu = ["File", "Import"]
 shortcut = ""
 kind = "engine"
-params = '{file: path}'
+params = '{file?: path, text?: string}'
 area = "features"
 milestone = "M8"
 summary = "Reads a feature file in AFDKO syntax (.fea) and adds the features it contains to the font's feature list in Font Info › Features. How name clashes with existing features, classes and prefixes are resolved is not stated."
 ref = "Import & Export › Importing Font Data › Importing Feature Files"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Built (M8.22) in `crates/engine/src/cmd/features_io.rs`. The file's includes are inlined first, resolved against its folder and then the including file's folder (`fea.include.resolution`) and kept inside the file's folder; 16 MB of text, 4,096 files and 50 levels at most. A text in the form UFO features are written in splits back into its entries with their automatic and disabled flags; any other text splits at the top level: class definitions become classes, `feature tag { … } tag;` blocks features, and each run of other statements and comments between them a prefix. The entries go after the font's as one undo step."
+guesses = [
+  "A class or prefix whose name the font already has gets the first free numeric suffix from 2 (`Upper2`), and the imported code's references to a renamed class follow it; importing into a font with clashing names in the reference app would settle it.",
+  "A feature whose tag the font already has is added as a second entry with that tag, because blocks of one tag add up in the feature-file language and a suffixed tag is not a tag; the same check would settle it.",
+  "Each run of top-level statements other than class definitions and feature blocks becomes a prefix named Prefix, and a `# Prefix: name` comment names the prefix after it; importing a file with lookups and language systems in the reference app would settle it.",
+  "Statements the split cannot place (a `useExtension` feature, an `anon` block, a class whose value is not a list) stay in a prefix as written rather than failing the import.",
+]
 observe = [
   "In F1 (Latin features), import a `.fea` file whose class and feature names already exist in the font: note how each clash is resolved.",
 ]
@@ -920,7 +926,30 @@ milestone = "M8"
 summary = "File chooser for the feature file to import."
 ref = "Import & Export › Importing Font Data › Importing Feature Files"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Built (M8.22) in `crates/ui-egui/src/dialogs/import_features.rs`: a path field, Import runs file.importFeatures once as one undo step, Cancel changes nothing."
+guesses = [
+  "The file is typed as a path, as in the other import dialogs, until the shell has a file chooser limited to .fea files.",
+]
+
+[[command]]
+id = "file.exportFeatures"
+label = "Export Features"
+menu = []
+shortcut = ""
+kind = "engine"
+params = '{format?: "fea"|"fea-kern", master?: id, path?: path, destination?: folder, fileName?: string}'
+area = "features"
+milestone = "M8"
+summary = "Writes a feature file, or returns its text: the font's enabled prefixes, classes and features assembled for one master as export compiles them (`fea`), or the master's kerning as a `kern` feature with the groups it uses as classes (`fea-kern`). Headless form of the feature-file formats; file.importFeatures reads the first back to the same entries."
+ref = "AFDKO OpenTypeFeatureFileSpecification; Import & Export › Importing Font Data › Importing Feature Files"
+status = "inferred"
+notes = "Built (M8.22) in `crates/engine/src/cmd/features_io.rs`. fea: `fontcraft_features::assemble` for the master, tokens expanded and the extensions lowered. fea-kern: the stored pairs of the master (of the master it follows, when linked), a lookup per direction holding glyph pairs, then glyph–group pairs as `enum` rules, then group pairs; right-to-left pairs carry `<v 0 v 0>`; values rounded half up. `destination` with `fileName` (default Family-Master, Family-Master-kern) adds .fea; the file is written atomically."
+guesses = [
+  "The reference app documents no feature-file export; the command exists for the command line and automation.",
+  "The fea export assembles the stored entries without running Update first, so automatic entries are written as they were last updated; running Update before the export gives the regenerated code.",
+  "The fea-kern export names group classes as the reference's feature code does (`@MMK_L_` for a right-side group, `@MMK_R_` for a left-side group) and leaves out pairs whose glyphs are missing or whose names feature code cannot spell, counting them in the warnings.",
+]
+
 
 # ───────────────────────────── Pasting from vector drawing applications ─────────────────────────────
 
