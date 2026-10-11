@@ -464,15 +464,19 @@ pub(super) fn build(
     let ctx = crate::export_steps::StepContext { data: &data, path };
     let options = Options { glyph_data: DataRef(Some(data.clone())), ..req.options.clone() };
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
-    let font: &Font = &prepared;
     for job in jobs {
         if req.first_only && !report.fonts.is_empty() {
             report.skipped.push(skip(job, "the destination is one file: give a folder to export every instance"));
             continue;
         }
-        let prepared = crate::export_steps::prepare(font, job, &ctx, &mut report.warnings)?;
-        let font: &Font = &prepared;
-        let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
+        // Propagation reads the job's source as stored; the drawing reads it prepared.
+        let source_job = crate::export_steps::prepare(font, job, &ctx, &mut report.warnings)?;
+        let font: &Font = &source_job;
+        let prepared_job = match &source_job {
+            std::borrow::Cow::Borrowed(_) => std::borrow::Cow::Borrowed(&*prepared),
+            std::borrow::Cow::Owned(f) => fontcraft_compile::prepare_source(f, &mut report.warnings),
+        };
+        let resolved = match fontcraft_compile::drawing::resolve(&prepared_job, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
                 report.skipped.push(skip(job, BETWEEN_MASTERS));
                 continue;
@@ -874,13 +878,17 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
     let mut warnings: Vec<String> = Vec::new();
     let prepared = fontcraft_compile::prepare_source(font, &mut warnings);
-    let font: &Font = &prepared;
     let mut glyph_order: Option<Vec<String>> = None;
     let mut production_names: Option<Map<String, Value>> = None;
     for job in &jobs {
-        let prepared = crate::export_steps::prepare(font, job, &ctx, &mut warnings)?;
-        let font: &Font = &prepared;
-        let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
+        // Propagation reads the job's source as stored; the drawing reads it prepared.
+        let source_job = crate::export_steps::prepare(font, job, &ctx, &mut warnings)?;
+        let font: &Font = &source_job;
+        let prepared_job = match &source_job {
+            std::borrow::Cow::Borrowed(_) => std::borrow::Cow::Borrowed(&*prepared),
+            std::borrow::Cow::Owned(f) => fontcraft_compile::prepare_source(f, &mut warnings),
+        };
+        let resolved = match fontcraft_compile::drawing::resolve(&prepared_job, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
                 skipped.push(skip(job, BETWEEN_MASTERS));
                 continue;

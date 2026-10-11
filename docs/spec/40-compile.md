@@ -54,7 +54,9 @@ Input: the source model plus export options. Output: a list of errors and warnin
   outlines (`fontcraft_compile::prepare_source`). A layer whose corners cannot be fitted, or a
   smart component that cannot be interpolated, is written as it is, with a warning.
 - Glyphs-style pre-steps when the source enables them: erase open corners, propagate anchors;
-  propagation precedes any flattening (`compile.glyphsOutlinePreSteps`).
+  propagation precedes any flattening (`compile.glyphsOutlinePreSteps`). Propagation reads the
+  source as stored, so a smart component passes on its glyph's anchors. A glyph whose anchors
+  cannot be worked out keeps its own, with a warning; the rest of the master propagates.
 
 ### 1.3 Outline preparation
 
@@ -564,6 +566,7 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | The *Decompose Components* and *Decompose Glyphs* parameters | not read (nor by fontmake) | every composite, or the listed composites, of a TrueType build become contours | the handbook describes them (`docs/plans/M6.md` › M6.16). No corpus source has them, so this row has no allow-list entry |
 | A `decomposeComponents` entry in the ufo2ft filter list | not read: only `--decompose-components` decomposes every composite | the composites the entry names become contours, as ufo2ft (fontmake) reads it | the entry is ufo2ft's filter, and fontmake applies it. No corpus source has one |
 | The `include` and `exclude` lists of a `flattenComponents` or `decomposeTransformedComponents` entry | ignored: the filter reaches every glyph | the filter reaches only the glyphs the list allows, as in ufo2ft | the lists are part of ufo2ft's filter definition. No corpus source has one |
+| Anchors a smart component passes on | interpolated at the component's values | the smart glyph's anchors on its layer for the master, not interpolated | smart components are drawn as outlines without their anchors (`fontcraft_model::smart`), so propagation reads the components in the stored source. A mark on a smart component whose anchor moves between the poles lands in a different place. No measure covers it yet |
 | Where the ufo2ft filter list is read for a `.glyphs` master that is not the default one | the default master's user data | the built master's user data, else the font's | FontCraft builds one master statically until M9, and fontmake builds each master from its own lib, where glyphsLib puts that master's user data |
 
 **Where the handbook decides against an oracle.** The M7, M8 and M9 plans follow the handbook on
