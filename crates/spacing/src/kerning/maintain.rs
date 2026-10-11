@@ -8,7 +8,6 @@ use std::sync::Arc;
 use fontcraft_model::{Font, KernFirst, KernGroups, MasterKerning, side_group};
 
 use super::groups::{GroupNameError, check_group_name};
-use super::pairs::merge_master;
 use super::sides::{GroupSide, Side, facing};
 use super::{Direction, NamedPair, Position};
 use crate::link::metrics_source;
@@ -168,7 +167,7 @@ impl Entry {
     }
 }
 
-/// The stored pairs of `master`'s own table, in stored order, over every entry for the master.
+/// The stored pairs of `master`'s own table, in stored order.
 fn master_entries(font: &Font, direction: Direction, master: &str) -> Vec<Entry> {
     direction
         .table(&font.kerning)
@@ -204,7 +203,7 @@ fn write_back(font: &mut Font, direction: Direction, master: &str, entries: &[En
         }
     }
     let table = direction.table_mut(Arc::make_mut(&mut font.kerning));
-    match merge_master(table, master) {
+    match table.0.iter().position(|m| m.master == master) {
         Some(i) if firsts.is_empty() => {
             table.0.remove(i);
         }

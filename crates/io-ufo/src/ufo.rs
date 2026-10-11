@@ -942,7 +942,7 @@ pub fn read(files: &Files) -> Result<Font> {
         glyphs: GlyphTable::from_glyphs(r.glyphs.into_iter().map(Arc::new).collect()),
         info: Arc::new(FontInfo { properties: r.info.properties, params: r.info.params, date: r.info.date, ..Default::default() }),
         kerning: Arc::new(Kerning {
-            ltr: if r.kerning.firsts.is_empty() { KernTable::default() } else { KernTable(vec![r.kerning]) },
+            ltr: if r.kerning.firsts.is_empty() { KernTable::default() } else { KernTable::new(vec![r.kerning]) },
             ..Default::default()
         }),
         features: Arc::new(features),

@@ -5,6 +5,8 @@
 //! prefixes). [`side_group`] reads a side either way. Tables keep the order they were read in at
 //! every level, because the reference's files keep kerning in the order it was made, not sorted.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -37,9 +39,22 @@ pub struct KernContext {
     pub values: Vec<(String, f64)>,
 }
 
-/// One direction's pairs, per master, in source order.
+/// One direction's pairs, per master, in source order. A table holds at most one entry per
+/// master: files can repeat a master, so every loader builds its table with [`KernTable::new`],
+/// and deserializing merges the same way.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(from = "RawKernTable")]
 pub struct KernTable(pub Vec<MasterKerning>);
+
+/// [`KernTable`]'s stored form, before its entries are merged.
+#[derive(Deserialize)]
+struct RawKernTable(Vec<MasterKerning>);
+
+impl From<RawKernTable> for KernTable {
+    fn from(raw: RawKernTable) -> Self {
+        KernTable::new(raw.0)
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MasterKerning {
@@ -55,6 +70,38 @@ pub struct KernFirst {
 }
 
 impl KernTable {
+    /// A table from entries as a file stores them, with each master's later entries merged into
+    /// its first: first sides keep the order they first appear in, and a first side met again
+    /// appends its pairs to the earlier one's. A pair stored twice keeps both copies in stored
+    /// order, so a lookup that takes the first match finds the value it found before the merge.
+    pub fn new(entries: Vec<MasterKerning>) -> Self {
+        let mut out: Vec<MasterKerning> = Vec::with_capacity(entries.len());
+        let mut masters: HashMap<String, usize> = HashMap::new();
+        let mut firsts: Vec<HashMap<String, usize>> = Vec::with_capacity(entries.len());
+        for m in entries {
+            let mi = match masters.get(&m.master) {
+                Some(i) => *i,
+                None => {
+                    masters.insert(m.master.clone(), out.len());
+                    out.push(MasterKerning { master: m.master, firsts: Vec::new() });
+                    firsts.push(HashMap::new());
+                    out.len() - 1
+                }
+            };
+            let (Some(target), Some(at)) = (out.get_mut(mi), firsts.get_mut(mi)) else { continue };
+            for f in m.firsts {
+                match at.get(&f.first).and_then(|i| target.firsts.get_mut(*i)) {
+                    Some(earlier) => earlier.seconds.extend(f.seconds),
+                    None => {
+                        at.insert(f.first.clone(), target.firsts.len());
+                        target.firsts.push(f);
+                    }
+                }
+            }
+        }
+        KernTable(out)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -183,6 +230,34 @@ mod tests {
         assert_eq!(t.remove("m02", "F", "a"), Some(-10.0));
         assert_eq!(t.0.len(), 1, "an emptied master is removed");
         assert_eq!(t.remove("m02", "F", "a"), None);
+    }
+
+    #[test]
+    fn a_master_stored_twice_becomes_one_entry_in_stored_order() {
+        let first = |name: &str, seconds: &[(&str, f64)]| KernFirst {
+            first: name.into(),
+            seconds: seconds.iter().map(|(s, v)| (s.to_string(), *v)).collect(),
+        };
+        let entries = vec![
+            MasterKerning { master: "m01".into(), firsts: vec![first("A", &[("V", -50.0)]), first("T", &[("o", -70.0)])] },
+            MasterKerning { master: "m02".into(), firsts: vec![first("A", &[("V", -10.0)])] },
+            MasterKerning { master: "m01".into(), firsts: vec![first("F", &[("a", -20.0)]), first("A", &[("V", -99.0), ("W", -40.0)])] },
+        ];
+        let json = serde_json::to_string(&KernTable(entries.clone())).unwrap();
+        let mut t = KernTable::new(entries);
+        assert_eq!(serde_json::from_str::<KernTable>(&json).unwrap(), t, "deserializing merges too");
+        let masters: Vec<&str> = t.0.iter().map(|m| m.master.as_str()).collect();
+        assert_eq!(masters, ["m01", "m02"]);
+        let m01: Vec<(&str, &str, f64)> =
+            t.0[0].firsts.iter().flat_map(|f| f.seconds.iter().map(|(s, v)| (f.first.as_str(), s.as_str(), *v))).collect();
+        assert_eq!(m01, [("A", "V", -50.0), ("A", "V", -99.0), ("A", "W", -40.0), ("T", "o", -70.0), ("F", "a", -20.0)]);
+        assert_eq!(t.get("m01", "A", "V"), Some(-50.0), "the earlier copy of a pair stored twice wins");
+        assert_eq!(t.get("m01", "A", "W"), Some(-40.0));
+        assert_eq!(t.get("m01", "F", "a"), Some(-20.0));
+        t.set("m01", "F", "a", -25.0);
+        assert_eq!(t.0.len(), 2, "setting a pair of the later entry adds no entry");
+        assert_eq!(t.remove("m01", "F", "a"), Some(-25.0));
+        assert_eq!(t.get("m01", "F", "a"), None);
     }
 
     #[test]

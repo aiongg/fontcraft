@@ -5,7 +5,6 @@
 //! `kerning.filterPairs`, `kerning.sortPairs`, `kerning.windowSearchOptions`,
 //! `kerning.pastePairs` and `kerning.deletePairs` in `spec/inventory/08-spacing-kerning.toml`.
 
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
@@ -351,44 +350,11 @@ fn index_master(m: &MasterKerning) -> HashMap<SideKey<'_>, (usize, usize)> {
     at
 }
 
-/// Every entry `table` holds for `master`, as one, in stored order. A file can hold several;
-/// lookups and the pair list read them all.
-pub(crate) fn master_view<'a>(table: &'a KernTable, master: &str) -> Cow<'a, MasterKerning> {
-    let mut entries = table.0.iter().filter(|m| m.master == master);
-    let Some(first) = entries.next() else { return Cow::Owned(MasterKerning { master: master.to_string(), firsts: Vec::new() }) };
-    let rest: Vec<&MasterKerning> = entries.collect();
-    if rest.is_empty() {
-        return Cow::Borrowed(first);
-    }
-    let mut merged = first.clone();
-    merged.firsts.extend(rest.into_iter().flat_map(|m| m.firsts.iter().cloned()));
-    Cow::Owned(merged)
-}
-
-/// Merges every entry `table` holds for `master` into the first, keeping stored order, and
-/// returns its position, so an edit sees all of the master's pairs in one place.
-pub(crate) fn merge_master(table: &mut KernTable, master: &str) -> Option<usize> {
-    let first = table.0.iter().position(|m| m.master == master)?;
-    let mut later = Vec::new();
-    let mut i = first + 1;
-    while i < table.0.len() {
-        if table.0.get(i).is_some_and(|m| m.master == master) {
-            later.push(table.0.remove(i));
-        } else {
-            i += 1;
-        }
-    }
-    if let Some(m) = table.0.get_mut(first) {
-        m.firsts.extend(later.into_iter().flat_map(|m| m.firsts));
-    }
-    Some(first)
-}
-
 /// Sorts the pasted pairs of `master` into new, conflicting and unchanged ones. When the pasted
 /// list names a pair twice, the later value counts: earlier ones are left out of every list.
 pub fn plan_paste(font: &Font, direction: Direction, master: &str, pairs: &[NewPair]) -> PastePlan {
-    let view = master_view(direction.table(&font.kerning), master);
-    let m: &MasterKerning = &view;
+    let empty = MasterKerning::default();
+    let m = direction.table(&font.kerning).0.iter().find(|m| m.master == master).unwrap_or(&empty);
     let at = index_master(m);
     let last: HashMap<SideKey<'_>, usize> = pairs.iter().enumerate().map(|(i, p)| ((side_key(&p.left), side_key(&p.right)), i)).collect();
     let mut plan = PastePlan::default();
@@ -411,7 +377,7 @@ pub fn plan_paste(font: &Font, direction: Direction, master: &str, pairs: &[NewP
 /// pair is appended in the spelling [`Side::stored`] gives; an overwritten pair keeps its stored
 /// spelling. One pass over the master's table, whatever the number of pairs.
 pub fn apply_paste(table: &mut KernTable, direction: Direction, master: &str, pairs: &[NewPair], plan: &PastePlan, overwrite: bool) {
-    let mi = match merge_master(table, master) {
+    let mi = match table.0.iter().position(|m| m.master == master) {
         Some(i) => i,
         None => {
             table.0.push(MasterKerning { master: master.to_string(), firsts: Vec::new() });
@@ -455,7 +421,7 @@ pub fn apply_paste(table: &mut KernTable, direction: Direction, master: &str, pa
 /// stored order, as [`super::stored_pair`] finds it). Returns, for each pair, whether it was
 /// there. Empty first sides and an empty master are removed with their last pair.
 pub fn delete_pairs(table: &mut KernTable, master: &str, pairs: &[(Side, Side)]) -> Vec<bool> {
-    let Some(mi) = merge_master(table, master) else { return vec![false; pairs.len()] };
+    let Some(mi) = table.0.iter().position(|m| m.master == master) else { return vec![false; pairs.len()] };
     let Some(m) = table.0.get_mut(mi) else { return vec![false; pairs.len()] };
     let (found, gone): (Vec<bool>, HashSet<(usize, usize)>) = {
         let at = index_master(m);

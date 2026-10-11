@@ -426,7 +426,7 @@ fn kern_table(v: &Value) -> Option<KernTable> {
         }
         out.push(MasterKerning { master: master.as_str().to_string(), firsts: fs });
     }
-    Some(KernTable(out))
+    Some(KernTable::new(out))
 }
 
 /// A kerning table as the format writes it: in the table's own order, not sorted. Group sides

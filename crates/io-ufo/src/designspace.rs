@@ -475,7 +475,7 @@ fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<
             user_data: font_user_data(root)?,
             ..Default::default()
         }),
-        kerning: Arc::new(Kerning { ltr: KernTable(kerning), ..Default::default() }),
+        kerning: Arc::new(Kerning { ltr: KernTable::new(kerning), ..Default::default() }),
         features: Arc::new(features),
         groups: Arc::new(groups),
         display_strings: Arc::default(),

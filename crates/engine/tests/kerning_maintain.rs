@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Font, KernFirst, KernGroups, Layer};
+use fontcraft_engine::model::{Font, KernFirst, KernGroups, KernTable, Layer};
 use fontcraft_spacing::kerning::{Direction, KernIndex};
 use serde_json::{Value, json};
 
@@ -280,7 +280,8 @@ fn rename_group_for_the_whole_font_or_one_pair_keeps_sides_apart() {
     refused(&mut s, "kerning.renameGroup", json!({"side": "left", "from": "Tee", "to": "U", "scope": "pair"}));
 }
 
-/// A file can hold two kerning entries for one master; edits see the pairs of both.
+/// A file can hold two kerning entries for one master; loading merges them into one, and edits
+/// see the pairs of both.
 #[test]
 fn rename_group_in_one_pair_finds_it_in_a_second_entry_for_the_master() {
     let mut s = font_with(&[("T", None, Some("T")), ("n", Some("n"), None)]);
@@ -290,6 +291,8 @@ fn rename_group_in_one_pair_finds_it_in_a_second_entry_for_the_master() {
         let mut extra = table[0].clone();
         extra.firsts = vec![KernFirst { first: "@MMK_L_T".into(), seconds: vec![("@MMK_R_n".into(), -40.0)] }];
         table.push(extra);
+        let kerning = Arc::make_mut(&mut font.kerning);
+        kerning.ltr = KernTable::new(std::mem::take(&mut kerning.ltr.0));
         Ok(())
     })
     .unwrap();
