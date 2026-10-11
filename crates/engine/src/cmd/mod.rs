@@ -40,6 +40,7 @@ mod settings;
 mod spacing;
 pub mod stroke;
 pub mod transform;
+mod transform_metrics;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -173,6 +174,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(path::specs());
         v.extend(spacing::specs());
         v.extend(metrics_keys::specs());
+        v.extend(transform_metrics::specs());
         v.extend(font::specs());
         v.extend(compile::specs());
         v.extend(meta::specs());

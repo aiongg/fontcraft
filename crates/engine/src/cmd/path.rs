@@ -67,12 +67,14 @@ fn add_path(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let layer = t.layer_id(s.font()?)?;
     t.layer = Some(layer.clone());
+    let data = s.glyph_data().ok();
     let index = s.edit("Add Path", |font| {
         let is_master = font.master(&layer).is_ok();
+        let width = super::transform_metrics::new_layer_width(font, data.as_deref(), &glyph, &layer);
         let mut g = font.glyph_mut(&glyph)?;
         if is_master && !g.layers.iter().any(|l| l.id == layer) {
             crate::check_unlocked(&g)?;
-            g.layers.push(Layer::new(&layer, 600.0));
+            g.layers.push(Layer::new(&layer, width));
         }
         drop(g);
         t.edit_layer(font, |l| {

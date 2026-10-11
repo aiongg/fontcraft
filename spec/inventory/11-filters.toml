@@ -587,14 +587,18 @@ label = "Transform Metrics"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?: [names], layers?: [ids], width?: number, onBothSides?: bool, lsb?: number, rsb?: number, relative?: bool}"
+params = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), width?: number, onBothSides?: bool, lsb?: number, rsb?: number, relative?: bool}"
 area = "spacing-kerning"
 milestone = "M5"
-summary = "Sets a new advance width, or new left and/or right sidebearings, on the selected glyph layers. Passing width selects width mode; otherwise each of lsb and rsb that is present is changed, absolutely or (relative) as a delta."
+summary = "Sets a new advance width, or new left and/or right sidebearings, on the selected glyph layers. Passing width selects width mode; otherwise each of lsb and rsb that is present is changed, absolutely or (relative) as a delta. width does not combine with lsb or rsb."
 ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
 status = "handbook"
+notes = "Documented, not yet observed. The outline, components, anchors, local guides, annotations, the placed image and the background move together; hints stay. With `glyphs`, a locked glyph or one without the layer is skipped and listed, as for the other whole-layer commands."
 guesses = [
-  "Width mode without on both sides keeps the left sidebearing and moves the right one; the handbook says the difference lands on one side without saying which.",
+  "Shifts and new widths are rounded to the font's grid, so an absolute sidebearing measured with a fraction lands within half a grid step of the entered value; watching the reference app on a glyph with a fractional extremum would settle it.",
+  "In sidebearing mode a layer without an outline is skipped and listed, because it has no sidebearings to set; running the dialog on the space glyph in the reference app would settle it.",
+  "Metrics keys are left as they are, so a glyph whose key the command overrides then shows as out of sync; the reference app on a glyph with a key would settle it.",
+  "A layer of a master that links its metrics to another master is changed like any other; the reference app on a linked master would settle it.",
 ]
 
 [[panel]]
@@ -618,17 +622,22 @@ status = "handbook"
 id = "glyph.transformMetrics.widthMode"
 area = "spacing-kerning"
 milestone = "M5"
-summary = "With Width enabled every target layer gets the entered advance width. Point coordinates are left unchanged (the difference lands on one side) unless on both sides is checked."
+summary = "With Width enabled every target layer gets the entered advance width. Point coordinates are left unchanged, so the whole difference lands on the right sidebearing, unless on both sides is checked."
 ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "glyph.transformMetrics.onBothSides"
 area = "spacing-kerning"
 milestone = "M5"
-summary = "on both sides distributes the width change equally between the left and right sidebearing, instead of putting it all on one side."
+summary = "on both sides distributes the width change equally between the left and right sidebearing, instead of putting it all on one side: everything in the layer moves by half the change."
 ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "When half the change is not on the grid, the left side's half is rounded to the grid and the right side takes the rest; an odd width change in the reference app would settle it.",
+]
 
 [[behavior]]
 id = "glyph.transformMetrics.sidebearingMode"
@@ -637,6 +646,7 @@ milestone = "M5"
 summary = "With Width disabled the dialog sets sidebearings; the LSB and RSB checkboxes choose which of the two sides are written, so either side can be left alone."
 ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "glyph.transformMetrics.relative"
@@ -645,6 +655,7 @@ milestone = "M5"
 summary = "Relative adds the entered LSB/RSB values to the existing sidebearings (negative values reduce them); without it the entered values replace the existing ones."
 ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "path.transformations"

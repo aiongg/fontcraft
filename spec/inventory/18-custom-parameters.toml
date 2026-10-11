@@ -363,7 +363,12 @@ effect = "ui"
 summary = "Width in units for new glyphs and layers, replacing the built-in defaults of 600 (1000 for CJK glyphs, 200 for corner components). The source types it as an integer but also allows a `script: value` form (for example `hebrew: 460`) that limits it to one script; repeat the parameter per script."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "M4 creates glyphs at the built-in defaults; M5 applies the parameter, the `script: value` form included, to New Glyph, Add Glyphs and new layers."
+notes = "Documented, not yet observed. A master layer that a drawing command adds to a glyph without one (Add Path, Add Rectangle, Add Ellipse) takes its width from the parameter: the entry for the glyph's script (stored, else from the glyph data), else the entry without a script, else the built-in width (1000 for a glyph of a CJK script, 200 for a glyph named `_corner.…`, 600 otherwise). New Glyph and Add Glyphs use the built-in 600 until M5.16."
+guesses = [
+  "Entries are looked up in the master's parameters before the font's, as for the other per-script parameters; the reference app with the parameter on a master would settle it.",
+  "A value that is not a number from 0 to 65535 is ignored; the reference app with such a value would settle it.",
+  "The CJK scripts are han, hangul, kana and bopomofo; a new layer of a glyph of each script in the reference app would settle it.",
+]
 
 [[parameter]]
 name = "descender"

@@ -2512,6 +2512,7 @@ milestone = "M5"
 summary = "Glyph → Transform Metrics applies its metric changes to all selected glyphs. No all-masters modifier is documented for it."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
+notes = "Documented, not yet observed. glyph.transformMetrics with `glyphs` changes them all in one undo step; locked glyphs are skipped and listed."
 
 [[behavior]]
 id = "fontView.batch.addComponent"
