@@ -508,10 +508,16 @@ fn fields(ui: &mut egui::Ui, tokens: &Tokens, s: &Summary, details: bool, vertic
     let mut edits = Vec::new();
     let any = !s.glyphs.is_empty();
     let one = s.glyphs.len() == 1;
-    let labels = ["Name", "Metrics", "Kerning", "Exports", "Unicode", "Production Name", "Script", "Category", "Subcategory", "Tags"];
+    let mut labels = vec!["Name", "Metrics", "Kerning", "Exports", "Unicode", "Tags"];
+    if details {
+        labels.extend(["Production Name", "Script", "Category", "Subcategory"]);
+    }
     let spacing = ui.spacing().item_spacing.x;
-    let width = (ui.available_width() - label_width(ui, tokens, &labels) - 2.0 * spacing).max(tokens.field_width);
-    egui::Grid::new(widgets::id((SALT, "grid"))).num_columns(2).show(ui, |ui| {
+    let labels_width = label_width(ui, tokens, &labels);
+    let width = (ui.available_width() - labels_width - 2.0 * spacing).max(tokens.field_width);
+    // The label column is as wide as the longest label shown, and the fields take the rest of
+    // the panel.
+    egui::Grid::new(widgets::id((SALT, "grid"))).num_columns(2).min_col_width(labels_width).show(ui, |ui| {
         edits.extend(text_row(ui, tokens, SALT, "Name", Column::Name, s, width, one));
 
         edits.extend(metric_rows(ui, tokens, s, width, vertical, any, pending));

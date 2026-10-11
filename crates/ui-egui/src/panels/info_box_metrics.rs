@@ -227,7 +227,8 @@ fn contents(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, k: Option<&Kerning>
     egui::Grid::new(widgets::id("infoBox.glyphGrid")).num_columns(5).min_col_width(tokens.field_width).spacing([6.0, 4.0]).show(ui, |ui| {
         ui.label("");
         ui.label("");
-        ui.vertical_centered(|ui| ui.strong(&m.glyph));
+        // A long name widens the middle column rather than wrapping.
+        ui.vertical_centered(|ui| ui.add(egui::Label::new(egui::RichText::new(&m.glyph).strong()).wrap_mode(egui::TextWrapMode::Extend)));
         match m.unicode {
             Some(u) => ui.label(dim(&format!("{u:04X}"))),
             None => ui.label(""),
