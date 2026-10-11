@@ -618,6 +618,7 @@ milestone = "M6"
 summary = "Path › Align Selection (Cmd+Shift+A) with exactly one node and one component selected moves the component so its origin lands on the node; the node does not move. The origin is the point where the baseline meets the left sidebearing (for an italic angle of zero), unless the base glyph has an anchor named origin, which then defines it."
 ref = "Reusing Shapes › Components › Combining Paths and Components"
 status = "handbook"
+notes = "Documented, not yet observed. Same command and origin point as align.componentOriginToNode and align.componentOriginPoint."
 
 # =====================================================================================
 # Components: nesting and anchor propagation

@@ -204,7 +204,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Align Selection",
             ["Path"],
             Some("Cmd+Shift+A"),
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index] (paths), anchors?: [name], axis?: \"auto\" (default) | \"vertical\" | \"horizontal\", origin?: origin (default the box centre)} lines the selected nodes, handles and anchors up on one coordinate. vertical: they share one x; horizontal: one y; auto collapses the smaller of the selection's width and height (a tie shares one x). The coordinate is the origin's (see transform.mirrorHorizontal): the box's left, centre or right for a box origin. A smooth node's handles move with it. One node alone moves onto the nearest node of the background. Fewer than two points change nothing → {glyph, moved: count, axis?: \"x\" | \"y\", coordinate?, message?}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index] (paths, or one component), anchors?: [name], axis?: \"auto\" (default) | \"vertical\" | \"horizontal\", origin?: origin (default the box centre)} lines the selected nodes, handles and anchors up on one coordinate. vertical: they share one x; horizontal: one y; auto collapses the smaller of the selection's width and height (a tie shares one x). The coordinate is the origin's (see transform.mirrorHorizontal): the box's left, centre or right for a box origin. A smooth node's handles move with it. One node alone moves onto the nearest node of the background. One anchor with one point moves horizontally above or below the point, with two points between them, along the master's italic angle; the points stay. One component (in `shapes`) with one node moves so its origin point lands on the node: the base glyph's `origin` anchor, else where its baseline meets its left sidebearing line; a locked or automatically aligned component refuses it. Fewer than two points change nothing → {glyph, moved: count, axis?: \"x\" | \"y\", coordinate?, anchor?, x?, component?, origin?: [x, y], message?}",
             has_doc,
             align_selection
         )
@@ -981,17 +981,20 @@ fn align_selection(s: &mut Session, v: &Value) -> Result<Value> {
         Some(other) => return Err(p.bad(format!("`axis` must be auto, vertical or horizontal, got \"{other}\""))),
     };
     let origin = parse_origin(&p, Origin::Box(BoxPoint::Center))?;
+    if let Some(out) = super::anchor::align_special(s, &p, &t)? {
+        return Ok(out);
+    }
     let step = grid(s.font()?);
     let font = s.font()?;
     let r = t.resolve(font)?;
-    // Whole paths take part with all their points; components follow other rules (M6).
+    // Whole paths take part with all their points; a component only in the case above.
     let mut points: BTreeSet<(usize, usize)> = BTreeSet::new();
     for &i in &t.shapes {
         match r.parts.shapes.get(i) {
             Some(Shape::Path(path)) => points.extend((0..path.nodes.len()).map(|n| (i, n))),
             _ => {
-                return Err(EngineError::Unsupported(format!(
-                    "path.alignSelection: shape {i} is not a path; aligning components and images comes later"
+                return Err(p.bad(format!(
+                    "shape {i} is not a path: a component is aligned only when it is selected with exactly one node; the Palette's align buttons line components up with each other"
                 )));
             }
         }

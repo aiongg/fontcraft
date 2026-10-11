@@ -8,6 +8,7 @@
 //! parameters through [`crate::params::Params`] and changes fonts only through
 //! [`crate::Session::edit`], which makes the change one undo step.
 
+mod anchor;
 mod anchor_context;
 mod annotation;
 mod attributes;
@@ -328,6 +329,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(features_compile::specs());
         v.extend(snippets::specs());
         v.extend(anchor_context::specs());
+        v.extend(anchor::specs());
         v.extend(features_io::specs());
         v.extend(axes::specs());
         v.extend(special_layers::specs());
