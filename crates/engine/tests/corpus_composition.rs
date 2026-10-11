@@ -22,8 +22,8 @@ use fontcraft_components::ComponentsError;
 use fontcraft_components::compose::components_for;
 use fontcraft_components::default_anchors::default_anchor_names;
 use fontcraft_components::propagate::effective_anchors_with;
-use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::Shape;
+use fontcraft_model::glyphdata::GlyphData;
 
 fn corpus() -> PathBuf {
     std::env::var_os("FONTCRAFT_CORPUS").map_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus"), PathBuf::from)

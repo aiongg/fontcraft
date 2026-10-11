@@ -74,8 +74,8 @@ pub mod target;
 pub mod tokens;
 pub mod tokens_predicate;
 mod unicode18;
-pub mod variable;
 pub mod var_layout;
+pub mod variable;
 mod writers;
 
 use std::collections::HashMap;

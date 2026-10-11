@@ -46,9 +46,9 @@ mod align_tests;
 #[cfg(test)]
 mod compose_tests;
 #[cfg(test)]
-mod metrics_tests;
-#[cfg(test)]
 mod index_tests;
+#[cfg(test)]
+mod metrics_tests;
 #[cfg(test)]
 mod propagate_tests;
 #[cfg(test)]

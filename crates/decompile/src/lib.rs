@@ -24,8 +24,8 @@ use std::sync::Arc;
 
 pub mod cff_hints;
 mod gpos_kern;
-pub mod variable;
 pub mod tt_hints;
+pub mod variable;
 pub use gpos_kern::{MAX_CLASS_RECORDS, MAX_KERN_PAIRS};
 
 use fontcraft_model::plist::{Array, Dict, Layout, Str, Value};
