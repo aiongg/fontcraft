@@ -580,6 +580,7 @@ summary = "Our own tab-separated exchange format for one master: kerning lines `
 ref = "Import & Export › Exporting Metrics (the reference's undocumented Metrics File is the model for the content)"
 status = "inferred"
 own = true
+notes = "Lines: an optional `kerning-text<TAB>1` header, `master` and `direction` lines, `group<TAB>side<TAB>name<TAB>member…` lines (a long group continues on further lines), `metrics<TAB>glyph<TAB>lsb<TAB>rsb<TAB>width<TAB>leftKey<TAB>rightKey<TAB>widthKey` lines and three-field pair lines in command spelling. The module doc of `crates/spacing/src/kerning_text.rs` is the full description. Limits: 16 MB, lines of 4,096 bytes, 500,000 pairs, values from -32,768 to 32,767."
 
 [[format]]
 id = "fea-kern"

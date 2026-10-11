@@ -41,6 +41,12 @@
 //! font; groups of the other side never change. All three refuse a linked master
 //! ([`check_editable`]); a font-wide rename is not tied to a master.
 //!
+//! # Pair list ([`pairs`])
+//! The Kerning window's list: [`pairs::stored_pairs`] in stored order, [`pairs::filter`] with
+//! the window's search options ([`pairs::Filter`]), [`pairs::sort`] by a column with ties in
+//! stored order. [`pairs::plan_paste`] sorts pasted pairs into new, conflicting and unchanged
+//! ones; [`pairs::apply_paste`] writes them; [`pairs::delete_pairs`] removes pairs by their sides.
+//!
 //! The public API:
 //! ```text
 //! Direction::{Ltr, Rtl, Vertical}: name, from_name, table(&Kerning) -> &KernTable
@@ -75,12 +81,20 @@
 //! Pair { first: Side, second: Side, value: f64 };  Removed { pair, reason: Obsolete::{MissingGlyph, EmptyGroup}(String) }
 //! CompressReport { runs, lifted: Vec<Lift { run, from, to }>, absorbed: Vec<Absorbed { run, pair, into }>, kept: Vec<Kept { pair, why: KeptWhy::{DifferentValue(Pair), MemberPairs} }>, pairs_before, pairs_after }
 //! RenameScope::{Pair { master, first: Side, second: Side }, Font};  RenameReport { glyphs: Vec<String>, pairs: Vec<NamedPair> }
+//! pairs::stored_pairs<'a>(font: &'a Font, Direction, master: &str) -> Vec<ListedPair<'a>>
+//! pairs::filter<'a>(font: &Font, Direction, pairs: Vec<ListedPair<'a>>, &Filter) -> Vec<ListedPair<'a>>
+//! pairs::sort(pairs: &mut [ListedPair], Column, descending: bool)
+//! pairs::list<'a>(font: &'a Font, Direction, master: &str, &Filter, order: Option<(Column, bool)>) -> Vec<ListedPair<'a>>
+//! pairs::plan_paste(font: &Font, Direction, master: &str, pairs: &[NewPair]) -> PastePlan
+//! pairs::apply_paste(table: &mut KernTable, Direction, master: &str, pairs: &[NewPair], &PastePlan, overwrite: bool)
+//! pairs::delete_pairs(table: &mut KernTable, master: &str, pairs: &[(Side, Side)]) -> Vec<bool>
 //! ```
 
 pub mod groups;
 pub mod locks;
 pub mod lookup;
 pub mod maintain;
+pub mod pairs;
 pub mod sides;
 
 #[cfg(test)]

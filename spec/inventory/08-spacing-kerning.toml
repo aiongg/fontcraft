@@ -1259,6 +1259,7 @@ summary = "Query, our addition: returns the stored kerning pairs of a master and
 ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pairs"
 status = "inferred"
 own = true
+notes = "Without `sort` the pairs keep their stored order (kerning.windowSorting). A master linked to another lists the pairs of the master it follows and names it as `source`. Each row carries its stored position as `index`."
 
 [[command]]
 id = "kerning.filterPairs"
@@ -1401,6 +1402,7 @@ milestone = "M5"
 summary = "Copies kerning pairs with their values to the clipboard. In the UI this is Edit › Copy (Cmd+C) while rows are selected in the Kerning window; Edit › Select All (Cmd+A) selects every listed pair first."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+notes = "The text starts with the kerning-text header, master and direction lines; the selected pairs follow in the order given, every pair of the master when none are given. A pair the master lacks refuses the command."
 guesses = [
   "The clipboard holds the pairs as kerning-text lines (`left<TAB>right<TAB>value`), so they also paste into a text editor; no source gives the reference clipboard format.",
 ]
@@ -1411,14 +1413,18 @@ label = "Paste Kerning Pairs"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{master?: id, direction?: "ltr"|"rtl"|"vertical", onConflict?: "ask"|"overwrite"|"keepExisting"}'
+params = '{text?: kerning-text, pairs?: [{left, right, value}], master?: id, direction?: "ltr"|"rtl"|"vertical", onConflict?: "ask"|"overwrite"|"keepExisting"}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Adds the kerning pairs on the clipboard to the current master, which may be a different master or a different font than the one they were copied from. In the UI this is Edit › Paste (Cmd+V) in the Kerning window. Pairs that already exist are handled according to the conflict choice."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+notes = "The engine has no clipboard: the pairs come as kerning-text (`text`) or as JSON (`pairs`). `ask`, the default, changes nothing when a pair conflicts and returns the conflicts, which is what the dialog shows; without conflicts it pastes at once. A linked master is refused. At most 500,000 pairs."
 guesses = [
   "A pasted group side keeps its name; a group the target font lacks is pasted as it is and reported.",
+  "A glyph the target font lacks is pasted as it is and reported, like a missing group.",
+  "A pasted pair that exists with the same value is not a conflict, so it does not bring up the question; pasting an unchanged selection back into its master settles it.",
+  "When the pasted pairs name one pair twice, the later value counts.",
 ]
 
 [[panel]]
@@ -1447,7 +1453,11 @@ milestone = "M5"
 summary = "Deletes the selected kerning pairs from the current master (the minus button at the bottom left of the Kerning window). With Option held, the same pairs are deleted from every master."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
-
+notes = "Documented, not yet observed."
+guesses = [
+  "A pair the master lacks (with all masters: that no master has) refuses the whole command; the reference can only delete listed rows, so the question does not arise there.",
+  "A linked master is refused, as for the other kerning edits.",
+]
 [[command]]
 id = "kerning.cleanUp"
 label = "Clean Up"
@@ -1500,6 +1510,10 @@ status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
   "The defaults are contains, every entry kind, both sides and not limited to the Font View selection; Reset returns to them. The options menu of a newly opened Kerning window settles them.",
+  "A pair is listed when one of the searched sides matches the term, has the chosen entry kind and, with the selection option, is a selected glyph or a group one of them belongs to; a search on a running Kerning window with mixed pairs settles it.",
+  "Does not contain keeps a pair only when no searched side contains the term; a search for a letter that occurs on one side of a pair settles it.",
+  "The term is compared with the bare name of a group, and with its @ spelling when the term starts with @; searching for @ in the reference settles it.",
+  "The search is case-sensitive, since glyph names are; searching for t in a font with T settles it.",
 ]
 
 [[behavior]]
@@ -1519,6 +1533,7 @@ ref = "Spacing & Kerning › Kerning › Kerning Window › Viewing Kerning Pair
 status = "handbook"
 guesses = [
   "Before a header is clicked the list keeps the stored order of the pairs.",
+  "Names sort byte by byte in their @ spelling and equal entries keep the stored order in both directions; sorting a list with repeated values in the reference settles it.",
 ]
 
 [[behavior]]

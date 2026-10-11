@@ -42,6 +42,11 @@
 //! supplied it ([`kerning::KernIndex`]), lock states derived from the pairs, and kerning groups.
 //! The module's own doc comment lists its API.
 //!
+//! # Kerning text ([`kerning_text`])
+//! Our tab-separated format for one master's pairs, groups and metrics: [`kerning_text::write`]
+//! and [`kerning_text::read`], with limits on hostile input; [`kerning_text::from_master`] takes
+//! a master's pairs and groups. The module doc describes the lines.
+//!
 //! The public API:
 //! ```text
 //! parse_field(text: &str, field: Field, exists: impl Fn(&str) -> bool) -> Result<Entry, KeyError>
@@ -57,11 +62,15 @@
 //! SyncCache::all<'a>(&'a self, font: &'a Font) -> impl Iterator<Item = &'a Finding>
 //! update_order(font: &Font, slots: &[Slot]) -> Vec<Slot>
 //! metrics_source<'a>(font: &'a Font, master: &str) -> Option<&'a Master>
+//! kerning_text::read(text: &str) -> Result<KerningText, ReadError>
+//! kerning_text::write(doc: &KerningText) -> Result<String, WriteError>
+//! kerning_text::from_master(font: &Font, Direction, master: &str) -> KerningText
 //! ```
 #![forbid(unsafe_code)]
 
 pub mod eval;
 pub mod kerning;
+pub mod kerning_text;
 pub mod keys;
 pub mod link;
 pub mod measure;
