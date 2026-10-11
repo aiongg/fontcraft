@@ -1564,7 +1564,7 @@ milestone = "M7"
 summary = "Returns the entries of the Exports tab in order with type, style name, active flag, weight and width class, axis coordinates and style-link data."
 ref = "Font Info › Exports"
 status = "inferred"
-notes = "M7 plan § 4: M7.7."
+notes = "M7 plan § 4: M7.7. An instance whose source states no class reports 400 and 5, the format's defaults; a class an older source writes as a name (`Bold`) is reported as that name."
 
 [[command]]
 id = "font.instance.get"
@@ -1947,6 +1947,7 @@ status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.7."
 guesses = [
   "font.instance.set and the Exports tab warn, without refusing, when the style name has characters outside ASCII letters, digits, spaces and hyphens, or when family and style name together exceed 20 characters without a postscriptFontName; the reference app settles whether it warns.",
+  "An empty or all-space style name is refused by font.instance.set and font.instance.add; clearing the Style Name field in the reference app settles it.",
 ]
 observe = [
   "In font B (m7-two), type an instance style name of 30 characters, then one containing `é`: note any warning for each.",
@@ -1981,6 +1982,9 @@ summary = "Style linking connects only fonts with an identical family name. All 
 ref = "Font Info › Exports › Style Linking"
 status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances)."
+guesses = [
+  "font.instance.setStyleLinking and font.instance.set link anyway but warn when the base instance named in the same file exports under another family name (its familyNames field); a base in another file is not checked. Linking two instances with different familyNames in the reference app settles whether it warns.",
+]
 
 [[behavior]]
 id = "fontInfo.styleLinking.recommendedScheme"
