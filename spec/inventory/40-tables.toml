@@ -1589,6 +1589,7 @@ milestone = "M9"
 summary = "Glyph swaps tied to axis ranges compile to single-substitution lookups plus a FeatureVariations table. For designspace rules the feature is rvrn when rules are processed first and rclt when processed last; for Glyphs bracket layers it is rvrn unless the 'Feature for Feature Variations' parameter names another tag. Overlapping condition boxes are split into non-overlapping regions first. When the only feature is rvrn its lookups go at the front of the lookup list."
 ref = "fontc ufo2fontir/src/source.rs, glyphs2fontir/src/source.rs (make_feature_variations), fontir/src/feature_variations.rs, fontbe/src/features/feature_variations.rs"
 status = "docs"
+notes = "M9.8: `fontcraft_interp::overlay` ports fontTools' overlayFeatureVariations; `compile/src/var/featvar.rs` makes one rule per alternate set, normalizes its ranges after avar, overlays them, and writes a GSUB of only these lookups (one empty feature in DFLT, lookups in substitution-name order, each record's lookups in rule order as fontTools writes them; fontc sorts them) until M8's compile merges them with the feature code. Where two sets of one glyph overlap, the later set's glyph is substituted, as both oracles do."
 
 [[behavior]]
 id = "compile.bracketLayerGlyphs"
@@ -1597,6 +1598,7 @@ milestone = "M9"
 summary = "Each alternate (bracket) layer set becomes an extra glyph named after its parent with a suffix; it is appended to the glyph order, takes the parent's production name plus the same suffix, has no codepoint, and is reached only through the feature variation substitution."
 ref = "fontc glyphs2fontir/src/source.rs"
 status = "docs"
+notes = "M9.8: the glyphs are `<glyph>.BRACKET.varAltNN`, numbered from 01 per glyph in the order its range sets first appear, made only for exported glyphs, and appended sorted by name, as fontc and ufo2ft append them (`compile/src/var/featvar.rs`)."
 
 [[behavior]]
 id = "compile.layoutPacking"

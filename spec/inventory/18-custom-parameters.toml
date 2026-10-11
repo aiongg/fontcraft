@@ -771,6 +771,9 @@ summary = "Feature tag into which the conditional glyph substitutions generated 
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "The Switching Shapes page gives `rlig` as the default and the appendix `rvrn`; both oracles use `rvrn`. FontCraft's default is `rvrn`, as the appendix and both oracles (docs/plans/M9.md § 7, question 2 (a), decided by the orchestrator on the owner's behalf); it departs from the Switching Shapes page."
+guesses = [
+  "A value that is not a feature tag puts the substitutions in `rvrn` with a warning, as fontc does; exporting with such a value from the reference app would settle it.",
+]
 
 [[parameter]]
 name = "fileName"
