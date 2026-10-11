@@ -10,7 +10,7 @@ _Updated: 2026-10-11, M5 accepted by the owner (M5.fix6 applied their decisions)
   About 168,000 lines of Rust in 25 library crates, two apps and `xtask`. Built and run on Linux
   x86-64 with Rust 1.97.
 - 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
-  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 675 guesses on 434
+  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 677 guesses on 435
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3, M4 and M5 UI package were reviewed. macOS and
@@ -41,6 +41,12 @@ resolution; the M6 entries of `crates/oracle/allow.toml` removed when they expor
 oracles'. Anchor propagation covers every anchor name as fontc does, beyond the handbook's top
 and bottom (a guess). Open questions Q-29 to Q-31 of `docs/spec/09-reusing-shapes.md` wait on
 § 7 question 4; Q-37 stays open.
+
+Seen before the rule existed (`docs/clean-room.md` › Recording): the M6 planning pass read
+fontc's `fontir/src/propagate_anchors.rs` and glyphsLib's `propagate_anchors.py`, whose notes say
+they derive from the reference app's privately shared source. The plan's § 2 records only what
+their outputs show. If the owner chooses to write anchor propagation ourselves, the agent that
+writes it reads neither file and works from the handbook and the oracles' outputs.
 
 Open items from M5 (the owner accepted M5 with the speed misses):
 
@@ -487,3 +493,8 @@ Append one terse entry per session: what landed, numbers, what is still open.
   Writing Direction ranges as embeddings). M6.plan: `docs/plans/M6.md`, 220 M6 rows (59
   commands), no recalled rows left, 11 moves, 48 new guesses (675 on 434 rows). Open: the
   owner's answers to the plan's § 7.
+- **2026-10-11, review fixes.** M5.fix7: Text Preview's trailing blanks take the paragraph level
+  before their kerns, so a line no longer shifts by a kern; embeddings are taken in order of their
+  start. The M6 plan asks the owner how to build anchor propagation (fontc's code derives from the
+  reference app's private source); `docs/clean-room.md` gains the rule for such code. 677 guesses
+  on 435 rows.

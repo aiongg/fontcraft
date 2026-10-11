@@ -161,7 +161,7 @@ end-to-end test).
 M4's and M5's behaviour comes from the handbook; 5 editor rows are confirmed by public tutorial videos. Where
 a detail is unconfirmed, the handbook decides (Remove Overlap, for example, deletes open paths).
 Where no source says, we choose, and each choice is listed in `docs/guesses.md` to revisit
-(675 guesses on 434 rows).
+(677 guesses on 435 rows).
 
 | Gap | Detail |
 |---|---|
