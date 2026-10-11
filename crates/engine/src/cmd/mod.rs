@@ -62,7 +62,7 @@ mod kerning_maintain;
 mod kerning_window;
 mod layer;
 mod layers;
-mod masters;
+pub mod masters;
 mod measure;
 mod measure_line;
 mod meta;

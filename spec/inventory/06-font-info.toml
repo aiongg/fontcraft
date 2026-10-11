@@ -843,13 +843,13 @@ label = "Get Master"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id|name|index}"
+params = "{master?: id|name|index, masters?: [id|name|index]}"
 area = "font-info"
 milestone = "M7"
 summary = "Returns every property of one master: name, icon, axis coordinates, metric positions and zone sizes, stem values, number values and custom parameters."
 ref = "Font Info › Masters"
 status = "inferred"
-notes = "M7 plan § 4: M7.5."
+notes = "With several masters, a value they do not share is null (fontInfo.masters.multipleValues). Metrics are keyed by their name, else their kind, with the glyph filter in brackets; unnamed stems by `#index`. M7 plan § 4: M7.5."
 
 [[command]]
 id = "font.master.set"
@@ -880,6 +880,8 @@ status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.5."
 guesses = [
   "The new master is called Regular, takes the first master's axis coordinates and the file format's default metric values scaled to the UPM (ascender 800, cap height 700, x-height 500, descender −200 at 1000 UPM, zones 16 and −16 at 1000 UPM), has no stem values, number values or parameters, and goes to the end of the list; every glyph gets an empty layer for it; adding a master in the reference app settles name, coordinates, values and position.",
+  "Each glyph's empty layer for the new master takes the advance width of its layer in the first master (0 without one); the width of a new master's layers in the reference app settles it.",
+  "A font with a locked glyph refuses adding, duplicating and removing masters until the glyph is unlocked, since those change the glyph's layers; doing so with a locked glyph in the reference app settles it.",
 ]
 observe = [
   "In font B (m7-two), choose Add Master on the Masters tab: note the new master's name, icon, coordinates, metric and zone values, and its position in the list.",
@@ -950,6 +952,7 @@ status = "handbook"
 notes = "Documented, not yet observed. Removing the last master is refused (the file format needs one). M7 plan § 4: M7.5."
 guesses = [
   "Removing a master removes its layers in every glyph, the special layers tied to it and its kerning; instances stay; parameters that name it (Link Metrics With Master, Get Hints From Master, Variable Font Origin) stay and the command's result names them in a warning; removing such a master in the reference app settles both.",
+  "An instance's manual interpolation weight for a removed master is dropped with it; removing a master an instance with manual interpolation uses in the reference app settles it.",
 ]
 observe = [
   "In font B (m7-two), remove Bold, then try to remove the last master: note what happens to the instances, the brace layer and the Link Metrics With Master parameter, and whether the last removal is refused.",
@@ -982,6 +985,9 @@ summary = "Sets the icon that represents a master in the UI: either one of 25 bu
 ref = "Font Info › Masters › General"
 status = "handbook"
 notes = "Documented, not yet observed. The built-in names are listed under fontInfo.masterIconPicker. An unknown icon name read from a file is kept and drawn as Regular. M7 plan § 4: M7.5."
+guesses = [
+  "A glyph icon is stored in the master's iconName, as a built-in icon is; the command refuses an icon name outside the 25 and a glyph the font lacks; the iconName the reference app saves after typing a glyph name in the picker settles the first part.",
+]
 
 [[panel]]
 id = "fontInfo.masterIconPicker"
