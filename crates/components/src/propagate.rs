@@ -35,7 +35,11 @@
 //!   on and is not an error (compile's preflight reports it).
 //! - A whole master ([`effective_anchors_for_master`]) never fails for one glyph: a glyph whose
 //!   anchors cannot be worked out keeps its own anchors and is listed in
-//!   [`MasterAnchors::failed`]. Each layer has its own work budget there.
+//!   [`MasterAnchors::failed`]. Each layer has its own work budget there, and the master has
+//!   [`MAX_MASTER_PROPAGATION_WORK`] for all its layers; past it, the glyphs not yet worked out
+//!   keep their own anchors and are listed as failed.
+//! - Nesting is measured as the longest chain of components below a layer, wherever the layer
+//!   is reached from, so a whole master gives every glyph the same result in any glyph order.
 //! - Propagated anchors are computed, never stored in the font.
 //! - [`AnchorCache`] keeps results across edits. An entry stays valid while the glyph's `Arc`
 //!   and the `Arc`s of every glyph it reaches through components are pointer-equal to those it
@@ -77,6 +81,10 @@ pub const PROPAGATE_ANCHORS_PARAM: &str = "Propagate Anchors";
 /// [`MAX_LAYER_COMPONENTS`] components of bases with [`MAX_LAYER_ANCHORS`] anchors each; this
 /// bounds the product.
 pub const MAX_PROPAGATION_WORK: usize = 20_000_000;
+
+/// Most anchors handled for a whole master ([`effective_anchors_for_master`]), all its layers
+/// together; each layer also keeps its own [`MAX_PROPAGATION_WORK`].
+pub const MAX_MASTER_PROPAGATION_WORK: usize = 100_000_000;
 
 /// Where an effective anchor comes from.
 #[derive(Clone, Debug, PartialEq)]
@@ -129,15 +137,27 @@ pub fn effective_anchors_for_master(font: &Font, master: &str) -> Result<MasterA
 
 /// [`effective_anchors_for_master`] with the glyph database to read categories from.
 pub fn effective_anchors_for_master_with(font: &Font, data: Option<&GlyphData>, master: &str) -> Result<MasterAnchors, ComponentsError> {
+    master_anchors(font, data, master, MAX_MASTER_PROPAGATION_WORK)
+}
+
+/// [`effective_anchors_for_master_with`] with `limit` steps for the whole master.
+pub(crate) fn master_anchors(font: &Font, data: Option<&GlyphData>, master: &str, limit: usize) -> Result<MasterAnchors, ComponentsError> {
     font.master(master)?;
     let mut run = Run::new(font, data);
     run.whole_master = true;
+    run.master_limit = limit;
     let mut anchors = HashMap::with_capacity(font.glyphs.len());
     for g in font.glyphs.iter() {
         let Some(layer) = g.layer(master) else { continue };
         let list = match run.anchors_of(g, layer, 0) {
-            Ok(list) => list.to_vec(),
+            Ok((list, _)) => list.to_vec(),
             Err(e) => {
+                // The glyph found too deep depends on which glyphs were worked out first; the
+                // glyph asked for does not.
+                let e = match e {
+                    ComponentsError::TooDeep { limit, .. } => ComponentsError::TooDeep { glyph: g.name.clone(), limit },
+                    e => e,
+                };
                 run.failed.push((g.name.clone(), e));
                 own_anchors(layer)
             }
@@ -228,13 +248,17 @@ struct Kind {
     ligature: bool,
 }
 
+/// A layer's effective anchors and its height: the longest chain of components followed below
+/// the layer.
+type Worked = (Arc<[EffectiveAnchor]>, usize);
+
 /// One propagation computation: memoised results per (glyph, layer id).
 struct Run<'a> {
     font: &'a Font,
     data: Option<&'a GlyphData>,
     enabled: bool,
-    memo: HashMap<(String, String), Arc<[EffectiveAnchor]>>,
-    counts: HashMap<(String, String), i64>,
+    memo: HashMap<(String, String), Worked>,
+    counts: HashMap<(String, String), (i64, usize)>,
     kinds: HashMap<String, Kind>,
     /// Glyphs whose layers are being worked out, outermost first (cycle detection).
     chain: Vec<String>,
@@ -245,6 +269,9 @@ struct Run<'a> {
     /// own anchors and is listed in `failed`.
     whole_master: bool,
     failed: Vec<(String, ComponentsError)>,
+    /// A whole-master run's steps so far, all layers together, and their limit.
+    master_work: usize,
+    master_limit: usize,
 }
 
 /// An anchor on its way through one component: its name now, its position, its name before the
@@ -271,6 +298,8 @@ impl<'a> Run<'a> {
             reached: None,
             whole_master: false,
             failed: Vec::new(),
+            master_work: 0,
+            master_limit: MAX_MASTER_PROPAGATION_WORK,
         }
     }
 
@@ -287,6 +316,12 @@ impl<'a> Run<'a> {
         if self.work > MAX_PROPAGATION_WORK {
             return Err(ComponentsError::LimitExceeded { what: "anchor propagation steps", limit: MAX_PROPAGATION_WORK });
         }
+        if self.whole_master {
+            self.master_work = self.master_work.saturating_add(n);
+            if self.master_work > self.master_limit {
+                return Err(ComponentsError::LimitExceeded { what: "anchor propagation steps on one master", limit: self.master_limit });
+            }
+        }
         Ok(())
     }
 
@@ -298,7 +333,7 @@ impl<'a> Run<'a> {
             .iter()
             .find(|l| l.id == layer)
             .ok_or_else(|| ComponentsError::MissingLayer { glyph: glyph.to_string(), layer: layer.to_string() })?;
-        self.anchors_of(g, l, 0)
+        self.anchors_of(g, l, 0).map(|(anchors, _)| anchors)
     }
 
     fn kind(&mut self, g: &Glyph) -> Kind {
@@ -321,11 +356,14 @@ impl<'a> Run<'a> {
         k
     }
 
-    /// The effective anchors of `layer` of `g`, memoised.
-    fn anchors_of(&mut self, g: &'a Glyph, layer: &'a Layer, depth: usize) -> Result<Arc<[EffectiveAnchor]>, ComponentsError> {
+    /// The effective anchors of `layer` of `g` and the layer's height, memoised.
+    fn anchors_of(&mut self, g: &'a Glyph, layer: &'a Layer, depth: usize) -> Result<Worked, ComponentsError> {
         let key = (g.name.clone(), layer.id.clone());
-        if let Some(found) = self.memo.get(&key) {
-            return Ok(found.clone());
+        if let Some((found, height)) = self.memo.get(&key) {
+            if depth.saturating_add(*height) > MAX_COMPONENT_DEPTH {
+                return Err(ComponentsError::TooDeep { glyph: g.name.clone(), limit: MAX_COMPONENT_DEPTH });
+            }
+            return Ok((found.clone(), *height));
         }
         if depth > MAX_COMPONENT_DEPTH {
             return Err(ComponentsError::TooDeep { glyph: g.name.clone(), limit: MAX_COMPONENT_DEPTH });
@@ -340,25 +378,26 @@ impl<'a> Run<'a> {
             self.work = outer_work;
         }
         self.chain.pop();
-        let anchors: Arc<[EffectiveAnchor]> = match result {
-            Ok(list) => list.into(),
+        let (anchors, height): Worked = match result {
+            Ok((list, height)) => (list.into(), height),
             // A cycle and nesting too deep depend on where the layer is reached from, so they
-            // fail the glyph asked for; every other failure belongs to this layer.
+            // fail the glyph asked for; every other failure belongs to this layer, which then
+            // reads no base.
             Err(e) if self.whole_master && !matches!(e, ComponentsError::Cycle(_) | ComponentsError::TooDeep { .. }) => {
                 self.failed.push((g.name.clone(), e));
-                own_anchors(layer).into()
+                (own_anchors(layer).into(), 0)
             }
             Err(e) => return Err(e),
         };
-        self.memo.insert(key, anchors.clone());
-        Ok(anchors)
+        self.memo.insert(key, (anchors.clone(), height));
+        Ok((anchors, height))
     }
 
-    fn compute(&mut self, g: &'a Glyph, layer: &'a Layer, depth: usize) -> Result<Vec<EffectiveAnchor>, ComponentsError> {
+    /// The layer's effective anchors and its height.
+    fn compute(&mut self, g: &'a Glyph, layer: &'a Layer, depth: usize) -> Result<(Vec<EffectiveAnchor>, usize), ComponentsError> {
         if layer.anchors.len() > MAX_LAYER_ANCHORS {
             return Err(ComponentsError::LimitExceeded { what: "anchors on one layer", limit: MAX_LAYER_ANCHORS });
         }
-        self.charge(layer.anchors.len())?;
         let own = || layer.anchors.iter().map(|a| own_anchor(a.name.clone(), a.x, a.y)).collect::<Vec<_>>();
         let comps: Vec<(usize, &'a Component)> =
             layer.shapes.iter().enumerate().filter_map(|(i, s)| if let Shape::Component(c) = s { Some((i, c)) } else { None }).collect();
@@ -366,25 +405,32 @@ impl<'a> Run<'a> {
             return Err(ComponentsError::LimitExceeded { what: "components on one layer", limit: MAX_LAYER_COMPONENTS });
         }
         if comps.is_empty() || !self.enabled {
-            return Ok(own());
+            return Ok((own(), 0));
         }
+        self.charge(layer.anchors.len())?;
         let kind = self.kind(g);
         if kind.mark && !layer.anchors.is_empty() {
-            return Ok(origin_adjusted(own()));
+            return Ok((origin_adjusted(own()), 0));
         }
         let own_under: HashSet<&str> = layer.anchors.iter().map(|a| a.name.as_str()).filter(|n| n.starts_with('_')).collect();
         let mut out = Ordered::default();
         let mut before: i64 = 0;
+        let mut height: usize = 0;
         for (i, &(shape, comp)) in comps.iter().enumerate() {
             let Some(base) = self.glyph(&comp.glyph) else { continue };
             let Some(base_layer) = base_layer(base, layer, comp) else { continue };
             let master = comp.info.master_id.as_deref().unwrap_or(&layer.master);
             let inherited = match self.smart_anchors(base, comp, master) {
                 Some(anchors) => anchors,
-                None => self.anchors_of(base, base_layer, depth + 1)?,
+                None => {
+                    let (anchors, below) = self.anchors_of(base, base_layer, depth + 1)?;
+                    height = height.max(below.saturating_add(1));
+                    anchors
+                }
             };
             self.charge(inherited.len())?;
-            let bases = self.base_count(base, base_layer, depth + 1)?;
+            let (bases, below) = self.base_count(base, base_layer, depth + 1)?;
+            height = height.max(below.saturating_add(1));
             let base_kind = self.kind(base);
             let moved = move_through(&g.name, comp, i, &inherited)?;
             let drop = opposite_names(if base_kind.mark { None } else { Some(base_layer.anchors.as_slice()) }, flips(&matrix(comp)));
@@ -417,7 +463,7 @@ impl<'a> Run<'a> {
         }
         let own_drop = opposite_names(Some(layer.anchors.as_slice()), (false, false));
         out.remove_where(|n| own_drop.contains(n));
-        Ok(out.into_vec())
+        Ok((out.into_vec(), height))
     }
 
     /// The anchors a smart component passes on: its base's pole layers' anchors interpolated at
@@ -431,44 +477,50 @@ impl<'a> Run<'a> {
         Some(anchors.into_iter().map(|a| own_anchor(a.name, a.x, a.y)).collect())
     }
 
-    /// How many ligature parts `g`'s layer counts as when it is a component of a ligature. See
-    /// the module doc's table and [`anchor_base_count`].
-    fn base_count(&mut self, g: &'a Glyph, layer: &'a Layer, depth: usize) -> Result<i64, ComponentsError> {
+    /// How many ligature parts `g`'s layer counts as when it is a component of a ligature, and
+    /// the height this count reads. See the module doc's table and [`anchor_base_count`].
+    fn base_count(&mut self, g: &'a Glyph, layer: &'a Layer, depth: usize) -> Result<(i64, usize), ComponentsError> {
         let key = (g.name.clone(), layer.id.clone());
-        if let Some(n) = self.counts.get(&key) {
-            return Ok(*n);
+        if let Some(&(n, height)) = self.counts.get(&key) {
+            if depth.saturating_add(height) > MAX_COMPONENT_DEPTH {
+                return Err(ComponentsError::TooDeep { glyph: g.name.clone(), limit: MAX_COMPONENT_DEPTH });
+            }
+            return Ok((n, height));
         }
         if depth > MAX_COMPONENT_DEPTH {
             return Err(ComponentsError::TooDeep { glyph: g.name.clone(), limit: MAX_COMPONENT_DEPTH });
         }
         let kind = self.kind(g);
         let has_components = layer.shapes.iter().any(|s| matches!(s, Shape::Component(_)));
-        let n = if !has_components {
+        let counted = if !has_components {
             if kind.mark {
-                0
+                (0, 0)
             } else {
                 let own: Vec<EffectiveAnchor> = layer.anchors.iter().map(|a| own_anchor(a.name.clone(), a.x, a.y)).collect();
-                anchor_base_count(&own, kind.ligature)
+                (anchor_base_count(&own, kind.ligature), 0)
             }
         } else if kind.mark && !layer.anchors.is_empty() {
-            0
+            (0, 0)
         } else {
             let mut sum: i64 = 0;
+            let mut height: usize = 0;
             for s in &layer.shapes {
                 let Shape::Component(c) = s else { continue };
                 let Some(base) = self.glyph(&c.glyph) else { continue };
                 let Some(bl) = base_layer(base, layer, c) else { continue };
-                sum = sum.saturating_add(self.base_count(base, bl, depth + 1)?);
+                let (n, below) = self.base_count(base, bl, depth + 1)?;
+                sum = sum.saturating_add(n);
+                height = height.max(below.saturating_add(1));
             }
             if sum > 0 {
-                sum
+                (sum, height)
             } else {
-                let anchors = self.anchors_of(g, layer, depth)?;
-                anchor_base_count(&anchors, kind.ligature)
+                let (anchors, own_height) = self.anchors_of(g, layer, depth)?;
+                (anchor_base_count(&anchors, kind.ligature), height.max(own_height))
             }
         };
-        self.counts.insert(key, n);
-        Ok(n)
+        self.counts.insert(key, counted);
+        Ok(counted)
     }
 }
 

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use fontcraft_model::plist::Value;
 use fontcraft_model::{Anchor, Component, Font, Glyph, GlyphTable, Layer, Param, Shape, Transform};
 
-use crate::propagate::{AnchorCache, AnchorSource, effective_anchors, effective_anchors_for_master, propagate_anchors_enabled};
+use crate::propagate::{AnchorCache, AnchorSource, effective_anchors, effective_anchors_for_master, master_anchors, propagate_anchors_enabled};
 use crate::{ComponentsError, MAX_COMPONENT_DEPTH};
 
 const M: &str = "m01";
@@ -426,4 +426,50 @@ fn smart_components_pass_on_anchors_interpolated_at_their_values() {
     assert_anchors(&f, "m_one", &[("connect", 315.634033, 1.0)]);
     assert_anchors(&f, "n", &[("_connect", 136.0, 0.0), ("connect", 290.0, 1.0)]);
     assert_anchors(&f, "_part.shoulder", &[("_connect", 136.0, 0.0), ("connect", 320.0, 1.0)]);
+}
+
+/// Past the master's work limit the glyphs not yet worked out keep their own anchors and are
+/// listed as failed.
+#[test]
+fn a_master_past_its_work_limit_keeps_the_rest_on_their_own_anchors() {
+    let f = with(vec![
+        letter("aacute", &[], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None)]),
+        letter("agrave", &[("ogonek", 9.0, 9.0)], &[("a", ID, None), ("gravecomb", at(150.0, 0.0), None)]),
+    ]);
+    let limit_hit = |limit| ComponentsError::LimitExceeded { what: "anchor propagation steps on one master", limit };
+    // aacute reads 3 anchors from a and 2 from acutecomb; agrave needs more.
+    let all = master_anchors(&f, None, M, 5).unwrap();
+    assert_eq!(all.failed, [("agrave".to_string(), limit_hit(5))]);
+    assert_eq!(all.anchors.get("aacute"), Some(&effective_anchors(&f, "aacute", M).unwrap()));
+    let names = |all: &crate::propagate::MasterAnchors, g: &str| all.anchors[g].iter().map(|a| (a.name.clone(), a.x, a.y)).collect::<Vec<_>>();
+    assert_eq!(names(&all, "agrave"), [("ogonek".to_string(), 9.0, 9.0)]);
+    let none = master_anchors(&f, None, M, 0).unwrap();
+    let failed: Vec<&str> = none.failed.iter().map(|(g, _)| g.as_str()).collect();
+    assert_eq!(failed, ["aacute", "agrave"], "glyphs without components need no work");
+    assert_eq!(names(&none, "a"), names(&all, "a"));
+}
+
+/// A chain of components longer than the nesting limit fails the same glyphs in any glyph order.
+#[test]
+fn nesting_past_the_limit_fails_the_same_glyphs_in_any_order() {
+    let chain: Vec<Glyph> = (0..MAX_COMPONENT_DEPTH + 4)
+        .map(|i| {
+            let base = if i == 0 { "a".to_string() } else { format!("chain{}", i - 1) };
+            letter(&format!("chain{i}"), &[], &[(&base, at(1.0, 0.0), None)])
+        })
+        .collect();
+    let run = |chain: Vec<Glyph>| {
+        let mut all = effective_anchors_for_master(&with(chain), M).unwrap();
+        all.failed.sort_by(|a, b| a.0.cmp(&b.0));
+        all
+    };
+    let forward = run(chain.clone());
+    let backward = run(chain.into_iter().rev().collect());
+    assert_eq!(forward, backward);
+    // chain{i} nests i + 1 deep.
+    let mut want: Vec<String> = (MAX_COMPONENT_DEPTH..MAX_COMPONENT_DEPTH + 4).map(|i| format!("chain{i}")).collect();
+    want.sort();
+    let failed: Vec<String> = forward.failed.iter().map(|(g, _)| g.clone()).collect();
+    assert_eq!(failed, want);
+    assert!(forward.failed.iter().all(|(g, e)| *e == ComponentsError::TooDeep { glyph: g.clone(), limit: MAX_COMPONENT_DEPTH }));
 }
