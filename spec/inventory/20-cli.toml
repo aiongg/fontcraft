@@ -802,6 +802,12 @@ milestone = "M12"
 summary = "Reports glyph metrics computed from the outlines: per glyph the identity, advance width and exact bounding box, optionally side bearings, the font-wide bounding box with the glyphs that set each edge, the kerning pair list, and shape statistics (area, centre of mass, slant). It can also write an AFM file."
 ref = "AFDKO tx -mtx / -afm help, spot hmtx and kern views; fontTools pens.statisticsPen, cffLib.width"
 status = "docs"
+notes = "Statistics are reported in font units (the statistics pen scales to the em first); the area is signed, negative for clockwise outer contours as in TrueType. Bounds checked against tx -mtx -1 and statistics against pens.statisticsPen on a font built with fontTools. Not yet: vertical side bearings, sources as input (compile first), re: items in glyph lists; --location needs the instancer (M12.20)."
+guesses = [
+  "The text form adds statistics, font-statistics and kerning sections in the same bracketed style as the glyph lines; a comparison with a future tx release or user feedback would settle the layout.",
+  "Glyph names come from post, then the CFF charset, then uniXXXX from the cmap, then glyphNNNNN, with #n added to repeats as fontTools does; tx's own fallback names (g1, g2) were not followed.",
+  "With several fonts on the command line the text forms print a '## FONT' line before each report.",
+]
 
 [[cli]]
 id = "convert"
