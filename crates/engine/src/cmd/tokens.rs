@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn expand_text_tokens_in_each_context() {
         let mut s = session();
-        let before = s.font().map(|f| f.clone()).ok();
+        let before = s.font().cloned().ok();
         let out = run(&mut s, json!({"text": "{{{familyName}}} {{{H:LSB}}} {{{H:width}}} {{{gap}}} {{{nonsense}}}"}));
         assert_eq!(out["text"], "Token Sans 60 600 {{{gap}}} {{{nonsense}}}");
         assert_eq!(out["unresolved"], json!(["gap", "nonsense"]));
@@ -126,7 +126,7 @@ mod tests {
         assert_eq!(out["text"], "{{{familyName}}} by {{{designer}}}");
 
         // A query: the font is the same object as before.
-        assert_eq!(s.font().map(|f| f.clone()).ok(), before);
+        assert_eq!(s.font().cloned().ok(), before);
     }
 
     #[test]

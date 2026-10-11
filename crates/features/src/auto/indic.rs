@@ -91,10 +91,10 @@ fn named(cx: &AutoContext, stem: &str, script: &Script) -> Option<String> {
 
 /// The full consonant of a conjunct part: `ka-S` for `k` or `ka`.
 fn consonant(cx: &AutoContext, part: &str, script: &Script) -> Option<String> {
-    if part.ends_with('a') {
-        if let Some(name) = named(cx, part, script) {
-            return Some(name);
-        }
+    if part.ends_with('a')
+        && let Some(name) = named(cx, part, script)
+    {
+        return Some(name);
     }
     named(cx, &format!("{part}a"), script)
 }

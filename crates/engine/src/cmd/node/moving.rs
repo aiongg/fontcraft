@@ -327,7 +327,7 @@ fn duplicate_in(parts: &mut LayerPartsMut, t: &Targets, points: &BTreeMap<usize,
     for name in &t.anchors {
         let Some(a) = parts.anchors.iter().find(|a| a.name == *name) else { continue };
         // The anchor rule: underscores appended until the name is free (`top_`).
-        let Some(fresh) = crate::cmd::anchor::unique_anchor_name(&parts.anchors, name) else { continue };
+        let Some(fresh) = crate::cmd::anchor::unique_anchor_name(parts.anchors, name) else { continue };
         let mut copy = a.clone();
         copy.name = fresh.clone();
         shift(&mut copy.x, &mut copy.y, d, step);

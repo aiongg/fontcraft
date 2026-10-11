@@ -981,7 +981,7 @@ mod tests {
         let before = s.doc().unwrap().font.clone();
         let out = run(&mut s, "glyph.createComposite", json!({"glyphs": ["Aacute"]}));
         assert_eq!(out["glyphs"][0]["components"], json!(["A", "acutecomb"]));
-        let names: Vec<String> = layer(&s, "Aacute").shapes.iter().filter_map(|s| component_at_ref(s)).collect();
+        let names: Vec<String> = layer(&s, "Aacute").shapes.iter().filter_map(component_at_ref).collect();
         assert_eq!(names, ["A", "acutecomb"]);
         assert_eq!(offset(&comp(&s, "Aacute", 1)), (300.0, 200.0), "the acute sits on A's top anchor");
         run(&mut s, "edit.undo", json!({}));

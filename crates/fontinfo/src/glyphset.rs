@@ -315,7 +315,7 @@ impl GlyphList {
 }
 
 /// One `left=right` line, both sides trimmed; `right` may be empty only when `empty_right`.
-fn assignment<'a>(line: &'a str, number: usize, empty_right: bool) -> Result<(&'a str, &'a str), PatternError> {
+fn assignment(line: &str, number: usize, empty_right: bool) -> Result<(&str, &str), PatternError> {
     if line.len() > crate::MAX_GLYPHSET_LINE_BYTES {
         return Err(PatternError::LimitExceeded { what: "bytes in one line", limit: crate::MAX_GLYPHSET_LINE_BYTES });
     }

@@ -1,6 +1,6 @@
 //! The engine's export stage: PreFilter, Filter, Scale to UPM and Export Folder parameters, as
 //! File › Export and `font.compile` run them (`engine/src/export_steps.rs`).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

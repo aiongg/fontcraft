@@ -43,7 +43,7 @@ fn font() -> Font {
     }
     let edit = |font: &mut Font, name: &str, f: &dyn Fn(&mut Glyph)| {
         let mut g = font.glyph_mut(name).unwrap();
-        f(&mut *g);
+        f(&mut g);
     };
     edit(&mut font, "A", &|g| {
         let nodes = vec![

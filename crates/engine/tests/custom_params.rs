@@ -1,7 +1,7 @@
 //! The custom-parameter commands: `font.customParameters.list`, `.describe`, `.add`, `.set`,
 //! `.remove`, the catalogue checks behind them, and precedence at export.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::sync::Arc;
 

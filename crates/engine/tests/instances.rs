@@ -1,7 +1,7 @@
 //! The export entry commands (`font.instance.*`) on fonts built in code: defaults, value checks,
 //! warnings, undo, and the order of entries leaving exported files alone.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

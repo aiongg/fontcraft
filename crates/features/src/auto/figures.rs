@@ -144,23 +144,23 @@ pub(super) fn figure_sets(cx: &AutoContext) -> Vec<FigureSet<'_>> {
 #[derive(Clone, Copy, Debug)]
 enum Change {
     /// Proportional to tabular (tnum).
-    ToTabular,
+    Tabular,
     /// Tabular to proportional (pnum).
-    ToProportional,
+    Proportional,
     /// Lining to oldstyle (onum).
-    ToOldstyle,
+    Oldstyle,
     /// Oldstyle to lining (lnum).
-    ToLining,
+    Lining,
 }
 
 impl Change {
     fn target(self, from: Style) -> Option<Style> {
         let (tabular, oldstyle) = (from.tabular(), from.oldstyle());
         match self {
-            Change::ToTabular if !tabular => Some(Style::from_parts(true, oldstyle)),
-            Change::ToProportional if tabular => Some(Style::from_parts(false, oldstyle)),
-            Change::ToOldstyle if !oldstyle => Some(Style::from_parts(tabular, true)),
-            Change::ToLining if oldstyle => Some(Style::from_parts(tabular, false)),
+            Change::Tabular if !tabular => Some(Style::from_parts(true, oldstyle)),
+            Change::Proportional if tabular => Some(Style::from_parts(false, oldstyle)),
+            Change::Oldstyle if !oldstyle => Some(Style::from_parts(tabular, true)),
+            Change::Lining if oldstyle => Some(Style::from_parts(tabular, false)),
             _ => None,
         }
     }
@@ -193,10 +193,10 @@ impl Generator for Figures {
     }
 }
 
-static ONUM: Figures = Figures { names: &["onum"], change: Change::ToOldstyle };
-static LNUM: Figures = Figures { names: &["lnum"], change: Change::ToLining };
-static TNUM: Figures = Figures { names: &["tnum"], change: Change::ToTabular };
-static PNUM: Figures = Figures { names: &["pnum"], change: Change::ToProportional };
+static ONUM: Figures = Figures { names: &["onum"], change: Change::Oldstyle };
+static LNUM: Figures = Figures { names: &["lnum"], change: Change::Lining };
+static TNUM: Figures = Figures { names: &["tnum"], change: Change::Tabular };
+static PNUM: Figures = Figures { names: &["pnum"], change: Change::Proportional };
 
 /// This module's generators.
 pub(super) fn generators() -> Vec<&'static dyn Generator> {

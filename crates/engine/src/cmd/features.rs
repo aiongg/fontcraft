@@ -364,7 +364,7 @@ fn auto_context(s: &Session, p: &Params) -> Result<AutoContext> {
 
 /// Some generator may write an entry named `name`.
 fn generatable(name: &str) -> bool {
-    auto::generators().iter().any(|g| g.names().iter().any(|n| *n == name))
+    auto::generators().iter().any(|g| g.names().contains(&name))
 }
 
 /// The entries of the active document's last compile that have errors, when it read the font

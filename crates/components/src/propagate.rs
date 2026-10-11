@@ -303,6 +303,9 @@ struct Moving {
     plain: String,
 }
 
+/// The anchors a smart component passes on, and the height of its pole layers.
+type SmartAnchors = (Option<Arc<[EffectiveAnchor]>>, usize);
+
 impl<'a> Run<'a> {
     fn new(font: &'a Font, data: Option<&'a GlyphData>) -> Self {
         Run {
@@ -494,14 +497,7 @@ impl<'a> Run<'a> {
     /// not a smart glyph, has one pole layer for `master` or cannot be interpolated; the base's
     /// layer then passes on its anchors as for any component. Fails when a pole layer's own
     /// propagation fails or the work budget runs out.
-    fn smart_anchors(
-        &mut self,
-        glyph: &str,
-        base: &'a Glyph,
-        comp: &Component,
-        master: &str,
-        depth: usize,
-    ) -> Result<(Option<Arc<[EffectiveAnchor]>>, usize), ComponentsError> {
+    fn smart_anchors(&mut self, glyph: &str, base: &'a Glyph, comp: &Component, master: &str, depth: usize) -> Result<SmartAnchors, ComponentsError> {
         if base.info.parts.is_empty() {
             return Ok((None, 0));
         }

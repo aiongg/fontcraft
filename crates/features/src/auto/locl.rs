@@ -90,10 +90,10 @@ fn built_in_sets(cx: &AutoContext) -> Vec<RuleSet> {
 
     // Turkish and related languages: the dotted i keeps its dot under capitalisation rules, so
     // the lowercase i becomes the explicitly dotted glyph.
-    if cx.has("i") {
-        if let Some(target) = first(cx, &["idotaccent", "i.TRK", "i.loclTRK"]) {
-            sets.extend(set("idotaccent", "latn", &["AZE", "CRT", "KAZ", "TAT", "TRK"], vec![format!("sub i by {target};")]));
-        }
+    if cx.has("i")
+        && let Some(target) = first(cx, &["idotaccent", "i.TRK", "i.loclTRK"])
+    {
+        sets.extend(set("idotaccent", "latn", &["AZE", "CRT", "KAZ", "TAT", "TRK"], vec![format!("sub i by {target};")]));
     }
 
     let pairs = [("Scedilla", "Scommaaccent"), ("scedilla", "scommaaccent"), ("Tcedilla", "Tcommaaccent"), ("tcedilla", "tcommaaccent")];
