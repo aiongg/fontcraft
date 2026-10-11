@@ -332,3 +332,69 @@ fn the_cache_reuses_results_until_a_reached_glyph_changes() {
     let after = cache.get(&f, "aacute", M).unwrap();
     assert_eq!(after.first().map(|a| (a.name.as_str(), a.y)), Some(("top", 800.0)));
 }
+
+/// The smart-components example font: `_part.shoulder` has two properties and three pole layers
+/// whose `connect` anchor moves with `shoulderWidth`. A component of it passes on its anchors
+/// interpolated at its values, not the master layer's. Expected values from glyphsLib on the
+/// same font, and on a copy with `m`'s second shoulder removed (`m_one`).
+#[test]
+fn smart_components_pass_on_anchors_interpolated_at_their_values() {
+    use fontcraft_model::{ComponentInfo, ComponentInfoBox, LayerAttrs, LayerInfo, LayerInfoBox, PartProperty, Path, SmartPole, SmartValue};
+    let property = |name: &str, bottom_value: f64, top_value: f64| PartProperty {
+        name: name.into(),
+        bottom_value,
+        top_value,
+        bottom_name: None,
+        top_name: None,
+        extra: Default::default(),
+    };
+    let mut shoulder = Glyph::new("_part.shoulder");
+    shoulder.info.parts = vec![property("shoulderWidth", 0.0, 100.0), property("crotchDepth", -100.0, 0.0)];
+    let poles = [
+        ("m01", None, 320.0, vec![("shoulderWidth", true), ("crotchDepth", true)]),
+        ("narrow", Some("NarrowShoulder"), 290.0, vec![("shoulderWidth", false)]),
+        ("low", Some("LowCrotch"), 320.0, vec![("crotchDepth", false)]),
+    ];
+    for (id, name, connect_x, ends) in poles {
+        let mut l = Layer::new(M, 600.0);
+        l.id = id.into();
+        l.anchors = vec![Anchor::new("_connect", 136.0, 0.0), Anchor::new("connect", connect_x, 1.0)];
+        l.shapes.push(Shape::Path(Path::rect(136.0, 0.0, connect_x + 40.0, 365.0)));
+        l.info = LayerInfoBox::new(LayerInfo {
+            name: name.map(str::to_string),
+            attrs: LayerAttrs { smart_poles: ends.into_iter().map(|(p, top)| SmartPole { property: p.into(), top }).collect(), ..Default::default() },
+            ..Default::default()
+        });
+        shoulder.layers.push(l);
+    }
+    let piece = |dx: f64, dy: f64, width: f64, crotch: f64| {
+        let mut c = Component::new("_part.shoulder", dx, dy);
+        c.info = ComponentInfoBox::new(ComponentInfo {
+            smart_values: vec![
+                SmartValue { property: "crotchDepth".into(), value: crotch },
+                SmartValue { property: "shoulderWidth".into(), value: width },
+            ],
+            ..Default::default()
+        });
+        Shape::Component(c)
+    };
+    let user = |name: &str, shapes: Vec<Shape>| {
+        let mut g = Glyph::new(name);
+        let mut l = Layer::new(M, 600.0);
+        l.shapes = shapes;
+        g.layers.push(l);
+        g
+    };
+    let stem = Shape::Component(Component::new("_part.stem", 0.0, 0.0));
+    let f = font(vec![
+        user("m", vec![stem.clone(), piece(17.0, 0.0, 28.78011, -44.28304), piece(180.0, 1.0, 0.0, -81.24796)]),
+        user("m_one", vec![stem, piece(17.0, 0.0, 28.78011, -44.28304)]),
+        user("n", vec![Shape::Path(Path::rect(26.0, 1.0, 193.0, 365.0)), piece(0.0, 0.0, 0.0, -100.0)]),
+        shoulder,
+        glyph("_part.stem", "Letter", "Lowercase", &[("connect", 153.0, 0.0)], &[]),
+    ]);
+    assert_anchors(&f, "m", &[("connect", 470.0, 2.0)]);
+    assert_anchors(&f, "m_one", &[("connect", 315.634033, 1.0)]);
+    assert_anchors(&f, "n", &[("_connect", 136.0, 0.0), ("connect", 290.0, 1.0)]);
+    assert_anchors(&f, "_part.shoulder", &[("_connect", 136.0, 0.0), ("connect", 320.0, 1.0)]);
+}

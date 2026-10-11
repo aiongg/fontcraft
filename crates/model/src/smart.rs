@@ -14,11 +14,14 @@
 //!
 //! [`crate::Font::outline`] draws a smart component through [`component_shapes`], so the editor,
 //! measurements and metrics see the interpolated outline; [`draw_smart_components`] rewrites a
-//! whole font the same way for export.
+//! whole font the same way for export. [`component_anchors`] places a smart component's anchors
+//! by the same interpolation, for anchor propagation.
+
+use std::collections::HashMap;
 
 use fontcraft_geom::variation::{VariationModel, normalize_value};
 
-use crate::{Component, Font, Glyph, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Shape, Transform};
+use crate::{Anchor, Component, Font, Glyph, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Shape, Transform};
 
 /// Most pole layers one smart glyph may have for one master.
 pub const MAX_SMART_POLE_LAYERS: usize = 64;
@@ -27,6 +30,8 @@ pub const MAX_SMART_POLE_LAYERS: usize = 64;
 pub const MAX_SMART_DRAWS_PER_LAYER: usize = 10_000;
 /// Most smart components drawn, nested ones included, for one font.
 pub const MAX_SMART_DRAWS: usize = 1_000_000;
+/// Most anchors on one pole layer that [`component_anchors`] interpolates.
+pub const MAX_SMART_ANCHORS: usize = 4096;
 
 /// What [`draw_smart_components`] did.
 #[derive(Debug, Default)]
@@ -158,46 +163,7 @@ impl<'a> Ctx<'a> {
         self.draws_left = self.draws_left.checked_sub(1).ok_or_else(|| {
             format!("too many smart components to draw (at most {MAX_SMART_DRAWS_PER_LAYER} for one glyph layer and {MAX_SMART_DRAWS} for the font)")
         })?;
-        // glyphsLib lists a glyph's master layers before its other layers.
-        let mut poles: Vec<&'a Layer> =
-            base.layers.iter().filter(|l| !l.info.attrs.smart_poles.is_empty() && (master.is_empty() || l.master == master)).collect();
-        poles.sort_by_key(|l| !l.is_master_layer());
-        let Some(&default) = poles.first() else {
-            return Err("the smart glyph has no pole layers for this master".into());
-        };
-        if poles.len() == 1 {
-            return Ok(None);
-        }
-        if poles.len() > MAX_SMART_POLE_LAYERS {
-            return Err(format!("the smart glyph has more than {MAX_SMART_POLE_LAYERS} pole layers for one master"));
-        }
-        let parts = &base.info.parts;
-        let pole = |l: &Layer, name: &str| l.info.attrs.smart_poles.iter().find(|p| p.property == name).map(|p| p.top);
-        let default_pole =
-            |name: &str| pole(default, name).ok_or_else(|| format!("the first pole layer does not say which end of `{name}` it draws"));
-        // Each pole layer's location: 0 where it draws the same end as the default, else −1 or 1.
-        let mut locations = Vec::with_capacity(poles.len());
-        for l in &poles {
-            let mut loc = vec![0.0; parts.len()];
-            for (slot, part) in loc.iter_mut().zip(parts.iter()) {
-                let Some(top) = pole(l, &part.name) else { continue };
-                *slot = match (default_pole(&part.name)?, top) {
-                    (a, b) if a == b => 0.0,
-                    (false, true) => 1.0,
-                    _ => -1.0,
-                };
-            }
-            locations.push(loc);
-        }
-        let model = VariationModel::new(&locations, true).map_err(|e| format!("its pole layers cannot be interpolated ({e})"))?;
-        let mut at = vec![0.0; parts.len()];
-        for (slot, part) in at.iter_mut().zip(parts.iter()) {
-            let Some(v) = c.info.smart_values.iter().find(|v| v.property == part.name) else { continue };
-            let default_value = if default_pole(&part.name)? { part.top_value } else { part.bottom_value };
-            *slot = normalize_value(v.value, part.bottom_value, default_value, part.top_value, true)
-                .filter(|v| v.is_finite())
-                .ok_or_else(|| format!("the range of `{}` runs from {} down to {}", part.name, part.bottom_value, part.top_value))?;
-        }
+        let Some(Interpolation { poles, model, at }) = interpolation(base, c, master)? else { return Ok(None) };
 
         // Nested smart components first; then the nodes of every path, in order.
         self.chain.push(&base.name);
@@ -243,6 +209,104 @@ impl<'a> Ctx<'a> {
         }
         Ok(Some(shapes))
     }
+}
+
+/// A smart component's pole layers for one master, default first, with the variation model
+/// over them and the component's location in it.
+struct Interpolation<'a> {
+    poles: Vec<&'a Layer>,
+    model: VariationModel,
+    at: Vec<f64>,
+}
+
+/// The interpolation of the smart component `c` of `base` in master `master`; `None` when the
+/// glyph has one pole layer there.
+fn interpolation<'a>(base: &'a Glyph, c: &Component, master: &str) -> Result<Option<Interpolation<'a>>, String> {
+    // glyphsLib lists a glyph's master layers before its other layers.
+    let mut poles: Vec<&'a Layer> =
+        base.layers.iter().filter(|l| !l.info.attrs.smart_poles.is_empty() && (master.is_empty() || l.master == master)).collect();
+    poles.sort_by_key(|l| !l.is_master_layer());
+    let Some(&default) = poles.first() else {
+        return Err("the smart glyph has no pole layers for this master".into());
+    };
+    if poles.len() == 1 {
+        return Ok(None);
+    }
+    if poles.len() > MAX_SMART_POLE_LAYERS {
+        return Err(format!("the smart glyph has more than {MAX_SMART_POLE_LAYERS} pole layers for one master"));
+    }
+    let parts = &base.info.parts;
+    let pole = |l: &Layer, name: &str| l.info.attrs.smart_poles.iter().find(|p| p.property == name).map(|p| p.top);
+    let default_pole = |name: &str| pole(default, name).ok_or_else(|| format!("the first pole layer does not say which end of `{name}` it draws"));
+    // Each pole layer's location: 0 where it draws the same end as the default, else −1 or 1.
+    let mut locations = Vec::with_capacity(poles.len());
+    for l in &poles {
+        let mut loc = vec![0.0; parts.len()];
+        for (slot, part) in loc.iter_mut().zip(parts.iter()) {
+            let Some(top) = pole(l, &part.name) else { continue };
+            *slot = match (default_pole(&part.name)?, top) {
+                (a, b) if a == b => 0.0,
+                (false, true) => 1.0,
+                _ => -1.0,
+            };
+        }
+        locations.push(loc);
+    }
+    let model = VariationModel::new(&locations, true).map_err(|e| format!("its pole layers cannot be interpolated ({e})"))?;
+    let mut at = vec![0.0; parts.len()];
+    for (slot, part) in at.iter_mut().zip(parts.iter()) {
+        let Some(v) = c.info.smart_values.iter().find(|v| v.property == part.name) else { continue };
+        let default_value = if default_pole(&part.name)? { part.top_value } else { part.bottom_value };
+        *slot = normalize_value(v.value, part.bottom_value, default_value, part.top_value, true)
+            .filter(|v| v.is_finite())
+            .ok_or_else(|| format!("the range of `{}` runs from {} down to {}", part.name, part.bottom_value, part.top_value))?;
+    }
+    Ok(Some(Interpolation { poles, model, at }))
+}
+
+/// The anchors of the smart component `c` in master `master`: the anchors of its glyph's first
+/// pole layer (the master layer when that is a pole layer), each placed by interpolating the
+/// pole layers' anchors of the same name at the component's values, as its outline is. The
+/// positions are in the smart glyph's coordinates; the component's transform is not applied.
+/// The pole layers' own anchors are read, not anchors their components would pass on.
+///
+/// `Ok(None)` when the glyph is not a smart glyph or has one pole layer for the master (its
+/// layer's anchors apply unchanged). An error when the pole layers cannot be interpolated, when
+/// a pole layer lacks an anchor the first one has, or when a pole layer has more than
+/// [`MAX_SMART_ANCHORS`] anchors.
+pub fn component_anchors(font: &Font, c: &Component, master: &str) -> Result<Option<Vec<Anchor>>, String> {
+    let Some(base) = font.glyphs.get(&c.glyph).filter(|g| !g.info.parts.is_empty()) else { return Ok(None) };
+    let Some(Interpolation { poles, model, at }) = interpolation(base, c, master)? else { return Ok(None) };
+    let Some(default) = poles.first() else { return Ok(None) };
+    if poles.iter().any(|l| l.anchors.len() > MAX_SMART_ANCHORS) {
+        return Err(format!("a pole layer has more than {MAX_SMART_ANCHORS} anchors"));
+    }
+    let mut coordinates = Vec::with_capacity(poles.len());
+    for l in &poles {
+        // The first anchor of a name, as in the default layer's own order.
+        let mut by_name: HashMap<&str, (f64, f64)> = HashMap::with_capacity(l.anchors.len());
+        for b in &l.anchors {
+            by_name.entry(b.name.as_str()).or_insert((b.x, b.y));
+        }
+        let mut row = Vec::with_capacity(default.anchors.len() * 2);
+        for a in &default.anchors {
+            let &(x, y) = by_name.get(a.name.as_str()).ok_or_else(|| format!("the pole layer `{}` has no anchor `{}`", layer_label(l), a.name))?;
+            row.extend([x, y]);
+        }
+        coordinates.push(row);
+    }
+    let values = model.interpolate(&at, &coordinates).map_err(|e| format!("its pole layers' anchors cannot be interpolated ({e})"))?;
+    let mut out = Vec::with_capacity(default.anchors.len());
+    for (a, xy) in default.anchors.iter().zip(values.chunks_exact(2)) {
+        let &[x, y] = xy else { continue };
+        if !(crate::in_range(x) && crate::in_range(y)) {
+            return Err("an interpolated anchor lies beyond the coordinate limit".into());
+        }
+        let mut moved = a.clone();
+        (moved.x, moved.y) = (x, y);
+        out.push(moved);
+    }
+    Ok(Some(out))
 }
 
 fn too_large() -> String {

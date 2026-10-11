@@ -22,6 +22,10 @@
 //!   its place, and an anchor removed and added again goes to the end.
 //! - Layer choice for a component's base: the base's layer with the same id, else the base's
 //!   master layer of the same master. A base without either passes nothing on.
+//! - A component of a smart glyph passes on the anchors of the glyph's pole layers for the
+//!   composite layer's master, interpolated at the component's values
+//!   ([`fontcraft_model::smart::component_anchors`]). With one pole layer, or pole layers that
+//!   cannot be interpolated, the base's layer is read as for any component.
 //! - When [`propagate_anchors_enabled`] is false the result is the layer's own anchors.
 //! - Errors: a cycle ([`ComponentsError::Cycle`]), nesting past [`MAX_COMPONENT_DEPTH`], more
 //!   than [`MAX_LAYER_ANCHORS`] anchors or [`MAX_LAYER_COMPONENTS`] components, a transform that
@@ -56,7 +60,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fontcraft_glyphdata::{Category, GlyphData, SubCategory};
-use fontcraft_model::{Anchor, Component, Font, FontInfo, Glyph, Layer, Shape, param_flag};
+use fontcraft_model::{Anchor, Component, Font, FontInfo, Glyph, Layer, Shape, param_flag, smart};
 
 use crate::{ComponentsError, MAX_ANCHOR_NAME_LEN, MAX_COMPONENT_DEPTH, MAX_LAYER_ANCHORS, MAX_LAYER_COMPONENTS};
 
@@ -336,7 +340,10 @@ impl<'a> Run<'a> {
         for (i, &(shape, comp)) in comps.iter().enumerate() {
             let Some(base) = self.glyph(&comp.glyph) else { continue };
             let Some(base_layer) = base_layer(base, layer) else { continue };
-            let inherited = self.anchors_of(base, base_layer, depth + 1)?;
+            let inherited = match self.smart_anchors(base, comp, &layer.master) {
+                Some(anchors) => anchors,
+                None => self.anchors_of(base, base_layer, depth + 1)?,
+            };
             self.charge(inherited.len())?;
             let bases = self.base_count(base, base_layer, depth + 1)?;
             let base_kind = self.kind(base);
@@ -372,6 +379,17 @@ impl<'a> Run<'a> {
         let own_drop = opposite_names(Some(layer.anchors.as_slice()), (false, false));
         out.remove_where(|n| own_drop.contains(n));
         Ok(out.into_vec())
+    }
+
+    /// The anchors a smart component passes on: its base's pole layers' anchors interpolated at
+    /// its values. `None` when `base` is not a smart glyph, has one pole layer for `master`, or
+    /// cannot be interpolated; the base's layer then passes on its anchors as for any component.
+    fn smart_anchors(&mut self, base: &Glyph, comp: &Component, master: &str) -> Option<Arc<[EffectiveAnchor]>> {
+        if base.info.parts.is_empty() {
+            return None;
+        }
+        let anchors = smart::component_anchors(self.font, comp, master).ok().flatten()?;
+        Some(anchors.into_iter().map(|a| own_anchor(a.name, a.x, a.y)).collect())
     }
 
     /// How many ligature parts `g`'s layer counts as when it is a component of a ligature. See
