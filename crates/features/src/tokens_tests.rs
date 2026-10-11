@@ -6,6 +6,7 @@ use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Anchor, Font, Layer, Master, NumberDef, Path, Shape};
 
 use super::{MAX_EXPRESSION_BYTES, MAX_TOKENS, TokenValue, evaluate, expand, token_ranges};
+use crate::source_map::EntryKind;
 use crate::{MasterValues, TargetValues};
 
 /// Sets `glyph`'s layer of `master`: its width, an optional rectangle (x0, y0, x1, y1) and its
@@ -45,7 +46,7 @@ fn font() -> Font {
 
 fn expanded(f: &Font, data: &GlyphData, master: &str, code: &str) -> String {
     let values = MasterValues::new(f, data, master).unwrap();
-    match expand(code, &values) {
+    match expand(code, &values, EntryKind::Feature) {
         Ok((text, _)) => text,
         Err(d) => panic!("`{code}` on {master}: {d:?}"),
     }
@@ -127,7 +128,7 @@ fn bad_tokens_are_errors_at_the_token() {
         ("@A = [$[name endswith \".sc\"\n;".into(), "$[name endswith \".sc\"\n", "not closed"),
     ];
     for (code, token, message) in &cases {
-        let errors = expand(code, &values).expect_err(code);
+        let errors = expand(code, &values, EntryKind::Feature).expect_err(code);
         assert_eq!(errors.len(), 1, "{code}: {errors:?}");
         let start = code.find(token).unwrap();
         assert_eq!(errors[0].span, start..start + token.len(), "{code}");
@@ -135,7 +136,7 @@ fn bad_tokens_are_errors_at_the_token() {
         assert!(errors[0].is_error());
     }
     // Every bad token is reported, not only the first.
-    let errors = expand("pos a $x; pos b ${y}; pos c $tracking;", &values).unwrap_err();
+    let errors = expand("pos a $x; pos b ${y}; pos c $tracking;", &values, EntryKind::Feature).unwrap_err();
     assert_eq!(errors.len(), 2);
 }
 
@@ -147,7 +148,7 @@ fn comments_and_strings_keep_their_dollar_signs() {
     assert_eq!(expanded(&f, &data, "m01", code), "# costs $5 and ${broken\nfeatureNames { name \"$ and $[\"; };\npos period 10; # $shift");
     // Code without tokens is returned as it is, with the identity map.
     let values = MasterValues::new(&f, &data, "m01").unwrap();
-    let (text, map) = expand("sub a by b;", &values).unwrap();
+    let (text, map) = expand("sub a by b;", &values, EntryKind::Feature).unwrap();
     assert_eq!(text, "sub a by b;");
     assert!(map.is_identity());
 }
@@ -158,7 +159,7 @@ fn the_offset_map_leads_back_to_the_stored_code() {
     let data = GlyphData::new().unwrap();
     let values = MasterValues::new(&f, &data, "m01").unwrap();
     let code = "pos @A <${tracking * 2} 0 $tracking 0>;\nsub x by y;";
-    let (text, map) = expand(code, &values).unwrap();
+    let (text, map) = expand(code, &values, EntryKind::Feature).unwrap();
     assert_eq!(text, "pos @A <20 0 10 0>;\nsub x by y;");
     assert_eq!(map.source_offset(text.find("sub").unwrap()), code.find("sub").unwrap());
     assert_eq!(map.source_offset(text.find(" 0 10").unwrap()), code.find(" 0 $tracking").unwrap());
@@ -171,20 +172,20 @@ fn hostile_tokens_are_refused_with_a_message() {
     let data = GlyphData::new().unwrap();
     let values = MasterValues::new(&f, &data, "m01").unwrap();
     let many = "$tracking ".repeat(MAX_TOKENS + 1);
-    let errors = expand(&many, &values).unwrap_err();
+    let errors = expand(&many, &values, EntryKind::Feature).unwrap_err();
     assert!(errors.iter().any(|e| e.message.contains("more than 100000 tokens")));
     assert_eq!(token_ranges(&many).len(), MAX_TOKENS);
 
     let deep = format!("${{{}tracking{}}}", "(".repeat(1_000), ")".repeat(1_000));
-    let errors = expand(&deep, &values).unwrap_err();
+    let errors = expand(&deep, &values, EntryKind::Feature).unwrap_err();
     assert!(errors[0].message.contains("nests more than"), "{}", errors[0].message);
     let signs = format!("${{{}1}}", "-".repeat(1_000));
-    assert!(expand(&signs, &values).unwrap_err()[0].message.contains("nests more than"));
+    assert!(expand(&signs, &values, EntryKind::Feature).unwrap_err()[0].message.contains("nests more than"));
 
     let long = format!("${{{}}}", "1+".repeat(MAX_EXPRESSION_BYTES) + "1");
-    assert!(expand(&long, &values).unwrap_err()[0].message.contains("longer than 4096 bytes"));
+    assert!(expand(&long, &values, EntryKind::Feature).unwrap_err()[0].message.contains("longer than 4096 bytes"));
     let unterminated = "${a:anchors.".repeat(10_000);
-    assert!(!expand(&unterminated, &values).unwrap_err().is_empty());
+    assert!(!expand(&unterminated, &values, EntryKind::Feature).unwrap_err().is_empty());
     assert!(evaluate(&long, &values).is_err());
 }
 

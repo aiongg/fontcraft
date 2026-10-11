@@ -27,7 +27,7 @@ use std::ops::Range;
 
 use fontcraft_fea::{Diagnostic, Severity};
 
-use crate::source_map::OffsetMap;
+use crate::source_map::{EntryKind, OffsetMap};
 use crate::target::GlyphMetric;
 use crate::{MAX_ENTRY_BYTES, TargetValues};
 
@@ -56,9 +56,10 @@ pub enum TokenValue {
     Glyphs(Vec<String>),
 }
 
-/// `code` with every token replaced by its value, and the map back to `code`. Diagnostics have
-/// no file; their spans are in `code` (the token's range).
-pub fn expand(code: &str, values: &dyn TargetValues) -> Result<(String, OffsetMap), Vec<Diagnostic>> {
+/// `code`, the stored code of an entry of `kind`, with every token replaced by its value, and
+/// the map back to `code`. Diagnostics have no file; their spans are in `code` (the token's
+/// range).
+pub fn expand(code: &str, values: &dyn TargetValues, kind: EntryKind) -> Result<(String, OffsetMap), Vec<Diagnostic>> {
     if code.len() > MAX_ENTRY_BYTES {
         return Err(vec![error(0..0, format!("the feature code is longer than {MAX_ENTRY_BYTES} bytes"))]);
     }
@@ -71,7 +72,7 @@ pub fn expand(code: &str, values: &dyn TargetValues) -> Result<(String, OffsetMa
     if let Some(at) = scanned.beyond {
         errors.push(error(at..at.saturating_add(1), format!("the code has more than {MAX_TOKENS} tokens")));
     }
-    let mut evaluator = Evaluator::new(values);
+    let mut evaluator = Evaluator::new(values, Some(kind));
     let mut out = String::with_capacity(code.len());
     let mut map = OffsetMap::identity();
     let mut copied = 0;
@@ -127,7 +128,7 @@ pub fn evaluate(token: &str, values: &dyn TargetValues) -> Result<TokenValue, St
     if one.range != (0..text.len()) {
         return Err(format!("`{text}` is not one token"));
     }
-    let mut evaluator = Evaluator::new(values);
+    let mut evaluator = Evaluator::new(values, None);
     match &one.body {
         Body::Predicate(inner) => evaluator.predicate(text, inner.clone()).map(TokenValue::Glyphs),
         _ => evaluator.number(text, one).map(TokenValue::Number),
@@ -234,6 +235,16 @@ fn scan_token(code: &str, start: usize) -> Token {
             stop => Token { range: start..stop.unwrap_or(b.len()), body: Body::Broken("the token is not closed with `}`") },
         },
         Some(b'[') => {
+            if let Some(len) = crate::tokens_predicate::token_len(code, start) {
+                let end = start.saturating_add(len);
+                let body = if len.saturating_sub(3) > MAX_EXPRESSION_BYTES {
+                    Body::Broken("the token's predicate is longer than 4096 bytes")
+                } else {
+                    Body::Predicate(inner..end.saturating_sub(1))
+                };
+                return Token { range: start..end, body };
+            }
+            // Not closed: the token ends where the statement does.
             let mut quote = None;
             let mut j = inner;
             let stop = loop {
@@ -283,17 +294,23 @@ struct Evaluator<'v> {
     predicates: HashMap<String, Result<String, String>>,
     /// Glyph tests spent on predicates ([`MAX_PREDICATE_WORK`]).
     work: usize,
+    /// The kind of entry the code is from, for where predicate tokens may stand; `None` for a
+    /// token evaluated on its own.
+    kind: Option<EntryKind>,
 }
 
 impl<'v> Evaluator<'v> {
-    fn new(values: &'v dyn TargetValues) -> Self {
-        Self { values, predicates: HashMap::new(), work: 0 }
+    fn new(values: &'v dyn TargetValues, kind: Option<EntryKind>) -> Self {
+        Self { values, predicates: HashMap::new(), work: 0, kind }
     }
 
     /// The text `token` of `code` is replaced by.
     fn text(&mut self, code: &str, token: &Token) -> Result<String, String> {
         match &token.body {
             Body::Predicate(inner) => {
+                if let Some(kind) = self.kind {
+                    crate::tokens_predicate::check_placement(code, token.range.start, kind)?;
+                }
                 let key = code.get(inner.clone()).unwrap_or_default().trim();
                 if let Some(done) = self.predicates.get(key) {
                     return done.clone();

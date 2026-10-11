@@ -156,7 +156,7 @@ fn run_passes(
     target: &Target,
     values: &dyn TargetValues,
 ) -> Result<(String, OffsetMap), (Vec<Diagnostic>, OffsetMap)> {
-    let (expanded, tokens_map) = crate::tokens::expand(&entry.code, values).map_err(|d| (non_empty(d), OffsetMap::identity()))?;
+    let (expanded, tokens_map) = crate::tokens::expand(&entry.code, values, kind).map_err(|d| (non_empty(d), OffsetMap::identity()))?;
     let (wrapped, wrapped_map) = wrap(kind, entry, &expanded, &tokens_map);
     let (lowered, lower_map) = crate::lower::lower(&wrapped, target.is_variable()).map_err(|d| (non_empty(d), wrapped_map.clone()))?;
     let map = OffsetMap::compose(&wrapped_map, &lower_map);

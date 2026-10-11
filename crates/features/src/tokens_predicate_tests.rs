@@ -180,3 +180,24 @@ fn predicate_tokens_stand_inside_class_brackets_in_code() {
     assert_eq!(token_len(code, 0), None);
     assert_eq!(token_len("$[name == 'a'", 0), None);
 }
+
+#[test]
+fn expansion_places_predicate_tokens_and_joins_the_names_with_spaces() {
+    let (font, data) = (oracle_font(), GlyphData::new().unwrap());
+    let values = MasterValues::new(&font, &data, &font.masters[0].id).unwrap();
+    let lower = select(&font, &data, "case == lower").unwrap();
+    assert!(lower.len() > 1);
+    // A `]` in quoted text does not close the token.
+    let code = "sub [$[case == lower AND name matches \"[a-z].*\"]] by x;";
+    let (text, _) = crate::tokens::expand(code, &values, EntryKind::Feature).unwrap();
+    let names = select(&font, &data, "case == lower AND name matches \"[a-z].*\"").unwrap();
+    assert_eq!(text, format!("sub [{}] by x;", names.join(" ")));
+    // Outside class brackets in feature code the token is refused at its place.
+    let code = "sub $[case == lower] by x;";
+    let errors = crate::tokens::expand(code, &values, EntryKind::Feature).unwrap_err();
+    assert_eq!(errors[0].span, 4..code.find(" by").unwrap());
+    assert!(errors[0].message.contains("inside class brackets"), "{}", errors[0].message);
+    // A class entry's code is a member list: no brackets needed.
+    let (text, _) = crate::tokens::expand("$[case == lower]", &values, EntryKind::Class).unwrap();
+    assert_eq!(text, lower.join(" "));
+}
