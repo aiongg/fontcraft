@@ -1322,6 +1322,8 @@ milestone = "M12"
 summary = "A name record contains a line break. The fix replaces line breaks with spaces."
 ref = "fontbakery googlefonts/name/line_breaks"
 status = "docs"
+notes = "Carriage returns count as line breaks too; the reference check looks for line feeds only."
+guesses = ["We treat a carriage return as a line break as well as a line feed; a FontBakery run on a name with a lone carriage return would show whether the verdicts differ on purpose."]
 
 [[check]]
 id = "check.names.postScriptNameCharacters"
@@ -1344,6 +1346,7 @@ milestone = "M12"
 summary = "The PostScript name records differ between platforms or languages, or differ from the font name stored in the CFF table. The fix writes the Windows English value everywhere."
 ref = "fontbakery opentype/name/postscript_name_consistency; fontbakery opentype/name/postscript_vs_cff; comparefamily single-face test 5"
 status = "docs"
+notes = "The comparison between platforms runs on CFF fonts too; there every disagreement also differs from the CFF font name, so the verdict is the same as the reference's."
 
 [[check]]
 id = "check.names.fullNameStartsWithFamily"
@@ -1377,6 +1380,7 @@ milestone = "M12"
 summary = "The family name (ID 1, with a trailing Regular/Bold/Italic/Bold Italic removed), or for variable fonts the family name plus any combination of non-elidable STAT style names, or a named instance, is longer than 31 characters. Longer names are truncated or cause fallback fonts in Windows GDI applications."
 ref = "fontbakery name/family_and_style_max_length; fontbakery name_length_req; fontbakery instances_name_length_req; fontbakery glyphs_file/name/family_and_style_max_length"
 status = "docs"
+notes = "With fvar and STAT, the check measures the family name plus the longest non-elidable style name of each axis (Regular and Italic left out) and reports that one combination. Without STAT it measures every named instance against each platform's family name. The STAT name resolution of instances_name_length_req is not ported."
 
 [[check]]
 id = "check.names.menuNameLimits"
@@ -1388,6 +1392,7 @@ milestone = "M12"
 summary = "A menu name breaks the hard limits of old systems: one of IDs 1, 2, 4, 16, 17 or 18 is longer than 63 characters, the Mac compatible full name (ID 18) is not unique among the family's fonts within its first 31 characters, or the full name (ID 4) is not unique within a typographic family."
 ref = "comparefamily single-face test 1; comparefamily single-face test 2"
 status = "docs"
+notes = "The binary check reports the 63-character limits. The two uniqueness rules need several fonts: full names that repeat are check.family.duplicateFullNames; the rule that name ID 18 is unique within its first 31 characters is not built yet."
 
 [[check]]
 id = "check.names.versionString"
@@ -1399,6 +1404,8 @@ milestone = "M12"
 summary = "The version cannot be read from name ID 5, or it differs from head.fontRevision by more than rounding (a tiny difference warns). Stricter house rules: the string starts with 'Version ' followed by digits with three decimals, is above 1.000, and does not contain the word Development. The fix rewrites ID 5 from head.fontRevision."
 ref = "fontbakery opentype/font_version; comparefamily single-face test 4; fontbakery googlefonts/name/version_format; fontbakery microsoft/version"
 status = "docs"
+notes = "The comparison with head.fontRevision follows FontBakery exactly (fail beyond 1/2000, warn beyond 1/65536). The house rules use comparefamily test 4's pattern on the Windows English record."
+guesses = ["The house-rule messages (Version prefix, three decimals, above 1.000, the word Development) are informational by default, so the opentype verdict equals FontBakery's opentype/font_version; a profile can raise them. Comparing verdicts on corpus fonts with short version strings would show whether that suits users."]
 
 [[check]]
 id = "check.names.italicNames"
@@ -1421,6 +1428,8 @@ milestone = "M12"
 summary = "The Windows subfamily name (ID 2) is not the one the bold and italic bits call for: Regular, Bold, Italic or Bold Italic. Any other style word belongs in the family name (ID 1) or in IDs 16/17. The fix rewrites ID 2 from the bits."
 ref = "comparefamily single-face test 8; fontbakery microsoft/office_ribz_req; fontbakery fontwerk/style_linking"
 status = "docs"
+notes = "The bold and italic bits are those of OS/2 fsSelection, or of head.macStyle when the font has no OS/2 table; comparefamily reads macStyle. check.tables.fsSelection reports fonts where the two disagree."
+guesses = ["We read the style bits from OS/2 fsSelection rather than head.macStyle; a comparefamily run on a font whose two bit sets disagree would show the difference."]
 observe = ["Style font (instances Light, Regular, Semibold and Bold, each with an Italic): link Semibold as the bold of Light, export, and note whether name ID 2 of Semibold and its fsSelection bold bit agree."]
 
 [[check]]
@@ -1444,6 +1453,8 @@ milestone = "M12"
 summary = "For fonts that deliberately keep Macintosh name records: one of the Mac records for IDs 1, 2, 4, 6 (errors) or 0, 5, 7, 14 (warnings) is missing. The opposite policy of check.names.noMacRecords; only one of the two is active in a profile."
 ref = "comparefamily name-table loader (Mac platform records)"
 status = "docs"
+notes = "Runs only when the project sets keepMacNames (precondition). It then reports every missing Mac record, also in a font that has none."
+guesses = ["With keepMacNames set, a font with no Macintosh records at all gets every missing record reported, where comparefamily checks Mac records only when the font has some; the project setting says the records are wanted."]
 
 [[check]]
 id = "check.names.copyrightInDescription"
@@ -1466,6 +1477,8 @@ milestone = "M12"
 summary = "Copyright or trademark is absent, the copyright mentions a patent number, the designer note (ID 9) or foundry URL (ID 11) is missing, or URL and OS/2 vendor ID differ from the configured house values (`defaultUrl`, `vendorId`; skipped when unset)."
 ref = "comparefamily single-face test 6 (CF_DEFAULT_URL, CF_DEFAULT_FOUNDRY_CODE)"
 status = "docs"
+notes = "Windows English records are always checked, Macintosh ones only when the font has Mac records; comparefamily asks for Mac records in every font. The comparisons with the house URL and vendor id (defaultUrl, vendorId) wait for project values to reach binary checks; until then they are not made. Missing copyright and trademark are warnings, as in comparefamily."
+guesses = ["We ask for Macintosh designer-note and URL records only in fonts that keep Mac records, since check.names.noMacRecords asks for none; a comparefamily run on a font without Mac records shows the reference's stricter rule."]
 
 [[check]]
 id = "check.names.familyNameStartsWithDigit"
