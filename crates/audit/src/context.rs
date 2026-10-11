@@ -47,6 +47,31 @@ impl SourceMap {
     }
 }
 
+/// The file a compiled font was read from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FontFile {
+    /// The path as the run was given it.
+    pub path: String,
+    /// The file's size in bytes, before any WOFF unwrapping.
+    pub size: u64,
+}
+
+impl FontFile {
+    /// The file name: the path after its last slash or backslash.
+    pub fn name(&self) -> &str {
+        self.path.rsplit(['/', '\\']).next().unwrap_or(&self.path)
+    }
+
+    /// The directory: the path before its last slash or backslash, or `.` when it has none.
+    pub fn directory(&self) -> &str {
+        match self.path.rfind(['/', '\\']) {
+            Some(0) => "/",
+            Some(i) => self.path.get(..i).unwrap_or("."),
+            None => ".",
+        }
+    }
+}
+
 /// One compiled font.
 pub struct BinaryCtx<'a> {
     /// The font's id in the result document (`f0`, `f1`…).
@@ -56,6 +81,8 @@ pub struct BinaryCtx<'a> {
     pub font: FontRef<'a>,
     /// Set when the font was compiled from a source in this run.
     pub source: Option<&'a SourceMap>,
+    /// Set when the font was read from a file; `None` for a font compiled in memory.
+    pub file: Option<FontFile>,
     pub services: &'a dyn AuditServices,
 }
 
@@ -64,7 +91,13 @@ impl<'a> BinaryCtx<'a> {
     /// directory.
     pub fn new(id: &'a str, bytes: &'a [u8], face: u32, services: &'a dyn AuditServices) -> Result<Self, String> {
         let font = FontRef::from_index(bytes, face).map_err(|e| format!("cannot read the font: {e}"))?;
-        Ok(Self { id, bytes, font, source: None, services })
+        Ok(Self { id, bytes, font, source: None, file: None, services })
+    }
+
+    /// Records the file the font was read from.
+    pub fn with_file(mut self, path: impl Into<String>, size: u64) -> Self {
+        self.file = Some(FontFile { path: path.into(), size });
+        self
     }
 }
 

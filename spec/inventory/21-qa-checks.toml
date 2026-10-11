@@ -3074,6 +3074,7 @@ milestone = "M12"
 summary = "The file's sfnt version tag does not match its outlines: 0x00010000 for TrueType outlines, OTTO for CFF and CFF2. The fix rewrites the header."
 ref = "fontbakery sfnt_version"
 status = "docs"
+notes = "Follows FontBakery's sfnt_version: a font with a 'glyf' table needs 0x00010000 even when it also has CFF data. The fix runs tables.recalculate."
 
 [[check]]
 id = "check.files.fileSize"
@@ -3085,6 +3086,10 @@ milestone = "M12"
 summary = "The font file is larger than `warnSize` (default 1 MB) or, as a failure, larger than `failSize` (default 9 MB)."
 ref = "fontbakery file_size"
 status = "docs"
+notes = "The limits are FontBakery's, 1 MiB and 9 MiB, as the thresholds warnSize and failSize. The size is the file's size on disk; a font compiled in memory is measured by its sfnt bytes."
+guesses = [
+  "A font compiled in memory is measured by its uncompressed sfnt bytes, so a WOFF2 export can warn here and pass in FontBakery; measuring the compressed output would settle it.",
+]
 
 [[check]]
 id = "check.files.singleDirectory"
@@ -3096,6 +3101,7 @@ milestone = "M12"
 summary = "The files given as one family lie in more than one directory, so they may not belong together."
 ref = "fontbakery family/single_directory"
 status = "docs"
+notes = "Compares the directories of the files given as one family, as FontBakery does; fonts compiled in memory have no directory and the check skips."
 
 [[check]]
 id = "check.files.sanitiser"
@@ -3107,6 +3113,10 @@ milestone = "M12"
 summary = "The font is rejected by a browser-style table sanitiser (structural errors that make browsers refuse the file); sanitiser warnings are passed on as warnings. FontCraft needs its own strict parse pass for this."
 ref = "fontbakery ots"
 status = "docs"
+notes = "Our own strict pass: the sfnt version, the table directory (search fields, order, duplicates, bounds, 4-byte alignment, overlaps), the tables every font needs and an outline table, then every table FontCraft reads (head magic, hhea, maxp, hmtx, OS/2, post, name records, cmap subtables, CFF, CFF2, GDEF, GSUB and GPOS lists and lookups, fvar, avar, gvar, HVAR, STAT) and every 'glyf' glyph. An external sanitiser's errors and warnings are added when one is installed and the run asks for it (AuditServices::run_external)."
+guesses = [
+  "Unsorted, duplicated, misaligned, overlapping and out-of-bounds tables are failures and wrong search fields a warning, as we read the sanitiser's published behaviour; running the sanitiser on fonts built with each fault would settle it.",
+]
 
 [[check]]
 id = "check.files.roundTrip"
@@ -3118,6 +3128,10 @@ milestone = "M12"
 summary = "Decompiling every table to the text dump and compiling the dump again fails, which exposes structurally broken tables."
 ref = "fontbakery ttx_roundtrip"
 status = "docs"
+notes = "Runs the TTX round trip service (AuditServices::ttx_round_trip) and skips without it. Only a dump or read that fails is reported, as in FontBakery."
+guesses = [
+  "A table that reads back with different bytes is not reported, because FontBakery reports only errors of the dump and the read; comparing verdicts on the corpus would settle it.",
+]
 
 [[check]]
 id = "check.files.rasterises"
@@ -3129,6 +3143,10 @@ milestone = "M12"
 summary = "Rasterising every glyph at a test size raises an error or crashes the rasteriser."
 ref = "fontbakery freetype_rasterizer"
 status = "docs"
+notes = "Draws every glyph with skrifa at ppem pixels per em (default 48, FontBakery's size), unhinted and, when the font has 'fpgm', 'prep' or CFF hints, hinted with the font's own programs, not pedantically."
+guesses = [
+  "Every glyph is drawn, where FontBakery loads one character with FreeType, so this check can fail where FontBakery passes; the verdict measure on the corpus would show how often.",
+]
 
 [[check]]
 id = "check.files.externalValidator"
@@ -3140,6 +3158,10 @@ milestone = "M12"
 summary = "Passes on the findings of an external validator when one is installed and configured (`validatorPath`), mapped to our severities and filtered through the known-false-positive list."
 ref = "fontbakery fontvalidator; afdko docs/MSFontValidatorIssues.md"
 status = "docs"
+notes = "Runs only when the project sets validatorPath and the engine provides the validator (AuditServices::run_external); otherwise skipped. The validator's errors and warnings are warnings here, anything milder information. Known false positives are dropped by a word list in checks/files.rs until audit.validatorKnownIssues supplies the list."
+guesses = [
+  "The known-issue filter matches words of the message, not validator message ids, because the public notes give no ids; the validator's output on a corpus font would settle it.",
+]
 
 [[check]]
 id = "check.files.canonicalFileName"
@@ -3151,6 +3173,11 @@ milestone = "M12"
 summary = "The file name is not built from the names inside the font: Family-Style.ext for static fonts, Family[axis tags in alphabetical order].ext for variable ones."
 ref = "fontbakery googlefonts/canonical_filename"
 status = "docs"
+notes = "After FontBakery's googlefonts/canonical_filename, which builds the name with axisregistry's build_filename. Fonts not read from a file skip."
+guesses = [
+  "The family comes from name ID 16, else 1, and the style from ID 17, else 2, with spaces removed, and an empty style counts as Regular; axisregistry's build_filename would settle it.",
+  "A .woff or .woff2 file keeps its extension; any other file is expected to end in .otf for CFF outlines and .ttf otherwise.",
+]
 
 [[check]]
 id = "check.files.auditorVersion"
@@ -3178,6 +3205,7 @@ milestone = "M12"
 summary = "A designspace document cannot be parsed, lists no sources, or lists sources that cannot be opened."
 ref = "fontbakery designspace_has_sources"
 status = "docs"
+notes = "A designspace in the model with no masters lists no sources. Parse errors and sources that cannot be opened come from reading the files again (AuditServices::check_source_files); without that service the check skips."
 
 [[check]]
 id = "check.sources.defaultMaster"
@@ -3189,6 +3217,7 @@ milestone = "M12"
 summary = "No source sits at the default location of every axis, so there is no default master."
 ref = "fontbakery designspace_has_default_master"
 status = "docs"
+notes = "Each axis's default in user coordinates goes through the axis map to design coordinates; a master within 0.001 design units of every default is the default master. Sources from the reference app always pass: their axis defaults derive from the origin master."
 
 [[check]]
 id = "check.sources.consistentGlyphSet"
@@ -3200,6 +3229,10 @@ milestone = "M12"
 summary = "A non-default master contains glyphs that the default master lacks."
 ref = "fontbakery designspace_has_consistent_glyphset"
 status = "docs"
+notes = "The default master is the designspace's default source, else the origin master. A glyph with a master layer for another master but none for the default master is reported."
+guesses = [
+  "The check runs on every source with several masters, not only on designspace documents as in FontBakery; for .glyphs sources it can repeat a missing-glyph finding of the variations checks.",
+]
 
 [[check]]
 id = "check.sources.consistentCodepoints"
@@ -3211,6 +3244,7 @@ milestone = "M12"
 summary = "A glyph has different codepoints in different masters. The fix copies the default master's codepoints."
 ref = "fontbakery designspace_has_consistent_codepoints"
 status = "docs"
+notes = "Reads the code points the designspace reader keeps on a master layer where that master's file differs from the default source; they count only while the glyph's code points are still the ones read."
 
 [[check]]
 id = "check.sources.ufoStructure"
@@ -3222,6 +3256,7 @@ milestone = "M12"
 summary = "A UFO fails structural validation: missing or malformed property lists, layer contents that do not match the files on disk, or invalid glyph files."
 ref = "fontbakery ufolint"
 status = "docs"
+notes = "Applies to UFO and designspace sources. The validation is the engine's strict re-reading of the files (AuditServices::check_source_files); without it the check skips."
 
 [[check]]
 id = "check.sources.requiredInfoFields"
@@ -3233,6 +3268,10 @@ milestone = "M12"
 summary = "A font-info value the compiler cannot work without is unset: unitsPerEm, ascender, descender, xHeight, capHeight or familyName."
 ref = "fontbakery ufo_required_fields"
 status = "docs"
+notes = "The model's terms: units per em, the family name, and each master's ascender, descender, x-height and cap height metric values."
+guesses = [
+  "A master's metric counts as unset only when its value list ends before it; a value stated as 0 between others cannot be told from an unset one.",
+]
 
 [[check]]
 id = "check.sources.recommendedInfoFields"
@@ -3244,6 +3283,10 @@ milestone = "M12"
 summary = "A font-info value every release font should set is unset: underline thickness and position, major and minor version, style name, copyright or PANOSE."
 ref = "fontbakery ufo_recommended_fields"
 status = "docs"
+notes = "The model's terms: the copyright property, each master's name as its style name, and a panose parameter on the font or the master."
+guesses = [
+  "Underline thickness and position and the version are never reported: the model gives them the reference's defaults, so they always have a value.",
+]
 
 [[check]]
 id = "check.sources.unnecessaryInfoFields"
@@ -3255,6 +3298,10 @@ milestone = "M12"
 summary = "The font info sets values the compiler generates itself or that are obsolete: openTypeNameUniqueID, openTypeNameVersion, postscriptUniqueID or year. The fix clears them."
 ref = "fontbakery ufo_unnecessary_fields"
 status = "docs"
+notes = "Looks for the properties uniqueID and versionString and the parameters openTypeNameUniqueID, openTypeNameVersion, postscriptUniqueID, year, uniqueID and versionString, on the font and on each master. Report-only until a Font Info command clears them."
+guesses = [
+  "versionString and uniqueID are reported in .glyphs sources too, since they compile to the same name records as the UFO keys FontBakery names.",
+]
 
 # ---------------------------------------------------------------------------
 # color: Colour
