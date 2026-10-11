@@ -47,8 +47,27 @@ fn inter_timings() {
     let t = Instant::now();
     next.check_changed(&font).unwrap();
     let check_changed = t.elapsed();
+    // The out-of-sync cache: the first full scan, then the update after a width edit to `n`
+    // (which many metrics keys read) and after a rename of `a`.
+    let mut font = std::sync::Arc::new(font);
+    let mut cache = fontcraft_spacing::SyncCache::default();
+    let t = Instant::now();
+    cache.update(&font);
+    let sync_first = t.elapsed();
+    std::sync::Arc::make_mut(&mut font).glyph_mut("n").unwrap().layers[0].width += 10.0;
+    let computed = cache.computed();
+    let t = Instant::now();
+    cache.update(&font);
+    let sync_width = t.elapsed();
+    let width_glyphs = cache.computed() - computed;
+    fontcraft_model::rename_glyphs(std::sync::Arc::make_mut(&mut font), &[("a".into(), "a.renamed".into())]).unwrap();
+    let computed = cache.computed();
+    let t = Instant::now();
+    cache.update(&font);
+    let sync_rename = t.elapsed();
+    let rename_glyphs = cache.computed() - computed;
     println!(
-        "Inter Roman: {} glyphs, {} masters, {} files, {:.1} MB\n  disk {disk:?}, read {read:?}, write {write:?}\n  snapshot + one-glyph edit {edit:?}, full check {check:?}, check after the edit {check_changed:?}",
+        "Inter Roman: {} glyphs, {} masters, {} files, {:.1} MB\n  disk {disk:?}, read {read:?}, write {write:?}\n  snapshot + one-glyph edit {edit:?}, full check {check:?}, check after the edit {check_changed:?}\n  sync cache: first update {sync_first:?}, after a width edit to n {sync_width:?} ({width_glyphs} glyphs scanned), after a rename of a {sync_rename:?} ({rename_glyphs} glyphs)",
         font.glyphs.len(),
         font.masters.len(),
         files.len(),

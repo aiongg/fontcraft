@@ -43,13 +43,15 @@ fn scanned(font: &Font, layer: &Layer) -> bool {
     (layer.is_master_layer() || !layer.info.attrs.is_empty()) && metrics_source(font, &layer.master).is_some_and(|m| m.id == layer.master)
 }
 
-/// The metrics a glyph's scan measured on its own layers: (layer index, field, result).
-type Measured = Vec<(usize, Field, Result<Option<f64>, EvalError>)>;
+/// One metric a glyph's scan measured on its own layers: (layer index, field, result).
+type Measurement = (usize, Field, Result<Option<f64>, EvalError>);
+/// The metrics a glyph's scan measured on its own layers.
+type Measured = Vec<Measurement>;
 
 /// The own-layer measurements of one glyph's scan: those of an earlier scan that still hold, and
 /// those of this one.
 struct Own<'p> {
-    prior: &'p [(usize, Field, Result<Option<f64>, EvalError>)],
+    prior: &'p [Measurement],
     measured: Measured,
 }
 
