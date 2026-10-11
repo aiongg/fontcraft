@@ -189,13 +189,13 @@ label = "Expand Text Tokens"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font?, text: string, master?: id, instance?: id}"
+params = "{font?: path, text: string, master?: id, instance?: id}"
 area = "font-info"
 milestone = "M7"
 summary = "Query: returns a text field value with every triple-brace token replaced, in the context of a font, master or instance. Not a reference command; lets agents preview name fields."
 ref = "Appendix › Text Tokens"
 status = "inferred"
-notes = "Our own query. M7 plan § 4: M7.13."
+notes = "Our own query. Returns the expanded text, the tokens that named nothing and the context used; `master` and `instance` take an id, a name or an index. M7 plan § 4: M7.13."
 
 [[command]]
 id = "url.open"
@@ -1951,6 +1951,9 @@ summary = "`{{{versionString}}}` gives the application's version number."
 ref = "Appendix › Text Tokens"
 status = "handbook"
 notes = "Documented, not yet observed. FontCraft gives its own version. M7 plan § 4: M7.13."
+guesses = [
+  "The token gives FontCraft's full release number (`0.0.1`), where the handbook's example shows two parts (`3.4`); the reference app's output for a release number of three parts would settle the form.",
+]
 
 [[behavior]]
 id = "textToken.buildNumber"
@@ -1959,7 +1962,7 @@ milestone = "M7"
 summary = "`{{{buildNumber}}}` gives the application's build number."
 ref = "Appendix › Text Tokens"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft gives its own build number (the commit count of the release, 0 in development builds). M7 plan § 4: M7.13."
+notes = "Documented, not yet observed. FontCraft gives its own build number: the value of `FONTCRAFT_BUILD_NUMBER` when the release was built, 0 in development builds. M7 plan § 4: M7.13."
 
 [[behavior]]
 id = "textToken.keyPath"
@@ -1970,7 +1973,8 @@ ref = "Appendix › Text Tokens"
 status = "handbook"
 notes = "Documented, not yet observed. glyphsLib resolves the key as an attribute of its font or instance object. M7 plan § 4: M7.13."
 guesses = [
-  "The supported key paths are the font's familyName, versionMajor, versionMinor, unitsPerEm, date, copyright, designer, designerURL, manufacturer, manufacturerURL and the instance's name, familyName, fullName (family and style name with a space), postscriptFontName, postscriptFullName, weightClass, widthClass; this is the set glyphsLib's objects expose under those names, and tokens tried in the reference app settle more.",
+  "The supported key paths are the font's familyName, versionMajor, versionMinor, unitsPerEm (and upm), date (as the source writes it), copyright, designer, designerURL, manufacturer, manufacturerURL, license, licenseURL, trademark, description, sampleText, vendorID, uniqueID, and the instance's name, familyName, fullName and postscriptFullName (family and style name with a space), postscriptFontName and fontName (family without spaces, a hyphen, the style name), preferredFamilyName, preferredSubfamilyName, weightClass (400 when unset) and widthClass (5 when unset); tokens tried in the reference app settle more.",
+  "In an instance context a key the instance does not have (designer, copyright…) reads the font's value, where glyphsLib keeps such a token as written; the same token typed into an instance's field in the reference app settles it.",
 ]
 observe = [
   "In font A (m7-one), type `{{{familyName}}} {{{fullName}}} {{{designer}}} {{{nonsense}}}` into the description field, export and read name ID 10: note which tokens expand.",
@@ -1983,7 +1987,10 @@ milestone = "M7"
 summary = "In a master context the token may be the name of a number value."
 ref = "Appendix › Text Tokens"
 status = "handbook"
-notes = "Documented, not yet observed. Number values are M8's definitions; the token reads them where they exist. M7 plan § 4: M7.13."
+notes = "Documented, not yet observed. The token reads the master's value of the font's number value of that name. In a master context only number values (and the tokens of every context) resolve; an instance context reads no number values until instances interpolate them (M9). M7 plan § 4: M7.13."
+guesses = [
+  "A master that stores no value for a defined number value reads 0, as a missing metric value does; the reference app with a number value added after the master settles it.",
+]
 
 [[behavior]]
 id = "textToken.glyphProperty"
@@ -1996,7 +2003,13 @@ status = "handbook"
 # ----------------------------------------------------------------------------
 # Behaviours: Regular expressions
 # ----------------------------------------------------------------------------
-notes = "Documented, not yet observed. M7 plan § 4: M7.13; the same property names as M8's glyph property tokens in feature code (layout__tokens), of which M7 implements width, LSB, RSB and the bounds."
+notes = "Documented, not yet observed. M7 plan § 4: M7.13; the same property names as M8's glyph property tokens in feature code (layout__tokens), of which M7 implements width, LSB, RSB, anchors.<name>.x and .y, and the bounds as bounds.origin.x, bounds.origin.y, bounds.size.width and bounds.size.height. TSB and BSB stay as written until M8."
+guesses = [
+  "In a font or instance context the token reads the first master's layer (an instance does not interpolate the value yet); the reference app with `{{{H:width}}}` in an instance's name settles it.",
+  "LSB and RSB of an empty layer name nothing and stay as written; the reference app with `{{{space:LSB}}}` settles it.",
+  "Numbers are written without a fraction when whole and with at most three decimals otherwise; a glyph with a fractional width in the reference app settles it.",
+  "The bounds are spelled as the reference's scripting object names them (`bounds.origin.x`, `bounds.size.width`); the reference app with those tokens settles it.",
+]
 
 [[behavior]]
 id = "regex.anyCharacter"

@@ -288,7 +288,7 @@ ref = "Font Info › Font; Font Info › Exports; Font Info › Features › Nam
 status = "handbook"
 
 # ───────────────────────────── Font tab ─────────────────────────────
-notes = "Documented, not yet observed. glyphsLib expands `{{{key}}}` in font properties and in instance names and properties by looking the key up on its font or instance object; fontc 1.0.0 expands no tokens. M7 plan § 4: M7.13."
+notes = "Documented, not yet observed. glyphsLib expands `{{{key}}}` in font properties and in instance names and properties by looking the key up on its font or instance object; fontc 1.0.0 expands no tokens. FontCraft expands them through `fontinfo::tokens::expand`, which the name table calls at export (M7.8) and `font.expandTextTokens` previews. M7 plan § 4: M7.13."
 
 [[panel]]
 id = "fontInfo.font"
