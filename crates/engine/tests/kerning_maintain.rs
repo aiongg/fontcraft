@@ -299,3 +299,28 @@ fn rename_group_in_one_pair_finds_it_in_a_second_entry_for_the_master() {
     let font = s.font().unwrap().clone();
     assert_eq!(stored(&font, Direction::Ltr, "m01"), owned(&[("T", "n", -5.0), ("@MMK_L_T", "@MMK_R_m", -40.0)]));
 }
+
+/// One group stored in two spellings: the later pair never applies, and Compress removes it with
+/// the earlier one, so no value changes.
+#[test]
+fn compress_removes_a_shadowed_pair_with_the_pair_that_shadows_it() {
+    for extra in [None, Some(("@MMK_L_A", "@MMK_R_V", -50.0)), Some(("@MMK_L_A", "@MMK_R_V", -60.0))] {
+        let mut s = font_with(&[("A", None, Some("A")), ("Aacute", None, Some("A")), ("V", Some("V"), None), ("W", Some("V"), None)]);
+        let mut pairs = vec![("@MMK_L_A", "V", -50.0), ("public.kern1.A", "V", -20.0)];
+        pairs.extend(extra);
+        set(&mut s, Direction::Ltr, "m01", &pairs);
+        let original = s.doc().unwrap().font.clone();
+        let out = run(&mut s, "kerning.compress", json!({"untilStable": true}));
+        let font = s.font().unwrap().clone();
+        // Lifting V to its group gives W kerning too; the pairs of V keep theirs.
+        for (a, b) in [("A", "V"), ("Aacute", "V")] {
+            assert_eq!(kern(&font, a, b), kern(&original, a, b), "{extra:?}: {a} {b}");
+        }
+        let removed = extra.is_none_or(|(_, _, v)| v == -50.0);
+        assert_eq!(out["shadowed"].as_array().unwrap().len(), usize::from(removed), "{extra:?}: {out}");
+        if removed {
+            assert_eq!(out["shadowed"][0]["value"], -20.0);
+            assert_eq!(out["shadowed"][0]["by"]["value"], -50.0);
+        }
+    }
+}

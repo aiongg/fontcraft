@@ -38,7 +38,8 @@
 //! glyph the font lacks or a group without members on the side facing the pair. [`compress`]
 //! lifts glyph sides to their groups, one side per pair and run, the first side first; a pair
 //! whose covering group pair has the same value is absorbed, one with another value is kept as
-//! an exception. [`rename_group`] renames a group on one glyph side, in one pair or in the whole
+//! an exception; a later pair with the same sides goes with the earlier one when that one is lifted or
+//! absorbed. [`rename_group`] renames a group on one glyph side, in one pair or in the whole
 //! font; groups of the other side never change. All three refuse a linked master
 //! ([`check_editable`]); a font-wide rename is not tied to a master.
 //!
@@ -81,7 +82,7 @@
 //! compress(font: &mut Font, Direction, master: &str, runs: usize) -> Result<CompressReport, MaintainError>
 //! rename_group(font: &mut Font, Direction, Position, from: &str, to: &str, &RenameScope) -> Result<RenameReport, MaintainError>
 //! Pair { first: Side, second: Side, value: f64 };  Removed { pair, reason: Obsolete::{MissingGlyph, EmptyGroup}(String) }
-//! CompressReport { runs, lifted: Vec<Lift { run, from, to }>, absorbed: Vec<Absorbed { run, pair, into }>, kept: Vec<Kept { pair, why: KeptWhy::{DifferentValue(Pair), MemberPairs} }>, pairs_before, pairs_after }
+//! CompressReport { runs, lifted: Vec<Lift { run, from, to }>, absorbed: Vec<Absorbed { run, pair, into }>, shadowed: Vec<Shadowed { run, pair, by }>, kept: Vec<Kept { pair, why: KeptWhy::{DifferentValue(Pair), MemberPairs} }>, pairs_before, pairs_after }
 //! RenameScope::{Pair { master, first: Side, second: Side }, Font};  RenameReport { glyphs: Vec<String>, pairs: Vec<NamedPair> }
 //! pairs::stored_pairs<'a>(font: &'a Font, Direction, master: &str) -> Vec<ListedPair<'a>>
 //! pairs::filter<'a>(font: &Font, Direction, pairs: Vec<ListedPair<'a>>, &Filter) -> Vec<ListedPair<'a>>
@@ -107,7 +108,7 @@ pub use locks::{Close, Edit, Lock, Locks, Which, close_locks, locked_pair, locks
 pub use lookup::{Applied, KernError, KernIndex, Step, StoredPair, Table, stored_pair};
 pub use maintain::{
     Absorbed, CompressReport, Kept, KeptWhy, Lift, MAX_COMPRESS_RUNS, MaintainError, Obsolete, Pair, Removed, RenameReport, RenameScope,
-    check_editable, clean_up, compress, obsolete_pairs, rename_group,
+    Shadowed, check_editable, clean_up, compress, obsolete_pairs, rename_group,
 };
 pub use sides::{GroupSide, Side, SideError, facing, prefix};
 

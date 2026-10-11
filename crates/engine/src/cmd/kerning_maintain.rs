@@ -25,7 +25,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compress",
             [],
             None,
-            "{master?: id (default: the first master), direction?: \"ltr\" | \"rtl\" | \"vertical\" (default ltr), untilStable?: bool (default false: one run)} turn glyph sides of pairs into the glyphs' kerning groups. One run lifts one side per pair, the left side first. A pair whose group pair already exists is removed when the values are equal and kept as an exception when they differ. untilStable repeats runs until nothing changes, at most 8, as one undo step. A master that shows another master's kerning is refused → {master, direction, runs, pairsBefore, pairsAfter, lifted: [{run, from: {left, right}, to: {left, right}, value}], absorbed: [{run, left, right, value, into: {left, right}}], kept: [{left, right, value, reason: \"differentValue\" | \"memberPairs\", groupPair?: {left, right, value}}]}",
+            "{master?: id (default: the first master), direction?: \"ltr\" | \"rtl\" | \"vertical\" (default ltr), untilStable?: bool (default false: one run)} turn glyph sides of pairs into the glyphs' kerning groups. One run lifts one side per pair, the left side first. A pair whose group pair already exists is removed when the values are equal and kept as an exception when they differ. A later pair with the same sides as an earlier one (another spelling of the group) never applies and is removed with the earlier one when that one is lifted or absorbed. untilStable repeats runs until nothing changes, at most 8, as one undo step. A master that shows another master's kerning is refused → {master, direction, runs, pairsBefore, pairsAfter, lifted: [{run, from: {left, right}, to: {left, right}, value}], absorbed: [{run, left, right, value, into: {left, right}}], shadowed: [{run, left, right, value, by: {left, right, value}}], kept: [{left, right, value, reason: \"differentValue\" | \"memberPairs\", groupPair?: {left, right, value}}]}",
             has_doc,
             compress
         ),
@@ -98,6 +98,11 @@ fn compress_json(master: &str, direction: Direction, r: &CompressReport) -> Valu
             json!({"run": a.run, "left": a.pair.first.command(), "right": a.pair.second.command(), "value": a.pair.value, "into": sides(&a.into.0, &a.into.1)})
         })
         .collect();
+    let shadowed: Vec<Value> = r
+        .shadowed
+        .iter()
+        .map(|d| json!({"run": d.run, "left": d.pair.first.command(), "right": d.pair.second.command(), "value": d.pair.value, "by": pair_json(&d.by)}))
+        .collect();
     let kept: Vec<Value> = r
         .kept
         .iter()
@@ -125,6 +130,7 @@ fn compress_json(master: &str, direction: Direction, r: &CompressReport) -> Valu
         "pairsAfter": r.pairs_after,
         "lifted": lifted,
         "absorbed": absorbed,
+        "shadowed": shadowed,
         "kept": kept,
     })
 }

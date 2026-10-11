@@ -78,6 +78,17 @@ pub struct Absorbed {
     pub into: (Side, Side),
 }
 
+/// A pair removed with the earlier pair of the same sides (in another spelling, or in another
+/// entry for the master) when that pair was lifted or absorbed. It never applied: the earlier
+/// pair shadowed it, and left alone it would apply in its place.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shadowed {
+    pub run: usize,
+    pub pair: Pair,
+    /// The earlier pair, as it was before the run.
+    pub by: Pair,
+}
+
 /// Why Compress left a liftable pair alone.
 #[derive(Clone, Debug, PartialEq)]
 pub enum KeptWhy {
@@ -100,6 +111,7 @@ pub struct CompressReport {
     pub runs: usize,
     pub lifted: Vec<Lift>,
     pub absorbed: Vec<Absorbed>,
+    pub shadowed: Vec<Shadowed>,
     /// The pairs the last run left alone although a side could be lifted.
     pub kept: Vec<Kept>,
     pub pairs_before: usize,
@@ -267,12 +279,26 @@ type Key = (Side, Side);
 struct Work {
     list: Vec<Entry>,
     by_sides: HashMap<Key, usize>,
+    /// Per sides, the later live pairs with the same sides, which the first one shadows.
+    shadows: HashMap<Key, Vec<usize>>,
     member_pairs: HashMap<(String, String), usize>,
 }
 
 impl Work {
     fn live(&self, key: &Key) -> Option<&Entry> {
         self.by_sides.get(key).and_then(|i| self.list.get(*i)).filter(|e| e.alive)
+    }
+
+    /// Removes the pairs `first` shadowed under `key`, now that it leaves those sides.
+    fn drop_shadows(&mut self, key: &Key, first: &Entry, run: usize, group_of_second: &dyn Fn(&Side) -> Option<String>, report: &mut CompressReport) {
+        for j in self.shadows.remove(key).unwrap_or_default() {
+            let Some(slot) = self.list.get_mut(j).filter(|e| e.alive) else { continue };
+            slot.alive = false;
+            if let (Side::Group(an), Some(b)) = (&slot.first, group_of_second(&slot.second)) {
+                decrement(&mut self.member_pairs, (an.clone(), b));
+            }
+            report.shadowed.push(Shadowed { run, pair: slot.pair(), by: first.pair() });
+        }
     }
 }
 
@@ -286,7 +312,8 @@ impl Work {
 /// glyphs does not change), another value keeps it as an exception. When none is stored, the run
 /// lifts one side: the first side when it can, else the second. Later pairs of the same run see
 /// the earlier lifts, so of two pairs that lift to one group pair the first is lifted and the
-/// second meets it.
+/// second meets it. A later pair with the same sides as an earlier one never applies; it is
+/// removed with the earlier pair when that one is lifted or absorbed ([`Shadowed`]).
 pub fn compress(font: &mut Font, direction: Direction, master: &str, runs: usize) -> Result<CompressReport, MaintainError> {
     check_editable(font, master)?;
     let fg = facing(direction, Position::First);
@@ -298,9 +325,14 @@ pub fn compress(font: &mut Font, direction: Direction, master: &str, runs: usize
         }
     };
     let list = master_entries(font, direction, master);
-    let mut work = Work { by_sides: HashMap::new(), member_pairs: HashMap::new(), list };
+    let mut work = Work { by_sides: HashMap::new(), shadows: HashMap::new(), member_pairs: HashMap::new(), list };
     for (i, e) in work.list.iter().enumerate() {
-        work.by_sides.entry((e.first.clone(), e.second.clone())).or_insert(i);
+        let key = (e.first.clone(), e.second.clone());
+        if work.by_sides.contains_key(&key) {
+            work.shadows.entry(key).or_default().push(i);
+        } else {
+            work.by_sides.insert(key, i);
+        }
         if let (Side::Group(a), Some(b)) = (&e.first, group(&e.second, sg)) {
             *work.member_pairs.entry((a.clone(), b)).or_default() += 1;
         }
@@ -344,10 +376,12 @@ pub fn compress(font: &mut Font, direction: Direction, master: &str, runs: usize
                     if let Some(slot) = work.list.get_mut(i) {
                         slot.alive = false;
                     }
-                    work.by_sides.remove(&(e.first.clone(), e.second.clone()));
+                    let own = (e.first.clone(), e.second.clone());
+                    work.by_sides.remove(&own);
                     if let (Side::Group(an), Some(b)) = (&e.first, &b) {
                         decrement(&mut work.member_pairs, (an.clone(), b.clone()));
                     }
+                    work.drop_shadows(&own, &e, run, &|side| group(side, sg), &mut report);
                     report.absorbed.push(Absorbed { run, pair: e.pair(), into: key });
                     changed = true;
                 } else {
@@ -360,10 +394,12 @@ pub fn compress(font: &mut Font, direction: Direction, master: &str, runs: usize
                 (_, _, Some(gb)) => (e.first.clone(), gb),
                 _ => continue,
             };
-            work.by_sides.remove(&(e.first.clone(), e.second.clone()));
+            let own = (e.first.clone(), e.second.clone());
+            work.by_sides.remove(&own);
             if let (Side::Group(an), Some(b)) = (&e.first, &b) {
                 decrement(&mut work.member_pairs, (an.clone(), b.clone()));
             }
+            work.drop_shadows(&own, &e, run, &|side| group(side, sg), &mut report);
             if let (Side::Group(an), Some(b)) = (&first, &b)
                 && !second.is_group()
             {
