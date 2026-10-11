@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-10, M5 planned (`docs/plans/M5.md`); the owner's acceptance next._
+_Updated: 2026-10-11, M5 accepted and started: M5.0 done, M5.1 next._
 
 ## State of the tree
 
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
 - 269 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
-  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 460 guesses on 327
+  are all live. Feature parity is about 14% (ROADMAP.md › Parity estimate). 459 guesses on 327
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -19,9 +19,7 @@ _Updated: 2026-10-10, M5 planned (`docs/plans/M5.md`); the owner's acceptance ne
 
 ## Where to start
 
-1. **The owner's acceptance of M5's plan** (`docs/plans/M5.md` § 7). Build nothing of M5
-   before it.
-2. **M5**, in the order of the plan's § 6: builder packages M5.1 and M5.2 first.
+1. **M5**, in the order of `docs/plans/M5.md` § 6: builder packages M5.1 and M5.2 first.
 
 M4, Font View and glyph management (`docs/plans/M4.md`), as built:
 
@@ -351,4 +349,8 @@ Append one terse entry per session: what landed, numbers, what is still open.
   units wide; removing a glyph keeps the kerning pairs that name it, as the handbook says
   (M4.16). M4.14: Remove Glyph's dialog defaults
   to Decompose. M5.0: the planning pass (222 rows, 97 commands; 27 rows
-  moved; 19 packages; 460 guesses on 327 rows). Next: the owner's acceptance of the M5 plan.
+  moved; 19 packages; 459 guesses on 327 rows). Next: the owner's acceptance of the M5 plan.
+- **2026-10-11, M5 started.** The owner accepted the M5 plan: the pair-kerning writer comes into
+  M5 (M5.17), tabs open from the document's display strings, Text Preview uses our own layout.
+  M5.0: the answers and the handbook's kerning details in the rows (5 kern-export rows moved from
+  M8; 459 guesses on 327 rows).
