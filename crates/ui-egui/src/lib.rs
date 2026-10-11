@@ -67,6 +67,8 @@ mod kerning_window_tests;
 #[cfg(test)]
 mod panels_tests;
 #[cfg(test)]
+mod preview_tests;
+#[cfg(test)]
 mod sidebar_tests;
 #[cfg(test)]
 mod spacing_dialogs_tests;

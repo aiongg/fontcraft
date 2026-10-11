@@ -265,6 +265,17 @@ pub struct Tokens {
     /// Font View's warning triangle for out-of-sync metrics keys, and its exclamation mark.
     pub font_view_badge_out_of_sync: Color32,
     pub font_view_badge_out_of_sync_mark: Color32,
+    /// The previews (Preview Area, Preview Panel): text and ground before Invert, the area's
+    /// default and smallest height, the separator's grab height, the room a flush line keeps
+    /// from the edge, the controls row's height and the panel's first size.
+    pub preview_ink: Color32,
+    pub preview_paper: Color32,
+    pub preview_area_height: f32,
+    pub preview_area_min_height: f32,
+    pub preview_separator: f32,
+    pub preview_margin: f32,
+    pub preview_controls_height: f32,
+    pub preview_panel_size: [f32; 2],
 }
 
 impl Tokens {
@@ -442,6 +453,14 @@ impl Tokens {
             kerning_glyph_text: Color32::from_rgb(0xd9, 0xb2, 0x48),
             font_view_badge_out_of_sync: Color32::from_rgb(0xf2, 0xa1, 0x1d),
             font_view_badge_out_of_sync_mark: Color32::from_rgb(0x10, 0x10, 0x10),
+            preview_ink: Color32::BLACK,
+            preview_paper: Color32::WHITE,
+            preview_area_height: 140.0,
+            preview_area_min_height: 48.0,
+            preview_separator: 6.0,
+            preview_margin: 16.0,
+            preview_controls_height: 30.0,
+            preview_panel_size: [640.0, 200.0],
         }
     }
 

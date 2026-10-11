@@ -75,6 +75,8 @@ pub struct PanelState {
     pub kerning_window: crate::shell::kerning_window::KerningWindowState,
     /// The inspector shows the vertical metric fields (`fontView.toggleMetricsOrientation`).
     pub inspector_vertical: bool,
+    /// The Preview Area and the Preview Panel (`crate::shell::preview`).
+    pub preview: crate::shell::preview::PreviewState,
 }
 
 impl Default for PanelState {
@@ -91,6 +93,7 @@ impl Default for PanelState {
             selection_info: false,
             kerning_window: Default::default(),
             inspector_vertical: false,
+            preview: Default::default(),
         }
     }
 }

@@ -2089,6 +2089,7 @@ milestone = "M5"
 summary = "Edit View text can be shown in three kerning modes: without kerning, with kerning, and with kerning locked. Details belong to the Kerning chapter."
 ref = "Edit View › Previewing & Testing › Previewing Kerning"
 status = "handbook"
+notes = "The Preview Area and the Preview Panel lay the text out in the tab's kerning mode (M5.11a); locked kerning previews like kerning."
 
 [[command]]
 id = "view.selectMaster"
@@ -2226,6 +2227,11 @@ milestone = "M5"
 summary = "Splits the Edit View tab into the editing canvas above and a Preview Area below, or closes the split. It is the eye button at the bottom left of the window; dragging the separator changes the area's height."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a as a shell command; the area sits between the canvas and the bottom bar and its top edge is the separator. Documented, not yet observed."
+guesses = [
+  "Each tab opens and closes its own Preview Area, while all tabs share one height; a second tab in the reference app settles it.",
+  "The area is 140 points tall until its separator is dragged; the reference app's first height settles it.",
+]
 
 [[command]]
 id = "window.previewPanel"
@@ -2233,12 +2239,16 @@ label = "Preview Panel"
 menu = ["Window"]
 shortcut = ""
 kind = "ui"
-params = "{}"
+params = "{on?: bool}"
 area = "proofing"
 milestone = "M5"
 summary = "Opens the preview in a window of its own that can be moved to a second display. It follows whichever Edit View tab of the current font is active."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a: a floating window with the area's controls and its own settings. Documented, not yet observed."
+guesses = [
+  "The Preview Panel keeps Invert, Flip, Blur, centring and offset of its own, apart from the Preview Area; the reference app settles it.",
+]
 
 [[panel]]
 id = "editView.previewArea"
@@ -2325,6 +2335,7 @@ milestone = "M5"
 summary = "Switches the preview between dark text on a light ground and light text on a dark ground."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a. Off: black text on white. Documented, not yet observed."
 
 [[command]]
 id = "preview.flip"
@@ -2338,6 +2349,10 @@ milestone = "M5"
 summary = "Draws the preview upside down, or right way up again. Used to judge spacing without reading the words."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a. Documented, not yet observed."
+guesses = [
+  "Flip turns the strip half a circle, as a printed proof turned upside down, rather than mirroring it top to bottom; the reference app settles it.",
+]
 
 [[command]]
 id = "preview.setBlur"
@@ -2351,6 +2366,7 @@ milestone = "M5"
 summary = "Blurs the preview by an adjustable amount to test legibility. Bound to the slider next to the Flip button; its range and unit are not documented."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a: three box blurs that together reach `amount` screen points. Documented, not yet observed."
 guesses = [
   "The blur amount runs from 0 to 10 screen points of blur radius; the handbook gives no range or unit.",
 ]
@@ -2367,6 +2383,10 @@ milestone = "M5"
 summary = "Context-menu toggle of the Preview Area. On: the active glyph is kept in the horizontal centre. Off: the text is positioned to use the width as fully as possible, flush with the left or right edge."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a; on by default, since the handbook says the current glyph is centred by default. Documented, not yet observed."
+guesses = [
+  "Off, a line wider than the strip sits as near to centring the edited glyph as it can without leaving a gap at either edge; the reference app with a long text settles it.",
+]
 
 [[command]]
 id = "preview.setOffset"
@@ -2374,13 +2394,17 @@ label = "Scroll Preview"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{target?: 'area'|'panel', x: number}"
+params = "{target?: 'area'|'panel', x?: number, dx?: number}"
 area = "proofing"
 milestone = "M5"
 summary = "Shifts the previewed line horizontally. Headless form of dragging the text sideways in the Preview Area."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "inferred"
 own = true
+notes = "Built in M5.11a; dragging the strip sideways runs it with `dx`."
+guesses = [
+  "The offset is in screen points, added to where the centring puts the line, and stays when the edited glyph changes; dragging in the reference app settles it.",
+]
 
 [[command]]
 id = "preview.render"
@@ -2402,9 +2426,10 @@ milestone = "M5"
 summary = "The Preview Area and Preview Panel put the complete text of the active tab on one line, without wrapping, with the current glyph centred by default."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
-notes = "The one-line layout is built in M5.6 (`Options::single_line`). Documented, not yet observed."
+notes = "The one-line layout is built in M5.6 (`Options::single_line`); the previews use it (M5.11a). Documented, not yet observed."
 guesses = [
   "On the preview line a line break takes no room; a tab of several lines in the reference app's Preview Area settles it.",
+  "Vertical text previews on a horizontal line, and right-to-left text from the right; the reference app with a vertical tab settles it.",
 ]
 
 [[behavior]]
@@ -2414,6 +2439,7 @@ milestone = "M5"
 summary = "Double-clicking a glyph in the preview makes it the glyph being edited in Edit View."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a: the double-click puts the text cursor before the glyph (`editView.setCursor`), which makes it the edited glyph. Documented, not yet observed."
 
 [[behavior]]
 id = "preview.dashFollowsMaster"
@@ -2438,6 +2464,7 @@ milestone = "M5"
 summary = "The Preview Panel is empty while the front tab is not an Edit View tab and fills in immediately when one is activated."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
+notes = "Built in M5.11a: while Font View shows, the panel draws its ground and no glyphs. Documented, not yet observed."
 
 [[behavior]]
 id = "proofing.systemFontCache"

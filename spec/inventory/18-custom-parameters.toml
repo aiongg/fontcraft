@@ -1368,6 +1368,7 @@ effect = "ui"
 summary = "Master parameter, float, default 1000. Raises the top of the preview strip and Preview panel so tall ascenders are not cut off."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Read by the Preview Area and the Preview Panel (M5.11a): the strip's top edge in font units, 1000 by default whatever the em size. Documented, not yet observed."
 
 [[parameter]]
 name = "Preview Descender"
@@ -1379,6 +1380,11 @@ effect = "ui"
 summary = "Master parameter, float, the counterpart of Preview Ascender for the lower edge. The source gives its default as winAscent when present, otherwise the master's descender (winDescent may be meant)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Read by the Preview Area and the Preview Panel (M5.11a): the strip's bottom edge. Without it, the master's or the font's winDescent, else the master's descender. Documented, not yet observed."
+guesses = [
+  "The default reads winDescent where the handbook says winAscent, since a lower edge at the ascent's depth would be a misprint; the reference app with a font whose winAscent and winDescent differ settles it.",
+  "A value of either sign is a distance below the baseline; the reference app with a positive and a negative value settles it.",
+]
 
 [[parameter]]
 name = "Propagate Anchors"

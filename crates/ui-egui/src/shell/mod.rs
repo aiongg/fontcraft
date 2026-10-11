@@ -19,6 +19,8 @@ pub mod masters;
 pub mod menus;
 pub mod palette;
 pub mod pickers;
+pub mod preview;
+pub mod preview_panel;
 pub mod selection;
 pub mod start_window;
 pub mod status_bar;
@@ -62,6 +64,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (crate::canvas::group_members::COMMANDS, crate::canvas::group_members::run),
     (kerning_window::COMMANDS, kerning_window::run),
     (font_view::metrics::COMMANDS, font_view::metrics::run),
+    (preview::COMMANDS, preview::run),
 ];
 
 /// Every shell command, in module order.
@@ -73,6 +76,7 @@ pub fn windows(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'s
     glyph_info::show(app, ui, pending);
     start_window::show(app, ui, pending);
     kerning_window::show(app, ui, pending);
+    preview_panel::show(app, ui, pending);
 }
 
 pub fn is_ui_command(id: &str) -> bool {

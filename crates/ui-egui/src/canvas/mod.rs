@@ -59,6 +59,7 @@ pub struct Painting<'a> {
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {
     audit_markers::refresh(app);
     crate::shell::context_menu::show(app, ui, pending);
+    crate::shell::preview::area(app, ui, pending);
     let FontcraftApp { session, state, tokens, fill_cache, preview_tool, tools, layouts, .. } = app;
     let Some(tab) = state.tab().cloned() else { return };
     layouts.prepare(session, &tab);
