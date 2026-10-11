@@ -578,7 +578,7 @@ milestone = "M10"
 summary = "Opening a hinted TrueType font adds three custom parameters to the masters: CVT Table, prep Table Assembly and fpgm Table Assembly, holding the font's control values and the assembly source of its control-value and font programs. They exist so that the original hinting survives a re-export and are rarely edited by hand; at export they are written to the cvt, prep and fpgm tables."
 ref = "TrueType Hinting › Advanced TrueType Hinting › Control Value Program"
 status = "handbook"
-guesses = ["No corpus source holds the prep or fpgm Table Assembly parameter, so FontCraft writes and reads them in its own assembly syntax (mnemonics with bracketed flags and inline push data, as fontTools prints them); a file saved by the reference app after opening a hinted TrueType font would show its syntax, and the reader would then accept both."]
+guesses = ["No corpus source holds the prep or fpgm Table Assembly parameter, so FontCraft writes and reads them in its own assembly syntax (one instruction per line, mnemonics with bracketed flags as fontTools prints them, push values on the push's line; fontTools' layout with the values on the following lines and /* */ comments is read too); a file saved by the reference app after opening a hinted TrueType font would show its syntax, and the reader would then accept both."]
 observe = [
   "Open a hinted TTF that FontCraft exported from T3 and save it as .glyphs; note how the CVT Table, prep Table Assembly and fpgm Table Assembly values are stored in the file (keys, value types, layout).",
 ]
