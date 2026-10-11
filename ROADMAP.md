@@ -461,7 +461,7 @@ on, so the engine track, where oracles prove correctness, goes first.
   from its schema; Round Corners, Transformations, Shape Order, Interpolate with Background,
   Primitive Measurements, Guide Properties, Export and two follow-up questions have their own
   files. Runs in a window and in headless test frames.
-- **Gates:** `cargo xtask ci` with ten steps; parity and guesses reports generated from the inventory.
+- **Gates:** `cargo xtask ci` with eleven steps; parity and guesses reports generated from the inventory.
   Outside the gate: `cargo xtask roundtrip` over 527 corpus sources, `cargo xtask overlap`
   (overlap removal on every corpus layer) and `cargo xtask audit`.
 

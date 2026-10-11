@@ -6,7 +6,7 @@ _Updated: 2026-10-11, M5 accepted by the owner (M5.fix6 applied their decisions)
 
 ## State of the tree
 
-- `cargo xtask ci` passes all ten steps (1,285 tests, 19 ignored).
+- `cargo xtask ci` passes all eleven steps (1,288 tests, 19 ignored).
   About 168,000 lines of Rust in 25 library crates, two apps and `xtask`. Built and run on Linux
   x86-64 with Rust 1.97.
 - 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
@@ -47,6 +47,10 @@ fontc's `fontir/src/propagate_anchors.rs` and glyphsLib's `propagate_anchors.py`
 they derive from the reference app's privately shared source. The plan's § 2 records only what
 their outputs show. If the owner chooses to write anchor propagation ourselves, the agent that
 writes it reads neither file and works from the handbook and the oracles' outputs.
+
+Checks for the reference app: `cargo xtask observe` writes `docs/observe.md`, every row the
+running app could settle (606 rows, 649 guesses), built milestones first, grouped by place in
+the app. Rows take optional `observe = […]` steps; `observe --check` is a gate step.
 
 Open items from M5 (the owner accepted M5 with the speed misses):
 
