@@ -52,6 +52,7 @@
 //! 7. Registers every feature for each language system of the feature code (`DFLT dflt` without
 //!    one), lookups in the order `curs`, `abvm`, `blwm`, `mark`, `mkmk`.
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use fontcraft_model::plist::{Num, Value};
@@ -797,7 +798,7 @@ impl<'a> MarkWriter<'a> {
         groups
     }
 
-    fn mark_to_ligature_groups(&self) -> BTreeMap<String, MarkGroup<'a>> {
+    fn mark_to_ligature_groups(&self, budget: &mut Budget) -> Result<BTreeMap<String, MarkGroup<'a>>, FeatureError> {
         let mut groups: BTreeMap<String, MarkGroup> = BTreeMap::new();
         let mut ligature_names: HashSet<&str> = HashSet::new();
         for (gid, anchors) in &self.anchors {
@@ -812,7 +813,13 @@ impl<'a> MarkWriter<'a> {
             for anchor in anchors {
                 let AnchorKind::Ligature { group, index } = &anchor.kind else { continue };
                 ligature_names.insert(group);
-                let slots = by_group.entry(group).or_insert_with(|| vec![None; components]);
+                let slots = match by_group.entry(group) {
+                    Entry::Occupied(slots) => slots.into_mut(),
+                    Entry::Vacant(entry) => {
+                        budget.spend(components)?;
+                        entry.insert(vec![None; components])
+                    }
+                };
                 if let Some(slot) = index.checked_sub(1).and_then(|k| slots.get_mut(k)) {
                     *slot = Some(*anchor);
                 }
@@ -833,7 +840,7 @@ impl<'a> MarkWriter<'a> {
                 }
             }
         }
-        groups
+        Ok(groups)
     }
 
     /// One lookup per name of `groups` that `names` accepts and that has marks and bases in
@@ -851,6 +858,17 @@ impl<'a> MarkWriter<'a> {
             if !names(name) {
                 continue;
             }
+            // The ligature slots are copied twice below (the filtered group and the rules).
+            let slots: usize = group
+                .bases
+                .iter()
+                .filter(|(gid, _)| include.contains(*gid))
+                .map(|(_, b)| match b {
+                    BaseOrLig::Ligature(slots) => slots.len(),
+                    BaseOrLig::Base(_) => 0,
+                })
+                .fold(0, usize::saturating_add);
+            budget.spend(slots.saturating_mul(2))?;
             let Some(group) = group.only_using_glyphs(include) else { continue };
             budget.spend(group.marks.len().saturating_add(group.bases.len()))?;
             let filter_set = group.filter_set(include);
@@ -1061,7 +1079,7 @@ pub fn generate_marks(req: &MarkRequest, warnings: &mut Vec<String>) -> Result<G
     }
 
     let writer = MarkWriter::new(&all, classes.clone(), &mut budget)?;
-    let groups = Groups { base: writer.mark_to_base_groups(), lig: writer.mark_to_ligature_groups(), mark: writer.mark_to_mark_groups() };
+    let groups = Groups { base: writer.mark_to_base_groups(), lig: writer.mark_to_ligature_groups(&mut budget)?, mark: writer.mark_to_mark_groups() };
     let (abvm_glyphs, mark_glyphs) = split_abvm(&char_map, glyph_count, &language_systems);
 
     let mut mark_mkmk =
