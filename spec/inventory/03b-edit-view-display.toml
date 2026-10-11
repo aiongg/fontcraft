@@ -52,7 +52,7 @@ milestone = "M5"
 summary = "Variant of the glyph Info box that replaces the horizontal one when the text is laid out top to bottom. It exposes the vertical metrics (top and bottom sidebearing, vertical origin, vertical advance) and top and bottom kerning values and groups."
 ref = "Edit View › Info Box › Vertical Layout"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M5.8a: T and B are fields running `spacing.setTopSidebearing` and `spacing.setBottomSidebearing`; O and H are shown, not edited, since no command sets the vertical origin or the vertical width yet. K and G belong to M5.8b."
+notes = "Documented, not yet observed. Built in M5.8a: T and B are fields running `spacing.setTopSidebearing` and `spacing.setBottomSidebearing`; O and H are shown, not edited, since no command sets the vertical origin or the vertical width yet. K and G are the kern field and the group field with its lock at the box's first and second edge, for the glyph above and the glyph below."
 
 [[panel]]
 id = "infoBox.selection"
