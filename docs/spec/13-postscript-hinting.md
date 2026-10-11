@@ -32,8 +32,9 @@ Rows: `hinting.ps.standardStems`, `.firstValueIsPrimary`, `.interpolateByName`,
 - Finding values: measure node-to-node distances (Info box with two nodes selected, or the
   Measurement tool), collect them, take a median. `autohint.ps.reportStems` gives the same as a
   histogram over many glyphs.
-- Export mapping (inferred): first values → `StdHW`, `StdVW`; full sorted lists → `StemSnapH`,
-  `StemSnapV`.
+- Export mapping (as glyphsLib and ufo2ft write it, used since M2 and equal to fontmake's builds):
+  first values → `StdHW`, `StdVW`; full sorted lists → `StemSnapH`, `StemSnapV`; written only when
+  both directions have stems.
 
 ## 3. Alignment zones
 
@@ -57,22 +58,23 @@ Rows: `hinting.ps.alignmentZones`, `.effect`, `.limits`, `.gridCompensation`,
 
 - On a non-default grid, widen each zone by one unit at each end (position shifted by 1 away from
   the zone, size grown by 2). Baseline zone: position stays 0, size grows by 1.
-- Export mapping (inferred from CFF and otfautohint's fontinfo format): baseline zone and top zones
-  → `BlueValues`; other bottom zones → `OtherBlues`; each as (lower, upper) pairs in ascending
-  order.
+- Export mapping (glyphsLib's `blue_values.py`, used since M2): zones sorted by position; a zone at
+  0 or with a positive size → `BlueValues`, the others → `OtherBlues`; each as (lower, upper) pairs
+  in ascending order.
 
 ## 4. Optional Private dict parameters
 
 Rows: `hinting.ps.blueScale`, `hinting.ps.blueShift`, `hinting.ps.blueFuzz`,
 `hinting.ps.familyAlignmentZones`.
 
-The handbook names four custom parameters and gives no values:
+The handbook names four custom parameters; their descriptions in the custom-parameter appendix give
+the defaults below:
 
 | Parameter | Private dict entry | What we know |
 |---|---|---|
-| blueScale | `BlueScale` | Limits zone size (formula above). CFF default 0.039625 (recalled). |
-| blueShift | `BlueShift` | Must be ≥ flex depth + 1 for flex. Set on the Font tab. CFF default 7 (recalled). |
-| blueFuzz | `BlueFuzz` | Widens zones at both ends for zone tests; otfautohint requires zone gaps ≥ 2 × BlueFuzz + 1. |
+| blueScale | `BlueScale` | Limits zone size (formula above). The parameter description gives 0.037 when unset and 0.039625 as the 10-point example; fontmake computes it from the largest zone. |
+| blueShift | `BlueShift` | Must be ≥ flex depth + 1 for flex. Set on the Font tab. Default 7 (parameter description). |
+| blueFuzz | `BlueFuzz` | Widens zones at both ends for zone tests; otfautohint requires zone gaps ≥ 2 × BlueFuzz + 1. The parameter description quotes the Type 1 default 1; fontmake writes 0. |
 | Family Alignment Zones | `FamilyBlues`, `FamilyOtherBlues` | Zone list shared across a family. |
 
 ## 5. Autohinting at export
@@ -236,29 +238,59 @@ each set to one Private dict.
 
 ## Open questions
 
+Answers from the M10 planning pass (`docs/plans/M10.md` § 3); "guess" means a choice of ours
+recorded in the row's `guesses`, to be checked in the reference app (§ 8 of the plan).
+
 1. Which tool must be active for PostScript hints to be editable in Edit View. (Visibility is the
    `view.showHints` toggle inventoried in `03b-edit-view-display.toml`; this chapter does not
    mention it.)
+   **Answer (guess):** the Select tool, while Show Hints is on.
 2. Initial origin and size of a hint added with nothing selected.
+   **Answer (guess):** centred on the glyph's bounding box, sized to the master's first stem of
+   that direction, 50 units without one.
 3. Default orientation of a new ghost hint (from single-node creation and from Make Ghost Hint); can
    a ghost hint be turned back into a stem hint?
+   **Answer (guess):** top when the edge lies in or nearer to a top zone, else bottom; giving a
+   ghost a size makes it a stem hint again.
 4. Does typing a value in the Info box break a node link? How is a link removed in the UI?
+   **Answer (guess):** a typed value unlinks that end; dragging a marker off its node unlinks it;
+   `hint.ps.attachHintToNode` with `null` does the same headless.
 5. Does the context-menu Autohint replace existing hints or add to them? Does it act on all
    selected glyphs?
+   **Answer (guess):** it replaces them, on every selected glyph.
 6. Wrap-around of Tab / Shift+Tab; behaviour with multiple hints selected.
+   **Answer (guess):** both wrap; with several selected, Tab moves on from the last selected.
 7. Scope of the Autohint, blueScale, blueFuzz and Family Alignment Zones parameters (font, master,
    instance) and their defaults when absent; whether absent means "omit the entry" or "write the
    CFF default".
+   **Answer (handbook, oracle):** Autohint is an instance parameter that forces autohinting
+   (custom-parameter descriptions); FontCraft also reads it on the font (guess). blueShift,
+   blueScale, blueFuzz and Family Alignment Zones are font parameters (the handbook sets blueShift
+   in Font Info › Font); the inventory's parameter rows give the scopes. Absent values: the export
+   writes what fontmake writes (BlueShift 7, BlueFuzz 0, BlueScale computed from the largest
+   zone), not the handbook's 0.037 and 1 (plan § 7, question 6); FamilyBlues are omitted.
 8. Exact Private dict mapping of zones and stems (order, which stems go to StemSnap, treatment of
    more than twelve stems or too many zones: truncate, error or warn).
+   **Answer (oracle, guess):** glyphsLib's rule, used since M2 and equal to fontmake's builds:
+   zones sorted by position, a zone at 0 or with a positive size to BlueValues, the rest to
+   OtherBlues; first stems to StdHW and StdVW, sorted lists to StemSnap, only when both directions
+   have stems. Beyond the CFF limits the export keeps the first entries and warns (guess).
 9. When several non-main masters carry hints and the main master has none, which one is used?
+   **Answer (guess):** the first of them in master order.
 10. For variable CFF2 exports, how the reference derives hints (main-master manual hints with
     linked nodes versus running an autohinter on the variable font) and whether unlinked hints are
     dropped.
+    **Answer (guess, waits for M9):** manual hints resolved through node links in every master,
+    unlinked ends keeping one value; otherwise the multiple-master autohinter.
 11. How hints behave on layers with components (are component hints reused at export?) and after
     Remove Overlap at export when linked nodes disappear.
+    **Answer (ours):** CFF output decomposes composites; a composite without manual hints is
+    autohinted as its decomposed outline, and its components' manual hints are not reused (guess).
+    Linked ends are resolved before overlap removal, since a PostScript hint is a coordinate.
 12. Which autohinter the reference runs and with which options; whether flex follows the handbook's
     conditions or the autohinter's own tests when they differ.
+    **Answer (ours, plan § 7 question 3):** a port of otfautohint with its defaults; flex follows
+    otfautohint's test, which contains the handbook's conditions and adds a length ratio (guess).
 
 ## Implementation notes
 

@@ -127,6 +127,7 @@ effect = "hinting"
 summary = "Integer written to the Type 1/CFF BlueFuzz entry: a horizontal stem edge within this many units outside a zone is treated as inside it. Default 1; zones must then lie at least 2 x BlueFuzz + 1 units apart, and the recommended practice is to fix the zones and set the value to 0."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "M10 planning pass: glyphsLib passes the short name blueFuzz through as a raw lib key, so fontmake ignores it; FontCraft reads it as the handbook says and writes it, a difference from fontmake recorded in docs/spec/40-compile.md § 4a by M10.14."
 
 [[parameter]]
 name = "blueScale"
@@ -714,6 +715,7 @@ effect = "hinting"
 summary = "List of zones, normally copied from the family's main style (Regular or Book). A rasteriser aligns every weight to them when the weight's own height differs from the family value by less than a pixel; they must be compatible with the masters' own alignment zones."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "M10 planning pass: glyphsLib passes this parameter through as a raw lib key, so fontmake writes no FamilyBlues from it; FontCraft writes them as the handbook says, a difference from fontmake recorded in docs/spec/40-compile.md § 4a by M10.14."
 
 [[parameter]]
 name = "familyNames"
@@ -1925,6 +1927,7 @@ effect = "hinting"
 summary = "Option string for ttfautohint, edited through a dialog: hint set range, default and fallback script, hinting limit (default 200), fallback stem width, x-height increase limit (default 14), x-height snapping exceptions, and flags for adjusting subglyphs, dehinting, version info, composites, restrictions, symbol fonts, a TTFA table, Windows compatibility and strong stems per rendering target."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+guesses = ["No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form."]
 
 [[parameter]]
 name = "TTFBlueFuzz"

@@ -1,9 +1,9 @@
 # TrueType hinting
 
 Behaviour notes for `spec/inventory/14-truetype-hinting.toml`.
-Source: Glyphs 4 Handbook, chapter "TrueType Hinting". Rows marked `memory` (the individual
-autohinter options) are recalled from the ttfautohint documentation and need checking. Row ids are
-given in `code`.
+Sources: Glyphs 4 Handbook, chapter "TrueType Hinting", and its custom-parameter appendix for the
+TTFAutohint options; defaults the handbook leaves out come from the help text of the ttfautohint
+program, run as a black box. Row ids are given in `code`.
 
 ## 1. Model
 
@@ -29,22 +29,24 @@ Rows: `hinting.tt.export.autohintIgnoresManual`, `hinting.tt.export.manualWhenAu
 Mixing is not possible in one export.
 
 Configuration is per export instance through two custom parameters: "TTFAutohint options" and
-"TTFAutohint control instructions". The handbook lists no options. Recalled option set (verify):
+"TTFAutohint control instructions". The custom-parameter appendix lists the options; the defaults
+are from ttfautohint 1.8's help text (M10 planning pass):
 
-| Option | Recalled default | Meaning |
+| Option | Default | Meaning |
 |---|---|---|
 | hinting-range-min / -max | 8 / 50 | PPM range that gets its own hint sets |
 | hinting-limit | 200 | PPM above which hinting switches off; 0 = never |
 | increase-x-height | 14 | Round x-height up more readily up to this PPM; 0 = off |
 | x-height-snapping-exceptions | none | PPM list exempt from x-height snapping |
-| fallback-stem-width | none | Stem width for scripts without a derived one |
-| stem width mode (strong-stem-width) | per target | natural / quantized / strong for grayscale, GDI ClearType, DirectWrite |
+| fallback-stem-width | 50 units at 2,048 units per em, scaled | Stem width for scripts without a derived one |
+| stem width mode (stem-width-mode) | qsq | natural / quantized / strong for grayscale, GDI ClearType, DirectWrite |
 | default-script, fallback-script, fallback-scaling | latn, none, off | Script assignment for unclassified glyphs |
 | windows-compatibility | off | Extra zones at usWinAscent / usWinDescent |
 | hint-composites, adjust-subglyphs | off | Composite handling |
 | symbol, ignore-restrictions | off | Fonts without standard characters; restricted fonts |
 | dehint | off | Strip hinting |
 | no-info / detailed-info | info on | Version-string annotation |
+| ttfa-table | off | TTFA table recording every parameter |
 
 Control instructions address points by index; Show Point Indexes (`hint.tt.showPointIndexes`,
 headless `hint.tt.getPointIndexes`) displays them on on-curve nodes.
@@ -268,33 +270,71 @@ Rows: `hinting.tt.export.*`, `hinting.tt.variable.*`, `hinting.tt.import.glyphPr
 
 ## Open questions
 
+Answers from the M10 planning pass (`docs/plans/M10.md` § 3); "guess" means a choice of ours
+recorded in the row's `guesses`, to be checked in the reference app (§ 8 of the plan).
+
 1. Tool shortcut and toolbar position of the TrueType Instructor; how node selection works in it
    (rectangle, Shift, Select All).
+   **Answer:** the custom-parameter descriptions give the shortcut as I (handbook). Toolbar
+   position after the Measurement tool, selection as with the Select tool (guess).
 2. Where the rendering intent (Grayscale / ClearType / DirectWrite) is chosen.
+   **Answer (guess):** a pop-up in the tool's Info box beside the pixel size.
 3. Context-menu label of the Stem instruction; whether Delete removes selected instructions; how a
    triple hint is dissolved; whether instructions can be reordered.
+   **Answer (guess):** "Stem"; Delete removes them; deleting or reversing a member dissolves the
+   group; no reordering.
 4. What "drag to reposition" changes: the attached node(s) or only the badge position?
+   **Answer (guess):** only where the badge is drawn, as view state.
 5. Colour of Delta badges; exact look of each rounding icon.
+   **Answer (guess):** orange; the icons are FontCraft's own, from the theme.
 6. Delta table: PPM row range; whether the columns for Delta instructions are masters or instances;
    whether zone/stem deltas survive variable export.
+   **Answer (guess):** rows 8 to 80 PPM; masters for zones and stems, static instances for Delta
+   instructions; in variable fonts only the default master's zone and stem deltas apply.
 7. "Get PS zones" / "Get PS stems": replace or append; names given to imported entries.
+   **Answer (guess):** replace; zones named after their metric (`xHeight` for the x-height),
+   stems keep their names.
 8. How zones and stems are matched across masters (name or index) and what happens when a master
    lacks an entry; whether stem names must be unique.
+   **Answer (guess):** by name, as stems interpolate by name; a missing entry takes the main
+   master's value; names unique, duplicates refused.
 9. What happens to instructions referring to a removed or renamed zone or stem.
+   **Answer (guess):** a removal falls back to Auto; a rename follows.
 10. Exact option list, defaults and storage format of "TTFAutohint options", and the accepted
     control-instruction syntax.
+    **Answer (handbook, black-box run):** the handbook's custom-parameter appendix lists the
+    options and the control-instruction syntax; the help text of ttfautohint 1.8 gives the
+    defaults (`autohint.tt.option.*`). No corpus source holds the parameter, so its stored form is
+    taken as ttfautohint's long command-line options in one string (guess, until a file from the
+    reference app shows it).
 11. Default of TTFOvershootSuppressionBelowPPM when absent.
+    **Answer (guess):** no size-based suppression beyond the zones'.
 12. gasp: exact flag bits per range, table version, and whether the behaviour per range is fixed or
     editable.
+    **Answer (corpus, oracle, guess):** the gasp Table parameter stores the records themselves, a
+    dictionary from maximum PPM to flag bits (fontc's test source `WghtVarGasp.glyphs`: 8 → 10,
+    20 → 7, 65535 → 15), so the behaviour per range is editable; fontc writes them into a version 1
+    table. Without the parameter a hinted font gets the handbook's thresholds 8 and 20 with
+    DOGRAY + SYMMETRIC_SMOOTHING, GRIDFIT + SYMMETRIC_GRIDFIT and all four bits (guess on
+    `hinting.tt.gasp.flagMapping`).
 13. How imported per-glyph instructions are stored and shown, and whether editor instructions and
     imported assembly can coexist in one font.
+    **Answer (guess):** per layer, as assembly text with an outline fingerprint; they coexist in
+    one font but not in one glyph, where editor instructions win.
 14. Layout of the generated `cvt`, `fpgm` and `prep` (function numbering, CVT order); needed only
     for byte parity, not for behaviour.
+    **Answer (ours):** FontCraft's own layout; byte parity with the reference is not a goal.
 15. Behaviour of instructions on glyphs with components, and on Alternate/Intermediate layers.
+    **Answer (guess):** composites get no program of their own, their components' programs apply;
+    special layers that replace the main master's layer carry their own instructions.
 16. Whether horizontal-direction Snap honours any zones (the text defines Auto for vertical mode
     only).
+    **Answer (guess):** no; it rounds to the nearest pixel edge.
 17. In variable exports, how per-master zones and stems reach the font (`cvar` is our assumption).
+    **Answer (guess, waits for M9):** default-master `cvt ` values plus `cvar` deltas.
 18. Lifetime and port of the web preview server.
+    **Answer (plan § 7 question 5, guess):** a free port on the local network interfaces; it stops
+    when the dialog closes.
 
 ## Implementation notes
 

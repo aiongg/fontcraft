@@ -1541,11 +1541,12 @@ label = "TrueType Hint Program"
 location = "palette"
 controls = ["text listing of the glyph's high-level hint commands, one per line", "Compile button to apply edited text", "Delete on a selected line removes that command"]
 area = "hinting-tt"
-milestone = "M10"
+milestone = "M13"
 summary = "Shows the manual TrueType hints of the glyph as an editable text program in step order, alongside the canvas representation, and applies hand edits on compile. It is the writable counterpart of the hint.tt.listInstructions query and gives diffs a textual form of visual hinting."
 ref = "FontLab 7 manual › TrueType Hinting tool (TrueType Hinting panel › Code panel)"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M10 to M13 by the M10 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 
 [[command]]
 id = "hint.tt.setProgramText"
@@ -1555,29 +1556,32 @@ shortcut = ""
 kind = "engine"
 params = "{glyph, master?: id, program: string}"
 area = "hinting-tt"
-milestone = "M10"
+milestone = "M13"
 summary = "Replaces the glyph's manual TrueType hint commands with the parsed text program, rejecting it without change when it does not parse."
 ref = "FontLab 7 manual › TrueType Hinting tool (Code panel)"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M10 to M13 by the M10 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 
 [[behavior]]
 id = "hint.tt.referToNodeNames"
 area = "hinting-tt"
-milestone = "M10"
+milestone = "M13"
 summary = "Manual TrueType hints refer to nodes by a hidden node name rather than by index, so the program survives node insertion and reordering and can be pasted onto another glyph with the same names. Autohinting assigns the hidden names."
 ref = "FontLab 8 What's new › Edit & refine › Node names (TrueType hinting references; Automatic hidden names)"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M10 to M13 by the M10 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 
 [[behavior]]
 id = "hint.tt.deltaWaterfallMarks"
 area = "hinting-tt"
-milestone = "M10"
+milestone = "M13"
 summary = "In the hinting size waterfall, sizes at which a delta hint is active are tinted, with one colour for deltas applied during the program and another for deltas applied after untouched points are interpolated."
 ref = "FontLab 8 What's new › Consistency & precision › TrueType Hinting (Delta highlighting)"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M10 to M13 by the M10 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
 
 # =====================================================================================================
 # FontLab — colour, export profiles, misc
@@ -2334,11 +2338,12 @@ label = "Stem Histogram"
 location = "dialog"
 controls = ["kind: horizontal stems, vertical stems or vertical extremes (for alignment zones)", "bar chart of how many selected glyphs have each width or position; hovering a bar lists its glyphs", "bar-width (bucket) and summing controls", "click bars to choose primary and secondary values, written back to the master's stems or zones"]
 area = "hinting-ps"
-milestone = "M10"
+milestone = "M13"
 summary = "Charts the distribution returned by the stem report (autohint.ps.reportStems) so standard stems and alignment zones can be picked from its peaks and written to Font Info in one step. The pages read confirm the three histogram kinds; the chart controls listed are recalled."
 ref = "FontForge Hints menu › Histograms; FontForge dialogs › The histogram dialog"
 status = "memory"
 origin = "fontforge"
+notes = "Moved from M10 to M13 by the M10 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3, M5 and M6 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Its controls are still recalled (status memory) and must be checked against the secondary reference's documentation before it is built; M10's autohint.ps.reportStems and autohint.ps.reportZones return the data it would chart."
 
 [[panel]]
 id = "dialog.reviewHints"
