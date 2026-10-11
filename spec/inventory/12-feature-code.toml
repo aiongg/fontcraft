@@ -175,6 +175,7 @@ milestone = "M7"
 summary = "Query: returns a text field value with every triple-brace token replaced, in the context of a font, master or instance. Not a reference command; lets agents preview name fields."
 ref = "Appendix › Text Tokens"
 status = "inferred"
+notes = "Our own query. M7 plan § 4: M7.13."
 
 [[command]]
 id = "url.open"
@@ -1382,6 +1383,10 @@ milestone = "M7"
 summary = "In text fields that support them, `{{{token}}}` is replaced by a computed value when the field is used."
 ref = "Appendix › Text Tokens"
 status = "handbook"
+notes = "Documented, not yet observed. glyphsLib reads tokens with the pattern `{{{` text `}}}` (shortest match) and leaves a token it cannot resolve as written; fontc 1.0.0 expands none. M7 plan § 4: M7.13."
+guesses = [
+  "A token FontCraft cannot resolve stays in the text as written, and the compile report names it, as glyphsLib leaves it; a misspelt token in the reference app settles it.",
+]
 
 [[behavior]]
 id = "textToken.versionString"
@@ -1390,6 +1395,7 @@ milestone = "M7"
 summary = "`{{{versionString}}}` gives the application's version number."
 ref = "Appendix › Text Tokens"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft gives its own version. M7 plan § 4: M7.13."
 
 [[behavior]]
 id = "textToken.buildNumber"
@@ -1398,6 +1404,7 @@ milestone = "M7"
 summary = "`{{{buildNumber}}}` gives the application's build number."
 ref = "Appendix › Text Tokens"
 status = "handbook"
+notes = "Documented, not yet observed. FontCraft gives its own build number (the commit count of the release, 0 in development builds). M7 plan § 4: M7.13."
 
 [[behavior]]
 id = "textToken.keyPath"
@@ -1406,6 +1413,10 @@ milestone = "M7"
 summary = "In a font or instance context the token may be a property path on the font or instance object, e.g. `{{{fullName}}}`. The reference resolves paths through its scripting object model; FontCraft needs a documented list of supported paths."
 ref = "Appendix › Text Tokens"
 status = "handbook"
+notes = "Documented, not yet observed. glyphsLib resolves the key as an attribute of its font or instance object. M7 plan § 4: M7.13."
+guesses = [
+  "The supported key paths are the font's familyName, versionMajor, versionMinor, unitsPerEm, date, copyright, designer, designerURL, manufacturer, manufacturerURL and the instance's name, familyName, fullName (family and style name with a space), postscriptFontName, postscriptFullName, weightClass, widthClass; this is the set glyphsLib's objects expose under those names, and tokens tried in the reference app settle more.",
+]
 
 [[behavior]]
 id = "textToken.numberValue"
@@ -1414,6 +1425,7 @@ milestone = "M7"
 summary = "In a master context the token may be the name of a number value."
 ref = "Appendix › Text Tokens"
 status = "handbook"
+notes = "Documented, not yet observed. Number values are M8's definitions; the token reads them where they exist. M7 plan § 4: M7.13."
 
 [[behavior]]
 id = "textToken.glyphProperty"
@@ -1426,6 +1438,7 @@ status = "handbook"
 # ----------------------------------------------------------------------------
 # Behaviours: Regular expressions
 # ----------------------------------------------------------------------------
+notes = "Documented, not yet observed. M7 plan § 4: M7.13; the same property names as M8's glyph property tokens in feature code (layout__tokens), of which M7 implements width, LSB, RSB and the bounds."
 
 [[behavior]]
 id = "regex.anyCharacter"

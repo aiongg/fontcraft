@@ -1049,6 +1049,7 @@ milestone = "M7"
 summary = "Style-linked groups hold at most four fonts (Regular, Italic, Bold, Bold Italic) sharing ID 1. The linked family name is the family plus every word of the style name that is not the Regular/Bold/Italic(Oblique) word already expressed by the bold and italic flags, so 'Family' + 'Semibold Italic' with the italic flag gives 'Family Semibold' and ID 2 'Italic'. makeotf expresses the same thing with explicit FontMenuNameDB entries."
 ref = "fontc fontir/src/ir.rs (style_map_family_name, citing glyphsLib); AFDKO docs/MakeOTFUserGuide.md (FontMenuNameDB)"
 status = "docs"
+notes = "The linked family name is derived as fontc derives it since M2; fontmake also reads the instance's linkStyle, which FontCraft's compiler does not yet. M7 plan § 4: M7.8."
 
 [[behavior]]
 id = "compile.fontMenuNameDb"

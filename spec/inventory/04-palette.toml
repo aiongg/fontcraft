@@ -299,12 +299,13 @@ status = "handbook"
 [[behavior]]
 id = "fitCurve.panelSettingsParameter"
 area = "font-info"
-milestone = "M7"
+milestone = "M3"
 summary = "A font-level custom parameter named Fit Curve Panel Settings fixes the lower and upper percentage for that document. Its value is two comma-separated numbers, for example 52, 78."
 ref = "Palette › Fit Curve"
 status = "handbook"
 
 # ───────────────────────────── Layers ─────────────────────────────
+notes = "Moved from M7 to M3 by the M7 planning pass: M3 built it (crates/engine/src/cmd/fit_curve.rs reads the parameter)."
 
 [[panel]]
 id = "palette.layers"

@@ -834,6 +834,7 @@ milestone = "M7"
 summary = "As an export-time filter Add Extremes is written AddExtremes and takes no arguments."
 ref = "Filters › Built-in Filters › Add Extremes"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[command]]
 id = "path.removeOverlap"
@@ -884,6 +885,7 @@ milestone = "M7"
 summary = "As an export-time filter Remove Overlap is written RemoveOverlap and takes no arguments."
 ref = "Filters › Built-in Filters › Remove Overlap"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "path.removeOverlap.exportCheckbox"
@@ -902,7 +904,7 @@ milestone = "M7"
 summary = "A Filter custom parameter on an instance (export) holds one filter string; at export the named filter runs on that instance's glyphs after composites have been decomposed."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:34–2:47 and 4:44–5:15: pasting in an instance's custom parameters adds a Filter entry holding the copied Transformations string, and the exported instance is slanted. Not shown: when it runs relative to decomposition."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:34–2:47 and 4:44–5:15: pasting in an instance's custom parameters adds a Filter entry holding the copied Transformations string, and the exported instance is slanted. Not shown: when it runs relative to decomposition. fontmake honours Filter on masters and instances with ufo2ft filter names only; fontc ignores it. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.preFilter"
@@ -911,7 +913,7 @@ milestone = "M7"
 summary = "PreFilter takes the same strings as Filter but runs before decomposition, so components are still intact. It is honoured for static fonts only."
 ref = "Appendix › Custom Parameters › PreFilter"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 0:54–1:30: PreFilter entries Decompose and RemoveOverlap are added to an instance. Their timing and the static-only limit are not shown."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 0:54–1:30: PreFilter entries Decompose and RemoveOverlap are added to an instance. Their timing and the static-only limit are not shown. fontmake treats PreFilter as Filter; fontc ignores it. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.syntax"
@@ -920,7 +922,7 @@ milestone = "M7"
 summary = "A filter string is the filter name followed by arguments, all separated by semicolons. Arguments are positional values or key: value pairs depending on the filter."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
-notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:34–2:47: the app writes Transformations;Slant:10;SlantCorrection:0;Origin:4; that is, the name, then Key:value arguments, with no spaces and a semicolon after every item. Not shown: positional arguments."
+notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:34–2:47: the app writes Transformations;Slant:10;SlantCorrection:0;Origin:4; that is, the name, then Key:value arguments, with no spaces and a semicolon after every item. Not shown: positional arguments. M3.12 parses the string (engine `parse_filter_string`); M7.10 runs it at export."
 
 [[behavior]]
 id = "filter.customParameter.booleans"
@@ -929,6 +931,7 @@ milestone = "M7"
 summary = "Boolean arguments in a filter string are written 1 (on) or 0 (off)."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. Parsed since M3.12; M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.includeExclude"
@@ -937,6 +940,7 @@ milestone = "M7"
 summary = "A trailing include: or exclude: argument limits a filter to, or keeps it away from, the listed glyphs; names are separated by spaces or commas, e.g. RemoveOverlap; exclude:x,y,z."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. Parsed since M3.12; M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.thirdParty"
@@ -953,6 +957,7 @@ milestone = "M7"
 summary = "Export string: AddExtremes (no arguments)."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.autohinting"
@@ -969,7 +974,7 @@ milestone = "M7"
 summary = "Export string: HatchOutlineFilter; OriginX: x; OriginY: y; StepWidth: distance; Angle: angle; Offset: thickness (keyed arguments)."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
-notes = "FontCraft (ours, not yet observed): `Offset: thickness` turns Offset Path on with that thickness; without `Offset`, or with `Offset: 0`, the lines stay open paths. Written strings carry all four other keys, and `Offset` only when Offset Path is on."
+notes = "FontCraft (ours, not yet observed): `Offset: thickness` turns Offset Path on with that thickness; without `Offset`, or with `Offset: 0`, the lines stay open paths. Written strings carry all four other keys, and `Offset` only when Offset Path is on. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.offsetCurve"
@@ -978,6 +983,7 @@ milestone = "M7"
 summary = "Export string: OffsetCurve; x; y; makestroke; position. x and y are the horizontal and vertical offsets, makestroke is 0 or 1, and position is a fraction from 0.0 (0 %) to 1.0 (100 %) or the word auto for Auto Stroke."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.removeOverlap"
@@ -986,6 +992,7 @@ milestone = "M7"
 summary = "Export string: RemoveOverlap (no arguments)."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.roughen"
@@ -994,7 +1001,7 @@ milestone = "M7"
 summary = "Export string: Roughenizer; segmentlength; x; y; angle. The fourth value (angle) has no counterpart in the dialog description of the Filters chapter."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
-notes = "FontCraft reads angle as the turn of the move box in degrees counter-clockwise (optional, default 0); the handbook does not say what it does. The seed has no slot, so an export string always uses the default seed 0."
+notes = "FontCraft reads angle as the turn of the move box in degrees counter-clockwise (optional, default 0); the handbook does not say what it does. The seed has no slot, so an export string always uses the default seed 0. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.roundCorners"
@@ -1003,6 +1010,7 @@ milestone = "M7"
 summary = "Export string: RoundCorner; radius; visualcorrection, the latter 0 or 1."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.roundedFont"
@@ -1011,6 +1019,7 @@ milestone = "M7"
 summary = "Export string: RoundedFont; stem, where the stem value may be left out."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.transformations"
@@ -1019,6 +1028,7 @@ milestone = "M7"
 summary = "Export string: Transformations; LSB: shift; RSB: shift; Width: shift; ScaleX: percent; ScaleY: percent; Slant: degrees; SlantCorrection: bool; OffsetX: amount; OffsetY: amount; Origin: 0–4. Shifts carry an explicit sign; it covers both the metrics and the affine dialog."
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[behavior]]
 id = "filter.customParameter.extrudeUndocumented"
@@ -1027,7 +1037,7 @@ milestone = "M7"
 summary = "No export string is documented for Extrude or for Interpolate with Background; whether they can be used as Filter parameters must be checked in the reference app."
 ref = "Appendix › Custom Parameters › Filter"
 status = "inferred"
-notes = "Extrude has no export string until a written source shows its form (owner's decision): an Extrude Filter parameter is refused with a message and changes nothing."
+notes = "Extrude has no export string until a written source shows its form (owner's decision): an Extrude Filter parameter is refused with a message and changes nothing. M7 plan § 4: M7.10 keeps the refusal."
 
 [[behavior]]
 id = "filter.customParameter.sameRegistryAsCommands"
@@ -1036,3 +1046,4 @@ milestone = "M7"
 summary = "FontCraft parses a filter string into the params of the matching filter.* command and runs it through the command registry, so menu, CLI, MCP and export all share one implementation per filter."
 ref = "Appendix › Custom Parameters › Filter"
 status = "inferred"
+notes = "Done for the menu, CLI and MCP in M3.12; M7.10 runs export through the same registry."

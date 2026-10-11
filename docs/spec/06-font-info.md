@@ -406,64 +406,108 @@ Output cell means the chapter does not say; those fields are repeated under Open
 
 ## Open questions
 
+Answers from the M7 planning pass (`docs/plans/M7.md` § 3) are written after each question.
+"Oracle" means fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) and fontc 1.0.0, probed on
+synthetic sources; "guess" means a choice of ours recorded in the row's `guesses` and listed for
+the reference app in the plan's § 8.
+
 Mapping to output, not stated in this chapter:
 
 - Units per Em: the table field (`head.unitsPerEm` by the OpenType spec) is not named.
+  **Answered (spec, M2):** `head.unitsPerEm`; the compiler writes it since M2.
 - Axes: which tables receive name, tag and the Hidden flag (`fvar`, `STAT`, name table by the
-  spec), and what a hidden axis changes besides the flag.
+  spec), and what a hidden axis changes besides the flag. **Open for M9**, which owns the axes.
 - Style Name: which name IDs it fills (2, 4, 6, 16, 17 by the spec) and how they are split when
-  style linking is set.
+  style linking is set. **Answered (oracle, M2):** the compiler follows fontc's name rules: a
+  style-linked (Regular, Italic, Bold, Bold Italic) style goes to ID 2, any other style is added
+  to the family in ID 1 with IDs 16 and 17 holding the typographic family and style; IDs 4 and 6
+  join family and style.
 - Style Linking: the exact effect on name IDs 1/2 versus 16/17, `OS/2.fsSelection`,
-  `head.macStyle`, and what an empty link-name field means.
+  `head.macStyle`, and what an empty link-name field means. **Answered (oracle):** the Bold and
+  Italic flags set fsSelection and macStyle (M2); fontmake also uses the base style name for IDs
+  1 and 2, which M7.8 adds. An empty base field links to Regular (guess on
+  `font.instance.setStyleLinking`).
 - Weight / Width Class: the OS/2 field names are implied, not written; is the width class limited
-  to 1–9 when typed, and what are the labels in the two disclosure menus.
+  to 1–9 when typed, and what are the labels in the two disclosure menus. **Answered:**
+  `usWeightClass` and `usWidthClass` (spec); M7.8 writes an instance's values to them for static
+  instances (fontmake writes the weight class; the width class follows the handbook). Typed
+  width classes outside 1–9 are refused (guess); the menus use the OS/2 specification's names
+  (Thin to Black, Ultra-condensed to Ultra-expanded).
 - familyNames: which name IDs and which platform/language records each localization writes.
+  **Answered (M2):** the default language goes to IDs 1 (and through it 3, 4, 6, 16), every
+  other language to Windows records of its language id (`language_id`).
 - Stylistic set names: storage in the output (feature parameters plus name records by the spec).
+  **Open for M8**, which owns the Features tab.
 - Master metrics: how Ascender / Descender / Cap Height / x-Height / Italic Angle reach `OS/2`,
-  `hhea` and `post`, and how zones and stems reach the CFF Private dictionary.
+  `hhea` and `post`, and how zones and stems reach the CFF Private dictionary. **Answered
+  (oracle, M2):** as fontc derives them (`crates/compile/src/info.rs`); zones and stems in the
+  CFF Private dictionary are M10's.
 
 Behaviour to observe in the reference:
 
 - Token delimiters: the converted handbook text shows the braces ambiguously; confirm the exact
-  token syntax from the Text Tokens section.
+  token syntax from the Text Tokens section. **Answered (handbook, Text Tokens page):**
+  `{{{token}}}`; glyphsLib reads the same form.
 - The complete list of optional General fields per tab, which of them are localizable, and whether
-  the Masters tab offers any.
+  the Masters tab offers any. **Guess** (`font.info.listFields`): the property keys of the file
+  format and glyphsLib's list; plural keys localizable; none on the Masters tab. § 8 check 2.
 - What the Scale to UPM button scales besides outlines (metrics, zones, stems, kerning, anchors,
-  guides, components, custom parameter values) and how it rounds.
+  guides, components, custom parameter values) and how it rounds. **Guess**
+  (`font.info.scaleToUnitsPerEm`): everything measured in units, rounded to the grid. Check 10.
 - Version stepper: step size, upper limit of the minor part, and whether the major part has a
-  control of its own.
-- Creation Date: display format and time-zone handling.
+  control of its own. **Guess** (`font.info.stepVersion`). Check 11.
+- Creation Date: display format and time-zone handling. **Guess** (`font.info.updateDate`): UTC,
+  stored in the file format's form. Check 12.
 - Axes: default name/tag of a new axis, the predefined name list, whether axes can be reordered,
-  what removing an axis does to stored coordinates, tag validation (length, duplicates).
+  what removing an axis does to stored coordinates, tag validation (length, duplicates). **Open
+  for M9.**
 - Custom parameters: whether duplicates are allowed in one scope, whether rows can be reordered,
   and the disabled state that the file format records (`disabled`) but this chapter does not show.
+  **Answered in part:** the disabled state is the row's checkbox (appendix,
+  `customParameters.enableCheckbox`). Duplicates allowed (guess on
+  `font.customParameters.add`, check 14). Reordering: not offered by any command; open, blocks
+  nothing.
 - Row copy and paste: clipboard format, conflict handling, pasting between tabs and fonts.
-- Add Master: default name, icon and axis coordinates of the new master.
+  **Guess** (`font.info.copyRows`, `font.info.pasteRows`). Checks 6 and 7.
+- Add Master: default name, icon and axis coordinates of the new master. **Guess**
+  (`font.master.add`). Check 19.
 - Add Other Font: handling of glyphs missing in either font, of differing axes, UPM and metrics.
-  The Interpolation chapter calls the entry "Add Other Master"; confirm the label.
+  The Interpolation chapter calls the entry "Add Other Master"; confirm the label. **Open for
+  M9**, which owns `font.master.addFromOtherFont`.
 - Removing a master: what happens to instances and to intermediate layers tied to it; refusal on
-  the last master.
+  the last master. **Answered in part:** the last master is refused (file format); the rest is a
+  guess on `font.master.remove`. Check 21.
 - Metrics: is there a plus button to add metrics, which categories exist (the format lists
   ascender, cap height, slant height, x-height, midHeight, bodyHeight, descender, baseline,
   italic angle, italic slope), can default metrics be deleted, may the zone size be negative
-  (it must be for bottom zones), and where the horizontal flag appears.
+  (it must be for bottom zones), and where the horizontal flag appears. **Guesses** on
+  `font.metrics.add`, `fontInfo.metricEditor`, `font.metrics.remove`, `font.master.setMetric`
+  (negative zones allowed). The horizontal flag is kept as read and not shown; open, blocks
+  nothing. Checks 24 and 26.
 - Stems and numbers: default names, whether renaming a number updates tokens, reordering.
+  **Guess** for stems (`font.stems.add`, check 27); numbers are M8's.
 - Exports: fields of a variable font setting, default weight/width class of a new instance,
   naming rules of Add Instance for Each Master and whether it skips existing locations,
-  what Instance as Master does with several instances selected.
+  what Instance as Master does with several instances selected. **Guess** for Add Instance
+  (`font.instance.add`, check 29); the rest is M9's.
 - Interpolation values (manual per-master factors): present in the file format, not described
-  here; find the UI.
+  here; find the UI. **Open for M9.**
 - Features: renaming and reordering sidebar entries, whether order affects compiled lookup order,
   the disabled state recorded by the file format, the snippet list, whether editing an automatic
   entry is blocked, shortcuts for Update and Compile, whether Compile runs automatically on export.
+  **Open for M8.**
 - Keyboard Increments: the chapter gives Shift = 10 and Cmd = 100, while the format documentation
   describes the largest step as Shift and Cmd together; confirm the modifiers and whether the base
-  step of 1 is editable.
+  step of 1 is editable. **Open for M3's row** (`fontInfo.keyboardIncrements`); M7 shows the two
+  fields the chapter names.
 - Use Custom Naming: the source key is the inverse-sounding `disablesNiceNames`; confirm the
-  polarity.
+  polarity. **Answered (M4):** on means `disablesNiceNames` true.
 - File Format Version: the chapter says new files are created in version 3 format even in
-  Glyphs 4; confirm, and list which features force version 4.
+  Glyphs 4; confirm, and list which features force version 4. **Open for M1's row**; the menu
+  offers the versions M1 writes.
 - Font Type: the format lists two more values (`layerFont`, `iconSet`) that this chapter does not
-  mention.
+  mention. **Open for M9's row**; the menu offers Default and Variable and keeps other stored
+  values.
 - Notes: the chapter text places the tab "in Font View"; taken here to mean the Notes tab of Font
-  Info. Confirm whether Markdown is rendered anywhere or only highlighted.
+  Info. Confirm whether Markdown is rendered anywhere or only highlighted. **Answered
+  (handbook):** highlighted only; the stored text is raw.

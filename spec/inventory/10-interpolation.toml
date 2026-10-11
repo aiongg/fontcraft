@@ -130,6 +130,7 @@ milestone = "M7"
 summary = "Each master has a free name (Light, Regular Condensed, Bold Caption…) and an icon chosen to represent it; both are organisational only."
 ref = "Interpolation › Setting up Masters"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.5."
 
 [[behavior]]
 id = "masters.metricsInterpolate"
@@ -221,6 +222,7 @@ milestone = "M7"
 summary = "The Weight Class and Width Class of an instance are stored separately from its axis coordinates; changing one never changes the other."
 ref = "Interpolation › Setting up Instances › Static Instances"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake writes an instance's Weight Class to usWeightClass (350 in the planning probe); FontCraft's compiler takes it from a variable weight axis only, and fontc builds no static instance. M7.8 writes the instance's Weight Class and Width Class to OS/2, as the handbook and, for the weight, fontmake do. M7 plan § 4: M7.7 (test that editing one leaves the other)."
 
 [[behavior]]
 id = "variableFontSetting.wholeFontParameters"
@@ -265,6 +267,7 @@ status = "handbook"
 # ───────────────────────────────────────────────────────────────────────────────
 # Outline compatibility
 # ───────────────────────────────────────────────────────────────────────────────
+notes = "Documented, not yet observed. M7 plan § 4: M7.8 (test: only the default-language family name reaches name ID 1)."
 
 [[behavior]]
 id = "compatibility.rules"

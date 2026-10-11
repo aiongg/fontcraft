@@ -657,15 +657,43 @@ Edited in a dialog and stored as an option string for ttfautohint.
   0.49 + 240 / z. For z = 21: PPM 49, value at most 0.04762.
 - `blueShift` default 7; `blueFuzz` default 1, zones at least 2 x blueFuzz + 1 units apart.
 
+## Oracle support of the M7 parameters
+
+Checked by the M7 planning pass with fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) and fontc
+1.0.0 on synthetic sources (`docs/plans/M7.md` § 2 has the full table). In short:
+
+- fontmake applies font parameters to every master, master parameters over them, and instance
+  parameters and properties to the static instance it builds. fontc builds no static instance:
+  instance values reach only `fvar`, and of master and instance parameters it reads only
+  metrics, panose and meta.
+- Read by fontmake on instances (and masters): the name properties and their format 2
+  parameters, Name Table Entry (added up over the levels), Remove Glyphs and Keep Glyphs (exact
+  names only; it subsets after compiling), Rename Glyphs, Reencode Glyphs, Filter and PreFilter
+  (ufo2ft filter names only).
+- Read by neither: Export Glyphs, Prevent Name ID, Export Mac Name Table Entries, Compatible name
+  Table, Scale to UPM, Export kern Table, ROS, Import Font, Import Master, Point To Unit Ratio,
+  Instance Preview, Use Arabic Presentation Form Unicodes, the wildcard and query forms of Remove
+  and Keep Glyphs, `%d` templates in versionString, and the properties postscriptFullNames,
+  styleNames, styleMapFamilyNames, styleMapStyleNames and compatibleFullNames.
+- Where no oracle reads a parameter, FontCraft follows the handbook and records each choice of
+  its own as a guess on the row.
+
 ## Open questions
+
+Answers from the M7 planning pass are written after each question; questions about parameters
+of other milestones stay open for those milestones.
 
 Scope
 - Only 24 of the 205 entries state where the parameter may be set. For the rest (`scope = []`) the
   allowed tabs must be taken from the Font Info chapter or observed in the reference app.
+  **Decided (guess on `font.customParameters.add`):** a parameter whose entry names no scope is
+  allowed in all three tabs; the catalogue (M7.2) records the stated scopes. § 8 check 13.
 - `TTFStems`: recorded as master because the entry speaks of "the main master"; can it also sit on
-  the font like `TTFZones`?
+  the font like `TTFZones`? **Open for M10.**
 - `Local Interpolation`, `Post Table Type`, `compatibleFullNames`: the wording mentions "the
-  instance" in passing without saying the parameter belongs there; left unscoped.
+  instance" in passing without saying the parameter belongs there; left unscoped. **Answered for
+  compatibleFullNames:** a property allowed on the font and on instances, like the other name
+  properties. The others stay open for M9 and M2.
 
 Value types the appendix does not give
 - The plural name keys (`familyNames`, `styleNames`, `copyrights`, `designers`, `manufacturers`,
@@ -673,80 +701,112 @@ Value types the appendix does not give
   `postscriptFullNames`, `preferredFamilyNames`, `preferredSubfamilyNames`, `styleMapFamilyNames`,
   `styleMapStyleNames`, `variableStyleNames`): recorded as `dict` (language to text) by inference.
   Confirm the stored shape against the file-format documentation, and whether singular spellings
-  are also accepted.
+  are also accepted. **Answered (GlyphsSDK, glyphsLib):** in format 3 they are `properties` with a
+  `values` list of `{language, value}` (OpenType language tags, `dflt` the default); format 2
+  stores the singular spelling as a custom parameter, which M1 reads into the same property.
+  Both spellings are accepted; the rows' summaries say so.
 - `Axis Mappings`, `gasp Table`, `Virtual Master`, `Import Font`, `Import Master`,
   `Fit Curve Panel Settings`, `variablePostscriptFontName`: no type stated; kinds are inferred.
+  **Answered for Import Font and Import Master:** text, a path (guesses on the rows); Fit Curve
+  Panel Settings was settled by M3. The others stay open for M9 and M10.
 - `Color Palettes`, `Hangul Composition Groups`, `Family Alignment Zones`, `Axis Location`,
   `TTFStems`, `TTFZones`, `panose`, `fsType`, `unicodeRanges`, `codePageRanges`: typed "list" with
-  no element format.
+  no element format. **Answered for panose, fsType, unicodeRanges, codePageRanges** by M2's
+  reader (numbers, bit numbers, code page numbers or `bit N`). The others stay open for their
+  milestones.
 - `Master Color`, `Master Stroke Color`, `Master Background Color` and their Dark variants: typed
-  "string"; the colour notation is not given.
+  "string"; the colour notation is not given. **Open for M11 and M14.**
 - `Default Layer Width` is typed integer but accepts `script: value`; `Point To Unit Ratio` is typed
   float but described as an integer; `SBIX to SVG` is typed integer but described as a switch.
+  **Answered for Point To Unit Ratio:** any finite number above 0 is accepted (catalogue kind
+  number). Default Layer Width was settled by M5; SBIX to SVG stays open for M11.
 - `Design Grid`: said to take three values while the syntax shows a script and two numbers; unit
-  and relation to `CJK Grid` unclear.
+  and relation to `CJK Grid` unclear. **Settled by M3** (`cmd/guide.rs`).
 
 Apparent duplicates and conflicting descriptions
 - `Optimize Variable Deltas` and `Variable Font Optimize Deltas` have identical descriptions.
-  Aliases, or old and new name? Which one does the reference write?
-- `Variable Font Origin` and `Variation Font Origin`: same question.
+  Aliases, or old and new name? Which one does the reference write? **Open for M9.**
+- `Variable Font Origin` and `Variation Font Origin`: same question. **Open for M9.**
 - `Variable Font Style Name` and `variableStyleName` carry the description of
   `Variable Font Family Name` (they say "family name"). Presumably style names; how do they relate
-  to `Variable SubfamilyName` and `variableStyleNames`, and which name IDs does each set?
+  to `Variable SubfamilyName` and `variableStyleNames`, and which name IDs does each set? **Open
+  for M9.**
 - `styleNames` and `styleMapStyleNames` are both said to be name ID 2. Which wins, and does
-  `styleNames` actually feed ID 17?
-- `styleMapFamilyNames`: the name ID (presumably 1) is not stated.
+  `styleNames` actually feed ID 17? **Decided (M7 plan § 7, question 2):** styleNames replaces
+  the style name, so it reaches ID 2 for style-linked fonts and ID 17 otherwise;
+  styleMapStyleNames sets ID 2 and the bold and italic bits and wins over styleNames for ID 2.
+  Neither oracle reads the properties.
+- `styleMapFamilyNames`: the name ID (presumably 1) is not stated. **Decided:** ID 1 of
+  style-linked fonts, as fontmake writes the format 2 parameter styleMapFamilyName.
 - `Export AAT` and `Export morx Table` both govern the morx table: one is described as a way to
-  suppress it, the other as inserting it. Precedence when both are present?
+  suppress it, the other as inserting it. Precedence when both are present? **Open for M8.**
 - `Export SVG Table` is said to be exported by default, yet `Color Layers to SVG` and
-  `SBIX to SVG` exist to request SVG output. What exactly triggers an SVG table?
+  `SBIX to SVG` exist to request SVG output. What exactly triggers an SVG table? **Open for M11.**
 - `Decompose Components` and `Decompose Components in Variable Font`: does the first also apply to
-  variable exports?
+  variable exports? **Open for M6 and M9.**
 
 Behaviour left unclear
-- `Autohint`: PostScript, TrueType, or whichever applies to the output format?
-- `DisableAllAutomaticBehaviour`: only two of the "most" automatic steps are named.
-- `Export OpenType`: which tables count as "most OpenType tables"?
-- `Webfont Only`: which data is removed.
+- `Autohint`: PostScript, TrueType, or whichever applies to the output format? **Open for M10.**
+- `DisableAllAutomaticBehaviour`: only two of the "most" automatic steps are named. **Open for
+  M2's row.**
+- `Export OpenType`: which tables count as "most OpenType tables"? **Open for M8.**
+- `Webfont Only`: which data is removed. **Open for M2's row.**
 - `Use Line Breaks`: the entry says checked means unescaped line breaks, then says unchecked helps
-  version control; which state is the default and which is meant to help diffs?
+  version control; which state is the default and which is meant to help diffs? **Open for M1's
+  row.**
 - `Use Arabic Presentation Form Unicodes`: which glyphs get which code points; does it change
-  `cmap` only?
+  `cmap` only? **Guess** on the row: unencoded positional and ligature forms get Unicode's
+  presentation-form code points; cmap only. § 8 check 40.
 - `isFixedPitch`: are widths really forced to the space width at export, and what is the
-  `.monospace` number in the master settings?
+  `.monospace` number in the master settings? **Open for M2's row.**
 - `Preview Descender`: default given as winAscent, which reads as a misprint. FontCraft uses
-  winDescent (as a distance below the baseline), departing from the handbook's words.
+  winDescent (as a distance below the baseline), departing from the handbook's words. **Settled
+  by M5.**
 - `superscriptYOffset`: "positive goes below the baseline" looks copied from the subscript entry.
+  **Open for M2's row.**
 - `Name Table Entry`: default language printed as 0x0049; the Windows English id is 0x0409. The
-  range "0 to 65536" presumably means 0 to 65535.
+  range "0 to 65536" presumably means 0 to 65535. **Answered:** read as 0x0409 and 0–65535, as M2's
+  reader does.
 - `Filter` > `Transformations`: `LSB` and `RSB` shifts carry an asterisk in the source that is
-  never explained (possibly a percentage or relative form).
+  never explained (possibly a percentage or relative form). **Settled by M3.12**'s parser.
 - `Filter` > `Autohinting`: listed as a filter value without saying what it does per instance or how
-  it relates to the `Autohint` parameter.
+  it relates to the `Autohint` parameter. **Open for M10**; until then the filter is refused at
+  export with a message.
 - `Grid Spacing`: behaviour at exactly 1.0 is stated twice with slightly different bounds; treated
-  as "below 1 = hundredths, 1 or more = whole units".
+  as "below 1 = hundredths, 1 or more = whole units". **Open for M2's row.**
 - `Scale to UPM`: does it scale kerning, metrics, hint values and guides as well as outlines, and
-  how is rounding done?
+  how is rounding done? **Guess** (`font.info.scaleToUnitsPerEm`, shared): everything measured in
+  units, rounded to the grid. § 8 check 43.
 - `TrueType Keep GlyphOrder` against `glyphOrder` and `DisableAllAutomaticBehaviour`: precedence.
+  **Open for M2's and M4's rows.**
 - `Keep Glyphs`: "mutually exclusive" with `Remove Glyphs`; what happens when both are present?
-- `Rename Glyphs` is described as a swap; what if `newname` does not exist?
+  **Guess** on Keep Glyphs: Keep first, then Remove, with a warning. Check 37.
+- `Rename Glyphs` is described as a swap; what if `newname` does not exist? **Guess** on the row:
+  the glyph is renamed, with a warning. Check 38.
 - `Link Metrics With First Master`: is the link live while editing or resolved at export?
+  **Settled by M5.**
 - `Import Font` / `Import Master`: path form (relative or absolute) and behaviour when the file is
-  missing.
+  missing. **Guess** on the rows: relative to the host's folder unless absolute; a missing file
+  is a warning. Check 50.
 - `Family Alignment Zones`: which table entry it writes (presumably the CFF family blues) is not
-  stated; `TTFFamilyZonesThreshold` uses a font-level `TTFZones` instead.
-- `Get Hints From Master`: value is a master name or id?
+  stated; `TTFFamilyZonesThreshold` uses a font-level `TTFZones` instead. **Open for M10.**
+- `Get Hints From Master`: value is a master name or id? **Open for M10.**
 - `Disable Masters`, `Variable Font Origin`, `Link Metrics With Master`: masters referenced by name;
-  behaviour with duplicate names.
-- `Keep UI-Font Bounding Box`: stated as Oriya only; confirm.
+  behaviour with duplicate names. **Open for M9; Link Metrics With Master settled by M5.**
+- `Keep UI-Font Bounding Box`: stated as Oriya only; confirm. **Open for M8.**
 - `ROS`: whether glyph naming or CID assignment requirements apply for the non-Identity
-  collections.
-- `Export Mac Name Table Entries` and `Compatible name Table`: interaction.
+  collections. **Open for M12**, where the row moved.
+- `Export Mac Name Table Entries` and `Compatible name Table`: interaction. **Decided:** Compatible
+  name Table writes Macintosh records even when Export Mac Name Table Entries is absent; with the
+  latter off, it writes none (guess on Compatible name Table).
 - `Has WWS Names`, `Use Typo Metrics`: are the bits set automatically when the parameter is absent?
+  **Answered (oracle, M2):** no; the bits come only from the parameters.
 
 Overlap with other inventory files
 - `spec/inventory/10-interpolation.toml` already holds `[[parameter]]` rows for `Axis Location`,
   `Axis Mappings`, `Virtual Master`, `Variable Font Origin`, `Disable Masters`,
   `Enforce Compatibility Check`, `Feature for Feature Variations`, `Style Name as STAT entry` and
   `Elidable STAT Axis Value Name`. Parameter names must be unique across files, so one copy of each
-  has to go; the interpolation rows give scopes this appendix does not.
+  has to go; the interpolation rows give scopes this appendix does not. **Answered:** each name
+  now has one row (checked by the M7 planning pass); the M7.2 catalogue generator fails on a
+  duplicate name.

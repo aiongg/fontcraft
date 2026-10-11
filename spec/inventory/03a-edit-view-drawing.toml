@@ -1718,6 +1718,7 @@ ref = "Edit View › Extremes & Inflections"
 status = "handbook"
 
 # ───────────────────────────── Focusing and locking ─────────────────────────────
+notes = "Documented, not yet observed. M7 plan § 4: M7.10."
 
 [[command]]
 id = "path.focusOnSelectedPath"

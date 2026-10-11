@@ -2315,10 +2315,11 @@ notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.m
 [[behavior]]
 id = "export.cidMapping"
 area = "compile"
-milestone = "M7"
+milestone = "M12"
 summary = "For CJK fonts glyphs are addressed by character identifier instead of name. A Registry-Ordering-Supplement decides which CID each nice-named glyph receives; exporting glyphs the ROS does not cover are appended after the mapped ones."
 ref = "Font View › Names & Unicode › CID Mapping"
 status = "handbook"
+notes = "Moved from M7 to M12 by the M7 planning pass, with the ROS parameter: CID-keyed output is M12's (compile.cidKeyedFonts, compile.cidCmapResources), where the AFDKO tools are the oracle; neither fontc nor fontmake writes CID-keyed fonts."
 
 [[behavior]]
 id = "import.keepGlyphNames"
@@ -3189,10 +3190,11 @@ guesses = [
 [[behavior]]
 id = "glyphOrder.customParameter"
 area = "font-info"
-milestone = "M7"
+milestone = "M4"
 summary = "A font-level glyphOrder parameter holding glyph names, one per line, replaces the default order in Font View and in exports, and makes sort names irrelevant. How glyphs missing from the list are placed is not stated in this chapter."
 ref = "Font View › Glyph Order"
 status = "handbook"
+notes = "Moved from M7 to M4 by the M7 planning pass: M4 built it (crates/model/src/order.rs; the compiler uses the same order)."
 
 [[behavior]]
 id = "glyphOrder.keepAlternatesSortName"

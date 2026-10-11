@@ -249,11 +249,12 @@ name = "inkTrapWidth"
 scope = ["master"]
 kind = "number"
 area = "path-ops"
-milestone = "M7"
+milestone = "M13"
 summary = "Default opening width of generated ink traps. The short-segment audit check also uses it as its length threshold."
 ref = "FontLab 8 What's new › Edit & refine › Ink traps (Font Info › Font Dimensions); Test & adjust › FontAudit"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M7 to M13 by the M7 planning pass with the other secondary-reference rows (owner decision M3 § 7, question 3)."
 
 [[command]]
 id = "path.loopCorner"
@@ -535,11 +536,12 @@ name = "suggestDistance"
 scope = ["master"]
 kind = "dict"
 area = "guides-metrics"
-milestone = "M7"
+milestone = "M13"
 summary = "Horizontal and vertical distances ({x, y}) at which the Suggest Distance snapping aid offers parallel snap outlines."
 ref = "FontLab 8 What's new › Consistency & precision (Font Info › Other Values › Suggest distance)"
 status = "docs"
 origin = "fontlab"
+notes = "Moved from M7 to M13 by the M7 planning pass with the other secondary-reference rows (owner decision M3 § 7, question 3)."
 
 [[command]]
 id = "view.suggestStems"

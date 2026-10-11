@@ -372,6 +372,10 @@ milestone = "M7"
 summary = "An instance carrying the Export Folder custom parameter is written to that sub-path, resolved relative to the export destination. Forward slashes create nested folders and '..' segments climb out of the destination (for example '../Trial Versions')."
 ref = "Import & Export › Exporting Font Files › Export Destination"
 status = "handbook"
+notes = "Documented, not yet observed. The Export Folder parameter itself is an M2 row; neither export command honours it yet. M7 plan § 4: M7.10."
+guesses = [
+  "The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment or a path of more than 32 segments is refused for that instance with a message, and the report names every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.",
+]
 
 [[behavior]]
 id = "export.variableUsesSettingsOrDefault"
@@ -991,6 +995,10 @@ milestone = "M7"
 summary = "Creates an empty project document: a set of export instance definitions that points at a font file without modifying it. It is saved like any document (File › Save) with the .glyphsproject suffix."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
+guesses = [
+  "A new project is saved as a native FontCraft project file (`.fontcraftproject`, JSON: the linked font's path relative to the project, the instances in the native format, the export destination); reading and writing `.glyphsproject` waits for a sample file from the reference app.",
+]
 
 [[command]]
 id = "project.linkFont"
@@ -1004,6 +1012,10 @@ milestone = "M7"
 summary = "Sets or changes the font file a project is linked to (the Choose button, or a click on the shown path). The font does not have to be open. The project's sidebar then lists that font's instances."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
+guesses = [
+  "The link is stored relative to the project file when both share a folder tree, else absolute; linking copies the font's instances into the project only when the project has none; saving a project in the reference app settles the path form.",
+]
 
 [[command]]
 id = "project.addInstance"
@@ -1017,6 +1029,10 @@ milestone = "M7"
 summary = "The plus button in the project window: appends a new static instance or a new variable font setting to the project's list."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
+guesses = [
+  "A new project instance has the defaults of font.instance.add; a variable font setting waits for M9 and is refused until then.",
+]
 
 [[command]]
 id = "project.removeInstances"
@@ -1030,6 +1046,7 @@ milestone = "M7"
 summary = "The minus button in the project window: deletes the selected instances from the project. The linked font is not touched."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[command]]
 id = "project.revertInstances"
@@ -1043,6 +1060,7 @@ milestone = "M7"
 summary = "The arrow button in the project window: discards the project's instance list and reloads the instances defined in the linked font file. The label is ours; the button has only an icon."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[command]]
 id = "project.moveInstances"
@@ -1056,6 +1074,7 @@ milestone = "M7"
 summary = "Reorders instances in the project list; in the UI this is drag and drop within the sidebar."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[command]]
 id = "project.duplicateInstances"
@@ -1069,6 +1088,10 @@ milestone = "M7"
 summary = "Copies instances within the project. In the UI: Option-drag an instance to the place where the copy should go, or use Copy (Cmd+C) followed by Paste (Cmd+V) on the selected instances."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
+guesses = [
+  "A duplicate keeps the original's name and goes right after it unless `to` is given.",
+]
 
 [[command]]
 id = "project.editInstance"
@@ -1082,6 +1105,7 @@ milestone = "M7"
 summary = "Changes the properties and custom parameters of one project instance. The right half of the project window is the same editor as Font Info › Exports."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. `changes` takes the keys of font.instance.set plus custom parameter edits in the form of font.customParameters.set. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[command]]
 id = "project.setExportDestination"
@@ -1095,6 +1119,7 @@ milestone = "M7"
 summary = "Sets the folder a project exports into (a click on the Export Destination path in the project window opens a folder chooser)."
 ref = "Import & Export › Projects › Exporting a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[command]]
 id = "project.export"
@@ -1108,6 +1133,7 @@ milestone = "M7"
 summary = "Compiles every instance configured in the project from the linked font into the project's export destination. Requires a saved project and a resolvable font link; the linked font need not be open."
 ref = "Import & Export › Projects › Exporting a Project"
 status = "handbook"
+notes = "Documented, not yet observed. Export reads the linked font from disk and builds the project's instances in place of the font's, through the same build as File › Export. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[panel]]
 id = "window.project"
@@ -1128,6 +1154,7 @@ milestone = "M7"
 summary = "Document window of a .glyphsproject file: the font link, the list of instance definitions, an editor for the selected instance, and the export controls."
 ref = "Import & Export › Projects"
 status = "handbook"
+notes = "Documented, not yet observed. The right half reuses the Exports tab's instance editor (M7.18). M7 plan § 4: M7.19."
 
 [[behavior]]
 id = "project.separateFromFont"
@@ -1136,6 +1163,7 @@ milestone = "M7"
 summary = "A project is a separate .glyphsproject file holding instance definitions and a reference to one font file. Editing it never alters the font file, so alternative font versions can be set up without touching the original."
 ref = "Import & Export › Projects"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[behavior]]
 id = "project.startsFromFontInstances"
@@ -1144,6 +1172,7 @@ milestone = "M7"
 summary = "Once a font is linked, the project list shows that font's own instances as its starting point; from then on the list is the project's own and can be restored from the font with the revert button."
 ref = "Import & Export › Projects › Setting up a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[behavior]]
 id = "project.linkedFontNeedNotBeOpen"
@@ -1152,6 +1181,7 @@ milestone = "M7"
 summary = "Linking a font to a project and exporting the project both work with the font file closed; the project reads it from disk."
 ref = "Import & Export › Projects › Setting up a Project; Exporting a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[behavior]]
 id = "project.exportPreconditions"
@@ -1160,6 +1190,7 @@ milestone = "M7"
 summary = "Project export needs the project to be saved and the stored path to the linked font to resolve. Renaming, moving or deleting the font file breaks the link, which must then be chosen again."
 ref = "Import & Export › Projects › Exporting a Project"
 status = "handbook"
+notes = "Documented, not yet observed. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."
 
 [[behavior]]
 id = "project.instanceExportFolder"
@@ -1168,3 +1199,4 @@ milestone = "M7"
 summary = "All project instances go into the project's export destination; any instance carrying an Export Folder custom parameter is placed in that sub-path, following the same relative-path rules as export.instanceExportFolder."
 ref = "Import & Export › Projects › Exporting a Project"
 status = "handbook"
+notes = "Documented, not yet observed. Same rules as export.instanceExportFolder. The project file format of the reference app (.glyphsproject) has no public specification and no sample in the corpus; until a project saved by the reference app is available (M7 plan § 8), projects are saved in FontCraft's own project format (M7 plan § 7, question 3). M7 plan § 4: M7.14."

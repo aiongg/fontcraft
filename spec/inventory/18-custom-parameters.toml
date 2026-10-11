@@ -17,6 +17,7 @@ milestone = "M7"
 summary = "Each custom parameter in the Font, Masters and Exports tabs of Font Info has a checkbox left of its name; unchecking it disables the parameter without deleting it. Enabled parameters are drawn in black and disabled ones in grey."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. The model keeps a disabled flag per parameter (M1) and the compiler ignores disabled rows (M2). M7 plan § 4: M7.2 (command), M7.15 (checkbox)."
 
 [[behavior]]
 id = "customParameters.nameCaseConvention"
@@ -25,6 +26,7 @@ milestone = "M7"
 summary = "Parameter names in camelCase are font-info keys defined by the UFO 3 specification and change font information; names in Title Case with spaces are specific to the reference application and usually change the font itself, for example by running a filter on the outlines."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. The catalogue records each parameter's kind and effect; nothing else depends on the case. M7 plan § 4: M7.2."
 
 [[behavior]]
 id = "customParameters.shortAndLongNames"
@@ -33,6 +35,7 @@ milestone = "M7"
 summary = "UFO-derived parameter names are accepted both in the full UFO spelling and in a short form with the keyword prefix dropped, for example `description` for `openTypeNameDescription` and `blueScale` for `postscriptBlueScale`. Both spellings must be read as the same parameter."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. The compiler reads both spellings already for the names it handles (M2, crates/compile/src/info.rs); the catalogue lists every alias so the picker, `describe` and the compiler share one table. M7 plan § 4: M7.2."
 
 [[parameter]]
 name = "Add Class"
@@ -275,6 +278,11 @@ effect = "naming"
 summary = "When on, export writes a legacy name table layout that some Mac applications (QuarkXPress, FontExplorer) need to group styles correctly in their font menus. It can break behaviour elsewhere, notably in Microsoft Office, so it is opt-in."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.8."
+guesses = [
+  "When on, every name record is also written on the Macintosh platform (Roman encoding, English), with name ID 1 holding the family and style name together and ID 2 the style name, the layout older Macintosh applications group by; exporting with the parameter in the reference app and reading the name table settles it.",
+  "Compatible name Table writes its Macintosh records even when Export Mac Name Table Entries is absent, and none when that parameter is present and off; both parameters together in the reference app settle it.",
+]
 
 [[parameter]]
 name = "compatibleFullNames"
@@ -283,9 +291,13 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 18, the Mac-only name preferred over ID 4. When absent, ID 18 is derived as family name, a space and the instance's style name. Using it can make Mac and Windows full names differ. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 18, the Mac-only name preferred over ID 4. When absent, ID 18 is derived as family name, a space and the instance's style name. Using it can make Mac and Windows full names differ. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `compatibleFullName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) writes name ID 18 from the format 2 parameter compatibleFullName and ignores this property; fontc writes neither. FontCraft writes ID 18 from either spelling, as the handbook says; when absent no ID 18 is written, as both oracles do. M7 plan § 4: M7.8."
+guesses = [
+  "Without the field no name ID 18 is written, as both oracles do, though the handbook says the reference derives it from family and style name; an export in the reference app settles whether it writes ID 18 by default.",
+]
 
 [[parameter]]
 name = "copyrights"
@@ -294,9 +306,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 0 and takes precedence over the Copyright field on the Font tab of Font Info. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 0 and takes precedence over the Copyright field on the Font tab of Font Info. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `copyright`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 0 by the compiler since M2, at font, master and instance level, as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does; fontc reads the font's only. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "cvt Table"
@@ -390,9 +403,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 10, a description that may hold revision notes, usage advice, history or feature lists. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 10, a description that may hold revision notes, usage advice, history or feature lists. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `description`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 10 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "Design Grid"
@@ -412,9 +426,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 9 for the instance it is on, taking precedence over the Designer field on the Font tab. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 9 for the instance it is on, taking precedence over the Designer field on the Font tab. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `designer`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 9 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "designerURL"
@@ -426,6 +441,7 @@ effect = "naming"
 summary = "Sets name ID 12 for the instance it is on, taking precedence over the designer URL on the Font tab. The value should include the protocol."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 12 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "Disable autohinting for glyphs"
@@ -560,6 +576,7 @@ effect = "export-filter"
 summary = "List of glyph names that are always exported, regardless of each glyph's own export flag."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.9."
 
 [[parameter]]
 name = "Export kern Table"
@@ -571,6 +588,10 @@ effect = "other"
 summary = "Adds an old-style kern table alongside GPOS kerning, for TrueType-flavoured output only. Group kerning is expanded to every glyph pair, so an unsubsetted font can overflow the table; intended only for legacy software."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.11."
+guesses = [
+  "The table is version 0 with one format 0 subtable per run of at most 10,920 pairs (the subtable's 16-bit length), class pairs expanded to every member pair, exceptions overriding, zero pairs left out, only the default (horizontal) kerning of the exported master; pairs past 65,535 in total are dropped with a warning; an export with the parameter in the reference app settles it.",
+]
 
 [[parameter]]
 name = "Export Mac Name Table Entries"
@@ -582,6 +603,10 @@ effect = "naming"
 summary = "Macintosh name records are written by default; setting this off leaves them out."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Both oracles write Windows records only, and FontCraft does by default (M2 decision in docs/spec/40-compile.md: Windows only, Mac optional); this departs from the handbook, which says the reference writes Macintosh records unless the parameter is off. FontCraft writes Macintosh records (Roman encoding, English) only when the parameter is present and on. M7 plan § 4: M7.8."
+guesses = [
+  "Macintosh records are written only for name IDs whose text the Mac Roman encoding can hold; an export from the reference app read with ttx settles which IDs it writes.",
+]
 
 [[parameter]]
 name = "Export morx Table"
@@ -689,9 +714,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Overrides the Family Name on the Font tab. It goes into name IDs 1 and 4 and is an input to the computed IDs 3, 4 and 6. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Overrides the Family Name on the Font tab. It goes into name IDs 1 and 4 and is an input to the computed IDs 3, 4 and 6. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `familyName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Font level: the compiler writes it since M2 (both oracles). Instance level: fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) renames the instance's family, fontc builds no static instance, and FontCraft's compiler ignores it today; M7.8 applies it as fontmake and the handbook do. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "Feature for Feature Variations"
@@ -725,6 +751,11 @@ effect = "export-filter"
 summary = "Applies a filter or app function to the instance's outlines at export, after decomposition; the value is the filter name followed by semicolon-separated arguments. Built-ins: AddExtremes, Autohinting, HatchOutlineFilter, OffsetCurve, RemoveOverlap, Roughenizer, RoundCorner, RoundedFont, Transformations (argument syntax in docs/spec/18-custom-parameters.md); `include:` or `exclude:` plus glyph names limits the glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on masters and instances, not on the font, and loads only filters that exist in ufo2ft under that name (Transformations works; RemoveOverlap, AddExtremes, RoundCorner and OffsetCurve are skipped with an error); include: and exclude: work; fontc ignores it. FontCraft runs the handbook's filter names through the M3.12 filter registry, on instances and masters. M7 plan § 4: M7.10."
+guesses = [
+  "The filter runs on every glyph of the instance with its components decomposed first, so a TrueType export of an instance with a Filter has no composites; a Transformations Filter on an instance with a composite in the reference app settles it.",
+  "A Filter on a master applies to every export of that master; on the font it applies to every export, which fontmake ignores but no source forbids; the reference app's picker settles where it may be added.",
+]
 
 [[parameter]]
 name = "Fit Curve Panel Settings"
@@ -904,6 +935,10 @@ effect = "other"
 summary = "References another source file; glyphs it has that the host lacks appear in the host as if copied, in layer and master order, visible and typeable but locked. Used to split work across people or share smart components. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12. 3 corpus sources (the GlyphsSDK samples) use it."
+guesses = [
+  "The path is relative to the host file's folder unless absolute; the imported glyphs are read when the host opens and before each export, shown locked, never saved into the host; a missing or unreadable file is a warning on opening and at export, not an error; the reference app settles the path form and the missing-file case.",
+]
 
 [[parameter]]
 name = "Import Master"
@@ -915,6 +950,10 @@ effect = "other"
 summary = "References a master in another source file so it behaves like a master of the host. Both files need mutually compatible axis values, and each linked master takes a parameter of its own. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.12."
+guesses = [
+  "The value is the other file's path, a semicolon and the master's name, resolved as Import Font resolves paths; the linked master is read-only and its glyphs' layers are not saved into the host; the reference app settles the value syntax.",
+]
 
 [[parameter]]
 name = "Instance Preview"
@@ -926,6 +965,10 @@ effect = "ui"
 summary = "List of glyph names replacing the default `Aang126` preview string shown for an instance in Font Info."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. M7 plan § 4: M7.18."
+guesses = [
+  "The value lists glyph names separated by spaces or line breaks; names the font lacks are skipped; an instance between masters shows its nearest master until M9 interpolates; the reference app settles separators and missing names.",
+]
 
 [[parameter]]
 name = "InterpolationWeightY"
@@ -981,6 +1024,11 @@ effect = "export-filter"
 summary = "List of glyphs to keep; all others are dropped and kerning and automatic features are adjusted to the smaller set. Accepts the wildcard and `key=value` queries of Remove Glyphs; the two parameters are not meant to be combined."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours exact names on instances only (it subsets after compiling); fontc ignores it. FontCraft follows the handbook: names, wildcards and key=value queries, at any level, with kerning pruned. M7 plan § 4: M7.9."
+guesses = [
+  "When both Keep Glyphs and Remove Glyphs are present, Keep Glyphs applies first and Remove Glyphs then removes from what is kept, with a warning; the reference app settles it.",
+  ".notdef and space are kept whatever the list says; the reference app settles it.",
+]
 
 [[parameter]]
 name = "Keep Kerning in one Lookup"
@@ -1035,9 +1083,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 13, which describes the permitted uses of the font. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 13, which describes the permitted uses of the font. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `license`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 13 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "licenseURL"
@@ -1049,6 +1098,7 @@ effect = "naming"
 summary = "Sets name ID 14. The value should start with the protocol, usually https://."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 14 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "Link Metrics With First Master"
@@ -1106,9 +1156,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 8 and takes precedence over the Manufacturer set on the Font tab. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 8 and takes precedence over the Manufacturer set on the Font tab. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `manufacturer`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 8 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "manufacturerURL"
@@ -1120,6 +1171,7 @@ effect = "naming"
 summary = "Sets name ID 11 and takes precedence over the Manufacturer URL on the Font tab. The value should include the protocol."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 11 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "Master Background Color"
@@ -1219,6 +1271,7 @@ effect = "naming"
 summary = "Value is `nameID; text`, `nameID platformID; text` or `nameID platformID encID langID; text`. Missing parts default to platform 3, encoding 1 and the language the source prints as 0x0049 (Windows English), or to encoding 0 and language 0 when only platform 1 is given; IDs 1, 2, 3, 5 and 6 cannot be set. Platform is 1 or 3, and encoding and language may be decimal, octal (leading 0) or hexadecimal (0x)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Read since M2. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) adds the entries of font, master and instance together; fontc reads the font's only; FontCraft's compiler lets a master's or instance's entries replace the font's. M7.8 adds them together as fontmake does, a later entry for the same ID, platform, encoding and language replacing an earlier one. M7 plan § 4: M7.8. The source's language 0x0049 is read as a misprint for 0x0409 (Windows English)."
 
 [[parameter]]
 name = "note"
@@ -1230,6 +1283,7 @@ effect = "other"
 summary = "Arbitrary text about the font, the same data as the Notes tab of Font Info. Never exported."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "The font note (Notes tab, font.note.get/set); never compiled, by both oracles too. M7 plan § 4: M7.3."
 
 [[parameter]]
 name = "Optical Size"
@@ -1274,6 +1328,10 @@ effect = "other"
 summary = "Number of font units equal to one point, which sets the scale of exported PDFs and of artwork copied to the clipboard for use in drawing applications. The source labels it a float but describes an integer."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. FontCraft has no PDF export; the ratio scales the SVG that edit.copy puts on the clipboard. M7 plan § 4: M7.11. 2 corpus sources use it."
+guesses = [
+  "The copied SVG gives coordinates in points, font units divided by the ratio, and declares its width and height in pt; without the parameter one unit is one point; copying into a drawing application from the reference app settles the scale.",
+]
 
 [[parameter]]
 name = "Post Table Type"
@@ -1296,6 +1354,7 @@ effect = "naming"
 summary = "Sets name ID 6. Must be ASCII without spaces and, for compatibility, under 30 characters (Adobe's limit is 29), built as family name, hyphen, style words; long names should use Adobe's standard style abbreviations (list in docs/spec/18-custom-parameters.md)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 6 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does; fontc reads the font's only. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "postscriptFullNames"
@@ -1304,9 +1363,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 4 and the CFF FullName: the complete display name, spaces allowed, starting with the family name followed by style words in the order weight, width, slope, optical size. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 4 and the CFF FullName: the complete display name, spaces allowed, starting with the family name followed by style words in the order weight, width, slope, optical size. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `postscriptFullName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) reads only the singular property or parameter postscriptFullName and writes it to the CFF FullName, never to name ID 4; fontc reads neither. FontCraft follows the handbook: either spelling sets name ID 4 and the CFF FullName, a difference from fontmake written down in docs/spec/40-compile.md § 4 (M7 plan § 7, question 2). M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "preferredFamilyNames"
@@ -1315,9 +1375,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 16. Only worth setting when it differs from the family name (ID 1); readers fall back to ID 1 when it is absent. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 16. Only worth setting when it differs from the family name (ID 1); readers fall back to ID 1 when it is absent. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `preferredFamilyName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 16 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "preferredSubfamilyNames"
@@ -1326,9 +1387,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 17. Only worth setting when it differs from the style name (ID 2); it must be unique within the typographic family. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 17. Only worth setting when it differs from the style name (ID 2); it must be unique within the typographic family. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `preferredSubfamilyName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 17 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "PreFilter"
@@ -1340,6 +1402,10 @@ effect = "export-filter"
 summary = "Same value syntax as Filter, applied before decomposition. Only works for static fonts."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it as Filter (master and instance level, ufo2ft filter names only); fontc ignores it. M7 plan § 4: M7.10."
+guesses = [
+  "On a variable font setting PreFilter is skipped with a warning, not an error; the reference app settles it.",
+]
 
 [[parameter]]
 name = "prep Table Assembly"
@@ -1362,6 +1428,10 @@ effect = "naming"
 summary = "The value is a name ID that must not be written. Add the parameter once per ID, for example once with 16 and once with 17."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.8."
+guesses = [
+  "Name IDs 1, 2, 3, 5 and 6 can be prevented like any other, with a warning that the font may not install; preventing ID 1 in the reference app settles whether it refuses.",
+]
 
 [[parameter]]
 name = "Preview Ascender"
@@ -1413,6 +1483,7 @@ effect = "export-filter"
 summary = "List of `glyphname=hex` entries; several code points are comma-separated (`space=0020,00A0`) and an empty right side removes the glyph's code points. A code point taken from another glyph is removed from that glyph, and production names stay unchanged."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on instances (a code point moves from its previous owner; `name=` clears); fontc ignores it. FontCraft follows the handbook at any level. M7 plan § 4: M7.9."
 
 [[parameter]]
 name = "Remove Classes"
@@ -1446,6 +1517,11 @@ effect = "export-filter"
 summary = "One entry per line: a full glyph name, a name with `*` wildcards, or a `key=value` query on glyph properties (name, unicode, note, script, category, subCategory, production, metrics keys, kerning groups, colorIndex, countOfLayers, mastersCompatible, export, colour and special-layer flags). Matching glyphs are not exported and automatic features follow the reduced glyph set."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours exact names on instances only (wildcards such as `*.sc` remove nothing; it subsets after compiling, which also drops the glyph's cmap entry); fontc ignores it. FontCraft follows the handbook: names, wildcards and key=value queries at any level. 5 corpus sources use it, all with exact names on instances; their glyph sets are compared with fontmake's (M7 plan § 5). M7 plan § 4: M7.9."
+guesses = [
+  "A removed glyph that a kept composite uses is decomposed into that composite, as non-exported glyphs are (M2 preflight); removing the base of a composite in the reference app settles it.",
+  "Queries compare text values exactly except for `*`, are case-sensitive, and an unknown key is a warning that matches nothing; the reference app settles case and unknown keys.",
+]
 
 [[parameter]]
 name = "Remove post names for webfonts"
@@ -1479,6 +1555,10 @@ effect = "export-filter"
 summary = "List of `oldname=newname` entries (for example `g.single=g`); the two glyphs trade names. Composites using them and automatic features are updated, and the glyphs' export flags are swapped too, so the unwanted one must be non-exporting or handled with Export Glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) honours it on instances: it swaps the outlines and keeps the code points; fontc ignores it. FontCraft follows the handbook: names, export flags, composites and kerning follow the swap. M7 plan § 4: M7.9."
+guesses = [
+  "An entry naming a glyph the font lacks renames the existing glyph to the new name, with a warning; an entry whose old name is missing is skipped with a warning; the reference app settles both.",
+]
 
 [[parameter]]
 name = "Replace Class"
@@ -1518,11 +1598,12 @@ name = "ROS"
 scope = []
 kind = "string"
 area = "compile"
-milestone = "M7"
+milestone = "M12"
 effect = "table-value"
 summary = "One of Adobe-CNS1-6, Adobe-GB1-5, Adobe-Japan1-3, Adobe-Japan1-6, Adobe-Korea1-2 or Adobe-Identity-0. With Adobe-Identity-0 the GSUB table is built from the font's own features; with the others Adobe's cmap and GSUB resources for that collection are used."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Moved from M7 to M12 by the M7 planning pass, with export.cidMapping: CID-keyed output is M12's (compile.cidKeyedFonts, compile.cidCmapResources), where the AFDKO tools are the oracle; neither fontc nor fontmake reads the parameter."
 
 [[parameter]]
 name = "sampleTexts"
@@ -1531,9 +1612,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 19, the text an application may use to show the font off. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 19, the text an application may use to show the font off. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `sampleText`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 19 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "Save as TrueType"
@@ -1567,6 +1649,7 @@ effect = "export-filter"
 summary = "Integer target UPM; everything in the font is scaled to it at export, for example to 2048 (or another power of two from 16 to 16384) for TrueType."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. The scaling is font.info.scaleToUnitsPerEm's, run on a copy of the font before the instance is built. M7 plan § 4: M7.4 (scaling), M7.10 (the export step)."
 
 [[parameter]]
 name = "shoulderHeight"
@@ -1630,9 +1713,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Family name used for regular/italic/bold/bold-italic style linking, letting a large family be split into groups of up to four linked fonts; linking itself follows each instance's style name and style-linking settings. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Family name used for regular/italic/bold/bold-italic style linking, letting a large family be split into groups of up to four linked fonts; linking itself follows each instance's style name and style-linking settings. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `styleMapFamilyName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) ignores this property but honours the format 2 parameter styleMapFamilyName on instances (name ID 1, overriding the family derived from style linking); fontc reads neither. FontCraft reads both spellings at any level into name ID 1 of style-linked fonts. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "styleMapStyleNames"
@@ -1641,9 +1725,13 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Described only as the localised font subfamily name, name ID 2. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Described only as the localised font subfamily name, name ID 2. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `styleMapStyleName`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) ignores this property but honours the parameter styleMapStyleName on instances (name ID 2 and the bold and italic bits); fontc reads neither. FontCraft reads both spellings. M7 plan § 4: M7.8."
+guesses = [
+  "The value must be regular, italic, bold or bold italic in any case, as the UFO key it comes from; another value is ignored with a warning; the reference app settles it.",
+]
 
 [[parameter]]
 name = "styleNames"
@@ -1655,6 +1743,7 @@ effect = "naming"
 summary = "Sets name ID 2, which distinguishes fonts sharing a family name (ID 1) and should express style and weight variants only. The source gives no value type; the plural key suggests one text per language (inferred)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Both oracles ignore this property (14 corpus sources hold it on instances). FontCraft follows the handbook: it replaces the style name, so name ID 2 for style-linked fonts and ID 17 otherwise, in every language it gives (M7 plan § 7, question 2). M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "subscriptXOffset"
@@ -1751,9 +1840,10 @@ kind = "dict"
 area = "font-info"
 milestone = "M7"
 effect = "naming"
-summary = "Sets name ID 7, kept separate from the copyright. The source gives no value type; the plural key suggests one text per language (inferred)."
+summary = "Sets name ID 7, kept separate from the copyright. Stored as a localizable property, a list of language and text (GlyphsSDK `infoProperty`); files of format version 2 hold it as the parameter `trademark`, which is read as the same field."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 7 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "TrueType Curve Error"
@@ -1974,6 +2064,7 @@ effect = "naming"
 summary = "Sets name ID 3."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 3 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "unitsPerEm"
@@ -2007,6 +2098,10 @@ effect = "export-filter"
 summary = "When set, Arabic glyphs are given the legacy presentation-form Unicode values. The source gives no further detail on which glyphs are affected."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it (fontmake 3.12.1 with glyphsLib 6.15.0, fontc 1.0.0; probe of the M7 planning pass), so FontCraft follows the handbook and nothing is compared. M7 plan § 4: M7.9."
+guesses = [
+  "An exported glyph without code points whose name is an Arabic letter's name with .isol, .init, .medi or .fina, or a ligature of Arabic letters (lam_alef-ar), gets the presentation-form code point Unicode's compatibility decomposition gives for that letter and form (FB50–FDFF, FE70–FEFF); glyphs with code points keep them; only cmap changes; an export from the reference app settles which glyphs it covers.",
+]
 
 [[parameter]]
 name = "Use Extension Kerning"
@@ -2183,6 +2278,10 @@ effect = "naming"
 summary = "Text beginning with `Version ` and a number; may be a template such as `Version %d.%03d` into which the major and minor version are inserted. The number is digits, a period, digits (each below 65535), and extra information is best separated with a semicolon."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 5 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does; fontc reads the font's only. Neither oracle fills `%d` templates; FontCraft fills them as the handbook says (no corpus source uses one). M7 plan § 4: M7.8."
+guesses = [
+  "`%d` takes the major version and `%03d` (or any printf integer form) the minor, in that order; more than two `%` forms leave the text as written with a warning; the reference app settles other forms.",
+]
 
 [[parameter]]
 name = "vheaVertAscender"
@@ -2304,6 +2403,7 @@ effect = "naming"
 summary = "Sets name ID 21, needed when IDs 16 and 17 do not follow the weight/width/slope model, for example when the subfamily includes an optical size."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Written to name ID 21 since M2, by both oracles. M7 plan § 4: M7.8."
 
 [[parameter]]
 name = "WWSSubfamilyName"
@@ -2315,3 +2415,16 @@ effect = "naming"
 summary = "Sets name ID 22, used with ID 21 to give a subfamily name that reflects only weight, width and slope."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) writes name ID 22 and fontc does not; FontCraft's compiler follows fontc today. M7.8 writes it, as the handbook and fontmake do. M7 plan § 4: M7.8."
+
+[[behavior]]
+id = "customParameters.unknownKept"
+area = "font-info"
+milestone = "M7"
+summary = "A custom parameter whose name the catalogue does not know (an older spelling such as Master Name, UFO Filename or Disable Last Change, or a plug-in's own) is kept with its value, listed in Font Info with an unknown-parameter mark, written back unchanged, and ignored by export."
+ref = "Appendix › Custom Parameters"
+status = "inferred"
+notes = "The corpus holds such parameters (Axes in 44 sources, Master Name, UFO Filename, Alignment Zones, localizedFamilyName, Disable Last Change). M7 plan § 4: M7.2."
+guesses = [
+  "Unknown parameters are shown and kept, not hidden or dropped; opening a file with an unknown parameter in the reference app settles it.",
+]
