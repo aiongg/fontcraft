@@ -167,10 +167,13 @@ fn general_categories(text: &str) -> Result<Vec<u8>, String> {
     Ok(gc)
 }
 
+/// One decomposition: the code point and the one or two code points it maps to.
+type Decomposition = (u32, u32, Option<u32>);
+
 /// The canonical decomposition mappings of `UnicodeData.txt` (field 5 without a `<tag>`), one
 /// level, sorted by code point, and the canonical combining class of every code point (field 3;
 /// code points it does not list have class 0). A canonical mapping has one or two code points.
-fn decompositions(text: &str) -> Result<(Vec<(u32, u32, Option<u32>)>, Vec<u8>), String> {
+fn decompositions(text: &str) -> Result<(Vec<Decomposition>, Vec<u8>), String> {
     let mut map = Vec::new();
     let mut ccc = vec![0u8; CODE_POINTS];
     for line in text.lines().filter(|l| !l.trim().is_empty()) {
