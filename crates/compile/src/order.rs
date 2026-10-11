@@ -15,6 +15,22 @@ use crate::{CompileError, MAX_FONT_GLYPHS, ot_round};
 /// The name of glyph 0.
 pub const NOTDEF: &str = ".notdef";
 
+/// A glyph the compiler makes that the source does not have, appended after the source glyphs
+/// in the order the list gives.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MadeGlyph {
+    pub name: String,
+    pub source: MadeFrom,
+}
+
+/// What a [`MadeGlyph`] is drawn from.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MadeFrom {
+    /// The alternate layers of one range set of `glyph` (a variable font's
+    /// `<glyph>.BRACKET.varAltNN`); `set` indexes `fontcraft_interp::GlyphSources::alternates`.
+    Alternate { glyph: String, set: usize },
+}
+
 /// `glyphs` in their final order: `.notdef` first, drawn when absent.
 pub fn final_order(mut glyphs: Vec<ResolvedGlyph>, font: &Resolved, warnings: &mut Vec<String>) -> Result<Vec<ResolvedGlyph>, CompileError> {
     match glyphs.iter().position(|g| g.name == NOTDEF) {

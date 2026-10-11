@@ -58,6 +58,7 @@ pub mod assemble;
 pub mod auto;
 pub mod edit;
 pub mod evaluate;
+pub mod fea_variable;
 mod gpos;
 pub mod implicit;
 mod kern;
@@ -74,6 +75,7 @@ pub mod tokens;
 pub mod tokens_predicate;
 mod unicode18;
 pub mod variable;
+pub mod var_layout;
 mod writers;
 
 use std::collections::HashMap;
@@ -157,6 +159,9 @@ pub enum FeatureError {
     /// A target or request this build cannot serve yet (an instance, the variable font).
     #[error("{0}")]
     Unsupported(String),
+    /// A function whose M9 package has not been written yet.
+    #[error("{0} is not available yet")]
+    NotYetImplemented(&'static str),
 }
 
 /// A mark glyph: one with an advance (spacing) or without.

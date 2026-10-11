@@ -17,6 +17,7 @@ fontcraft-fea.workspace = true
 fontcraft-features.workspace = true
 fontcraft-fontinfo.workspace = true
 fontcraft-geom.workspace = true
+fontcraft-interp.workspace = true
 fontcraft-model.workspace = true
 fontcraft-pathops.workspace = true
 fontcraft-spacing.workspace = true

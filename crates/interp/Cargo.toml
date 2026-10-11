@@ -1,0 +1,16 @@
+[package]
+name = "fontcraft-interp"
+description = "FontCraft interpolation: the designspace, glyph sources, compatibility, static instances and alternate-layer ranges (L2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-geom.workspace = true
+fontcraft-model.workspace = true
+thiserror.workspace = true

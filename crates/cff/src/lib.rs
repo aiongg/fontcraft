@@ -21,14 +21,16 @@
 //!   layout until no position changes.
 //!
 //! Out of scope: CID-keyed fonts (ROS, FDArray, FDSelect), custom encodings (the standard
-//! encoding is implied), hints (stems, hint masks), subroutinisation, CFF2 and blends, and the
-//! seldom-used Top DICT entries (UniqueID, XUID, PostScript, BaseFontName, SyntheticBase).
+//! encoding is implied), hints (stems, hint masks), subroutinisation, and the seldom-used Top
+//! DICT entries (UniqueID, XUID, PostScript, BaseFontName, SyntheticBase). The `CFF2` table of a
+//! variable font, with blends, is [`cff2`]'s.
 //!
 //! Every input is untrusted: counts, lengths and numbers are checked against the limits below, and
 //! anything out of range returns an [`Error`]; nothing panics.
 #![forbid(unsafe_code)]
 
 mod bounds;
+pub mod cff2;
 mod charset;
 mod charstring;
 mod dict;

@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 fontcraft-fea.workspace = true
 fontcraft-glyphquery.workspace = true
+fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
 fontcraft-spacing.workspace = true
 icu_properties.workspace = true

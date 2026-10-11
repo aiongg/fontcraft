@@ -917,6 +917,7 @@ dependencies = [
  "fontcraft-features",
  "fontcraft-fontinfo",
  "fontcraft-geom",
+ "fontcraft-interp",
  "fontcraft-model",
  "fontcraft-pathops",
  "fontcraft-spacing",
@@ -976,6 +977,7 @@ dependencies = [
  "fontcraft-format",
  "fontcraft-geom",
  "fontcraft-glyphquery",
+ "fontcraft-interp",
  "fontcraft-io-glyphs",
  "fontcraft-io-svg",
  "fontcraft-io-ufo",
@@ -1004,6 +1006,7 @@ name = "fontcraft-features"
 version = "0.0.1"
 dependencies = [
  "fontcraft-fea",
+ "fontcraft-geom",
  "fontcraft-glyphquery",
  "fontcraft-model",
  "fontcraft-spacing",
@@ -1059,6 +1062,15 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "fontcraft-interp"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-geom",
+ "fontcraft-model",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

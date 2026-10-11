@@ -11,10 +11,12 @@
 mod anchor_context;
 mod annotation;
 pub(crate) mod audit;
+mod axes;
 mod background;
 mod clipboard;
 mod clipboard_scale;
 mod common;
+mod compare;
 pub(crate) mod compile;
 mod custom_params;
 mod dimensions;
@@ -34,7 +36,9 @@ mod glyph_search;
 mod glyph_set;
 mod guide;
 mod inspect;
+mod instance_masters;
 mod instances;
+mod interpolation;
 mod kerning;
 mod kerning_groups;
 mod kerning_maintain;
@@ -59,6 +63,7 @@ mod session;
 mod settings;
 mod snippets;
 mod spacing;
+mod special_layers;
 pub mod stroke;
 mod tokens;
 pub mod transform;
@@ -243,6 +248,11 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(snippets::specs());
         v.extend(anchor_context::specs());
         v.extend(features_io::specs());
+        v.extend(axes::specs());
+        v.extend(special_layers::specs());
+        v.extend(interpolation::specs());
+        v.extend(instance_masters::specs());
+        v.extend(compare::specs());
         v
     })
 }

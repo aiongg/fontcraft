@@ -42,6 +42,9 @@
 
 mod add_glyphs;
 mod add_glyphs_existing;
+mod add_other_font;
+mod axis_location;
+mod axis_mappings;
 mod export;
 mod feature_picker;
 mod find_and_replace;
@@ -65,9 +68,11 @@ mod round_corners;
 pub mod rule_tree;
 pub mod sample_strings;
 mod shape_order;
+mod shape_order_window;
 mod smart_filter_editor;
 mod transform_metrics;
 mod transformations;
+mod virtual_master;
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};

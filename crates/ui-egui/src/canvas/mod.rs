@@ -26,6 +26,7 @@ pub mod annotations;
 pub mod audit_markers;
 pub mod background;
 pub mod bbox;
+pub mod compatibility;
 pub mod composite;
 pub mod fill;
 pub mod group_members;

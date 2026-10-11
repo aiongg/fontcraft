@@ -23,6 +23,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 mod gpos_kern;
+pub mod variable;
 pub use gpos_kern::{MAX_CLASS_RECORDS, MAX_KERN_PAIRS};
 
 use fontcraft_model::plist::{Array, Dict, Layout, Str, Value};
@@ -51,6 +52,9 @@ pub enum DecompileError {
     NoSuchFace { face: u32 },
     #[error(transparent)]
     Model(#[from] fontcraft_model::ModelError),
+    /// A function whose package has not been written yet.
+    #[error("{0} is not available yet")]
+    NotYetImplemented(&'static str),
 }
 
 fn container(e: fontcraft_container::Error) -> DecompileError {

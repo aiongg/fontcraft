@@ -29,6 +29,7 @@ pub mod info_box_metrics;
 pub mod layers;
 pub mod palette;
 pub mod selection_info;
+pub mod special_layer_popover;
 pub mod stroke;
 pub mod transformations;
 pub mod widgets;

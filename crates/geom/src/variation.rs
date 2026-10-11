@@ -27,6 +27,8 @@ pub enum VariationError {
     NoDefault,
     /// Master values of different lengths, or a count that does not match the masters.
     BadValues,
+    /// A function whose M9 package has not been written yet.
+    NotYetImplemented(&'static str),
 }
 
 impl fmt::Display for VariationError {
@@ -37,6 +39,7 @@ impl fmt::Display for VariationError {
             VariationError::DuplicateLocation => "two masters are at the same location",
             VariationError::NoDefault => "no master is at the default location",
             VariationError::BadValues => "the masters do not have the same number of values",
+            VariationError::NotYetImplemented(what) => what,
         })
     }
 }
@@ -104,6 +107,22 @@ fn support_scalar(location: &[f64], support: &Support, ranges: Option<&[(f64, f6
     }
     scalar
 }
+
+/// One axis of a [`Region`] (OpenType's region axis coordinates): the scalar rises from 0 at
+/// `start` to 1 at `peak` and falls back to 0 at `end`, in normalized coordinates
+/// (`start <= peak <= end`, all within −1…1). All three at zero leave the axis unconstrained.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct RegionAxis {
+    pub start: f64,
+    pub peak: f64,
+    pub end: f64,
+}
+
+/// Where a delta applies: one [`RegionAxis`] per axis of the model, in the model's axis order (the
+/// OpenType variation region, before it is written as F2Dot14 values). The default master's
+/// region has every axis at zero.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Region(pub Vec<RegionAxis>);
 
 /// Masters at locations, ready to interpolate between.
 #[derive(Clone, Debug)]
@@ -263,6 +282,36 @@ impl VariationModel {
             }
         }
         self.mapping.iter().map(|&m| out.get(m).copied().unwrap_or(0.0)).collect()
+    }
+
+    /// The number of masters the model was built from.
+    pub fn master_count(&self) -> usize {
+        self.mapping.len()
+    }
+
+    /// The model of a subset of this model's masters, given by their normalized locations (each
+    /// one of the locations this model was built from), with the same extrapolation setting.
+    /// Glyphs with intermediate layers or missing masters interpolate through such a model
+    /// (fontTools' `VariationModel.getSubModel`); callers cache it by the set of locations.
+    pub fn sub_model(&self, locations: &[Vec<f64>]) -> Result<VariationModel, VariationError> {
+        // M9.4: compare with getSubModel (extrapolation ranges of the full model or the subset).
+        VariationModel::new(locations, self.ranges.is_some())
+    }
+
+    /// The region of each master's delta, in the model's order (the order of [`Self::deltas`]):
+    /// the default master first, with every axis at zero.
+    pub fn regions(&self) -> Vec<Region> {
+        // M9.5: the supports as tents, axes without a support at zero.
+        Vec::new()
+    }
+
+    /// The deltas of `masters` (one list of numbers per master, in the caller's order, all the
+    /// same length), in the model's order: the first is the default master's values, each later
+    /// one the change its [`Self::regions`] entry adds (fontTools' `getDeltas`, unrounded).
+    pub fn deltas(&self, masters: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, VariationError> {
+        // M9.5
+        let _ = masters;
+        Err(VariationError::NotYetImplemented("deltas between masters are not available yet"))
     }
 
     /// Interpolates `masters` (one list of numbers per master, in the caller's order, all the

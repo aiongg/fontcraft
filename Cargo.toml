@@ -41,6 +41,7 @@ fontcraft-components = { path = "crates/components" }
 fontcraft-fontinfo = { path = "crates/fontinfo" }
 fontcraft-fea = { path = "crates/fea" }
 fontcraft-shaping = { path = "crates/shaping" }
+fontcraft-interp = { path = "crates/interp" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }

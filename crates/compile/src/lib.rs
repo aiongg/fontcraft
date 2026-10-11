@@ -24,6 +24,9 @@
 //! (OpenType rounding, `compile.rounding`): point coordinates when the glyph is written,
 //! component offsets, advances.
 //!
+//! Variable fonts are built by [`var::compile_variable`], which runs the same stages for every
+//! source and adds the variation tables.
+//!
 //! Everything handed to the table writer is validated first. `write-fonts` panics or overflows on
 //! points more than 32,767 units apart, on more than 65,277 glyph names outside the standard set and
 //! on oversized name strings; each has a limit and a test here. Work that grows with what
@@ -52,6 +55,7 @@ pub mod plan;
 pub mod preflight;
 pub mod preview;
 mod ranges;
+pub mod var;
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -126,6 +130,12 @@ pub enum CompileError {
     /// The feature code has errors, mapped to the entries that hold them; never empty.
     #[error("{}", fontcraft_features::source_map::summary(.0))]
     Features(Vec<fontcraft_features::EntryDiagnostic>),
+    /// The designspace, the glyph sources or the compatibility check refused the font.
+    #[error(transparent)]
+    Interp(#[from] fontcraft_interp::InterpError),
+    /// A stage whose package has not been written yet.
+    #[error("{0} is not available yet")]
+    NotYetImplemented(&'static str),
 }
 
 /// Options of [`compile`].

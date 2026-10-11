@@ -205,7 +205,7 @@ The milestones add these stages:
 | Export parameters (M7) | `crates/compile/src/export_params.rs`, right after resolving | Export, Keep, Remove, Rename and Reencode Glyphs and Arabic presentation forms change the resolved glyphs and hand a rename map to the kerning writer |
 | Names and legacy `kern` (M7) | `info.rs`, `kern_table.rs` | the name parameters and properties, OS/2 classes, and the `kern` table when Export kern Table asks for it |
 | Layout (M8) | `layout.rs`, through the `fea` crate | feature code assembled, tokens expanded and lowered, automatic features regenerated per target, compiled by fea-rs with the generated kerning and marks; `preview.rs` builds the layout-only preview font |
-| Variations (M9) | `crates/compile/src/var/` | the variable compile: one table builder per module (`fvar`, `avar`, `gvar`, `HVAR`, `VVAR`, `MVAR`, `STAT`, feature variations), each from plain data rather than the font |
+| Variations (M9) | `crates/compile/src/var/` (`compile_variable`) | the variable compile: the same stages for every source of the designspace from `interp`, then one table builder per module (`fvar`, `avar`, `gvar`, `HVAR`, `VVAR`, `MVAR`, `STAT`, feature variations, `CFF2`), each from plain data rather than the font |
 
 The CLI, the control channel and the oracle harness all export through the engine, so the export
 steps run for every export.

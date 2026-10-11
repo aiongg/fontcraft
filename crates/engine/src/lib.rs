@@ -29,6 +29,7 @@ pub(crate) mod export_steps;
 pub mod feature_state;
 pub mod glyph_data;
 pub mod guard;
+pub mod interp_cache;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
 pub(crate) mod linked;
