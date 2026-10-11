@@ -848,6 +848,7 @@ effect = "hinting"
 summary = "Writes the gasp table for TrueType fonts from two PPM thresholds, default 8 and 20. Up to the first: no grid-fitting, symmetric smoothing; between them: grid-fitting with asymmetric (ClearType) rendering; above: grid-fitting with symmetric smoothing. The source gives no value type."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Sources store the value as a dictionary from the largest PPM of each range to its flag bits, under this name or as GASP Table; M10.20 writes those records (crates/compile/src/gasp.rs, the gasp row in 40-tables.toml)."
 
 [[parameter]]
 name = "Get Hints From Master"

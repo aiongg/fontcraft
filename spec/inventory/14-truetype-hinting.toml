@@ -620,7 +620,7 @@ milestone = "M10"
 summary = "gasp Table is a custom parameter on the font or on an export instance (the font value applies to instances without their own) holding a pair of PPM thresholds, each a size where the rendering behaviour that the font recommends switches; the defaults are 8 and 20. The table carries recommendations for both grayscale and ClearType renderers, which a renderer is free to ignore."
 ref = "TrueType Hinting › Advanced TrueType Hinting › gasp Table"
 status = "handbook"
-notes = "Read as the corpus stores it, a dictionary from maximum PPM to flags (instance, then master, then font); a size above 65535 is left out, as fontc does, and at most 256 ranges are read. Documented, not yet observed."
+notes = "Read as the corpus stores it, a dictionary from maximum PPM to flags (instance, then master, then font); a size above 65535 is left out, as fontc does, and at most 256 ranges are read. Documented, not yet observed. Documented, not yet observed. The parameter's value holds the records themselves (largest PPM of each range to its flag bits), not two thresholds: fontc's test sources and glyphsLib read it that way, and M10.20 writes those records (crates/compile/src/gasp.rs); the instance's value replaces the font's."
 
 [[behavior]]
 id = "hinting.tt.gasp.ranges"
@@ -629,6 +629,7 @@ milestone = "M10"
 summary = "The two thresholds give three ranges. Up to the first: 'No Hinting & Symmetric', no grid-fitting, antialiased rendering. Between them: 'Hinting & Asymmetric', grid-fitting without grayscale smoothing; in ClearType, vertical grid-fitting with horizontal subpixel rendering. Above the second: 'Hinting & Symmetric', grid-fitting plus grayscale smoothing, and symmetric smoothing in ClearType (antialiasing in Y in addition to horizontal subpixels)."
 ref = "TrueType Hinting › Advanced TrueType Hinting › gasp Table"
 status = "handbook"
+notes = "Documented, not yet observed. The default ranges a hinted font without a source gets (M10.20) follow these three descriptions; the flag bits chosen for them are in hinting.tt.gasp.flagMapping."
 
 [[behavior]]
 id = "hinting.tt.gasp.flagMapping"
@@ -637,7 +638,7 @@ milestone = "M10"
 summary = "Proposed gasp records for the three ranges, to verify against a reference export: up to threshold 1, DOGRAY + SYMMETRIC_SMOOTHING; up to threshold 2, GRIDFIT + SYMMETRIC_GRIDFIT; up to 65535, GRIDFIT + DOGRAY + SYMMETRIC_GRIDFIT + SYMMETRIC_SMOOTHING, in a version 1 table. The handbook describes the ranges in words only; whether the middle and upper behaviours are user-selectable per range is not stated."
 ref = "TrueType Hinting › Advanced TrueType Hinting › gasp Table; OpenType spec › gasp"
 status = "inferred"
-notes = "M10 planning pass: the gasp Table parameter stores the records themselves, maximum PPM to flag bits (fontc's test source WghtVarGasp.glyphs holds 8 → 10, 20 → 7, 65535 → 15), and fontc writes them into a version 1 table; the mapping below is only the default for a hinted font without the parameter."
+notes = "M10 planning pass: the gasp Table parameter stores the records themselves, maximum PPM to flag bits (fontc's test source WghtVarGasp.glyphs holds 8 → 10, 20 → 7, 65535 → 15), and fontc writes them into a version 1 table; the mapping above is only the default for a hinted font without the parameter, which M10.20 writes (crates/compile/src/gasp.rs). The handbook calls the middle range grid-fitting without grayscale, which rules out WghtVarGasp's 7 (it sets the grayscale bit) as the default."
 guesses = ["Without a gasp Table parameter a font with TrueType instructions gets three records: up to 8 PPM DOGRAY + SYMMETRIC_SMOOTHING, up to 20 GRIDFIT + SYMMETRIC_GRIDFIT, up to 65535 all four bits; an unhinted font gets no gasp table, as fontc and fontmake write none; an export from the reference app without the parameter would settle both."]
 
 # ---------------------------------------------------------------------------------------------

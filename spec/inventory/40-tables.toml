@@ -334,9 +334,11 @@ read = "read-fonts"
 write = "write-fonts"
 area = "compile"
 milestone = "M10"
-summary = "Grid-fitting and smoothing ranges from the source, sorted by rangeMaxPPEM, version 1. Omitted when the source defines no ranges."
-ref = "fontc fontbe/src/gasp.rs; write-fonts src/tables/gasp.rs"
+summary = "Grid-fitting and smoothing ranges from the gasp Table parameter (either spelling) or a UFO's openTypeGaspRangeRecords, sorted by rangeMaxPPEM, version 1, TrueType output only. A font with TrueType instructions and no source gets the default ranges of hinting.tt.gasp.flagMapping; any other font without a source gets no gasp."
+ref = "fontc fontbe/src/gasp.rs, glyphs2fontir and ufo2fontir source.rs; ufo2ft instructionCompiler.py; write-fonts src/tables/gasp.rs"
 status = "docs"
+notes = "M10.20, crates/compile/src/gasp.rs. As fontc reads the records: a size given twice keeps its last value; bits above the four the table defines are dropped; a size outside 0 to 65535 is dropped with a warning (fontc wraps a UFO's size to 16 bits instead); a range with no bit left is dropped with a warning from a .glyphs source and kept from a UFO. A last range that ends below 65535 is kept and reported. At most 256 entries are read."
+guesses = ["A CFF export gets no gasp table even with the parameter, as ufo2ft writes gasp for TrueType output only and the handbook describes the parameter for TrueType fonts; a CFF export from the reference app with the parameter would settle it.", "A gasp Table parameter with no usable range counts as no source, so a hinted font gets the default ranges; an export from the reference app with an empty parameter would settle it."]
 
 [[table]]
 tag = "cvt "
