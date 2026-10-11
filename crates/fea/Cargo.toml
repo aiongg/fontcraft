@@ -1,0 +1,18 @@
+[package]
+name = "fontcraft-fea"
+description = "FontCraft feature compiler: OpenType feature files compiled to GSUB, GPOS, GDEF and the table blocks, on fea-rs, behind limits (L0, standalone)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fea-rs.workspace = true
+# fea-rs's own write-fonts version; no other crate sees it. The font-types it re-exports (Tag,
+# GlyphId16) is the workspace's, so those types cross the boundary unchanged.
+write-fonts-052.workspace = true
+thiserror.workspace = true

@@ -43,10 +43,12 @@
 mod add_glyphs;
 mod add_glyphs_existing;
 mod export;
+mod feature_picker;
 mod find_and_replace;
 pub mod find_glyphs;
 pub mod form;
 mod guide_properties;
+mod import_features;
 mod import_metrics;
 pub mod import_outlines_missing_glyph;
 mod interpolate_with_background;

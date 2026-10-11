@@ -39,6 +39,8 @@ fontcraft-textlayout = { path = "crates/textlayout" }
 fontcraft-features = { path = "crates/features" }
 fontcraft-components = { path = "crates/components" }
 fontcraft-fontinfo = { path = "crates/fontinfo" }
+fontcraft-fea = { path = "crates/fea" }
+fontcraft-shaping = { path = "crates/shaping" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }
@@ -63,6 +65,18 @@ icu_properties = "=2.1.2"
 write-fonts = "0.54"
 read-fonts = "0.45"
 skrifa = "0.48"
+
+# The feature compiler (MIT OR Apache-2.0), used only by `fea`. fea-rs 1.0.0 is built on
+# write-fonts 0.52, so `fea` alone also sees that version, renamed. See docs/plans/M8.md § 3.
+fea-rs = { version = "=1.0.0", default-features = false }
+write-fonts-052 = { package = "write-fonts", version = "=0.52.0" }
+
+# Shaping for Edit View and Text Preview (MIT), on the workspace's read-fonts. Never its `icu`
+# feature, which pins another icu_properties.
+harfrust = { version = "0.14", default-features = false, features = ["std"] }
+# The Unicode Bidirectional Algorithm (MIT OR Apache-2.0), with its data from icu_properties'
+# `unicode_bidi` feature (turned on in `shaping`).
+unicode-bidi = { version = "0.3", default-features = false }
 
 # Rasterising for `render` (BSD-3-Clause): nonzero fills, anti-aliased, PNG output. Builds for wasm.
 tiny-skia = "0.12"

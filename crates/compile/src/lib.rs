@@ -43,12 +43,14 @@ pub mod export_params;
 pub mod info;
 mod kern;
 pub mod kern_table;
+pub mod layout;
 mod marks;
 pub mod names;
 pub mod order;
 pub mod outline;
 pub mod plan;
 pub mod preflight;
+pub mod preview;
 mod ranges;
 
 use std::borrow::Cow;
@@ -121,6 +123,9 @@ pub enum CompileError {
     Table { table: &'static str, message: String },
     #[error("{0} outlines are not written yet")]
     Unsupported(&'static str),
+    /// The feature code has errors, mapped to the entries that hold them; never empty.
+    #[error("{}", fontcraft_features::source_map::summary(.0))]
+    Features(Vec<fontcraft_features::EntryDiagnostic>),
 }
 
 /// Options of [`compile`].

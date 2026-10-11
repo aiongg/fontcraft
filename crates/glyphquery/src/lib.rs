@@ -9,7 +9,7 @@
 #![forbid(unsafe_code)]
 
 mod filters;
-mod predicate;
+pub mod predicate;
 mod replace;
 mod rules;
 mod search;

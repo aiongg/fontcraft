@@ -36,6 +36,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("features", Class::Layer(2)),
     ("components", Class::Layer(2)),
     ("fontinfo", Class::Layer(2)),
+    ("fea", Class::Standalone),
+    ("shaping", Class::Layer(2)),
     ("format", Class::Layer(3)),
     ("compile", Class::Layer(3)),
     ("io-glyphs", Class::Layer(3)),
@@ -57,8 +59,10 @@ pub const TABLE: &[(&str, Class)] = &[
 ];
 
 /// Explicit orderings within a layer: a crate may use the ones before it in its chain.
-/// `textlayout` and `features` read kerning through `spacing`.
-pub const INTRA_LAYER_ORDER: &[&[&str]] = &[&["spacing", "textlayout"], &["spacing", "features"]];
+/// `textlayout` and `features` read kerning through `spacing`; `textlayout` shapes through
+/// `shaping`; `features` evaluates glyph predicates through `glyphquery`.
+pub const INTRA_LAYER_ORDER: &[&[&str]] =
+    &[&["spacing", "textlayout"], &["spacing", "features"], &["shaping", "textlayout"], &["glyphquery", "features"]];
 
 /// External crates that are a UI toolkit, windowing or GPU dependency. A trailing `*` is a prefix.
 pub const UI_CRATES: &[&str] =

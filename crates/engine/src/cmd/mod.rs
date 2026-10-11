@@ -8,6 +8,7 @@
 //! parameters through [`crate::params::Params`] and changes fonts only through
 //! [`crate::Session::edit`], which makes the change one undo step.
 
+mod anchor_context;
 mod annotation;
 pub(crate) mod audit;
 mod background;
@@ -18,6 +19,9 @@ pub(crate) mod compile;
 mod custom_params;
 mod dimensions;
 mod edit;
+mod features;
+mod features_compile;
+mod features_io;
 mod file;
 pub mod filter;
 pub mod fit_curve;
@@ -46,12 +50,14 @@ mod metrics_io;
 mod metrics_keys;
 mod new_document;
 mod node;
+mod numbers;
 mod path;
 mod pathops;
 mod project;
 mod scale_upm;
 mod session;
 mod settings;
+mod snippets;
 mod spacing;
 pub mod stroke;
 mod tokens;
@@ -231,6 +237,12 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(clipboard_scale::specs());
         v.extend(tokens::specs());
         v.extend(project::specs());
+        v.extend(features::specs());
+        v.extend(numbers::specs());
+        v.extend(features_compile::specs());
+        v.extend(snippets::specs());
+        v.extend(anchor_context::specs());
+        v.extend(features_io::specs());
         v
     })
 }

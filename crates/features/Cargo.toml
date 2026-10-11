@@ -1,6 +1,6 @@
 [package]
 name = "fontcraft-features"
-description = "FontCraft features: the generated pair kerning of a compiled font, as fontc writes it (L2)"
+description = "FontCraft features: feature-code assembly, tokens, syntax extensions, automatic and implicit features, editor helpers (L2)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-fea.workspace = true
+fontcraft-glyphquery.workspace = true
 fontcraft-model.workspace = true
 fontcraft-spacing.workspace = true
 icu_properties.workspace = true
