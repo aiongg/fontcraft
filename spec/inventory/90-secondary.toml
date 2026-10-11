@@ -1186,7 +1186,7 @@ summary = "Computes left and right sidebearings for the given glyphs from their 
 ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Auto-spacing; Autospace method); FontForge dialogs › Auto Width"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[setting]]
 id = "spacing.autoSpaceMethod"
@@ -1214,7 +1214,7 @@ summary = "Shows a draggable horizontal line and reports sidebearings where it c
 ref = "FontLab 8 What's new › Metrics & kerning › Metrics (Metrics line); RoboFont reference › Space Center › Display options"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "spacing.centerInWidth"
@@ -1229,7 +1229,7 @@ summary = "Shifts the outline inside its unchanged advance width so the sidebear
 ref = "FontForge Metrics menu › Center in Width, Thirds in Width; FontLab 8 What's new › Metrics & kerning › Center glyph"
 status = "docs"
 origin = "fontforge"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "kerning.autoKern"
@@ -1244,7 +1244,7 @@ summary = "Proposes kerning values for the given pairs from the optical gap betw
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (autokerning); FontLab 7 manual › Pairs and Phrases panel; FontForge dialogs › Lookups (pair kerning subtable: Default Separation, Min Kern, Touching, Only kern closer)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "kerning.kernToDistance"
@@ -1259,7 +1259,7 @@ summary = "Sets each given pair so that the smallest gap between the two outline
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Kern to Distance)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "kerning.auditExceptions"
@@ -1288,7 +1288,7 @@ summary = "Deletes kerning pairs by rule: values whose magnitude is below a limi
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Remove Pairs)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "kerning.matchAcrossMasters"
@@ -1315,7 +1315,7 @@ summary = "A work list for kerning and spacing: stepping through the rows puts e
 ref = "FontLab 7 manual › Pairs and Phrases panel; FontLab 8 What's new › Metrics & kerning"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "kerning.loadPairList"
@@ -1330,7 +1330,7 @@ summary = "Loads a plain-text list with one pair or phrase per line (glyph names
 ref = "FontLab 7 manual › Pairs and Phrases panel (Importing lists)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "kerning.stepPairList"
@@ -1345,7 +1345,7 @@ summary = "Moves to the next or previous row of the pair list and shows it in th
 ref = "FontLab 7 manual › Pairs and Phrases panel (Lists and navigation)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[behavior]]
 id = "kerning.representativeGlyph"
@@ -1355,7 +1355,7 @@ summary = "While a class pair is being kerned, a key steps the displayed left or
 ref = "FontLab 8 What's new › Metrics & kerning › Kerning (Representative glyphs)"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[behavior]]
 id = "features.opticalBoundsFromGuides"
@@ -2194,7 +2194,7 @@ summary = "Copies only the chosen metric values of a glyph so a paste applies th
 ref = "FontForge Edit menu › Copy Width, Copy VWidth, Copy LBearing, Copy RBearing"
 status = "docs"
 origin = "fontforge"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "edit.copyLayerToLayer"
@@ -2578,7 +2578,7 @@ summary = "A visual list of all kerning pairs for reviewing a whole font's kerni
 ref = "FontForge dialogs › The Kerning Pairs dialog; FontForge View menu › Combinations › Kern Pairs"
 status = "docs"
 origin = "fontforge"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "kerning.buildGroups"
@@ -2593,7 +2593,7 @@ summary = "Proposes kerning groups by comparing the side profiles of the given g
 ref = "FontForge dialogs › Manipulating OpenType Lookups (kerning classes: guess classes); FontForge main views › Metrics View (Kerning by class)"
 status = "docs"
 origin = "fontforge"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[panel]]
 id = "dialog.kerningGroupsEditor"
@@ -2606,7 +2606,7 @@ summary = "Builds and inspects kerning groups by drag and drop. The stacked view
 ref = "RoboFont reference › Groups Editor; FontLab 8 What's new › Metrics & kerning (Set Kerning Class dialog)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "kerning.verticalFromHorizontal"
@@ -2757,7 +2757,7 @@ summary = "A separate window dedicated to spacing: several lines of text at read
 ref = "RoboFont reference › Space Center"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[behavior]]
 id = "spaceCenter.inputSyntax"
@@ -2767,7 +2767,7 @@ summary = "The spacing text accepts plain characters, /name for a glyph by name,
 ref = "RoboFont reference › Space Center › Text input syntax"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[behavior]]
 id = "spaceCenter.matrixEntry"
@@ -2777,7 +2777,7 @@ summary = "A matrix cell accepts a number, a reference that copies another glyph
 ref = "RoboFont reference › Space Center › Numerical fields"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[behavior]]
 id = "spaceCenter.pointerAndKeys"
@@ -2787,7 +2787,7 @@ summary = "In the preview, dragging a margin changes it (with Alt, in all layers
 ref = "RoboFont reference › Space Center › Editing spacing with the mouse; Arrow key increments"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "view.setSpacingCutOff"
@@ -2802,7 +2802,7 @@ summary = "Inverts foreground and background of the spacing preview between two 
 ref = "RoboFont reference › Space Center › Display options (Cut Off)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "view.setPreferredSuffix"
@@ -2817,7 +2817,7 @@ summary = "Shows, for every glyph of the preview text, the variant with the give
 ref = "RoboFont reference › Space Center › Display options (Suffixes)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[behavior]]
 id = "kerning.previewGroupCombinations"
@@ -2827,7 +2827,7 @@ summary = "Selecting a group-to-group pair in a kerning list previews every glyp
 ref = "RoboFont reference › Kern Center (Preview)"
 status = "docs"
 origin = "robofont"
-notes = "Moved from M5 to M13 by the M5 planning pass: it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
+notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2)."
 
 [[command]]
 id = "guide.setAppearance"

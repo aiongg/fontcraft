@@ -438,7 +438,7 @@ milestone = "M5"
 summary = "The tint of the indicator shown between a negatively kerned pair; default light blue, used when content is drawn in the light appearance. Reset by the Standard button."
 ref = "Settings › Appearance"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 planning pass: Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
 
 [[setting]]
 id = "appearance.color.kerningNegative.dark"
@@ -451,7 +451,7 @@ milestone = "M5"
 summary = "The tint of the indicator shown between a negatively kerned pair; default light blue, used when content is drawn in the dark appearance. Reset by the Standard button."
 ref = "Settings › Appearance"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 planning pass: Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
 
 [[setting]]
 id = "appearance.color.kerningPositive.light"
@@ -464,7 +464,7 @@ milestone = "M5"
 summary = "The tint of the indicator shown between a positively kerned pair; default yellow, used when content is drawn in the light appearance. Reset by the Standard button."
 ref = "Settings › Appearance"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 planning pass: Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
 
 [[setting]]
 id = "appearance.color.kerningPositive.dark"
@@ -477,7 +477,7 @@ milestone = "M5"
 summary = "The tint of the indicator shown between a positively kerned pair; default yellow, used when content is drawn in the dark appearance. Reset by the Standard button."
 ref = "Settings › Appearance"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 planning pass: Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Edit View draws kerned gaps from M5 (`kerning.highlightColors`), and the value lives in the user settings store of M4. The settings window stays M14."
 
 [[command]]
 id = "settings.resetColors"
@@ -672,7 +672,7 @@ milestone = "M5"
 summary = "Ordered list of named groups, each holding sample strings, one per line. Stored as structured data (list of {name, strings}); the schema's kind list has no list type, hence string."
 ref = "Settings › Sample Strings"
 status = "handbook"
-notes = "Moved from M14 to M5 by the M5 planning pass: Select Sample Text (M5) reads it from the user settings store of M4. The settings section and its group commands stay M14."
+notes = "Moved from M14 to M5 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): Select Sample Text (M5) reads it from the user settings store of M4. The settings section and its group commands stay M14."
 guesses = [
   "The built-in default holds groups of our own writing: Latin spacing strings built around n and o, and a pangram per script the glyph sets of M4 cover; no source lists the reference defaults we may copy.",
 ]

@@ -833,7 +833,7 @@ milestone = "M6"
 summary = "If an imported value for an automatically aligned composite differs from what alignment would compute, alignment is switched off for the affected components so the imported value can hold. Ticking Keep Aligned Components prevents this and the aligned glyph keeps its derived metrics."
 ref = "Import & Export › Importing Font Data › Importing Metrics"
 status = "handbook"
-notes = "Moved from M5 to M6 by the M5 planning pass: automatic alignment is built in M6, so nothing can break it before then."
+notes = "Moved from M5 to M6 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): automatic alignment is built in M6, so nothing can break it before then."
 
 [[behavior]]
 id = "import.metricsSelectedGlyphs"

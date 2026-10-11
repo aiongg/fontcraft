@@ -156,7 +156,8 @@ ending alignment; meant for composites whose marks reach outside the glyph box.
 - `infoBox.kerning`: one kern field per neighbour of the current glyph; grey placeholder `Kern`
   when no pair is set. A typed value is committed by Return or by leaving the field; clearing
   the field removes the pair (`kerning.infoBoxFieldEditing`, `kerning.setPair`,
-  `kerning.removePair`).
+  `kerning.removePair`). Up and Down step the value as in every Info box field: ±1, ±10 with
+  Shift, ±100 with Cmd+Shift (`spacing.infoBoxArrowSteps`).
 - Group fields hold the glyph's kerning group names; a lock per side controls exceptions.
 - With the Text tool, a second small box shows the preceding glyph's name, lock and group
   (`infoBox.precedingGlyph`).
@@ -178,8 +179,9 @@ ending alignment; meant for composites whose marks reach outside the glyph box.
   glyph). Ctrl picks the left pair, Cmd the right pair, Alt distinguishes kerning from spacing,
   Shift = ×10 (`kerning.shortcutModifierScheme`).
 - Step sizes are 1 and 10 only.
-- The sign of "increase" is not defined in the text. The key layout mirrors the spacing
-  shortcuts, where the same arrows add space, so we take increase = value +1. To be verified.
+- The sign of "increase" is not defined in the text, and the highlight colours do not settle
+  it. The key layout mirrors the spacing shortcuts, where the same arrows add space, so we take
+  increase = value +1 (an inference). To be verified.
 - Disabled in no-kerning mode (`kerning.shortcutsNeedTextTool`).
 
 ### 3.5 Kerning groups
@@ -219,8 +221,10 @@ ending alignment; meant for composites whose marks reach outside the glyph box.
   Only the closed/open row is spelled out in the handbook (T closed, ö open gives an exception
   for ö that still holds for every member of T's right group); the other rows follow from the
   same rule. A glyph without a group on that side can only be written as itself.
-- Closing an open lock removes the exception (`kerning.closingLockRemovesException`,
-  `kerning.removeException`); opening is `kerning.addException`.
+- With the cursor between the pair, opening a glyph's lock makes that side an exception
+  (`kerning.addException`); closing it removes the exception (`kerning.closingLockRemovesException`,
+  `kerning.removeException`). An older answer on the reference forum, not the handbook, says that
+  closing a lock applies the existing group value, so the number shown can change.
 
 ### 3.7 Pair lookup order
 
@@ -316,8 +320,10 @@ is in `07-import-export.md`, section 4.2).
 1. Sign of the kerning shortcuts: does "increase" add to the value (more space) or make the
    pair tighter?
    **Answered for M5 (our decision):** increase adds to the value (more space), decrease subtracts.
-   The handbook table names the directions without a sign; the reference kerning tutorial
-   (glyphsapp.com/learn/kerning) says negative values tighten. Guess on `kerning.increaseLeft`.
+   The handbook names the keys and the directions without a sign; the reference kerning tutorial
+   (glyphsapp.com/learn/kerning) says negative values tighten. Reading "increase" as a more
+   positive value is an inference. The Info box value after one keypress settles it. Guess on
+   `kerning.increaseLeft`.
 2. Do the spacing and kerning shortcuts follow the visual or the logical side in right-to-left
    and vertical text?
    **Answered for M5 (our decision):** in right-to-left text the shortcuts follow the visual side,
@@ -328,9 +334,10 @@ is in `07-import-export.md`, section 4.2).
    **Answered for M5 (our decision):** the number changes, the key stays and shows as out of sync
    (`spacing.shortcutsNeedTextTool`). Auto-aligned glyphs wait for M6.
 4. Up/Down in an Info box field that holds a metrics key or a kern field: what happens?
-   **Answered for M5 (our decision):** in a field with a key, Up and Down leave the key unchanged.
-   In a kern field they add and subtract 1 (10 with Shift), as a user report on the reference forum
-   describes (`spacing.infoBoxArrowSteps`).
+   **Answered for M5 (handbook and our decision):** a kern field is an Info box value, so Up and
+   Down add and subtract 1, 10 with Shift and 100 with Cmd+Shift, as the handbook gives for Info
+   box values; a user report on the reference forum describes the 1 and 10 steps in a kern field.
+   Ours: in a field with a key, Up and Down leave the key unchanged (`spacing.infoBoxArrowSteps`).
 5. Numeric width edit: which sidebearing absorbs the change?
    **Answered for M5 (our decision):** the right sidebearing absorbs it; the left one stays
    (`spacing.setWidth`). `glyph.transformMetrics` without *on both sides* does the same.
@@ -384,7 +391,9 @@ is in `07-import-export.md`, section 4.2).
     stored separately?
    **Answered for M5 (sources and our decision):** the lock state follows from the stored pairs:
    the file format has no lock field, and the reference scripting API reads and sets whether the
-   kerning to the neighbour is an exception. Ours: opening a lock stores the pair that the open
+   kerning to the neighbour is an exception. The handbook says opening a lock makes that side an
+   exception and closing it removes the exception; an older forum answer adds that closing applies
+   the group value, so the number can change. Ours: opening a lock stores the pair that the open
    lock names at the value that applied; closing deletes that exception in the current master only
    (`kerning.lockStates`, `kerning.closingLockRemovesException`).
 13. Are kerning groups per glyph across all masters (assumed) and shared between LTR and RTL?
@@ -422,7 +431,8 @@ is in `07-import-export.md`, section 4.2).
    and shows them in top-to-bottom text; there are no vertical kerning shortcuts in M5.
 19. Implicit `kern` feature: lookup structure, script/language handling, interaction with a
     hand-written `kern` feature, and any value or size limits.
-   **Open for M8.** Known: both oracles split the generated kern lookups by script (a test font
-   with Latin and Hebrew pairs gets a lookup per script), and the handbook's Layout chapter says a
-   hand-written feature of the same name places the generated code where it holds the line `#
-   Automatic Code`.
+   **Answered for M5 (oracle):** M5.17 builds the lookups as fontc's kern writer does: both
+   oracles split the generated kern lookups by script (a test font with Latin and Hebrew pairs gets
+   a lookup per script). Guess on `kerning.implicitKernFeature`. **Open for M8:** the interaction
+   with a hand-written `kern` feature; the handbook's Layout chapter says a hand-written feature of
+   the same name places the generated code where it holds the line `# Automatic Code`.

@@ -907,8 +907,9 @@ milestone = "M5"
 summary = "Switches between typing text and editing the current glyph. The handbook states the Escape toggle but not which tool becomes active when leaving text mode."
 ref = "Edit View › Entering Text"
 status = "handbook"
+notes = "Documented, not yet observed: Escape switches between entering text and editing the current glyph, the glyph after the cursor (spacing.currentGlyphFollowsCursor)."
 guesses = [
-  "Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either.",
+  "Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either, and the toolbar after Escape, in the running app or a video, settles it.",
 ]
 
 [[command]]
@@ -1153,10 +1154,7 @@ milestone = "M5"
 summary = "Window for proofing running text of any length. The reference renders with the operating system's shaping engine and draws characters the font lacks in a system fallback font; FontCraft needs its own shaper to match this."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
-notes = "M5 lays the preview out with the Edit View text layout: characters map to glyphs by Unicode value, the document kerning applies, and the writing direction orders the glyphs. Substitution and other positioning features need compiled feature code, which is M8; the preview gains a shaping engine then (docs/plans/M5.md § 3)."
-guesses = [
-  "Until M8 the preview applies the document kerning and no other feature; the reference shapes the text through the operating system.",
-]
+notes = "The owner's decision (docs/plans/M5.md § 7 question 6): M5 lays the preview out with the Edit View text layout: characters map to glyphs by Unicode value, the document kerning applies, and the writing direction orders the glyphs. The reference shapes the text through the operating system. Substitution and other positioning features need compiled feature code, which is M8; the preview gains a shaping engine then."
 
 [[command]]
 id = "textPreview.setText"
@@ -1381,9 +1379,9 @@ milestone = "M5"
 summary = "The texts of the open Edit View tabs are stored in the document as its display strings, one string per tab, with a glyph that has no character written as `/name`. Opening a document opens its tabs again from them."
 ref = "GlyphsSDK file-format specification, versions 3 and 4 › DisplayStrings (UIState.plist in a package)"
 status = "docs"
-notes = "The reference writes them unless the `Write DisplayStrings` custom parameter is false. FontCraft keeps the stored strings unchanged since M1; restoring and writing them is § 7 question 4 of docs/plans/M5.md."
+notes = "The owner's decision (docs/plans/M5.md § 7 question 4): opening a document opens one tab per stored string, and saving writes the open tabs in tab order. When the `Write DisplayStrings` custom parameter is false, saving writes none, as the reference does."
 guesses = [
-  "Opening a document opens one tab per stored string, and saving writes the open tabs in tab order; changing a tab's text is not an undo step and does not mark the document modified.",
+  "Changing a tab's text is not an undo step and does not mark the document modified; no source says, and the window's edited mark after typing in a tab of the reference app settles it.",
 ]
 
 [[behavior]]
@@ -1425,6 +1423,7 @@ milestone = "M5"
 summary = "Characters the font does not cover are drawn in a system fallback font in the Text Preview rather than as missing-glyph boxes."
 ref = "Edit View › Entering Text › Text Preview"
 status = "handbook"
+notes = "Part of the Text Preview layout the owner chose for M5 (docs/plans/M5.md § 7 question 6)."
 guesses = [
   "Characters the font lacks are drawn in the interface font of the app.",
 ]

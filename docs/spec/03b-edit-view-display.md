@@ -247,8 +247,10 @@ much text. Controls: style pop-up (`textPreview.setStyle`), size field
 Insert Pattern (`textPreview.insertPattern`, Cmd+Ctrl+Alt+P).
 
 The reference shapes this text with the operating system's engine, so it is a true preview of
-all features, and draws unsupported characters in a fallback font. FontCraft has to shape with
-its own engine and instance the font on the fly.
+all features, and draws unsupported characters in a fallback font. Until M8, FontCraft lays the
+text out with the Edit View text layout (Unicode mapping, the document's kerning, the writing
+direction) and draws characters the font lacks in the interface font (the owner's decision,
+`docs/plans/M5.md` § 7 question 6). A shaping engine comes with M8's features.
 
 ## Measuring
 
