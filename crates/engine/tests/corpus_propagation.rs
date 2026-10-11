@@ -107,7 +107,7 @@ fn propagation_equals_the_reference_library() {
             for (glyph, by_master) in glyphs {
                 let Some(theirs) = by_master.get(&master.id) else { continue };
                 let theirs = reference_anchors(theirs);
-                let mine: Anchors = match ours.get(glyph) {
+                let mine: Anchors = match ours.anchors.get(glyph) {
                     Some(list) => list.iter().map(|a| (a.name.clone(), a.x, a.y)).collect(),
                     None => {
                         if font.glyph(glyph).is_none() {
