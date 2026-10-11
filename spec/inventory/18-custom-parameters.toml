@@ -491,6 +491,7 @@ effect = "ui"
 summary = "Float setting the distance between lines of text in Edit View, for fonts whose vertical metrics make the default leading unsuitable. Never affects the exported font."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Read by `textlayout::line_height` for the master a tab draws in; without it, lines are the master's ascender minus its descender plus a tenth of the em apart (docs/plans/M5.md § 3)."
 
 [[parameter]]
 name = "Elidable STAT Axis Value Name"

@@ -22,6 +22,7 @@ pub mod selection;
 pub mod start_window;
 pub mod status_bar;
 pub mod tabs;
+pub mod text;
 pub mod toolbar;
 pub mod transform;
 pub mod view;
@@ -56,6 +57,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (font_view::sidebar::COMMANDS, font_view::sidebar::run),
     (glyph_info::COMMANDS, glyph_info::run),
     (start_window::COMMANDS, start_window::run),
+    (text::COMMANDS, text::run),
 ];
 
 /// Every shell command, in module order.

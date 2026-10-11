@@ -87,7 +87,7 @@ fn select_layer(app: &mut FontcraftApp, args: &Args, index: usize) -> Result<Val
         return Err(args.err("`glyphs` is empty"));
     }
     for name in &glyphs {
-        if !tab.glyphs.contains(name) {
+        if !tab.shown_glyphs().any(|g| g == name) {
             return Err(args.err(format!("`{name}` is not in the tab")));
         }
         let glyph = font.glyph(name).ok_or_else(|| args.err(format!("there is no glyph `{name}`")))?;

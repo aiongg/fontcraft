@@ -9,6 +9,7 @@ use egui::{Color32, ColorImage, Rect, Stroke, TextureHandle, TextureOptions, pos
 use fontcraft_geom::{Affine, BezPath};
 use fontcraft_model::Font;
 use fontcraft_render::{Style, render_path};
+use fontcraft_textlayout::Layout;
 
 use super::composite::CompositeCache;
 use super::{Painting, flatten};
@@ -41,16 +42,18 @@ pub struct Fill {
     pub edited: bool,
 }
 
-/// Draws the tab's glyphs (`line` holds their offsets and widths) as `what` says.
-pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, tab: &Tab, line: &[(f64, f64)], what: Fill) {
-    let offset = line.get(tab.edited).map_or(0.0, |(x, _)| *x);
+/// Draws the tab's glyphs where `layout` places them as `what` says; `origin` is where the
+/// edited glyph sits.
+pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, tab: &Tab, layout: Option<&Layout>, origin: [f64; 2], what: Fill) {
     let mut filled = BezPath::new();
-    for (i, (name, (x, _))) in tab.glyphs.iter().zip(line).enumerate() {
-        let edited = i == tab.edited;
+    let edited_index = tab.edited_index();
+    for (i, placed) in layout.map(|l| l.placed.as_slice()).unwrap_or_default().iter().enumerate() {
+        let edited = Some(i) == edited_index;
+        let Some(name) = placed.glyph.as_deref() else { continue };
         let Some(layer) = super::view::shown_layer(font, tab, name) else { continue };
         let Some(composite) = cache.outlines.get(what.doc, font, name, layer) else { continue };
         let mut outline = composite.outline.clone();
-        outline.apply_affine(Affine::translate((x - offset, 0.0)));
+        outline.apply_affine(Affine::translate((placed.x - origin[0], placed.y - origin[1])));
         if (edited && what.edited) || (!edited && what.others) {
             filled.extend(outline.elements().iter().copied());
         } else if !edited {
@@ -66,7 +69,7 @@ pub fn draw(c: &Painting, cache: &mut FillCache, font: &Font, tab: &Tab, line: &
     let ppp = c.painter.ctx().pixels_per_point();
     let (w, h) = ((c.rect.width() * ppp).round(), (c.rect.height() * ppp).round());
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    (what, &tab.glyphs, tab.edited, &tab.master, &tab.layers).hash(&mut hasher);
+    (what, tab.text.revision(), tab.direction, tab.kerning, &tab.master, &tab.layers).hash(&mut hasher);
     for v in [
         c.view.scale(),
         c.view.origin.x,

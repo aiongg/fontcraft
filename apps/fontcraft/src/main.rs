@@ -9,7 +9,8 @@
 //! The app gives the engine the system clock (Last Changed stamps), the user's settings and the
 //! user's custom glyph data from the settings folder ([`user_files`]), and saves the settings
 //! whenever they change. Started without a file, it shows the Start Window unless the person
-//! turned that off.
+//! turned that off. A document opens with one Edit View tab per display string it stores, and
+//! saving writes the open tabs back.
 #![forbid(unsafe_code)]
 
 mod control_server;
@@ -95,6 +96,7 @@ fn run() -> Result<(), String> {
     // With no file to open, the Start Window takes the place of a new document while its Show
     // window on startup setting is on.
     let show_start = file.is_none() && session.settings().get_bool(start_window::SHOW_AT_LAUNCH).unwrap_or(true);
+    let opened = file.is_some();
     match file {
         Some(path) => {
             session.execute("file.open", &json!({"path": path})).map_err(|e| e.to_string())?;
@@ -103,6 +105,12 @@ fn run() -> Result<(), String> {
         None => session.execute("file.new", &json!({})).map(|_| ()).map_err(|e| e.to_string())?,
     }
     let mut app = FontcraftApp::new(session);
+    // The document's tabs open from its display strings, as they do for File › Open.
+    if opened {
+        for warning in app.open_display_strings() {
+            eprintln!("fontcraft: {warning}");
+        }
+    }
     app.picker = Some(Box::new(pickers::SystemPicker));
     app.state.start.reveal = start_window::Reveal(Some(pickers::reveal));
     if show_start {

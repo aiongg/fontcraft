@@ -907,7 +907,7 @@ milestone = "M5"
 summary = "Switches between typing text and editing the current glyph. The handbook states the Escape toggle but not which tool becomes active when leaving text mode."
 ref = "Edit View › Entering Text"
 status = "handbook"
-notes = "Documented, not yet observed: Escape switches between entering text and editing the current glyph, the glyph after the cursor (spacing.currentGlyphFollowsCursor)."
+notes = "Documented, not yet observed: Escape switches between entering text and editing the current glyph, the glyph after the cursor (spacing.currentGlyphFollowsCursor). Built in M5.7a as tab state (`Tab::text_mode`); the tool switch and the Escape key come with the Text tool."
 guesses = [
   "Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either, and the toolbar after Escape, in the running app or a video, settles it.",
 ]
@@ -918,13 +918,13 @@ label = "Insert Text"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{tab?: id, text?: string, glyphs?: [names], at?: index, replace?: [start, end]}"
+params = "{tab?: id, text?: string, chars?: string, glyphs?: [names], at?: index, replace?: [start, end]}"
 area = "edit-text"
 milestone = "M5"
 summary = "Inserts characters or named glyphs into the tab's string at the text cursor or a given index. This is what typing and pasting do; characters map to glyphs through their Unicode values."
 ref = "Edit View › Entering Text › Text Tool"
 status = "handbook"
-notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3). A glyph without a character is written `/name`, as the reference writes it into the display strings of the files it saves (`/Smily`, `/_part.test` in corpus files)."
+notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3). A glyph without a character is written `/name`, as the reference writes it into the display strings of the files it saves (`/Smily`, `/_part.test` in corpus files). `text` reads that form; `chars` takes every character as typed (what typing and pasting insert), a line break as a line break. Without `at` or `replace` the items take the place of the selection."
 guesses = [
   "A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends.",
 ]
@@ -935,13 +935,13 @@ label = "Set Tab Text"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{tab?: id, text?: string, glyphs?: [names]}"
+params = "{tab?: id, text?: string, chars?: string, glyphs?: [names]}"
 area = "edit-text"
 milestone = "M5"
 summary = "Replaces the whole string shown in an Edit View tab. Headless counterpart of selecting all text and typing."
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
-notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3)."
+notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3). `text`, `chars` and `glyphs` read as in editView.insertText; the cursor ends after the text, as after typing it."
 own = true
 
 [[command]]
@@ -956,7 +956,7 @@ milestone = "M5"
 summary = "Query returning the tab's string as a glyph name list with placeholders and line breaks marked, the cursor index, the current glyph, the writing direction and the active master."
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
-notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3)."
+notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3). Items are glyph names, `{placeholder: true}`, `{lineBreak: true}` and `{missing: char}`; the reply also gives the display string, the selection, the text mode and the kerning mode. Every text command answers with this reply."
 own = true
 
 [[command]]
@@ -972,6 +972,7 @@ summary = "Places the text cursor before the glyph at the given index, optionall
 ref = "Edit View › Entering Text › Text Tool"
 status = "inferred"
 own = true
+notes = "The selection runs from the cursor over the `selectionLength` items after it, so the current glyph is the first selected glyph."
 
 [[command]]
 id = "edit.emojiAndSymbols"
@@ -1078,6 +1079,9 @@ milestone = "M5"
 summary = "Like Previous Glyph, but steps through the glyphs as Font View currently lists them, so an active filter or search limits and orders the walk."
 ref = "Edit View › Entering Text › Change the Current Glyph"
 status = "handbook"
+guesses = [
+  "For a current glyph that Font View does not list, Previous Glyph in Font View takes the last glyph listed; stepping from such a glyph in the reference app settles it.",
+]
 
 [[command]]
 id = "editView.nextVisibleGlyph"
@@ -1092,6 +1096,9 @@ milestone = "M5"
 summary = "Like Next Glyph, but steps through the glyphs as Font View currently lists them."
 ref = "Edit View › Entering Text › Change the Current Glyph"
 status = "handbook"
+guesses = [
+  "For a current glyph that Font View does not list, Next Glyph in Font View takes the first glyph listed; stepping from such a glyph in the reference app settles it.",
+]
 
 [[command]]
 id = "edit.addPlaceholder"
@@ -1108,6 +1115,7 @@ status = "handbook"
 notes = "The tab text is view state that the shell holds, as the tab glyph list has been since M3, so this is a shell command (docs/plans/M5.md § 3)."
 guesses = [
   "A placeholder is written `/Placeholder` in display strings and copied to the plain-text clipboard as the text of the current glyph; no source shows either.",
+  "A placeholder goes in place of the selection, as a typed character does; adding one with text selected in the reference app settles it.",
 ]
 
 [[command]]
@@ -1386,11 +1394,13 @@ milestone = "M5"
 summary = "The texts of the open Edit View tabs are stored in the document as its display strings, one string per tab, with a glyph that has no character written as `/name`. Opening a document opens its tabs again from them."
 ref = "GlyphsSDK file-format specification, versions 3 and 4 › DisplayStrings (UIState.plist in a package)"
 status = "docs"
-notes = "The owner's decision (docs/plans/M5.md § 7 question 4): opening a document opens one tab per stored string, and saving writes the open tabs in tab order. When the `Write DisplayStrings` custom parameter is false, saving writes none, as the reference does. The string format is built in M5.6 (`textlayout::parse`, `Text::to_display_string`): a space after `/name` ends the name and is dropped, as the handbook describes sample strings; the 45 display strings of the 21 corpus sources that have them read and write back unchanged."
+notes = "The owner's decision (docs/plans/M5.md § 7 question 4): opening a document opens one tab per stored string, and saving writes the open tabs in tab order. When the `Write DisplayStrings` custom parameter is false, saving writes none, as the reference does. The string format is built in M5.6 (`textlayout::parse`, `Text::to_display_string`): a space after `/name` ends the name and is dropped, as the handbook describes sample strings; the 45 display strings of the 21 corpus sources that have them read and write back unchanged. Built in M5.7a: File › Open opens the tabs, Save and Save As write the open tabs first, without an undo step and without marking the document modified."
 guesses = [
   "Changing a tab's text is not an undo step and does not mark the document modified; no source says, and the window's edited mark after typing in a tab of the reference app settles it.",
   "A `/` with an empty name is the slash character, and a glyph is written as the character it was typed as only while the font still maps that character to it; saving such a string in the reference app settles it.",
   "A `/name` the font lacks and a character no glyph encodes are kept in the text and take half the em with nothing drawn; opening such a string in the reference app settles it.",
+  "A stored string over the 10,000-item tab limit opens cut to its first 10,000 items, with a warning in the log and the status bar, and a string that cannot be read (a `/name` longer than a glyph name may be) opens no tab; a file from the reference app with such a string settles it.",
+  "Opening a document adds its tabs after the open ones and leaves Font View showing; opening a file with display strings in the reference app settles which tab shows.",
 ]
 
 [[behavior]]

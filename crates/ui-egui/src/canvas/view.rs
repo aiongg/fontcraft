@@ -1,15 +1,21 @@
-//! The Edit View camera: where a tab's line of glyphs sits on the canvas.
+//! The Edit View camera and the tab's text layout: where a tab's glyphs sit on the canvas.
 //!
-//! A tab's [`TabView`] holds a scale and the line point at the canvas centre. The tools crate's
-//! [`fontcraft_tools::View`] is the transform for the edited glyph, whose origin sits at its
-//! offset in the line; [`tools_view`] turns one into the other, so the canvas and the tools share
+//! A tab's [`TabView`] holds a scale and the text point at the canvas centre. The tools crate's
+//! [`fontcraft_tools::View`] is the transform for the edited glyph, placed where the glyph sits
+//! in the text; [`tools_view`] turns one into the other, so the canvas and the tools share
 //! one transform.
 
+use std::cell::RefCell;
+use std::sync::Arc;
+
+use fontcraft_engine::Session;
 use fontcraft_geom::Point;
 use fontcraft_model::{Font, Layer, Master, metric};
+use fontcraft_spacing::kerning::KernIndex;
+use fontcraft_textlayout::{DEFAULT_LINE_WIDTH, KerningMode, Layout, Options};
 use fontcraft_tools::View;
 
-use crate::state::{Tab, TabView};
+use crate::state::{Tab, TabView, WritingDirection};
 
 /// The master a tab draws its glyphs in: the one chosen with `view.selectMaster`, else the
 /// first.
@@ -46,30 +52,109 @@ pub fn active_master<'f>(font: &'f Font, tab: &Tab) -> Option<&'f Master> {
     active_layer(font, tab).and_then(|l| font.masters.iter().find(|m| m.id == l.master)).or_else(|| tab_master(font, tab))
 }
 
-/// Where each glyph of a tab starts on the line, and its advance width in the layer shown (0 for
-/// a missing glyph).
-pub fn layout(font: &Font, tab: &Tab) -> Vec<(f64, f64)> {
-    let mut x = 0.0;
-    tab.glyphs
-        .iter()
-        .map(|name| {
-            let width = shown_layer(font, tab, name).map_or(0.0, |l| if l.width.is_finite() { l.width.max(0.0) } else { 0.0 });
-            let at = x;
-            x += width;
-            (at, width)
-        })
-        .collect()
+/// Most tab layouts kept at once.
+const KEPT_LAYOUTS: usize = 8;
+
+/// What a tab's layout depends on besides the font's glyphs.
+#[derive(Clone, Debug, PartialEq)]
+struct LayoutKey {
+    tab: u64,
+    /// The document's id and revision.
+    doc: (u64, u64),
+    text: u64,
+    master: String,
+    direction: WritingDirection,
+    kerning: KerningMode,
 }
 
-/// Where the edited glyph starts on the line.
-pub fn edited_offset(font: &Font, tab: &Tab) -> f64 {
-    layout(font, tab).get(tab.edited).map_or(0.0, |(x, _)| *x)
+/// The tabs' text layouts, each kept while its document revision, text revision, master,
+/// direction and kerning mode stay the same, so a frame lays text out only after a change. It
+/// also keeps the kerning index the layouts read.
+#[derive(Default)]
+pub struct LayoutCache {
+    inner: RefCell<LayoutCacheInner>,
 }
 
-/// The edited glyph's transform on a canvas whose centre is `center` (screen points).
-pub fn tools_view(view: &TabView, offset: f64, center: Point) -> View {
+#[derive(Default)]
+struct LayoutCacheInner {
+    kern: Option<Arc<KernIndex>>,
+    entries: Vec<(LayoutKey, Arc<Layout>)>,
+}
+
+impl LayoutCache {
+    /// Hands the cache the session's kerning index when a layout of `tab` would have to be
+    /// computed and its own index no longer describes the font.
+    pub fn prepare(&self, session: &mut Session, tab: &Tab) {
+        let Ok(font) = session.font() else { return };
+        let Some(key) = key(session, font, tab) else { return };
+        let inner = self.inner.borrow();
+        let fresh =
+            inner.entries.iter().any(|(k, _)| *k == key) || !tab.kerning.shows_kerning() || inner.kern.as_ref().is_some_and(|k| k.is_current(font));
+        drop(inner);
+        if !fresh && let Ok(index) = session.kern_index() {
+            self.inner.borrow_mut().kern = Some(index);
+        }
+    }
+}
+
+fn key(session: &Session, font: &Font, tab: &Tab) -> Option<LayoutKey> {
+    let doc = session.active().map(|d| (d.id, d.revision))?;
+    let master = tab_master(font, tab)?.id.clone();
+    Some(LayoutKey { tab: tab.id, doc, text: tab.text.revision(), master, direction: tab.direction, kerning: tab.kerning })
+}
+
+/// The layout of a tab's text in the tab's master, with its direction and kerning mode, and the
+/// line height of the master (`EditView Line Height`, else the computed one). Cached in `cache`;
+/// `None` without a document or a master.
+pub fn text_layout(session: &Session, cache: &LayoutCache, tab: &Tab) -> Option<Arc<Layout>> {
+    let font = session.font().ok()?;
+    let key = key(session, font, tab)?;
+    let mut inner = cache.inner.borrow_mut();
+    if let Some((_, layout)) = inner.entries.iter().find(|(k, _)| *k == key) {
+        return Some(layout.clone());
+    }
+    let index = match &inner.kern {
+        Some(index) if tab.kerning.shows_kerning() && index.is_current(font) => Some(index.clone()),
+        _ if tab.kerning.shows_kerning() => {
+            let index = Arc::new(KernIndex::new(font));
+            inner.kern = Some(index.clone());
+            Some(index)
+        }
+        _ => None,
+    };
+    let options = Options {
+        direction: tab.direction.layout(),
+        kerning: tab.kerning,
+        line_width: DEFAULT_LINE_WIDTH,
+        index: index.as_deref(),
+        ..Default::default()
+    };
+    let layout = Arc::new(fontcraft_textlayout::layout(font, &key.master, &tab.text, &options).ok()?);
+    inner.entries.retain(|(k, _)| k.tab != key.tab);
+    if inner.entries.len() >= KEPT_LAYOUTS {
+        inner.entries.remove(0);
+    }
+    inner.entries.push((key, layout.clone()));
+    Some(layout)
+}
+
+/// Where the edited glyph's origin sits in the tab's text, in font units (`[0, 0]` when nothing
+/// is edited).
+pub fn edited_origin(session: &Session, cache: &LayoutCache, tab: &Tab) -> [f64; 2] {
+    let Some(index) = tab.edited_index() else { return [0.0, 0.0] };
+    text_layout(session, cache, tab).and_then(|l| l.placed.get(index).map(|p| [p.x, p.y])).unwrap_or([0.0, 0.0])
+}
+
+/// The advance width of the edited glyph in its active layer (0 when there is none).
+pub fn edited_width(font: &Font, tab: &Tab) -> f64 {
+    active_layer(font, tab).map_or(0.0, |l| if l.width.is_finite() { l.width.max(0.0) } else { 0.0 })
+}
+
+/// The edited glyph's transform on a canvas whose centre is `center` (screen points); `origin`
+/// is where the glyph sits in the text ([`edited_origin`]).
+pub fn tools_view(view: &TabView, origin: [f64; 2], center: Point) -> View {
     let s = TabView::clamped_scale(view.scale);
-    View::new(s, Point::new(center.x + (offset - view.center[0]) * s, center.y + view.center[1] * s))
+    View::new(s, Point::new(center.x + (origin[0] - view.center[0]) * s, center.y + (view.center[1] - origin[1]) * s))
 }
 
 /// Descender and ascender of a master, in font units.
@@ -83,13 +168,15 @@ pub fn vertical_span(font: &Font, master: &Master) -> (f64, f64) {
 /// The camera that fits the edited glyph's descender-to-ascender span (and its width, when that
 /// is the tighter limit) into a canvas of `canvas` points, leaving `margin` (a fraction) free on
 /// every side.
-pub fn fit(font: &Font, tab: &Tab, canvas: [f64; 2], margin: f64) -> TabView {
+pub fn fit(session: &Session, cache: &LayoutCache, tab: &Tab, canvas: [f64; 2], margin: f64) -> TabView {
+    let Ok(font) = session.font() else { return TabView::default() };
     let Some(master) = active_master(font, tab) else { return TabView::default() };
     let (descender, ascender) = vertical_span(font, master);
-    let (offset, width) = layout(font, tab).get(tab.edited).copied().unwrap_or((0.0, 0.0));
-    let mut v = zoom_to_rect([offset, descender, width, ascender - descender], canvas, margin);
+    let [x, y] = edited_origin(session, cache, tab);
+    let width = edited_width(font, tab);
+    let mut v = zoom_to_rect([x, y + descender, width, ascender - descender], canvas, margin);
     if width <= 0.0 {
-        v.center[0] = offset;
+        v.center[0] = x;
     }
     v
 }

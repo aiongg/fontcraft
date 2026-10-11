@@ -112,8 +112,7 @@ fn cache_key(session: &Session, state: &UiState) -> u64 {
     state.active_tab.hash(&mut h);
     state.selected_glyphs.hash(&mut h);
     if let Some(tab) = state.tab() {
-        tab.edited.hash(&mut h);
-        tab.glyphs.hash(&mut h);
+        tab.text.revision().hash(&mut h);
         tab.focus.hash(&mut h);
         serde_json::to_string(&tab.selection).unwrap_or_default().hash(&mut h);
     }

@@ -327,7 +327,7 @@ fn zoom_and_scroll_commands_move_the_camera_within_limits() {
 #[test]
 fn tabs_open_switch_close_and_reopen() {
     let mut app = FontcraftApp::default();
-    let tabs = |app: &FontcraftApp| app.state.tabs.iter().map(|t| t.glyphs.join(" ")).collect::<Vec<_>>();
+    let tabs = |app: &FontcraftApp| app.state.tabs.iter().map(|t| t.shown_glyphs().collect::<Vec<_>>().join(" ")).collect::<Vec<_>>();
     app.run("fontView.setSelection", &json!({"glyphs": ["A", "B"]})).unwrap();
     let first = app.run("view.newTab", &json!({})).unwrap();
     assert_eq!((first["position"].as_u64(), first["editing"].as_str()), (Some(2), Some("A")));

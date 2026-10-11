@@ -218,7 +218,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             if glyphs.is_empty() {
                 return Err(args.err("no glyph is selected"));
             }
-            if let Some(index) = app.state.tabs.iter().position(|t| t.glyphs == glyphs) {
+            if let Some(index) = app.state.tabs.iter().position(|t| t.holds(&glyphs)) {
                 app.state.active_tab = Some(index);
                 return Ok(super::tabs::describe(app, index));
             }

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**508 guesses on 339 rows (152 of them live commands).**
+**513 guesses on 341 rows (160 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -136,6 +136,14 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `path.swapWithBackground` | M3 | handbook | yes | Swap exchanges shapes, anchors, guides, hints and annotations but not the placed image, and removes a background the swap leaves empty. |
 | `path.clearBackground` | M3 | handbook | yes | Clear Background is its own Path menu item and acts on the active layer of the targeted glyphs, image included (03b question 2). |
 | `path.assignBackground` | M3 | handbook | yes | Glyphs are matched by name and masters by name, then by position; a source with fewer masters gives its first (03b question 3). |
+| `editView.toggleTextMode` | M5 | handbook | yes | Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either, and the toolbar after Escape, in the running app or a video, settles it. |
+| `editView.insertText` | M5 | handbook | yes | A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends. |
+| `editView.previousGlyph` | M5 | handbook | yes | At the first glyph of the order Previous Glyph does nothing (no wrap), and with several glyphs selected in the text it replaces only the current glyph. |
+| `editView.nextGlyph` | M5 | handbook | yes | At the last glyph of the order Next Glyph does nothing (no wrap). |
+| `editView.previousVisibleGlyph` | M5 | handbook | yes | For a current glyph that Font View does not list, Previous Glyph in Font View takes the last glyph listed; stepping from such a glyph in the reference app settles it. |
+| `editView.nextVisibleGlyph` | M5 | handbook | yes | For a current glyph that Font View does not list, Next Glyph in Font View takes the first glyph listed; stepping from such a glyph in the reference app settles it. |
+| `edit.addPlaceholder` | M5 | handbook | yes | A placeholder is written `/Placeholder` in display strings and copied to the plain-text clipboard as the text of the current glyph; no source shows either. |
+| `edit.addPlaceholder` | M5 | handbook | yes | A placeholder goes in place of the selection, as a typed character does; adding one with text selected in the reference app settles it. |
 | `measure.ruler` | M3 | inferred | yes | Crossings follow the nonzero winding rule, and a line that only touches a contour does not cross it; the handbook does not say how the reference merges overlapping contours. |
 | `measure.ruler` | M3 | inferred | yes | Components are measured like paths, and the ruler stays until the next click or tool change (03b question 10). |
 | `annotation.add` | M3 | inferred | yes | New annotations get a text box 200 units wide, an arrow at 45° and a circle 100 units across; the handbook gives no defaults (03b question 11). |
@@ -148,13 +156,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `text.displayStrings` (behavior) | M5 | docs | – | Changing a tab's text is not an undo step and does not mark the document modified; no source says, and the window's edited mark after typing in a tab of the reference app settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | A `/` with an empty name is the slash character, and a glyph is written as the character it was typed as only while the font still maps that character to it; saving such a string in the reference app settles it. |
 | `text.displayStrings` (behavior) | M5 | docs | – | A `/name` the font lacks and a character no glyph encodes are kept in the text and take half the em with nothing drawn; opening such a string in the reference app settles it. |
+| `text.displayStrings` (behavior) | M5 | docs | – | A stored string over the 10,000-item tab limit opens cut to its first 10,000 items, with a warning in the log and the status bar, and a string that cannot be read (a `/name` longer than a glyph name may be) opens no tab; a file from the reference app with such a string settles it. |
+| `text.displayStrings` (behavior) | M5 | docs | – | Opening a document adds its tabs after the open ones and leaves Font View showing; opening a file with display strings in the reference app settles which tab shows. |
 | `textPreview.fallbackFont` (behavior) | M5 | handbook | – | Characters the font lacks are drawn in the interface font of the app. |
 | `preview.singleLine` (behavior) | M5 | handbook | – | On the preview line a line break takes no room; a tab of several lines in the reference app's Preview Area settles it. |
-| `editView.toggleTextMode` | M5 | handbook | no | Leaving text mode makes the Select tool active, and returning puts the text cursor before the glyph that was edited; no source names either, and the toolbar after Escape, in the running app or a video, settles it. |
-| `editView.insertText` | M5 | handbook | no | A `/name` escape ends at the next slash, space or line break, and one space after it is consumed; the corpus files show the escape but not how it ends. |
-| `editView.previousGlyph` | M5 | handbook | no | At the first glyph of the order Previous Glyph does nothing (no wrap), and with several glyphs selected in the text it replaces only the current glyph. |
-| `editView.nextGlyph` | M5 | handbook | no | At the last glyph of the order Next Glyph does nothing (no wrap). |
-| `edit.addPlaceholder` | M5 | handbook | no | A placeholder is written `/Placeholder` in display strings and copied to the plain-text clipboard as the text of the current glyph; no source shows either. |
 | `textPreview.setStyle` | M5 | handbook | no | Until instances are interpolated (M9) the style list holds the masters and the instances that sit at a master location. |
 | `edit.selectSampleText` | M5 | handbook | no | Choosing a sample string replaces the whole text of the tab; the handbook says the string goes into the text without saying where. |
 | `edit.selectNextSampleString` | M5 | handbook | no | Next and Previous wrap around at the ends of the list. |
@@ -412,6 +417,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `glyph.updateMetricsForAllMasters` | M5 | handbook | yes | Besides the master layers it updates the layers with attributes (intermediate, alternate, colour, smart), the layers the out-of-sync scan lists, and leaves out masters that take their metrics from another master; a brace layer with an out-of-sync key in the reference app would settle it. |
 | `spacing.listOutOfSyncMetrics` | M5 | inferred | yes | A key is out of sync when its value differs from the layer's metric rounded half up. |
 | `spacing.listOutOfSyncMetrics` | M5 | inferred | yes | Master layers and layers with attributes (intermediate, alternate, colour, smart) are scanned; backup layers and the layers of a master that takes its metrics from another master are not. |
+| `kerning.setMode` | M5 | handbook | yes | A new Edit View tab starts in kerning mode; no source gives the default. |
 | `kerning.setPair` | M5 | handbook | yes | A group side must be the group some glyph has on the side that faces the pair, and a glyph side a glyph of the font, so a typo is refused rather than stored as a pair that never applies; storing a pair for an unknown group in the running app's Kerning window settles it. |
 | `kerning.setPair` | M5 | handbook | yes | Values beyond ±32,767 are refused, the range a compiled pair value holds; typing a larger value in a kern field settles what the reference does. |
 | `kerning.removePair` | M5 | handbook | yes | Removing a pair the master does not store is refused with a message rather than ignored; clearing an empty kern field in the running app shows nothing either way, so only the scripting API's behaviour would settle it. |
@@ -471,7 +477,6 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `kerning.compressRules` (behavior) | M5 | handbook | – | A later pair with the same sides as an earlier one (one group in two spellings, or two entries for one master) never applies, so it is removed together with the earlier pair when that one is lifted or absorbed; compressing such a pair list in the reference app settles it. |
 | `kerning.compressOneStepPerRun` (behavior) | M5 | handbook | – | A run lifts the left side of every pair that can lift it, else its right side; one run on a pair list where both sides can lift, in the reference app, settles it. |
 | `kerning.implicitKernFeature` (behavior) | M5 | handbook | – | The generated lookups follow fontc's kern writer (split by script and direction, glyph pairs before class pairs, values rounded half up); the handbook gives no rules, and the GPOS of a font the reference app exports from a test source settles it. |
-| `kerning.setMode` | M5 | handbook | no | A new Edit View tab starts in kerning mode; no source gives the default. |
 | `dialog.renameKerningGroup` (panel) | M5 | handbook | – | The buttons read This Pair, All Pairs and Cancel; the handbook gives no captions, and a screenshot or video of the dialog settles them. |
 | `dialog.pasteKerningConflict` (panel) | M5 | handbook | – | The warning has a Cancel button besides Overwrite and Keep Existing. |
 

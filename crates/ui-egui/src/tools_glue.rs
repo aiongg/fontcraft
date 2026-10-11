@@ -150,22 +150,22 @@ pub fn shown_scene<'a>(session: &Session, font: &'a Font, tab: &Tab) -> Option<S
 
 /// The edited glyph's transform on the canvas now.
 pub fn current_view(app: &FontcraftApp) -> Option<View> {
-    let font = app.session.font().ok()?;
+    app.session.font().ok()?;
     let tab = app.state.tab()?;
-    Some(view::tools_view(&tab.view, view::edited_offset(font, tab), app.tools.center(app.state.canvas_size)))
+    Some(view::tools_view(&tab.view, view::edited_origin(&app.session, &app.layouts, tab), app.tools.center(app.state.canvas_size)))
 }
 
 /// Runs `f` with the active tool and the context of the showing tab.
 fn with_tool<R>(app: &mut FontcraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_>) -> R) -> Result<R, String> {
     sync(app);
     let center = app.tools.center(app.state.canvas_size);
-    let FontcraftApp { session, state, tools, tokens, .. } = app;
+    let FontcraftApp { session, state, tools, tokens, layouts, .. } = app;
     let font = session.font().map_err(|e| e.to_string())?;
     let tab = state.tab().ok_or("no Edit View tab is showing (open a glyph first)")?;
     let mut scene = shown_scene(session, font, tab).ok_or("the edited glyph has no layer in the active master")?;
     scene.background_shown = state.display.background;
     scene.guides_shown = state.display.guides;
-    let view = view::tools_view(&tab.view, view::edited_offset(font, tab), center);
+    let view = view::tools_view(&tab.view, view::edited_origin(session, layouts, tab), center);
     let settings = ToolSettings { bounding_box: state.display.bounding_box, reference: state.transform.reference(), ..settings(tokens, font) };
     let cx = Context { scene: &scene, view, selection: &tab.selection, settings };
     Ok(f(&mut tools.toolbox, &cx))
@@ -345,20 +345,20 @@ fn adopt(app: &mut FontcraftApp, value: &Value) {
 }
 
 fn view_change(app: &mut FontcraftApp, change: ViewChange) -> Result<(), String> {
-    let font = app.session.font().map_err(|e| e.to_string())?;
+    app.session.font().map_err(|e| e.to_string())?;
     let tab = app.state.tab().ok_or("no Edit View tab is showing")?;
     let id = tab.id;
     let (command, params) = match change {
         ViewChange::Pan { dx, dy } => ("view.scrollTo", json!({"tab": id, "dx": dx, "dy": dy})),
         ViewChange::Zoom { factor, at } => {
             // Keep `at` where it is on screen: the centre moves towards it as the scale grows.
-            let offset = view::edited_offset(font, tab);
+            let [ox, oy] = view::edited_origin(&app.session, &app.layouts, tab);
             let scale = TabView::clamped_scale(tab.view.scale);
             let next = TabView::clamped_scale(scale * factor);
             let k = scale / next;
             let [cx, cy] = tab.view.center;
-            let x = at.x + offset - (at.x + offset - cx) * k - offset;
-            let y = at.y - (at.y - cy) * k;
+            let x = at.x + ox - (at.x + ox - cx) * k - ox;
+            let y = at.y + oy - (at.y + oy - cy) * k - oy;
             ("view.setZoom", json!({"tab": id, "size": next * 1000.0, "center": [x, y]}))
         }
         ViewChange::ZoomToRect { x, y, width, height } => ("view.zoomToRect", json!({"tab": id, "rect": [x, y, width, height]})),

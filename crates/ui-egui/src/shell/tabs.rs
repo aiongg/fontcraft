@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use super::{Args, UiCommand};
 use crate::app::FontcraftApp;
 use crate::canvas::view;
-use crate::state::{MAX_CLOSED_TABS, MAX_TAB_GLYPHS, MAX_TABS, Tab};
+use crate::state::{MAX_CLOSED_TABS, MAX_TAB_GLYPHS, MAX_TABS, Tab, TabText};
 
 pub const COMMANDS: &[UiCommand] = &[
     (
@@ -162,12 +162,17 @@ pub(crate) fn open(app: &mut FontcraftApp, args: &Args, glyphs: Vec<String>) -> 
         Some(t) => t.master.clone(),
         None => app.state.font_view.master.clone(),
     };
-    let mut tab = Tab { id, glyphs, master, ..Default::default() };
-    tab.view = view::fit(font, &tab, app.state.canvas_size, f64::from(app.tokens.fit_margin));
+    let text = TabText::from_glyphs(&glyphs).map_err(|e| args.err(e))?;
+    Ok(push(app, Tab { id, text, master, ..Default::default() }))
+}
+
+/// Adds `tab` at the end of the strip, fitted to the canvas, shows it and describes it.
+pub(crate) fn push(app: &mut FontcraftApp, mut tab: Tab) -> Value {
+    tab.view = view::fit(&app.session, &app.layouts, &tab, app.state.canvas_size, f64::from(app.tokens.fit_margin));
     app.state.tabs.push(tab);
     let index = app.state.tabs.len() - 1;
     app.state.active_tab = Some(index);
-    Ok(describe(app, index))
+    describe(app, index)
 }
 
 /// What tab commands return about the tab at `index` (into the tabs).
@@ -177,7 +182,8 @@ pub(crate) fn describe(app: &FontcraftApp, index: usize) -> Value {
             let font = app.session.font().ok();
             let master = font.and_then(|f| view::active_master(f, tab)).map(|m| m.id.clone());
             let layer = font.and_then(|f| view::active_layer(f, tab)).map(|l| l.id.clone());
-            json!({"tab": tab.id, "position": index + 2, "glyphs": tab.glyphs, "editing": tab.edited_glyph(), "master": master, "layer": layer})
+            let glyphs: Vec<&str> = tab.shown_glyphs().collect();
+            json!({"tab": tab.id, "position": index + 2, "glyphs": glyphs, "editing": tab.edited_glyph(), "master": master, "layer": layer})
         }
         None => json!({}),
     }

@@ -1124,6 +1124,8 @@ dependencies = [
  "fontcraft-glyphquery",
  "fontcraft-model",
  "fontcraft-render",
+ "fontcraft-spacing",
+ "fontcraft-textlayout",
  "fontcraft-tools",
  "log",
  "serde",

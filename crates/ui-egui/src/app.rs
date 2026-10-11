@@ -35,6 +35,8 @@ pub struct FontcraftApp {
     pub(crate) clipboard_out: Option<String>,
     pub(crate) menu_cache: MenuCache,
     pub(crate) fill_cache: FillCache,
+    /// The tabs' text layouts.
+    pub(crate) layouts: canvas::view::LayoutCache,
     /// Font View's caches and the edit or drag in progress.
     pub(crate) font_view: shell::font_view::FontViewUi,
     themed: bool,
@@ -59,6 +61,7 @@ impl FontcraftApp {
             clipboard_out: None,
             menu_cache: MenuCache::default(),
             fill_cache: FillCache::default(),
+            layouts: Default::default(),
             font_view: Default::default(),
             themed: false,
         }
@@ -68,6 +71,10 @@ impl FontcraftApp {
     /// or the error also goes to the status bar. Never panics: a bug in a command is reported as
     /// an internal error and the document is left as it was.
     pub fn run(&mut self, id: &str, params: &Value) -> Result<Value, String> {
+        if matches!(id, "file.save" | "file.saveAs") {
+            shell::text::store_display_strings(self);
+        }
+        let before = self.session.active().map(|d| (d.id, d.font.clone()));
         let result = if is_ui_command(id) {
             match guard::catch_panic(|| shell::run(self, id, params)) {
                 Ok(r) => r,
@@ -92,7 +99,9 @@ impl FontcraftApp {
                 }
             }
         }
-        self.after_command();
+        self.after_command(before);
+        let opened = id == "file.open" && result.as_ref().is_ok_and(|r| r.get("alreadyOpen").is_none());
+        let warnings = if opened { self.open_display_strings() } else { Vec::new() };
         shell::start_window::after_run(self, id, &result);
         shell::font_view::remember_node_selection(self);
         if result.is_ok() && matches!(id, "audit.run" | "audit.fix") {
@@ -103,7 +112,35 @@ impl FontcraftApp {
             Ok(_) => self.state.status = format!("{id}: done"),
             Err(e) => self.state.status = e.clone(),
         }
+        if let Some(last) = warnings.last() {
+            self.state.status = last.clone();
+        }
         result
+    }
+
+    /// Opens one Edit View tab per display string of the active document, after the open tabs;
+    /// Font View stays showing. A string over the tab item limit opens cut to the limit. The
+    /// warnings (also logged) say which strings were cut or left out.
+    pub fn open_display_strings(&mut self) -> Vec<String> {
+        let (tabs, warnings) = match self.session.font() {
+            Ok(font) => shell::text::tabs_from_display_strings(font, &font.display_strings),
+            Err(_) => return Vec::new(),
+        };
+        let active = self.state.active_tab;
+        for text in tabs {
+            if self.state.tabs.len() >= crate::state::MAX_TABS {
+                break;
+            }
+            let id = self.state.next_tab_id;
+            self.state.next_tab_id += 1;
+            let master = self.state.font_view.master.clone();
+            shell::tabs::push(self, crate::state::Tab { id, text, master, ..Default::default() });
+        }
+        self.state.active_tab = active;
+        for w in &warnings {
+            log::warn!("{w}");
+        }
+        warnings
     }
 
     /// Runs a command the person started (menu item, shortcut, tool) as [`Self::run`] does, then
@@ -147,8 +184,8 @@ impl FontcraftApp {
         let state = &mut self.state;
         state.selected_glyphs.iter_mut().for_each(rename);
         state.font_view.anchor.iter_mut().for_each(rename);
-        for tab in &mut state.tabs {
-            tab.glyphs.iter_mut().for_each(rename);
+        for tab in state.tabs.iter_mut().chain(state.closed_tabs.iter_mut().map(|(_, t)| t)) {
+            tab.text.rename_glyph(old, new);
             tab.selection_glyph.iter_mut().for_each(rename);
             if let Some(layer) = tab.layers.remove(old) {
                 tab.layers.insert(new.to_string(), layer);
@@ -159,31 +196,38 @@ impl FontcraftApp {
         }
     }
 
-    /// Drops UI references to glyphs a command removed (or to a closed document). A tab whose
-    /// glyphs are all gone closes.
-    fn after_command(&mut self) {
+    /// Drops UI references to glyphs a command removed (or to a closed document); `before` is
+    /// the active document's id and font before the command. Glyphs a tab names that the font
+    /// did not have before (a display string may name one) stay. A tab the command emptied closes.
+    fn after_command(&mut self, before: Option<(u64, std::sync::Arc<fontcraft_model::Font>)>) {
         let state = &mut self.state;
         if state.selected_glyphs.is_empty() && state.tabs.is_empty() {
             return;
         }
-        let Ok(font) = self.session.font() else {
+        let Some(doc) = self.session.active() else {
             state.selected_glyphs.clear();
             state.tabs.clear();
             state.active_tab = None;
             return;
         };
-        let known = |name: &String| font.glyph(name).is_some();
-        state.selected_glyphs.retain(known);
-        let active = state.tab().map(|t| t.id);
-        for tab in &mut state.tabs {
-            if tab.glyphs.iter().all(known) {
-                continue;
-            }
-            let edited = tab.edited_glyph().map(str::to_string);
-            tab.glyphs.retain(known);
-            tab.edited = edited.and_then(|e| tab.glyphs.iter().position(|g| *g == e)).unwrap_or(0);
+        let font = &doc.font;
+        let (same_doc, old) = match &before {
+            Some((id, old)) if *id == doc.id => (true, Some(old)),
+            _ => (false, None),
+        };
+        if same_doc && old.is_some_and(|old| std::sync::Arc::ptr_eq(old, font)) {
+            return;
         }
-        state.tabs.retain(|t| !t.glyphs.is_empty());
+        state.selected_glyphs.retain(|name| font.glyph(name).is_some());
+        let gone = |name: &str| font.glyph(name).is_none() && (!same_doc || old.is_some_and(|old| old.glyph(name).is_some()));
+        let active = state.tab().map(|t| t.id);
+        let mut emptied = Vec::new();
+        for tab in &mut state.tabs {
+            if tab.text.remove_glyphs(gone) && tab.text.is_empty() {
+                emptied.push(tab.id);
+            }
+        }
+        state.tabs.retain(|t| !emptied.contains(&t.id));
         state.active_tab = active.and_then(|id| state.tab_index(id));
     }
 
@@ -200,7 +244,7 @@ impl FontcraftApp {
     /// View selection.
     pub fn default_render_glyphs(&self) -> Vec<String> {
         match self.state.tab() {
-            Some(tab) => tab.glyphs.clone(),
+            Some(tab) => tab.shown_glyphs().map(str::to_string).collect(),
             None => self.state.selected_glyphs.clone(),
         }
     }

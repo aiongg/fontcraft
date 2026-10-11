@@ -123,17 +123,17 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
     if id == "view.getDisplayOptions" {
         return display_options(app, index);
     }
-    let font = app.session.font().map_err(|e| e.to_string())?;
+    app.session.font().map_err(|e| e.to_string())?;
     let canvas = app.state.canvas_size;
     let margin = f64::from(app.tokens.fit_margin);
     let tab = app.state.tabs.get(index).ok_or_else(|| args.err("no such tab"))?;
-    let offset = view::edited_offset(font, tab);
+    let [offset, offset_y] = view::edited_origin(&app.session, &app.layouts, tab);
     let mut v = tab.view;
     match id {
         "view.zoomIn" => v.scale = TabView::clamped_scale(v.scale * ZOOM_STEP),
         "view.zoomOut" => v.scale = TabView::clamped_scale(v.scale / ZOOM_STEP),
         "view.zoomToActualSize" => v.scale = 1.0,
-        "view.zoomToActiveLayer" => v = view::fit(font, tab, canvas, margin),
+        "view.zoomToActiveLayer" => v = view::fit(&app.session, &app.layouts, tab, canvas, margin),
         "view.setZoom" => {
             let size = args.number("size")?.ok_or_else(|| args.err("`size` (screen points per 1000 units) is required"))?;
             if size <= 0.0 {
@@ -141,7 +141,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             }
             v.scale = TabView::clamped_scale(size / 1000.0);
             if let Some([x, y]) = args.numbers::<2>("center")? {
-                v.center = [scroll_limit(offset + x), scroll_limit(y)];
+                v.center = [scroll_limit(offset + x), scroll_limit(offset_y + y)];
             }
         }
         "view.zoomToRect" => {
@@ -149,7 +149,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             if w <= 0.0 || h <= 0.0 {
                 return Err(args.err("`rect` must have a width and a height of more than 0"));
             }
-            v = view::zoom_to_rect([offset + x, y, w, h], canvas, margin);
+            v = view::zoom_to_rect([offset + x, offset_y + y, w, h], canvas, margin);
             v.center = [scroll_limit(v.center[0]), scroll_limit(v.center[1])];
         }
         "view.scrollTo" => {
@@ -159,7 +159,7 @@ pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, Strin
             }
             let s = TabView::clamped_scale(v.scale);
             let cx = x.map_or(v.center[0], |x| offset + x) - dx.unwrap_or(0.0) / s;
-            let cy = y.unwrap_or(v.center[1]) + dy.unwrap_or(0.0) / s;
+            let cy = y.map_or(v.center[1], |y| offset_y + y) + dy.unwrap_or(0.0) / s;
             v.center = [scroll_limit(cx), scroll_limit(cy)];
         }
         other => return Err(format!("unknown command `{other}`")),
@@ -175,7 +175,7 @@ fn scroll_limit(v: f64) -> f64 {
 }
 
 /// The tab a view command acts on: `tab` by id, else the showing tab.
-fn target_tab(app: &FontcraftApp, args: &Args) -> Result<usize, String> {
+pub(crate) fn target_tab(app: &FontcraftApp, args: &Args) -> Result<usize, String> {
     match args.index("tab")? {
         Some(id) => app.state.tab_index(id).ok_or_else(|| args.err(format!("no tab has id {id}"))),
         None => app.state.active_tab.ok_or_else(|| args.err("no Edit View tab is showing (open a glyph first)")),
@@ -185,11 +185,11 @@ fn target_tab(app: &FontcraftApp, args: &Args) -> Result<usize, String> {
 /// A tab's camera as commands return it: zoom value and centre in the edited glyph's units.
 fn view_reply(app: &FontcraftApp, index: usize) -> Value {
     let Some(tab) = app.state.tabs.get(index) else { return json!({}) };
-    let offset = app.session.font().map(|f| view::edited_offset(f, tab)).unwrap_or(0.0);
+    let [x, y] = view::edited_origin(&app.session, &app.layouts, tab);
     json!({
         "tab": tab.id,
         "zoom": tab.view.scale * 1000.0,
-        "center": [tab.view.center[0] - offset, tab.view.center[1]],
+        "center": [tab.view.center[0] - x, tab.view.center[1] - y],
     })
 }
 
@@ -198,7 +198,8 @@ fn display_options(app: &FontcraftApp, index: usize) -> Result<Value, String> {
     if let (Some(map), Value::Object(view)) = (out.as_object_mut(), view_reply(app, index)) {
         map.extend(view);
         map.insert("palette".into(), json!(app.state.show_palette));
-        map.insert("direction".into(), json!("ltr"));
+        let direction = app.state.tabs.get(index).map_or("ltr", |t| t.direction.name());
+        map.insert("direction".into(), json!(direction));
         map.insert("previewFeatures".into(), json!([]));
     }
     Ok(out)

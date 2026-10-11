@@ -402,6 +402,25 @@ impl Session {
         Ok(cache)
     }
 
+    /// Sets the active document's display strings (the texts of its Edit View tabs). This is
+    /// view state, not an edit: it adds no undo step, and an unmodified document stays
+    /// unmodified (`text.displayStrings`).
+    pub fn set_display_strings(&mut self, strings: Vec<String>) -> Result<()> {
+        let doc = self.doc_mut()?;
+        if *doc.font.display_strings == strings {
+            return Ok(());
+        }
+        let unchanged = !doc.modified();
+        let mut font = Font::clone(&doc.font);
+        font.display_strings = Arc::new(strings);
+        let font = Arc::new(font);
+        doc.font = font.clone();
+        if unchanged {
+            doc.saved = font;
+        }
+        Ok(())
+    }
+
     /// The active document's kerning prepared for lookups. The index is kept while it describes
     /// the font ([`KernIndex::is_current`](fontcraft_spacing::kerning::KernIndex::is_current)) and
     /// built again on the first call after an edit to kerning, masters or groups.

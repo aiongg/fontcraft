@@ -2,7 +2,10 @@
 //! can set it. Document state lives in the engine, never here.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
+use fontcraft_textlayout::{Direction, Item, KerningMode, Text, TextError};
 use fontcraft_tools::Selection;
 use serde::{Deserialize, Serialize};
 
@@ -14,8 +17,8 @@ pub const ZOOM_STEP: f64 = std::f64::consts::SQRT_2;
 pub const MAX_TABS: usize = 1_000;
 /// Most closed tabs kept for Reopen Last Closed Tab.
 pub const MAX_CLOSED_TABS: usize = 32;
-/// Most glyphs one tab (or one `text` parameter) may hold.
-pub const MAX_TAB_GLYPHS: usize = 10_000;
+/// Most glyphs one tab (or one `text` parameter) may hold: a tab text's item limit.
+pub const MAX_TAB_GLYPHS: usize = fontcraft_textlayout::MAX_ITEMS;
 /// Largest coordinate, in font units, a view may be scrolled to.
 pub const MAX_SCROLL: f64 = 10_000_000.0;
 
@@ -97,15 +100,20 @@ impl UiState {
     }
 }
 
-/// One Edit View tab: a line of glyphs, the one being edited, the camera and the selection.
+/// One Edit View tab: its text, the camera and the selection. The edited glyph is the text's
+/// current glyph, the glyph after the cursor ([`Tab::edited_glyph`]).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Tab {
     /// Stable for the session, unlike the tab's position in the strip.
     pub id: u64,
-    pub glyphs: Vec<String>,
-    /// Which entry of `glyphs` is edited.
-    pub edited: usize,
+    /// The items, the cursor, the selection and the current glyph.
+    pub text: TabText,
+    /// Typing edits the text (`editView.toggleTextMode`); otherwise the current glyph is edited.
+    pub text_mode: bool,
+    pub direction: WritingDirection,
+    #[serde(with = "kerning_mode")]
+    pub kerning: KerningMode,
     pub view: TabView,
     /// The selection in the edited glyph's layer.
     pub selection: Selection,
@@ -131,8 +139,38 @@ pub struct Tab {
 }
 
 impl Tab {
+    /// The glyph being edited: the text's current glyph.
     pub fn edited_glyph(&self) -> Option<&str> {
-        self.glyphs.get(self.edited).map(String::as_str)
+        self.text.current_glyph()
+    }
+
+    /// The index of the item that shows the edited glyph: the item after the cursor, else the
+    /// one before it, else the first item that shows it.
+    pub fn edited_index(&self) -> Option<usize> {
+        let current = self.text.current_glyph()?;
+        let shows = |i: usize| self.item_glyph(i) == Some(current);
+        let cursor = self.text.cursor();
+        [Some(cursor), cursor.checked_sub(1)].into_iter().flatten().find(|&i| shows(i)).or_else(|| (0..self.text.len()).find(|&i| shows(i)))
+    }
+
+    /// The glyph item `index` shows: its own, or the current glyph for a placeholder.
+    pub fn item_glyph(&self, index: usize) -> Option<&str> {
+        match self.text.items().get(index)? {
+            Item::Glyph { name, .. } => Some(name),
+            Item::Placeholder => self.text.current_glyph(),
+            Item::Missing(_) | Item::LineBreak => None,
+        }
+    }
+
+    /// The glyphs the text shows, in order, placeholders as the current glyph.
+    pub fn shown_glyphs(&self) -> impl Iterator<Item = &str> {
+        (0..self.text.len()).filter_map(|i| self.item_glyph(i))
+    }
+
+    /// Whether the text is exactly these glyphs, with nothing else.
+    pub fn holds(&self, glyphs: &[String]) -> bool {
+        self.text.len() == glyphs.len()
+            && self.text.items().iter().zip(glyphs).all(|(item, g)| matches!(item, Item::Glyph { name, .. } if **name == **g))
     }
 
     /// The side of the active layer the tab edits.
@@ -158,11 +196,241 @@ impl Tab {
     /// The title in the tab strip.
     pub fn title(&self) -> String {
         const SHOWN: usize = 4;
-        let mut title = self.glyphs.iter().take(SHOWN).map(String::as_str).collect::<Vec<_>>().join(" ");
-        if self.glyphs.len() > SHOWN {
+        let mut title = self.shown_glyphs().take(SHOWN).collect::<Vec<_>>().join(" ");
+        if self.shown_glyphs().nth(SHOWN).is_some() {
             title.push_str(" …");
         }
+        if title.is_empty() {
+            title.push('–');
+        }
         title
+    }
+}
+
+/// A tab text's writing direction (`editView.setWritingDirection`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WritingDirection {
+    #[default]
+    Ltr,
+    Rtl,
+    Ttb,
+}
+
+impl WritingDirection {
+    pub const ALL: [WritingDirection; 3] = [WritingDirection::Ltr, WritingDirection::Rtl, WritingDirection::Ttb];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            WritingDirection::Ltr => "ltr",
+            WritingDirection::Rtl => "rtl",
+            WritingDirection::Ttb => "ttb",
+        }
+    }
+
+    /// A parameter value; `vertical`, as the kerning commands name the direction, means `ttb`.
+    pub fn from_name(name: &str) -> Option<WritingDirection> {
+        match name {
+            "vertical" => Some(WritingDirection::Ttb),
+            _ => WritingDirection::ALL.into_iter().find(|d| d.name() == name),
+        }
+    }
+
+    /// The layout and kerning direction.
+    pub fn layout(self) -> Direction {
+        match self {
+            WritingDirection::Ltr => Direction::Ltr,
+            WritingDirection::Rtl => Direction::Rtl,
+            WritingDirection::Ttb => Direction::Vertical,
+        }
+    }
+}
+
+mod kerning_mode {
+    use fontcraft_textlayout::KerningMode;
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    pub fn serialize<S: Serializer>(mode: &KerningMode, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(mode.name())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<KerningMode, D::Error> {
+        let name = String::deserialize(d)?;
+        KerningMode::from_name(&name).ok_or_else(|| D::Error::custom(format!("unknown kerning mode `{name}`")))
+    }
+}
+
+static NEXT_TEXT_REVISION: AtomicU64 = AtomicU64::new(1);
+
+/// A tab's [`Text`] and a revision that changes with every edit, so its layout can be cached.
+/// Revisions are unique in the process, so two texts never share one.
+#[derive(Clone, Debug)]
+pub struct TabText {
+    text: Text,
+    revision: u64,
+}
+
+impl Default for TabText {
+    fn default() -> Self {
+        TabText::new(Text::new())
+    }
+}
+
+impl PartialEq for TabText {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+    }
+}
+
+impl std::ops::Deref for TabText {
+    type Target = Text;
+    fn deref(&self) -> &Text {
+        &self.text
+    }
+}
+
+impl TabText {
+    pub fn new(text: Text) -> TabText {
+        TabText { text, revision: NEXT_TEXT_REVISION.fetch_add(1, Ordering::Relaxed) }
+    }
+
+    /// A text of these glyphs, entered by name, with the cursor before the first.
+    pub fn from_glyphs(glyphs: &[String]) -> Result<TabText, TextError> {
+        let mut text = Text::new();
+        text.replace(0..0, glyphs.iter().map(|g| Item::glyph(g)).collect())?;
+        text.set_cursor(0);
+        Ok(TabText::new(text))
+    }
+
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// The text, to change it; the revision changes.
+    pub fn edit(&mut self) -> &mut Text {
+        self.revision = NEXT_TEXT_REVISION.fetch_add(1, Ordering::Relaxed);
+        &mut self.text
+    }
+
+    /// The end of the selection the cursor is not at (the cursor when nothing is selected).
+    pub fn anchor(&self) -> usize {
+        let s = self.text.selection();
+        if self.text.cursor() == s.start { s.end } else { s.start }
+    }
+
+    /// Passes every item through `f`, dropping those it returns `None` for, and makes `current`
+    /// the current glyph. The cursor and the selection keep their places among the items kept.
+    pub fn rebuild(&mut self, mut f: impl FnMut(&Item) -> Option<Item>, current: Option<&str>) {
+        let (cursor, anchor) = (self.text.cursor(), self.anchor());
+        let (mut new_cursor, mut new_anchor) = (0, 0);
+        let mut items = Vec::with_capacity(self.text.len());
+        for (i, item) in self.text.items().iter().enumerate() {
+            if let Some(kept) = f(item) {
+                items.push(kept);
+                new_cursor += usize::from(i < cursor);
+                new_anchor += usize::from(i < anchor);
+            }
+        }
+        let text = self.edit();
+        let len = text.len();
+        // `f` returns at most one item per item, so the text cannot outgrow its limit.
+        if text.replace(0..len, items).is_ok() {
+            text.set_current_glyph(current);
+            text.select(new_anchor, new_cursor);
+        }
+    }
+
+    /// Renames glyph `old` to `new` in the items and the current glyph.
+    pub fn rename_glyph(&mut self, old: &str, new: &str) {
+        let named = |item: &Item| matches!(item, Item::Glyph { name, .. } if &**name == old);
+        if !self.text.items().iter().any(named) && self.text.current_glyph() != Some(old) {
+            return;
+        }
+        let current = self.text.current_glyph().map(|c| if c == old { new.to_string() } else { c.to_string() });
+        self.rebuild(
+            |item| {
+                Some(match item {
+                    Item::Glyph { name, typed } if &**name == old => Item::Glyph { name: Arc::from(new), typed: *typed },
+                    other => other.clone(),
+                })
+            },
+            current.as_deref(),
+        );
+    }
+
+    /// Drops the glyph items `gone` names; a current glyph it names is replaced by the glyph
+    /// next to the cursor. Returns whether anything was dropped.
+    pub fn remove_glyphs(&mut self, gone: impl Fn(&str) -> bool) -> bool {
+        let named = |item: &Item| matches!(item, Item::Glyph { name, .. } if gone(name));
+        let current_gone = self.text.current_glyph().is_some_and(&gone);
+        if !self.text.items().iter().any(named) && !current_gone {
+            return false;
+        }
+        let current = if current_gone { None } else { self.text.current_glyph().map(str::to_string) };
+        self.rebuild(|item| (!named(item)).then(|| item.clone()), current.as_deref());
+        true
+    }
+}
+
+/// How a tab text is written in the UI state (`ui.inspect`).
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ItemForm {
+    Glyph {
+        name: String,
+        #[serde(default)]
+        typed: Option<char>,
+    },
+    Missing(char),
+    Placeholder,
+    LineBreak,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct TextForm {
+    items: Vec<ItemForm>,
+    cursor: usize,
+    anchor: usize,
+    current: Option<String>,
+}
+
+impl Serialize for TabText {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let items = self
+            .text
+            .items()
+            .iter()
+            .map(|item| match item {
+                Item::Glyph { name, typed } => ItemForm::Glyph { name: name.to_string(), typed: *typed },
+                Item::Missing(c) => ItemForm::Missing(*c),
+                Item::Placeholder => ItemForm::Placeholder,
+                Item::LineBreak => ItemForm::LineBreak,
+            })
+            .collect();
+        TextForm { items, cursor: self.text.cursor(), anchor: self.anchor(), current: self.text.current_glyph().map(str::to_string) }.serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for TabText {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<TabText, D::Error> {
+        use serde::de::Error;
+        let form = TextForm::deserialize(d)?;
+        let items = form
+            .items
+            .into_iter()
+            .map(|item| match item {
+                ItemForm::Glyph { name, typed } => Item::Glyph { name: Arc::from(name), typed },
+                ItemForm::Missing(c) => Item::Missing(c),
+                ItemForm::Placeholder => Item::Placeholder,
+                ItemForm::LineBreak => Item::LineBreak,
+            })
+            .collect();
+        let mut text = Text::new();
+        text.replace(0..0, items).map_err(D::Error::custom)?;
+        text.set_current_glyph(form.current.as_deref());
+        text.select(form.anchor, form.cursor);
+        Ok(TabText::new(text))
     }
 }
 
@@ -172,8 +440,8 @@ impl Tab {
 pub struct TabView {
     /// Screen points per font unit (the zoom value is this × 1000).
     pub scale: f64,
-    /// The point drawn at the centre of the canvas, in the line's font units: x from the start of
-    /// the tab's first glyph, y from the baseline.
+    /// The point drawn at the centre of the canvas, in the text's font units: x from the text's
+    /// origin, y from its first baseline.
     pub center: [f64; 2],
 }
 
