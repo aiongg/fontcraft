@@ -95,11 +95,8 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
                 return Err(FeatureError::Limit { what: "bytes of code in one entry", limit: MAX_ENTRY_BYTES });
             }
             let entry_ref = EntryRef { kind, index };
-            match run_passes(&entry.code, target, values) {
-                Ok((code, map)) => {
-                    let (text, map) = wrap(kind, entry, &code, &map);
-                    pieces.push((entry_ref, text, map));
-                }
+            match run_passes(kind, entry, target, values) {
+                Ok((text, map)) => pieces.push((entry_ref, text, map)),
                 Err((found, map)) => {
                     for diagnostic in found {
                         if diagnostics.len() >= MAX_DIAGNOSTICS {
@@ -148,13 +145,21 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
     Ok(Assembly { files, map })
 }
 
-/// Token expansion, the syntax extensions and (variable target) the variable syntax over one
-/// entry's code: the text and the map back to the stored code, or the diagnostics of the pass
-/// that failed with the map from that pass's input to the stored code.
-fn run_passes(code: &str, target: &Target, values: &dyn TargetValues) -> Result<(String, OffsetMap), (Vec<Diagnostic>, OffsetMap)> {
-    let (expanded, tokens_map) = crate::tokens::expand(code, values).map_err(|d| (non_empty(d), OffsetMap::identity()))?;
-    let (lowered, lower_map) = crate::lower::lower(&expanded, target.is_variable()).map_err(|d| (non_empty(d), tokens_map.clone()))?;
-    let map = OffsetMap::compose(&tokens_map, &lower_map);
+/// Token expansion, the entry's wrapper, the syntax extensions and (variable target) the
+/// variable syntax over one entry: the text and the map back to the stored code, or the
+/// diagnostics of the pass that failed with the map from that pass's input to the stored code.
+/// The syntax extensions see the wrapper: a `standalone` lookup closes and reopens the
+/// `feature tag { … } tag;` block, so it needs the tag.
+fn run_passes(
+    kind: EntryKind,
+    entry: &Snippet,
+    target: &Target,
+    values: &dyn TargetValues,
+) -> Result<(String, OffsetMap), (Vec<Diagnostic>, OffsetMap)> {
+    let (expanded, tokens_map) = crate::tokens::expand(&entry.code, values).map_err(|d| (non_empty(d), OffsetMap::identity()))?;
+    let (wrapped, wrapped_map) = wrap(kind, entry, &expanded, &tokens_map);
+    let (lowered, lower_map) = crate::lower::lower(&wrapped, target.is_variable()).map_err(|d| (non_empty(d), wrapped_map.clone()))?;
+    let map = OffsetMap::compose(&wrapped_map, &lower_map);
     if !target.is_variable() {
         return Ok((lowered, map));
     }

@@ -191,3 +191,27 @@ fn pass_errors_and_limits_change_nothing() {
 fn assembled_err(font: &Font, entries: &Features) -> FeatureError {
     assemble(font, entries, &Target::Master("m01".into()), &Values::of(font)).unwrap_err()
 }
+
+#[test]
+fn a_standalone_lookup_in_a_feature_entry_is_not_registered_in_the_feature() {
+    let font = Font::new("Standalone");
+    let stored = "sub a by b;\nstandalone lookup demo {\n  sub c by d;\n} demo;\nsub e' lookup demo f;";
+    let mut entries = Features::default();
+    entries.features.push(snippet("ccmp", stored));
+    let assembly = assembled(&font, &entries);
+    let text = assembly.expanded_text();
+    let lookup = text.find("lookup demo {").unwrap();
+    // The feature block is closed before the lookup and reopened after it.
+    let closed = text[..lookup].rfind("} ccmp;").expect("the feature closes before the lookup");
+    assert!(text[..closed].contains("feature ccmp {"));
+    assert!(text[lookup..].contains("feature ccmp {"));
+    assert!(!text.contains("standalone"));
+
+    // The lookup's code still maps back to the stored entry.
+    let entry = EntryRef { kind: EntryKind::Feature, index: 0 };
+    let path = assembly.map.path_of(entry).unwrap().to_string();
+    let file = assembly.files.get(&path).unwrap();
+    let at = file.find("sub c by d").unwrap();
+    let place = assembly.map.locate(&path, at..at + 10).unwrap();
+    assert_eq!(&stored[place.range], "sub c by d");
+}
