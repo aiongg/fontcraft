@@ -783,6 +783,7 @@ milestone = "M10"
 summary = "With -c (--allow-changes) the hinter may alter outlines to hint better: it reorders contours to need fewer hint switches and turns nearly straight curves into lines. It is off by default, so hinting normally leaves every coordinate untouched."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "FontCraft's port (crates/autohint, driver.rs and masters.rs) follows otfautohint: with changes allowed, glyphs of 4 to 100 contours may have their contours reordered, and when several masters are hinted together a segment that is a line in some masters and a curve in others becomes a curve in all; without changes allowed such masters are not hinted."
 
 [[behavior]]
 id = "autohint.ps.decimalCoordinates"
@@ -816,6 +817,7 @@ milestone = "M10"
 summary = "When a glyph needs stems that conflict (overlap) in one direction, the hinter distributes them over hint masks that switch the active set along the outline; this mask distribution is what older documentation calls hint substitution. --no-hint-sub disables it, leaving one non-conflicting set for the whole glyph."
 ref = "AFDKO otfautohint --help; docs/otfautohint_Notes.md"
 status = "docs"
+notes = "FontCraft's port (crates/autohint/src/driver.rs, distributeMasks) places each new mask on the element where it takes over; a mask placed on a contour's closing element is written before that contour's moveto, as otfautohint writes it."
 
 [[behavior]]
 id = "autohint.ps.noZonesStems"
@@ -949,6 +951,7 @@ milestone = "M10"
 summary = "The hinter can hint a variable CFF-based font, including an already built CFF2 font, in one pass: the default master decides the hint structure and the other masters supply the varying coordinates. Glyphs that still contain overlaps (normal in variable fonts) are hinted close to how their overlap-removed form would be."
 ref = "AFDKO docs/otfautohint_Notes.md › Changes Summary"
 status = "docs"
+notes = "FontCraft's port hints the masters of a glyph together (crates/autohint/src/masters.rs, hint_masters): the main master decides the stems and masks, every other master gets the same stems in the same order and the same masks, a master without the glyph is skipped, and masters whose contours differ are an error. Only the main master's overlap-free outline is used for segments."
 
 [[behavior]]
 id = "autohint.ps.parallelism"

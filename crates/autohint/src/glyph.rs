@@ -1205,15 +1205,32 @@ impl GlyphData {
         }
     }
 
-    /// The result in the public form.
+    /// The result in the public form: the stems, the start mask, every element's mask at the
+    /// element's position, the counter masks and the first element of each flex pair. A mask on
+    /// a subpath's closing element (the implicit closing line, or the zero-length one added to
+    /// match another master) is written before that subpath's `moveto`, as otfautohint does.
     pub fn to_hints(&self) -> crate::GlyphHints {
-        // M10.12: masks before elements and flex positions from the elements.
+        let mut masks = Vec::new();
+        let mut flex = Vec::new();
+        for (subpath, sp) in self.subpaths.iter().enumerate() {
+            for (element, pe) in sp.iter().enumerate() {
+                let pos = crate::ElementPos { subpath, element };
+                if let Some(m) = &pe.masks {
+                    masks.push((pos, m.clone()));
+                }
+                if pe.flex == Some(FlexPart::First) {
+                    flex.push(pos);
+                }
+            }
+        }
         crate::GlyphHints {
             h: self.hstems.clone(),
             v: self.vstems.clone(),
             start_mask: self.start_masks.clone(),
+            masks,
             counters: self.cntr.clone(),
-            ..Default::default()
+            flex,
+            warnings: Vec::new(),
         }
     }
 }
