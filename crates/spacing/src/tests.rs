@@ -291,6 +291,28 @@ fn update_order_puts_what_a_key_reads_first() {
     assert_eq!(names, ["o.left", "o.right", "C.left", "B.left", "A.left", "D.left", "E.left"]);
 }
 
+/// Updating a base glyph's left sidebearing moves its outline in every composite that shows it,
+/// so composites wait for their bases, through components of components too.
+#[test]
+fn update_order_puts_a_composites_bases_first() {
+    let mut f = font();
+    f.add_glyph("n.alt2", vec![], 500.0).unwrap();
+    for l in &mut f.glyph_mut("n.alt2").unwrap().layers {
+        l.shapes = vec![Shape::Component(Component::new("n.alt", 0.0, 0.0))];
+    }
+    set_glyph_key(&mut f, "n", Field::Left, "=o");
+    let slot = |g: &str, field| Slot { glyph: g.into(), layer: "m01".into(), field };
+    let names = |slots: &[Slot]| -> Vec<String> { update_order(&f, slots).iter().map(|s| format!("{}.{}", s.glyph, s.field.name())).collect() };
+    let given =
+        [slot("n.alt2", Field::Left), slot("n.alt", Field::Right), slot("n.alt", Field::Left), slot("n", Field::Left), slot("o", Field::Left)];
+    assert_eq!(names(&given), ["o.left", "n.left", "n.alt.right", "n.alt.left", "n.alt2.left"]);
+    let given = [slot("n.alt2", Field::Left), slot("n.alt", Field::Right), slot("n", Field::Left), slot("o", Field::Left)];
+    assert_eq!(names(&given), ["o.left", "n.left", "n.alt2.left", "n.alt.right"]);
+    // The base's right sidebearing and width leave its outline where it is.
+    let given = [slot("n.alt", Field::Left), slot("n", Field::Right), slot("n", Field::Width)];
+    assert_eq!(names(&given), ["n.alt.left", "n.right", "n.width"]);
+}
+
 #[test]
 fn linked_masters_name_their_source() {
     let mut f = font();

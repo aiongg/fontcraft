@@ -465,7 +465,7 @@ ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
 notes = "Documented, not yet observed: Glyph › Update Metrics (Cmd+Ctrl+M) brings the keys of the current layer in line."
 guesses = [
-  "Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value; one Update Metrics on a two-step chain in the reference app settles it.",
+  "Keys are evaluated in dependency order (the metrics a key reads, and the left sidebearings of the glyphs a composite's components show, come first), so a glyph whose reference or base was updated in the same run gets the new value; one Update Metrics on a two-step chain and on a composite of a keyed base in the reference app settles it.",
   "A key that cannot be evaluated (unlinked, in error, or on an empty layer) is skipped and the other keys are still updated; running it on a font with one unlinked key in the reference app would settle it.",
 ]
 

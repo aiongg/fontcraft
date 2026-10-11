@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**493 guesses on 338 rows (149 of them live commands).**
+**506 guesses on 339 rows (152 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -378,6 +378,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `export.flavourSubfolders` (behavior) | M2 | inferred | – | An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented. |
 | `export.afmIsLossy` (behavior) | M5 | handbook | – | Group pairs are expanded to glyph pairs with the exceptions applied, so the AFM file holds the kerning that applies to every covered glyph pair; the handbook does not say. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A class read from a compiled font becomes a kerning group named after its first glyph in glyph order; no source says how the reference names recovered groups. |
+| `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A glyph keeps the first class it is in on each side, and pairs of a later class with other members are stored as glyph pairs; opening a font whose subtables use overlapping classes in the reference app would settle it. |
+| `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A `kern` feature record used only by right-to-left scripts fills the right-to-left kerning, any other the left-to-right kerning; opening an Arabic font in the reference app would settle it. |
+| `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A pair two feature records of one direction cover (for two scripts) takes the first record's value; no source says what the reference does. |
 | `import.outlinesSingleInEditView` (behavior) | M3 | handbook | – | A single file imported in Edit View is appended to the active layer; the handbook does not say whether existing shapes are kept or which layer receives them. |
 | `import.metricsModes` (behavior) | M5 | handbook | – | The default mode is LSB and width (the RSB follows); the handbook gives no default. |
 | `paste.strokeAndFillMayDouble` (behavior) | M3 | inferred | – | A pasted shape with both fill and stroke may arrive as two contours; this is our reading of the handbook's advice, which gives no cause. |
@@ -404,7 +407,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `spacing.setTopSidebearing` | M5 | inferred | yes | The top and bottom fields take the same key forms as the left and right ones, with `\|` naming the opposite vertical sidebearing; `@` is refused there. |
 | `spacing.setBottomSidebearing` | M5 | inferred | yes | Setting the bottom sidebearing changes the vertical width only. |
 | `spacing.updateMetricsKey` | M5 | handbook | yes | A metric whose value rounded half up already equals its key's value is left as it is, so the command makes no change there; watching the button on a fractional metric in the reference app would settle it. |
-| `glyph.updateMetrics` | M5 | handbook | yes | Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value; one Update Metrics on a two-step chain in the reference app settles it. |
+| `glyph.updateMetrics` | M5 | handbook | yes | Keys are evaluated in dependency order (the metrics a key reads, and the left sidebearings of the glyphs a composite's components show, come first), so a glyph whose reference or base was updated in the same run gets the new value; one Update Metrics on a two-step chain and on a composite of a keyed base in the reference app settles it. |
 | `glyph.updateMetrics` | M5 | handbook | yes | A key that cannot be evaluated (unlinked, in error, or on an empty layer) is skipped and the other keys are still updated; running it on a font with one unlinked key in the reference app would settle it. |
 | `glyph.updateMetricsForAllMasters` | M5 | handbook | yes | Besides the master layers it updates the layers with attributes (intermediate, alternate, colour, smart), the layers the out-of-sync scan lists, and leaves out masters that take their metrics from another master; a brace layer with an out-of-sync key in the reference app would settle it. |
 | `spacing.listOutOfSyncMetrics` | M5 | inferred | yes | A key is out of sync when its value differs from the layer's metric rounded half up. |
@@ -418,6 +421,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `kerning.renameGroup` | M5 | handbook | yes | With scope `pair`, only the side of the selected pair changes to the new name and the glyphs keep their group; no source says whether the reference also moves glyphs into the new group, and the Group fields after a pair-only rename settle it. |
 | `kerning.renameGroup` | M5 | handbook | yes | With scope `font`, a new name that is already a group of that side is refused rather than merging the two groups; renaming onto an existing group in the reference app settles it. |
 | `kerning.renameGroup` | M5 | handbook | yes | With scope `font`, the rename reaches every master and both writing directions, since groups are shared between them; reading another master's pairs after a rename in the reference app settles it. |
+| `kerning.copyPairs` | M5 | handbook | yes | The clipboard holds the pairs as kerning-text lines (`left<TAB>right<TAB>value`), so they also paste into a text editor; no source gives the reference clipboard format. |
+| `kerning.pastePairs` | M5 | handbook | yes | A pasted group side keeps its name; a group the target font lacks is pasted as it is and reported. |
+| `kerning.pastePairs` | M5 | handbook | yes | A glyph the target font lacks is pasted as it is and reported, like a missing group. |
+| `kerning.pastePairs` | M5 | handbook | yes | A pasted pair that exists with the same value is not a conflict, so it does not bring up the question; pasting an unchanged selection back into its master settles it. |
+| `kerning.pastePairs` | M5 | handbook | yes | When the pasted pairs name one pair twice, the later value counts. |
+| `kerning.deletePairs` | M5 | handbook | yes | A pair the master lacks (with all masters: that no master has) refuses the whole command; the reference can only delete listed rows, so the question does not arise there. |
+| `kerning.deletePairs` | M5 | handbook | yes | A linked master is refused, as for the other kerning edits. |
 | `kerning.cleanUp` | M5 | handbook | yes | Clean Up acts on the given master and direction only, like the Kerning window list; running it on a font with two masters and reading the other master's pairs settles it. |
 | `kerning.compress` | M5 | handbook | yes | Compress acts on the given master and direction only; running it on a font with two masters and reading the other master's pairs settles it. |
 | `spacing.infoBoxArrowSteps` (behavior) | M5 | handbook | – | Up and Down in a field that holds a metrics key leave the key unchanged; no source says what they do there, and pressing Up in such a field in the reference app settles it. |
@@ -448,15 +458,18 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing one lock while both are open deletes the glyph–glyph pair, so the other side shows whichever pair applies next; closing one lock of such a pair in the running app settles it. |
 | `kerning.pairLookupOrder` (behavior) | M5 | docs | – | When two stored pairs name the same sides in different spellings (the reference's group prefix and the UFO's), the first in stored order applies; a source with both, opened in the reference app, settles it. |
 | `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | The defaults are contains, every entry kind, both sides and not limited to the Font View selection; Reset returns to them. The options menu of a newly opened Kerning window settles them. |
+| `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | A pair is listed when one of the searched sides matches the term, has the chosen entry kind and, with the selection option, is a selected glyph or a group one of them belongs to; a search on a running Kerning window with mixed pairs settles it. |
+| `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | Does not contain keeps a pair only when no searched side contains the term; a search for a letter that occurs on one side of a pair settles it. |
+| `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | The term is compared with the bare name of a group, and with its @ spelling when the term starts with @; searching for @ in the reference settles it. |
+| `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | The search is case-sensitive, since glyph names are; searching for t in a font with T settles it. |
 | `kerning.windowSorting` (behavior) | M5 | handbook | – | Before a header is clicked the list keeps the stored order of the pairs. |
+| `kerning.windowSorting` (behavior) | M5 | handbook | – | Names sort byte by byte in their @ spelling and equal entries keep the stored order in both directions; sorting a list with repeated values in the reference settles it. |
 | `kerning.windowSelectionDrivesEditView` (behavior) | M5 | handbook | – | A group side is shown by its first member in glyph order. |
 | `kerning.compressRules` (behavior) | M5 | handbook | – | Within one run the pairs are taken in stored order and each sees the lifts made before it, so when two pairs would lift to the same group pair the first is lifted and the second meets it (absorbed with an equal value, kept as an exception with another); running Compress on such a pair list in the reference app settles it. |
 | `kerning.compressRules` (behavior) | M5 | handbook | – | A glyph–group pair is not lifted or absorbed while group–glyph pairs stored for members of its group would take over those glyphs once it is gone; a pair list with T–@n and @T–m in the reference app settles it. |
 | `kerning.compressOneStepPerRun` (behavior) | M5 | handbook | – | A run lifts the left side of every pair that can lift it, else its right side; one run on a pair list where both sides can lift, in the reference app, settles it. |
 | `kerning.implicitKernFeature` (behavior) | M5 | handbook | – | The generated lookups follow fontc's kern writer (split by script and direction, glyph pairs before class pairs, values rounded half up); the handbook gives no rules, and the GPOS of a font the reference app exports from a test source settles it. |
 | `kerning.setMode` | M5 | handbook | no | A new Edit View tab starts in kerning mode; no source gives the default. |
-| `kerning.copyPairs` | M5 | handbook | no | The clipboard holds the pairs as kerning-text lines (`left<TAB>right<TAB>value`), so they also paste into a text editor; no source gives the reference clipboard format. |
-| `kerning.pastePairs` | M5 | handbook | no | A pasted group side keeps its name; a group the target font lacks is pasted as it is and reported. |
 | `dialog.renameKerningGroup` (panel) | M5 | handbook | – | The buttons read This Pair, All Pairs and Cancel; the handbook gives no captions, and a screenshot or video of the dialog settles them. |
 | `dialog.pasteKerningConflict` (panel) | M5 | handbook | – | The warning has a Cancel button besides Overwrite and Keep Existing. |
 

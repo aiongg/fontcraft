@@ -11,7 +11,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 
-use fontcraft_model::{Font, Glyph, Layer, Master, MetricDef};
+use fontcraft_model::{Font, Glyph, Layer, MAX_COMPONENT_DEPTH, Master, MetricDef, Shape};
 
 use crate::eval::{Ctx, EvalError, effective_key};
 use crate::keys::{Body, Scope, parse_stored};
@@ -207,9 +207,11 @@ fn writers(field: Field) -> &'static [Field] {
     }
 }
 
-/// `slots` ordered so that a metric comes after the metrics in `slots` its key reads, so that
-/// Update Metrics settles a chain in one run. Otherwise the given order is kept; slots in a cycle
-/// come last, in the given order. A slot given twice appears once.
+/// `slots` ordered so that a metric comes after the metrics in `slots` its key reads, and a
+/// composite's sidebearings come after the left sidebearings of the glyphs its components show
+/// (updating those moves their outlines, and so the composite's), so that Update Metrics settles
+/// a chain in one run. Otherwise the given order is kept; slots in a cycle come last, in the
+/// given order. A slot given twice appears once.
 pub fn update_order(font: &Font, slots: &[Slot]) -> Vec<Slot> {
     let mut index: HashMap<(&str, &str, Field), usize> = HashMap::new();
     let mut unique: Vec<&Slot> = Vec::new();
@@ -226,6 +228,21 @@ pub fn update_order(font: &Font, slots: &[Slot]) -> Vec<Slot> {
         for w in writers(f) {
             if let Some(&j) = index.get(&(r.name.as_str(), rl.id.as_str(), *w))
                 && j != i
+                && let (Some(list), Some(n)) = (after.get_mut(j), waiting.get_mut(i))
+            {
+                list.push(i);
+                *n += 1;
+            }
+        }
+    }
+    let mut shown: HashMap<(&str, &str), Vec<usize>> = HashMap::new();
+    for (i, s) in unique.iter().enumerate() {
+        if !matches!(s.field, Field::Left | Field::Right) {
+            continue;
+        }
+        let deps = shown.entry((s.glyph.as_str(), s.layer.as_str())).or_insert_with(|| component_slots(font, s, &index));
+        for &j in deps.iter() {
+            if j != i
                 && let (Some(list), Some(n)) = (after.get_mut(j), waiting.get_mut(i))
             {
                 list.push(i);
@@ -255,6 +272,33 @@ pub fn update_order(font: &Font, slots: &[Slot]) -> Vec<Slot> {
     for (i, s) in unique.iter().enumerate() {
         if !done.get(i).copied().unwrap_or(true) {
             out.push((*s).clone());
+        }
+    }
+    out
+}
+
+/// The left-sidebearing slots in `index` of the glyphs `s`'s layer shows through components.
+/// The walk stops at a base glyph that has such a slot (that slot waits for what lies below it)
+/// and at [`MAX_COMPONENT_DEPTH`]; each base layer is visited once.
+fn component_slots(font: &Font, s: &Slot, index: &HashMap<(&str, &str, Field), usize>) -> Vec<usize> {
+    let mut out = Vec::new();
+    let Some(layer) = font.glyph(&s.glyph).and_then(|g| g.layers.iter().find(|l| l.id == s.layer)) else { return out };
+    let master = layer.master.as_str();
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut stack: Vec<(&Layer, usize)> = vec![(layer, 0)];
+    while let Some((l, depth)) = stack.pop() {
+        for shape in &l.shapes {
+            let Shape::Component(c) = shape else { continue };
+            let Some(base) = font.glyph(&c.glyph) else { continue };
+            let Some(bl) = base.layer(master) else { continue };
+            if !seen.insert(base.name.as_str()) {
+                continue;
+            }
+            match index.get(&(base.name.as_str(), bl.id.as_str(), Field::Left)) {
+                Some(&j) => out.push(j),
+                None if depth < MAX_COMPONENT_DEPTH => stack.push((bl, depth + 1)),
+                None => {}
+            }
         }
     }
     out
