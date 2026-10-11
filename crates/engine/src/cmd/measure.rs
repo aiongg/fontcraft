@@ -83,9 +83,7 @@ fn contours(font: &Font, parts: LayerParts, master: &str, p: &Params) -> Result<
                 if font.glyph(&c.glyph).is_none() || c.transform.numbers().iter().any(|v| !v.is_finite()) {
                     continue;
                 }
-                let mut inner = font.outline(&c.glyph, master)?;
-                inner.apply_affine(c.affine());
-                inner
+                font.component_outline(c, master)?
             }
             Shape::Image(_) | Shape::Raw(_) => continue,
         };

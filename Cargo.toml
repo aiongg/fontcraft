@@ -38,6 +38,18 @@ fontcraft-spacing = { path = "crates/spacing" }
 fontcraft-textlayout = { path = "crates/textlayout" }
 fontcraft-features = { path = "crates/features" }
 fontcraft-components = { path = "crates/components" }
+fontcraft-fontinfo = { path = "crates/fontinfo" }
+fontcraft-fea = { path = "crates/fea" }
+fontcraft-shaping = { path = "crates/shaping" }
+fontcraft-interp = { path = "crates/interp" }
+fontcraft-ttasm = { path = "crates/ttasm" }
+fontcraft-autohint = { path = "crates/autohint" }
+fontcraft-hinting = { path = "crates/hinting" }
+fontcraft-color = { path = "crates/color" }
+fontcraft-imagery = { path = "crates/imagery" }
+fontcraft-tables = { path = "crates/tables" }
+fontcraft-proof = { path = "crates/proof" }
+fontcraft-plugins = { path = "crates/plugins" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }
@@ -63,11 +75,34 @@ write-fonts = "0.54"
 read-fonts = "0.45"
 skrifa = "0.48"
 
+# The feature compiler (MIT OR Apache-2.0), used only by `fea`. fea-rs 1.0.0 is built on
+# write-fonts 0.52, so `fea` alone also sees that version, renamed. See docs/plans/M8.md § 3.
+fea-rs = { version = "=1.0.0", default-features = false }
+write-fonts-052 = { package = "write-fonts", version = "=0.52.0" }
+
+# Shaping for Edit View and Text Preview (MIT), on the workspace's read-fonts. Never its `icu`
+# feature, which pins another icu_properties.
+harfrust = { version = "0.14", default-features = false, features = ["std"] }
+# The Unicode Bidirectional Algorithm (MIT OR Apache-2.0), with its data from icu_properties'
+# `unicode_bidi` feature (turned on in `shaping`).
+unicode-bidi = { version = "0.3", default-features = false }
+# PDF writing for proof sheets (MIT OR Apache-2.0). Pure Rust, builds for wasm.
+pdf-writer = "0.15"
+
 # Rasterising for `render` (BSD-3-Clause): nonzero fills, anti-aliased, PNG output. Builds for wasm.
 tiny-skia = "0.12"
 
 # SVG reading (MIT OR Apache-2.0). Without its default features: no text layout, no system fonts.
 usvg = { version = "0.47", default-features = false }
+
+# Image decoding for `imagery` (MIT OR Apache-2.0): the PNG, JPEG and TIFF decoders only. Builds for wasm.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff"] }
+# Sandboxed WebAssembly modules (MIT OR Apache-2.0): a pure-Rust interpreter that builds for wasm32
+# too. No text format, no memory64; `validate` keeps full module validation; the portable
+# dispatcher cannot overflow the host stack on long-running modules.
+wasmi = { version = "2.0.0", default-features = false, features = ["std", "validate", "stable", "portable-dispatch"] }
+# Tests only: WebAssembly text to binary for the module fixtures (Apache-2.0 WITH LLVM-exception).
+wat = "1.228"
 
 # ui
 egui = "0.36"

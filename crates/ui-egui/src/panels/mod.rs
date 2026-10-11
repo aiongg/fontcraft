@@ -14,21 +14,37 @@
 //! | [`bottom_bar`] | the zoom controls along the lower edge of an Edit View tab |
 //! | [`widgets`] | fields with the Info box editing rules, buttons, the nine-point grid |
 //! | [`selection_info`] | the Selection Info window: the selected glyphs' properties |
+//! | [`info_box_ps_hint`], [`info_box_tt`] | the Info box of a PostScript hint and of the TrueType Instructor (M10.24, M10.27) |
+//! | [`hinting_waterfall`] | the Hinting Preview waterfall (M10.29) |
 //!
 //! Panels read engine state (the font and queries such as `selection.getInfo`) and act only by
 //! queueing commands with explicit targets; the app runs them after the frame. Their own
 //! settings (collapsed sections, the Info box point, the Fit Curve range) are UI state in [`PanelState`], which
 //! only this module's shell commands ([`COMMANDS`]) change.
 
+pub mod attributes;
 pub mod bottom_bar;
+pub mod command_console;
 pub mod dimensions;
 pub mod fit_curve;
+pub mod hinting_waterfall;
 pub mod info_box;
+pub mod info_box_attach;
 pub mod info_box_kerning;
 pub mod info_box_metrics;
+pub mod info_box_ps_hint;
+pub mod info_box_tt;
 pub mod layers;
+pub mod layers_color;
+pub mod measurements;
+pub mod pairs_and_phrases;
 pub mod palette;
+pub mod palette_modules;
+pub mod reference_font;
+pub mod related_glyphs;
 pub mod selection_info;
+pub mod selections;
+pub mod special_layer_popover;
 pub mod stroke;
 pub mod transformations;
 pub mod widgets;
@@ -85,6 +101,15 @@ pub struct PanelState {
     pub sample_strings: crate::dialogs::sample_strings::SampleStringsState,
     /// The Find Glyphs pop-up.
     pub find_glyphs: crate::dialogs::find_glyphs::FindGlyphsState,
+    /// The Font Info window.
+    pub font_info: crate::shell::font_info::FontInfoState,
+    pub extensions: crate::shell::extensions::ExtensionsState,
+    pub command_console: crate::shell::command_console::CommandConsoleState,
+    pub actions: crate::shell::actions::ActionsState,
+    pub space_center: crate::shell::space_center::SpaceCenterState,
+    pub kerning_review: crate::shell::kerning_review::KerningReviewState,
+    pub edit_aids: crate::shell::edit_aids::EditAidsState,
+    pub attach: crate::shell::attach::AttachState,
 }
 
 impl Default for PanelState {
@@ -106,6 +131,14 @@ impl Default for PanelState {
             text_preview: Default::default(),
             sample_strings: Default::default(),
             find_glyphs: Default::default(),
+            font_info: Default::default(),
+            extensions: Default::default(),
+            command_console: Default::default(),
+            actions: Default::default(),
+            space_center: Default::default(),
+            kerning_review: Default::default(),
+            edit_aids: Default::default(),
+            attach: Default::default(),
         }
     }
 }

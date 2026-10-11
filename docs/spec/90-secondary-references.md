@@ -31,12 +31,12 @@ Cells marked *(m)* are recalled, not read on a page this session.
   in FontLab and tidies paths in the primary). Every row has `shortcut = ""` and quotes the reference
   key in its summary so it can be offered as an alternative binding.
 - **Ids follow the prefixes already in the inventory** (`guide.`, `hint.tt.`, `hint.ps.`, `kerning.`,
-  `spacing.`, `audit.`, `script.`, `app.`, `component.`). New nouns introduced here: `element.` (shared
-  shapes), `bitmap.` (strikes), `cid.`, `collab.`.
+  `spacing.`, `audit.`, `script.`, `app.`, `component.`). New nouns introduced here: `bitmap.` (strikes)
+  and `cid.`.
 - **Menus are our placement**, not the reference's. FontLab's Contour menu maps to our Path menu, its
   Tools › Actions to Script.
 - **Status.** `docs` = read on a public page; `memory` = recalled, not found on a page; `inferred` = our
-  own command shape for a documented capability. Two rows are `memory` and two `inferred` (section 8); the M13 planning pass verified three former `memory` rows.
+  own command shape for a documented capability. Two rows are `memory` and one `inferred` (section 8); the M13 planning pass verified three former `memory` rows.
 
 ## 3. FontLab 8
 
@@ -71,10 +71,7 @@ manual page for the same feature.
 | Snapping suggestions | `view.suggestHandles`, `view.suggestLines`, `view.suggestDistance`, `view.suggestStems`, parameter `suggestDistance`, setting `snapping.suggestActivation` | Draw parallel edges and consistent stems without guides |
 | Power guides | tool `magnet`, `guide.makePowerGuide`, `guide.addPowerGuides`, `guide.unlinkPowerGuides`, `guide.powerGuideScope` | Re-proportion glyphs by moving guides while stems keep their width |
 | Thick guides and guide markers | `guide.setThickness`, `guide.addMarkers`, setting `appearance.guideOpacity` | Bands with centreline snapping; measured positions along a guide |
-| Element references | `element.referenceModel`, `element.perOccurrenceTransform`, `element.newFromSelection`, `element.detectReferences`, `element.linkReference`, `element.componentToReference`, `element.toggleLocked`, `element.copyTransformation` | Shared shapes that are not tied to a source glyph's metrics and anchors (serifs, bowls, dots) |
-| Delta filter | `element.addDeltaFilter`, `delta.nodeStates`, `element.setDeltaStrength`, `element.copyDeltasToMasters` | Derived shapes (old-style zero from lining zero) that still follow the original |
-| Live filters, expand and remove | `element.expandFilters`, `element.removeFilters` | One switch between live and baked outlines |
-| Fusion (live booleans) | `element.setFusion` | Union, intersect and exclude kept editable; the primary has live subtract only |
+| Copy component transformation | `component.copyTransformation` | One component's position, scale, rotation and slant applied to others in one step |
 | Detect composites and components | `font.detectComposites`, `path.detectComponent` | Rebuild components after opening a compiled font |
 | Auto layers with stored recipes | `glyph.setAutoLayerRecipe`, `recipe.directives` | Composites that rebuild themselves and fill in when a missing part is added later |
 | Component pointing at an instance | `component.setInstanceLocation` | A component can use a lighter or narrower interpolation of its source |
@@ -112,6 +109,10 @@ manual page for the same feature.
 - **VOLT project integration, `.vfb` writing, EOT export, digital-signature setup**: legacy.
 - **Widgets, scrollable panel dock, floating toolboxes**: UI choices that conflict with the primary
   reference's layout.
+- **Element references, the delta filter, live filters with Expand and Remove, and Fusion** (open
+  decision D7): neither `.glyphs` nor UFO can store them. Components of non-exporting glyphs, corner
+  components and the mask attribute cover their uses; Copy Element Transformation is taken for
+  components only (`component.copyTransformation`).
 - **Direction-filtered removal of TrueType hints, import of TT stems and zones, keeping imported
   instructions**: the primary already has these in some form (`hint.tt.removeHints`,
   `hint.tt.getPsStems`, imported hinting parameters); a `direction` option on `hint.tt.removeHints` is
@@ -186,7 +187,7 @@ that functions should be separate tools rather than built-in features. **Licence
 | External changes review | panel `dialog.externalChanges`, `file.reviewExternalChanges`, `io.watchSourceOnDisk` | Safe to run scripts, agents or a version-control checkout against an open source |
 | Stable source serialisation | `io.stableSourceSerialization` *(memory)* | Clean diffs |
 | Glyph construction rules | `font.buildFromConstructions`, `constructions.ruleGrammar` *(memory)* | Composites from a rule file with richer positioning than anchors alone |
-| Preferences editor, safe mode | `app.openPreferencesEditor`, `app.safeMode` | Every setting reachable; recover from a broken plug-in |
+| Preferences editor | `app.openPreferencesEditor` | Every setting reachable |
 
 ### 4.2 What we do not take
 
@@ -194,7 +195,7 @@ that functions should be separate tools rather than built-in features. **Licence
   toolkit, Merz drawing layer). Our extension surface is the command registry and its change events.
   The ideas that carry over are the bundle with a manifest that adds menu items and tools, an in-app
   manager for finding and updating them, and safe mode; those belong to the `extensions` area and the
-  primary's plug-in manager rows already cover them.
+  primary's plug-in manager rows already cover them (safe mode is `app.launchWithoutPlugins`).
 - **Smart Sets**: the primary's smart filters and lists are the same thing.
 - **Kern Center as a separate sheet**: the primary's Kerning window already lists pairs; only the
   group-combination preview is taken.
@@ -252,7 +253,7 @@ GPL. Only the user documentation was read.
 | Raw TrueType instructions | panel `dialog.ttInstructions`, `hint.tt.setAssembly` | Assembly-level editing of glyph programs, `fpgm` and `prep` |
 | TrueType debugger | panel `window.ttDebugger`, `hint.tt.debugStep` | Step through a glyph program and watch points move |
 | Delta suggestions | `hint.tt.suggestDeltas` | Find sizes that need a delta |
-| PostScript hint review | panel `dialog.stemHistogram` *(memory for its controls)*, panel `dialog.reviewHints`, `hint.ps.addDiagonalHint` | Pick standard stems and zones from a distribution; inspect hints one by one |
+| PostScript hint review | panel `dialog.stemHistogram` *(memory for its controls)*, panel `dialog.reviewHints` | Pick standard stems and zones from a distribution; inspect hints one by one |
 | Kerning review and groups | panel `window.kerningPairsPreview`, `kerning.buildGroups`, `kerning.verticalFromHorizontal` | See every pair rendered; propose kerning groups from side profiles |
 | MATH and BASE editors | panel `dialog.mathTable`, `font.setMathData`, panel `dialog.baselines` | Math fonts; explicit baseline data |
 | Name lists | `font.renameGlyphsByNamelist` | Switch a font between naming schemes |
@@ -283,6 +284,7 @@ naming missing glyphs) were not repeated.
 - **Italic transformation**: the reference calls its own result incomplete.
 - **The native scripting language and the Python module**; the user-defined Tools menu.
 - **Auto Width as a separate dialog**: folded into `spacing.autoSpace` parameters.
+- **Diagonal PostScript hints**: neither CFF nor the source formats can store them.
 
 ### 5.3 Pages read
 
@@ -317,7 +319,7 @@ are a title and a screenshot.
 | Related glyphs and characters | panel `palette.relatedGlyphs` | Navigate between a letter, its composites, its alternates and its Unicode decomposition |
 | Status definitions | `font.setStatusDefinitions`, `glyph.setStatus` *(memory for where it is stored)* | Named workflow states instead of bare colour labels |
 | Ghost outline while dragging | `drag.ghostOutline` | See the change against the starting shape |
-| Live shared editing | `collab.liveSharedEditing`, `collab.serveProject` *(inferred)*, `collab.showServerInfo` | Several people, or people and agents, in one document |
+| App info | `app.info` | Version, start time, control-channel and MCP state and the loaded modules in one query |
 | Browser client | `app.browserClient` | The web target planned for 1.0 |
 
 ### 6.2 What we do not take
@@ -332,6 +334,10 @@ are a title and a screenshot.
 - **The Python server and its plug-in mechanism**; our server side is the Rust command dispatcher.
 - **Export as conversion** (TTF to designspace, `.glyphs` to another source): our CLI `convert` covers it.
 - **Glyph locking**: already in the primary (`glyph.toggleLocked`).
+- **Live shared editing and serving a project to other editors**, not in 1.0: it opens the document
+  to the network and needs a conflict policy and permissions that no reference documents. The control
+  channel and MCP already let agents and the app work on one document. Server Info is taken as
+  `app.info`.
 
 ### 6.3 Pages read
 
@@ -373,7 +379,6 @@ Dropped because another inventory file already has the feature:
 | `constructions.ruleGrammar` | docs (M13 pass) | Verified against the Glyph Construction README (MIT) |
 | `glyph.setStatus` | docs (M13 pass) | The definitions and the tint are documented; where a status is stored is not, so per glyph is our guess |
 | `bitmap.setPixels` | inferred | Our headless form of pixel editing |
-| `collab.serveProject` | inferred | Our command for starting shared editing; the docs state only that hosted projects are edited by several users in real time |
 
 In the matrix: FontForge's platforms, the absence of OpenType variation support in FontForge, the layout
 of the `.fontra` format, and the licences of FontLab and RoboFont as "proprietary" (their pages link
@@ -384,10 +389,10 @@ to a paid licence and EULA, not read) are recalled or deduced.
 1. **Element references in the source model.** A shared shape with no owning glyph has no equivalent in
    the primary's file format or in UFO. Decide whether elements are a native-format feature that
    decomposes to hidden glyphs plus components on export to `.glyphs` and UFO, or are dropped.
-   **M13 pass:** proposed for dropping with the delta and Fusion filters (open decision D7, `docs/plans/M13.md` § 7 question 3).
+   **Decided 2026-10-11 (D7, `docs/plans/M13.md` § 7 question 3):** dropped, with the delta filter and Fusion.
 2. **Live filters versus the primary's attributes.** Delta filter, Fusion and per-node stroke width need
    a place in the shape model next to the primary's mask and stroke attributes. One stack, or two?
-   **M13 pass:** no second stack; the delta filter and Fusion are proposed for dropping with D7. Per-node stroke width (the Thickness tool) is stored in the path's stroke attributes and node user data (M13.38).
+   **Decided 2026-10-11:** no second stack; the delta filter and Fusion are dropped with D7. Per-node stroke width (the Thickness tool) is stored in the path's stroke attributes and node user data (M13.38).
 3. **Power guides and the undo model.** Moving a font-level power guide edits many glyphs from one
    drag. Confirm that this is one undo step and how it interacts with locked glyphs.
    **M13 pass (ours):** one undo step for every glyph a drag reshapes; locked glyphs keep their outline, with a warning (`guide.makePowerGuide` guess).
@@ -402,7 +407,7 @@ to a paid licence and EULA, not read) are recalled or deduced.
    **M13 pass (D8):** action sets are macros: JSON `.fcmacro` files with a format version; command ids and parameter names follow decision 0004 item 8 (aliases for renames); a run checks every step before running any.
 7. **Shared editing.** Conflict policy (last writer wins per glyph layer, or operation merging),
    permissions, and whether undo is per client. Fontra's pages do not describe theirs.
-   **M13 pass:** left to the owner (`docs/plans/M13.md` § 7 question 4), with dropping it from 1.0 recommended.
+   **Decided 2026-10-11 (`docs/plans/M13.md` § 7 question 4):** not in 1.0; Server Info is kept as the `app.info` query.
 8. **TrueType debugger scope.** It needs a complete bytecode interpreter of our own. Confirm that the
    interpreter planned for hinting preview is complete enough, or defer the debugger.
    **M13 pass:** built on M10's interpreter if that can stop after each instruction; otherwise it waits (M13.52).

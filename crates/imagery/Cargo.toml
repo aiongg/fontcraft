@@ -1,0 +1,15 @@
+[package]
+name = "fontcraft-imagery"
+description = "FontCraft image decoding: format and size sniffing, PNG, JPEG and TIFF decoding within limits, PNG encoding (standalone)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+image.workspace = true
+thiserror.workspace = true

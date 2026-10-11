@@ -11,13 +11,20 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+fontcraft-autohint.workspace = true
 fontcraft-cff.workspace = true
+fontcraft-color.workspace = true
 fontcraft-components.workspace = true
+fontcraft-fea.workspace = true
 fontcraft-features.workspace = true
+fontcraft-fontinfo.workspace = true
 fontcraft-geom.workspace = true
+fontcraft-interp.workspace = true
+fontcraft-hinting.workspace = true
 fontcraft-model.workspace = true
 fontcraft-pathops.workspace = true
 fontcraft-spacing.workspace = true
+fontcraft-ttasm.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
 write-fonts.workspace = true

@@ -40,18 +40,35 @@
 //! `Down` step the value by 1, by 10 with `Shift`. With no field taking the keyboard, `Return`
 //! is OK and `Escape` is Cancel. The rest of the app takes no input until the dialog closes.
 
+pub mod actions;
 mod add_glyphs;
 mod add_glyphs_existing;
+mod add_other_font;
+pub mod attach_picker;
+mod axis_location;
+mod axis_mappings;
+pub mod baselines;
+mod color_palettes;
+pub mod compare_fonts;
+pub mod cross_axis;
 mod export;
+pub mod export_profiles;
+mod feature_picker;
 mod find_and_replace;
 pub mod find_glyphs;
+pub mod find_outline;
 pub mod form;
 mod guide_properties;
+mod import_features;
 mod import_metrics;
 pub mod import_outlines_missing_glyph;
 mod interpolate_with_background;
+pub mod kerning_groups_editor;
+pub mod kerning_pairs_preview;
 mod languages_list;
 mod list_filter_editor;
+mod master_color;
+pub mod math_table;
 mod missing_glyphs;
 pub mod paste_kerning_conflict;
 mod paste_special;
@@ -63,9 +80,19 @@ mod round_corners;
 pub mod rule_tree;
 pub mod sample_strings;
 mod shape_order;
+mod shape_order_window;
 mod smart_filter_editor;
+pub mod space_center;
+pub mod stem_filters;
 mod transform_metrics;
 mod transformations;
+pub mod tt_debugger;
+mod tt_deltas;
+pub mod tt_instructions;
+mod tt_preview_address;
+mod ttf_stems;
+mod ttf_zones;
+mod virtual_master;
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};

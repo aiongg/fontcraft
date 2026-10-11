@@ -21,18 +21,21 @@
 //!   layout until no position changes.
 //!
 //! Out of scope: CID-keyed fonts (ROS, FDArray, FDSelect), custom encodings (the standard
-//! encoding is implied), hints (stems, hint masks), subroutinisation, CFF2 and blends, and the
-//! seldom-used Top DICT entries (UniqueID, XUID, PostScript, BaseFontName, SyntheticBase).
+//! encoding is implied), hints (stems, hint masks), subroutinisation, and the seldom-used Top
+//! DICT entries (UniqueID, XUID, PostScript, BaseFontName, SyntheticBase). The `CFF2` table of a
+//! variable font, with blends, is [`cff2`]'s.
 //!
 //! Every input is untrusted: counts, lengths and numbers are checked against the limits below, and
 //! anything out of range returns an [`Error`]; nothing panics.
 #![forbid(unsafe_code)]
 
 mod bounds;
+pub mod cff2;
 mod charset;
 mod charstring;
 mod dict;
 mod error;
+pub mod hints;
 mod index;
 mod number;
 mod specialize;
@@ -43,6 +46,7 @@ use std::collections::HashSet;
 
 pub use bounds::Bounds;
 pub use error::Error;
+pub use hints::{CharstringHints, MAX_STEM_HINTS, Mask, StemHint};
 pub use number::Number;
 
 use charset::Charset;
@@ -87,6 +91,8 @@ pub struct Glyph {
     pub name: String,
     pub advance: f64,
     pub path: Vec<PathOp>,
+    /// Stem hints, masks and flex; `None` writes an unhinted charstring.
+    pub hints: Option<CharstringHints>,
 }
 
 /// Top DICT values. `Default` gives the CFF defaults, which are left out of the table; a string
@@ -385,6 +391,11 @@ fn validate(font: &Font) -> Result<(), Error> {
     }
     if !font.round_tolerance.is_finite() || font.round_tolerance < 0.0 {
         return Err(Error::BadRoundTolerance(font.round_tolerance));
+    }
+    for g in &font.glyphs {
+        if let Some(h) = &g.hints {
+            h.validate(&g.name, g.path.len())?;
+        }
     }
     check_string(&font.name, "font name", false, false)?;
     let t = &font.top;

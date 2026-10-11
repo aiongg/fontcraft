@@ -7,7 +7,7 @@ use std::sync::Arc;
 use fontcraft_model::plist::Value;
 use fontcraft_model::{Anchor, Component, Font, Glyph, GlyphTable, Layer, Param, Shape, Transform};
 
-use crate::propagate::{AnchorCache, AnchorSource, effective_anchors, effective_anchors_for_master, propagate_anchors_enabled};
+use crate::propagate::{AnchorCache, AnchorSource, effective_anchors, effective_anchors_for_master, master_anchors, propagate_anchors_enabled};
 use crate::{ComponentsError, MAX_COMPONENT_DEPTH};
 
 const M: &str = "m01";
@@ -360,4 +360,116 @@ fn the_cache_reuses_results_until_a_reached_glyph_changes() {
     }
     let after = cache.get(&f, "aacute", M).unwrap();
     assert_eq!(after.first().map(|a| (a.name.as_str(), a.y)), Some(("top", 800.0)));
+}
+
+/// The smart-components example font: `_part.shoulder` has two properties and three pole layers
+/// whose `connect` anchor moves with `shoulderWidth`. A component of it passes on its anchors
+/// interpolated at its values, not the master layer's. Expected values from glyphsLib on the
+/// same font, and on a copy with `m`'s second shoulder removed (`m_one`).
+#[test]
+fn smart_components_pass_on_anchors_interpolated_at_their_values() {
+    use fontcraft_model::{ComponentInfo, ComponentInfoBox, LayerAttrs, LayerInfo, LayerInfoBox, PartProperty, Path, SmartPole, SmartValue};
+    let property = |name: &str, bottom_value: f64, top_value: f64| PartProperty {
+        name: name.into(),
+        bottom_value,
+        top_value,
+        bottom_name: None,
+        top_name: None,
+        extra: Default::default(),
+    };
+    let mut shoulder = Glyph::new("_part.shoulder");
+    shoulder.info.parts = vec![property("shoulderWidth", 0.0, 100.0), property("crotchDepth", -100.0, 0.0)];
+    let poles = [
+        ("m01", None, 320.0, vec![("shoulderWidth", true), ("crotchDepth", true)]),
+        ("narrow", Some("NarrowShoulder"), 290.0, vec![("shoulderWidth", false)]),
+        ("low", Some("LowCrotch"), 320.0, vec![("crotchDepth", false)]),
+    ];
+    for (id, name, connect_x, ends) in poles {
+        let mut l = Layer::new(M, 600.0);
+        l.id = id.into();
+        l.anchors = vec![Anchor::new("_connect", 136.0, 0.0), Anchor::new("connect", connect_x, 1.0)];
+        l.shapes.push(Shape::Path(Path::rect(136.0, 0.0, connect_x + 40.0, 365.0)));
+        l.info = LayerInfoBox::new(LayerInfo {
+            name: name.map(str::to_string),
+            attrs: LayerAttrs { smart_poles: ends.into_iter().map(|(p, top)| SmartPole { property: p.into(), top }).collect(), ..Default::default() },
+            ..Default::default()
+        });
+        shoulder.layers.push(l);
+    }
+    let piece = |dx: f64, dy: f64, width: f64, crotch: f64| {
+        let mut c = Component::new("_part.shoulder", dx, dy);
+        c.info = ComponentInfoBox::new(ComponentInfo {
+            smart_values: vec![
+                SmartValue { property: "crotchDepth".into(), value: crotch },
+                SmartValue { property: "shoulderWidth".into(), value: width },
+            ],
+            ..Default::default()
+        });
+        Shape::Component(c)
+    };
+    let user = |name: &str, shapes: Vec<Shape>| {
+        let mut g = Glyph::new(name);
+        let mut l = Layer::new(M, 600.0);
+        l.shapes = shapes;
+        g.layers.push(l);
+        g
+    };
+    let stem = Shape::Component(Component::new("_part.stem", 0.0, 0.0));
+    let f = font(vec![
+        user("m", vec![stem.clone(), piece(17.0, 0.0, 28.78011, -44.28304), piece(180.0, 1.0, 0.0, -81.24796)]),
+        user("m_one", vec![stem, piece(17.0, 0.0, 28.78011, -44.28304)]),
+        user("n", vec![Shape::Path(Path::rect(26.0, 1.0, 193.0, 365.0)), piece(0.0, 0.0, 0.0, -100.0)]),
+        shoulder,
+        glyph("_part.stem", "Letter", "Lowercase", &[("connect", 153.0, 0.0)], &[]),
+    ]);
+    assert_anchors(&f, "m", &[("connect", 470.0, 2.0)]);
+    assert_anchors(&f, "m_one", &[("connect", 315.634033, 1.0)]);
+    assert_anchors(&f, "n", &[("_connect", 136.0, 0.0), ("connect", 290.0, 1.0)]);
+    assert_anchors(&f, "_part.shoulder", &[("_connect", 136.0, 0.0), ("connect", 320.0, 1.0)]);
+}
+
+/// Past the master's work limit the glyphs not yet worked out keep their own anchors and are
+/// listed as failed.
+#[test]
+fn a_master_past_its_work_limit_keeps_the_rest_on_their_own_anchors() {
+    let f = with(vec![
+        letter("aacute", &[], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None)]),
+        letter("agrave", &[("ogonek", 9.0, 9.0)], &[("a", ID, None), ("gravecomb", at(150.0, 0.0), None)]),
+    ]);
+    let limit_hit = |limit| ComponentsError::LimitExceeded { what: "anchor propagation steps on one master", limit };
+    // aacute reads 3 anchors from a and 2 from acutecomb; agrave needs more.
+    let all = master_anchors(&f, None, M, 5).unwrap();
+    assert_eq!(all.failed, [("agrave".to_string(), limit_hit(5))]);
+    assert_eq!(all.anchors.get("aacute"), Some(&effective_anchors(&f, "aacute", M).unwrap()));
+    let names = |all: &crate::propagate::MasterAnchors, g: &str| all.anchors[g].iter().map(|a| (a.name.clone(), a.x, a.y)).collect::<Vec<_>>();
+    assert_eq!(names(&all, "agrave"), [("ogonek".to_string(), 9.0, 9.0)]);
+    let none = master_anchors(&f, None, M, 0).unwrap();
+    let failed: Vec<&str> = none.failed.iter().map(|(g, _)| g.as_str()).collect();
+    assert_eq!(failed, ["aacute", "agrave"], "glyphs without components need no work");
+    assert_eq!(names(&none, "a"), names(&all, "a"));
+}
+
+/// A chain of components longer than the nesting limit fails the same glyphs in any glyph order.
+#[test]
+fn nesting_past_the_limit_fails_the_same_glyphs_in_any_order() {
+    let chain: Vec<Glyph> = (0..MAX_COMPONENT_DEPTH + 4)
+        .map(|i| {
+            let base = if i == 0 { "a".to_string() } else { format!("chain{}", i - 1) };
+            letter(&format!("chain{i}"), &[], &[(&base, at(1.0, 0.0), None)])
+        })
+        .collect();
+    let run = |chain: Vec<Glyph>| {
+        let mut all = effective_anchors_for_master(&with(chain), M).unwrap();
+        all.failed.sort_by(|a, b| a.0.cmp(&b.0));
+        all
+    };
+    let forward = run(chain.clone());
+    let backward = run(chain.into_iter().rev().collect());
+    assert_eq!(forward, backward);
+    // chain{i} nests i + 1 deep.
+    let mut want: Vec<String> = (MAX_COMPONENT_DEPTH..MAX_COMPONENT_DEPTH + 4).map(|i| format!("chain{i}")).collect();
+    want.sort();
+    let failed: Vec<String> = forward.failed.iter().map(|(g, _)| g.clone()).collect();
+    assert_eq!(failed, want);
+    assert!(forward.failed.iter().all(|(g, e)| *e == ComponentsError::TooDeep { glyph: g.clone(), limit: MAX_COMPONENT_DEPTH }));
 }

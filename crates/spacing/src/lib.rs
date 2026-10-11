@@ -75,6 +75,8 @@ pub mod kerning_text;
 pub mod keys;
 pub mod link;
 pub mod measure;
+pub mod pfm;
+pub mod profile;
 pub mod sync;
 
 #[cfg(test)]

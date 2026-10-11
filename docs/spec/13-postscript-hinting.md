@@ -72,9 +72,9 @@ the defaults below:
 
 | Parameter | Private dict entry | What we know |
 |---|---|---|
-| blueScale | `BlueScale` | Limits zone size (formula above). The parameter description gives 0.037 when unset and 0.039625 as the 10-point example; fontmake computes it from the largest zone. |
+| blueScale | `BlueScale` | Limits zone size (formula above). Default 0.037 when unset (parameter description; 0.039625 is its 10-point example). fontmake computes it from the tallest zone instead. |
 | blueShift | `BlueShift` | Must be ≥ flex depth + 1 for flex. Set on the Font tab. Default 7 (parameter description). |
-| blueFuzz | `BlueFuzz` | Widens zones at both ends for zone tests; otfautohint requires zone gaps ≥ 2 × BlueFuzz + 1. The parameter description quotes the Type 1 default 1; fontmake writes 0. |
+| blueFuzz | `BlueFuzz` | Widens zones at both ends for zone tests; otfautohint requires zone gaps ≥ 2 × BlueFuzz + 1. Default 1 when unset (the Type 1 default the parameter description quotes). fontmake writes 0 instead. |
 | Family Alignment Zones | `FamilyBlues`, `FamilyOtherBlues` | Zone list shared across a family. |
 
 ## 5. Autohinting at export
@@ -263,12 +263,16 @@ recorded in the row's `guesses`, to be checked in the reference app (§ 8 of the
 7. Scope of the Autohint, blueScale, blueFuzz and Family Alignment Zones parameters (font, master,
    instance) and their defaults when absent; whether absent means "omit the entry" or "write the
    CFF default".
-   **Answer (handbook, oracle):** Autohint is an instance parameter that forces autohinting
+   **Answer (handbook, guess):** Autohint is an instance parameter that forces autohinting
    (custom-parameter descriptions); FontCraft also reads it on the font (guess). blueShift,
    blueScale, blueFuzz and Family Alignment Zones are font parameters (the handbook sets blueShift
    in Font Info › Font); the inventory's parameter rows give the scopes. Absent values: the export
-   writes what fontmake writes (BlueShift 7, BlueFuzz 0, BlueScale computed from the largest
-   zone), not the handbook's 0.037 and 1 (plan § 7, question 6); FamilyBlues are omitted.
+   writes the parameter descriptions' defaults, BlueScale 0.037, BlueFuzz 1 and BlueShift 7, as
+   the handbook gives them (plan § 7, question 6). fontmake computes BlueScale from the tallest
+   zone and writes BlueFuzz 0; `docs/spec/40-compile.md` § 4a records the difference. As in
+   fontmake, the three entries are written only when the master has alignment zones (guess).
+   FamilyBlues are omitted. Documented, not yet observed: a reference export with no zone
+   settings would confirm it.
 8. Exact Private dict mapping of zones and stems (order, which stems go to StemSnap, treatment of
    more than twelve stems or too many zones: truncate, error or warn).
    **Answer (oracle, guess):** glyphsLib's rule, used since M2 and equal to fontmake's builds:

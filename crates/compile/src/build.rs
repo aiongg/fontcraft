@@ -350,6 +350,8 @@ pub fn assemble(
     synthesised_notdef: bool,
     gpos: Option<&Gpos>,
     gdef: Option<&Gdef>,
+    kern: Option<&[u8]>,
+    color: &[(Tag, Vec<u8>)],
     options: &Options,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
@@ -472,10 +474,21 @@ pub fn assemble(
     if let Some(gdef) = gdef {
         builder.add_table(gdef).map_err(table("GDEF"))?;
     }
+    if let Some(kern) = kern {
+        builder.add_raw(Tag::new(b"kern"), kern);
+    }
+    // M10.19: `hinted` is true when the font carries TrueType instructions.
+    let hinted = false;
+    if let Some(gasp) = crate::gasp::gasp_table(font, flavour, hinted, warnings)? {
+        builder.add_table(&gasp).map_err(table("gasp"))?;
+    }
     if info.vertical {
         let (vhea, vmtx) = vertical(order, &boxes, &info);
         builder.add_table(&vhea).map_err(table("vhea"))?;
         builder.add_table(&vmtx).map_err(table("vmtx"))?;
+    }
+    for (tag, bytes) in color {
+        builder.add_raw(*tag, bytes.as_slice());
     }
     Ok(builder.build())
 }

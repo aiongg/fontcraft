@@ -9,12 +9,14 @@
 //! | Resolve | [`drawing::resolve`] | one master, or an instance at a master, as the compiler reads it: glyphs, contours, components, metrics, names; strokes expanded and masks applied |
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
+//! | Export parameters | [`export_params`] | Export, Keep, Remove, Rename and Reencode Glyphs and the Arabic presentation forms change the resolved glyphs; the renames and removals go to the kerning writers |
 //! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
 //! | Pair kerning | `kern` | the master's kerning as `GPOS` (`fontcraft_features`), for a source without a hand-written `kern` feature |
 //! | Component options | [`components_opt`] | decomposition and flattening the options, parameters and filter list ask for |
 //! | Mark attachment | `marks` | the master's propagated anchors as `mark`, `mkmk`, `abvm`, `blwm` and `curs` lookups merged into the `GPOS`, and the `GDEF` classes, carets and mark filtering sets |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
-//! | Table builders and assembly | `build`, [`cff`], [`names`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning or mark attachment, `GDEF` when glyphs have classes, carets or mark filtering sets, then the font file |
+//! | Hinting (M10) | [`cff_hints`], [`tt_hints`], [`points`], [`gasp`] | CFF stem hints, masks and flex; `cvt `, `fpgm`, `prep` and glyph programs against the point map; `gasp` |
+//! | Table builders and assembly | `build`, [`cff`], [`names`], [`kern_table`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning or mark attachment, `GDEF` when glyphs have classes, carets or mark filtering sets, then the font file |
 //!
 //! The output is a **static font** of one master, with TrueType outlines ([`Flavour::TrueType`],
 //! as fontc builds it) or CFF outlines ([`Flavour::Cff`], as fontmake builds it: `maxp` 0.5, `post`
@@ -22,6 +24,9 @@
 //! deterministic: the same font and options give the same bytes. Rounding is half up everywhere
 //! (OpenType rounding, `compile.rounding`): point coordinates when the glyph is written,
 //! component offsets, advances.
+//!
+//! Variable fonts are built by [`var::compile_variable`], which runs the same stages for every
+//! source and adds the variation tables.
 //!
 //! Everything handed to the table writer is validated first. `write-fonts` panics or overflows on
 //! points more than 32,767 units apart, on more than 65,277 glyph names outside the standard set and
@@ -36,17 +41,27 @@
 
 mod build;
 pub mod cff;
+pub mod cff_hints;
+pub mod color;
 pub mod components_opt;
 pub mod drawing;
+pub mod export_params;
+pub mod gasp;
 pub mod info;
 mod kern;
+pub mod kern_table;
+pub mod layout;
 mod marks;
 pub mod names;
 pub mod order;
 pub mod outline;
 pub mod plan;
+pub mod points;
 pub mod preflight;
+pub mod preview;
 mod ranges;
+pub mod tt_hints;
+pub mod var;
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -118,6 +133,21 @@ pub enum CompileError {
     Table { table: &'static str, message: String },
     #[error("{0} outlines are not written yet")]
     Unsupported(&'static str),
+    /// The feature code has errors, mapped to the entries that hold them; never empty.
+    #[error("{}", fontcraft_features::source_map::summary(.0))]
+    Features(Vec<fontcraft_features::EntryDiagnostic>),
+    /// The designspace, the glyph sources or the compatibility check refused the font.
+    #[error(transparent)]
+    Interp(#[from] fontcraft_interp::InterpError),
+    #[error(transparent)]
+    Color(#[from] fontcraft_color::ColorError),
+    /// The colour export of this target is refused (an instance between masters with colour
+    /// layers, until variable colour lands); the message names the instance.
+    #[error("{0}")]
+    ColorRefused(String),
+    /// A stage or table builder whose package has not been written yet.
+    #[error("{0} is not available yet")]
+    NotYetImplemented(&'static str),
 }
 
 /// Options of [`compile`].
@@ -143,6 +173,46 @@ pub struct Options {
     pub glyph_data: DataRef,
     /// Decomposition and flattening beyond what the source asks ([`components_opt`]).
     pub components: components_opt::ComponentOptions,
+    /// Hinting at export ([`HintingOptions`]).
+    pub hinting: HintingOptions,
+    /// Where image and SVG files of colour layers are read from ([`color`]). `None`: no files,
+    /// so a glyph whose image is needed is left out of its table, with a warning.
+    pub assets: AssetsRef,
+    /// Also write `CBDT` and `CBLC` from the iColor layers (`color.export.cbdtNotInReference`).
+    pub cbdt: bool,
+}
+
+/// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
+/// store.
+#[derive(Clone, Default)]
+pub struct AssetsRef(pub Option<Arc<dyn fontcraft_color::AssetStore>>);
+
+impl PartialEq for AssetsRef {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Debug for AssetsRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() { "AssetsRef(store)" } else { "AssetsRef(none)" })
+    }
+}
+
+/// What the compiler does about hints (`docs/plans/M10.md` § 3). The source's own settings
+/// (Autohint, Export PostScript Hints, Export TrueType Hints…) are read from the font by
+/// `fontcraft_hinting::HintSettings`; these options are the export dialog's and the command's.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HintingOptions {
+    /// Autohint: PostScript glyphs without manual hints, every TrueType glyph (the export
+    /// option; an instance's Autohint parameter overrides it).
+    pub autohint: bool,
+    /// Write no hints at all, whatever the source holds.
+    pub strip: bool,
 }
 
 /// The glyph database a compile reads ([`Options::glyph_data`]). Two are equal when they are the
@@ -177,6 +247,9 @@ impl Default for Options {
             overlap_time_limit: fontcraft_pathops::TIME_LIMIT,
             glyph_data: DataRef::default(),
             components: components_opt::ComponentOptions::default(),
+            hinting: HintingOptions::default(),
+            assets: AssetsRef::default(),
+            cbdt: false,
         }
     }
 }
@@ -248,13 +321,16 @@ pub fn compile_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, 
 fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
+    let edits = export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
+    let color_plan = color::plan(font, &resolved, options);
+    let (glyphs, made) = color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
     let kern = match font {
-        Some(font) => kern::generate(font, &resolved, &glyphs, &mut warnings),
+        Some(font) => kern::generate(font, &resolved, &glyphs, &edits, &mut warnings),
         None => None,
     };
     let layout = marks::generate(font, glyph_data.as_deref(), &resolved, &glyphs, kern, &mut warnings);
@@ -272,6 +348,8 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
         overlap_time_limit: options.overlap_time_limit,
     };
     let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
+    let kern_table = font.and_then(|font| kern_table::build(font, &resolved, &glyphs, flavour, &edits, &mut warnings));
+    let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
     let bytes = build::assemble(
         &resolved,
         &glyphs,
@@ -280,6 +358,8 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
         synthesised_notdef,
         layout.gpos.as_ref(),
         layout.gdef.as_ref(),
+        kern_table.as_deref(),
+        &color_tables.tables,
         options,
         &mut warnings,
     )?;

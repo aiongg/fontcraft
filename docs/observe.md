@@ -32,11 +32,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**872 rows to check: 1009 guesses and 56 observe steps.**
+**910 rows to check: 1004 guesses and 364 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
-| **Built milestones (M0 to M6)** | all | **437** |
+| **Built milestones (M0 to M6)** | all | **436** |
 | Built milestones (M0 to M6) | Edit View: drawing, guides, layers and the Palette | 95 |
 | Built milestones (M0 to M6) | Edit View: text mode and preview | 32 |
 | Built milestones (M0 to M6) | Components and anchors | 50 |
@@ -45,27 +45,27 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Kerning and the Kerning window | 42 |
 | Built milestones (M0 to M6) | Font View | 103 |
 | Built milestones (M0 to M6) | Font Info and features | 8 |
-| Built milestones (M0 to M6) | Files: open, import, export | 38 |
+| Built milestones (M0 to M6) | Files: open, import, export | 37 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **435** |
+| **Later milestones (after M6)** | all | **474** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 12 |
-| Later milestones (after M6) | Edit View: text mode and preview | 8 |
-| Later milestones (after M6) | Components and anchors | 26 |
+| Later milestones (after M6) | Edit View: text mode and preview | 11 |
+| Later milestones (after M6) | Components and anchors | 27 |
 | Later milestones (after M6) | Filters | 1 |
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 3 |
-| Later milestones (after M6) | Font View | 6 |
-| Later milestones (after M6) | Font Info and features | 172 |
-| Later milestones (after M6) | Interpolation | 25 |
-| Later milestones (after M6) | Hinting | 55 |
-| Later milestones (after M6) | Colour fonts | 29 |
+| Later milestones (after M6) | Font View | 7 |
+| Later milestones (after M6) | Font Info and features | 195 |
+| Later milestones (after M6) | Interpolation | 32 |
+| Later milestones (after M6) | Hinting | 57 |
+| Later milestones (after M6) | Colour fonts | 39 |
 | Later milestones (after M6) | Files: open, import, export | 11 |
 | Later milestones (after M6) | Settings and the window | 11 |
-| Later milestones (after M6) | Scripts, plug-ins and URLs | 68 |
+| Later milestones (after M6) | Scripts, plug-ins and URLs | 60 |
 | Later milestones (after M6) | Elsewhere | 5 |
 
-## Built milestones (M0 to M6) (437)
+## Built milestones (M0 to M6) (436)
 
 ### Edit View: drawing, guides, layers and the Palette (95)
 
@@ -403,7 +403,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `glyph.resetAnchorsForAllMasters` (M6, handbook): Reset Anchors for All Masters
   - Guess: The shortcut is Cmd+Alt+Shift+U, Reset Anchors with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.
 - [ ] `components.liveUpdateFromBaseGlyph` (behavior, M6, handbook): A component is a live reference to its base glyph: editing the…
-  - Guess: Re-alignment after an edit touches only the masters whose layers the edit changed, and the masters of layers whose components are pinned to one of them, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.
+  - Guess: Re-alignment after an edit touches only the masters whose layers the edit changed, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.
   - Guess: A locked composite is not re-aligned when its base changes, because a lock keeps the glyph's drawing; locking a composite in the reference app and editing its base settles it.
 - [ ] `components.autoComposeOnAddGlyph` (behavior, M6, handbook): When a glyph that the glyph info database describes as a composite…
   - Guess: The Unicode decomposition is expanded fully (Aringacute is A, ringcomb, acutecomb), except that a letter with a horn stays whole when the font has it (Ohornacute is Ohorn, acutecomb); the composites stored in corpus sources saved by the reference app measure it (M6 plan § 5).
@@ -437,7 +437,6 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The editor and the compiler propagate anchors exactly as fontc does, every name included, since its algorithm gives top and bottom as the handbook says and also the other names both reference compilers export; a composite that inherits an ogonek or a cedilla anchor in the reference app settles it.
   - Guess: A non-master layer whose base glyph has no layer with the same id reads the base's master layer of the same master, where glyphsLib interpolates the base's anchors at the layer's axis location; a brace layer in the reference app whose base lacks it settles it.
   - Guess: A base glyph without a layer for the composite's master passes no anchors on, where glyphsLib stops with an error; the reference app with such a font settles it.
-  - Guess: A component pinned to another master (`masterId`) passes on the anchors of that master's layer of its base, the layer alignment places it from; a composite with a pinned component in the reference app, read through a mark attached to it, settles it.
 - [ ] `components.underscoreAnchorSnapsToPlainAnchor` (behavior, M6, handbook): A component whose base glyph has an anchor with a leading underscore…
   - Guess: A component whose underscore anchors find no plain anchor among the components before it is set after them as another base, as if typed; a mark added to a base without the matching anchor in the reference app settles it.
 - [ ] `components.alternativeAnchorSuffix` (behavior, M6, handbook): A layer may carry several anchors of one type, told apart by…
@@ -465,7 +464,6 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `smart.handlesFromPropertyAnchors` (behavior, M6, handbook): An anchor whose name equals a property name exactly (case included), present…
   - Guess: Dragging a handle sets the value whose interpolated anchor position is nearest the pointer, found by projecting the pointer on the line between the anchor's positions at the property's two poles, with no clamp; dragging a handle in the reference app settles it.
 - [ ] `corner.glyphNaming` (behavior, M6, handbook): A glyph is a corner glyph when its name starts with _corner
-  - Guess: A layer with a corner that cannot be fitted (its path deleted, a zero-length segment next to it) is drawn in the editor without any of its corners, as the export leaves it; a hint whose path was deleted in the reference app shows what it draws.
   - Guess: Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it.
 - [ ] `corner.copyPasteOntoNodes` (behavior, M6, handbook): A selected corner component can be copied with Edit › Copy and,…
   - Guess: Pasting a corner, cap, segment or brush onto a selection of the wrong kind (a corner with a segment selected, a cap on nodes that are not neighbours) is refused with a message and nothing changes; the reference app settles it.
@@ -1092,7 +1090,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `Decompose Glyphs` (parameter, M6, handbook): List of glyph names whose components are turned into outlines at export
   - Guess: A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.
 
-### Files: open, import, export (38)
+### Files: open, import, export (37)
 
 - [ ] `file.open` (M1, handbook, live): Open…
   - Guess: The menu label and place are our assumption, and the shortcut is the platform convention; the chapter states neither.
@@ -1188,8 +1186,6 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The featureWriters setting is read from the font's user data, then from the built master's; fontc reads only a .glyphs font's user data, while glyphsLib also carries a master's into its UFO lib.
 - [ ] `open.alignsCompositeMetrics` (behavior, M6, handbook): On opening a font file, composite glyphs are put under automatic alignment…
   - Guess: A UFO counts as an imported file and is aligned on opening, because the Source Formats page points a UFO to the importing behaviours and gives it its own Disable Automatic Alignment option in Font Info; the running app opening a UFO with an out-of-date composite would settle it.
-- [ ] `compile.glyphsOutlinePreSteps` (behavior, M6, docs): Two Glyphs-specific steps run before decomposition when the source asks for them:…
-  - Guess: A glyph whose anchor propagation fails keeps its own anchors and the build goes on with a warning; exporting a source with a component cycle from the reference app settles what it does.
 - [ ] `compile.markFeatureWriter` (behavior, M6, docs): Anchors generate mark (mark to base and mark to ligature), mkmk (mark…
   - Guess: A top-level include in the feature code keeps all five generated features out until M8, as it keeps the generated kerning out, since the included file may hold any of them; compiling the included file (M8) settles it.
   - Guess: Anchors whose names the reference compilers refuse (`_`, `_top_1`, a number 0), whose ligature number is above 1,024, or whose positions do not fit 16 bits are left out with a warning, where fontc stops the build; an export of such anchors from the reference app would settle it.
@@ -1228,24 +1224,31 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (435)
+## Later milestones (after M6) (474)
 
 ### Edit View: drawing, guides, layers and the Palette (12)
 
 - [ ] `image.supportedFormats` (behavior, M11, handbook): The reference accepts every image type its operating system can decode and…
   - Guess: PDF and PSD images are kept as references and drawn as an unsupported-image marker with a message, not decoded. Settled by the owner's answer to M11 § 7 question 3.
+  - Observe: Image font: add a PDF and a PSD image to a glyph; note how each is drawn.
 - [ ] `image.storedAsRelativePath` (behavior, M11, handbook): The document records only the image's path relative to the font file
   - Guess: An image added to a document that has never been saved keeps its absolute path until the first save, which rewrites it relative to the new file. Settled by adding an image to an untitled document in the reference and saving it.
+  - Observe: Image font: save, move H.png away and reopen the file; note how the missing image is drawn and whether a message appears.
 - [ ] `image.defaultPlacement` (behavior, M11, handbook): A newly placed image sits at the layer origin, scaled so that…
   - Guess: The image's size in points comes from the resolution stored in the file (PNG pHYs, JPEG JFIF or Exif, TIFF resolution tags); a file without one counts as 72 pixels per inch, one pixel per unit. Settled by adding a 144 dpi PNG in the reference.
+  - Observe: Image font: choose Glyph › Add Image with H.png, then with a 144 dpi copy; note the position and scale of each, and the pos and scale values stored in the file.
 - [ ] `glyph.addImage` (M11, handbook): Add Image…
   - Guess: A layer holds one placed image, as the version 3 format stores one: Add Image on a layer that has an image replaces it. Image shapes of the version 4 format are read, drawn and written back but not created. Settled by adding a second image to a glyph in the reference and reading the saved file.
+  - Observe: Image font: add a second image to H; note whether it replaces the first or both stay, and how the file stores them.
 - [ ] `image.setTransform` (M11, handbook): Set Image Transform
   - Guess: Width and height are the displayed size in font units; rotation turns the image about its position point (its bottom-left corner before rotation), as the stored `pos`, `scale` and `angle` suggest. Settled by rotating an image in the reference's Info box and reading the saved file.
+  - Observe: Image font: type a rotation in the image Info box and save; note the pivot of the rotation and the stored pos, scale and angle values.
 - [ ] `image.setCrop` (M11, handbook): Crop Image
   - Guess: The crop rectangle is in image pixels, measured from the image's bottom-left corner, as origin and size. Settled by cropping an image in the reference and reading `crop` in the saved file.
+  - Observe: Image font: Option-Control-drag a handle of H's image to crop it and save; note the coordinate space of the stored crop rectangle (image pixels or font units, and from which corner).
 - [ ] `image.setCropToLayerBounds` (M11, handbook): Set Crop to Layer Bounds
   - Guess: The layer bounds are the rectangle from 0 to the advance width and from the master's descender to its ascender. Settled by Set Crop to Layer Bounds on an image larger than the glyph in the reference.
+  - Observe: Image font: choose Set Crop to Layer Bounds on H's image; note the rectangle used (advance width by the vertical metrics, or the outline bounds).
 - [ ] `palette.pluginSections` (behavior, M13, handbook): Plug-ins can register their own Palette sections, which appear alongside the built-in…
   - Observe: Install a palette plug-in from the Plugin Manager, relaunch and note where its section appears among the built-in Palette sections and whether it collapses like them.
 - [ ] `path.setCurveTension` (M13, docs): Set Curve Tension
@@ -1257,31 +1260,47 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `path.setPenPoint` (fidelity, inferred): Set Pen Point
   - Open (our design, not confirmed): Writes or clears the pen-point data of a node or of a free pen point, the action behind the pen-point fields of the Info box. Clearing the data is how a pen point on a node is removed. The reference exposes this only as Info box fields.
 
-### Edit View: text mode and preview (8)
+### Edit View: text mode and preview (11)
 
 - [ ] `textToken.syntax` (behavior, M7, handbook): In text fields that support them, `{{{token}}}` is replaced by a computed…
   - Guess: A token FontCraft cannot resolve stays in the text as written, and the compile report names it, as glyphsLib leaves it; a misspelt token in the reference app settles it.
+  - Observe: In font A (m7-one), type `{{{familyName}}} {{{nonsense}}}` into the description field, export and read name ID 10: note what the unknown token becomes.
 - [ ] `textToken.keyPath` (behavior, M7, handbook): In a font or instance context the token may be a property…
   - Guess: The supported key paths are the font's familyName, versionMajor, versionMinor, unitsPerEm, date, copyright, designer, designerURL, manufacturer, manufacturerURL and the instance's name, familyName, fullName (family and style name with a space), postscriptFontName, postscriptFullName, weightClass, widthClass; this is the set glyphsLib's objects expose under those names, and tokens tried in the reference app settle more.
+  - Observe: In font A (m7-one), type `{{{familyName}}} {{{fullName}}} {{{designer}}} {{{nonsense}}}` into the description field, export and read name ID 10: note which tokens expand.
 - [ ] `font.expandTextTokens` (M7, inferred): Expand Text Tokens
   - Open (our design, not confirmed): Query: returns a text field value with every triple-brace token replaced, in the context of a font, master or instance. Not a reference command; lets agents preview name fields.
 - [ ] `text.shaping` (behavior, M8, handbook): Edit View text is shaped with the compiled feature code: the substitution…
   - Guess: Only the features active in the Features menu apply, with no default features, so Arabic text shows its positional forms only when init, medi and fina are on; typing Arabic in an Edit View tab of the reference app with no feature active would settle it.
   - Guess: A glyph typed by name is shaped as a private-use character that maps to that glyph, so substitutions apply to it as to typed characters; typing /a.sc next to a feature that substitutes it in the reference app would settle it.
   - Guess: Kerning is applied by the tab's kerning mode to the glyphs after substitution, and the compiled kern feature is not used in Edit View; a font whose hand-written kern feature has a contextual rule would settle it.
+  - Observe: In F2 (Arabic), type Arabic text in an Edit View tab with no feature active: note whether positional forms show.
+  - Observe: In F1 (Latin features), type `/a /a.sc /f /i` in Edit View and turn on smcp and liga: note whether the glyphs typed by name are substituted.
+  - Observe: In F1 (Latin features), write a contextual rule in a hand-written kern feature, compile and view the pair in Edit View: note whether the contextual value shows.
 - [ ] `textPreview.shaping` (behavior, M8, handbook): Text Preview shapes its text as an application would: every feature that…
   - Guess: The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.
+  - Observe: In F1 (Latin features), edit a feature without pressing Compile while Text Preview shows text the feature affects: note whether the preview follows the edit, and when.
+- [ ] `textPreview.unicodeBidi` (behavior, M8, handbook): Text Preview orders mixed right-to-left and left-to-right text by the Unicode Bidirectional…
+  - Observe: In F2 (Arabic), type "12 34" inside right-to-left text in Text Preview: note the order of the digits.
+- [ ] `editView.setLocalizedForms` (M8, handbook): Localized Forms
+  - Observe: In F1 (Latin features), turn on Localized Forms in Edit View, choose Turkish and type i: write down the menu's script and language entries and note the glyph shown.
 - [ ] `editView.getFeatures` (M8, inferred): Get Preview Features
   - Open (our design, not confirmed): Query returning the features available in the Features menu, which are active in the tab, and the chosen script and language.
 - [ ] `preview.respectsInstanceData` (behavior, M9, handbook): Instance previews take intermediate and alternate layers into account and apply some,…
   - Guess: The preview of an instance applies the instance's interpolation parameters (Local Interpolation, InterpolationWeightY, manual interpolation), Rename Glyphs and Remove Glyphs, and no filters; settle by previewing an instance with a filter parameter in the reference app.
+  - Observe: In F1 (two masters), put a filter parameter on the Regular instance and preview Regular: note whether the preview applies the filter.
 - [ ] `preview.render` (M9, inferred): Render Preview
   - Open (our design, not confirmed): Renders the preview line to an image so an agent can inspect what the Preview Area would show. Not a reference feature.
+- [ ] `proofing.webfontPreview` (behavior, M12, handbook): Checking .woff2 (and optionally .woff for old browsers) in the export dialog…
+  - Observe: Any font: export WOFF2 alone, then WOFF2 with WOFF; note whether the app writes an HTML test page itself or only the font files.
 
-### Components and anchors (26)
+### Components and anchors (27)
 
 - [ ] `anchor.setContext` (M8, inferred): Set Context
   - Open (our design, not confirmed): Stores the context code of a contextual anchor, the action behind the Anchor Context field. The reference exposes it only as that field.
+  - Observe: In F6 (contextual anchors), type a context with a token into a `*top` anchor's Anchor Context field and save: note the user data key that stores it.
+- [ ] `palette.anchorContext` (panel, M8, handbook): Anchor Context
+  - Observe: In F6 (contextual anchors), select a `*top` anchor in Edit View: note the Anchor Context field in the Palette and how it accepts a context with a token.
 - [ ] `cap.attachesToTwoAdjacentNodes` (behavior, M13, handbook): A cap component is bound to two nodes that are neighbours on…
   - Observe: Select two nodes that are not neighbours on one path, then two nodes on different paths, and open the context menu: note whether Add Cap Component is shown, disabled or missing.
 - [ ] `cap.node1Node2AnchorSetup` (behavior, M13, handbook): Flexible anchor setup for a cap glyph: two anchors named node1 and…
@@ -1368,59 +1387,85 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `kerning.buildGroups` (M13, docs): Build Kerning Groups…
   - Guess: Two glyphs fall in one group while the root mean square of their side profiles' differences over the band stays under maxDifference; FontForge does not describe its grouping rule.
 
-### Font View (6)
+### Font View (7)
 
 - [ ] `smartFilter.rule.custom` (behavior, M8, handbook): Rule Custom holds a free-form glyph predicate written in the same expression…
   - Guess: The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.
 - [ ] `font.features.reorder` (M8, inferred): Reorder Entries
   - Guess: Entries are dragged within their group, and the order of features is the order of feature blocks and of chained suffixes; the running app would settle whether dragging exists.
+  - Observe: In F1 (Latin features), drag a feature entry to another place in the sidebar: note whether it moves and whether the order is kept on save.
 - [ ] `fontView.image.batchByFileName` (behavior, M11, handbook): When Add Image is given several files, each is matched to a…
   - Guess: Files with no glyph of their name are skipped and listed in the result; no glyph is created. Settled by Add Image with an unmatched file in the reference.
+  - Observe: Image font: in Font View, Add Image with H.png, I.png, J.png and a.png; note which glyphs receive an image and any message about J, which has no glyph.
 - [ ] `fontView.image.caseSensitivity` (behavior, M11, handbook): Glyph names are case-sensitive but many file systems are not, so A.png…
   - Guess: File names are matched to glyph names exactly, case included, on every platform. Settled by Add Image with `a.png` in a font with `A` and `a` in the reference.
+  - Observe: Image font: in Font View, Add Image with H.png, I.png, J.png and a.png; note whether a.png goes to a only or also to A.
+- [ ] `fontView.image.showImageOption` (behavior, M11, handbook): View → Show Image controls whether placed images are drawn in Font…
+  - Observe: Image font: in Font View turn Show Image off; note whether H (which has paths) is drawn without its image and I (empty) with its image.
 - [ ] `font.setStatusDefinitions` (M13, docs): Status Definitions…
   - Guess: The definitions are stored in the font's user data as a list of code, name, colour and default flag; Fontra's storage is not documented.
 - [ ] `glyph.setStatus` (M13, docs): Set Status
   - Guess: FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say.
 
-### Font Info and features (172)
+### Font Info and features (195)
 
 - [ ] `fontInfo.familyName.allowedCharacters` (behavior, M7, handbook): The Family Name should contain only A-Z, a-z, 0-9 and spaces; other…
   - Guess: Other characters are accepted with a warning, not refused; typing an ampersand or an accented letter in the reference app settles whether it warns, refuses or neither.
+  - Observe: In font A (m7-one), type the family name `Café & Co`: note any warning, refusal or nothing.
 - [ ] `fontInfo.unitsPerEm.limits` (behavior, M7, handbook): New files start at 1000 UPM
   - Guess: font.info.set refuses values outside 16–16384 and returns a warning above 3000, above 4096 when the font is exported with CFF outlines, and above 5000; the reference app settles whether it warns at all.
+  - Observe: In font A (m7-one), type 3500 and then 6000 as Units per Em: note any warning or refusal for each.
 - [ ] `fontInfo.version.headAndNameId5` (behavior, M7, handbook): Export writes major.minor to head.fontRevision and builds name ID 5 as 'Version…
   - Guess: The suffix is `;FontCraft <version>`, without a build number while FontCraft has none; an export from the reference app shows only its own form.
+  - Observe: In font C (m7-export), export with versionString `Version %d.%03d;beta`, then with no versionString; read the exported TTF with ttx: note name ID 5 and head fontRevision in both.
+- [ ] `fontInfo.masters.multipleValues` (behavior, M7, handbook): With several masters selected, name, metrics, stems, numbers and custom parameters are…
+  - Observe: In font B (m7-two), select both masters on the Masters tab: note which fields show Multiple Values, then edit a metric and check whether both masters get it.
 - [ ] `fontInfo.metrics.defaultsByScript` (behavior, M7, handbook): The default set of metrics depends on the font's script and language…
   - Guess: A new font whose chosen scripts include Arabic and not Latin gets the metrics Ascender 800, Alef Height 700, Joining Line 150, Baseline 0, Descender −200 and Meem Depth −250 at 1000 UPM; a new Arabic font in the reference app settles names, order and values.
+  - Observe: Choose File › New with Arabic chosen: write down the default metrics, their order and their values.
+- [ ] `fontInfo.metrics.scopeHidesLine` (behavior, M7, handbook): A metric with a glyph scope is drawn only in glyphs matching…
+  - Observe: In font B (m7-two), scope x-Height to the script greek and look at A in Edit View: note whether the x-height line is hidden.
 - [ ] `fontInfo.styleName.limits` (behavior, M7, handbook): Style names outside ASCII letters, digits, spaces and simple punctuation are not…
   - Guess: font.instance.set and the Exports tab warn, without refusing, when the style name has characters outside ASCII letters, digits, spaces and hyphens, or when family and style name together exceed 20 characters without a postscriptFontName; the reference app settles whether it warns.
+  - Observe: In font B (m7-two), type an instance style name of 30 characters, then one containing `é`: note any warning for each.
+- [ ] `fontInfo.notes.markdownHighlighting` (behavior, M7, handbook): The note field highlights Markdown as plain text styling: italic with single…
+  - Observe: In font A (m7-one), type `# Head`, `*it*`, `**bold**` and `<https://example.org>` in the Notes tab: note how each is highlighted.
 - [ ] `fontInfo.exports.instancePreview` (behavior, M7, handbook): The Exports tab shows a short preview of the selected instance drawn…
   - Guess: The preview sits above the instance's fields, one line high, and an instance between masters is drawn with its nearest master until M9 interpolates; the Exports tab of the reference app settles placement.
+  - Observe: In font B (m7-two), look at an instance's preview on the Exports tab: note where it is and what it shows.
 - [ ] `font.info.selectTab` (M7, inferred): Select Font Info Tab
   - Open (our design, not confirmed): Switches the open Font Info window to one of its six tabs. The handbook only describes clicking the tabs; no shortcut is given.
 - [ ] `font.info.listFields` (M7, inferred): List Available Fields
   - Guess: The Font tab offers familyNames, designers, designerURL, manufacturers, manufacturerURL, copyrights, versionString, vendorID, uniqueID, licenses, licenseURL, trademarks, descriptions, sampleTexts, postscriptFontName, postscriptFullNames, compatibleFullNames, WWSFamilyName, WWSSubfamilyName and variationsPostScriptNamePrefix; the Exports tab the same plus styleNames, styleMapFamilyNames, styleMapStyleNames, preferredFamilyNames, preferredSubfamilyNames and variableStyleNames; the Masters tab offers none and keeps master properties as read. The pickers of the reference app settle the three lists.
+  - Observe: In font A (m7-one), click the plus button beside General on the Font tab: write down the fields offered, in their order.
 - [ ] `font.info.addField` (M7, handbook): Add Field
   - Guess: Adding a field that is already present on a target is refused with a message pointing to Set Localized Value; the reference app settles it.
   - Guess: A new localizable field gets one entry in the default language (dflt) holding the given value, or else the built-in value it overrides (familyNames takes the Family Name, styleNames the Style Name), else empty text; adding the field in the reference app settles it.
+  - Observe: In font A (m7-one), add familyNames from the plus button beside General, then try to add it again: note the new row's language and value, and whether the second add is offered or refused.
 - [ ] `font.info.removeField` (M7, handbook): Remove Field
   - Guess: Built-in fields (Family Name, Units per Em, Version, Creation Date, Style Name, Weight Class, Width Class) cannot be removed; only added fields and custom parameters can; the reference app settles it.
 - [ ] `font.info.setLocalizedValue` (M7, handbook): Set Localized Value
   - Guess: A language tag the name table cannot map to a Windows language id is refused, except dflt (the default); the language menu of the reference app settles which tags it offers.
+  - Observe: In font A (m7-one), open the language menu of a familyNames row: write down the languages offered, then save and note how each language is written in the file.
 - [ ] `font.info.removeLocalizedValue` (M7, handbook): Remove Localized Value
   - Guess: Removing the last language entry of a field removes the field; removing its default (dflt) entry while others remain is allowed, and export then uses the English entry as the default name; the reference app settles both.
+  - Observe: In font A (m7-one), give familyNames a default-language row and a German row, remove the default-language row, then remove the last row: note what remains each time and whether the field disappears.
 - [ ] `font.info.copyRows` (M7, handbook): Copy Rows
   - Guess: Rows are copied as our own JSON (scope, kind, key, value, enabled) and, for custom parameters and fields, also as property-list text in the file format's spelling, so a text editor or another document can read them; copying rows in the reference app and pasting into a text editor settles the format.
+  - Observe: In font A (m7-one), select a field row and a custom-parameter row together, choose Copy and paste into a text editor: keep the clipboard text.
 - [ ] `font.info.pasteRows` (M7, handbook): Paste Rows
   - Guess: A pasted row whose field or single-valued parameter is already present replaces its value, a repeatable parameter is appended, a row not allowed in the target scope is skipped and listed, and pasting between tabs and between documents is allowed; pasting in the reference app settles all four.
+  - Observe: In font A (m7-one), copy a field row and a parameter row, then paste them into the Exports tab, into font B (m7-two)'s Font tab, and back into font A (m7-one)'s Font tab where they already exist: note for each whether the rows are added, replaced, duplicated or refused.
 - [ ] `font.info.scaleToUnitsPerEm` (M7, handbook): Scale Font to Units per Em
   - Guess: Scaling by new/old covers every layer of every glyph (paths, component offsets but not component scales, anchors, guides, hints, backgrounds, special layers), the advance widths and vertical metrics, master metric positions and zone sizes, stems, kerning, global guides, and the custom parameters whose catalogue entry is measured in units (typoAscender, hheaAscender, winAscent, underlinePosition and the like); metrics keys, italic angles and percentages are kept; the reference app on a font holding all of these settles the list.
   - Guess: Scaled coordinates are rounded to the font's grid (none when the grid spacing is 0), and a scale that would put a coordinate beyond ±32768 is refused; the reference app settles the rounding.
+  - Observe: In font A (m7-one), click the double arrow beside Units per Em, scale to 2048 and save: note which of outlines, component offsets, anchors, the guide, kerning, metrics, zones, stems and typoAscender changed, and how half units were rounded.
 - [ ] `font.info.stepVersion` (M7, handbook): Step Minor Version
   - Guess: One step is 1 on the minor version; a step above 999 or below 0 is refused with a message and nothing changes, and the major part has no stepper; the stepper of the reference app settles both ends.
+  - Observe: In font A (m7-one), set the version to 1.999 and step it up, then set 1.000 and step it down: note the result at each end and whether the major part has a stepper of its own.
 - [ ] `font.info.updateDate` (M7, handbook): Update Creation Date
   - Guess: The update button stores the current time in UTC (+0000); the date the reference app saves after the button settles the time zone.
+  - Observe: In font A (m7-one), click the date's update button and save: note how the date is displayed and which time zone the saved value has.
 - [ ] `font.customParameters.list` (M7, inferred): List Custom Parameters
   - Open (our design, not confirmed): Returns the custom parameters set on the font, on one master or on one export, in row order with their values.
 - [ ] `font.customParameters.describe` (M7, inferred): Describe Custom Parameters
@@ -1429,6 +1474,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: One scope may hold the same parameter more than once; for a parameter that takes one value the first enabled row counts and the list marks the others; adding a duplicate in the reference app settles whether it is refused.
   - Guess: Without a value the new row holds the kind's empty value (off, 0, empty text, empty list); the new rows of the reference app settle it.
   - Guess: A parameter whose appendix entry names its scopes is refused in other scopes; one whose entry names none is allowed in all three.
+  - Observe: In font A (m7-one), add typoAscender twice, then add a yes-or-no parameter and a list parameter: note whether the duplicate is allowed or refused and the empty value each new row gets.
 - [ ] `font.customParameters.set` (M7, inferred): Set Custom Parameter
   - Open (our design, not confirmed): Changes the value of an existing custom parameter row.
 - [ ] `font.master.list` (M7, inferred): List Masters
@@ -1437,22 +1483,31 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Returns every property of one master: name, icon, axis coordinates, metric positions and zone sizes, stem values, number values and custom parameters.
 - [ ] `font.master.add` (M7, handbook): Add Master
   - Guess: The new master is called Regular, takes the first master's axis coordinates and the file format's default metric values scaled to the UPM (ascender 800, cap height 700, x-height 500, descender −200 at 1000 UPM, zones 16 and −16 at 1000 UPM), has no stem values, number values or parameters, and goes to the end of the list; every glyph gets an empty layer for it; adding a master in the reference app settles name, coordinates, values and position.
+  - Observe: In font B (m7-two), choose Add Master on the Masters tab: note the new master's name, icon, coordinates, metric and zone values, and its position in the list.
 - [ ] `font.master.duplicate` (M7, handbook): Duplicate Selected
   - Guess: Each copy goes right after its original with a new id and the same name; the original's master layers, their backgrounds, the special layers tied to it and its kerning are copied and tied to the copy; duplicating in the reference app settles position and special layers.
+  - Observe: In font B (m7-two), choose Duplicate Selected on Bold: note the copy's position and whether the brace layer and the kerning are copied.
 - [ ] `font.master.remove` (M7, handbook): Remove Master
   - Guess: Removing a master removes its layers in every glyph, the special layers tied to it and its kerning; instances stay; parameters that name it (Link Metrics With Master, Get Hints From Master, Variable Font Origin) stay and the command's result names them in a warning; removing such a master in the reference app settles both.
+  - Observe: In font B (m7-two), remove Bold, then try to remove the last master: note what happens to the instances, the brace layer and the Link Metrics With Master parameter, and whether the last removal is refused.
 - [ ] `font.metrics.list` (M7, inferred): List Metrics
   - Open (our design, not confirmed): Returns the metric definitions (category, name, scope) and, when a master is given, that master's position and zone size for each.
 - [ ] `font.metrics.add` (M7, inferred): Add Metric
   - Guess: Add Metric appends a definition of the given category and gives every master position 0 and zone 0; the reference app settles whether the Metrics heading has a plus button and what it adds.
+  - Observe: In font B (m7-two), look for a plus button beside Metrics on the Masters tab: note whether it exists and what it adds.
 - [ ] `font.metrics.remove` (M7, inferred): Remove Metric
   - Guess: Every metric can be removed, Baseline and Italic Angle included, and its values go from every master; the reference app settles whether the built-in metrics can be deleted.
+  - Observe: In font B (m7-two), try to delete the Baseline and Italic Angle metrics: note whether each deletion is allowed.
 - [ ] `font.master.setMetric` (M7, handbook): Set Master Metric
   - Guess: Zone sizes may be negative (zones below a line, such as at the baseline and the descender); Italic Angle takes a position only, between −89 and 89 degrees; typing a negative zone in the reference app settles it.
+  - Observe: In font B (m7-two), type −16 as the baseline zone's size: note whether a negative zone is accepted.
 - [ ] `font.stems.list` (M7, inferred): List Stems
   - Open (our design, not confirmed): Returns the stem definitions (name, orientation, scope) and, when a master is given, that master's value for each.
 - [ ] `font.stems.add` (M7, handbook): Add Stem
   - Guess: A stem added without a name is called `Stem` with `.1`, `.2` appended while taken, names are unique, and every master gets 0 unless `values` gives its value; adding a stem in the reference app settles the default name and value.
+  - Observe: In font B (m7-two), add a stem: note its default name and value.
+- [ ] `font.stems.set` (M7, handbook): Edit Stem
+  - Observe: In font B (m7-two), add a second stem and give it the first stem's name: note whether the duplicate name is refused.
 - [ ] `font.instance.list` (M7, inferred): List Exports
   - Open (our design, not confirmed): Returns the entries of the Exports tab in order with type, style name, active flag, weight and width class, axis coordinates and style-link data.
 - [ ] `font.instance.get` (M7, inferred): Get Export
@@ -1461,10 +1516,15 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Writes built-in properties of one or several export entries in one step.
 - [ ] `font.instance.add` (M7, handbook): Add Instance
   - Guess: The new instance has Weight Class 400, Width Class 5, the first master's axis coordinates, Active on, no style linking, and goes to the end of the list; adding an instance in the reference app settles the defaults and the position.
+  - Observe: In font B (m7-two), choose Add Instance on the Exports tab: note the new instance's name, weight and width class, coordinates and position.
 - [ ] `font.instance.setStyleLinking` (M7, handbook): Set Style Linking
   - Guess: An empty base field with Bold or Italic checked links to Regular; exporting such an instance from the reference app settles it.
+  - Observe: In font B (m7-two), export Bold Italic, whose style-linking base field is empty; read the exported TTF with ttx: note name IDs 1, 2, 16 and 17, fsSelection and macStyle.
+- [ ] `font.instance.setWeightClass` (M7, handbook): Set Weight Class
+  - Observe: In font B (m7-two), type weight classes 0, 350 and 1001 on an instance: note which are accepted and which refused.
 - [ ] `font.instance.setWidthClass` (M7, handbook): Set Width Class
   - Guess: Values outside 1–9 are refused, typed or not; typing 10 into the field of the reference app settles it.
+  - Observe: In font B (m7-two), type width class 10 on an instance: note whether it is accepted or refused.
 - [ ] `font.settings.get` (M7, inferred): Get Font Settings
   - Open (our design, not confirmed): Reads the Other Settings values: gridSpacing, gridSubdivision, keyboardIncrementShift, keyboardIncrementCmd, useCustomNaming, disableAutomaticAlignment, keepAlternatesNextToBase, fileFormatVersion and fontType.
 - [ ] `font.settings.set` (M7, inferred): Set Font Settings
@@ -1475,63 +1535,100 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Replaces the font note. The same text is what the font's note custom parameter reads and writes.
 - [ ] `fontInfo` (panel, M7, handbook): Font Info
   - Guess: Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it.
+  - Observe: In font A (m7-one), open Font Info, switch to the Exports tab, close the window and open it again: note which tab it opens on.
 - [ ] `fontInfo.fieldPicker` (panel, M7, handbook): Add Field
   - Guess: The picker lists only the fields not yet present on the selected font, masters or exports, in the order of font.info.listFields, and allows several to be selected; the picker of each tab in the reference app settles it.
+  - Observe: In font A (m7-one), click the plus button beside General on the Font tab: note the fields offered in order, and which of them get a language menu once added.
 - [ ] `fontInfo.customParameterPicker` (panel, M7, handbook): Add Custom Parameter
   - Guess: The list shows every catalogue parameter allowed in the tab's scope, in alphabetical order, including those already present; the search matches any part of the name, ignoring case; the picker in the reference app settles order and matching.
   - Guess: A parameter whose appendix entry names no scope is offered in all three tabs; the picker of each tab in the reference app settles it.
+  - Observe: In font A (m7-one), click the plus button beside Custom Parameters on the Font, Masters and Exports tabs: note which of typoAscender, Remove Glyphs, Filter, glyphOrder, versionString, familyNames and copyrights each tab offers, the order of the list, and whether the search matches inside names.
 - [ ] `fontInfo.masterIconPicker` (panel, M7, handbook): Master Icon
   - Guess: The 25 built-in icons are five weights (Light, Regular, Medium, SemiBold, Bold) by five widths (Condensed, SemiCondensed, normal, SemiExtended, Extended), named `Weight` or `Weight_Width` as the corpus files spell them; the names the reference app writes for each icon of its picker settle the set.
+  - Observe: In font B (m7-two), open the master icon picker, pick each icon in turn and save each time: write down the 25 saved iconName values.
 - [ ] `fontInfo.metricEditor` (panel, M7, handbook): Metric
   - Guess: The category menu offers the file format's metric types (ascender, cap height, slant height, x-height, midHeight, bodyHeight, descender, baseline, italic angle) with readable labels, and the scope uses the smart-filter rule editor of M4; the menu of the reference app settles the list and the labels.
+  - Observe: In font B (m7-two), click the name of x-Height on the Masters tab: write down the items and labels of the category menu.
+- [ ] `filter.customParameter.filter` (behavior, M7, handbook): A Filter custom parameter on an instance (export) holds one filter string;…
+  - Observe: In font C (m7-export), put Filter `Transformations;Slant:10` on an instance and export a TTF; read the exported TTF with ttx: note whether Aacute stays a composite and whether the slant reaches its outlines.
 - [ ] `filter.customParameter.extrudeUndocumented` (behavior, M7, inferred): No export string is documented for Extrude or for Interpolate with Background;…
   - Open (our design, not confirmed): No export string is documented for Extrude or for Interpolate with Background; whether they can be used as Filter parameters must be checked in the reference app.
 - [ ] `filter.customParameter.sameRegistryAsCommands` (behavior, M7, inferred): FontCraft parses a filter string into the params of the matching filter.*…
   - Open (our design, not confirmed): FontCraft parses a filter string into the params of the matching filter.* command and runs it through the command registry, so menu, CLI, MCP and export all share one implementation per filter.
+- [ ] `customParameters.enableCheckbox` (behavior, M7, handbook): Each custom parameter in the Font, Masters and Exports tabs of Font…
+  - Observe: In font A (m7-one), untick a custom parameter's checkbox and save: note how the row is drawn and the key written to the file.
+- [ ] `customParameters.shortAndLongNames` (behavior, M7, handbook): UFO-derived parameter names are accepted both in the full UFO spelling and…
+  - Observe: In font A (m7-one), add the parameter `description`, then search the picker for `openTypeNameDescription`: note which spelling the list shows and which the saved file uses.
 - [ ] `customParameters.unknownKept` (behavior, M7, inferred): A custom parameter whose name the catalogue does not know (an older…
   - Guess: Unknown parameters are shown and kept, not hidden or dropped; opening a file with an unknown parameter in the reference app settles it.
+  - Observe: Open a copy of font A (m7-one) with an unknown custom parameter `Master Name` added in a text editor: note whether it is shown, and whether it is kept or dropped on save.
 - [ ] `Compatible name Table` (parameter, M7, handbook): When on, export writes a legacy name table layout that some Mac…
   - Guess: When on, every name record is also written on the Macintosh platform (Roman encoding, English), with name ID 1 holding the family and style name together and ID 2 the style name, the layout older Macintosh applications group by; exporting with the parameter in the reference app and reading the name table settles it.
   - Guess: Compatible name Table writes its Macintosh records even when Export Mac Name Table Entries is absent, and none when that parameter is present and off; both parameters together in the reference app settle it.
+  - Observe: In font C (m7-export), export with Compatible name Table on; read the exported TTF with ttx: note which name records change.
 - [ ] `compatibleFullNames` (parameter, M7, handbook): Sets name ID 18, the Mac-only name preferred over ID 4
   - Guess: Without the field no name ID 18 is written, as both oracles do, though the handbook says the reference derives it from family and style name; an export in the reference app settles whether it writes ID 18 by default.
 - [ ] `Export kern Table` (parameter, M7, handbook): Adds an old-style kern table alongside GPOS kerning, for TrueType-flavoured output only
   - Guess: The table is version 0 with one format 0 subtable per run of at most 10,920 pairs (the subtable's 16-bit length), class pairs expanded to every member pair, exceptions overriding, zero pairs left out, only the default (horizontal) kerning of the exported master; pairs past 65,535 in total are dropped with a warning; an export with the parameter in the reference app settles it.
+  - Observe: In font C (m7-export), export with Export kern Table on, including the A/V class pair; read the exported TTF with ttx: note the kern table's format and its pairs.
 - [ ] `Export Mac Name Table Entries` (parameter, M7, handbook): Macintosh name records are written by default; setting this off leaves them…
   - Guess: Macintosh records are written only for name IDs whose text the Mac Roman encoding can hold; an export from the reference app read with ttx settles which IDs it writes.
+  - Observe: In font C (m7-export), export with no parameter, then with Export Mac Name Table Entries off; read the exported TTF with ttx: note whether platform 1 name records are present by default and gone with the parameter.
 - [ ] `Filter` (parameter, M7, handbook): Applies a filter or app function to the instance's outlines at export,…
   - Guess: The filter runs on every glyph of the instance with its components decomposed first, so a TrueType export of an instance with a Filter has no composites; a Transformations Filter on an instance with a composite in the reference app settles it.
   - Guess: A Filter on a master applies to every export of that master; on the font it applies to every export, which fontmake ignores but no source forbids; the reference app's picker settles where it may be added.
+  - Observe: In font C (m7-export), put Filter `Transformations;Slant:10` on an instance and export a TTF; read the exported TTF with ttx: note whether Aacute stays a composite.
 - [ ] `Import Font` (parameter, M7, handbook): References another source file; glyphs it has that the host lacks appear…
   - Guess: The path is relative to the host file's folder unless absolute; the imported glyphs are read when the host opens and before each export, shown locked, never saved into the host; a missing or unreadable file is a warning on opening and at export, not an error; the reference app settles the path form and the missing-file case.
+  - Observe: Add Import Font naming font B (m7-two) by relative path, then by absolute path, then rename font B (m7-two)'s file: note which glyphs are shown, whether they are locked, and the message for the missing file.
 - [ ] `Import Master` (parameter, M7, handbook): References a master in another source file so it behaves like a…
   - Guess: The value is the other file's path, a semicolon and the master's name, resolved as Import Font resolves paths; the linked master is read-only and its glyphs' layers are not saved into the host; the reference app settles the value syntax.
+  - Observe: Add Import Master naming font B (m7-two)'s Bold master: note the master added and what is saved in the host file.
 - [ ] `Instance Preview` (parameter, M7, handbook): List of glyph names replacing the default `Aang126` preview string shown for…
   - Guess: The value lists glyph names separated by spaces or line breaks; names the font lacks are skipped; an instance between masters shows its nearest master until M9 interpolates; the reference app settles separators and missing names.
+  - Observe: In font B (m7-two), add the parameter Instance Preview with `A a n` to an instance: note what the preview shows afterwards.
 - [ ] `Keep Glyphs` (parameter, M7, handbook): List of glyphs to keep; all others are dropped and kerning and…
   - Guess: When both Keep Glyphs and Remove Glyphs are present, Keep Glyphs applies first and Remove Glyphs then removes from what is kept, with a warning; the reference app settles it.
   - Guess: .notdef and space are kept whatever the list says; the reference app settles it.
+  - Observe: In font C (m7-export), export with Keep Glyphs `A a`, then with Keep Glyphs and Remove Glyphs together; read the exported TTF with ttx: note the glyphs kept, whether kerning is pruned, and which parameter wins.
 - [ ] `Point To Unit Ratio` (parameter, M7, handbook): Number of font units equal to one point, which sets the scale…
   - Guess: The copied SVG gives coordinates in points, font units divided by the ratio, and declares its width and height in pt; without the parameter one unit is one point; copying into a drawing application from the reference app settles the scale.
+  - Observe: In font A (m7-one), set Point To Unit Ratio 10, copy glyph A and paste into a drawing application: note the pasted size.
 - [ ] `PreFilter` (parameter, M7, handbook): Same value syntax as Filter, applied before decomposition
   - Guess: On a variable font setting PreFilter is skipped with a warning, not an error; the reference app settles it.
+  - Observe: In font C (m7-export), put PreFilter `RemoveOverlap` on a variable font setting and export the variable font: note whether it is refused, ignored or applied.
 - [ ] `Prevent Name ID` (parameter, M7, handbook): The value is a name ID that must not be written
   - Guess: Name IDs 1, 2, 3, 5 and 6 can be prevented like any other, with a warning that the font may not install; preventing ID 1 in the reference app settles whether it refuses.
+  - Observe: In font C (m7-export), export with Prevent Name ID 16, then with Prevent Name ID 1; read the exported TTF with ttx: note whether ID 16 is missing, and whether ID 1 is refused or left out.
+- [ ] `Reencode Glyphs` (parameter, M7, handbook): List of `glyphname=hex` entries; several code points are comma-separated (`space=0020,00A0`) and an…
+  - Observe: In font C (m7-export), export with Reencode Glyphs `a=0061,0251` and `space=`; read the exported TTF with ttx: note the cmap entries of a and space.
 - [ ] `Remove Glyphs` (parameter, M7, handbook): One entry per line: a full glyph name, a name with `*`…
   - Guess: A removed glyph that a kept composite uses is decomposed into that composite, as non-exported glyphs are (M2 preflight); removing the base of a composite in the reference app settles it.
   - Guess: Queries compare text values exactly except for `*`, are case-sensitive, and an unknown key is a warning that matches nothing; the reference app settles case and unknown keys.
+  - Observe: In font C (m7-export), export an instance with Remove Glyphs `A` (A is the base of Aacute); read the exported TTF with ttx: note whether Aacute is decomposed, removed, or kept with a broken component.
+  - Observe: In font C (m7-export), export with Remove Glyphs `export=0`, then `unicode=1E*`, then `category=Mark`; read the exported TTF with ttx: note which glyphs each removes.
 - [ ] `Rename Glyphs` (parameter, M7, handbook): List of `oldname=newname` entries (for example `g.single=g`); the two glyphs trade names
   - Guess: An entry naming a glyph the font lacks renames the existing glyph to the new name, with a warning; an entry whose old name is missing is skipped with a warning; the reference app settles both.
+  - Observe: In font C (m7-export), export with Rename Glyphs `g.single=g`, then with `a=nonexistent`; read the exported TTF with ttx: note the swap's effect on composites and export flags, and what happens to the missing name.
+- [ ] `Scale to UPM` (parameter, M7, handbook): Integer target UPM; everything in the font is scaled to it at…
+  - Observe: In font C (m7-export), export with Scale to UPM 2048; read the exported TTF with ttx: note the head, outline, hmtx, kerning, OS/2 and post values and how they were rounded.
 - [ ] `styleMapStyleNames` (parameter, M7, handbook): Described only as the localised font subfamily name, name ID 2
   - Guess: The value must be regular, italic, bold or bold italic in any case, as the UFO key it comes from; another value is ignored with a warning; the reference app settles it.
 - [ ] `Use Arabic Presentation Form Unicodes` (parameter, M7, handbook): When set, Arabic glyphs are given the legacy presentation-form Unicode values
   - Guess: An exported glyph without code points whose name is an Arabic letter's name with .isol, .init, .medi or .fina, or a ligature of Arabic letters (lam_alef-ar), gets the presentation-form code point Unicode's compatibility decomposition gives for that letter and form (FB50–FDFF, FE70–FEFF); glyphs with code points keep them; only cmap changes; an export from the reference app settles which glyphs it covers.
+  - Observe: In font C (m7-export), export with Use Arabic Presentation Form Unicodes on; read the exported TTF with ttx: note the code points of beh-ar.init, beh-ar.medi, beh-ar.fina and lam_alef-ar, and whether anything besides cmap changes.
 - [ ] `versionString` (parameter, M7, handbook): Text beginning with `Version ` and a number; may be a template…
   - Guess: `%d` takes the major version and `%03d` (or any printf integer form) the minor, in that order; more than two `%` forms leave the text as written with a warning; the reference app settles other forms.
+  - Observe: In font C (m7-export), export with versionString `Version %d.%03d;beta`, then with no versionString; read the exported TTF with ttx: note name ID 5 in both.
+- [ ] `fontInfo.features.updateDetectsNew` (behavior, M8, handbook): Update inspects glyph names for features it can newly generate: underscore names…
+  - Observe: In F1 (Latin features), press Update in Font Info › Features: note which entries it adds and their order in the sidebar.
+- [ ] `fontInfo.features.optionalAutomatic` (behavior, M8, handbook): Some entries can be generated but are not added by Update, among…
+  - Observe: In F1 (Latin features), add the class All by hand, then press Update: note All's content and whether Update keeps, refreshes or replaces it.
 - [ ] `font.numbers.list` (M8, inferred): List Number Values
   - Open (our design, not confirmed): Returns the named numbers of the font and, when a master is given, that master's value for each.
 - [ ] `font.numbers.rename` (M8, inferred): Rename Number Value
   - Guess: Renaming a number value leaves tokens in feature code unchanged, so they then name an unknown value and the next compile reports them; renaming one used in feature code in the reference app would settle it.
+  - Observe: In F5 (tokens), rename the number value `tracking` while a feature uses `$tracking`: note whether the token in the feature follows the new name.
 - [ ] `font.features.list` (M8, inferred): List Feature Entries
   - Open (our design, not confirmed): Returns the sidebar entries in order: kind, name or tag, automatic flag and whether the entry currently has compile errors.
 - [ ] `font.features.get` (M8, inferred): Get Feature Entry
@@ -1540,458 +1637,709 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Searches the registered feature tags by tag or by descriptive name, the data behind the Add Feature picker, and reports for each whether automatic code generation is possible in this font.
 - [ ] `font.features.rename` (M8, inferred): Rename Feature Entry
   - Guess: A double-click on a sidebar entry's name renames it; a feature tag must be four characters and a name may not be taken in its group, else the command is refused; the running app would settle it.
+  - Observe: In F1 (Latin features), double-click a feature entry's name, then try a name another entry has and a tag that is not four characters: note whether renaming exists and what each attempt does.
 - [ ] `font.features.setCode` (M8, inferred): Set Feature Code
   - Guess: Set Feature Code refuses an automatic entry instead of switching it to manual; typing into an automatic entry in the reference app would settle it.
+  - Observe: In F1 (Latin features), select an automatic feature and type into the editor: note whether the code is read-only or the entry switches to manual.
+- [ ] `font.features.update` (M8, handbook): Update
+  - Observe: In any font, look for a shortcut or menu item for Update in Font Info › Features: note both.
+- [ ] `font.features.compile` (M8, handbook): Compile
+  - Observe: In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.
 - [ ] `font.features.listErrors` (M8, inferred): List Feature Errors
   - Open (our design, not confirmed): Returns the current compile errors with entry, text range, message, expanded description and, where one exists, the suggested fix. The UI shows the same data as inline markers and sidebar icons.
 - [ ] `font.features.applyFix` (M8, handbook): Fix
   - Guess: Three fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a missing semicolon at the end of a statement, and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.
+  - Observe: In F1 (Latin features), write a misspelt glyph name, drop a semicolon, and use a class before its entry: note which errors show a wrench and what Fix does for each.
 - [ ] `font.features.listSnippets` (M8, inferred): List Code Snippets
   - Open (our design, not confirmed): Returns the predefined and user-defined feature code snippets offered by the snippets button, including the automatic-code placeholder.
 - [ ] `font.features.complete` (M8, inferred): Complete Feature Code
   - Open (our design, not confirmed): Returns the glyph names, class names and lookup names that fit at a position in the code, the data behind the editor's autocomplete menu.
 - [ ] `featureEditor.outputOrder` (behavior, M8, inferred): The generated feature file is assembled as classes, then prefixes, then features,…
   - Guess: Classes come before prefixes, as both reference compilers assemble them; the expanded code of a reference export whose prefix uses a class would settle the reference app's own order.
+  - Observe: In F1 (Latin features), add a prefix that uses a class, export, then export again with that class broken: note from the error position the order in which classes, prefixes and features are assembled.
 - [ ] `featureEditor.featureBody` (behavior, M8, inferred): A feature entry stores only the body; the surrounding `feature tag {…
   - Open (our design, not confirmed): A feature entry stores only the body; the surrounding `feature tag { ... } tag;` wrapper is added when the file is assembled. Assumed from the examples, which show bare rules.
 - [ ] `featureEditor.afdkoSyntax` (behavior, M8, inferred): Feature code is written in the AFDKO feature-file language plus the extensions…
   - Open (our design, not confirmed): Feature code is written in the AFDKO feature-file language plus the extensions listed under featureCode.* and the tokens under token.*; FontCraft lowers the extensions to standard syntax before handing the file to the compiler.
 - [ ] `implicit.markerMissing` (behavior, M8, inferred): An explicit kern feature without a `# Automatic Code` line gets the…
   - Guess: Generated kerning follows a hand-written kern feature and a hand-written mark-family feature replaces the generated one, as glyphsLib and fontc do; a reference export of a font with a hand-written mark feature without the line would settle it.
+  - Observe: In F6 (contextual anchors), add a mark feature with one hand-written rule and no `# Automatic Code` line, export and read GPOS: note whether the generated mark lookups remain.
 - [ ] `token.expansionTiming` (behavior, M8, inferred): Tokens are evaluated separately for each export target (static instance, variable font,…
   - Open (our design, not confirmed): Tokens are evaluated separately for each export target (static instance, variable font, preview master) just before compiling, never stored expanded in the source.
 - [ ] `token.numberValue.expressionDetails` (behavior, M8, docs): Details the handbook leaves open: fea-rs, which implements this token, accepts several…
   - Guess: Results are rounded half away from zero, as fea-rs rounds, where glyphsLib truncates, and division by zero is a compile error at the token; an expression giving 2.5 exported from the reference app would settle the rounding.
+  - Observe: In F5 (tokens), use `${tracking/4}` where it gives 2.5, export and read GPOS: note how the value was rounded.
 - [ ] `token.numberValue.unknownName` (behavior, M8, inferred): A token naming a number value that no master defines is a…
   - Open (our design, not confirmed): A token naming a number value that no master defines is a compile error reported at the token. Assumed; the handbook does not say.
 - [ ] `token.numberValue.inspect` (behavior, M8, handbook): Option-clicking a number value token shows the value it currently evaluates to
   - Guess: Option-click evaluates the token for the master of the active Edit View tab, else the first master; Option-clicking a token in a two-master font with the second master showing in the reference app would settle it.
+  - Observe: In F5 (tokens), with the second master showing in Edit View, Option-click `$tracking` in a feature: note which master's value is shown.
 - [ ] `token.glyphProperty.layerChoice` (behavior, M8, inferred): The value comes from the glyph's layer for the master or interpolated…
   - Guess: Only the documented properties (width, LSB, RSB, TSB, BSB, anchors.<name>.x and .y) are accepted and any other is an error naming it; Option-clicking a token with another layer property in the reference app would show what else exists.
+  - Observe: In F5 (tokens), Option-click `${b:bounds}` and `${b:LSB}` in a feature: note the values shown and whether other layer properties are offered.
+- [ ] `token.predicate.logic` (behavior, M8, handbook): Predicates combine with AND and OR, NOT negates the predicate that follows,…
+  - Observe: In F5 (tokens), write `$[note contains "x" OR "ipa" in tags AND case == upper]` and Option-click it: note the glyphs listed, which shows whether AND binds tighter than OR.
 - [ ] `token.predicate.resultOrder` (behavior, M8, inferred): Matching glyphs are listed in the font's glyph order, as fea-rs does
   - Guess: The Edit View preview target also leaves out non-exporting glyphs, as export targets do; Option-clicking a predicate token in a font with a non-exporting match would settle it.
 - [ ] `featureCode.standaloneLowering` (behavior, M8, inferred): Standard syntax has no way to define a lookup inside a feature…
   - Guess: The split-block lowering keeps the lookup's place in lookup order and leaves it out of the feature; a reference export of a feature with a standalone lookup, read back with a font tool, would settle it.
+  - Observe: In F1 (Latin features), write a feature with a standalone lookup, export and read GSUB: note where the lookup is placed and that the feature does not reference it.
 - [ ] `autoClass.general` (behavior, M8, inferred): Update can create and refresh automatic classes; the handbook names All and…
   - Guess: Update generates Uppercase, Lowercase and AllLetters when the font has such glyphs, and All only when added by hand; which other classes Update offers would be settled in the running app.
+  - Observe: In F1 (Latin features) plus a few Greek and Cyrillic letters, press Update in Font Info › Features: copy the automatic classes it creates and their contents.
 - [ ] `autoFeature.generalRule` (behavior, M8, handbook): Feature generation is driven by glyph names: a dot suffix (or a…
   - Guess: A ligature name goes to liga when it is on the handbook's list or has `.liga`, to dlig with `.dlig`, to hlig when it contains longs or has `.hlig` or `.hist`, to rlig with `.rlig` or on the lam-alef list, and to dlig otherwise, the first match winning in that order; Update on a font with f_f_i.dlig and longs_t would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of every entry it creates: compare each with FontCraft's generators and note the order in which the entries are added.
 - [ ] `autoFeature.languageSystems` (behavior, M8, inferred): Generated code is preceded by languagesystem statements for the scripts in the…
   - Guess: Besides DFLT dflt, one `dflt` line per script of the font's exporting glyphs in script-tag order, then the locl languages of each script; Update on a font with Latin, Cyrillic and Greek glyphs would settle the order.
+  - Observe: In F1 (Latin features) plus a few Greek and Cyrillic letters, press Update in Font Info › Features: copy the Languagesystems prefix and note its script list and order.
 - [ ] `autoFeature.aalt` (behavior, M8, handbook): aalt (All Alternatives)
   - Guess: Generated as one `feature xxxx;` line per other feature with substitutions, in sidebar order, leaving the grouping to the compiler, as the corpus shows; cv features and features listed after aalt included.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the aalt entry: compare it with FontCraft's generator for the same font, or note that no aalt entry is created.
 - [ ] `autoFeature.liga` (behavior, M8, handbook): liga (Standard Ligatures)
   - Guess: Generated code starts with `lookupflag IgnoreMarks;`, as the newer corpus files have it, and lists longer ligatures first; Update on a font with f_f_i, fi and a mark would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the liga entry: compare it with FontCraft's generator for the same font, or note that no liga entry is created.
 - [ ] `autoFeature.dlig` (behavior, M8, handbook): dlig (Discretionary Ligatures)
   - Guess: Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with f_odieresis would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the dlig entry: compare it with FontCraft's generator for the same font, or note that no dlig entry is created.
 - [ ] `autoFeature.hlig` (behavior, M8, handbook): hlig (Historical Ligatures)
   - Guess: Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with such ligatures would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the hlig entry: compare it with FontCraft's generator for the same font, or note that no hlig entry is created.
 - [ ] `autoFeature.rlig` (behavior, M8, handbook): rlig (Required Ligatures)
   - Guess: Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with such ligatures would settle it.
+  - Observe: In F2 (Arabic), press Update in Font Info › Features and copy the code of the rlig entry: compare it with FontCraft's generator for the same font, or note that no rlig entry is created.
 - [ ] `autoFeature.c2sc` (behavior, M8, handbook): c2sc (Small Capitals from Capitals)
   - Guess: With a shared `.sc` set each capital maps to the small cap named after its lowercase letter (`sub A by a.sc;`), with a `.c2sc` set to its own suffix; Update on a font with A, a and a.sc would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the c2sc entry: compare it with FontCraft's generator for the same font, or note that no c2sc entry is created.
 - [ ] `autoFeature.smcp` (behavior, M8, handbook): smcp (Small Capitals)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the smcp entry: compare it with FontCraft's generator for the same font, or note that no smcp entry is created.
 - [ ] `autoFeature.c2pc` (behavior, M8, handbook): c2pc (Petite Capitals from Capitals)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the c2pc entry: compare it with FontCraft's generator for the same font, or note that no c2pc entry is created.
 - [ ] `autoFeature.pcap` (behavior, M8, handbook): pcap (Petite Capitals)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the pcap entry: compare it with FontCraft's generator for the same font, or note that no pcap entry is created.
 - [ ] `autoFeature.subs` (behavior, M8, handbook): subs (Subscript)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the subs entry: compare it with FontCraft's generator for the same font, or note that no subs entry is created.
 - [ ] `autoFeature.sinf` (behavior, M8, handbook): sinf (Scientific Inferiors)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the sinf entry: compare it with FontCraft's generator for the same font, or note that no sinf entry is created.
 - [ ] `autoFeature.afrc` (behavior, M8, handbook): afrc (Alternative Fractions)
   - Guess: One ligature rule per nut fraction from the figures, slash and figures it names; Update on a font with oneovertwo would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the afrc entry: compare it with FontCraft's generator for the same font, or note that no afrc entry is created.
 - [ ] `autoFeature.frac` (behavior, M8, handbook): frac (Fractions)
   - Guess: With `.numr` and `.dnom` figures, fraction gets three lookups: figures to numerators, figures after fraction or a numerator to denominators, slash between figures to fraction; Update on a font with both sets would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the frac entry: compare it with FontCraft's generator for the same font, or note that no frac entry is created.
 - [ ] `autoFeature.dnom` (behavior, M8, handbook): dnom (Denominators)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the dnom entry: compare it with FontCraft's generator for the same font, or note that no dnom entry is created.
 - [ ] `autoFeature.numr` (behavior, M8, handbook): numr (Numerators)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the numr entry: compare it with FontCraft's generator for the same font, or note that no numr entry is created.
 - [ ] `autoFeature.onum` (behavior, M8, handbook): onum (Oldstyle Figures)
   - Guess: Default and `.tf` figures map to `.osf` and `.tosf`, keeping proportional or tabular width; Update on a font with lf, tf, osf and tosf figures would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the onum entry: compare it with FontCraft's generator for the same font, or note that no onum entry is created.
 - [ ] `autoFeature.lnum` (behavior, M8, handbook): lnum (Lining Figures)
   - Guess: `.osf` and `.tosf` figures map back to the default and `.tf` figures, keeping width; Update on a font with all four figure sets would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the lnum entry: compare it with FontCraft's generator for the same font, or note that no lnum entry is created.
 - [ ] `autoFeature.ornm` (behavior, M8, handbook): ornm (Ornaments)
   - Guess: `sub bullet from [A.ornm …];` with the ornaments in glyph order, then `sub A by A.ornm;` per letter; Update on a font with bullet and A.ornm would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the ornm entry: compare it with FontCraft's generator for the same font, or note that no ornm entry is created.
 - [ ] `autoFeature.hist` (behavior, M8, handbook): hist (Historical Forms)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the hist entry: compare it with FontCraft's generator for the same font, or note that no hist entry is created.
 - [ ] `autoFeature.cpsp` (behavior, M8, handbook): cpsp (Capital Spacing)
   - Guess: The amount is a number value named after the feature if the font has one, else 5 units per side, written `pos @Uppercase <5 0 10 0>;`; adding Capital Spacing in the reference app would settle the amount.
+  - Observe: In F1 (Latin features), add Capital Spacing from the plus menu in Font Info › Features: copy its code and note the spacing amount.
 - [ ] `autoFeature.locl` (behavior, M8, handbook): locl (Localized Forms)
   - Guess: One named lookup per rule set (`locl_latn_0`) inside `script latn; language XXX;`, referenced from each further language that shares it, as the Oswald files have it; Update on a font with idotaccent and Scommaaccent would settle the current form.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the locl entry: compare it with FontCraft's generator for the same font, or note that no locl entry is created.
 - [ ] `autoFeature.cvXX` (behavior, M8, handbook): cv01-cv99 (Character Variants)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the cv01 entry: compare it with FontCraft's generator for the same font, or note that no cv01 entry is created.
 - [ ] `autoFeature.salt` (behavior, M8, handbook): salt (Stylistic Alternates)
   - Guess: salt copies the rules of ss01 only, as the handbook says; Update on a font with ss01 and ss02 would settle whether other sets join.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the salt entry: compare it with FontCraft's generator for the same font, or note that no salt entry is created.
 - [ ] `autoFeature.swsh` (behavior, M8, handbook): swsh (Swashes)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the swsh entry: compare it with FontCraft's generator for the same font, or note that no swsh entry is created.
 - [ ] `autoFeature.titl` (behavior, M8, handbook): titl (Titling)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the titl entry: compare it with FontCraft's generator for the same font, or note that no titl entry is created.
 - [ ] `autoFeature.init` (behavior, M8, handbook): init (Initial Forms)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F2 (Arabic), press Update in Font Info › Features and copy the code of the init entry: compare it with FontCraft's generator for the same font, or note that no init entry is created.
 - [ ] `autoFeature.medi` (behavior, M8, handbook): medi (Medial Forms)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F2 (Arabic), press Update in Font Info › Features and copy the code of the medi entry: compare it with FontCraft's generator for the same font, or note that no medi entry is created.
 - [ ] `autoFeature.med2` (behavior, M8, handbook): med2 (Medial Forms 2)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features) with Syriac glyphs with `.med2` added, press Update in Font Info › Features and copy the code of the med2 entry: compare it with FontCraft's generator for the same font, or note that no med2 entry is created.
 - [ ] `autoFeature.fina` (behavior, M8, handbook): fina (Terminal Forms)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F2 (Arabic), press Update in Font Info › Features and copy the code of the fina entry: compare it with FontCraft's generator for the same font, or note that no fina entry is created.
 - [ ] `autoFeature.fin2` (behavior, M8, handbook): fin2 (Terminal Forms 2)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features) with Syriac glyphs with `.fin2` added, press Update in Font Info › Features and copy the code of the fin2 entry: compare it with FontCraft's generator for the same font, or note that no fin2 entry is created.
 - [ ] `autoFeature.fin3` (behavior, M8, handbook): fin3 (Terminal Forms 3)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features) with Syriac glyphs with `.fin3` added, press Update in Font Info › Features and copy the code of the fin3 entry: compare it with FontCraft's generator for the same font, or note that no fin3 entry is created.
 - [ ] `autoFeature.fwid` (behavior, M8, handbook): fwid (Full Widths)
   - Guess: Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the fwid entry: compare it with FontCraft's generator for the same font, or note that no fwid entry is created.
 - [ ] `autoFeature.hkna` (behavior, M8, handbook): hkna (Horizontal Kana Alternates)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the hkna entry: compare it with FontCraft's generator for the same font, or note that no hkna entry is created.
 - [ ] `autoFeature.hojo` (behavior, M8, handbook): hojo (Hojo Kanji Forms)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features) with a few kanji with `.hojo` added, press Update in Font Info › Features and copy the code of the hojo entry: compare it with FontCraft's generator for the same font, or note that no hojo entry is created.
 - [ ] `autoFeature.hwid` (behavior, M8, handbook): hwid (Half Widths)
   - Guess: Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the hwid entry: compare it with FontCraft's generator for the same font, or note that no hwid entry is created.
 - [ ] `autoFeature.ital` (behavior, M8, handbook): ital (Italics)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features) with a few letters with `.italic` added, press Update in Font Info › Features and copy the code of the ital entry: compare it with FontCraft's generator for the same font, or note that no ital entry is created.
 - [ ] `autoFeature.pkna` (behavior, M8, handbook): pkna (Proportional Kana)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the pkna entry: compare it with FontCraft's generator for the same font, or note that no pkna entry is created.
 - [ ] `autoFeature.pwid` (behavior, M8, handbook): pwid (Proportional Widths)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the pwid entry: compare it with FontCraft's generator for the same font, or note that no pwid entry is created.
 - [ ] `autoFeature.qwid` (behavior, M8, handbook): qwid (Quarter Widths)
   - Guess: Update recognises both `.qartwidth`, the handbook's spelling, and `.quartwidth`; a font with both suffixes updated in the reference app would settle it.
+  - Observe: In F1 (Latin features), which has both a `.qartwidth` and a `.quartwidth` glyph, press Update in Font Info › Features: note which spelling the qwid entry uses, or that none is created.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the qwid entry: compare it with FontCraft's generator for the same font, or note that no qwid entry is created.
 - [ ] `autoFeature.ruby` (behavior, M8, handbook): ruby (Ruby Notation Forms)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F1 (Latin features) with a few kana with `.ruby` added, press Update in Font Info › Features and copy the code of the ruby entry: compare it with FontCraft's generator for the same font, or note that no ruby entry is created.
 - [ ] `autoFeature.twid` (behavior, M8, handbook): twid (Third Widths)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the twid entry: compare it with FontCraft's generator for the same font, or note that no twid entry is created.
 - [ ] `autoFeature.vkna` (behavior, M8, handbook): vkna (Vertical Kana Alternates)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the vkna entry: compare it with FontCraft's generator for the same font, or note that no vkna entry is created.
 - [ ] `autoFeature.vrt2` (behavior, M8, handbook): vrt2 (Vertical Alternates and Rotation)
   - Guess: One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.
+  - Observe: In F4 (widths and kana), press Update in Font Info › Features and copy the code of the vrt2 entry: compare it with FontCraft's generator for the same font, or note that no vrt2 entry is created.
 - [ ] `autoFeature.abvs` (behavior, M8, handbook): abvs (Above-base Substitutions)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the abvs entry: compare it with FontCraft's generator for the same font, or note that no abvs entry is created.
 - [ ] `autoFeature.akhn` (behavior, M8, handbook): akhn (Akhands)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the akhn entry: compare it with FontCraft's generator for the same font, or note that no akhn entry is created.
 - [ ] `autoFeature.blwf` (behavior, M8, handbook): blwf (Below Base Forms)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blwf entry: compare it with FontCraft's generator for the same font, or note that no blwf entry is created.
 - [ ] `autoFeature.blws` (behavior, M8, handbook): blws (Below-base Substitutions)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the blws entry: compare it with FontCraft's generator for the same font, or note that no blws entry is created.
 - [ ] `autoFeature.cjct` (behavior, M8, handbook): cjct (Conjunct Forms)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the cjct entry: compare it with FontCraft's generator for the same font, or note that no cjct entry is created.
 - [ ] `autoFeature.half` (behavior, M8, handbook): half (Half Forms)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the half entry: compare it with FontCraft's generator for the same font, or note that no half entry is created.
 - [ ] `autoFeature.nukt` (behavior, M8, handbook): nukt (Nukta Forms)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the nukt entry: compare it with FontCraft's generator for the same font, or note that no nukt entry is created.
 - [ ] `autoFeature.pref` (behavior, M8, handbook): pref (Pre-base Forms)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pref entry: compare it with FontCraft's generator for the same font, or note that no pref entry is created.
 - [ ] `autoFeature.pres` (behavior, M8, handbook): pres (Pre-base Substitutions)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the pres entry: compare it with FontCraft's generator for the same font, or note that no pres entry is created.
 - [ ] `autoFeature.psts` (behavior, M8, handbook): psts (Post-base Substitutions)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the psts entry: compare it with FontCraft's generator for the same font, or note that no psts entry is created.
 - [ ] `autoFeature.rkrf` (behavior, M8, handbook): rkrf (Rakar Forms)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rkrf entry: compare it with FontCraft's generator for the same font, or note that no rkrf entry is created.
 - [ ] `autoFeature.rphf` (behavior, M8, handbook): rphf (Reph Forms)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the rphf entry: compare it with FontCraft's generator for the same font, or note that no rphf entry is created.
 - [ ] `autoFeature.vatu` (behavior, M8, handbook): vatu (Vattu Variants)
   - Guess: Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the vatu entry: compare it with FontCraft's generator for the same font, or note that no vatu entry is created.
 - [ ] `autoFeature.ccmp` (behavior, M8, handbook): ccmp (Glyph Composition and Decomposition)
   - Guess: Latin ccmp is generated in the corpus's form: mark-ligature lookup first, then the dotless lookups with the top-accent filtering set; scripts other than Latin get no ccmp until a source shows their form.
+  - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of the ccmp entry: compare it with FontCraft's generator for the same font, or note that no ccmp entry is created.
+  - Observe: In F3 (Devanagari), press Update in Font Info › Features and copy the code of the ccmp entry: compare it with FontCraft's generator for the same font, or note that no ccmp entry is created.
 - [ ] `snippet.builtIn` (behavior, M8, handbook): The snippets menu ships with predefined code fragments, among them the `#…
   - Guess: The built-in snippets are `# Automatic Code`, a named lookup block, a contextual substitution, a languagesystem line and a stylistic set with a featureNames block; opening the snippets menu in the reference app would settle the list.
+  - Observe: In any font, open the snippets menu of the feature editor: write down the built-in snippets.
 - [ ] `snippet.insertion` (behavior, M8, inferred): A chosen snippet is inserted at the caret, replacing the selection
   - Guess: A snippet is inserted at the caret and replaces the selection; inserting one over a selection in the reference app would settle it.
+  - Observe: In any font, select some feature code and insert a snippet: note whether it replaces the selection or goes in beside it.
 - [ ] `snippet.nativeFormat` (behavior, M8, inferred): FontCraft reads the reference's plist snippet files unchanged and also accepts the…
   - Open (our design, not confirmed): FontCraft reads the reference's plist snippet files unchanged and also accepts the same data as TOML (`[[snippet]] title, code`) so snippets can be edited without plist tools.
 - [ ] `font.features.expandCode` (M8, inferred): Expand Feature Code
   - Open (our design, not confirmed): Query: returns the complete standard feature file for one export target after resolving tokens, conditional blocks, syntax extensions and, optionally, the implicit features. Not a reference command; needed so agents and the CLI can inspect what the compiler receives.
 - [ ] `font.features.showSnippetFolder` (M8, handbook): Show Snippet Folder
   - Guess: The snippet folder is `snippets/` inside FontCraft's configuration folder, created on first use; the reference's folder is inside its application support folder, which the running app would show.
+  - Observe: In any font, choose Show Snippet Folder from the snippets menu: note which folder opens.
+- [ ] `Update Features` (parameter, M8, handbook): When on, all automatic feature code is regenerated, which helps while the…
+  - Observe: In F1 (Latin features), add a glyph with `.sc` after the last Update and export without pressing Update, then export again with Update Features off: read GSUB each time and note whether export regenerated smcp.
 - [ ] `fontInfo.customParameters.masterInterpolation` (behavior, M9, handbook): A custom parameter present on every master is interpolated for instances that…
   - Guess: A parameter interpolates when its value is a number, or a list of numbers of the same length, on every master; other values are taken from the origin master. Settle with a parameter that is text on one master in the reference app.
+  - Observe: In F1 (two masters), set a custom parameter to a number on Thin and to text on Black, export Regular and read the value written: note whether it was interpolated, taken from one master, or dropped.
+- [ ] `fontInfo.instance.extrapolation` (behavior, M9, handbook): An instance whose coordinates lie inside the range covered by masters is…
+  - Observe: In F1 (two masters), export ExtraBlack (1000, outside the masters) as a static font and as part of a variable font: note whether the outlines are extrapolated, any warning, and whether `fvar` lists it.
 - [ ] `fontInfo.fontType` (behavior, M9, handbook): Font Type picks the interpolation model for static instances
   - Guess: Default and Variable both use the variable-font model (fontTools' VariationModel); they agree on one axis and on full grids, and the Multiple Master model of the reference is not documented for other setups. Settle by comparing an instance of an irregular two-axis setup under both settings in the reference app (docs/plans/M9.md § 8).
+  - Observe: In F3 (irregular two axes), export the instance at (650, 60) with Font Type Default, then with Font Type Variable: compare the two outlines.
 - [ ] `font.axes.list` (M9, inferred): List Axes
   - Open (our design, not confirmed): Returns the design axes in order, each with name, tag and hidden flag.
 - [ ] `font.axes.add` (M9, handbook): Add Axis
   - Guess: A new axis is named Weight with tag wght when the font has no such axis, else a private axis `Axis N` with tag `AXSN`; settle by pressing the plus button in the reference app.
   - Guess: Existing masters, instances and virtual masters get coordinate 0 on the new axis, and intermediate layers inherit it from their master; settle in the reference app's Masters tab after adding an axis.
+  - Observe: In F1 (two masters), press the plus button beside Axes in Font Info › Font once, then a second time: note each new axis's name and tag, and the coordinate the masters and instances get on it.
 - [ ] `font.axes.remove` (M9, handbook): Remove Axis
   - Guess: Removing an axis drops its coordinate from every master, instance, virtual master, intermediate layer and alternate range; an alternate range that becomes empty on every axis stays an alternate layer `[]`. Settle in the reference app.
+  - Observe: In F2 (special layers) with a second axis added, remove that axis: note the intermediate layer's coordinates and the alternate layers' ranges afterwards.
 - [ ] `font.axes.listPredefined` (M9, inferred): List Predefined Axis Names
   - Open (our design, not confirmed): Returns the predefined axis names offered by the name field together with the tag each one sets. The chapter says such a list exists but does not enumerate it.
+  - Observe: In any font, open the list of predefined axes in Font Info › Font: write down every name and tag offered.
 - [ ] `font.master.addFromOtherFont` (M9, handbook): Add Other Font
   - Guess: Glyphs missing in the imported master get an empty layer for it; glyphs only the other font has are not added; axis coordinates come from the other font's master by axis tag, 0 for tags it lacks. Settle by adding a master from a font with different glyphs in the reference app.
+  - Observe: In F7 (two documents), choose Add Other Font on the Masters tab and pick the second document: note what happens to glyphs only one font has, and the new master's coordinates.
+- [ ] `font.instance.addForEachMaster` (M9, handbook): Add Instance for Each Master
+  - Observe: In F1 (two masters), choose Add Instance for each Master: note the names the new instances get.
+- [ ] `font.instance.toMaster` (M9, handbook): Instance as Master
+  - Observe: In F1 (two masters), select the Regular instance and choose Instance as Master: note the new master's name and position, and which instances now use it.
 - [ ] `featureCode.ifdefOtherSymbols` (behavior, M9, inferred): VARIABLE is the only symbol the handbook documents; nesting, `#else` and other…
   - Guess: Only `#ifdef VARIABLE` and `#ifndef VARIABLE` blocks are read, without nesting or `#else`; an unterminated `#ifndef VARIABLE` runs to the end of the code, as glyphsLib reads it. Settle with nested blocks in the reference app.
+  - Observe: In F1 (two masters), write a feature with `#ifdef VARIABLE` nested inside `#ifndef VARIABLE`, and one with `#else`; export a static and a variable font: read GSUB and note which branches each kept.
 - [ ] `featureCode.conditionScope` (behavior, M9, docs): A condition applies to the rules that follow it up to the…
   - Guess: The scope and coordinate rules follow glyphsLib's converter; settle with a feature holding two conditions and a bare `condition;` in the reference app.
+  - Observe: In F1 (two masters), write a `calt` feature with two `condition` lines and a bare `condition;`, export the variable font and read its FeatureVariations: note the condition sets and which rules each covers.
+- [ ] `Decompose Brace Layers` (parameter, M9, handbook): For variable-font export: components whose base glyph has intermediate (brace) layers are…
+  - Observe: In F2 (special layers), export the variable font with no Decompose Brace Layers parameter and read `glyf`: note whether `Hcomp` is a composite or contours.
 - [ ] `InterpolationWeightY` (parameter, M9, handbook): Float used to interpolate y coordinates of an instance while x coordinates…
   - Guess: Read only for fonts whose first axis is the weight axis, and applied to y coordinates of outlines, anchors and vertical metrics; settle with an instance that sets it in the reference app.
+  - Observe: In F1 (two masters), put InterpolationWeightY 600 on Regular, export and measure the horizontal strokes: note whether they are drawn as at 600.
 - [ ] `Local Interpolation` (parameter, M9, handbook): Value: one interpolation value per axis separated by semicolons, then a semicolon,…
   - Guess: The listed glyphs are interpolated at the given location with every other part of the instance unchanged, including their widths; settle with an instance that sets it in the reference app.
+  - Observe: In F1 (two masters), put Local Interpolation `700; include: o` on Regular, export and measure `o`: note whether o is drawn as at 700 while the other glyphs stay at 400.
 - [ ] `Variable Font Optimize Deltas` (parameter, M9, handbook): Described identically to Optimize Variable Deltas: on by default, drops the deltas…
   - Guess: Treated as a second name of Optimize Variable Deltas, as the appendix describes both alike; settle by setting one of them off in the reference app and comparing the exported gvar.
+  - Observe: In F1 (two masters), export the variable font with Variable Font Optimize Deltas off and on: compare the `gvar` point counts.
 - [ ] `Variation Font Origin` (parameter, M9, handbook): Described identically to Variable Font Origin: names the master stored as the…
   - Guess: Treated as an older name of Variable Font Origin naming the master by name, as glyphsLib reads it; settle in the reference app.
+  - Observe: In F1 (two masters), set Variation Font Origin naming Black and export the variable font: note whether the default outlines and the `fvar` default are Black's.
 - [ ] `autohint.tt.option.info` (behavior, M10, handbook): By default the autohinter appends its name and version to the version…
-  - Guess: With FontCraft's own TrueType autohinter (M10 § 7, question 2) the name strings are left alone unless detailed or plain info is asked for; the reference app's choice between its default and No Autohint Info would settle it.
+  - Guess: With FontCraft's own TrueType autohinter (decided in M10 § 7, question 2) the name strings are left alone unless detailed or plain info is asked for; the reference app's choice between its default and No Autohint Info would settle it.
+  - Observe: T3: export as TTF with Autohint and the default TTFAutohint options; read name ID 5 and note whether autohinter version information was added to it.
 - [ ] `TTFAutohint options` (parameter, M10, handbook): Option string for ttfautohint, edited through a dialog: hint set range, default…
   - Guess: No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form.
+  - Observe: T3: fill in the TTFAutohint options sheet on an instance and save; note how the parameter's value is stored in the .glyphs file (one string, long or short options, or a dictionary).
+- [ ] `color.preview.paletteDrivesFontView` (behavior, M11, handbook): Once the Color Palettes parameter exists, glyphs with palette layers are previewed…
+  - Observe: Palette font: look at A in Font View; note whether its cell is drawn in colour and with which palette.
 - [ ] `color.layered.toColr` (behavior, M11, handbook): Color Layers to COLR on an instance converts a layered setup into…
   - Guess: The masters with a Master Color become palette layers of one glyph in master order, the last master at the bottom and the first on top (as Edit View stacks them), each in a palette entry made from its Master Color; the fallback outline is the instance's own master. Settled by exporting the layered test font with Color Layers to COLR from the reference.
+  - Observe: Layered font: export an instance with Color Layers to COLR and read COLR and CPAL; note the paint order, the master whose outline becomes the fallback glyph, and the colours used.
+- [ ] `Color Palettes` (parameter, M11, handbook): List of colour palettes exported as the CPAL table of a COLR/CPAL…
+  - Observe: Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integers or version 4 floats).
+- [ ] `fontInfo.styleLinking.recommendedScheme` (behavior, M12, handbook): Recommended scheme, usable as a lint: Bold, Italic and Bold Italic link…
+  - Observe: Style font (instances Light, Regular, Semibold and Bold, each with an Italic): in the Exports tab link Semibold as the bold of Light; note whether the app warns, then export and read name IDs 1, 2, 16 and 17 and fsSelection of both.
 - [ ] `filter.customParameter.thirdParty` (behavior, M13, handbook): Plug-in filters define their own argument strings and are not guaranteed to…
   - Guess: FontCraft applies include and exclude itself for module filters, where the reference leaves it to each plug-in; settled by nothing in the reference, since our modules cannot see glyph lists.
   - Observe: Open that filter plug-in's dialog and, if it has a gear menu, copy its export string and paste it into a text file: compare it with the built-in filters' export strings (separator, key spelling).
 - [ ] `proof-pdf` (format, M14, inferred): PDF proof sheet
   - Open (our design, not confirmed): Vector PDF of an Edit View text, a glyph overview or a waterfall, drawn straight from the source outlines of the current master or instance so no font has to be installed. Scale follows the font's units-per-point setting; nodes, guides and annotations are included only when asked for.
 
-### Interpolation (25)
+### Interpolation (32)
 
 - [ ] `masters.originAutomaticForStatic` (behavior, M9, handbook): The origin master is a designer's choice only for variable fonts
   - Guess: Static instances use the same variation model as the variable font, anchored at the variable origin; the result does not depend on the origin for the variable model. Settle by comparing instances of an irregular two-axis setup in the reference app (docs/plans/M9.md § 8).
+  - Observe: In F3 (irregular two axes), export the instance at (650, 60) with Font Type Default, then Variable: note whether the outlines differ, which shows whether a static export picks its origin automatically.
 - [ ] `masters.metricsInterpolate` (behavior, M9, inferred): Besides outlines, per-master data must interpolate between masters: advance widths, anchors, component…
   - Open (our design, not confirmed): Besides outlines, per-master data must interpolate between masters: advance widths, anchors, component placement, vertical metrics, kerning, and stems and number values matched by name. The chapter only says an instance has outlines and metrics; the name-matching rule for stems and numbers is in the Font Info chapter, and the rest of the list is our reading of what an instance needs.
+- [ ] `variableFontSetting.disableMasters` (behavior, M9, handbook): A Disable Masters parameter on a variable font setting lists master names…
+  - Observe: In F1 (two masters), add Disable Masters naming Black on a variable font setting and export it: read `fvar` and note the axis range and named instances.
 - [ ] `compatibility.checkScope` (behavior, M9, handbook): Compatibility is tested only between masters that are both needed to interpolate…
   - Guess: Masters needed by an instance are those with a non-zero scalar at the instance's location in the variation model; variable font settings count as needing every master they do not disable. Settle by observing the indicators with an instance between two of three masters.
+  - Observe: In F1 (two masters) with a third master at 400 and only a Thin instance, give Black an incompatible glyph: note whether that glyph shows the red indicators.
 - [ ] `intermediateLayer.mustBeCompatible` (behavior, M9, inferred): An intermediate layer takes part in interpolation like a master layer for…
   - Guess: An intermediate layer is checked against every master layer of its glyph, not only its neighbours, because the variable font needs all of them compatible. Settle by observing the indicators with an incompatible intermediate layer between unrelated masters.
+  - Observe: In F2 (special layers), add an extra contour to `e`'s intermediate layer: note the compatibility indicators.
 - [ ] `alternateLayer.rangeSemantics` (behavior, M9, inferred): A range is a conjunction over axes of min ≤ value ≤…
   - Guess: Both bounds inclusive, as the oracles; the handbook does not say. Settle with an instance exactly on a bound in the reference app (docs/plans/M9.md § 8).
+  - Observe: In F2 (special layers), export instances at exactly 600 and at 599 and preview them: note which shows the alternate `dollar`.
+- [ ] `alternateLayer.variableExport` (behavior, M9, handbook): In a variable font, alternate layers are switched on by an OpenType…
+  - Observe: In F2 (special layers), export the variable font with no Feature for Feature Variations parameter and read GSUB: note the feature that holds the `dollar` swap (rvrn or rlig).
+- [ ] `variable.originMaster` (behavior, M9, handbook): A variable font stores the outlines of one origin master in full…
+  - Observe: In F4 (three named masters), export the variable font without Variable Font Origin and read `fvar`: note whether the default is Light (the first master) or Regular.
+- [ ] `stat.automaticFromInstances` (behavior, M9, handbook): By default the style attributes are derived from the instances: their names…
+  - Observe: In F6 (style names), export the variable fonts of both documents (without and with an `ital` axis), dump `STAT` and compare it with fontc's for the same sources.
 - [ ] `font.axes.reorder` (M9, inferred): Reorder Axes
   - Guess: Reordering permutes every master, instance, virtual master and special-layer coordinate list with the axes, so no location changes; settle by dragging axes in the reference app's Font Info, if it allows it.
+  - Observe: In F2 (special layers) with two axes, try to reorder the axes: note whether a drag or a button does it, and how the layer labels read afterwards.
 - [ ] `file.generateInstances` (M9, handbook): Generate Instances
   - Guess: One new document per instance, as the Several Fonts section of the handbook says (a file per instance), holding one master with the instance's outlines, metrics, kerning and features and no special layers; settle by running the command in the reference app.
+  - Observe: In F1 (two masters), choose File › Generate Instances: count the documents made and look in them for special layers, kerning and feature code.
 - [ ] `interpolation.interpolateGlyph` (M9, inferred): Interpolate Glyph at Location
   - Guess: `coordinates: external` converts the location through Axis Location and Axis Mappings first; the default is internal, as the coordinate fields of the reference take internal values.
 - [ ] `interpolation.describeDesignspace` (M9, inferred): Describe Designspace
   - Open (our design, not confirmed): Query: returns axes with internal and external ranges, masters and virtual masters with locations, the origin master, instances with an inside/extrapolated flag, mappings, and the glyphs carrying intermediate or alternate layers.
 - [ ] `interpolation.checkCompatibility` (M9, inferred): Check Master Compatibility
   - Guess: The 20° warning measures the angle of each segment's chord from its start node to its end node; settle with the Master Compatibility view on a segment that turns by 19° and 21°.
+  - Observe: In F5 (incompatible), open the glyphs whose segment turns by 19° and by 21° between masters: note the segment colours of each.
 - [ ] `glyph.setShapeOrder` (M9, inferred): Set Shape Order
   - Open (our design, not confirmed): Headless form of a drag in the Shape Order window: reorders the shapes of one layer to the given permutation of current indices. Rejects lists that are not a permutation.
 - [ ] `glyph.swapShapes` (M9, inferred): Swap Shapes
   - Guess: A drag that ends on no other line end changes nothing; settle by observing the drag in the Master Compatibility view.
+  - Observe: In F5 (incompatible), in Show Master Compatibility, drag a line end onto empty space: note what happens to the shape order.
 - [ ] `view.showMasterCompatibility` (M9, handbook): Show Master Compatibility
   - Guess: Shape tints cycle through eight theme colours by shape index; settle by observing the view with nine shapes.
+  - Observe: In F5 (incompatible), open the glyph with nine shapes and choose Show Master Compatibility: note the tint of shape 9 next to shape 1.
 - [ ] `layers.setIntermediate` (M9, handbook): Intermediate
   - Guess: Coordinates outside the axis range of the masters and virtual masters are refused with a message; settle by typing one in the reference app's popover.
+  - Observe: In F2 (special layers), type 2000 into the intermediate layer's coordinate popover: note whether it is accepted, clamped or refused.
 - [ ] `layers.clearIntermediate` (M9, inferred): Remove Intermediate Status
   - Guess: Unticking Intermediate in the layer's context menu runs this command; settle in the reference app's Layers palette.
+  - Observe: In F2 (special layers), untick Intermediate on `e`'s intermediate layer: note the layer's label afterwards.
 - [ ] `layers.setAlternate` (M9, handbook): Alternate
   - Guess: Choosing Alternate on a master layer with no `[]` partner under the same master adds no partner layer; the partner is made by hand as the handbook describes. Settle in the reference app.
+  - Observe: In F1 (two masters), choose Alternate on a master layer: note whether a `[]` layer is added by itself.
 - [ ] `layers.clearAlternate` (M9, inferred): Remove Alternate Status
   - Guess: Unticking Alternate in the layer's context menu runs this command; settle in the reference app's Layers palette.
-- [ ] `hoi.setControlPoints` (M9, inferred): Set Interpolation Control Points
-  - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
+  - Observe: In F2 (special layers), untick Alternate on a `dollar` alternate layer: note the layer's label afterwards.
 - [ ] `axisMappings.setPoint` (M9, handbook): Edit Mapping Point
   - Guess: A change that breaks the increasing order on either coordinate is refused with a message and changes nothing; settle by dragging a point past its neighbour in the reference app.
+  - Observe: In F1 (two masters) with an Axis Mappings value, drag a point past its neighbour: note whether it is stopped, refused or allowed to cross.
 - [ ] `axisMappings.nudgePoint` (M9, handbook): Nudge Mapping Point
   - Guess: The base step is 1 unit, Up and Down move the external value and Left and Right the internal value; settle in the reference app's Axis Mappings dialog.
+  - Observe: In F1 (two masters) with an Axis Mappings value, select a point in the dialog and press each arrow key without modifiers, with Shift and with Cmd: note which coordinate moves and by how much.
 - [ ] `axisMappings.convertCoordinate` (M9, inferred): Convert Axis Coordinate
   - Open (our design, not confirmed): Query: converts a coordinate between the internal and external systems using Axis Location and Axis Mappings, so agents and the CLI can address locations in either.
 - [ ] `compareFonts.useLeft` (M9, handbook): Use Left
   - Guess: For a glyph row, Use Left copies the master layer's shapes, anchors and width; the copy is one undo step in the receiving document only. Settle in the reference app's Compare Fonts window.
+  - Observe: In F7 (two documents), open Compare Fonts, select a glyph row and choose Use Left: note what changed (outline, width, anchors) and what Undo reverts in each document.
 - [ ] `compareFonts.diff` (M9, inferred): Diff Two Masters
   - Open (our design, not confirmed): Query: returns the rows the Compare Fonts window would show, as structured data, so agents and the CLI can compare masters without the window.
 - [ ] `edit.compareFamily` (M9, handbook): Compare Family…
   - Guess: Each column shows the document's first master; settle by opening Compare Family on documents with several masters.
+  - Observe: In F7 (two documents) with two masters in each document, open Compare Family: note which master is shown and the column order.
 - [ ] `compareFamily.report` (M9, inferred): Family Comparison Report
   - Open (our design, not confirmed): Query: returns the Compare Family table as data, with null for empty values and a missing marker for absent glyphs.
+- [ ] `window.shapeOrder` (panel, M9, handbook): Shape Order
+  - Observe: In F5 (incompatible), open Filter › Shape Order: note the layout, whether special layers appear, and how a drag reorders shapes.
+- [ ] `dialog.virtualMaster` (panel, M9, handbook): Virtual Master
+  - Observe: In F1 (two masters), add a Virtual Master parameter on a second axis: note the dialog's fields and buttons, and whether the parameter is also offered on a variable font setting.
+- [ ] `dialog.axisLocation` (panel, M9, handbook): Axis Location
+  - Observe: In F1 (two masters), open an Axis Location value on a master: note the dialog's layout and fields.
+- [ ] `hoi.setControlPoints` (M13, inferred): Set Interpolation Control Points
+  - Open (our design, not confirmed): Headless form of dragging a knob or handle: sets the intermediate point (one point), the two handles (two points) or the rotation centre (one point) of a node's interpolation curve.
 
-### Hinting (55)
+### Hinting (57)
 
 - [ ] `hinting.ps.standardStems.privateDictMapping` (behavior, M10, docs): At export the first horizontal stem becomes StdHW and the first vertical…
   - Guess: More than twelve stems in one direction: the export writes the first twelve in list order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with thirteen stems would settle it.
+  - Observe: T5 (13 vertical stems): export as CFF and read the Private dict; count the StemSnapV values, note which stems are left out, and note any warning in the export results.
 - [ ] `hinting.ps.alignmentZones.blueValuesMapping` (behavior, M10, docs): At export the zones are written as pairs into the Private dict:…
   - Guess: Too many zones (more than seven BlueValues pairs or five OtherBlues pairs): the export keeps the first pairs in ascending order and warns, and hint.ps.validateFontHints reports it; an export from the reference app with eight top zones would settle it.
+  - Observe: T5 (8 top zones): export as CFF and read the Private dict; count the BlueValues pairs, note which zones are left out, and note any warning in the export results.
 - [ ] `hinting.ps.blueScale` (behavior, M10, handbook): blueScale is an optional custom parameter written to the Private dict as…
-  - Guess: Absent blueScale: the export computes the value from the largest zone as ufo2ft does (FontCraft since M2), not the 0.037 the parameter description gives (M10 § 7, question 6); a reference export without the parameter would show which value it writes.
+  - Guess: As in fontmake, BlueScale, BlueFuzz and BlueShift are written only when the master has alignment zones; a reference export of a font with no zone settings would settle it.
+  - Observe: T5 (no blueScale, blueFuzz or blueShift parameter): export as CFF and read the Private dict with fontTools; note the BlueScale, BlueFuzz and BlueShift values (FontCraft writes 0.037, 1 and 7).
+  - Observe: T1 with every alignment zone removed from the master and no blue parameters: export as CFF and read the Private dict; note whether BlueScale, BlueFuzz and BlueShift are written at all, and with which values.
 - [ ] `hinting.ps.blueFuzz` (behavior, M10, docs): blueFuzz is an optional custom parameter written to the Private dict as…
-  - Guess: Absent blueFuzz: the export writes BlueFuzz 0 as ufo2ft does (FontCraft since M2), although the parameter description quotes the Type 1 default of 1 (M10 § 7, question 6); a reference export without the parameter would settle it.
+  - Observe: T5 (no blueScale, blueFuzz or blueShift parameter): export as CFF and read the Private dict with fontTools; note the BlueScale, BlueFuzz and BlueShift values (FontCraft writes 0.037, 1 and 7).
+  - Observe: T1 with every alignment zone removed from the master and no blue parameters: export as CFF and read the Private dict; note whether BlueScale, BlueFuzz and BlueShift are written at all, and with which values.
 - [ ] `hinting.ps.familyAlignmentZones` (behavior, M10, handbook): Family Alignment Zones is an optional custom parameter holding a second zone…
   - Guess: Family Alignment Zones is read from the font's custom parameters and written as FamilyBlues and FamilyOtherBlues with the same ordering rule as the master zones; an export from the reference app would confirm the split.
+  - Observe: T1: add a Family Alignment Zones parameter with one top zone and two bottom zones, export as CFF and read the Private dict; note which zones go to FamilyBlues and which to FamilyOtherBlues.
 - [ ] `hinting.ps.export.autohintParameter` (behavior, M10, handbook): An Autohint custom parameter forces the autohint setting for an export regardless…
   - Guess: The Autohint parameter is read on the instance first, then the font; when neither has it the export dialog's checkbox (default off) decides; a reference export would show whether a font-level parameter counts.
+  - Observe: T1: add the Autohint parameter to the font only (not to an instance), export as CFF with the Export dialog's Autohint off, and read the charstrings; note whether the glyphs carry hints.
 - [ ] `hinting.ps.export.hintReplacement` (behavior, M10, handbook): Stem hints of one direction may overlap in the source (the two…
   - Guess: Manual hints that overlap go through the same mask builder as autohinted ones (the port of otfautohint's hint substitution), so the masks match what the autohinter would write for those stems; the reference's masks for a hand-hinted 8 would settle it.
+  - Observe: T1: hint eight by hand on its two overlapping vertical stems, export as CFF and read its charstring; note where hintmask operators appear and which stems each mask holds.
 - [ ] `hinting.ps.flex.automatic` (behavior, M10, handbook): Flex hints flatten very shallow curves (cupped serifs, slightly tapered stems) at…
   - Guess: Flex is added to every exported glyph that qualifies, hand-hinted glyphs included, with otfautohint's flex test (the handbook's conditions plus its length ratio); an export from the reference app of a cupped serif under 20 units, hinted by hand, would settle both points.
+  - Observe: T1: set blueShift to 6, hint n.serif by hand, export as CFF and read its charstring; note whether the 5-unit cupped serifs are written with a flex operator.
 - [ ] `hinting.ps.manual.display` (behavior, M10, handbook): In Edit View a stem hint is drawn as a gray bar…
   - Guess: PostScript hints are shown and edited with the Select tool while View › Show Hints is on; whether another tool is needed would be settled in the reference app.
+  - Observe: T1: turn on View › Show Hints, open n and try to drag a hint marker with the Select tool, then with each other tool; note which tools can move or edit a hint.
 - [ ] `hinting.ps.manual.select` (behavior, M10, handbook): Clicking a hint's number badge selects the hint; Shift+click adds to or…
   - Guess: Tab after the last hint wraps to the first and Shift+Tab before the first wraps to the last; with several hints selected Tab moves on from the last selected one; trying it in the reference app would settle it.
+  - Observe: T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next.
 - [ ] `hinting.ps.manual.ghostFromSingleNode` (behavior, M10, handbook): Control-click or right-click on exactly one node and choosing Add Horizontal Hint…
   - Guess: A ghost hint made from one node is a top ghost when the node lies in a top zone or nearer to a top zone than to a bottom zone, else a bottom ghost; doing it in the reference app on a node at the cap height and one at the baseline would settle it.
+  - Observe: T1: in I, select one node at the cap height and choose Add Horizontal Hint, then do the same with one node on the baseline; note whether each new hint is a top or a bottom ghost hint.
 - [ ] `hinting.ps.masters.transferByNodeLink` (behavior, M10, handbook): For an interpolated instance, each main-master hint is rebuilt from the nodes…
   - Guess: An unlinked hint end keeps its main-master number in every master and instance, and a link whose node no longer exists in a master falls back to that number; an export of an interpolated instance with one unlinked hint would settle it.
+  - Observe: T2: export the instance halfway between masters 1 and 2 as CFF and read I; note the position of its unlinked hint (master 1's value, an interpolated value, or dropped).
 - [ ] `hinting.ps.masters.fallbackToOtherMasters` (behavior, M10, handbook): Manual hints placed on a glyph in a master other than the…
   - Guess: When the main master has no hints for a glyph and several other masters do, the first of them in master order is used; a reference export of such a glyph would settle it.
+  - Observe: T2: export the three masters as CFF and read e in the master 1 font (e has manual hints only in masters 2 and 3); note whether its hints come from master 2, from master 3, or from the autohinter.
 - [ ] `hinting.ps.cff2.sharedHintStructure` (behavior, M10, inferred): In a variable CFF2 font a glyph has one hint list and…
   - Guess: In variable CFF2 output the hints come from the main master's manual hints resolved through node links in every master, or else from the multiple-master autohinter; unlinked manual hints keep one value in every master; a variable export from the reference app would settle it.
+  - Observe: T2: export as a variable CFF2 font and read the charstrings; note whether all masters share one hint structure and what happens to I's unlinked hint.
 - [ ] `autohint.ps.inputs` (behavior, M10, docs): The reference autohinter accepts bare CFF, name-keyed and CID-keyed OTF, UFO with…
   - Guess: Identical zones are merged before the autohinter reads them: glyphsLib's mapping (and FontCraft's Private dict) keeps duplicates, which otfautohint rejects as overlapping zones (Oswald Italic, ascender equal to cap height); the export still writes the Private dict as fontmake does.
 - [ ] `hint.ps.autohintGlyph` (M10, handbook): Autohint
   - Guess: Autohint replaces any hints the layer already has and acts on every glyph selected in Edit View or Font View; the reference app would settle both.
+  - Observe: T1: give n two manual hints and choose Autohint from the context menu; note whether the old hints are replaced or kept. Then select n, m and o and choose Autohint again; note whether only one glyph or all three get hints.
 - [ ] `hint.ps.addHorizontalHint` (M10, handbook): Add Horizontal Hint
   - Guess: With no node selected the new hint sits at the vertical centre of the glyph's bounding box with the master's first horizontal stem as its size (50 units without stems); doing it in the reference app would settle it.
+  - Observe: T1: open n with nothing selected and choose Add Horizontal Hint; note where the new hint starts and how wide it is (centred on the bounding box, the first stem's width, or something else).
 - [ ] `hint.ps.addVerticalHint` (M10, handbook): Add Vertical Hint
   - Guess: With no node selected the new hint sits at the horizontal centre of the glyph's bounding box with the master's first vertical stem as its size (50 units without stems); doing it in the reference app would settle it.
+  - Observe: T1: open n with nothing selected and choose Add Vertical Hint; note where the new hint starts and how wide it is (centred on the bounding box, the first stem's width, or something else).
 - [ ] `hint.ps.makeGhostHint` (M10, handbook): Make Ghost Hint
   - Guess: Make Ghost Hint keeps the hint's origin edge and makes a top ghost when that edge is the upper one of a stem that reaches a top zone, else a bottom ghost; a ghost hint becomes a stem hint again when hint.ps.setHintValues gives it a size; the reference app would settle both.
+  - Observe: T1: in n, select the hint on the x-height stem and choose Make Ghost Hint; note whether it becomes a top or a bottom ghost. Then type a size for the ghost in the Info box and note whether it turns back into a stem hint.
 - [ ] `hint.ps.setHintValues` (M10, handbook): Set Hint Values
   - Guess: Typing a value for a linked end unlinks that end and keeps the typed number; the reference app would settle it.
+  - Observe: T1: select a hint linked to two nodes, type a new origin in the Info box, then move one of the nodes; note whether the hint follows the node (link kept) or stays at the typed value (link broken).
 - [ ] `hint.ps.attachHintToNode` (M10, inferred): Attach Hint to Node
   - Guess: Dropping a marker on a node links that end, and dragging it off onto empty space unlinks it, keeping the current number; the reference app would settle the unlinking gesture.
+  - Observe: T1: drag a linked hint marker off its node to empty space, then move that node; note whether that end of the hint is now unlinked.
 - [ ] `hint.ps.selectNextHint` (M10, handbook): Select Next Hint
   - Guess: Tab wraps from the last hint to the first; the reference app would settle it.
+  - Observe: T1: in n, select the last hint and press Tab; note whether the selection wraps to the first hint. Then select two hints and press Tab; note which hint is selected next.
 - [ ] `autohint.ps.run` (M10, docs): Autohint PostScript
   - Guess: The autohinter is a port of otfautohint with its defaults; which autohinter the reference app runs is not documented, and a reference export compared with otfautohint's output on the same font would show whether they agree.
+  - Observe: T1: export as CFF with Autohint on; export it again unhinted and run otfautohint on that file; compare the hstem and vstem lists and the hint masks glyph by glyph and note every glyph where they differ.
 - [ ] `hinting.tt.zones.name` (behavior, M10, handbook): A zone's name is free text but must be unique within the…
   - Guess: TT zones and TT stems are matched across masters by name; a master that lacks a name uses the main master's value for it; adding or renaming a zone or stem acts on every master; names must be unique and a duplicate is refused; the reference app would settle all four.
+  - Observe: T3: add a TT zone in master 1 only and note whether master 2 gets it too; give two zones the same name and note whether the duplicate name is refused.
 - [ ] `hinting.tt.param.overshootSuppressionBelowPpm` (behavior, M10, handbook): TTFOvershootSuppressionBelowPPM is a font-level custom parameter (Font Info › Font) setting a…
   - Guess: Absent TTFOvershootSuppressionBelowPPM: no size-based suppression beyond what the zones do on their own; a reference export without the parameter would settle it.
+  - Observe: T3, without a TTFOvershootSuppressionBelowPPM parameter: look at o in the Hinting Preview from 30 to 60 PPM; note the first size at which the overshoot shows.
 - [ ] `hinting.tt.param.controlValueProgram` (behavior, M10, handbook): Opening a hinted TrueType font adds three custom parameters to the masters:…
   - Guess: No corpus source holds the prep or fpgm Table Assembly parameter, so FontCraft writes and reads them in its own assembly syntax (mnemonics with bracketed flags and inline push data, as fontTools prints them); a file saved by the reference app after opening a hinted TrueType font would show its syntax, and the reader would then accept both.
+  - Observe: Open a hinted TTF that FontCraft exported from T3 and save it as .glyphs; note how the CVT Table, prep Table Assembly and fpgm Table Assembly values are stored in the file (keys, value types, layout).
 - [ ] `hinting.tt.import.glyphPrograms` (behavior, M10, inferred): The handbook describes how cvt, prep and fpgm of an opened font…
   - Guess: Imported glyph programs are kept per layer as assembly text with a fingerprint of the outline; they are written back while the outline is unchanged and the layer has no editor instructions, editor instructions win, and a changed outline drops the program with a warning; opening a hinted TTF in the reference app would settle how it stores them.
+  - Observe: Open a hinted TTF that FontCraft exported from T3 and look at a glyph with the TrueType Instructor; note how the imported program is shown. Add an instruction, export, and note whether the glyph program holds both the imported and the new instructions.
 - [ ] `hinting.tt.gasp.flagMapping` (behavior, M10, inferred): Proposed gasp records for the three ranges, to verify against a reference…
   - Guess: Without a gasp Table parameter a font with TrueType instructions gets three records: up to 8 PPM DOGRAY + SYMMETRIC_SMOOTHING, up to 20 GRIDFIT + SYMMETRIC_GRIDFIT, up to 65535 all four bits; an unhinted font gets no gasp table, as fontc and fontmake write none; an export from the reference app without the parameter would settle both.
+  - Observe: T3: export as TTF with a gasp Table parameter, without it, and an uninstructed copy without it; read each gasp table and note its ranges and flags, and whether the unhinted font gets a gasp table at all.
 - [ ] `hinting.tt.tool.gridFittedOutline` (behavior, M10, handbook): A red outline shows the previewed instance after its instructions have been…
-  - Guess: The grid-fitted outline comes from skrifa's TrueType interpreter (FreeType's v40 interpreter in Rust), not from the Windows rasterizer the handbook names (M10 § 7, question 4); comparing red outlines with the reference app at a few sizes would show the difference.
+  - Guess: The grid-fitted outline comes from skrifa's TrueType interpreter (FreeType's v40 interpreter in Rust), not from the Windows rasterizer the handbook names (decided in M10 § 7, question 4); comparing red outlines with the reference app at a few sizes would show the difference.
+  - Observe: T3: instruct n and take screenshots of the red grid-fitted outline at 12 and 16 PPM in each rendering intent; compare them with FontCraft's preview of the same font and note where the outlines differ.
 - [ ] `hinting.tt.hintOrder` (behavior, M10, handbook): Instructions run in the order in which they were added, and the…
   - Guess: Instructions cannot be reordered: the list order is creation order, and deleting and re-adding is the way to move one to the end; the reference app would show whether a reorder exists.
+  - Observe: T3: on a glyph with several instructions, look for any way (drag, menu item or key) to move an instruction earlier in the list; note whether instructions can be reordered.
 - [ ] `hinting.tt.instructions.addFromSelection` (behavior, M10, handbook): An instruction is added by selecting the nodes it should act on…
   - Guess: Dragging an instruction badge moves only the badge's drawn position, which is view state and not saved; dropping it on another node does not re-target it; the reference app would settle what the drag changes.
+  - Observe: T3: drag an instruction badge, save, reopen, and note what the drag changed and whether it was saved; then drag a badge onto another node and note whether the instruction moves to that node.
 - [ ] `hinting.tt.instructions.badgeColours` (behavior, M10, handbook): Each instruction is drawn with a clickable badge whose colour identifies its…
   - Guess: Delta badges are orange, a colour no other instruction uses; the reference app would settle it.
+  - Observe: T3: add a Delta instruction; note its badge colour and the icons of the rounding modes, next to the badges of the other instruction types.
 - [ ] `hinting.tt.snap.zoneAuto` (behavior, M10, handbook): Snap with zone Auto, in vertical mode: if the point lies inside…
   - Guess: In horizontal mode Auto ignores zones and rounds to the nearest pixel edge, since zones are vertical; the reference app would settle it.
+  - Observe: T3: in horizontal mode, Snap a node that lies vertically inside a zone, with the zone choice left at Auto; note whether the zone changes the instruction or its effect.
+- [ ] `hinting.tt.export.overlapRemovalMovesHints` (behavior, M10, handbook): When a static font is exported with Remove Overlaps, points inside overlaps…
+  - Observe: T4: instruct X on a node at the crossing and on a normal node, export a static TTF with Remove Overlaps and read X's glyph program; note which point the crossing node's instruction ends up on.
+- [ ] `hinting.tt.variable.extraNodeHintsIgnored` (behavior, M10, handbook): Variable fonts keep their overlaps, so intersection (extra) nodes do not exist…
+  - Observe: T4: instruct X on a node at the crossing and on a normal node, export a variable TTF and read X's glyph program; note whether the instruction on the crossing node is dropped.
 - [ ] `hinting.tt.variable.deltasIgnored` (behavior, M10, handbook): Delta instructions are not written into variable fonts
   - Guess: Zone and stem deltas reach a variable font only for the default master's column; per-instance Delta instructions are dropped as the handbook says; a variable export from the reference app would settle the zone and stem part.
+  - Observe: T3: give a TT zone a delta and export a variable TTF; note whether the delta survives anywhere in prep or the glyph programs.
 - [ ] `hinting.tt.variable.cvar` (behavior, M10, inferred): In a variable TrueType export the glyph programs come once from the…
   - Guess: Per-master zones and stems reach a variable font as cvt values of the default master plus cvar deltas; a variable export from the reference app would settle it.
+  - Observe: T3: give a TT zone a delta and export a variable TTF; note whether a cvar table is written and which cvt entries it varies.
 - [ ] `hinting.tt.export.generatedPrograms` (behavior, M10, inferred): For manually instructed fonts the exporter generates the supporting tables itself: cvt…
   - Guess: The fpgm, prep and cvt layout is FontCraft's own, written from the TrueType instruction set specification; byte parity with the reference app is not a goal and nothing from its output is copied.
 - [ ] `hinting.tt.export.instanceValues` (behavior, M10, handbook): For a static instance, TT zone positions and sizes, stem sizes and…
   - Guess: Composite glyphs get no glyph program of their own: their components' programs apply; Alternate and Intermediate layers that replace the main master's layer carry their own instructions, as the PostScript chapter says for hints; a reference export would settle both.
+  - Observe: T3: instruct A, export as TTF and read Aacute in glyf; note whether the composite has instructions of its own.
+  - Observe: T3: add an Alternate layer for master 1 of n with instructions of its own, export as TTF and read n's glyph program; note which layer's instructions were used.
 - [ ] `autohint.tt.run` (M10, inferred): Autohint TrueType
-  - Guess: The built-in TrueType autohinter is FontCraft's own (M10 § 7, question 2): Snap and Stem instructions from the PostScript autohinter's zone and stem analysis, compiled with the manual-instruction compiler; ttfautohint runs instead when the TTFAutohint binary path parameter names one; the reference app's built-in autohinter is ttfautohint.
+  - Guess: The built-in TrueType autohinter is FontCraft's own (decided in M10 § 7, question 2): Snap and Stem instructions from the PostScript autohinter's zone and stem analysis, compiled with the manual-instruction compiler; ttfautohint runs instead when the TTFAutohint binary path parameter names one; the reference app's built-in autohinter is ttfautohint.
 - [ ] `hint.tt.getPsZones` (M10, handbook): Get PS zones
   - Guess: Get PS zones replaces the TT zone list with the master's alignment zones, named after their metrics (xHeight for the x-height metric so that it gets the x-height rounding, else the metric's name, else zone1, zone2…); the reference app would settle replace or append and the names.
+  - Observe: T3: on a master that already has two TT zones, choose Get PS zones; note whether the existing zones are replaced or kept, and which names the new zones get.
 - [ ] `hint.tt.removeZone` (M10, handbook): Remove Zone
   - Guess: Snap instructions that name a removed zone fall back to Auto, and zones aligned to it lose their alignment; a rename updates both; the reference app would settle it.
+  - Observe: T3: remove a TT zone that a Snap instruction names; note what the instruction shows afterwards (Auto, another zone, or an error).
 - [ ] `hint.tt.setZone` (M10, inferred): Edit Zone
   - Guess: One command edits any property of a TT zone, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all.
 - [ ] `hint.tt.getPsStems` (M10, handbook): Get PS stems
   - Guess: Get PS stems replaces the TT stem list, keeping the stems' names; the reference app would settle replace or append.
+  - Observe: T3: on a master that already has TT stems, choose Get PS stems; note whether the existing stems are replaced or kept, and which names the new stems get.
 - [ ] `hint.tt.removeStemDefinition` (M10, handbook): Remove Stem
   - Guess: Stem instructions that name a removed stem fall back to Auto; a rename updates them; the reference app would settle it.
+  - Observe: T3: remove a TT stem that a Stem instruction names; note what the instruction shows afterwards (Auto, another stem, or an error).
 - [ ] `hint.tt.setStemDefinition` (M10, inferred): Edit Stem
   - Guess: One command edits any property of a TT stem, as the sheet's row does, and refuses deltas and filters outside the main master; the reference app's sheet would settle whether other masters show those buttons at all.
 - [ ] `hint.tt.setRenderingIntent` (M10, inferred): Set Rendering Intent
   - Guess: The rendering intent is a pop-up in the TrueType Instructor's Info box beside the pixel size; Grayscale maps to skrifa's smooth normal target, ClearType to its LCD target with the backward-compatible interpreter, DirectWrite to LCD with symmetric rendering; the reference app would settle the control and the comparison of outlines.
+  - Observe: T3: with the TrueType Instructor active, look for the Grayscale, ClearType and DirectWrite choice; note where it is (Info box, toolbar or menu) and what kind of control it is.
 - [ ] `hint.tt.setPixelSize` (M10, handbook): Set Preview Pixel Size
   - Guess: The pixel size field accepts whole numbers from 4 to 400 PPM; the reference app would settle the limits.
+  - Observe: T3: type 2, then 500, into the TrueType Instructor's pixel size field; note the smallest and the largest value it accepts.
 - [ ] `hint.tt.showPreviewAddress` (M10, handbook): Show Preview Address…
-  - Guess: The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (M10 § 7, question 5); the reference app would settle lifetime and port.
+  - Guess: The server listens on a free port of the local network interfaces, serves only the preview page and the font, and stops when the dialog closes (decided in M10 § 7, question 5); the reference app would settle lifetime and port.
+  - Observe: T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.
 - [ ] `hint.tt.deleteInstructions` (M10, inferred): Delete Instructions
   - Guess: The Delete key removes the selected instructions, as for PostScript hints; the reference app would settle it.
+  - Observe: T3: with the TrueType Instructor, select an instruction badge and press Delete; note whether the instruction is removed.
 - [ ] `hint.tt.addStemHint` (M10, handbook): Stem
   - Guess: The context-menu label of the Stem instruction is Stem, as the key list names it; the reference app would settle it.
+  - Observe: T3: with the TrueType Instructor, select two nodes and right-click; note the exact label of the item that adds a stem instruction.
 - [ ] `hint.tt.makeTripleHint` (M10, handbook): Make Triple Hint
   - Guess: Deleting or reversing one member of a triple hint dissolves the group and the other two become plain Stem instructions; the reference app would settle it.
+  - Observe: T3: make a triple hint, delete one of its members and note whether the group dissolves; make it again, reverse one member and note whether the group dissolves.
 - [ ] `dialog.ttDeltas` (panel, M10, handbook): Delta table
   - Guess: The table has one row per PPM from 8 to 80, the waterfall's range; its columns are the masters for zone and stem deltas and the static instances for Delta instructions; the reference app would settle both.
+  - Observe: T3: open the Delta table of a zone and of a Delta instruction; note which PPM rows it offers and whether its columns are masters or instances.
 - [ ] `preview.ttHintingWaterfall` (panel, M10, handbook): Hinting Preview
   - Guess: Each waterfall row is one PPM from 8 to 80 with the tab's text set in the current instance at that size; the reference app would settle spacing and labels.
+  - Observe: T3: open the Hinting Preview and switch through each scale; note the row labels and the spacing between rows.
 - [ ] `dialog.ttPreviewAddress` (panel, M10, handbook): Preview Address
   - Guess: Closing the dialog stops the server; the reference app would settle it.
+  - Observe: T3: choose Show Preview Address…, open the address from another device on the same network, close the dialog, then quit the app; note the port, whether the page was reachable, and at which of these moments the server stopped.
 - [ ] `trueTypeInstructor` (tool, M10, handbook): TrueType Instructor
   - Guess: The tool sits after the Measurement tool in the toolbar and node selection works as with the Select tool (click, Shift+click, rubber band, Select All on the layer); the custom-parameter descriptions give its shortcut as I; the reference app would settle the rest.
+  - Observe: T3: find the TrueType Instructor in the toolbar and note its position and shortcut; select nodes by rubber band, by Shift+click and with Select All, and note which of these gestures work.
 - [ ] `dialog.stemHistogram` (panel, M13, memory): Stem Histogram
   - Open (recalled, not confirmed): Charts the distribution returned by the stem report (autohint.ps.reportStems) so standard stems and alignment zones can be picked from its peaks and written to Font Info in one step. The pages read confirm the three histogram kinds; the chart controls listed are recalled.
 
-### Colour fonts (29)
+### Colour fonts (39)
 
 - [ ] `color.fourKinds` (behavior, M11, handbook): Four colour workflows are supported: layered fonts (one font file per colour),…
   - Guess: A glyph may mix kinds: its palette and full-colour layers feed COLR, its iColor layers sbix and its svg layer the SVG table, each written by its own rule; an svg layer wins over a conversion by Color Layers to SVG for that glyph. Settled by exporting a glyph with a palette layer and an svg layer from the reference.
+  - Observe: Palette font: give a glyph both a palette layer and an svg layer, export, and note which colour tables are written and which one carries that glyph.
 - [ ] `color.preview.editViewOtherGlyphs` (behavior, M11, handbook): In Edit View, when the layer selected in the current glyph is…
   - Guess: Other glyphs are drawn with the colour layers of the current master, in palette 0. Settled by selecting a colour layer in a tab of several colour glyphs in the reference.
+  - Observe: Palette font: select a palette layer of A and type AB in the Edit View tab; note whether B is drawn in colour and with which palette.
+- [ ] `color.layered.masterColor` (behavior, M11, handbook): The Master Color parameter on a master sets the colour its filled…
+  - Observe: Layered font: show all masters in Edit View; note whether each master is drawn in its Master Color with its opacity, and whether Master Color Dark is used in dark appearance.
+- [ ] `color.layered.stackingOrder` (behavior, M11, handbook): When several masters are shown together, their order in Font Info ›…
+  - Observe: Layered font: show all masters in Edit View; note which master is drawn on top.
 - [ ] `color.layered.toSvg` (behavior, M11, handbook): An extra instance with both Color Layers to SVG and Export SVG…
   - Guess: The SVG document stacks the masters as Color Layers to COLR does, each filled with its Master Color, opacity included. Settled by exporting the layered test font with Color Layers to SVG from the reference.
+  - Observe: Layered font: export an instance with Color Layers to SVG and read the SVG table; note the paint order, the master whose outline becomes the fallback glyph, and the colours used.
+- [ ] `color.palette.editorIsTransactional` (behavior, M11, handbook): Changes in the palette editor take effect only on OK; Cancel throws…
+  - Observe: Palette font: make several edits in the Color Palettes editor and press Cancel; note whether the palettes are unchanged and whether anything appears in Undo.
 - [ ] `color.export.colrFromPaletteLayers` (behavior, M11, handbook): If glyphs have Color Palette layers, export writes CPAL and COLR: each…
   - Guess: The first palette layer in the file paints at the bottom, as both oracles write it. Settled by exporting the palette test font from the reference and comparing its layer records with the Layers palette order.
+  - Observe: Palette font: export the default instance and read it with fontTools; note the COLR version, the layer record order against the Layers palette order, the layer glyph names, whether B's layer shares A's layer glyph, and the CPAL version, labels and types.
 - [ ] `color.export.colorPaletteForCpal` (behavior, M11, handbook): Color Palette for CPAL on an instance holds a palette number (0-based)…
   - Guess: Every palette is written, with the chosen palette moved to position 0, so the font keeps its alternatives and renders the chosen one by default. Settled by exporting the palette test font with Color Palette for CPAL = 1 from the reference.
+  - Observe: Palette font: export an instance with Color Palette for CPAL set to 1 and read CPAL; note whether one palette or both are written, and in which order.
 - [ ] `color.fullColor.defaultGrayFill` (behavior, M11, handbook): Paths on a full-colour layer are drawn and edited with the normal…
   - Guess: The gray is 50 % gray, opaque (#808080FF), written to the path's fill colour when the path is made. Settled by reading the colour picker of a new shape in the reference.
+  - Observe: Full-colour font: draw a rectangle on a Color layer; read its fill in the colour picker and note the exact gray value.
+- [ ] `color.fullColor.gradientTypes` (behavior, M11, handbook): The chapter describes two gradient types, linear and radial, each with at…
+  - Observe: Full-colour font: look in the Attributes inspector for conic gradients and for extend modes (pad, repeat, reflect); note whether any UI offers them.
 - [ ] `color.export.fullColorToSvg` (behavior, M11, handbook): With Color Layers to SVG checked on an instance, the paths of…
   - Guess: One uncompressed SVG document per glyph whose group has the id `glyph<ID>` and a transform that flips y at the baseline; centred strokes are SVG strokes, inside and outside strokes are expanded to outlines. Settled by exporting the full-colour test font with Color Layers to SVG from the reference and reading the documents.
+  - Observe: Full-colour font: export an instance with Color Layers to SVG and read the SVG table; note whether there is one document per glyph or grouped documents, whether they are compressed, the transform and viewBox, and whether strokes are written as strokes or outlines.
 - [ ] `color.sbix.bitmapFormats` (behavior, M11, handbook): sbix glyphs are made from bitmap files, not vectors
   - Guess: PNG and JPEG data are stored as read, with the graphic types `png ` and `jpg `; TIFF is converted to PNG. Settled by exporting the sbix test font from the reference and reading the graphic types.
+  - Observe: sbix font: export and read sbix with fontTools; note the strikes and the graphic type tags written for the JPEG and the TIFF image.
 - [ ] `color.sbix.sameAspectRatio` (behavior, M11, handbook): All sizes of one glyph's image must have the same width-to-height ratio;…
   - Guess: Unequal ratios are exported as they are, with a warning from export and from `color.describeExport`. Settled by exporting the non-square image in the sbix test font from the reference.
+  - Observe: sbix font: export and read sbix; note what happens to the non-square PNG (written, scaled, refused) and any message.
+- [ ] `color.sbix.masterLayerBounds` (behavior, M11, handbook): The master layer of an sbix glyph has no real outline, but…
+  - Observe: sbix font: drop E 64.png on the iColor 64 layer of E; note whether the image is fitted to the box of the corner paths at (50, -100) and (550, 700).
+- [ ] `color.sbix.sizeScalesImage` (behavior, M11, handbook): The image on an iColor layer is drawn at image pixels divided…
+  - Observe: sbix font: double-click an iColor layer entry and type 256; note whether the image is drawn half as large as at 128.
 - [ ] `color.layers.widthFollowsMaster` (behavior, M11, handbook): iColor and svg layers have no advance width of their own: a…
   - Guess: Palette and full-colour layers follow the master's width as iColor and svg layers do. Settled by changing a master width in the reference with a palette layer present.
+  - Observe: sbix font and SVG font: change the master layer's width; note the width of every iColor and svg layer of that glyph afterwards.
 - [ ] `color.export.sbixAutomatic` (behavior, M11, handbook): An sbix table is written automatically whenever the font contains iColor layers:…
   - Guess: A glyph whose image file is missing at export is left out of that strike, with a warning naming the glyph and the file. Settled by exporting the sbix test font from the reference with one file moved away.
+  - Observe: sbix font: export with no colour parameters and read the result; note whether sbix is written, the origin offsets, and what happens to a glyph whose image file is missing.
 - [ ] `color.export.sbixToSvg` (behavior, M11, handbook): SBIX to SVG on an instance takes a pixel size and additionally…
   - Guess: Each bitmap becomes an `<image>` element with embedded PNG data, placed where the image sits on its iColor layer. Settled by exporting the sbix test font with SBIX to SVG from the reference.
+  - Observe: sbix font: export an instance with SBIX to SVG set to 100 and read the SVG table; note how each document places its <image> element (position, size, transform).
+- [ ] `color.export.sbixToSvgSizeChoice` (behavior, M11, handbook): For SBIX to SVG the layer is chosen per glyph: the iColor…
+  - Observe: sbix font: export an instance with SBIX to SVG set to 100 and read the SVG table; note which iColor size each glyph uses.
 - [ ] `color.svg.imageTransform` (behavior, M11, handbook): The SVG on an svg layer is positioned and scaled like any…
   - Guess: The placed SVG's transform is written as a group transform inside the glyph's document, combined with the y flip at the baseline; the SVG's own content is kept as usvg normalises it. Settled by exporting the SVG test font with a moved and scaled svg layer from the reference.
+  - Observe: SVG font: move and scale the svg layer's image, export and read F's SVG document; note how the placement appears in the document.
 - [ ] `color.export.exportSvgTable` (behavior, M11, handbook): Export SVG Table controls whether SVG data is included in an instance
   - Guess: The SVG table is written whenever svg layers exist or a conversion asks for it, without Export SVG Table, as the appendix says; the parameter set off removes it. Settled by exporting the SVG test font from the reference with no parameters.
+  - Observe: SVG font: export with no colour parameters; note whether an SVG table is written.
 - [ ] `colorPalette.addColor` (M11, handbook): Add Color
   - Guess: A new row is opaque black (#000000FF) in every palette unless `color` or `colors` is given. Settled by pressing plus in the reference's palette editor.
+  - Observe: Palette font: in Font Info › Font, open the Color Palettes editor and press plus; note the colour of the new row in each of the two palettes.
 - [ ] `colorPalette.removeColor` (M11, handbook): Remove Color
   - Guess: Removing a row renumbers the layers that use higher rows and refuses while a layer uses the row. Settled by removing a used row in the reference's editor and reading the layers afterwards.
+  - Observe: Palette font: in the Color Palettes editor remove row 1, which a palette layer of A uses, and press OK; note whether A's layers are renumbered, left pointing at the old index, or the removal is refused.
 - [ ] `colorPalette.addPalette` (M11, handbook): Add Palette
   - Guess: A new palette is a copy of palette 0 (`copyFrom` defaults to 0). Settled by Add Palette in the reference's editor.
+  - Observe: Palette font: in the Color Palettes editor choose Add Palette from the gear menu; note the new palette's colours (a copy of palette 0, all black, or empty).
 - [ ] `colorPalette.removePalette` (M11, handbook): Remove Palette
   - Guess: The last remaining palette cannot be removed; the command is refused. Settled by removing every palette in the reference's editor.
+  - Observe: Palette font: in the Color Palettes editor remove every palette but one, then try to remove the last palette and its last colour; note whether either can be removed.
 - [ ] `layer.convertToColorPalette` (M11, handbook): Color Palette
   - Guess: Without `index` the layer gets colour index 0. Settled by choosing Color Palette on a new layer in the reference.
   - Guess: A master layer cannot become a colour layer, and converting a colour layer to another kind replaces its kind. Settled by the Layers palette context menu on a master layer and on a colour layer.
+  - Observe: Palette font: add a layer, choose Color Palette from its context menu, then another colour kind; note whether the later kind replaces the Color Palette kind or the choice is refused.
 - [ ] `layer.convertToIColor` (M11, handbook): iColor
   - Guess: Without `size` a new iColor layer gets 128 pixels per em. Settled by the label of a new iColor layer in the reference.
+  - Observe: sbix font: add a new iColor layer; note the default size shown in its label.
+- [ ] `layer.setIColorSize` (M11, handbook): Set iColor Size
+  - Observe: sbix font: double-click an iColor layer entry and type 256; note the new label and whether the image is drawn half as large as at 128.
 - [ ] `layer.setSvgImage` (M11, handbook): Set SVG Image
   - Guess: The SVG's viewBox is placed with its bottom-left corner at the layer origin, one SVG user unit per font unit, y pointing up. Settled by dropping an SVG file on an svg layer in the reference.
+  - Observe: SVG font: drop F.svg on the svg layer of F; note where the viewBox lands and at which scale.
+- [ ] `layer.convertToColor` (M11, handbook): Color
+  - Observe: Palette font: open the context menu of a master layer in the Layers palette; note whether the colour layer kinds are offered for it.
 - [ ] `attributes.addAttribute` (M11, handbook): Add Attribute
   - Guess: Shadow and Inner Shadow have blur, offset and colour fields, as the file format stores them; Pattern Image has an image reference. Settled by adding each in the reference's inspector.
+  - Observe: Full-colour font: add Shadow, Inner Shadow and Pattern Image to a path; note the controls each one shows.
 - [ ] `attributes.setStrokeWidth` (M11, handbook): Set Stroke Width
   - Guess: A stroke added to a path without one is opaque black. Settled by entering a stroke width in the reference's Attributes inspector.
+  - Observe: Full-colour font: give a path a stroke width in the Attributes inspector; note the default stroke colour.
 - [ ] `attributes.setStrokeAlignment` (M11, handbook): Set Stroke Alignment
   - Guess: The left button is inside and the right button outside, for paths in the usual direction. Settled by choosing each in the reference and reading `strokePos` in the saved file.
+  - Observe: Full-colour font: on a counter-clockwise path with a stroke, choose left, then right stroke alignment; note which side the stroke moves to and the strokePos value saved in the file.
 - [ ] `attributes.removeGradient` (M11, inferred): Remove Gradient
   - Guess: The Gradient row has a minus button, like the Stroke and Fill rows, that removes the gradient. Settled by looking at the Gradient row of the reference's Attributes inspector.
+  - Observe: Full-colour font: on a path with a gradient, look for a way to remove the gradient (a minus button or another control); note what it is.
 - [ ] `attributes.addGradient` (M11, handbook): Add Gradient
   - Guess: A new gradient is linear, from the path's fill colour at offset 0 to the same colour fully transparent at offset 1, running from the left middle to the right middle of the path's bounds. Settled by adding a gradient in the reference.
   - Guess: Conic gradients and the extend mode, which the version 4 file format has and the handbook does not describe, are accepted as parameters; the inspector shows only linear and radial. Settled by looking for them in the reference's inspector.
+  - Observe: Full-colour font: add a gradient to a path; note its type, its stop colours and its start and end positions.
 - [ ] `attributes.addGradientStop` (M11, handbook): Add Gradient Stop
   - Guess: A new stop takes the colour of the gradient at its offset. Settled by clicking the gradient bar in the reference.
+  - Observe: Full-colour font: click the gradient bar between two stops; note the colour of the new stop.
 - [ ] `attributes.setGradientStopColor` (M11, handbook): Set Gradient Stop Color
   - Guess: A stop can be moved along the bar, which `offset` does. Settled by dragging a stop knob sideways in the reference.
+  - Observe: Full-colour font: drag a stop knob along the gradient bar; note whether the stop moves and how its offset changes.
+- [ ] `palette.layers.colorLayerEntry` (panel, M11, handbook): Color layer entries in the Layers palette
+  - Observe: Palette font: add a layer to a glyph and choose each colour kind from its context menu in turn; note the entry's label, indent, bold text and swatch or size, and whether a later kind replaces the earlier one.
 - [ ] `palette.layers.paletteColorChooser` (panel, M11, handbook): Palette color chooser
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
+  - Observe: Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists.
 
 ### Files: open, import, export (11)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment or a path of more than 32 segments is refused for that instance with a message, and the report names every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
+  - Observe: In font C (m7-export), export with Export Folder `../trial`, then `/tmp/x`: note where the files go.
 - [ ] `file.newProject` (M7, handbook): New Project
   - Guess: A new project is saved as a native FontCraft project file (`.fontcraftproject`, JSON: the linked font's path relative to the project, the instances in the native format, the export destination); reading and writing `.glyphsproject` waits for a sample file from the reference app.
+  - Observe: Choose File › New Project, link font B (m7-two) and save: keep the `.glyphsproject` file and hand it over (our own font, so it may be read); it is the sample the project reader and writer wait for.
 - [ ] `project.linkFont` (M7, handbook): Choose
   - Guess: The link is stored relative to the project file when both share a folder tree, else absolute; linking copies the font's instances into the project only when the project has none; saving a project in the reference app settles the path form.
+  - Observe: Choose File › New Project, link font B (m7-two) and save: note in the saved file whether the link is a relative or an absolute path.
 - [ ] `project.addInstance` (M7, handbook): Add Instance
   - Guess: A new project instance has the defaults of font.instance.add; a variable font setting waits for M9 and is refused until then.
 - [ ] `project.duplicateInstances` (M7, handbook): Duplicate Instances
   - Guess: A duplicate keeps the original's name and goes right after it unless `to` is given.
-- [ ] `cff2.export` (format, M9, docs): Variable OpenType, CFF2 outlines (export)
-  - Guess: Offered from the command line and `file.exportVariable {flavour: cff2}` only; the Export dialog's Variable tab stays TrueType, as the reference app offers. Settle by the owner's answer to docs/plans/M9.md § 7, question 8.
+- [ ] `open.reconstructsFeatures` (behavior, M8, handbook): OpenType layout from a compiled font is turned back into feature code…
+  - Observe: Open a compiled OTF exported from F1 (Latin features) with a lookup used by two features and contextual kerning: note whether a prefix named Prefix holds the shared lookup, and what happens to the contextual kerning.
+- [ ] `file.importFeatures` (M8, handbook): Features…
+  - Observe: In F1 (Latin features), import a `.fea` file whose class and feature names already exist in the font: note how each clash is resolved.
 - [ ] `color.export.fullColorToColrV1` (behavior, M11, docs): Full-colour layers are compiled to COLR version 1 when any of them…
   - Guess: A full-colour Color layer exports as COLR version 1 without any parameter, as both oracles do; the handbook names only SVG for these layers. Settled by exporting the full-colour test font from the reference with no parameters.
+  - Observe: Full-colour font: export with no colour parameters and read it with fontTools; note whether COLR version 1, an SVG table or neither is written.
 - [ ] `color.export.colrVersionChoice` (behavior, M11, docs): The compiler writes COLR version 0 when every colour glyph is a…
   - Guess: Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.
+  - Observe: Full-colour font with the gradient and stroke paths deleted (solid fills only): export and read COLR; note whether it is version 0 or version 1.
 - [ ] `glyphsproject` (format, M13, handbook): Glyphs project
   - Observe: Make a Project from the instances test font (two masters, three instances, one with a custom parameter), set an export destination, save it, and send back the `.glyphsproject` file: its keys show where the instances, the link to the source and the destination are stored.
-- [ ] `vfj` (format, M13, memory): FontLab JSON source
-  - Open (recalled, not confirmed): The JSON flavour of FontLab's native source. FontLab's own help pages only call it a human-readable JSON file and link to no schema, and we found no public key-by-key description, so import is planned for the self-evident core only (masters, glyph layers with contours and components, anchors, kerning, classes, features) and everything else is reported as skipped.
 - [ ] `glyph.exportArtwork` (M13, docs): Export Artwork…
   - Guess: SVG uses the io-svg writer, PNG the render crate and PDF a minimal writer of our own; FontLab's options beyond the three formats are not followed.
 
@@ -2022,7 +2370,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `settings.listShortcuts` (M14, inferred): List Shortcuts
   - Open (our design, not confirmed): Read-only query returning each action with its section, default shortcut and current shortcut. Proposed for agents; equals the content of the list.
 
-### Scripts, plug-ins and URLs (68)
+### Scripts, plug-ins and URLs (60)
 
 - [ ] `app.launchWithoutPlugins` (behavior, M13, handbook): Holding Option and Shift while the application starts launches it with every…
   - Observe: Hold Option and Shift while launching: note any dialog or message, and whether plug-ins can be turned back on without relaunching.
@@ -2060,8 +2408,6 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Opens each listed file unless it is already open and adds a new Edit tab to it containing the listed glyph layers in order. Proposed target of `fontcraft://show/`.
 - [ ] `extensions.twoFamilies` (behavior, M13, inferred): The reference is extended by scripts (run on demand from a menu)…
   - Open (our design, not confirmed): The reference is extended by scripts (run on demand from a menu) and plug-ins (loaded at launch, adding menu entries, drawing, tools, palettes or formats); many are free through the Plugin Manager, others are sold elsewhere, and users can write their own. FontCraft: two layers replace both: the command registry driven from outside (CLI, JSON control channel, MCP) for automation, and sandboxed WebAssembly modules for code that must run inside the app.
-- [ ] `extensions.pythonBased` (behavior, M13, inferred): In the reference every script and the majority of plug-ins are Python,…
-  - Open (our design, not confirmed): In the reference every script and the majority of plug-ins are Python, so a working Python must be chosen in Settings › Addons before they run. FontCraft: no interpreter is embedded; automation is written in any language against the command surfaces and in-app extensions are compiled to WebAssembly, so there is nothing to configure.
 - [ ] `pluginManager.relaunchForPluginsAndModules` (behavior, M13, inferred): A plug-in or module installed during a session is usable only once…
   - Open (our design, not confirmed): A plug-in or module installed during a session is usable only once the app has been relaunched. FontCraft: modules are loaded and unloaded while the app runs, so installing never needs a relaunch; a module is compiled when installed and instantiated fresh for each run.
 - [ ] `pluginManager.scriptsLoadWithoutRelaunch` (behavior, M13, inferred): Newly installed scripts appear without relaunching once the Script menu is reloaded…
@@ -2072,9 +2418,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `pluginManager.repositories` (behavior, M13, inferred): The catalogue is the main public repository plus any alternate repositories entered…
   - Guess: When two indexes list the same id, the index listed first in the settings wins; the reference does not say how it merges entries.
 - [ ] `pluginManager.submission` (behavior, M13, inferred): New entries reach the main catalogue through a pull request on the…
-  - Open (our design, not confirmed): New entries reach the main catalogue through a pull request on the public plug-in repository or by contacting the vendor. FontCraft: an index is a JSON file anyone can host; whether a public main index exists, and how entries reach it, is the owner's answer to docs/plans/M13.md § 7 question 5.
-- [ ] `extensions.modules` (behavior, M13, inferred): Modules are shared libraries (Python itself and Python packages) that some scripts…
-  - Open (our design, not confirmed): Modules are shared libraries (Python itself and Python packages) that some scripts and plug-ins depend on; they are installed from the Modules tab of the Plugin Manager and need a relaunch. FontCraft: no equivalent, because there is no embedded Python and each WebAssembly module is self-contained; shared functionality is exposed as commands instead.
+  - Open (our design, not confirmed): New entries reach the main catalogue through a pull request on the public plug-in repository or by contacting the vendor. FontCraft: an index is a JSON file anyone can host, as a local file or over HTTPS; there is no public main index (docs/plans/M13.md § 7 question 5), so entries reach users through the indexes their vendors publish.
 - [ ] `script.scope` (behavior, M13, inferred): Scripts are Python files that can automate every part of the app…
   - Open (our design, not confirmed): Scripts are Python files that can automate every part of the app through its Python API. FontCraft: everything a script could do is a command, so a script is either a macro (a stored list of command invocations with parameters, the same file as an action set) or an external program in any language calling the CLI, control channel or MCP server.
 - [ ] `script.menu.mirrorsFolder` (behavior, M13, inferred): The Script menu is a picture of the Scripts folder: one item…
@@ -2104,16 +2448,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): Filter plug-ins (.glyphsFilter) process glyph layers and are listed in the Filter menu (and usable as export-time filter parameters). FontCraft: a filter module receives one layer as JSON with its parameters and returns the layer's new paths, components and anchors; plugin.runFilter calls it once per target layer and applies all results as one undo step. Installed filters are listed in the Filter menu and can be named in the Filter export parameter.
 - [ ] `plugin.kind.palette` (behavior, M13, inferred): Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette,…
   - Open (our design, not confirmed): Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar (Window › Palette, Cmd+Shift+P). FontCraft: no module kind runs interface code; a filter module that declares parameters can be shown as a Palette section holding its parameter form and an Apply button, drawn by the app.
-- [ ] `plugin.kind.fileFormat` (behavior, M13, inferred): File Format plug-ins (.glyphsFileFormat) add formats to open and export
-  - Open (our design, not confirmed): File Format plug-ins (.glyphsFileFormat) add formats to open and export. FontCraft: not a module kind at first; formats are built in, and other formats are handled by external converters calling the CLI. Import/export modules may follow once the module interface is stable.
-- [ ] `plugin.kind.tool` (behavior, M13, inferred): Tool plug-ins (.glyphsTool) add tools to the toolbar that extend Edit View
-  - Open (our design, not confirmed): Tool plug-ins (.glyphsTool) add tools to the toolbar that extend Edit View. FontCraft: not supported as modules, since a pointer tool needs event handling and UI access the sandbox does not grant; new tools are contributed to the app itself.
-- [ ] `plugin.kind.general` (behavior, M13, inferred): General plug-ins (.glyphsPlugin) cover anything the other five types do not
-  - Open (our design, not confirmed): General plug-ins (.glyphsPlugin) cover anything the other five types do not. FontCraft: no catch-all kind; such needs are met by macros, by external programs on the control channel or MCP, or by proposing a new narrowly scoped module kind.
 - [ ] `plugin.loadedAtLaunch` (behavior, M13, inferred): Plug-ins are loaded once when the app starts, hence the relaunch after…
   - Open (our design, not confirmed): Plug-ins are loaded once when the app starts, hence the relaunch after installing. FontCraft: modules in the modules folder are validated and compiled at launch and whenever the folder changes; each run uses a fresh instance, so nothing needs a relaunch.
-- [ ] `plugin.requiresModules` (behavior, M13, inferred): A plug-in may depend on modules that have to be installed separately…
-  - Open (our design, not confirmed): A plug-in may depend on modules that have to be installed separately from the Modules tab. FontCraft: a module is a single self-contained .wasm file with a manifest; nothing else needs installing.
 - [ ] `plugin.pluginsFolder` (behavior, M13, inferred): Installed plug-ins live in a Plugins folder that sits beside the Scripts…
   - Guess: The folders are `Macros` and `Modules` in the per-user application data folder; the reference's folder names and location are not given in the handbook (open question).
 - [ ] `plugin.noManualMove` (behavior, M13, inferred): Plug-ins must not be copied into the Plugins folder by hand because…
@@ -2125,12 +2461,8 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Open (our design, not confirmed): The open-source Glyphs SDK supplies plug-in templates in two languages, Python and Objective-C, and plug-ins start from those. FontCraft: a module template in Rust for each module kind (filter, reporter, check) and the ABI documentation, so any language that compiles to WebAssembly can be used.
 - [ ] `api.python` (behavior, M13, inferred): A documented Python API exposes the application and its font objects to…
   - Open (our design, not confirmed): A documented Python API exposes the application and its font objects to scripts and plug-ins; the chapter refers to that documentation rather than listing the API. FontCraft: the API is the command registry, documented from the same metadata (id, label, parameters, result) for the CLI, the control channel, MCP and macros; modules see the layer JSON of the native format.
-- [ ] `api.objectiveC` (behavior, M13, inferred): A documented Objective-C API serves compiled plug-ins
-  - Open (our design, not confirmed): A documented Objective-C API serves compiled plug-ins. FontCraft: the native counterpart is the module ABI, a small versioned interface that passes layer data and parameters into the sandbox and results back.
 - [ ] `api.externalInterop` (behavior, M13, inferred): The SDK also provides ways for a separate application to work with…
   - Open (our design, not confirmed): The SDK also provides ways for a separate application to work with the running app. FontCraft: this is the primary model: the JSON control channel and the MCP server expose every command to other processes, with the same parameters as the UI.
-- [ ] `api.openScriptingArchitecture` (behavior, M13, inferred): The reference additionally answers the system's Open Scripting Architecture, so AppleScript or…
-  - Open (our design, not confirmed): The reference additionally answers the system's Open Scripting Architecture, so AppleScript or JavaScript can drive it. FontCraft: no OSA dictionary; the CLI and control channel serve the same purpose on every platform and can be called from those languages.
 - [ ] `extensions.authoringDocs` (behavior, M13, inferred): Authors are pointed to API references, a scripting tutorial series, a plug-in…
   - Open (our design, not confirmed): Authors are pointed to API references, a scripting tutorial series, a plug-in writing tutorial, existing scripts as examples and the vendor's forum. FontCraft: generated command reference, module SDK guide with worked examples, and a porting table from common reference-API tasks to commands.
 - [ ] `extensions.sandboxCapabilities` (behavior, M13, inferred): The chapter mentions no permission model for extensions beyond the operating system's…

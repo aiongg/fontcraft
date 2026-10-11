@@ -656,6 +656,7 @@ milestone = "M9"
 summary = "Static instances are produced by interpolating masters at the instance location before compiling. fontmake's default interpolator does not extrapolate outside the masters and does not support anisotropic locations; those need the optional MutatorMath path. Outline rounding at this stage is optional (--round-instances)."
 ref = "fontmake USAGE.md (Options for instance generation)"
 status = "docs"
+notes = "FontCraft extrapolates static instances that lie outside the masters, as the handbook says (`fontInfo.instance.extrapolation`; docs/plans/M9.md § 7, question 6 (a)); the difference from fontmake is in docs/spec/40-compile.md § 4a."
 
 [[behavior]]
 id = "compile.instanceLayoutInterpolation"
@@ -1654,6 +1655,7 @@ milestone = "M2"
 summary = "Private DICT values of a static CFF font as fontmake writes them: BlueValues and OtherBlues from the master's alignment zones (overshoots of the metrics, then the master's other zones), rounded; only when some blue array is present also BlueFuzz (default 0), BlueShift (7), BlueScale (3 / (4 × the tallest zone), else 0.039625) and ForceBold, each overridable by its parameter; StemSnapH and StemSnapV sorted with StdHW and StdVW the first stem of each direction, written only when both directions have stems; defaultWidthX and nominalWidthX from the source when it sets either, else optimised. No LanguageGroup or ExpansionFactor."
 ref = "ufo2ft outlineCompiler.py (setupTable_CFF), fontInfoData.py (postscriptBlueScaleFallback); glyphsLib builder/blue_values.py; oracle runs against fontmake 3.12.1 (M2.3b)"
 status = "observed"
+notes = "From M10.14, where a source with zones sets no blueScale or blueFuzz, FontCraft writes the handbook's BlueScale 0.037 and BlueFuzz 1 instead of fontmake's values (hinting.ps.blueScale, hinting.ps.blueFuzz; docs/spec/40-compile.md § 4a)."
 
 [[behavior]]
 id = "compile.cidKeyedFonts"

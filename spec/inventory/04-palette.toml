@@ -540,15 +540,6 @@ summary = "The height of the Layers section is changed by dragging the handle at
 ref = "Palette › Layers"
 status = "handbook"
 
-[[behavior]]
-id = "layers.pluginSpecialLayers"
-area = "extensions"
-milestone = "M13"
-summary = "Plug-ins may introduce further kinds of special layers, which the list shows like the built-in ones."
-ref = "Palette › Layers › Special Layers"
-status = "handbook"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2: no FontCraft module kind adds layer kinds, so nothing would implement it."
-
 # ───────────────────────────── Transformations ─────────────────────────────
 
 [[panel]]

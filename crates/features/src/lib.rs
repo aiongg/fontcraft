@@ -1,6 +1,25 @@
 //! FontCraft features (L2): the generated pair kerning a compiled font gets, as a `GPOS` table,
-//! and the mark writer ([`marks`], M6.17). Feature-code compiling and the other automatic
-//! features follow in M8.
+//! the mark writer ([`marks`], M6.17), and feature code made ready for the compiler (M8).
+//!
+//! Feature code, for one [`Target`] (`docs/plans/M8.md` § 3, `docs/spec/12-feature-code.md` § 1):
+//!
+//! | Step | Module | Package |
+//! |---|---|---|
+//! | Automatic entries regenerated, Update and Update Entry | [`auto`] (generators in its submodules) | M8.9–M8.13 |
+//! | Instance parameters applied to the entries | [`params`] | M8.3 |
+//! | Tokens expanded against the target's values | [`tokens`], [`tokens_predicate`], [`target`] | M8.5, M8.6 |
+//! | Syntax extensions and `#ifdef VARIABLE` lowered | [`lower`] | M8.4 |
+//! | The variable syntax lowered (variable target) | [`variable`] | M9.11 |
+//! | Entries assembled into virtual files with a source map | [`assemble`], [`source_map`] | M8.3 |
+//! | Implicit features in neutral form | [`implicit`] | M8.7 |
+//! | Compiling | `fontcraft_fea::compile` | M8.2 |
+//!
+//! Beside the pipeline: editor helpers ([`edit`], M8.15), snippets ([`snippets`], M8.16) and the
+//! registered feature tags ([`registry`], M8.14). Every pass reads untrusted code within
+//! [`MAX_ENTRY_BYTES`] per entry and [`MAX_ENTRIES`] entries, and reports problems as
+//! diagnostics with byte spans, never a panic.
+//!
+//! The pair kerning:
 //!
 //! [`kern_feature`] writes one master's kerning (`compile.kernValueLookup`,
 //! `compile.kernFeatureWriter`, `kerning.implicitKernFeature`, `autoFeature.kern`,
@@ -35,22 +54,46 @@
 //! allocates the tables; the rules themselves are bounded by the rule and glyph-pair caps.
 #![forbid(unsafe_code)]
 
+pub mod assemble;
+pub mod auto;
+pub mod edit;
 pub mod evaluate;
+pub mod fea_variable;
 mod gpos;
+pub mod implicit;
 mod kern;
+pub mod lower;
 pub mod marks;
+pub mod params;
 mod properties;
+pub mod registry;
 mod resolve;
+pub mod snippets;
+pub mod source_map;
+pub mod target;
+pub mod tokens;
+pub mod tokens_predicate;
 mod unicode18;
+pub mod var_layout;
+pub mod variable;
 mod writers;
 
 use std::collections::HashMap;
 
+pub use assemble::{Assembly, assemble};
 use fontcraft_model::Font;
 use fontcraft_spacing::kerning::KernIndex;
+pub use source_map::{EntryDiagnostic, EntryKind, EntryRange, EntryRef, OffsetMap, SourceMap};
+pub use target::{GlyphMetric, MasterValues, Target, TargetValues};
 use write_fonts::tables::gpos::Gpos;
 use write_fonts::types::GlyphId16;
 pub use writers::{FEATURE_WRITERS_KEY, KernTags, kern_tags};
+
+/// Most bytes of code one prefix, class or feature may hold.
+pub const MAX_ENTRY_BYTES: usize = 4 << 20;
+/// Most prefixes, classes and features one font may hold together (the UFO feature splitter's
+/// cap).
+pub const MAX_ENTRIES: usize = 100_000;
 
 /// Most rules the kerning of one master may resolve to, glyph–group pairs expanded to their
 /// members.
@@ -107,6 +150,18 @@ pub enum FeatureError {
     TooMany { what: &'static str, limit: usize },
     #[error("the kerning cannot be written: {0}")]
     Kerning(String),
+    /// A count or size of the feature code beyond its cap.
+    #[error("the feature code has more than {limit} {what}")]
+    Limit { what: &'static str, limit: usize },
+    /// The code has errors, mapped to the entries that hold them; never empty.
+    #[error("{}", source_map::summary(.0))]
+    Code(Vec<EntryDiagnostic>),
+    /// A target or request this build cannot serve yet (an instance, the variable font).
+    #[error("{0}")]
+    Unsupported(String),
+    /// A function whose M9 package has not been written yet.
+    #[error("{0} is not available yet")]
+    NotYetImplemented(&'static str),
 }
 
 /// A mark glyph: one with an advance (spacing) or without.

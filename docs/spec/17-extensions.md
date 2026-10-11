@@ -42,7 +42,7 @@ Reference (`window.pluginManager`, Window › Plugin Manager; no shortcut given)
   visible only to users who registered them. New public entries are added by pull request.
 
 FontCraft: an Extension Manager over extension indexes (JSON files listing modules and macros),
-local and, if the owner allows network access, HTTPS (`docs/plans/M13.md` § 7 question 5).
+local files and HTTPS URLs, with no main index (`docs/plans/M13.md` § 7 question 5).
 Install and remove take effect immediately because modules load at run time. Each entry shows its
 kind, size and checksum; updates are offered, and installed automatically only where the user
 turned that on. `pluginManager.list` gives agents the catalogue.
@@ -116,11 +116,12 @@ entries.
 Reference:
 
 - Plug-ins in Python or Objective-C from the open-source SDK templates (`sdk.templates`).
-- Python API and Objective-C API, each with its own reference documentation (`api.python`,
-  `api.objectiveC`). The chapter names them but lists no API members.
+- Python API and Objective-C API, each with its own reference documentation (`api.python`;
+  the Objective-C API has no row, since FontCraft loads no native code). The chapter names them but
+  lists no API members.
 - The SDK has means for an external application to interoperate with the app (`api.externalInterop`).
 - Open Scripting Architecture support: AppleScript or JavaScript automation
-  (`api.openScriptingArchitecture`).
+  (no row: FontCraft has no counterpart, see below).
 - Learning material: API docs, tutorials, existing scripts, forum (`extensions.authoringDocs`).
 
 FontCraft:
@@ -164,8 +165,8 @@ reference app are in `docs/plans/M13.md` § 8.
   ABI keeps that shape: reporter output is cached per layer revision and scale; filter export
   strings resolve to modules by name or id (`filter.customParameter.thirdParty`).
 - **Which palette, tool and general plug-ins our kinds cannot express.** Answered (ours): tools
-  and general plug-ins, which run interface code; file-format plug-ins. The M13 plan proposes
-  dropping those rows (§ 7 question 2). Palette needs are met by parameter forms of filter modules.
+  and general plug-ins, which run interface code; file-format plug-ins. Their rows are dropped
+  (`docs/plans/M13.md` § 7 question 2). Palette needs are met by parameter forms of filter modules.
 - **Macro file format, variables, conditionals.** Answered (D8, `docs/plans/M13.md` § 3): JSON
   `.fcmacro` files with a format marker and version, title, description, declared arguments,
   `requires` and steps; placeholders fill arguments; no conditionals or loops, which belong in an

@@ -59,7 +59,7 @@ fn expected(path: &[PathOp]) -> Vec<Seg> {
 }
 
 fn glyph(name: &str, advance: f64, path: Vec<PathOp>) -> Glyph {
-    Glyph { name: name.to_string(), advance, path }
+    Glyph { name: name.to_string(), advance, path, hints: None }
 }
 
 fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<PathOp> {

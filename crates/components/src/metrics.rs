@@ -17,9 +17,11 @@
 //!   them as placeholders. A layer whose components nest too deep, whose anchors cannot be read
 //!   for a missing glyph or layer, or whose work passes a limit, is skipped the same way and
 //!   keeps its stored positions, so one unusual glyph never blocks edits to its bases.
-//! - Only the masters whose layers changed are re-aligned, widened by every master whose layers
-//!   hold a component pinned (`ComponentInfo::master_id`) to one of them. A change of masters,
-//!   of the alignment setting or of Propagate Anchors re-aligns every master.
+//! - Only the masters whose layers changed are re-aligned. On the other masters, a layer is
+//!   re-aligned when it holds a component pinned (`ComponentInfo::master_id`) to a re-aligned
+//!   master of an affected base, or a component whose base layer was re-aligned that way; the
+//!   other layers of those masters keep their stored positions. A change of masters, of the
+//!   alignment setting or of Propagate Anchors re-aligns every master.
 //! - Locked glyphs are skipped: a lock keeps the glyph's drawing as it is.
 //! - The dependency order is worked out for the affected glyphs only, from one pass over the
 //!   font's components, so one edit costs a pass over the components plus the work on the
@@ -152,8 +154,10 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
         return Ok(font);
     }
     let order = affected_order(&font, changed);
-    let widened = masters.map(|m| with_pinned_masters(&font, &order, m));
-    let masters = widened.as_ref();
+    let affected: HashSet<usize> = order.iter().copied().collect();
+    // Glyph position → masters outside `masters` on which a layer of it is re-aligned because it
+    // reads a re-aligned base layer. Bases come first in `order`, so one pass fills it.
+    let mut followed: HashMap<usize, HashSet<String>> = HashMap::new();
     let mut cache = AnchorCache::new();
     for i in order {
         let Some(glyph) = font.glyphs.as_arcs().get(i).cloned() else { continue };
@@ -162,8 +166,21 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
         }
         let mut updates: Vec<(usize, Layer)> = Vec::new();
         for (k, layer) in glyph.layers.iter().enumerate() {
-            let wanted = masters.is_none_or(|m| m.contains(&layer.master));
-            if !wanted || !layer.shapes.iter().any(|s| matches!(s, Shape::Component(_))) {
+            if !layer.shapes.iter().any(|s| matches!(s, Shape::Component(_))) {
+                continue;
+            }
+            let wanted = match masters {
+                None => true,
+                Some(m) if m.contains(&layer.master) => true,
+                Some(m) => {
+                    let follows = reads_realigned(&font, layer, &affected, m, &followed);
+                    if follows {
+                        followed.entry(i).or_default().insert(layer.master.clone());
+                    }
+                    follows
+                }
+            };
+            if !wanted {
                 continue;
             }
             match align_layer_cached(&font, &glyph, layer, &mut cache) {
@@ -194,33 +211,22 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
     Ok(font)
 }
 
-/// `masters` with the master of every layer, among the glyphs at `order`, that holds a
-/// component pinned to a master of the set whose base is also at `order`: a base edited on one
-/// master moves the composites that read that master from their own.
-fn with_pinned_masters(font: &Font, order: &[usize], masters: &HashSet<String>) -> HashSet<String> {
-    let glyphs = font.glyphs.as_arcs();
-    let affected: HashSet<&str> = order.iter().filter_map(|&i| glyphs.get(i)).map(|g| g.name.as_str()).collect();
-    let mut out = masters.clone();
-    // Each pass adds a master or stops, so there are at most as many passes as masters.
-    loop {
-        let reads_pinned = |layer: &Layer| {
-            layer.shapes.iter().any(|s| {
-                matches!(s, Shape::Component(c) if affected.contains(c.glyph.as_str())
-                    && c.info.master_id.as_ref().is_some_and(|m| out.contains(m)))
-            })
-        };
-        let more: HashSet<String> = order
-            .iter()
-            .filter_map(|&i| glyphs.get(i))
-            .flat_map(|g| g.layers.iter())
-            .filter(|l| !out.contains(&l.master) && reads_pinned(l))
-            .map(|l| l.master.clone())
-            .collect();
-        if more.is_empty() {
-            return out;
-        }
-        out.extend(more);
-    }
+/// Whether a component of `layer` reads a base layer this pass re-aligns or that changed: the
+/// base is affected and the master the component reads is in `masters`, or that base layer was
+/// re-aligned on its master because it follows a pinned component (`followed`).
+fn reads_realigned(
+    font: &Font,
+    layer: &Layer,
+    affected: &HashSet<usize>,
+    masters: &HashSet<String>,
+    followed: &HashMap<usize, HashSet<String>>,
+) -> bool {
+    layer.shapes.iter().any(|s| {
+        let Shape::Component(c) = s else { return false };
+        let Some(base) = font.glyphs.position(&c.glyph).filter(|b| affected.contains(b)) else { return false };
+        let read = c.info.master_id.as_deref().unwrap_or(&layer.master);
+        masters.contains(read) || followed.get(&base).is_some_and(|m| m.contains(read))
+    })
 }
 
 /// The positions of `changed` and of every glyph that uses one of them, directly or through
@@ -309,9 +315,9 @@ fn component_names(glyph: &Glyph) -> impl Iterator<Item = &str> {
 /// The engine hook: `new` with the glyphs changed since `old`, and their dependents,
 /// re-aligned ([`changed_glyphs`], then [`realign_glyphs`]).
 ///
-/// Only the masters whose layers the change touched are re-aligned, and those of components
-/// pinned to them, so an edit on one master leaves the stored positions of the others as they
-/// are. A change of masters or of a font setting alignment reads re-aligns every master.
+/// Only the masters whose layers the change touched are re-aligned, plus the layers that read
+/// one of them through a pinned component, so an edit on one master leaves the rest of the
+/// other masters as stored. A change of masters or of a font setting alignment reads re-aligns every master.
 pub fn realign(old: &Font, new: Font) -> Result<Font, ComponentsError> {
     let (changed, everything) = changes(old, &new);
     if changed.is_empty() {

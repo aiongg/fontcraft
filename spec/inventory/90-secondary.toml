@@ -693,215 +693,20 @@ origin = "fontlab"
 # FontLab — elements, references, live filters, composites
 # =====================================================================================================
 
-[[behavior]]
-id = "element.referenceModel"
-area = "components"
-milestone = "M13"
-summary = "An element reference is a shared shape with no owning glyph: every glyph that uses it holds an equal reference, and editing the shape's nodes in any of them changes all. This differs from a component, whose content belongs to one source glyph and which also brings that glyph's anchors and hints."
-ref = "FontLab 8 What's new › Build & assemble › Elements and components"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[behavior]]
-id = "element.perOccurrenceTransform"
-area = "components"
-milestone = "M13"
-summary = "Each occurrence of a shared element keeps its own live scale, rotation, slant, flip and position. Transforming with the element-level tool changes only that occurrence; transforming the nodes inside changes every occurrence."
-ref = "FontLab 8 What's new › Build & assemble › Elements and components"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
 [[command]]
-id = "element.newFromSelection"
-label = "Selection to New Element"
-menu = ["Path", "Convert"]
-shortcut = ""
-kind = "engine"
-params = "{glyph?, layer?, paths?: [pathRef], name?: string}"
-area = "components"
-milestone = "M13"
-summary = "Moves the selected paths into a new named shared element, leaving a reference to it in place. Named elements appear in the element gallery for reuse in other glyphs."
-ref = "FontLab 8 What's new › Build & assemble › Elements (To New Element)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.detectReferences"
-label = "Detect Element References"
-menu = ["Path", "Convert"]
-shortcut = ""
-kind = "engine"
-params = "{glyphs?, layer?, paths?: [pathRef]}"
-area = "components"
-milestone = "M13"
-summary = "Finds identical copies of the selected paths in other glyphs and replaces them all with references to one shared element."
-ref = "FontLab 8 What's new › Build & assemble › Elements (Detect Element Reference)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.linkReference"
-label = "Link Element Reference"
-menu = ["Glyph", "Element Reference"]
-shortcut = ""
-kind = "engine"
-params = "{glyph?, layer?, element: elementRef}"
-area = "components"
-milestone = "M13"
-summary = "Joins a stand-alone element to an existing shared element when their shapes are identical, so later edits propagate."
-ref = "FontLab 8 What's new › Build & assemble › Elements (Link Reference)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.componentToReference"
-label = "Component to Element Reference"
-menu = ["Glyph", "Element Reference"]
-shortcut = ""
-kind = "engine"
-params = "{glyphs?, layer?, components?: [componentRef]}"
-area = "components"
-milestone = "M13"
-summary = "Converts components into element references to the same shapes, detaching them from the source glyph's metrics, anchors and hints while keeping the outlines shared."
-ref = "FontLab 8 What's new › Build & assemble › Boolean operations (Component to Reference); Test & adjust › Delta filter (Derived glyphs)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.toggleLocked"
-label = "Lock Element Content"
-menu = ["Glyph", "Element Reference"]
-shortcut = ""
-kind = "engine"
-params = "{glyph?, layer?, element: elementRef, locked?: bool}"
-area = "components"
-milestone = "M13"
-summary = "Locks the nodes of one occurrence of a shared element so the shape cannot be edited from that glyph. An option inserts all references locked except the first."
-ref = "FontLab 8 What's new › Build & assemble › Elements (Lock element references)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.copyTransformation"
-label = "Copy Element Transformation"
+id = "component.copyTransformation"
+label = "Copy Component Transformation"
 menu = ["Edit"]
 shortcut = ""
 kind = "engine"
-params = "{from: elementRef, to?: [elementRef]}"
+params = "{glyph?: name, layer?: id, component: index, to: [{glyph?: name, layer?: id, components: [indices]}]}"
 area = "components"
 milestone = "M13"
-summary = "Copies the position and live scale, rotation and slant of one element or component so they can be pasted onto others."
+summary = "Copies the position and live scale, rotation and slant of one element or component so they can be pasted onto others. FontCraft: copies one component's transform (position, scale, rotation, slant) and applies it to the components named in `to`, in one undo step."
 ref = "FontLab 8 What's new › Build & assemble › Elements (Copy transformation)"
 status = "docs"
 origin = "fontlab"
-notes = "Proposed rename to `component.copyTransformation` by docs/plans/M13.md § 7 question 3: copy a component's transform to other components, without element references."
-
-[[command]]
-id = "element.addDeltaFilter"
-label = "Add Delta Filter"
-menu = ["Glyph", "Filters"]
-shortcut = ""
-kind = "engine"
-params = "{glyph?, layer?, element?: elementRef, deltas?: [{node: nodeRef, dx?: number, dy?: number, pinned?: bool}], strength?: percent}"
-area = "components"
-milestone = "M13"
-summary = "Attaches a non-destructive delta filter to an element: a few nodes receive explicit offsets (or are pinned in place) and every other node is repositioned by interpolating between them, as untouched points are in a variable font. On a locked element reference this yields a derived shape, such as an old-style zero from the lining zero, that still follows edits to the original."
-ref = "FontLab 8 What's new › Test & adjust › Delta filter"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[behavior]]
-id = "delta.nodeStates"
-area = "components"
-milestone = "M13"
-summary = "In delta-editing mode, untouched nodes show as pale circles and nodes with a delta as darker marks with an arrow. A delta is either free, horizontal-only or vertical-only; clicking a node cycles pinned free, pinned horizontal, pinned vertical; Backspace removes a delta and Alt-click applies the current delta to all selected nodes."
-ref = "FontLab 8 What's new › Test & adjust › Delta filter (Visual states; Editing controls)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.setDeltaStrength"
-label = "Set Delta Strength"
-menu = []
-shortcut = ""
-kind = "engine"
-params = "{element: elementRef, strength: percent}"
-area = "components"
-milestone = "M13"
-summary = "Scales the effect of an element's delta filter from 0 percent (ignored) to 100 percent (fully applied)."
-ref = "FontLab 8 What's new › Test & adjust › Delta filter (Strength slider)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.copyDeltasToMasters"
-label = "Copy Deltas to Masters"
-menu = []
-shortcut = ""
-kind = "engine"
-params = "{glyph?, element: elementRef, masters?: [id]}"
-area = "components"
-milestone = "M13"
-summary = "Copies an element's delta setup to the same element on all compatible masters."
-ref = "FontLab 8 What's new › Test & adjust › Delta filter (Copy to masters)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.expandFilters"
-label = "Expand Filters"
-menu = ["Glyph", "Filters"]
-shortcut = ""
-kind = "engine"
-params = "{glyphs?, layers?: [id], kinds?: [name]}"
-area = "components"
-milestone = "M13"
-summary = "Bakes every live, non-destructive filter on the selected glyphs into plain outlines: delta, live boolean, clipping group, live stroke and brush, smart corner and similar."
-ref = "FontLab 8 What's new › Test & adjust › Delta filter (Batch expand or remove); Build & assemble"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.removeFilters"
-label = "Remove Filters"
-menu = ["Glyph", "Filters"]
-shortcut = ""
-kind = "engine"
-params = "{glyphs?, layers?: [id], kinds?: [name]}"
-area = "components"
-milestone = "M13"
-summary = "Discards the live filters on the selected glyphs and restores the unfiltered source shapes."
-ref = "FontLab 8 What's new › Test & adjust › Delta filter (Batch expand or remove)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
-
-[[command]]
-id = "element.setFusion"
-label = "Fusion"
-menu = ["Glyph", "Filters"]
-shortcut = ""
-kind = "engine"
-params = "{glyph?, layer?, element: elementRef, mode: 'add' | 'subtract' | 'intersect' | 'exclude' | 'none'}"
-area = "path-ops"
-milestone = "M13"
-summary = "Marks a shape or component as a live boolean operand acting on everything stacked below it: union, difference, intersection or exclusive-or. The result stays editable and is resolved by decomposing and removing overlaps at export. The primary reference offers only a live subtract (mask)."
-ref = "FontLab 8 What's new › Build & assemble › Boolean operations (Fusion filter)"
-status = "docs"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 3 (open decision D7): neither `.glyphs` nor UFO can store it, and components of non-exporting glyphs, corner components and the mask attribute cover its uses."
+notes = "FontCraft has no element references (open decision D7, docs/plans/M13.md § 7 question 3), so the command works on components only and its label names components. The reference's label is Copy Element Transformation."
 
 [[command]]
 id = "font.detectComposites"
@@ -2436,21 +2241,6 @@ ref = "FontForge Hints menu › Review Hints"
 status = "docs"
 origin = "fontforge"
 
-[[command]]
-id = "hint.ps.addDiagonalHint"
-label = "Add Diagonal Hint"
-menu = []
-shortcut = ""
-kind = "engine"
-params = "{glyph?, master?: id, nodes: [nodeRef, nodeRef, nodeRef, nodeRef]}"
-area = "hinting-ps"
-milestone = "M13"
-summary = "Records a diagonal stem from four selected nodes that form its two edges. Diagonal stems have no place in CFF hints; they would inform TrueType autohinting and stem measurement only."
-ref = "FontForge Hints menu › Add DHint, Clear DStem"
-status = "docs"
-origin = "fontforge"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2: diagonal stems have no place in CFF hints or in the primary reference's sources, so nothing would use them."
-
 # =====================================================================================================
 # FontForge — bitmap strikes
 # =====================================================================================================
@@ -3110,16 +2900,6 @@ ref = "RoboFont reference › Preferences Editor; RoboFont topics › Features o
 status = "docs"
 origin = "robofont"
 
-[[behavior]]
-id = "app.safeMode"
-area = "extensions"
-milestone = "M13"
-summary = "A start-up mode, entered by holding Shift while launching, that loads no plug-ins and runs no start-up scripts so a broken extension cannot prevent the application from opening. A menu item then loads them on demand."
-ref = "RoboFont reference › Safe Mode"
-status = "docs"
-origin = "robofont"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2 as a duplicate of app.launchWithoutPlugins, which gains a `--safe-mode` start option."
-
 # =====================================================================================================
 # Fontra — per-glyph design space, references, collaboration
 # =====================================================================================================
@@ -3275,45 +3055,20 @@ ref = "Fontra reference › Glyph editor appearance (Drag ghost path; Drag cross
 status = "docs"
 origin = "fontra"
 
-[[behavior]]
-id = "collab.liveSharedEditing"
-area = "automation"
-milestone = "M13"
-summary = "When a project is served from one machine, several people can open it at once and each sees the others' edits arrive live in the glyphs they have open. The editor is a client of a document server whether that server runs locally or remotely."
-ref = "Fontra documentation › Introduction"
-status = "docs"
-origin = "fontra"
-notes = "Kept or dropped by the owner's answer to docs/plans/M13.md § 7 question 4."
-
 [[command]]
-id = "collab.serveProject"
-label = "Share Project…"
-menu = ["File"]
-shortcut = ""
-kind = "engine"
-params = "{font?: fontRef, address?: string, port?: number, readOnly?: bool}"
-area = "automation"
-milestone = "M13"
-summary = "Starts serving the open document so other editor instances and agents can connect to it and edit it together, over the same change-message channel the control interface uses. Command form, conflict policy and permissions are our design; the docs state only that hosted projects are edited by several users in real time."
-ref = "Fontra documentation › Introduction"
-status = "inferred"
-origin = "fontra"
-notes = "Kept or dropped by the owner's answer to docs/plans/M13.md § 7 question 4."
-
-[[command]]
-id = "collab.showServerInfo"
-label = "Server Info"
+id = "app.info"
+label = "App Info"
 menu = ["Help"]
 shortcut = ""
 kind = "engine"
 params = "{}"
 area = "automation"
 milestone = "M13"
-summary = "Reports the application version, when the document server started, which project back end is in use and which plug-ins are loaded. Read-only."
+summary = "Reports the application version, when the document server started, which project back end is in use and which plug-ins are loaded. Read-only. FontCraft: a query for the version, the start time, the control channel's and the MCP server's state, the loaded modules and the command log's size."
 ref = "Fontra reference › Fontra menu › Server info"
 status = "docs"
 origin = "fontra"
-notes = "Proposed rename to `app.info` by docs/plans/M13.md § 7 question 4: a query for the version, start time, control-channel and MCP state and the loaded modules, useful without shared editing."
+notes = "FontCraft has no shared editing in 1.0 (docs/plans/M13.md § 7 question 4), so the query reports on the app rather than a document server; the reference's label is Server Info."
 
 [[behavior]]
 id = "app.browserClient"

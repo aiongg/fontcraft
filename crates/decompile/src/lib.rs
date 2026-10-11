@@ -22,7 +22,10 @@ pub use fontcraft_container::woff2::Woff2Directory;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
+pub mod cff_hints;
 mod gpos_kern;
+pub mod tt_hints;
+pub mod variable;
 pub use gpos_kern::{MAX_CLASS_RECORDS, MAX_KERN_PAIRS};
 
 use fontcraft_model::plist::{Array, Dict, Layout, Str, Value};
@@ -51,6 +54,9 @@ pub enum DecompileError {
     NoSuchFace { face: u32 },
     #[error(transparent)]
     Model(#[from] fontcraft_model::ModelError),
+    /// A function whose package has not been written yet.
+    #[error("{0} is not available yet")]
+    NotYetImplemented(&'static str),
 }
 
 fn container(e: fontcraft_container::Error) -> DecompileError {
@@ -271,7 +277,10 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         Value::Array(Array { items: vec![Value::Dict(param)], layout: Layout::Multiline, ..Default::default() }),
     );
 
-    let read_tables = ["head", "hhea", "hmtx", "maxp", "cmap", "name", "post", "OS/2", "glyf", "loca", "CFF "];
+    let read_tables: Vec<&str> = ["head", "hhea", "hmtx", "maxp", "cmap", "name", "post", "OS/2", "glyf", "loca", "CFF "]
+        .into_iter()
+        .chain(tt_hints::TABLES.iter().copied())
+        .collect();
     let mut left_out: Vec<String> = font
         .table_directory
         .table_records()
@@ -286,7 +295,8 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         warnings.push(format!("tables not read: {}", left_out.join(", ")));
     }
 
-    let font = Font {
+    let sfnt: &FontRef = font;
+    let mut font = Font {
         source: Source { format: SourceFormat::Binary, ..Default::default() },
         family_name,
         units_per_em,
@@ -309,6 +319,8 @@ fn read(font: &FontRef) -> Result<Decompiled, DecompileError> {
         extra: Arc::new(extra),
     };
     font.check()?;
+    cff_hints::import(sfnt, &mut font, &mut warnings)?;
+    tt_hints::import(sfnt, &mut font, &mut warnings)?;
     Ok(Decompiled { font, warnings })
 }
 

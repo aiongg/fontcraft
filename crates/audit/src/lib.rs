@@ -1,7 +1,12 @@
-//! FontCraft font audit (L2): the check registry and the outline checks.
+//! FontCraft font audit (L2): the check registry and the checks.
 //!
-//! A check is a pure function from one glyph layer, with its font for context, to a list of
-//! [`Finding`]s. [`CHECKS`] lists every check with its id, label, severity, home profile,
+//! A check is a pure function from a target to a list of [`Finding`]s. Its [`CheckScope`] says
+//! which target: one layer ([`audit_layer`]), every master of a glyph ([`audit_glyph`]), the
+//! source ([`audit_source`]), one compiled font ([`audit_binary`]) or several ([`audit_family`]).
+//! What a check cannot compute at this layer (an in-memory compile, a TTX round trip, shaping,
+//! the master-compatibility report, rasterising) it asks of [`AuditServices`], which the engine
+//! implements; an unavailable service makes the check skip with the reason.
+//! [`CHECKS`] lists every check with its id, label, severity, home profile,
 //! thresholds and fix. The `audit.*` engine commands pick checks with [`select`], run them with
 //! [`audit_layer`], apply the result cap with [`collapse`] and build the result document of
 //! `docs/spec/21-qa.md` § 4 from the findings. Checks never change the font: a fix is carried out
@@ -12,12 +17,17 @@
 //! `segments` name a segment by the `[shape, node]` address of the on-curve node that ends it.
 #![forbid(unsafe_code)]
 
+mod checks;
+mod context;
 mod contour;
 mod contours;
+mod data;
 mod handles;
 mod metrics;
 mod points;
 mod registry;
+mod scope;
+pub mod services;
 
 use std::collections::BTreeMap;
 
@@ -25,7 +35,10 @@ use fontcraft_geom::{Point, Rect};
 use fontcraft_model::{Font, Glyph, Layer, Master, NodeKind, Shape};
 use serde::Serialize;
 
+pub use context::{BinaryCtx, FamilyCtx, GlyphCtx, SourceCtx, SourceMap};
 pub use registry::CHECKS;
+pub use scope::{CheckGroup, CheckScope, Precondition};
+pub use services::{AuditServices, CompatibilityReport, NoServices, Unavailable};
 
 /// Most nodes (on- and off-curve, every path of the layer together) a layer may have to be
 /// audited. Far beyond a drawn glyph; a larger layer is skipped by every check with a reason.
@@ -109,7 +122,7 @@ impl Profile {
     }
 }
 
-/// The kind of check, which is also the module it lives in.
+/// The kind of an outline check of the layer scope, which is also the module it lives in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CheckFamily {
@@ -143,6 +156,21 @@ pub struct FixSpec {
 }
 
 pub(crate) type CheckFn = fn(&LayerInput<'_>, &Params<'_>, &mut Sink);
+pub(crate) type GlyphFn = fn(&GlyphCtx<'_>, &Params<'_>, &mut Sink);
+pub(crate) type SourceFn = fn(&SourceCtx<'_>, &Params<'_>, &mut Sink);
+pub(crate) type BinaryFn = fn(&BinaryCtx<'_>, &Params<'_>, &mut Sink);
+pub(crate) type FamilyFn = fn(&FamilyCtx<'_>, &Params<'_>, &mut Sink);
+
+/// A check's code, one function type per scope.
+#[derive(Clone, Copy)]
+#[allow(dead_code)] // The registry files of M12.46–M12.58 add checks of the other scopes.
+pub(crate) enum Runner {
+    Layer(CheckFn),
+    Glyph(GlyphFn),
+    Source(SourceFn),
+    Binary(BinaryFn),
+    Family(FamilyFn),
+}
 
 /// One check of the registry.
 #[derive(Clone, Copy, Serialize)]
@@ -151,7 +179,11 @@ pub struct CheckSpec {
     pub id: &'static str,
     pub label: &'static str,
     pub description: &'static str,
-    pub family: CheckFamily,
+    pub group: CheckGroup,
+    /// What the runner reads; matches [`CheckSpec::run`].
+    pub scope: CheckScope,
+    /// The kind of an outline check of the layer scope; `None` for every other check.
+    pub family: Option<CheckFamily>,
     /// The most severe result the check emits by default.
     pub severity: Severity,
     /// The home profile.
@@ -166,8 +198,13 @@ pub struct CheckSpec {
     pub capped: bool,
     /// The message codes the check emits, besides `too-many-results` when it is capped.
     pub codes: &'static [&'static str],
+    /// Message codes whose default severity differs from [`CheckSpec::severity`]
+    /// (`audit.severityOverrides`); every other code has the check's severity.
+    pub code_severities: &'static [(&'static str, Severity)],
+    /// Facts that must hold for the check to run (`audit.preconditions`).
+    pub preconditions: &'static [Precondition],
     #[serde(skip)]
-    pub(crate) run: CheckFn,
+    pub(crate) run: Runner,
 }
 
 impl std::fmt::Debug for CheckSpec {
@@ -179,6 +216,11 @@ impl std::fmt::Debug for CheckSpec {
 impl CheckSpec {
     pub fn threshold(&self, name: &str) -> Option<&'static Threshold> {
         self.thresholds.iter().find(|t| t.name == name)
+    }
+
+    /// The default severity of one of the check's message codes.
+    pub fn code_severity(&self, code: &str) -> Severity {
+        self.code_severities.iter().find(|(c, _)| *c == code).map(|(_, s)| *s).unwrap_or(self.severity)
     }
 }
 
@@ -302,8 +344,11 @@ impl<'a> AuditContext<'a> {
     }
 }
 
-/// Where a finding is. Only the keys that apply are set.
+/// Where a finding is. Only the keys that apply are set (`docs/spec/21-qa.md` § 4): glyph-level
+/// keys for source and glyph findings, table-level keys for compiled fonts, `fonts` for family
+/// findings, `masters` for interpolation findings.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Location {
     pub glyph: String,
     pub layer: String,
@@ -319,6 +364,129 @@ pub struct Location {
     /// `[x0, y0, x1, y1]` in font units.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<[f64; 4]>,
+    /// The font's id in the result document (`f0`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    /// The master id, when it differs from the layer id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+    /// Component indices in the layer's shape list.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<usize>,
+    /// Anchor names.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<String>,
+    /// Table tag text (`OS/2`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub table: Option<String>,
+    /// Field name in the table (`usWinAscent`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_id: Option<u16>,
+    /// Name record platform.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<u16>,
+    /// Name record language id as decimal text, or a layout language tag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+    /// Lookup index.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lookup: Option<usize>,
+    /// Axis tag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis: Option<String>,
+    /// Named instance or source instance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instance: Option<String>,
+    /// A kerning pair, two glyph names.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pair: Option<[String; 2]>,
+    /// Ids of every font a family finding involves.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fonts: Vec<String>,
+    /// The two masters an interpolation finding compares.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub masters: Vec<String>,
+    /// The Font Info field or custom parameter that produces a compiled value, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_field: Option<String>,
+}
+
+impl Location {
+    /// Takes every key `other` sets, keeping the others.
+    pub fn merge(&mut self, other: Location) {
+        fn take<T>(slot: &mut Option<T>, v: Option<T>) {
+            if v.is_some() {
+                *slot = v;
+            }
+        }
+        fn take_vec<T>(slot: &mut Vec<T>, v: Vec<T>) {
+            if !v.is_empty() {
+                *slot = v;
+            }
+        }
+        let Location {
+            glyph,
+            layer,
+            shapes,
+            points,
+            segments,
+            point,
+            bounds,
+            font,
+            master,
+            components,
+            anchors,
+            table,
+            field,
+            name_id,
+            platform,
+            language,
+            feature,
+            script,
+            lookup,
+            axis,
+            instance,
+            pair,
+            fonts,
+            masters,
+            source_field,
+        } = other;
+        if !glyph.is_empty() {
+            self.glyph = glyph;
+        }
+        if !layer.is_empty() {
+            self.layer = layer;
+        }
+        take_vec(&mut self.shapes, shapes);
+        take_vec(&mut self.points, points);
+        take_vec(&mut self.segments, segments);
+        take(&mut self.point, point);
+        take(&mut self.bounds, bounds);
+        take(&mut self.font, font);
+        take(&mut self.master, master);
+        take_vec(&mut self.components, components);
+        take_vec(&mut self.anchors, anchors);
+        take(&mut self.table, table);
+        take(&mut self.field, field);
+        take(&mut self.name_id, name_id);
+        take(&mut self.platform, platform);
+        take(&mut self.language, language);
+        take(&mut self.feature, feature);
+        take(&mut self.script, script);
+        take(&mut self.lookup, lookup);
+        take(&mut self.axis, axis);
+        take(&mut self.instance, instance);
+        take(&mut self.pair, pair);
+        take_vec(&mut self.fonts, fonts);
+        take_vec(&mut self.masters, masters);
+        take(&mut self.source_field, source_field);
+    }
 }
 
 /// One thing a check reports.
@@ -400,16 +568,80 @@ pub fn audit_layer(ctx: &AuditContext<'_>, glyph: &Glyph, layer: &Layer, checks:
             report.skipped.push(Skipped { check: spec.id, reason: "the source has more than one master".into() });
             continue;
         }
+        let Runner::Layer(run) = spec.run else { continue };
         let params = Params { overrides: config.thresholds.get(spec.id) };
         let mut sink = Sink::new(spec, &glyph.name, &layer.id);
-        (spec.run)(&input, &params, &mut sink);
-        if let Some(reason) = sink.skipped {
-            report.skipped.push(Skipped { check: spec.id, reason });
+        run(&input, &params, &mut sink);
+        sink.finish(&mut report);
+    }
+    report
+}
+
+/// Runs the glyph-scope checks among `checks` on every master of one glyph. Checks of other
+/// scopes are left out.
+pub fn audit_glyph(ctx: &GlyphCtx<'_>, checks: &[&'static CheckSpec], config: &Config) -> LayerReport {
+    let base = Location { glyph: ctx.glyph.name.clone(), ..Location::default() };
+    run_scope(checks, config, &base, |run, params, sink| match run {
+        Runner::Glyph(f) => {
+            f(ctx, params, sink);
+            true
         }
-        if sink.dropped > 0 {
-            report.truncated.push(Truncated { check: spec.id, dropped: sink.dropped });
+        _ => false,
+    })
+}
+
+/// Runs the source-scope checks among `checks` on the whole source.
+pub fn audit_source(ctx: &SourceCtx<'_>, checks: &[&'static CheckSpec], config: &Config) -> LayerReport {
+    run_scope(checks, config, &Location::default(), |run, params, sink| match run {
+        Runner::Source(f) => {
+            f(ctx, params, sink);
+            true
         }
-        report.findings.extend(sink.findings);
+        _ => false,
+    })
+}
+
+/// Runs the binary-scope checks among `checks` on one compiled font. Findings carry the font's
+/// id. Preconditions are the caller's to evaluate (M12.44's runner).
+pub fn audit_binary(ctx: &BinaryCtx<'_>, checks: &[&'static CheckSpec], config: &Config) -> LayerReport {
+    let base = Location { font: Some(ctx.id.to_string()), ..Location::default() };
+    run_scope(checks, config, &base, |run, params, sink| match run {
+        Runner::Binary(f) => {
+            f(ctx, params, sink);
+            true
+        }
+        _ => false,
+    })
+}
+
+/// Runs the family-scope checks among `checks` on several compiled fonts. Findings carry the ids
+/// of every font in `fonts` unless the check names fewer.
+pub fn audit_family(ctx: &FamilyCtx<'_>, checks: &[&'static CheckSpec], config: &Config) -> LayerReport {
+    let base = Location { fonts: ctx.fonts.iter().map(|f| f.id.to_string()).collect(), ..Location::default() };
+    run_scope(checks, config, &base, |run, params, sink| match run {
+        Runner::Family(f) => {
+            f(ctx, params, sink);
+            true
+        }
+        _ => false,
+    })
+}
+
+/// Runs every check `call` accepts (it returns false for a runner of another scope) with a sink
+/// whose findings start from `base`.
+fn run_scope(
+    checks: &[&'static CheckSpec],
+    config: &Config,
+    base: &Location,
+    mut call: impl FnMut(&Runner, &Params<'_>, &mut Sink) -> bool,
+) -> LayerReport {
+    let mut report = LayerReport::default();
+    for &spec in checks {
+        let params = Params { overrides: config.thresholds.get(spec.id) };
+        let mut sink = Sink::at(spec, base.clone());
+        if call(&spec.run, &params, &mut sink) {
+            sink.finish(&mut report);
+        }
     }
     report
 }
@@ -460,6 +692,7 @@ pub(crate) struct Hit {
     bounds: Option<Rect>,
     data: Vec<(&'static str, f64)>,
     no_fix: bool,
+    place: Option<Location>,
 }
 
 impl Hit {
@@ -475,6 +708,7 @@ impl Hit {
             bounds: None,
             data: Vec::new(),
             no_fix: false,
+            place: None,
         }
     }
     pub(crate) fn severity(mut self, s: Severity) -> Self {
@@ -509,13 +743,18 @@ impl Hit {
         self.no_fix = true;
         self
     }
+    /// Sets the location keys `place` sets (table, field, fonts…) on top of the sink's base.
+    #[allow(dead_code)] // M12.46–M12.58: the binary and family checks set table-level keys.
+    pub(crate) fn place(mut self, place: Location) -> Self {
+        self.place = Some(place);
+        self
+    }
 }
 
 /// Collects one check's findings on one layer, up to [`MAX_FINDINGS_PER_CHECK`].
 pub(crate) struct Sink {
     spec: &'static CheckSpec,
-    glyph: String,
-    layer: String,
+    base: Location,
     findings: Vec<Finding>,
     dropped: usize,
     skipped: Option<String>,
@@ -523,7 +762,21 @@ pub(crate) struct Sink {
 
 impl Sink {
     fn new(spec: &'static CheckSpec, glyph: &str, layer: &str) -> Self {
-        Self { spec, glyph: glyph.to_string(), layer: layer.to_string(), findings: Vec::new(), dropped: 0, skipped: None }
+        Self::at(spec, Location { glyph: glyph.to_string(), layer: layer.to_string(), ..Location::default() })
+    }
+
+    fn at(spec: &'static CheckSpec, base: Location) -> Self {
+        Self { spec, base, findings: Vec::new(), dropped: 0, skipped: None }
+    }
+
+    fn finish(self, report: &mut LayerReport) {
+        if let Some(reason) = self.skipped {
+            report.skipped.push(Skipped { check: self.spec.id, reason });
+        }
+        if self.dropped > 0 {
+            report.truncated.push(Truncated { check: self.spec.id, dropped: self.dropped });
+        }
+        report.findings.extend(self.findings);
     }
 
     pub(crate) fn push(&mut self, hit: Hit) {
@@ -531,19 +784,21 @@ impl Sink {
             self.dropped += 1;
             return;
         }
-        let location = Location {
-            glyph: self.glyph.clone(),
-            layer: self.layer.clone(),
+        let mut location = Location {
             shapes: hit.shapes,
             points: hit.points,
             segments: hit.segments,
             point: hit.point.map(|p| [p.x, p.y]).filter(|v| all_finite(v)),
             bounds: hit.bounds.map(|r| [r.x0, r.y0, r.x1, r.y1]).filter(|v| all_finite(v)),
+            ..self.base.clone()
         };
+        if let Some(place) = hit.place {
+            location.merge(place);
+        }
         self.findings.push(Finding {
             check: self.spec.id,
             code: hit.code,
-            severity: hit.severity.unwrap_or(self.spec.severity),
+            severity: hit.severity.unwrap_or_else(|| self.spec.code_severity(hit.code)),
             message: hit.message,
             location,
             data: hit.data.into_iter().filter(|(_, v)| v.is_finite()).collect(),

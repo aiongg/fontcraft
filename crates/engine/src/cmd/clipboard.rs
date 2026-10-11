@@ -10,7 +10,7 @@ use std::sync::Arc;
 use fontcraft_geom::{Point, Rect, Segment, bounds, round_to_grid};
 use fontcraft_io_svg::clipboard::{self, Fragment, FragmentGuide, FragmentShape, GuideScope as FragmentScope};
 use fontcraft_io_svg::{Placement, glyph_name_for_file, looks_like_svg, read_svg, shapes_to_svg};
-use fontcraft_model::{Font, MAX_COORDINATE, MAX_LAYER_GUIDES, MAX_NAME_LEN, NodeKind, Path, Shape, Transform, metric};
+use fontcraft_model::{Component, Font, MAX_COORDINATE, MAX_LAYER_GUIDES, MAX_NAME_LEN, NodeKind, Path, Shape, Transform, metric};
 use serde_json::{Value, json};
 
 use super::common::{grid, in_range};
@@ -189,7 +189,7 @@ fn gather(font: &Font, p: &Params) -> Result<Copied> {
     let json = clipboard::encode(&fragment).map_err(|e| p.bad(e.to_string()))?;
     let shapes: Vec<Shape> = fragment.shapes.iter().cloned().map(FragmentShape::into_shape).collect();
     let master = r.layer.master.as_str();
-    let svg = shapes_to_svg(&shapes, &|name: &str| font.outline(name, master).ok(), None).map_err(|e| p.bad(e.to_string()))?;
+    let svg = shapes_to_svg(&shapes, &|c: &Component| font.component_outline(c, master).ok(), None).map_err(|e| p.bad(e.to_string()))?;
     Ok(Copied { targets: copied, skipped, json, svg })
 }
 

@@ -337,9 +337,7 @@ milestone = "M9"
 summary = "Variable font with cubic outlines stored as CFF2 blends. The reference app exports variable fonts only with TrueType outlines, so this follows the AFDKO and fontmake tool chains instead and is offered as an extra flavour."
 ref = "OpenType specification › CFF2; AFDKO buildcff2vf; fontmake variable-cff2 output"
 status = "docs"
-guesses = [
-  "Offered from the command line and `file.exportVariable {flavour: cff2}` only; the Export dialog's Variable tab stays TrueType, as the reference app offers. Settle by the owner's answer to docs/plans/M9.md § 7, question 8.",
-]
+notes = "Built in M9 (M9.13) and offered from the command line and `file.exportVariable {flavour: cff2}` only; the Export dialog's Variable tab stays TrueType, as the reference app offers (docs/plans/M9.md § 7, question 8 (a), decided by the orchestrator on the owner's behalf)."
 
 [[format]]
 id = "ttc.export"
@@ -497,21 +495,6 @@ origin = "fontforge"
 notes = "M13.55, with BDF."
 
 [[format]]
-id = "vfj"
-label = "FontLab JSON source"
-extensions = ["vfj"]
-read = true
-write = false
-spec = ""
-area = "import-export"
-milestone = "M13"
-summary = "The JSON flavour of FontLab's native source. FontLab's own help pages only call it a human-readable JSON file and link to no schema, and we found no public key-by-key description, so import is planned for the self-evident core only (masters, glyph layers with contours and components, anchors, kerning, classes, features) and everything else is reported as skipped."
-ref = "FontLab help › Font Formats (https://help.fontlab.com/fontlab-vi/Font-Formats/)"
-status = "memory"
-origin = "fontlab"
-notes = "Proposed for dropping by docs/plans/M13.md § 7 question 2. The M13 planning pass found no description of the format by its owner (FontLab's help names the format only); a community library (vfjLib, BSD-3-Clause) shows its top-level keys. The roadmap puts undocumented proprietary formats out of scope; FontLab exports UFO and designspace, which FontCraft reads."
-
-[[format]]
 id = "sfd"
 label = "FontForge Spline Font Database"
 extensions = ["sfd", "sfdir"]
@@ -553,7 +536,7 @@ milestone = "M13"
 summary = "Imports the path-construction operators of the first page's content stream as outlines; stroke width is kept as a stroke attribute on the path, while fill colour and other styling are dropped. Text, images, shadings and clipping are ignored."
 ref = "Import & Export › Importing Outlines"
 status = "handbook"
-notes = "M13.58; needs a PDF parser, a new dependency that docs/plans/M13.md § 7 question 7 asks about."
+notes = "M13.58, on the `lopdf` crate (MIT; docs/plans/M13.md § 7 question 7), with FontCraft's PDF limits checked before each call."
 
 [[format]]
 id = "eps-outline"

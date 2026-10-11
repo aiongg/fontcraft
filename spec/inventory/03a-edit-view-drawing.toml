@@ -2320,6 +2320,9 @@ summary = "Field at the bottom of the Palette for the context of a selected aste
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
 notes = "Documented, not yet observed."
+observe = [
+  "In F6 (contextual anchors), select a `*top` anchor in Edit View: note the Anchor Context field in the Palette and how it accepts a context with a token.",
+]
 
 [[command]]
 id = "anchor.setContext"
@@ -2336,6 +2339,9 @@ status = "inferred"
 notes = "Stored in the anchor's user data under the key `GPOS_Context`, where the reference's files keep it: glyphsLib passes anchor user data on and ufo2ft's mark writer reads that key (M8 planning pass). fontc does not support contextual anchors; fontmake is the oracle for them."
 
 # ───────────────────────────── Guides ─────────────────────────────
+observe = [
+  "In F6 (contextual anchors), type a context with a token into a `*top` anchor's Anchor Context field and save: note the user data key that stores it.",
+]
 
 [[behavior]]
 id = "guides.magnetic"

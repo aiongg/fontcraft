@@ -1,0 +1,126 @@
+//! FontCraft's feature compiler (L0, standalone): one OpenType feature file, assembled from
+//! virtual files, compiled to `GSUB`, `GPOS`, `GDEF`, `BASE` and the values of the table blocks,
+//! with generated lookups (kerning, mark attachment, feature variations) inserted where the code
+//! asks for them.
+//!
+//! The compiler is fea-rs 1.0.0 (decision 0002; `docs/plans/M8.md` § 3). fea-rs is built on
+//! `write-fonts` 0.52 and the workspace on 0.54, so this crate is the only one that sees 0.52
+//! (the renamed `write-fonts-052` dependency). Nothing of fea-rs or of `write-fonts` 0.52 is in
+//! the public interface: tables leave as bytes ([`Compiled`]), which the compiler adds with
+//! `FontBuilder::add_raw`; generated lookups enter as this crate's own plain data
+//! ([`GeneratedLookups`]); variation data enters through the [`FeaVariations`] trait. The two
+//! exceptions are [`Tag`] and [`GlyphId16`]: they come from `font-types`, which both
+//! `write-fonts` versions share, so they are the workspace's types too.
+//!
+//! Rows: `compile.featureCompilation`, `compile.expandFeatureIncludes`, `compile.layoutPacking`,
+//! the `fea.*` rows of `spec/inventory/12b-feature-language.toml` (M8.2); the output side of
+//! `fea.table.*`, `compile.nameFeaOverrides` and `compile.feaTableOverrides` (M8.8).
+//!
+//! Contract:
+//! - [`compile`] takes a [`CompileRequest`]: the files ([`VirtualFiles`]: a root file and the
+//!   files it includes, by path, plus an optional folder for includes read from disk), the glyph
+//!   order, the generated lookups, the variation data (`None` for a static font) and the
+//!   [`Limits`].
+//! - Everything in the request is untrusted. Before fea-rs sees it, the request is checked
+//!   against the limits: text size, included files and their depth, brace and bracket depth,
+//!   then, on fea-rs's parse tree, class sizes, ligature lengths and the rules the code expands
+//!   to (counted with saturation). `validate` and `compile` then run on a thread with a
+//!   [`STACK_SIZE`] stack on native targets, under the caller's panic guard. On wasm, where a
+//!   panic aborts, the same checks run with the lower caps of [`Limits::WASM`].
+//! - A failure is a list of [`Diagnostic`]s, each naming a file of the request and a byte range
+//!   in it (or no file, for a refusal of the request as a whole). Nothing panics, and a failed
+//!   compile returns no tables.
+//! - Generated lookups go to fea-rs's feature writer interface: at the `# Automatic Code` marker
+//!   of their feature when the code has one, else after the hand-written lookups, as fontc
+//!   places them ([`GeneratedLookups::append`] forces the second).
+//! - `GDEF` comes from the code's `table GDEF` block when it has one ([`Compiled::gdef_from_code`]),
+//!   else from the generated glyph classes and carets, as fontc does.
+//! - Name ids of 256 and above that the code declares move to start at
+//!   [`CompileRequest::first_name_id`], everywhere they are referenced, so they cannot collide
+//!   with the source's own names.
+//!
+//! What M9 plugs in here: [`FeaVariations`] (M9.12), [`GeneratedLookups::feature_variations`]
+//! (M9.8's bracket-layer substitutions) and the deltas of [`Metric`] (M9.9's variable kerning
+//! and marks).
+#![forbid(unsafe_code)]
+
+mod diagnostic;
+mod files;
+mod generated;
+mod glyphs;
+mod limits;
+mod output;
+mod variations;
+
+pub use diagnostic::{Diagnostic, Severity};
+pub use files::VirtualFiles;
+pub use generated::{
+    Anchor, ClassPair, Condition, FeatureKey, FeatureVariation, GeneratedLookup, GeneratedLookups, GeneratedRules, GlyphClass, GlyphPair,
+    LookupFlags, Metric, Region, RegionAxis, Value,
+};
+pub use glyphs::GlyphOrder;
+pub use limits::{
+    Limits, MAX_AXES, MAX_DELTAS, MAX_DIAGNOSTICS, MAX_FEATURE_VARIATIONS, MAX_GENERATED_LOOKUPS, MAX_GENERATED_RULES, MAX_GLYPHS, MAX_INCLUDE_DEPTH,
+    MAX_INCLUDE_FILES, MAX_LOCATIONS, MAX_NESTING_DEPTH, MAX_PATH_BYTES, STACK_SIZE,
+};
+pub use output::{Compiled, FeatureSummary, HeadValues, LayoutTable, MetricsValues, Os2Values};
+pub use variations::{Axis, FeaVariations, Location};
+pub use write_fonts_052::types::{GlyphId16, Tag};
+
+/// What [`compile`] and [`validate`] work on.
+#[derive(Clone, Copy)]
+pub struct CompileRequest<'a> {
+    pub files: &'a VirtualFiles,
+    pub glyph_order: &'a GlyphOrder,
+    /// The implicit features (kerning, marks) and feature variations to merge with the code;
+    /// `None` adds nothing.
+    pub generated: Option<&'a GeneratedLookups>,
+    /// Axes, master locations and number values of a variable font; `None` for a static font.
+    pub variations: Option<&'a dyn FeaVariations>,
+    /// The first name id free in the font's `name` table: name ids of 256 and above that the
+    /// code declares are moved up to start there. 256 moves nothing.
+    pub first_name_id: u16,
+    /// `false` leaves `GPOS` out of the result (the Edit View preview font, which shapes with
+    /// substitutions only).
+    pub gpos: bool,
+    pub limits: Limits,
+}
+
+impl<'a> CompileRequest<'a> {
+    /// A request for a static font with every table, no generated lookups and the default limits.
+    pub fn new(files: &'a VirtualFiles, glyph_order: &'a GlyphOrder) -> Self {
+        Self { files, glyph_order, generated: None, variations: None, first_name_id: 256, gpos: true, limits: Limits::default() }
+    }
+}
+
+/// Compiles the request's files to layout tables. Errors and warnings fea-rs reports, and
+/// refusals of the pre-checks, come back as diagnostics; at most [`Limits::diagnostics`] of them.
+pub fn compile(req: &CompileRequest) -> Result<Compiled, Vec<Diagnostic>> {
+    // M8.2: resolver, pre-checks, fea-rs on the big-stack thread, tables to bytes.
+    let _ = req;
+    Err(vec![Diagnostic::request(Severity::Error, NOT_BUILT)])
+}
+
+/// Parses and validates the request's files without building tables: the diagnostics
+/// [`compile`] would report about the code itself (`font.features.listErrors`). An empty list
+/// means the code is valid.
+pub fn validate(req: &CompileRequest) -> Vec<Diagnostic> {
+    // M8.2: the same pre-checks, then fea-rs's `validate`.
+    let _ = req;
+    vec![Diagnostic::request(Severity::Error, NOT_BUILT)]
+}
+
+const NOT_BUILT: &str = "compiling feature code is not available yet";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_request_fails_with_a_message_not_a_panic() {
+        let files = VirtualFiles::new("features.fea", "feature liga { sub f i by f_i; } liga;").unwrap();
+        let order = GlyphOrder::new(vec![".notdef".into(), "f".into(), "i".into(), "f_i".into()]).unwrap();
+        let result = compile(&CompileRequest::new(&files, &order));
+        assert!(result.is_err_and(|d| !d.is_empty()));
+    }
+}

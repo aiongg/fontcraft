@@ -23,12 +23,21 @@
 //! without history, and the commit makes one undo step and one journal entry.
 #![forbid(unsafe_code)]
 
+pub mod assets;
 pub mod clock;
 pub mod cmd;
+pub(crate) mod export_steps;
+pub mod extension_index;
+pub mod extensions;
+pub mod feature_state;
 pub mod glyph_data;
 pub mod guard;
+pub mod interp_cache;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod io;
+pub(crate) mod linked;
+pub mod log;
+pub mod macros;
 pub mod params;
 pub mod settings;
 
@@ -38,9 +47,12 @@ use std::sync::Arc;
 
 pub use clock::Clock;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
+pub use fontcraft_color as color;
 pub use fontcraft_compile as compile;
 pub use fontcraft_container as container;
+pub use fontcraft_fontinfo as fontinfo;
 pub use fontcraft_format as format;
+pub use fontcraft_imagery as imagery;
 pub use fontcraft_model as model;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph, PropsCache};
@@ -74,6 +86,10 @@ pub enum EngineError {
     Decompile(#[from] fontcraft_decompile::DecompileError),
     #[error(transparent)]
     Settings(#[from] settings::SettingsError),
+    #[error(transparent)]
+    Tables(#[from] fontcraft_tables::TablesError),
+    #[error(transparent)]
+    Proof(#[from] fontcraft_proof::ProofError),
     #[error("{0}")]
     Io(String),
     #[error("not supported yet: {0}")]
@@ -228,6 +244,12 @@ pub struct Session {
     metrics_sync: HashMap<u64, fontcraft_spacing::SyncCache>,
     /// Each open document's kerning prepared for lookups, by document id.
     kern_index: HashMap<u64, Arc<fontcraft_spacing::kerning::KernIndex>>,
+    /// Each open document's last feature compile, by document id ([`feature_state`]).
+    feature_state: HashMap<u64, Arc<feature_state::FeatureState>>,
+    /// The file cache and in-memory files behind [`Session::assets`].
+    assets: assets::SessionAssets,
+    /// Installed modules, macros, recording, the command log (`extensions`).
+    extensions: extensions::ExtensionState,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -385,6 +407,17 @@ impl Session {
     /// The user's settings (`settings.get`).
     pub fn settings(&self) -> &settings::UserSettings {
         &self.settings
+    }
+
+    /// Installed modules, macros, the recording and the command log.
+    pub fn extensions(&self) -> &extensions::ExtensionState {
+        &self.extensions
+    }
+
+    /// The extension state, for the commands and the app (folder sync, safe mode). It is not
+    /// part of the rollback snapshot: a command that changes it does so only after it succeeds.
+    pub fn extensions_mut(&mut self) -> &mut extensions::ExtensionState {
+        &mut self.extensions
     }
 
     /// The user's settings, for the app (loading) and for the commands that own reserved ids.
@@ -567,6 +600,9 @@ impl Session {
             }
             Err(panic) => Err(EngineError::Internal(format!("`{id}` failed unexpectedly: {panic}"))),
         };
+        if record {
+            self.extensions.after_command(id, params, spec.journal, &result);
+        }
         match result {
             Ok(value) => {
                 if spec.journal && record {

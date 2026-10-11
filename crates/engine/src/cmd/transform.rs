@@ -515,16 +515,10 @@ fn shape_box(font: &Font, master: &str, shape: &Shape) -> Option<Rect> {
             Ok(b) if !b.elements().is_empty() => Some(b.bounding_box()),
             _ => fontcraft_geom::bounds(p.nodes.iter().map(Node::point)),
         },
-        Shape::Component(c) => {
-            let a = c.affine();
-            match font.outline(&c.glyph, master) {
-                Ok(mut b) if !b.elements().is_empty() => {
-                    b.apply_affine(a);
-                    Some(b.bounding_box())
-                }
-                _ => Some(dot(a * Point::ZERO)),
-            }
-        }
+        Shape::Component(c) => match font.component_outline(c, master) {
+            Ok(b) if !b.elements().is_empty() => Some(b.bounding_box()),
+            _ => Some(dot(c.affine() * Point::ZERO)),
+        },
         Shape::Image(img) => Some(dot(img.transform.affine() * Point::ZERO)),
         Shape::Raw(_) => None,
     }

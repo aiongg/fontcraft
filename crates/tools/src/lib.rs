@@ -23,24 +23,30 @@
 //! | [`cycling`] | tool letters, and the tools that share a toolbar button |
 //! | [`keymap`] | the Edit View keys these tools answer |
 //! | [`toolbox`] | the active tool, temporary tools (Space, Cmd+Space) and key routing |
+//! | [`hint_drag`] | the Select tool's PostScript hint drags (M10.24) |
+//! | [`tt_instructor`] | the TrueType Instructor tool (M10.25) |
 #![forbid(unsafe_code)]
 
 pub mod annotate;
 pub mod bbox;
 pub mod cycling;
+pub mod drag_aids;
 pub mod draw;
 pub mod event;
 pub mod geometry;
 pub mod guide_drag;
 pub mod hand;
+pub mod hint_drag;
 pub mod hit;
 pub mod keymap;
 pub mod knife;
 pub mod lasso;
+pub mod magnet;
 pub mod measure;
 pub mod output;
 pub mod pencil;
 pub mod primitives;
+pub mod rapid;
 pub mod rotate;
 pub mod scale;
 pub mod scene;
@@ -49,9 +55,13 @@ pub mod select;
 pub mod selection;
 pub mod snap;
 pub mod snap_guides;
+pub mod spiro;
+pub mod suggestions;
 pub mod text;
+pub mod thickness;
 pub mod tool;
 pub mod toolbox;
+pub mod tt_instructor;
 pub mod view;
 pub mod zoom;
 

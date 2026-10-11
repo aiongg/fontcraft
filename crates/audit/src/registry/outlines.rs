@@ -1,11 +1,11 @@
-//! The registry: every check with its metadata. Profile, fix and thresholds live here as data
-//! (`docs/spec/21-qa.md` § 10, question 12). Ids and severities match the `[[check]]` rows of
-//! `spec/inventory/21-qa-checks.toml`.
+//! Registry entries of the outline checks of the source (M3): the `check.outlines.*` rows whose
+//! runners read one layer.
 
+use super::LAYER_OUTLINES;
 use crate::CheckFamily::{Contours, HandlesAndCurvature, MetricsAndGrid, PointsAndSegments};
 use crate::Profile::{Outlines, Strict, Universal};
 use crate::Severity::{Fail, Info, Warn};
-use crate::{CheckSpec, FixSpec, contours, handles, metrics, points};
+use crate::{CheckSpec, FixSpec, Runner, contours, handles, metrics, points};
 
 const fn fix(id: &'static str, command: Option<&'static str>, safe: bool, description: &'static str) -> Option<FixSpec> {
     Some(FixSpec { id, command, safe, description })
@@ -15,13 +15,13 @@ const REMOVE_OVERLAP: Option<FixSpec> =
     fix("removeOverlap", Some("path.removeOverlap"), true, "Replace the contours with their union, then restore contour order and start points.");
 const TIDY: Option<&str> = Some("path.tidyUpPaths");
 
-/// Every check, in the order of the inventory.
-pub static CHECKS: &[CheckSpec] = &[
+/// The outline checks, in the order of the inventory.
+pub(super) const CHECKS: &[CheckSpec] = &[
     CheckSpec {
         id: "check.outlines.overlap",
         label: "Overlapping contours",
         description: "Contours cross each other or themselves, or a contour lies inside another that runs the same way. Components take part as their outlines.",
-        family: Contours,
+        family: Some(Contours),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -29,13 +29,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["crossing", "nested-same-direction"],
-        run: contours::overlap,
+        run: Runner::Layer(contours::overlap),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.coincidentPoints",
         label: "Coincident points",
         description: "Two consecutive on-curve points have the same coordinates, giving a segment of length zero.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -43,13 +44,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["coincident"],
-        run: points::coincident_points,
+        run: Runner::Layer(points::coincident_points),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.flatCurve",
         label: "Flat curves",
         description: "A cubic segment whose handles both lie on the line between its ends.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[points::FLAT_CURVE_TOLERANCE],
@@ -57,13 +59,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["flat-curve"],
-        run: points::flat_curve,
+        run: Runner::Layer(points::flat_curve),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.collinearLines",
         label: "Collinear lines",
         description: "Two consecutive lines lie on one straight line, so the node between them is redundant.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[points::COLLINEAR_TOLERANCE, points::COLLINEAR_MAX_ANGLE],
@@ -71,13 +74,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["collinear", "nearly-collinear"],
-        run: points::collinear_lines,
+        run: Runner::Layer(points::collinear_lines),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.tinyContour",
         label: "Tiny contours",
         description: "A contour of four or fewer on-curve points whose bounding box is smaller than `minArea`.",
-        family: Contours,
+        family: Some(Contours),
         severity: Warn,
         profile: Outlines,
         thresholds: &[contours::TINY_MIN_AREA],
@@ -85,13 +89,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["tiny"],
-        run: contours::tiny_contour,
+        run: Runner::Layer(contours::tiny_contour),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.noContours",
         label: "Empty glyphs",
         description: "A layer has neither paths nor components although its glyph is not a space.",
-        family: Contours,
+        family: Some(Contours),
         severity: Info,
         profile: Outlines,
         thresholds: &[],
@@ -99,13 +104,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["no-contours"],
-        run: contours::no_contours,
+        run: Runner::Layer(contours::no_contours),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.pathDirection",
         label: "Path direction",
         description: "An outer contour runs clockwise, or a contour runs the same way as the one around it.",
-        family: Contours,
+        family: Some(Contours),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -113,13 +119,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["outer-clockwise", "counter-same-direction", "nested-clockwise"],
-        run: contours::path_direction,
+        run: Runner::Layer(contours::path_direction),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.alignmentMiss",
         label: "Points near metric lines",
         description: "An on-curve point lies close to, but not on, the baseline, x-height (lowercase), cap height (uppercase), ascender or descender.",
-        family: MetricsAndGrid,
+        family: Some(MetricsAndGrid),
         severity: Warn,
         profile: Outlines,
         thresholds: &[metrics::ALIGNMENT_MAX_DISTANCE],
@@ -127,13 +134,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["alignment-miss"],
-        run: metrics::alignment_miss,
+        run: Runner::Layer(metrics::alignment_miss),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.jaggySegments",
         label: "Spikes",
         description: "Two neighbouring segments meet at a very sharp angle, which usually marks a spike or a folded-back node.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[points::JAGGY_MAX_ANGLE],
@@ -141,13 +149,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: true,
         capped: true,
         codes: &["jaggy"],
-        run: points::jaggy_segments,
+        run: Runner::Layer(points::jaggy_segments),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.almostOrthogonalLine",
         label: "Slightly slanted lines",
         description: "A line is within `maxAngle` degrees of horizontal or vertical without being exactly so. Not run on italic masters.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[points::ORTHOGONAL_LINE_MAX_ANGLE],
@@ -155,13 +164,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: true,
         capped: true,
         codes: &["almost-orthogonal"],
-        run: points::almost_orthogonal_line,
+        run: Runner::Layer(points::almost_orthogonal_line),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.shortSegments",
         label: "Short segments",
         description: "A segment is shorter than `minLength` units or than `minFraction` of its contour; a short line after a line does not count.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[points::SHORT_MIN_LENGTH, points::SHORT_MIN_FRACTION],
@@ -169,13 +179,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: true,
         capped: true,
         codes: &["short-segment"],
-        run: points::short_segments,
+        run: Runner::Layer(points::short_segments),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.overlappingSegments",
         label: "Segments drawn twice",
         description: "Two segments have the same ends and handles, in either direction, so one edge is drawn twice.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -183,13 +194,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["overlapping-segments"],
-        run: points::overlapping_segments,
+        run: Runner::Layer(points::overlapping_segments),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.mixedCurveTypes",
         label: "Mixed curve types",
         description: "A layer mixes cubic and quadratic curves, or uses the type most of the font does not.",
-        family: Contours,
+        family: Some(Contours),
         severity: Warn,
         profile: Universal,
         thresholds: &[],
@@ -197,13 +209,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["mixed-in-layer", "differs-from-font"],
-        run: contours::mixed_curve_types,
+        run: Runner::Layer(contours::mixed_curve_types),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.openCorners",
         label: "Open corners",
         description: "Two segments cross a short distance before a corner, leaving a small triangle outside the shape.",
-        family: Contours,
+        family: Some(Contours),
         severity: Info,
         profile: Strict,
         thresholds: &[contours::OPEN_CORNER_MAX_LENGTH],
@@ -211,13 +224,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["open-corner"],
-        run: contours::open_corners,
+        run: Runner::Layer(contours::open_corners),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.missingExtremes",
         label: "Missing extremes",
         description: "A curve reaches a horizontal or vertical extreme between its nodes instead of at a node.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Warn,
         profile: Outlines,
         thresholds: &[handles::EXTREMES_MIN_DISTANCE],
@@ -225,13 +239,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["missing-extreme"],
-        run: handles::missing_extremes,
+        run: Runner::Layer(handles::missing_extremes),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.inflections",
         label: "Inflections",
         description: "A cubic segment changes its bending direction between its nodes.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Info,
         profile: Outlines,
         thresholds: &[],
@@ -239,13 +254,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["inflection"],
-        run: handles::inflections,
+        run: Runner::Layer(handles::inflections),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.almostStraightCurve",
         label: "Almost straight curves",
         description: "A curve strays less than `maxDeviation` units from the line between its ends but is not exactly flat.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[points::ALMOST_STRAIGHT_MAX_DEVIATION],
@@ -253,13 +269,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["almost-straight"],
-        run: points::almost_straight_curve,
+        run: Runner::Layer(points::almost_straight_curve),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.almostOrthogonalHandle",
         label: "Slightly slanted handles",
         description: "A handle is within `maxAngle` degrees or `maxOffset` units of horizontal or vertical without being exactly so.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Warn,
         profile: Outlines,
         thresholds: &[handles::HANDLE_MAX_ANGLE, handles::HANDLE_MAX_OFFSET],
@@ -267,13 +284,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["almost-orthogonal"],
-        run: handles::almost_orthogonal_handle,
+        run: Runner::Layer(handles::almost_orthogonal_handle),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.zeroLengthHandle",
         label: "Retracted handles",
         description: "A handle has the same coordinates as its node.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -281,13 +299,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["retracted", "both-retracted"],
-        run: handles::zero_length_handle,
+        run: Runner::Layer(handles::zero_length_handle),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.nearCoincidentPoints",
         label: "Nearly coincident points",
         description: "Two consecutive on-curve points are closer than `minDistance` units without being identical.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
         thresholds: &[points::NEAR_COINCIDENT_MIN_DISTANCE],
@@ -295,13 +314,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["near-coincident"],
-        run: points::near_coincident_points,
+        run: Runner::Layer(points::near_coincident_points),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.duplicateContour",
         label: "Repeated paths",
         description: "Two paths of one layer have the same points, in the same or the opposite direction.",
-        family: Contours,
+        family: Some(Contours),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -309,13 +329,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["duplicate"],
-        run: contours::duplicate_contour,
+        run: Runner::Layer(contours::duplicate_contour),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.openPath",
         label: "Open paths",
         description: "A path is open; open paths are left out of exported fonts.",
-        family: Contours,
+        family: Some(Contours),
         severity: Fail,
         profile: Outlines,
         thresholds: &[],
@@ -323,13 +344,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["open-path"],
-        run: contours::open_path,
+        run: Runner::Layer(contours::open_path),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.strayPoint",
         label: "Stray points",
         description: "A path has a single node, no nodes, or only off-curve nodes that make no shape.",
-        family: Contours,
+        family: Some(Contours),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -337,13 +359,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["empty", "single-node", "off-curve-only"],
-        run: contours::stray_point,
+        run: Runner::Layer(contours::stray_point),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.zeroAreaContour",
         label: "Paths without area",
         description: "A closed path encloses no area, for example two points joined by lines.",
-        family: Contours,
+        family: Some(Contours),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -351,13 +374,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["zero-area"],
-        run: contours::zero_area_contour,
+        run: Runner::Layer(contours::zero_area_contour),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.invalidSegmentStructure",
         label: "Malformed segments",
         description: "A node list does not make segments: a curve node without exactly two off-curve nodes before it, a line node after off-curve nodes, or a quadratic node with none.",
-        family: PointsAndSegments,
+        family: Some(PointsAndSegments),
         severity: Fail,
         profile: Outlines,
         thresholds: &[],
@@ -372,13 +396,14 @@ pub static CHECKS: &[CheckSpec] = &[
             "curve-off-curve-count",
             "qcurve-without-off-curve",
         ],
-        run: points::invalid_segment_structure,
+        run: Runner::Layer(points::invalid_segment_structure),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.nodesOffGrid",
         label: "Points off the grid",
         description: "A node or handle coordinate is not a multiple of the font's grid step.",
-        family: MetricsAndGrid,
+        family: Some(MetricsAndGrid),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -386,13 +411,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["off-grid"],
-        run: metrics::nodes_off_grid,
+        run: Runner::Layer(metrics::nodes_off_grid),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.coordinatesOutOfRange",
         label: "Coordinates out of range",
         description: "A coordinate is not a number, lies beyond what a compiled font can store, or lies more than `maxEmMultiple` ems from the origin.",
-        family: MetricsAndGrid,
+        family: Some(MetricsAndGrid),
         severity: Fail,
         profile: Outlines,
         thresholds: &[metrics::MAX_EM_MULTIPLE],
@@ -400,13 +426,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["not-a-number", "beyond-storage", "far-from-em"],
-        run: metrics::coordinates_out_of_range,
+        run: Runner::Layer(metrics::coordinates_out_of_range),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.nearAlignmentZone",
         label: "Points near alignment zones",
         description: "An extreme on-curve point lies just outside an alignment zone, within `margin` units of its edge.",
-        family: MetricsAndGrid,
+        family: Some(MetricsAndGrid),
         severity: Warn,
         profile: Outlines,
         thresholds: &[metrics::ZONE_MARGIN],
@@ -414,13 +441,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["near-zone"],
-        run: metrics::near_alignment_zone,
+        run: Runner::Layer(metrics::near_alignment_zone),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.kinkedSmoothNode",
         label: "Kinked smooth nodes",
         description: "A smooth node's incoming and outgoing directions differ by more than `maxAngle` degrees.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Warn,
         profile: Outlines,
         thresholds: &[handles::KINK_MAX_ANGLE],
@@ -428,13 +456,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["kinked"],
-        run: handles::kinked_smooth_node,
+        run: Runner::Layer(handles::kinked_smooth_node),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.unflaggedSmoothNode",
         label: "Smooth corner nodes",
         description: "A corner node between two curves has handles exactly on one line; it probably should be smooth.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Info,
         profile: Strict,
         thresholds: &[],
@@ -442,13 +471,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["collinear-handles"],
-        run: handles::unflagged_smooth_node,
+        run: Runner::Layer(handles::unflagged_smooth_node),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.unbalancedHandles",
         label: "Unbalanced handles",
         description: "The handles of a curve differ more than `maxRatio`-fold in relative length, or one reaches past where the handles meet.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Info,
         profile: Strict,
         thresholds: &[handles::UNBALANCED_MAX_RATIO],
@@ -456,13 +486,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["beyond-intersection", "unbalanced"],
-        run: handles::unbalanced_handles,
+        run: Runner::Layer(handles::unbalanced_handles),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.crossedHandles",
         label: "Crossed handles",
         description: "The two handles of a cubic segment cross, so the segment forms a loop or a cusp.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Warn,
         profile: Outlines,
         thresholds: &[],
@@ -470,13 +501,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: false,
         codes: &["crossed"],
-        run: handles::crossed_handles,
+        run: Runner::Layer(handles::crossed_handles),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.curvatureBreak",
         label: "Curvature breaks",
         description: "At a smooth node between two curves the curvature on the two sides differs more than `maxRatio`-fold.",
-        family: HandlesAndCurvature,
+        family: Some(HandlesAndCurvature),
         severity: Info,
         profile: Strict,
         thresholds: &[handles::CURVATURE_MAX_RATIO],
@@ -484,13 +516,14 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["curvature-break"],
-        run: handles::curvature_break,
+        run: Runner::Layer(handles::curvature_break),
+        ..LAYER_OUTLINES
     },
     CheckSpec {
         id: "check.outlines.startPointPosition",
         label: "Start points",
         description: "A closed path does not start at its lowest, then leftmost, on-curve node.",
-        family: Contours,
+        family: Some(Contours),
         severity: Info,
         profile: Strict,
         thresholds: &[],
@@ -498,6 +531,7 @@ pub static CHECKS: &[CheckSpec] = &[
         skip_variable: false,
         capped: true,
         codes: &["start-point"],
-        run: contours::start_point_position,
+        run: Runner::Layer(contours::start_point_position),
+        ..LAYER_OUTLINES
     },
 ];

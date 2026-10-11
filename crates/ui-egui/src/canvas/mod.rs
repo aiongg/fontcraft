@@ -7,6 +7,7 @@
 //! | [`metrics`] | metric lines, zones and their names |
 //! | [`guides`] | guides, the grid, parameter metric lines, CJK grids, measurement labels |
 //! | [`background`] | the other side of the layer and the other visible layers, behind the outline; the darker canvas while the background is edited |
+//! | [`images`] | placed images, through a cache of decoded textures |
 //! | [`fill`] | filled glyphs, rasterised by the `render` crate into a texture |
 //! | [`composite`] | (no drawing) each glyph's outline with strokes expanded and masks applied, cached |
 //! | [`nodes`] | nodes and handles with the display conventions of `docs/spec/03a` § 4 |
@@ -17,24 +18,40 @@
 //! | [`text`] | text mode: kerned gaps, the text selection and cursor, metrics labels; the pointer in text mode |
 //! | [`group_members`] | Show Group Members: the other members of the edited pair's kerning groups, behind the glyphs |
 //! | [`measurement_line`] | text mode: the measurement line and the sidebearings on it |
+//! | [`hints_ps`] | PostScript hints: bars, badges, drag markers (M10.24) |
+//! | [`tt_badges`] | TrueType instruction badges of the Instructor (M10.25) |
+//! | [`tt_pixels`] | the Instructor's instance and grid-fitted outlines and pixel backdrop (M10.26) |
 //!
 //! Every colour and size comes from [`Tokens`]. Wheel and gestures act through `view.scrollTo`
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
 //! ([`crate::tools_glue`]) after the frame is drawn.
 
 pub mod annotations;
+pub mod attach;
 pub mod audit_markers;
+pub mod autometer;
 pub mod background;
 pub mod bbox;
+pub mod compatibility;
 pub mod composite;
+pub mod edit_aids;
 pub mod fill;
 pub mod group_members;
 pub mod guides;
+pub mod hints_ps;
+pub mod images;
 pub mod measurement_line;
 pub mod metrics;
 pub mod nodes;
+pub mod power_guides;
+pub mod reference_font;
+pub mod reporters;
 pub mod selection;
+pub mod status;
+pub mod suggestions;
 pub mod text;
+pub mod tt_badges;
+pub mod tt_pixels;
 pub mod view;
 
 use egui::{Pos2, Rect, Sense, Stroke};
@@ -55,6 +72,19 @@ pub struct Painting<'a> {
     pub rect: Rect,
     pub view: View,
     pub tokens: &'a Tokens,
+}
+
+/// What the overlays added by later packages read: the session, the shell state, the showing
+/// tab, its font and edited layer, and the document id and revision. Built only outside text mode
+/// and while a layer is edited.
+pub struct Scene<'a> {
+    pub session: &'a fontcraft_engine::Session,
+    pub state: &'a crate::state::UiState,
+    pub tab: &'a crate::state::Tab,
+    pub font: &'a fontcraft_model::Font,
+    pub layer: &'a fontcraft_model::Layer,
+    /// The active document's id and revision.
+    pub doc: (u64, u64),
 }
 
 /// Draws Edit View for the showing tab, and queues the view commands its input asks for.
@@ -108,6 +138,12 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             background::draw(&c, font, glyph, layer, &state.display);
         }
         let doc = session.active().map(|d| (d.id, d.revision)).unwrap_or_default();
+        let scene = edited.as_deref().filter(|_| !text_mode).map(|layer| Scene { session: &*session, state: &*state, tab: &tab, font, layer, doc });
+        if let Some(s) = &scene {
+            status::draw(ui, &c, s, pending);
+            reference_font::draw(ui, &c, s, pending);
+            reporters::draw_back(ui, &c, s, pending);
+        }
         if text_mode && let Some(layout) = layout.as_deref() {
             text::draw_behind(&tc, layout, &tab, span.0);
         }
@@ -162,12 +198,23 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
                 painter.add(egui::Shape::line(contour, Stroke::new(tokens.outline_width, tokens.outline)));
             }
         }
+        if let Some(s) = &scene {
+            attach::draw(ui, &c, s, pending);
+            edit_aids::draw(ui, &c, s, pending);
+            reporters::draw_front(ui, &c, s, pending);
+        }
         guides::draw_guides(&c, font, layer, &tab.selection, &extras, &state.display);
+        if let Some(s) = &scene {
+            power_guides::draw(ui, &c, s, pending);
+        }
         let focus = tab.focus.as_deref();
         if state.display.nodes {
             painter.extend(selection::segment_shapes(layer, &tab.selection, v, tokens, focus));
             painter.extend(nodes::shapes(layer, v, tokens, &marks, focus));
             painter.extend(selection::point_shapes(layer, &tab.selection, v, tokens, focus));
+        }
+        if let Some(s) = &scene {
+            autometer::draw(ui, &c, s, pending);
         }
         painter.extend(bbox::shapes(font, &tab, tools.toolbox.active_id(), state.display.bounding_box, &state.transform, v, tokens));
         annotations::draw(&c, layer, &tab.selection, &state.display);
@@ -176,6 +223,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
             audit_markers::draw(ui, &c, layer, audit_markers::visible(&state.audit, session, &tab), !tools.toolbox.busy(), pending);
         }
         painter.extend(selection::overlay_shapes(&tools.toolbox.overlays(), v, tokens));
+        if let Some(s) = &scene {
+            suggestions::draw(ui, &c, s, pending);
+        }
         guides::draw_measurement(&c, &extras);
     });
 }

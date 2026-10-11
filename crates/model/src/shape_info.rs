@@ -10,6 +10,7 @@ use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 
+use crate::paint::{Color, Gradient, MAX_GRADIENT_STOPS, Shadow};
 use crate::rare::{Rare, RareDefault};
 use crate::{ColorLabel, Extra, UserData};
 
@@ -73,6 +74,10 @@ pub struct ShapeAttrs {
     /// The vertical stroke size; the width when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke_height: Option<Dimension>,
+    /// Where the stroke sits on the path. Today the source's format version states it
+    /// (`.glyphs` version 3: 0 outside, 0.5 centred, 1 inside; version 4: −1 inside, 0 centred, 1
+    /// outside). M11.5 stores it in the version 4 convention and converts version 3 files when
+    /// they are read and written.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stroke_pos: Option<Dimension>,
     /// 0 butt, 1 round, 2 square, 3 round inset.
@@ -86,11 +91,20 @@ pub struct ShapeAttrs {
     /// A stroked path is also filled.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fill: bool,
-    /// Red, green, blue and alpha from 0 to 1.
+    /// The fill: RGBA from 0 to 1, or a palette entry with an alpha.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fill_color: Option<[f64; 4]>,
+    pub fill_color: Option<Color>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stroke_color: Option<[f64; 4]>,
+    pub stroke_color: Option<Color>,
+    /// A gradient, which replaces the fill colour when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<Gradient>,
+    /// A drop shadow (image export only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadow: Option<Shadow>,
+    /// An inner shadow (image export only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadow_in: Option<Shadow>,
     /// The shape's colour label.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<ColorLabel>,
@@ -104,8 +118,9 @@ pub struct ShapeAttrs {
     pub hidden: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,
-    /// Attributes kept as stored values: gradients, shadows, compositing, shape-group membership
-    /// and keys the model does not know.
+    /// Attributes kept as stored values: compositing, shape-group membership, keys the model
+    /// does not know, and (until M11.5) the gradients, shadows and palette colours the readers
+    /// do not yet type.
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
@@ -124,8 +139,10 @@ impl ShapeAttrs {
         [dim(&self.stroke_width), dim(&self.stroke_height), dim(&self.stroke_pos), self.opacity]
             .into_iter()
             .flatten()
-            .chain(self.fill_color.into_iter().flatten())
-            .chain(self.stroke_color.into_iter().flatten())
+            .chain(self.fill_color.iter().flat_map(Color::numbers))
+            .chain(self.stroke_color.iter().flat_map(Color::numbers))
+            .chain(self.gradient.iter().flat_map(Gradient::numbers))
+            .chain(self.shadow.iter().chain(self.shadow_in.iter()).flat_map(Shadow::numbers))
     }
 }
 
@@ -245,8 +262,13 @@ pub(crate) fn check_attrs(a: &ShapeAttrs) -> Result<(), String> {
     if !a.numbers().all(f64::is_finite) {
         return Err("a drawing attribute is not a number".into());
     }
-    if [a.fill_color, a.stroke_color].iter().flatten().flatten().any(|c| !(0.0..=1.0).contains(c)) || a.color.is_some_and(|c| !c.is_valid()) {
+    let colors = a.fill_color.iter().chain(&a.stroke_color).chain(a.shadow.iter().chain(&a.shadow_in).map(|s| &s.color));
+    let stops = a.gradient.iter().flat_map(|g| g.stops.iter().map(|s| &s.color));
+    if colors.chain(stops).any(|c| !c.is_valid()) || a.color.is_some_and(|c| !c.is_valid()) {
         return Err("a colour component is not a number from 0 to 1".into());
+    }
+    if a.gradient.as_ref().is_some_and(|g| g.stops.len() > MAX_GRADIENT_STOPS) {
+        return Err(format!("a gradient has more than {MAX_GRADIENT_STOPS} stops"));
     }
     Ok(())
 }

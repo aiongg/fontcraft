@@ -59,6 +59,7 @@ status = "handbook"
 guesses = [
   "A new row is opaque black (#000000FF) in every palette unless `color` or `colors` is given. Settled by pressing plus in the reference's palette editor.",
 ]
+observe = ["Palette font: in Font Info › Font, open the Color Palettes editor and press plus; note the colour of the new row in each of the two palettes."]
 
 [[command]]
 id = "colorPalette.removeColor"
@@ -74,6 +75,9 @@ ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
 status = "handbook"
 guesses = [
   "Removing a row renumbers the layers that use higher rows and refuses while a layer uses the row. Settled by removing a used row in the reference's editor and reading the layers afterwards.",
+]
+observe = [
+  "Palette font: in the Color Palettes editor remove row 1, which a palette layer of A uses, and press OK; note whether A's layers are renumbered, left pointing at the old index, or the removal is refused.",
 ]
 
 [[command]]
@@ -104,6 +108,7 @@ status = "handbook"
 guesses = [
   "A new palette is a copy of palette 0 (`copyFrom` defaults to 0). Settled by Add Palette in the reference's editor.",
 ]
+observe = ["Palette font: in the Color Palettes editor choose Add Palette from the gear menu; note the new palette's colours (a copy of palette 0, all black, or empty)."]
 
 [[command]]
 id = "colorPalette.removePalette"
@@ -122,6 +127,7 @@ guesses = [
 ]
 
 # ───────────────────────────── Commands: colour layer types ─────────────────────────────
+observe = ["Palette font: in the Color Palettes editor remove every palette but one, then try to remove the last palette and its last colour; note whether either can be removed."]
 
 [[command]]
 id = "layer.convertToColorPalette"
@@ -142,6 +148,7 @@ guesses = [
 context = [
   "layers.row",
 ]
+observe = ["Palette font: add a layer, choose Color Palette from its context menu, then another colour kind; note whether the later kind replaces the Color Palette kind or the choice is refused."]
 
 [[command]]
 id = "layer.setColorPaletteIndex"
@@ -174,6 +181,7 @@ guesses = [
 context = [
   "layers.row",
 ]
+observe = ["sbix font: add a new iColor layer; note the default size shown in its label."]
 
 [[command]]
 id = "layer.setIColorSize"
@@ -187,6 +195,7 @@ milestone = "M11"
 summary = "Changes the pixel size of an iColor layer; in the UI by double-clicking the layer entry and editing the number. The size is the strike's pixels-per-em, so raising it above the image's own resolution makes the image draw smaller and lowering it makes the image draw larger."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "handbook"
+observe = ["sbix font: double-click an iColor layer entry and type 256; note the new label and whether the image is drawn half as large as at 128."]
 
 [[command]]
 id = "layer.setIColorImage"
@@ -204,6 +213,7 @@ own = true
 guesses = [
   "The image is placed with its bottom-left corner at the bottom-left of the master layer's path bounds (the origin when the master layer has no paths) and scaled to unitsPerEm ÷ size units per pixel, so the iColor size alone sets its scale. Settled by dropping an image on an iColor layer in the reference.",
 ]
+observe = ["sbix font: drop E 64.png on the iColor 64 layer of E; note where the image lands relative to the two corner paths and whether it fills their box."]
 
 [[command]]
 id = "layer.convertToSvg"
@@ -236,6 +246,7 @@ status = "handbook"
 guesses = [
   "The SVG's viewBox is placed with its bottom-left corner at the layer origin, one SVG user unit per font unit, y pointing up. Settled by dropping an SVG file on an svg layer in the reference.",
 ]
+observe = ["SVG font: drop F.svg on the svg layer of F; note where the viewBox lands and at which scale."]
 
 [[command]]
 id = "layer.convertToColor"
@@ -252,6 +263,7 @@ status = "handbook"
 context = [
   "layers.row",
 ]
+observe = ["Palette font: open the context menu of a master layer in the Layers palette; note whether the colour layer kinds are offered for it."]
 
 [[command]]
 id = "layer.listColorLayers"
@@ -284,6 +296,7 @@ status = "handbook"
 guesses = [
   "Shadow and Inner Shadow have blur, offset and colour fields, as the file format stores them; Pattern Image has an image reference. Settled by adding each in the reference's inspector.",
 ]
+observe = ["Full-colour font: add Shadow, Inner Shadow and Pattern Image to a path; note the controls each one shows."]
 
 [[command]]
 id = "attributes.setStrokeWidth"
@@ -300,6 +313,7 @@ status = "handbook"
 guesses = [
   "A stroke added to a path without one is opaque black. Settled by entering a stroke width in the reference's Attributes inspector.",
 ]
+observe = ["Full-colour font: give a path a stroke width in the Attributes inspector; note the default stroke colour."]
 
 [[command]]
 id = "attributes.setStrokeAlignment"
@@ -316,6 +330,7 @@ status = "handbook"
 guesses = [
   "The left button is inside and the right button outside, for paths in the usual direction. Settled by choosing each in the reference and reading `strokePos` in the saved file.",
 ]
+observe = ["Full-colour font: on a counter-clockwise path with a stroke, choose left, then right stroke alignment; note which side the stroke moves to and the strokePos value saved in the file."]
 
 [[command]]
 id = "attributes.setStrokeColor"
@@ -385,6 +400,7 @@ notes = "The handbook says how a gradient is added and that it replaces the fill
 guesses = [
   "The Gradient row has a minus button, like the Stroke and Fill rows, that removes the gradient. Settled by looking at the Gradient row of the reference's Attributes inspector.",
 ]
+observe = ["Full-colour font: on a path with a gradient, look for a way to remove the gradient (a minus button or another control); note what it is."]
 
 [[command]]
 id = "attributes.addGradient"
@@ -402,6 +418,7 @@ guesses = [
   "A new gradient is linear, from the path's fill colour at offset 0 to the same colour fully transparent at offset 1, running from the left middle to the right middle of the path's bounds. Settled by adding a gradient in the reference.",
   "Conic gradients and the extend mode, which the version 4 file format has and the handbook does not describe, are accepted as parameters; the inspector shows only linear and radial. Settled by looking for them in the reference's inspector.",
 ]
+observe = ["Full-colour font: add a gradient to a path; note its type, its stop colours and its start and end positions."]
 
 [[command]]
 id = "attributes.setGradientType"
@@ -431,6 +448,7 @@ status = "handbook"
 guesses = [
   "A new stop takes the colour of the gradient at its offset. Settled by clicking the gradient bar in the reference.",
 ]
+observe = ["Full-colour font: click the gradient bar between two stops; note the colour of the new stop."]
 
 [[command]]
 id = "attributes.removeGradientStop"
@@ -460,6 +478,7 @@ status = "handbook"
 guesses = [
   "A stop can be moved along the bar, which `offset` does. Settled by dragging a stop knob sideways in the reference.",
 ]
+observe = ["Full-colour font: drag a stop knob along the gradient bar; note whether the stop moves and how its offset changes."]
 
 [[command]]
 id = "attributes.setGradientPosition"
@@ -525,6 +544,9 @@ milestone = "M11"
 summary = "How colour layers appear in the Layers palette (Window › Palette, Cmd+Alt+P): as special layers indented under their master, with a type-specific label and controls. They are created by adding a layer with the plus button and then picking a colour type from the entry's context menu."
 ref = "Color Fonts › COLR/CPAL Fonts › Color Palette Layers; sbix Fonts › Adding Images to Glyphs; SVG Color Fonts"
 status = "handbook"
+observe = [
+  "Palette font: add a layer to a glyph and choose each colour kind from its context menu in turn; note the entry's label, indent, bold text and swatch or size, and whether a later kind replaces the earlier one.",
+]
 
 [[panel]]
 id = "palette.layers.paletteColorChooser"
@@ -542,6 +564,7 @@ status = "handbook"
 guesses = [
   "The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.",
 ]
+observe = ["Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists."]
 
 [[panel]]
 id = "inspector.attributes"
@@ -599,6 +622,7 @@ status = "handbook"
 guesses = [
   "A glyph may mix kinds: its palette and full-colour layers feed COLR, its iColor layers sbix and its svg layer the SVG table, each written by its own rule; an svg layer wins over a conversion by Color Layers to SVG for that glyph. Settled by exporting a glyph with a palette layer and an svg layer from the reference.",
 ]
+observe = ["Palette font: give a glyph both a palette layer and an svg layer, export, and note which colour tables are written and which one carries that glyph."]
 
 [[behavior]]
 id = "color.metrics.linkWithFirstMaster"
@@ -626,6 +650,7 @@ status = "handbook"
 guesses = [
   "Other glyphs are drawn with the colour layers of the current master, in palette 0. Settled by selecting a colour layer in a tab of several colour glyphs in the reference.",
 ]
+observe = ["Palette font: select a palette layer of A and type AB in the Edit View tab; note whether B is drawn in colour and with which palette."]
 
 [[behavior]]
 id = "color.preview.previewArea"
@@ -650,6 +675,7 @@ milestone = "M11"
 summary = "Once the Color Palettes parameter exists, glyphs with palette layers are previewed in colour in Font View cells as well as in Edit View."
 ref = "Appendix › Custom Parameters › Color Palettes"
 status = "handbook"
+observe = ["Palette font: look at A in Font View; note whether its cell is drawn in colour and with which palette."]
 
 [[behavior]]
 id = "color.export.anyFlavour"
@@ -692,6 +718,7 @@ milestone = "M11"
 summary = "The Master Color parameter on a master sets the colour its filled outlines are drawn with in the editor, including opacity. It is a preview aid only and never reaches the exported font; it can be added to several selected masters in one step."
 ref = "Color Fonts › Layered Color Fonts › Initial Setup"
 status = "handbook"
+observe = ["Layered font: show all masters in Edit View; note whether each master is drawn in its Master Color with its opacity, and whether Master Color Dark is used in dark appearance."]
 
 [[behavior]]
 id = "color.layered.masterColorDark"
@@ -724,6 +751,7 @@ milestone = "M11"
 summary = "When several masters are shown together, their order in Font Info › Masters is the stacking order in Edit View: the first master is drawn on top, the second below it, and so on."
 ref = "Color Fonts › Layered Color Fonts › Editing Color Layers"
 status = "handbook"
+observe = ["Layered font: show all masters in Edit View; note which master is drawn on top."]
 
 [[behavior]]
 id = "color.layered.exportSeparateFonts"
@@ -743,6 +771,7 @@ status = "handbook"
 guesses = [
   "The SVG document stacks the masters as Color Layers to COLR does, each filled with its Master Color, opacity included. Settled by exporting the layered test font with Color Layers to SVG from the reference.",
 ]
+observe = ["Layered font: export an instance with Color Layers to SVG and read the SVG table; note the paint order, the master whose outline becomes the fallback glyph, and the colours used."]
 
 [[behavior]]
 id = "color.layered.toColr"
@@ -756,6 +785,7 @@ guesses = [
 ]
 
 # ───────────────────────────── Behaviours: palettes and palette layers (CPAL + COLR v0) ─────────────────────────────
+observe = ["Layered font: export an instance with Color Layers to COLR and read COLR and CPAL; note the paint order, the master whose outline becomes the fallback glyph, and the colours used."]
 
 [[behavior]]
 id = "color.palette.fontLevelParameter"
@@ -797,6 +827,7 @@ milestone = "M11"
 summary = "Changes in the palette editor take effect only on OK; Cancel throws all of them away. In FontCraft the editor therefore produces one undoable change."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
 status = "handbook"
+observe = ["Palette font: make several edits in the Color Palettes editor and press Cancel; note whether the palettes are unchanged and whether anything appears in Undo."]
 
 [[behavior]]
 id = "color.paletteLayer.naming"
@@ -849,6 +880,9 @@ notes = "Naming, order and the absence of sharing are what fontc 1.0.0 and fontm
 guesses = [
   "The first palette layer in the file paints at the bottom, as both oracles write it. Settled by exporting the palette test font from the reference and comparing its layer records with the Layers palette order.",
 ]
+observe = [
+  "Palette font: export the default instance and read it with fontTools; note the COLR version, the layer record order against the Layers palette order, the layer glyph names, whether B's layer shares A's layer glyph, and the CPAL version, labels and types.",
+]
 
 [[behavior]]
 id = "color.export.defaultPalette"
@@ -870,6 +904,7 @@ guesses = [
   "Every palette is written, with the chosen palette moved to position 0, so the font keeps its alternatives and renders the chosen one by default. Settled by exporting the palette test font with Color Palette for CPAL = 1 from the reference.",
 ]
 notes = "Neither oracle reads the parameter; fontmake ignores it on instances and fontc warns that it is unknown."
+observe = ["Palette font: export an instance with Color Palette for CPAL set to 1 and read CPAL; note whether one palette or both are written, and in which order."]
 
 [[behavior]]
 id = "color.export.exportColrTableOff"
@@ -917,6 +952,7 @@ status = "handbook"
 guesses = [
   "The gray is 50 % gray, opaque (#808080FF), written to the path's fill colour when the path is made. Settled by reading the colour picker of a new shape in the reference.",
 ]
+observe = ["Full-colour font: draw a rectangle on a Color layer; read its fill in the colour picker and note the exact gray value."]
 
 [[behavior]]
 id = "color.fullColor.attributesPerPath"
@@ -958,6 +994,7 @@ milestone = "M11"
 summary = "The chapter describes two gradient types, linear and radial, each with at least two colour stops. The Glyphs 4 file format additionally defines a conic gradient and an extend mode, which the chapter does not mention."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs › Gradient; GlyphsSDK GlyphsFileFormatv4.md › gradient"
 status = "handbook"
+observe = ["Full-colour font: look in the Attributes inspector for conic gradients and for extend modes (pad, repeat, reflect); note whether any UI offers them."]
 
 [[behavior]]
 id = "color.fullColor.gradientCanvasKnobs"
@@ -985,6 +1022,9 @@ status = "handbook"
 guesses = [
   "One uncompressed SVG document per glyph whose group has the id `glyph<ID>` and a transform that flips y at the baseline; centred strokes are SVG strokes, inside and outside strokes are expanded to outlines. Settled by exporting the full-colour test font with Color Layers to SVG from the reference and reading the documents.",
 ]
+observe = [
+  "Full-colour font: export an instance with Color Layers to SVG and read the SVG table; note whether there is one document per glyph or grouped documents, whether they are compressed, the transform and viewBox, and whether strokes are written as strokes or outlines.",
+]
 
 [[behavior]]
 id = "color.export.fullColorToColrV1"
@@ -997,6 +1037,7 @@ notes = "Both oracles split runs of equal attributes and write the paints this w
 guesses = [
   "A full-colour Color layer exports as COLR version 1 without any parameter, as both oracles do; the handbook names only SVG for these layers. Settled by exporting the full-colour test font from the reference with no parameters.",
 ]
+observe = ["Full-colour font: export with no colour parameters and read it with fontTools; note whether COLR version 1, an SVG table or neither is written."]
 
 [[behavior]]
 id = "color.export.colrVersionChoice"
@@ -1009,6 +1050,7 @@ notes = "The two oracles differ. fontc 1.0.0 writes version 0 for full-colour la
 guesses = [
   "Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.",
 ]
+observe = ["Full-colour font with the gradient and stroke paths deleted (solid fills only): export and read COLR; note whether it is version 0 or version 1."]
 
 [[behavior]]
 id = "color.export.variableColr"
@@ -1022,6 +1064,7 @@ notes = "fontmake 3.12.1 writes variable COLR for fontc's test source COLRv1-var
 guesses = [
   "Gradient geometry and stop colours vary when they differ between masters, as fontmake writes them. Settled by exporting the two-master palette font and a two-master gradient font as variable fonts from the reference.",
 ]
+observe = ["Two-master palette font: export a variable font and read COLR; note whether it has a variation store or Var paints, or is static."]
 
 [[behavior]]
 id = "color.export.strokeInColr"
@@ -1037,6 +1080,7 @@ guesses = [
 ]
 
 # ───────────────────────────── Behaviours: bitmap colour (sbix) ─────────────────────────────
+observe = ["Full-colour font: export with no colour parameters and read COLR; note how C's 20-unit stroke is written (an outlined layer, a separate glyph, or dropped)."]
 
 [[behavior]]
 id = "color.sbix.bitmapFormats"
@@ -1048,6 +1092,7 @@ status = "handbook"
 guesses = [
   "PNG and JPEG data are stored as read, with the graphic types `png ` and `jpg `; TIFF is converted to PNG. Settled by exporting the sbix test font from the reference and reading the graphic types.",
 ]
+observe = ["sbix font: export and read sbix with fontTools; note the strikes and the graphic type tags written for the JPEG and the TIFF image."]
 
 [[behavior]]
 id = "color.sbix.imagePerSize"
@@ -1075,6 +1120,7 @@ status = "handbook"
 guesses = [
   "Unequal ratios are exported as they are, with a warning from export and from `color.describeExport`. Settled by exporting the non-square image in the sbix test font from the reference.",
 ]
+observe = ["sbix font: export and read sbix; note what happens to the non-square PNG (written, scaled, refused) and any message."]
 
 [[behavior]]
 id = "color.sbix.fileNamingTip"
@@ -1099,6 +1145,7 @@ milestone = "M11"
 summary = "The master layer of an sbix glyph has no real outline, but two tiny paths at the bottom-left and top-right corners should be placed on it. Their bounding box is the rectangle the app fits the images into on the iColor layers, and some software (Chrome, Photoshop) clips the bitmap to it."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "handbook"
+observe = ["sbix font: drop E 64.png on the iColor 64 layer of E; note whether the image is fitted to the box of the corner paths at (50, -100) and (550, 700)."]
 
 [[behavior]]
 id = "color.sbix.zeroSizeCornerPaths"
@@ -1123,6 +1170,7 @@ milestone = "M11"
 summary = "The image on an iColor layer is drawn at image pixels divided by the layer's pixel size, in ems. A layer size larger than the image makes it appear smaller and a smaller size makes it appear larger; changing the size is the way to scale it."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "handbook"
+observe = ["sbix font: double-click an iColor layer entry and type 256; note whether the image is drawn half as large as at 128."]
 
 [[behavior]]
 id = "color.layers.widthFollowsMaster"
@@ -1135,6 +1183,7 @@ notes = "FontCraft keeps the widths equal in the engine: a width change on a mas
 guesses = [
   "Palette and full-colour layers follow the master's width as iColor and svg layers do. Settled by changing a master width in the reference with a palette layer present.",
 ]
+observe = ["sbix font and SVG font: change the master layer's width; note the width of every iColor and svg layer of that glyph afterwards."]
 
 [[behavior]]
 id = "color.export.sbixAutomatic"
@@ -1147,6 +1196,7 @@ notes = "Neither oracle builds sbix (both ignore `sbixSize` layers silently) and
 guesses = [
   "A glyph whose image file is missing at export is left out of that strike, with a warning naming the glyph and the file. Settled by exporting the sbix test font from the reference with one file moved away.",
 ]
+observe = ["sbix font: export with no colour parameters and read the result; note whether sbix is written, the origin offsets, and what happens to a glyph whose image file is missing."]
 
 [[behavior]]
 id = "color.export.exportSbixTableOff"
@@ -1166,6 +1216,7 @@ status = "handbook"
 guesses = [
   "Each bitmap becomes an `<image>` element with embedded PNG data, placed where the image sits on its iColor layer. Settled by exporting the sbix test font with SBIX to SVG from the reference.",
 ]
+observe = ["sbix font: export an instance with SBIX to SVG set to 100 and read the SVG table; note how each document places its <image> element (position, size, transform)."]
 
 [[behavior]]
 id = "color.export.sbixToSvgSizeChoice"
@@ -1174,6 +1225,7 @@ milestone = "M11"
 summary = "For SBIX to SVG the layer is chosen per glyph: the iColor layer of exactly the requested size if present, otherwise the smallest one larger than it, otherwise the largest one below it."
 ref = "Color Fonts › sbix Fonts › Exporting"
 status = "handbook"
+observe = ["sbix font: export an instance with SBIX to SVG set to 100 and read the SVG table; note which iColor size each glyph uses."]
 
 [[behavior]]
 id = "color.export.svgOnlyFromSbix"
@@ -1187,11 +1239,11 @@ status = "handbook"
 id = "color.export.cbdtNotInReference"
 area = "compile"
 milestone = "M11"
-summary = "The chapter has no CBDT/CBLC workflow; the only bitmap output it describes is sbix. If FontCraft offers CBDT/CBLC it would be built from the same iColor layers as an export option of our own, and needs its own table writer."
+summary = "The chapter has no CBDT/CBLC workflow; the only bitmap output it describes is sbix. FontCraft builds CBDT/CBLC from the same iColor layers as an export option of its own (off by default; an export dialog checkbox and a command-line flag, not a custom parameter), with its own table writer."
 ref = "Color Fonts › sbix Fonts"
 status = "inferred"
 own = true
-notes = "Whether FontCraft builds CBDT and CBLC is the owner's question 2 of the M11 plan; nanoemoji's `cbdt` output (CBLC and CBDT version 3, index subtable format 1, glyph bitmap format 17) is the layout oracle."
+notes = "Decided in docs/plans/M11.md § 7, question 2 (a): built, at the lowest priority, in the plan's last wave (package M11.11). nanoemoji's `cbdt` output (CBLC and CBDT version 3, index subtable format 1, glyph bitmap format 17) is the layout oracle."
 
 # ───────────────────────────── Behaviours: SVG colour glyphs ─────────────────────────────
 
@@ -1229,6 +1281,7 @@ status = "handbook"
 guesses = [
   "The placed SVG's transform is written as a group transform inside the glyph's document, combined with the y flip at the baseline; the SVG's own content is kept as usvg normalises it. Settled by exporting the SVG test font with a moved and scaled svg layer from the reference.",
 ]
+observe = ["SVG font: move and scale the svg layer's image, export and read F's SVG document; note how the placement appears in the document."]
 
 [[behavior]]
 id = "color.fallback.masterLayerSvg"
@@ -1248,6 +1301,7 @@ status = "handbook"
 guesses = [
   "The SVG table is written whenever svg layers exist or a conversion asks for it, without Export SVG Table, as the appendix says; the parameter set off removes it. Settled by exporting the SVG test font from the reference with no parameters.",
 ]
+observe = ["SVG font: export with no colour parameters; note whether an SVG table is written."]
 
 [[behavior]]
 id = "color.export.colorLayersToSvg"
@@ -1283,4 +1337,7 @@ status = "inferred"
 own = true
 guesses = [
   "Opening a compiled colour font recovers palettes and vector colour layers and reports bitmap and SVG glyphs as lost. Settled by opening a COLR font in the reference.",
+]
+observe = [
+  "Palette font: open its exported .ttf in the app; note whether the palettes and palette layers come back, and how bitmap and SVG glyphs of the sbix and SVG fonts' exports are reported when those files are opened.",
 ]

@@ -118,7 +118,13 @@ fn shape_of(p: &Path) -> Vec<(f64, f64, NodeKind)> {
 fn a_layer_written_as_svg_reads_back_as_the_same_paths() {
     let rect = Path::rect(0.0, 0.0, 50.0, 60.0);
     let shapes = vec![Shape::Path(rect.clone()), Shape::Path(curve_path()), Shape::Component(Component::new("B", 200.0, 10.0))];
-    let b_outline = |name: &str| (name == "B").then(|| Path::rect(0.0, 0.0, 20.0, 20.0).to_bez().unwrap());
+    let b_outline = |c: &Component| {
+        (c.glyph == "B").then(|| {
+            let mut o = Path::rect(0.0, 0.0, 20.0, 20.0).to_bez().unwrap();
+            o.apply_affine(c.affine());
+            o
+        })
+    };
     let text = shapes_to_svg(&shapes, &b_outline, None).unwrap();
     assert!(looks_like_svg(&text));
     assert!(text.contains(r#"viewBox="0 -60 220 60""#), "{text}");

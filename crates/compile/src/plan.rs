@@ -53,12 +53,15 @@ pub fn plan_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, opt
 fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
+    let edits = crate::export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| crate::compile_glyph_data(options));
+    let color_plan = crate::color::plan(font, &resolved, options);
+    let (glyphs, _) = crate::color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
     let kern = match font {
-        Some(font) => crate::kern::generate(font, &resolved, &glyphs, &mut warnings),
+        Some(font) => crate::kern::generate(font, &resolved, &glyphs, &edits, &mut warnings),
         None => None,
     };
     let layout = crate::marks::generate(font, glyph_data.as_deref(), &resolved, &glyphs, kern, &mut warnings);
@@ -72,7 +75,7 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     Ok(Plan {
         glyph_order: glyphs.into_iter().map(|g| g.name).collect(),
         final_names,
-        tables: tables(flavour, names.vertical, layout.gpos.is_some(), layout.gdef.is_some()),
+        tables: tables(flavour, names.vertical, layout.gpos.is_some(), layout.gdef.is_some(), &color_plan.tables()),
         postscript_name: names.name(6),
         style_name,
         warnings,
@@ -93,7 +96,7 @@ pub fn file_stem(resolved: &Resolved, options: &Options, source: &str) -> Option
 }
 
 /// The tables `build::assemble` writes for `flavour`, sorted by tag as the table directory is.
-fn tables(flavour: Flavour, vertical: bool, gpos: bool, gdef: bool) -> Vec<String> {
+fn tables(flavour: Flavour, vertical: bool, gpos: bool, gdef: bool, color: &[&'static str]) -> Vec<String> {
     let mut tags: Vec<&str> = vec!["OS/2", "cmap", "head", "hhea", "hmtx", "maxp", "name", "post"];
     match flavour {
         Flavour::TrueType => tags.extend(["glyf", "loca"]),
@@ -108,6 +111,7 @@ fn tables(flavour: Flavour, vertical: bool, gpos: bool, gdef: bool) -> Vec<Strin
     if gdef {
         tags.push("GDEF");
     }
+    tags.extend_from_slice(color);
     tags.sort_unstable();
     tags.into_iter().map(str::to_string).collect()
 }

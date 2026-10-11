@@ -14,10 +14,12 @@ mod guesses;
 mod layers;
 mod observe;
 mod overlap;
+mod paramcatalog;
 mod parity;
 mod roundtrip;
 mod sha256;
 mod spec;
+mod testfonts;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -39,6 +41,9 @@ commands:
   observe [--check]
                   list every row the running reference app could settle (guesses, memory and inferred
                   rows, `observe` steps) in docs/observe.md (--check: fail if the file is out of date)
+  paramcatalog [--check]
+                  write crates/fontinfo/src/catalog_data.rs from the inventory's parameter rows
+                  (--check: fail if the file is out of date)
   assets          check that every asset has a row in ASSETS.md and that no font binary is in the repository
   brands          check that user-visible text names no other vendor's products
   layers          enforce the crate dependency layering (docs/architecture.md)
@@ -61,6 +66,9 @@ commands:
                   remove overlaps on every glyph layer of the corpus comparison set and measure it
                   (--quadratic: convert the input to quadratic curves first)
                   (inputs for crates/pathops/crosscheck/reference.py go to DIR/layers.jsonl)
+  testfonts [--out DIR]
+                  build the synthetic test fonts for the checks in the reference app and write them
+                  as .glyphs files with a README (default DIR: plan/local/testfonts/)
 ";
 
 fn main() -> ExitCode {
@@ -72,6 +80,7 @@ fn main() -> ExitCode {
         Some("parity") => parity::run(&root(), rest.contains(&"--check")),
         Some("guesses") => guesses::run(&root(), rest.contains(&"--check")),
         Some("observe") => observe::run(&root(), rest.contains(&"--check")),
+        Some("paramcatalog") => paramcatalog::run(&root(), rest.contains(&"--check")),
         Some("assets") => assets::run(&root()),
         Some("brands") => brands::run(&root()),
         Some("layers") => cmd_layers(),
@@ -82,6 +91,7 @@ fn main() -> ExitCode {
         Some("roundtrip") => roundtrip::run(&root(), &rest),
         Some("audit") => audit::run(&root(), &rest),
         Some("overlap") => overlap::run(&root(), &rest),
+        Some("testfonts") => testfonts::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");
             Ok(())

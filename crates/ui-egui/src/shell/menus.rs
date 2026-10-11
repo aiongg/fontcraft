@@ -35,6 +35,9 @@ pub struct MenuItem {
 pub struct Menu {
     pub title: &'static str,
     pub items: Vec<MenuItem>,
+    /// Items made from modules and macros ([`super::menus_dynamic`]), drawn after `items`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub dynamic: Vec<super::menus_dynamic::DynamicItem>,
 }
 
 /// The whole menu tree for the session's current state (`ui.menu.list` on the control channel),
@@ -50,12 +53,12 @@ pub fn menu_tree_for(session: &Session, state: &UiState) -> Vec<Menu> {
 }
 
 fn build(session: &Session, state: Option<&UiState>) -> Vec<Menu> {
-    let mut menus: Vec<Menu> = MENU_ORDER.iter().map(|title| Menu { title, items: Vec::new() }).collect();
+    let mut menus: Vec<Menu> = MENU_ORDER.iter().map(|title| Menu { title, items: Vec::new(), dynamic: Vec::new() }).collect();
     let mut add = |menu: &'static [&'static str], item: MenuItem| {
         let Some((title, _)) = menu.split_first() else { return };
         match menus.iter_mut().find(|m| m.title == *title) {
             Some(m) => m.items.push(item),
-            None => menus.push(Menu { title, items: vec![item] }),
+            None => menus.push(Menu { title, items: vec![item], dynamic: Vec::new() }),
         }
     };
     for c in command_specs() {
@@ -77,7 +80,11 @@ fn build(session: &Session, state: Option<&UiState>) -> Vec<Menu> {
         let path = menu.get(1..).unwrap_or_default().to_vec();
         add(menu, MenuItem { command: id, label, path, shortcut, enabled: true, disabled_reason: None });
     }
-    menus.retain(|m| !m.items.is_empty());
+    for m in &mut menus {
+        m.dynamic =
+            super::menus_dynamic::DynamicSection::of_menu(m.title).map(|s| super::menus_dynamic::items(session, state, s)).unwrap_or_default();
+    }
+    menus.retain(|m| !m.items.is_empty() || !m.dynamic.is_empty());
     menus
 }
 
@@ -109,6 +116,7 @@ fn cache_key(session: &Session, state: &UiState) -> u64 {
     session.documents().len().hash(&mut h);
     session.interaction().hash(&mut h);
     session.batch_is_idle().hash(&mut h);
+    session.extensions().revision().hash(&mut h);
     state.active_tab.hash(&mut h);
     state.selected_glyphs.hash(&mut h);
     if let Some(tab) = state.tab() {

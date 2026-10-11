@@ -18,14 +18,6 @@ summary = "The reference is extended by scripts (run on demand from a menu) and 
 ref = "Extensions (chapter introduction)"
 status = "inferred"
 
-[[behavior]]
-id = "extensions.pythonBased"
-area = "extensions"
-milestone = "M13"
-summary = "In the reference every script and the majority of plug-ins are Python, so a working Python must be chosen in Settings › Addons before they run. FontCraft: no interpreter is embedded; automation is written in any language against the command surfaces and in-app extensions are compiled to WebAssembly, so there is nothing to configure."
-ref = "Extensions (chapter introduction)"
-status = "inferred"
-
 # --- Plugin Manager ---
 
 [[command]]
@@ -131,7 +123,7 @@ kind = "engine"
 params = "{id: string, version?: string}"
 area = "extensions"
 milestone = "M13"
-summary = "Downloads and installs the extension whose green Install button is clicked; plug-ins and modules become usable after a relaunch, scripts after reloading the Script menu. FontCraft: copies a module or macro named by an index entry into its folder after checking its checksum, and makes it usable at once, with no relaunch. Fetching an entry over HTTPS depends on the owner's answer to docs/plans/M13.md § 7 question 5; a local index needs no network."
+summary = "Downloads and installs the extension whose green Install button is clicked; plug-ins and modules become usable after a relaunch, scripts after reloading the Script menu. FontCraft: copies a module or macro named by an index entry into its folder after checking its checksum, and makes it usable at once, with no relaunch. An entry is fetched from a local path, or over HTTPS by the desktop app (docs/plans/M13.md § 7 question 5); a local index needs no network."
 ref = "Extensions › Plugin Manager"
 status = "inferred"
 guesses = [
@@ -238,18 +230,8 @@ guesses = [
 id = "pluginManager.submission"
 area = "extensions"
 milestone = "M13"
-summary = "New entries reach the main catalogue through a pull request on the public plug-in repository or by contacting the vendor. FontCraft: an index is a JSON file anyone can host; whether a public main index exists, and how entries reach it, is the owner's answer to docs/plans/M13.md § 7 question 5."
+summary = "New entries reach the main catalogue through a pull request on the public plug-in repository or by contacting the vendor. FontCraft: an index is a JSON file anyone can host, as a local file or over HTTPS; there is no public main index (docs/plans/M13.md § 7 question 5), so entries reach users through the indexes their vendors publish."
 ref = "Extensions › Plugin Manager"
-status = "inferred"
-
-# --- Modules ---
-
-[[behavior]]
-id = "extensions.modules"
-area = "extensions"
-milestone = "M13"
-summary = "Modules are shared libraries (Python itself and Python packages) that some scripts and plug-ins depend on; they are installed from the Modules tab of the Plugin Manager and need a relaunch. FontCraft: no equivalent, because there is no embedded Python and each WebAssembly module is self-contained; shared functionality is exposed as commands instead."
-ref = "Extensions › Scripts; Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
 
 # --- Scripts and Macro Panel ---
@@ -480,30 +462,6 @@ summary = "Palette plug-ins (.glyphsPalette) add sections to the Palette sidebar
 ref = "Extensions › Plug-ins"
 status = "inferred"
 
-[[behavior]]
-id = "plugin.kind.fileFormat"
-area = "import-export"
-milestone = "M13"
-summary = "File Format plug-ins (.glyphsFileFormat) add formats to open and export. FontCraft: not a module kind at first; formats are built in, and other formats are handled by external converters calling the CLI. Import/export modules may follow once the module interface is stable."
-ref = "Extensions › Plug-ins"
-status = "inferred"
-
-[[behavior]]
-id = "plugin.kind.tool"
-area = "extensions"
-milestone = "M13"
-summary = "Tool plug-ins (.glyphsTool) add tools to the toolbar that extend Edit View. FontCraft: not supported as modules, since a pointer tool needs event handling and UI access the sandbox does not grant; new tools are contributed to the app itself."
-ref = "Extensions › Plug-ins"
-status = "inferred"
-
-[[behavior]]
-id = "plugin.kind.general"
-area = "extensions"
-milestone = "M13"
-summary = "General plug-ins (.glyphsPlugin) cover anything the other five types do not. FontCraft: no catch-all kind; such needs are met by macros, by external programs on the control channel or MCP, or by proposing a new narrowly scoped module kind."
-ref = "Extensions › Plug-ins"
-status = "inferred"
-
 # --- Installing and removing plug-ins ---
 
 [[behavior]]
@@ -511,14 +469,6 @@ id = "plugin.loadedAtLaunch"
 area = "extensions"
 milestone = "M13"
 summary = "Plug-ins are loaded once when the app starts, hence the relaunch after installing. FontCraft: modules in the modules folder are validated and compiled at launch and whenever the folder changes; each run uses a fresh instance, so nothing needs a relaunch."
-ref = "Extensions › Plug-ins › Installing Plug-ins"
-status = "inferred"
-
-[[behavior]]
-id = "plugin.requiresModules"
-area = "extensions"
-milestone = "M13"
-summary = "A plug-in may depend on modules that have to be installed separately from the Modules tab. FontCraft: a module is a single self-contained .wasm file with a manifest; nothing else needs installing."
 ref = "Extensions › Plug-ins › Installing Plug-ins"
 status = "inferred"
 
@@ -584,26 +534,10 @@ ref = "Extensions › Scripts › Creating Scripts; Extensions › Plug-ins › 
 status = "inferred"
 
 [[behavior]]
-id = "api.objectiveC"
-area = "extensions"
-milestone = "M13"
-summary = "A documented Objective-C API serves compiled plug-ins. FontCraft: the native counterpart is the module ABI, a small versioned interface that passes layer data and parameters into the sandbox and results back."
-ref = "Extensions › Plug-ins › Creating Plug-ins"
-status = "inferred"
-
-[[behavior]]
 id = "api.externalInterop"
 area = "automation"
 milestone = "M13"
 summary = "The SDK also provides ways for a separate application to work with the running app. FontCraft: this is the primary model: the JSON control channel and the MCP server expose every command to other processes, with the same parameters as the UI."
-ref = "Extensions › Plug-ins › Creating Plug-ins"
-status = "inferred"
-
-[[behavior]]
-id = "api.openScriptingArchitecture"
-area = "automation"
-milestone = "M13"
-summary = "The reference additionally answers the system's Open Scripting Architecture, so AppleScript or JavaScript can drive it. FontCraft: no OSA dictionary; the CLI and control channel serve the same purpose on every platform and can be called from those languages."
 ref = "Extensions › Plug-ins › Creating Plug-ins"
 status = "inferred"
 

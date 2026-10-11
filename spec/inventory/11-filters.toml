@@ -909,6 +909,9 @@ summary = "A Filter custom parameter on an instance (export) holds one filter st
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
 notes = "Video \"How To Make an Italic Font The Easy Method | Glyphs 3 For Beginners\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=4AJrNUWGRds; it shows Glyphs 3, not Glyphs 4), 2:34–2:47 and 4:44–5:15: pasting in an instance's custom parameters adds a Filter entry holding the copied Transformations string, and the exported instance is slanted. Not shown: when it runs relative to decomposition. fontmake honours Filter on masters and instances with ufo2ft filter names only; fontc ignores it. M7 plan § 4: M7.10."
+observe = [
+  "In font C (m7-export), put Filter `Transformations;Slant:10` on an instance and export a TTF; read the exported TTF with ttx: note whether Aacute stays a composite and whether the slant reaches its outlines.",
+]
 
 [[behavior]]
 id = "filter.customParameter.preFilter"

@@ -13,5 +13,6 @@ workspace = true
 [dependencies]
 fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
+skrifa.workspace = true
 thiserror.workspace = true
 tiny-skia.workspace = true

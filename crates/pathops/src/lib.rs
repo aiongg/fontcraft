@@ -27,17 +27,24 @@
 mod boolean;
 mod contour;
 mod corner;
+pub mod corner_helpers;
 mod cut;
 mod direction;
 mod extremes;
 pub mod filters;
+pub mod geometry_helpers;
 mod graph;
 mod inflections;
 mod limit;
 mod mask;
+pub mod matcher;
+pub mod stem_filters;
+pub mod stems;
 mod stroke;
 mod stroker;
+pub mod tension;
 mod tidy;
+pub mod trace;
 
 use std::fmt;
 

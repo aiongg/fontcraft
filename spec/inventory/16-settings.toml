@@ -892,18 +892,6 @@ observe = [
 ]
 
 [[setting]]
-id = "addons.pythonVersion"
-label = "Python version"
-kind = "choice"
-section = "Addons"
-values = ""
-area = "extensions"
-milestone = "M13"
-summary = "Which installed Python interpreter runs scripts and plug-ins; values are the interpreters found on the machine plus the one installed by the Plugin Manager, labelled (Glyphs). Needs Python 3 or later and a relaunch. FontCraft embeds no Python, so it has no such setting."
-ref = "Settings › Addons › Python version"
-status = "handbook"
-
-[[setting]]
 id = "addons.useSystemConsoleForScriptOutput"
 label = "Use system console for script output"
 kind = "bool"
@@ -927,31 +915,7 @@ milestone = "M13"
 summary = "Extra extension repositories listed in addition to the main one, one entry per line. An entry is an HTTPS URL (HTTP Basic credentials allowed) or a full local file path."
 ref = "Settings › Addons › Alternate Plugin Repositories"
 status = "handbook"
-notes = "FontCraft (M13.10): Extension Indexes, one local path or HTTPS URL per line, read in order. HTTPS URLs need the owner's answer to docs/plans/M13.md § 7 question 5."
-
-[[behavior]]
-id = "addons.pythonRequired"
-area = "extensions"
-milestone = "M13"
-summary = "Most scripts and plug-ins of the reference need Python, and only version 3 or later is accepted."
-ref = "Settings › Addons › Python version"
-status = "handbook"
-
-[[behavior]]
-id = "addons.pythonInstallViaModules"
-area = "extensions"
-milestone = "M13"
-summary = "When no interpreter is chosen or the chosen one does not work, the remedy is to install Python from the Modules tab of the Plugin Manager and then pick the entry labelled (Glyphs)."
-ref = "Settings › Addons › Python version"
-status = "handbook"
-
-[[behavior]]
-id = "addons.pythonChangeNeedsRelaunch"
-area = "extensions"
-milestone = "M13"
-summary = "A changed Python version is used only after the app is relaunched."
-ref = "Settings › Addons › Python version"
-status = "handbook"
+notes = "FontCraft (M13.10): Extension Indexes, one local path or HTTPS URL per line, read in order. HTTPS URLs are fetched by the desktop app (docs/plans/M13.md § 7 question 5)."
 
 [[behavior]]
 id = "addons.repo.mainRepository"
@@ -960,7 +924,7 @@ milestone = "M13"
 summary = "One main repository, available to every user, is always listed; alternates are added to it, never replace it."
 ref = "Settings › Addons › Alternate Plugin Repositories"
 status = "handbook"
-notes = "FontCraft: whether a main index is always listed is the owner's answer to docs/plans/M13.md § 7 question 5; until then there is none, which departs from the reference."
+notes = "FontCraft lists no main index (docs/plans/M13.md § 7 question 5): only the indexes the user adds are read, which departs from the reference."
 
 [[behavior]]
 id = "addons.repo.httpBasicAuth"
@@ -982,14 +946,6 @@ summary = "A full file path in place of a URL makes a local repository definitio
 ref = "Settings › Addons › Alternate Plugin Repositories"
 status = "handbook"
 notes = "FontCraft (M13.10): a line holding an absolute path reads that index file from disk; module and macro URLs inside it may be paths relative to the index."
-
-[[behavior]]
-id = "addons.repo.purpose"
-area = "extensions"
-milestone = "M13"
-summary = "Alternate repositories serve pre-release distribution and private, company-internal extensions."
-ref = "Settings › Addons › Alternate Plugin Repositories"
-status = "handbook"
 
 [[behavior]]
 id = "addons.repo.definitionStructure"

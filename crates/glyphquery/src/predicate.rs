@@ -850,3 +850,20 @@ pub fn parse_predicate(text: &str) -> Result<Expr, QueryError> {
     }
     Ok(e)
 }
+
+/// A parsed glyph predicate: the language of `$[…]` feature-code tokens and of the Custom
+/// smart-filter rule (`token.predicate.*`, `smartFilter.rule.custom`). M8.6 extends the
+/// attributes and the evaluation; these three names are the interface `fontcraft-features`
+/// compiles against.
+pub type Predicate = Expr;
+
+/// Reads predicate text ([`parse_predicate`]).
+pub fn parse(text: &str) -> Result<Predicate, QueryError> {
+    parse_predicate(text)
+}
+
+/// The names of the glyphs of `env`'s font that `predicate` selects, in font order. Layer
+/// attributes read `env`'s master. An error names what cannot be evaluated.
+pub fn evaluate(predicate: &Predicate, env: &Env) -> Result<Vec<String>, QueryError> {
+    Ok(env.font.glyphs.iter().filter(|g| predicate.matches(&Subject::new(g), env)).map(|g| g.name.clone()).collect())
+}

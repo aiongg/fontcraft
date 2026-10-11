@@ -3234,6 +3234,7 @@ status = "handbook"
 guesses = [
   "Files with no glyph of their name are skipped and listed in the result; no glyph is created. Settled by Add Image with an unmatched file in the reference.",
 ]
+observe = ["Image font: in Font View, Add Image with H.png, I.png, J.png and a.png; note which glyphs receive an image and any message about J, which has no glyph."]
 
 [[behavior]]
 id = "fontView.image.caseSensitivity"
@@ -3245,6 +3246,7 @@ status = "handbook"
 guesses = [
   "File names are matched to glyph names exactly, case included, on every platform. Settled by Add Image with `a.png` in a font with `A` and `a` in the reference.",
 ]
+observe = ["Image font: in Font View, Add Image with H.png, I.png, J.png and a.png; note whether a.png goes to a only or also to A."]
 
 [[behavior]]
 id = "fontView.image.showImageOption"
@@ -3256,6 +3258,7 @@ status = "handbook"
 
 # ── Rows added after the audit of 2026-10-07: commands the Font View chapter states that had only
 #    been recorded as batch behaviours. ──
+observe = ["Image font: in Font View turn Show Image off; note whether H (which has paths) is drawn without its image and I (empty) with its image."]
 
 [[command]]
 id = "path.roundCoordinates"

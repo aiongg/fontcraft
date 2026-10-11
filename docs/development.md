@@ -10,6 +10,7 @@ cargo run -p fontcraft -- file.fontcraft --control 7985   # + the JSON control c
 cargo run -p fontcraft-cli -- commands           # the command catalogue as JSON
 cargo run -p fontcraft-cli -- run --cmd glyph.newGlyph --params '{"name":"A.alt"}' --export out.ttf
 cargo run -p fontcraft-cli -- mcp --headless     # the MCP server on stdio
+cargo xtask testfonts [--out DIR]                # synthetic test fonts as .glyphs files for the reference-app checks (default plan/local/testfonts/)
 ```
 
 Rust 1.95 or newer (edition 2024), as in the sibling apps. `rustup target add

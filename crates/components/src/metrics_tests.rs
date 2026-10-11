@@ -252,3 +252,30 @@ fn a_component_pinned_to_another_master_follows_that_master() {
     assert_eq!((l.width, pos(&l, 1)), (720.0, (360.0, 200.0)), "an edit of the pinned master moves the composite on its own master");
     assert_eq!(layer(&out, "Aacute").width, 600.0, "composites reading their own master stay");
 }
+
+#[test]
+fn an_edit_on_a_pinned_master_moves_only_the_layers_that_pin_it() {
+    let mut f = accents();
+    let mut second = f.masters[0].clone();
+    second.id = "m02".into();
+    Arc::make_mut(&mut f.masters).push(Master { name: "Bold".into(), ..second });
+    {
+        let mut a = f.glyphs.get_mut("A").unwrap();
+        let mut l = a.layers[0].clone();
+        (l.id, l.master, l.width) = ("m02".into(), "m02".into(), 700.0);
+        a.layers.push(l);
+    }
+    let info = fontcraft_model::ComponentInfo { master_id: Some("m02".into()), ..Default::default() };
+    f.glyphs.push(composite("Apinned", vec![with_info(part("A"), info), part("acutecomb")]));
+    f.glyphs.push(composite("Apinned.ss01", vec![part("Apinned")]));
+    let all: Vec<String> = f.glyphs.iter().map(|g| g.name.clone()).collect();
+    let mut f = realign_glyphs(f, &all).unwrap();
+    f.glyphs.get_mut("Aacute").unwrap().layers[0].width = 999.0;
+
+    let mut new = f.clone();
+    new.glyphs.get_mut("A").unwrap().layers[1].width = 720.0;
+    let out = realign(&f, new).unwrap();
+    assert_eq!(layer(&out, "Apinned").width, 720.0, "the layer pinned to the edited master follows it");
+    assert_eq!(layer(&out, "Apinned.ss01").width, 720.0, "a composite built on the pinned layer follows too");
+    assert_eq!(layer(&out, "Aacute").width, 999.0, "a layer reading its own master keeps its stale width");
+}

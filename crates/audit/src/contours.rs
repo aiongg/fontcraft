@@ -66,14 +66,13 @@ pub(crate) fn overlap(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sink) {
     let mut budget = MAX_LAYER_NODES;
     for (i, shape) in input.layer.shapes.iter().enumerate() {
         let Shape::Component(comp) = shape else { continue };
-        let Ok(mut outline) = input.ctx.font.outline(&comp.glyph, &input.layer.master) else { continue };
+        let Ok(outline) = input.ctx.font.component_outline(comp, &input.layer.master) else { continue };
         let count = outline.elements().len();
         if count > budget {
             sink.skip(format!("the components' outlines have more than {MAX_LAYER_NODES} segments"));
             return;
         }
         budget -= count;
-        outline.apply_affine(comp.affine());
         push_outline(&outline, i, &mut contour_id, &mut edges);
     }
     edges.sort_by(|a, b| a.bbox.x0.total_cmp(&b.bbox.x0));

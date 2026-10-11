@@ -139,7 +139,7 @@ ref = "Reusing Shapes › Components"
 status = "handbook"
 notes = "Positions and widths follow through alignment: after every font-changing command the engine re-aligns the composites that depend on the changed glyphs, in dependency order and in the same undo step (`fontcraft_components::metrics::realign`, M6.2). Documented, not yet observed. M6.1: the reverse component index (crates/components/src/index.rs) gives the glyphs that follow an edit of a base glyph, directly and through nesting, in dependency order; the engine's re-alignment and the canvas read it."
 guesses = [
-  "Re-alignment after an edit touches only the masters whose layers the edit changed, and the masters of layers whose components are pinned to one of them, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.",
+  "Re-alignment after an edit touches only the masters whose layers the edit changed, and on other masters only the layers whose components are pinned to one of them (and the composites built on those layers), so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.",
   "A locked composite is not re-aligned when its base changes, because a lock keeps the glyph's drawing; locking a composite in the reference app and editing its base settles it.",
 ]
 
