@@ -20,8 +20,10 @@
 //! - Order: the order of first insertion into one list, keyed by name. Components are read in
 //!   order, then the layer's own anchors; a later anchor of a name replaces the earlier one in
 //!   its place, and an anchor removed and added again goes to the end.
-//! - Layer choice for a component's base: the base's layer with the same id, else the base's
-//!   master layer of the same master. A base without either passes nothing on.
+//! - Layer choice for a component's base ([`base_layer`], shared with alignment): the base's
+//!   master layer of the master the component names (`ComponentInfo::master_id`), else the
+//!   base's layer with the same id, else its master layer of the layer's own master. A base
+//!   without any of these passes nothing on.
 //! - When [`propagate_anchors_enabled`] is false the result is the layer's own anchors.
 //! - Errors: a cycle ([`ComponentsError::Cycle`]), nesting past [`MAX_COMPONENT_DEPTH`], more
 //!   than [`MAX_LAYER_ANCHORS`] anchors or [`MAX_LAYER_COMPONENTS`] components, a transform that
@@ -371,7 +373,7 @@ impl<'a> Run<'a> {
         let mut before: i64 = 0;
         for (i, &(shape, comp)) in comps.iter().enumerate() {
             let Some(base) = self.glyph(&comp.glyph) else { continue };
-            let Some(base_layer) = base_layer(base, layer) else { continue };
+            let Some(base_layer) = base_layer(base, layer, comp) else { continue };
             let inherited = self.anchors_of(base, base_layer, depth + 1)?;
             self.charge(inherited.len())?;
             let bases = self.base_count(base, base_layer, depth + 1)?;
@@ -436,7 +438,7 @@ impl<'a> Run<'a> {
             for s in &layer.shapes {
                 let Shape::Component(c) = s else { continue };
                 let Some(base) = self.glyph(&c.glyph) else { continue };
-                let Some(bl) = base_layer(base, layer) else { continue };
+                let Some(bl) = base_layer(base, layer, c) else { continue };
                 sum = sum.saturating_add(self.base_count(base, bl, depth + 1)?);
             }
             if sum > 0 {
@@ -486,10 +488,12 @@ fn move_through(glyph: &str, comp: &Component, index: usize, inherited: &[Effect
     Ok(out)
 }
 
-/// The layer of `base` that a component on `layer` reads: the one with the same id, else the
-/// master layer of the same master.
-fn base_layer<'g>(base: &'g Glyph, layer: &Layer) -> Option<&'g Layer> {
-    base.layers.iter().find(|l| l.id == layer.id).or_else(|| base.layer(&layer.master))
+/// The layer of `base` that the component `c` on `layer` reads, for propagation and alignment
+/// alike: the master layer of the component's own master when it names one, else the layer with
+/// the same id, else the master layer of `layer`'s master.
+pub fn base_layer<'g>(base: &'g Glyph, layer: &Layer, c: &Component) -> Option<&'g Layer> {
+    let pinned = c.info.master_id.as_deref().and_then(|m| base.layer(m));
+    pinned.or_else(|| base.layers.iter().find(|l| l.id == layer.id)).or_else(|| base.layer(&layer.master))
 }
 
 /// A layer's anchors as stored.

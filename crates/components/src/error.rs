@@ -12,6 +12,10 @@ pub const MAX_COMPONENT_DEPTH: usize = fontcraft_model::MAX_COMPONENT_DEPTH;
 pub const MAX_LAYER_COMPONENTS: usize = 65_535;
 /// Most anchors on one layer, own and propagated together.
 pub const MAX_LAYER_ANCHORS: usize = 4_096;
+/// Most steps of aligning one layer: each component costs one plus the anchors of its base. A
+/// layer may hold [`MAX_LAYER_COMPONENTS`] components of bases with [`MAX_LAYER_ANCHORS`] anchors
+/// each; this bounds the product.
+pub const MAX_ALIGN_WORK: usize = 1_000_000;
 /// Longest anchor name, in bytes.
 pub const MAX_ANCHOR_NAME_LEN: usize = fontcraft_model::MAX_NAME_LEN;
 /// Longest recipe, in bytes.

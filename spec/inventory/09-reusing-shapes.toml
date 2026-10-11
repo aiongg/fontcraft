@@ -139,7 +139,7 @@ ref = "Reusing Shapes › Components"
 status = "handbook"
 notes = "Positions and widths follow through alignment: after every font-changing command the engine re-aligns the composites that depend on the changed glyphs, in dependency order and in the same undo step (`fontcraft_components::metrics::realign`, M6.2). Documented, not yet observed. M6.1: the reverse component index (crates/components/src/index.rs) gives the glyphs that follow an edit of a base glyph, directly and through nesting, in dependency order; the engine's re-alignment and the canvas read it."
 guesses = [
-  "Re-alignment after an edit touches only the masters whose layers the edit changed, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.",
+  "Re-alignment after an edit touches only the masters whose layers the edit changed, and the masters of layers whose components are pinned to one of them, so stale stored positions on other masters stay as the file has them; editing a base on one master in the reference app and reading the other masters' composites settles it.",
   "A locked composite is not re-aligned when its base changes, because a lock keeps the glyph's drawing; locking a composite in the reference app and editing its base settles it.",
 ]
 
@@ -624,6 +624,7 @@ guesses = [
   "The editor and the compiler propagate anchors exactly as fontc does, every name included, since its algorithm gives top and bottom as the handbook says and also the other names both reference compilers export; a composite that inherits an ogonek or a cedilla anchor in the reference app settles it.",
   "A non-master layer whose base glyph has no layer with the same id reads the base's master layer of the same master, where glyphsLib interpolates the base's anchors at the layer's axis location; a brace layer in the reference app whose base lacks it settles it.",
   "A base glyph without a layer for the composite's master passes no anchors on, where glyphsLib stops with an error; the reference app with such a font settles it.",
+  "A component pinned to another master (`masterId`) passes on the anchors of that master's layer of its base, the layer alignment places it from; a composite with a pinned component in the reference app, read through a mark attached to it, settles it.",
 ]
 
 [[behavior]]

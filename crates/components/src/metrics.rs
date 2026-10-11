@@ -14,8 +14,12 @@
 //!   `new` when nothing moves, so the engine can put it in the same undo step. An error means the
 //!   command fails and the engine rolls back.
 //! - Glyphs in a cycle, and the glyphs above one, are skipped, not an error: the editor shows
-//!   them as placeholders. A layer whose components nest too deep, or whose anchors cannot be
-//!   read for a missing glyph or layer, is skipped the same way.
+//!   them as placeholders. A layer whose components nest too deep, whose anchors cannot be read
+//!   for a missing glyph or layer, or whose work passes a limit, is skipped the same way and
+//!   keeps its stored positions, so one unusual glyph never blocks edits to its bases.
+//! - Only the masters whose layers changed are re-aligned, widened by every master whose layers
+//!   hold a component pinned (`ComponentInfo::master_id`) to one of them. A change of masters,
+//!   of the alignment setting or of Propagate Anchors re-aligns every master.
 //! - Locked glyphs are skipped: a lock keeps the glyph's drawing as it is.
 //! - The dependency order is worked out for the affected glyphs only, from one pass over the
 //!   font's components, so one edit costs a pass over the components plus the work on the
@@ -107,15 +111,21 @@ fn layer_outline(font: &Font, glyph: &Glyph, layer_id: &str) -> Result<BezPath, 
 /// removed, in `new`'s order then removed ones. Every glyph when the masters or the font's
 /// alignment setting changed.
 pub fn changed_glyphs(old: &Font, new: &Font) -> Vec<String> {
+    changes(old, new).0
+}
+
+/// [`changed_glyphs`], and whether the change reaches every glyph on every master: the masters,
+/// the alignment setting or Propagate Anchors changed.
+fn changes(old: &Font, new: &Font) -> (Vec<String>, bool) {
     let masters_changed = !Arc::ptr_eq(&old.masters, &new.masters) && old.masters != new.masters;
     let settings_changed = !Arc::ptr_eq(&old.info, &new.info)
         && (alignment_off(old) != alignment_off(new) || propagate_anchors_enabled(old) != propagate_anchors_enabled(new));
     if masters_changed || settings_changed {
-        return new.glyphs.iter().map(|g| g.name.clone()).collect();
+        return (new.glyphs.iter().map(|g| g.name.clone()).collect(), true);
     }
     let (now, before) = (new.glyphs.as_arcs(), old.glyphs.as_arcs());
     if std::ptr::eq(now, before) {
-        return Vec::new();
+        return (Vec::new(), false);
     }
     let mut out = Vec::new();
     for (i, g) in now.iter().enumerate() {
@@ -128,7 +138,7 @@ pub fn changed_glyphs(old: &Font, new: &Font) -> Vec<String> {
         out.push(g.name.clone());
     }
     out.extend(before.iter().filter(|b| new.glyph(&b.name).is_none()).map(|b| b.name.clone()));
-    out
+    (out, false)
 }
 
 /// `font` with `changed` and every glyph that depends on them re-aligned, in dependency order.
@@ -142,6 +152,8 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
         return Ok(font);
     }
     let order = affected_order(&font, changed);
+    let widened = masters.map(|m| with_pinned_masters(&font, &order, m));
+    let masters = widened.as_ref();
     let mut cache = AnchorCache::new();
     for i in order {
         let Some(glyph) = font.glyphs.as_arcs().get(i).cloned() else { continue };
@@ -162,7 +174,8 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
                     ComponentsError::Cycle(_)
                     | ComponentsError::TooDeep { .. }
                     | ComponentsError::MissingGlyph(_)
-                    | ComponentsError::MissingLayer { .. },
+                    | ComponentsError::MissingLayer { .. }
+                    | ComponentsError::LimitExceeded { .. },
                 ) => {}
                 Err(e) => return Err(e),
             }
@@ -179,6 +192,35 @@ fn realign_on(mut font: Font, changed: &[String], masters: Option<&HashSet<Strin
         }
     }
     Ok(font)
+}
+
+/// `masters` with the master of every layer, among the glyphs at `order`, that holds a
+/// component pinned to a master of the set whose base is also at `order`: a base edited on one
+/// master moves the composites that read that master from their own.
+fn with_pinned_masters(font: &Font, order: &[usize], masters: &HashSet<String>) -> HashSet<String> {
+    let glyphs = font.glyphs.as_arcs();
+    let affected: HashSet<&str> = order.iter().filter_map(|&i| glyphs.get(i)).map(|g| g.name.as_str()).collect();
+    let mut out = masters.clone();
+    // Each pass adds a master or stops, so there are at most as many passes as masters.
+    loop {
+        let reads_pinned = |layer: &Layer| {
+            layer.shapes.iter().any(|s| {
+                matches!(s, Shape::Component(c) if affected.contains(c.glyph.as_str())
+                    && c.info.master_id.as_ref().is_some_and(|m| out.contains(m)))
+            })
+        };
+        let more: HashSet<String> = order
+            .iter()
+            .filter_map(|&i| glyphs.get(i))
+            .flat_map(|g| g.layers.iter())
+            .filter(|l| !out.contains(&l.master) && reads_pinned(l))
+            .map(|l| l.master.clone())
+            .collect();
+        if more.is_empty() {
+            return out;
+        }
+        out.extend(more);
+    }
 }
 
 /// The positions of `changed` and of every glyph that uses one of them, directly or through
@@ -267,14 +309,15 @@ fn component_names(glyph: &Glyph) -> impl Iterator<Item = &str> {
 /// The engine hook: `new` with the glyphs changed since `old`, and their dependents,
 /// re-aligned ([`changed_glyphs`], then [`realign_glyphs`]).
 ///
-/// Only the masters whose layers the change touched are re-aligned, so an edit on one master
-/// leaves the stored positions of the others as they are.
+/// Only the masters whose layers the change touched are re-aligned, and those of components
+/// pinned to them, so an edit on one master leaves the stored positions of the others as they
+/// are. A change of masters or of a font setting alignment reads re-aligns every master.
 pub fn realign(old: &Font, new: Font) -> Result<Font, ComponentsError> {
-    let changed = changed_glyphs(old, &new);
+    let (changed, everything) = changes(old, &new);
     if changed.is_empty() {
         return Ok(new);
     }
-    let masters = changed_masters(old, &new, &changed);
+    let masters = if everything { None } else { changed_masters(old, &new, &changed) };
     realign_on(new, &changed, masters.as_ref())
 }
 

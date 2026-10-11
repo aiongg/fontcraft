@@ -45,8 +45,8 @@ use std::sync::Arc;
 use fontcraft_geom::Point;
 use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, MAX_COORDINATE, Shape, Transform};
 
-use crate::propagate::{AnchorCache, EffectiveAnchor};
-use crate::{ComponentsError, MAX_LAYER_COMPONENTS};
+use crate::propagate::{AnchorCache, EffectiveAnchor, base_layer as base_layer_of};
+use crate::{ComponentsError, MAX_ALIGN_WORK, MAX_LAYER_COMPONENTS};
 
 /// Most anchor targets kept while one layer is aligned, over all its clusters together.
 pub(crate) const MAX_ALIGN_TARGETS: usize = 65_536;
@@ -250,6 +250,7 @@ pub(crate) fn plan_layer(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut 
     let mut anchors_of: HashMap<(&str, &str), Arc<[EffectiveAnchor]>> = HashMap::new();
     let mut clusters: Vec<Cluster> = Vec::new();
     let mut targets = 0usize;
+    let mut work = 0usize;
     let mut pen = left;
     let mut parts = Vec::with_capacity(modes.len());
     for (shape, c, mode) in modes {
@@ -271,6 +272,10 @@ pub(crate) fn plan_layer(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut 
             },
             None => Arc::from(Vec::new()),
         };
+        work = work.saturating_add(anchors.len()).saturating_add(1);
+        if work > MAX_ALIGN_WORK {
+            return Err(ComponentsError::LimitExceeded { what: "alignment steps on one layer", limit: MAX_ALIGN_WORK });
+        }
         let (flip_x, flip_y) = (a < 0.0, d < 0.0);
         let local: Vec<(String, Point)> =
             anchors.iter().map(|an| (swap_names(&an.name, flip_x, flip_y), Point::new(a * an.x + cc * an.y, b * an.x + d * an.y))).collect();
@@ -332,13 +337,6 @@ pub(crate) fn plan_layer(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut 
         None
     };
     Ok(Some(LayerPlan { parts, width }))
-}
-
-/// The layer of the base glyph `base` a component on `layer` reads: the one named by the
-/// component's master, else the one with the same id, else the master layer of the same master.
-pub(crate) fn base_layer_of<'a>(base: &'a Glyph, layer: &Layer, c: &Component) -> Option<&'a Layer> {
-    let by_master = c.info.master_id.as_deref().and_then(|m| base.layer(m));
-    by_master.or_else(|| base.layers.iter().find(|l| l.id == layer.id)).or_else(|| base.layer(&layer.master))
 }
 
 /// The anchor a component attaches to: (cluster index, the component's own underscore anchor

@@ -120,3 +120,15 @@ fn the_font_setting_stops_realignment() {
     run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["A"], "value": 70}));
     assert_eq!(aacute(s.font().unwrap()), (1.0, (0.0, 0.0)));
 }
+
+#[test]
+fn realigned_composites_are_stamped_as_changed() {
+    let mut s = session();
+    s.set_clock(Some(fontcraft_engine::clock::fixed_clock(1_791_460_800)));
+    run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["A"], "value": 70}));
+    let f = s.font().unwrap();
+    let stamp = f.glyph("A").unwrap().info.last_change.clone();
+    assert!(stamp.is_some());
+    assert_eq!(f.glyph("Aacute").unwrap().info.last_change, stamp, "the composite moved with A");
+    assert_eq!(f.glyph("acutecomb").unwrap().info.last_change, None, "the mark did not move");
+}
