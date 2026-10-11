@@ -8,18 +8,17 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fontcraft_geom::{Rect, Shape as _};
-use fontcraft_model::glyphdata::{items, validate};
+use fontcraft_model::glyphdata::{GlyphData, items, validate};
 use fontcraft_model::{
     Component, Font, Glyph, GlyphTable, Layer, MAX_COMPONENT_DEPTH, MAX_GLYPHS, MAX_NAME_LEN, ModelError, Shape, glyph_order, insert_by_sort_key,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use super::widths::{new_glyph_layers, new_layer_width};
 use super::*;
 use crate::params::{Params, TargetKind, kind};
 
-/// The advance width of a glyph these commands create.
-const NEW_GLYPH_WIDTH: f64 = 600.0;
 /// The `format` value of copied glyphs on the clipboard.
 pub(crate) const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 /// The version of the copied-glyphs text this build writes, and the newest it reads.
@@ -74,10 +73,10 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 /// An empty glyph with a layer for every master of `font`.
-fn fresh_glyph(font: &Font, name: &str, code_points: &[u32]) -> Glyph {
+fn fresh_glyph(font: &Font, data: &GlyphData, name: &str, code_points: &[u32]) -> Glyph {
     let mut g = Glyph::new(name);
     g.unicodes = code_points.to_vec();
-    g.layers = font.masters.iter().map(|m| Layer::new(m.id.as_str(), NEW_GLYPH_WIDTH)).collect();
+    g.layers = new_glyph_layers(font, Some(data), name, code_points);
     g
 }
 
@@ -125,9 +124,9 @@ fn add_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
         if let Some(g) = font.glyph(&w.name) {
             crate::check_unlocked(g)?;
         }
-        replacements.push(fresh_glyph(font, &w.name, &w.code_points));
+        replacements.push(fresh_glyph(font, &data, &w.name, &w.code_points));
     }
-    let new_glyphs: Vec<Glyph> = new.iter().map(|w| fresh_glyph(font, &w.name, &w.code_points)).collect();
+    let new_glyphs: Vec<Glyph> = new.iter().map(|w| fresh_glyph(font, &data, &w.name, &w.code_points)).collect();
     let added: Vec<String> = new.iter().map(|w| w.name.clone()).collect();
     let replaced: Vec<String> = replace.iter().map(|w| w.name.clone()).collect();
     s.edit("Add Glyphs", |font| {
@@ -231,7 +230,7 @@ fn add_to_font(s: &mut Session, v: &Value) -> Result<Value> {
             continue;
         }
         let code_points: Vec<u32> = data.lookup(name, &[]).unicode.map(|u| u.value).into_iter().collect();
-        glyphs.push(fresh_glyph(font, name, &code_points));
+        glyphs.push(fresh_glyph(font, &data, name, &code_points));
         added.push(name.to_string());
     }
     s.edit("Add to Font", |font| Ok(insert_by_sort_key(font, &data, glyphs)?))?;
@@ -391,8 +390,9 @@ fn master_map(clip: &GlyphClip, font: &Font) -> HashMap<String, String> {
 }
 
 /// The glyph's layers moved to the target's masters. Layers of masters without a counterpart
-/// are dropped; with `fill`, a target master the glyph has no layer for gets an empty one.
-fn map_layers(glyph: &Glyph, map: &HashMap<String, String>, font: &Font, fill: bool) -> Vec<Layer> {
+/// are dropped; with `fill` (the glyph data), a target master the glyph has no layer for gets an
+/// empty one as wide as the glyph's first layer, or as a new layer when it has none.
+fn map_layers(glyph: &Glyph, map: &HashMap<String, String>, font: &Font, fill: Option<&GlyphData>) -> Vec<Layer> {
     let mut layers = Vec::with_capacity(glyph.layers.len());
     for l in &glyph.layers {
         let Some(t) = map.get(&l.master) else { continue };
@@ -403,10 +403,11 @@ fn map_layers(glyph: &Glyph, map: &HashMap<String, String>, font: &Font, fill: b
         l.master = t.clone();
         layers.push(l);
     }
-    if fill {
-        let width = glyph.layers.first().map_or(NEW_GLYPH_WIDTH, |l| l.width);
+    if let Some(data) = fill {
+        let width = glyph.layers.first().map(|l| l.width);
         for m in font.masters.iter() {
             if !layers.iter().any(|l| l.id == m.id) {
+                let width = width.unwrap_or_else(|| new_layer_width(font, Some(data), &glyph.name, &m.id));
                 layers.push(Layer::new(m.id.as_str(), width));
             }
         }
@@ -426,7 +427,7 @@ pub(crate) fn paste_glyphs(s: &mut Session, p: &Params, text: &str) -> Result<Va
     let mut renamed = Vec::new();
     for c in clip.glyphs {
         let mut g = c.glyph;
-        g.layers = map_layers(&g, &map, font, true);
+        g.layers = map_layers(&g, &map, font, Some(&data));
         g.file_name = None;
         if font.glyph(&g.name).is_some() || taken.contains(&g.name) {
             let name = free_name(font, &taken, &g.name);
@@ -500,7 +501,7 @@ struct Overwrite {
 
 fn overwrite(font: &Font, clip: &GlyphClip, map: &HashMap<String, String>, c: &ClipGlyph, target: &Glyph) -> Overwrite {
     let mut source = c.glyph.clone();
-    source.layers = map_layers(&c.glyph, map, font, false);
+    source.layers = map_layers(&c.glyph, map, font, None);
     let active = clip.active_master.as_deref().and_then(|m| c.glyph.layer(m)).cloned();
     let metrics = c
         .metrics
@@ -699,7 +700,7 @@ fn paste_special(s: &mut Session, v: &Value) -> Result<Value> {
                 }
                 None => {
                     let mut g = c.glyph.clone();
-                    g.layers = map_layers(&c.glyph, &map, font, true);
+                    g.layers = map_layers(&c.glyph, &map, font, Some(&data));
                     g.file_name = None;
                     new_glyphs.push(g);
                 }

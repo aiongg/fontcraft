@@ -10,7 +10,8 @@
 //!
 //! [`resolve`] is [`Font::resolve`] with that composite in place of the shapes of every layer
 //! that has a stroke or a mask; the compiler's later stages (decomposition, overlap removal) see
-//! only contours and components.
+//! only contours and components. It also gives the glyphs of a master with linked metrics the
+//! advances of the master it follows ([`metrics_layer`]).
 
 use std::collections::HashMap;
 
@@ -124,7 +125,39 @@ pub fn resolve(font: &Font, target: &Target) -> Result<Resolved, ModelError> {
         }
     })?;
     resolved.notes.extend(notes);
+    link_metrics(font, &mut resolved);
     Ok(resolved)
+}
+
+/// The layer whose width, vertical width and vertical origin a compile of `layer` uses. For a
+/// master layer of a master that takes its metrics from another master
+/// ([`fontcraft_spacing::metrics_source`]), that is the glyph's layer of the other master when
+/// the glyph has one. Every other layer, intermediate layers included, keeps its own (fontc
+/// `glyphs2fontir/src/source.rs`).
+pub fn metrics_layer<'a>(font: &Font, glyph: &'a Glyph, layer: &'a Layer) -> &'a Layer {
+    if !layer.is_master_layer() {
+        return layer;
+    }
+    match fontcraft_spacing::metrics_source(font, &layer.master) {
+        Some(source) if source.id != layer.master => glyph.layer(&source.id).unwrap_or(layer),
+        _ => layer,
+    }
+}
+
+/// Gives each resolved glyph the advances of its [`metrics_layer`]. A vertical width or origin
+/// the linked layer does not state keeps the glyph's own, as fontc does.
+fn link_metrics(font: &Font, resolved: &mut Resolved) {
+    if fontcraft_spacing::metrics_source(font, &resolved.master).is_none_or(|s| s.id == resolved.master) {
+        return;
+    }
+    for out in &mut resolved.glyphs {
+        let Some(glyph) = font.glyph(&out.name) else { continue };
+        let Some(own) = glyph.layer(&resolved.master) else { continue };
+        let source = metrics_layer(font, glyph, own);
+        out.width = source.width;
+        out.vert_width = source.info.vert_width.or(out.vert_width);
+        out.vert_origin = source.info.vert_origin.or(out.vert_origin);
+    }
 }
 
 /// Resolves components once per base glyph and charges every outline it hands out against a

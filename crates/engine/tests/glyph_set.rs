@@ -71,6 +71,40 @@ fn add_glyphs_takes_every_item_kind() {
 }
 
 #[test]
+fn new_glyphs_take_the_default_layer_width() {
+    use fontcraft_engine::model::Param;
+    use fontcraft_engine::model::plist::{Number, Value as PValue};
+    let mut s = Session::with_document();
+    s.edit("setup", |font| {
+        let mut m = font.default_master()?.clone();
+        m.id = "m02".into();
+        m.name = "Bold".into();
+        m.params.0.push(Param::new("Default Layer Width", PValue::String("cyrillic: 430".into())));
+        Arc::make_mut(&mut font.masters).push(m);
+        let params = &mut Arc::make_mut(&mut font.info).params;
+        params.0.push(Param::new("Default Layer Width", PValue::Number(Number::int(520))));
+        params.0.push(Param::new("Default Layer Width", PValue::String("cyrillic: 400".into())));
+        Ok(())
+    })
+    .unwrap();
+    let widths = |s: &Session, name: &str| glyph(s, name).layers.iter().map(|l| (l.id.clone(), l.width)).collect::<Vec<_>>();
+    let both = |a: f64, b: f64| vec![("m01".to_string(), a), ("m02".to_string(), b)];
+    run(&mut s, "glyph.addGlyphs", json!({"text": "be-cy Ccedilla uni4E00"}));
+    assert_eq!(widths(&s, "be-cy"), both(400.0, 430.0), "the script's entry, the master's first");
+    assert_eq!(widths(&s, "Ccedilla"), both(520.0, 520.0), "the entry without a script");
+    run(&mut s, "glyph.newGlyph", json!({"name": "ve-cy"}));
+    assert_eq!(widths(&s, "ve-cy"), both(400.0, 430.0));
+    run(&mut s, "glyph.newGlyph", json!({"name": "ge-cy", "width": 250}));
+    assert_eq!(widths(&s, "ge-cy"), both(250.0, 250.0), "a stated width wins");
+    // Without the parameter, the built-in widths.
+    let mut s = Session::with_document();
+    run(&mut s, "glyph.newGlyph", json!({"name": "_corner.serif"}));
+    run(&mut s, "glyph.addGlyphs", json!({"text": "uni4E00 be-cy"}));
+    let first = |s: &Session, name: &str| glyph(s, name).layers[0].width;
+    assert_eq!([first(&s, "_corner.serif"), first(&s, "uni4E00"), first(&s, "be-cy")], [200.0, 1000.0, 600.0]);
+}
+
+#[test]
 fn add_glyphs_existing_names_ask_keep_replace_cancel() {
     let mut s = Fixture::Drawn.session();
     let before = s.doc().unwrap().font.clone();

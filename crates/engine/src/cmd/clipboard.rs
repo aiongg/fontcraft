@@ -22,8 +22,6 @@ use crate::params::{GuideRef, GuideScope, Params, TargetKind, Targets};
 const MAX_IMPORT_FILES: usize = 4096;
 /// Most nodes one `file.importOutlines` call adds, over all its files.
 const MAX_IMPORT_NODES: usize = 2_000_000;
-/// The advance width of a glyph that an import creates.
-const NEW_GLYPH_WIDTH: f64 = 600.0;
 
 const COPY_TARGETS: &[TargetKind] =
     &[TargetKind::Layer, TargetKind::Points, TargetKind::Segments, TargetKind::Shapes, TargetKind::Anchors, TargetKind::Guides];
@@ -589,11 +587,14 @@ fn import_outlines(s: &mut Session, p: &Value) -> Result<Value> {
     }
 
     let mut added: Vec<String> = Vec::new();
+    let data = s.glyph_data().ok();
     let imported = s.edit("Import Outlines", |font| {
         let mut out = Vec::with_capacity(jobs.len());
         for job in jobs {
             if job.new && font.glyph(&job.glyph).is_none() {
-                font.add_glyph(&job.glyph, Vec::new(), NEW_GLYPH_WIDTH)?;
+                let layers = super::widths::new_glyph_layers(font, data.as_deref(), &job.glyph, &[]);
+                font.add_glyph(&job.glyph, Vec::new(), super::widths::BUILT_IN_LAYER_WIDTH)?;
+                font.glyph_mut(&job.glyph)?.layers = layers;
                 added.push(job.glyph.clone());
             }
             let count = job.paths.len();

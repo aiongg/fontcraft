@@ -466,6 +466,69 @@ fn two_masters() -> Font {
     f
 }
 
+fn master_param(f: &mut Font, master: usize, name: &str, v: fontcraft_model::plist::Value) {
+    Arc::make_mut(&mut f.masters)[master].params.0.push(fontcraft_model::Param::new(name, v));
+}
+
+#[test]
+fn a_linked_master_compiles_the_advances_of_the_master_it_follows() {
+    use fontcraft_model::plist::{Number, Value as PValue};
+    let with_link = |name: &str, v: PValue| {
+        let mut f = two_masters();
+        for (n, v) in [("vheaVertAscender", 500), ("vheaVertDescender", -500), ("vheaVertLineGap", 1000)] {
+            int_param(&mut f, n, v);
+        }
+        let mut a = f.glyph_mut("A").unwrap();
+        a.layers[0].info.vert_width = Some(900.0);
+        a.layers[0].info.vert_origin = Some(40.0);
+        a.layers[1].info.vert_width = Some(950.0);
+        // An intermediate layer of the linked master keeps its own width.
+        let mut brace = a.layers[1].clone();
+        brace.id = "brace".into();
+        brace.width = 810.0;
+        brace.info.attrs.coordinates = vec![Some(150.0)];
+        a.layers.push(brace);
+        drop(a);
+        // O has no layer in the first master's place to follow: it keeps its own.
+        f.glyph_mut("O").unwrap().layers.retain(|l| l.id != "m01");
+        master_param(&mut f, 1, name, v);
+        f
+    };
+    for (param, value) in [
+        ("Link Metrics With First Master", PValue::Number(Number::int(1))),
+        ("Link Metrics With Master", PValue::String("m01".into())),
+        ("Link Metrics With Master", PValue::String("Regular".into())),
+    ] {
+        let f = with_link(param, value.clone());
+        let out = compile(&f, &Target::Master("m02".into()), Flavour::TrueType, &Options::default()).unwrap();
+        let font = FontRef::new(&out.bytes).unwrap();
+        let what = format!("{param} = {value:?}");
+        assert_eq!(font.hmtx().unwrap().advance(gid_of(&out, "A")), Some(620), "{what}");
+        assert_eq!(font.hmtx().unwrap().advance(gid_of(&out, "B")), Some(f.glyph("B").unwrap().layers[0].width as u16), "{what}");
+        assert_eq!(font.hmtx().unwrap().advance(gid_of(&out, "O")), Some(800), "{what}: no layer to follow");
+        let vmtx = font.vmtx().unwrap();
+        assert_eq!(vmtx.advance(gid_of(&out, "A")), Some(900), "{what}");
+        assert_eq!(vmtx.side_bearing(gid_of(&out, "A")), Some(60), "{what}: origin 40 below the ascender");
+        let a = f.glyph("A").unwrap();
+        let brace = a.layers.iter().find(|l| l.id == "brace").unwrap();
+        assert_eq!(drawing::metrics_layer(&f, a, brace).width, 810.0, "{what}");
+        assert_eq!(drawing::metrics_layer(&f, a, &a.layers[1]).width, 620.0, "{what}");
+        // The master it follows compiles as before.
+        let first = compile(&f, &Target::Master("m01".into()), Flavour::TrueType, &Options::default()).unwrap();
+        assert_eq!(FontRef::new(&first.bytes).unwrap().hmtx().unwrap().advance(gid_of(&first, "A")), Some(620));
+    }
+    let unlinked = compile(
+        &with_link("Link Metrics With Master", PValue::String("Nowhere".into())),
+        &Target::Master("m02".into()),
+        Flavour::TrueType,
+        &Options::default(),
+    )
+    .unwrap();
+    let font = FontRef::new(&unlinked.bytes).unwrap();
+    assert_eq!(font.hmtx().unwrap().advance(gid_of(&unlinked, "A")), Some(720), "a name that matches no master links nothing");
+    assert_eq!(font.vmtx().unwrap().advance(gid_of(&unlinked, "A")), Some(950));
+}
+
 #[test]
 fn a_target_compiles_its_own_master_and_an_instance_at_a_master() {
     let f = two_masters();

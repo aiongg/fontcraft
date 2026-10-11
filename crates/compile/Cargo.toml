@@ -15,6 +15,7 @@ fontcraft-cff.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-model.workspace = true
 fontcraft-pathops.workspace = true
+fontcraft-spacing.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
 write-fonts.workspace = true

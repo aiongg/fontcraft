@@ -45,6 +45,7 @@ mod spacing;
 pub mod stroke;
 pub mod transform;
 mod transform_metrics;
+mod widths;
 
 use serde::Serialize;
 use serde_json::Value;

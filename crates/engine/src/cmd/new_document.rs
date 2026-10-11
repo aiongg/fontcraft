@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::glyphdata::sets::{self, GlyphSet, SetGlyph};
-use fontcraft_model::{Font, Glyph, GlyphTable, Layer, MAX_GLYPHS, insert_by_sort_key};
+use fontcraft_model::{Font, Glyph, GlyphTable, MAX_GLYPHS, insert_by_sort_key};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -19,8 +19,6 @@ use crate::EngineError;
 use crate::params::Params;
 use crate::settings::Reserved;
 
-/// The advance width of each new glyph, as `glyph.newGlyph` gives.
-const NEW_GLYPH_WIDTH: f64 = 600.0;
 /// Most scripts one call may pick.
 const MAX_SCRIPTS: usize = 256;
 /// Most glyph sets one script may name.
@@ -201,7 +199,7 @@ fn new_from_glyph_sets(s: &mut Session, v: &Value) -> Result<Value> {
             }
             let mut g = Glyph::new(name.as_str());
             g.unicodes = unicodes;
-            g.layers = font.masters.iter().map(|m| Layer::new(m.id.as_str(), NEW_GLYPH_WIDTH)).collect();
+            g.layers = super::widths::new_glyph_layers(&font, Some(&data), &name, &g.unicodes);
             if let Err(e) = font.check_glyph(&g) {
                 skip(&name, e.to_string());
                 continue;

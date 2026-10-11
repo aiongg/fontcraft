@@ -889,6 +889,7 @@ dependencies = [
  "fontcraft-geom",
  "fontcraft-model",
  "fontcraft-pathops",
+ "fontcraft-spacing",
  "skrifa 0.48.0",
  "thiserror 2.0.21",
  "unicode-normalization",

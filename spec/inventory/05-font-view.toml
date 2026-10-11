@@ -337,7 +337,7 @@ summary = "Adds the glyphs chosen in the missing-glyphs list of a sidebar entry 
 ref = "Font View › Adding New Glyphs › Adding From the Sidebar"
 status = "handbook"
 guesses = [
-  "Generated glyphs are empty, 600 units wide (as New Glyph), take the code point the entry gives or the glyph data gives their name, and are placed by the default sort key; all of them are one undo step. Settled by observing Generate on a list filter.",
+  "Generated glyphs are empty, as wide as the Default Layer Width parameter or the built-in width makes a new glyph (as New Glyph), take the code point the entry gives or the glyph data gives their name, and are placed by the default sort key; all of them are one undo step. Settled by observing Generate on a list filter.",
 ]
 
 [[command]]

@@ -1,6 +1,5 @@
 //! Glyph → Transform Metrics: one new advance width, or new sidebearings, on many layers at once
-//! (`docs/spec/11-filters.md` § Transform Metrics), and the width the *Default Layer Width*
-//! parameter gives a new layer (`docs/spec/18-custom-parameters.md`).
+//! (`docs/spec/11-filters.md` § Transform Metrics).
 //!
 //! The command takes one `glyph` or a `glyphs` list (Font View). With `glyphs`, a locked glyph,
 //! a glyph without the named layer and, in sidebearing mode, a layer without an outline are
@@ -10,9 +9,7 @@
 use std::collections::HashMap;
 
 use fontcraft_geom::round_to_grid;
-use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::plist::Value as PValue;
-use fontcraft_model::{Font, Layer, glyph_props};
+use fontcraft_model::{Font, Layer};
 use fontcraft_spacing::{Field, SIDEBEARING_RANGE, WIDTH_RANGE, metric};
 use serde_json::{Value, json};
 
@@ -20,22 +17,6 @@ use super::common::{each_layer, grid, scope};
 use super::spacing::shift_layer;
 use super::*;
 use crate::params::{Params, TargetKind};
-
-/// The custom parameter that sets the width of new glyphs and layers.
-pub(crate) const DEFAULT_LAYER_WIDTH: &str = "Default Layer Width";
-
-/// The width of a new layer when no *Default Layer Width* parameter applies.
-pub(crate) const BUILT_IN_LAYER_WIDTH: f64 = 600.0;
-
-/// The built-in width of a new layer of a CJK glyph.
-const CJK_LAYER_WIDTH: f64 = 1000.0;
-
-/// The scripts whose glyphs get [`CJK_LAYER_WIDTH`].
-const CJK_SCRIPTS: [&str; 4] = ["han", "hangul", "kana", "bopomofo"];
-
-/// The built-in width of a new layer of a corner component, and the prefix that names one.
-const CORNER_LAYER_WIDTH: f64 = 200.0;
-const CORNER_PREFIX: &str = "_corner.";
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -149,44 +130,4 @@ fn transform_metrics(s: &mut Session, v: &Value) -> Result<Value> {
         o.insert("mode".into(), json!(if matches!(mode, Mode::Width { .. }) { "width" } else { "sidebearings" }));
     }
     Ok(v)
-}
-
-/// The width a new layer of `glyph` gets on `master`: the *Default Layer Width* entry for the
-/// glyph's script, else the entry without a script, else the built-in width. Entries come from
-/// the master's parameters, then the font's; an entry that is not a width is ignored. `data`
-/// gives the script of a glyph that stores none.
-pub(crate) fn new_layer_width(font: &Font, data: Option<&GlyphData>, glyph: &str, master: &str) -> f64 {
-    let script = font.glyph(glyph).and_then(|g| match (&g.info.script, data) {
-        (Some(s), _) => Some(s.to_lowercase()),
-        (None, Some(data)) => glyph_props(g, data, false).script.value.map(|s| s.to_lowercase()),
-        (None, None) => None,
-    });
-    let master_params = font.masters.iter().find(|m| m.id == master).map(|m| &m.params);
-    let entries: Vec<(Option<String>, f64)> = master_params
-        .into_iter()
-        .flat_map(|params| params.all(DEFAULT_LAYER_WIDTH))
-        .chain(font.info.params.all(DEFAULT_LAYER_WIDTH))
-        .filter_map(width_entry)
-        .collect();
-    let for_script = script.as_deref().and_then(|sc| entries.iter().find(|(s, _)| s.as_deref() == Some(sc)));
-    match for_script.or_else(|| entries.iter().find(|(s, _)| s.is_none())) {
-        Some((_, width)) => *width,
-        None if glyph.starts_with(CORNER_PREFIX) => CORNER_LAYER_WIDTH,
-        None if script.as_deref().is_some_and(|s| CJK_SCRIPTS.contains(&s)) => CJK_LAYER_WIDTH,
-        None => BUILT_IN_LAYER_WIDTH,
-    }
-}
-
-/// One *Default Layer Width* value: a number, or text holding a number with an optional
-/// `script:` prefix.
-fn width_entry(v: &PValue) -> Option<(Option<String>, f64)> {
-    let (script, number) = match v {
-        PValue::Number(n) => (None, n.value().as_f64()),
-        PValue::String(s) => match s.as_str().split_once(':') {
-            Some((script, rest)) => (Some(script.trim().to_lowercase()), rest.trim().parse::<f64>().ok()?),
-            None => (None, s.as_str().trim().parse::<f64>().ok()?),
-        },
-        _ => return None,
-    };
-    (number.is_finite() && WIDTH_RANGE.contains(&number)).then_some((script, number))
 }

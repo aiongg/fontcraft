@@ -16,7 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "New Glyph",
             ["Glyph"],
             Some("Cmd+Alt+Shift+N"),
-            "{name?: string, unicodes?: [hex | number], width?: number} add an empty glyph with a layer for every master, at the place the default sort order gives it among the glyphs already there (the others keep their order). name: at most 255 bytes, no control characters; defaults to newGlyph (newGlyph.001, .002… when taken). unicodes: default the code point the glyph data gives the name. width: 0 to 65535, default 600 → {name, index, unicodes}",
+            "{name?: string, unicodes?: [hex | number], width?: number} add an empty glyph with a layer for every master, at the place the default sort order gives it among the glyphs already there (the others keep their order). name: at most 255 bytes, no control characters; defaults to newGlyph (newGlyph.001, .002… when taken). unicodes: default the code point the glyph data gives the name. width: 0 to 65535, for every master; by default each master's layer takes the Default Layer Width parameter's entry for the glyph's script, else its entry without a script, else 600 (1000 for a CJK glyph, 200 for a `_corner.` glyph) → {name, index, unicodes}",
             has_doc,
             new_glyph
         ),
@@ -55,8 +55,10 @@ pub fn specs() -> Vec<CommandSpec> {
 
 fn new_glyph(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("glyph.newGlyph", p)?;
-    let width = p.opt_f64("width")?.unwrap_or(600.0);
-    if !(0.0..=65_535.0).contains(&width) {
+    let width = p.opt_f64("width")?;
+    if let Some(width) = width
+        && !(0.0..=65_535.0).contains(&width)
+    {
         return Err(p.bad(format!("`width` must be between 0 and 65535, got {width}")));
     }
     let codes = super::common::code_points(&p, "unicodes")?;
@@ -82,7 +84,11 @@ fn new_glyph(s: &mut Session, p: &Value) -> Result<Value> {
         let mut probe = fontcraft_model::Glyph::new(name.as_str());
         probe.unicodes = codes.clone();
         let index = fontcraft_model::insertion_index(font, &data, &probe);
-        font.add_glyph_at(index, &name, codes.clone(), width)?;
+        let layers = super::widths::new_glyph_layers(font, Some(&data), &name, &codes);
+        font.add_glyph_at(index, &name, codes.clone(), width.unwrap_or(super::widths::BUILT_IN_LAYER_WIDTH))?;
+        if width.is_none() {
+            font.glyph_mut(&name)?.layers = layers;
+        }
         Ok(index)
     })?;
     Ok(json!({ "name": name, "index": index, "unicodes": codes.iter().map(|c| format!("{c:04X}")).collect::<Vec<_>>() }))
