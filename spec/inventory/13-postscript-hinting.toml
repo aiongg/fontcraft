@@ -932,6 +932,7 @@ milestone = "M10"
 summary = "Option -k (--keep-conflicts) keeps a stem whose order inverts against another stem somewhere in the design space instead of removing it. Default is removal."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+guesses = ["The search that picks which conflicting stems to remove tries both choices for each conflict, as otfautohint does, but only for its first 4,096 steps; after that it keeps the first choice, so a glyph with that many order conflicts across masters can lose different stems than otfautohint would. Hinting such a glyph with otfautohint would show whether the limit is ever reached in practice."]
 
 [[behavior]]
 id = "autohint.ps.variable.stemOverlap"
