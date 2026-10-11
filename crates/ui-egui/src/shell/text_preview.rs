@@ -2,7 +2,8 @@
 //! for proofing passages that would slow Edit View down.
 //!
 //! The text is laid out with `textlayout`, as Edit View text is: characters map to glyphs by
-//! Unicode value, the document's kerning applies, the writing direction orders the glyphs, and
+//! Unicode value, the document's kerning applies, the writing direction orders the glyphs (runs
+//! of the other direction keep their own order: `textlayout::bidi`), and
 //! lines wrap at the width of the window (the height, in vertical text). Characters the font
 //! lacks are drawn in the interface font. Only the lines in view are drawn.
 //!
@@ -27,7 +28,7 @@ use fontcraft_geom::{Affine, BezPath};
 use fontcraft_model::Font;
 use fontcraft_render::{Style, render_path};
 use fontcraft_spacing::kerning::KernIndex;
-use fontcraft_textlayout::{Charmap, Direction, Item, KerningMode, LENGTH_RANGE, Layout, MAX_PREVIEW_ITEMS, Options, Text};
+use fontcraft_textlayout::{Charmap, Direction, Embedding, Item, KerningMode, LENGTH_RANGE, Layout, MAX_PREVIEW_ITEMS, Options, Text, bidi};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -483,21 +484,18 @@ fn set_run(runs: &[Run], start: usize, end: usize, direction: BaseDirection) -> 
     out
 }
 
-fn is_rtl_letter(c: char) -> bool {
-    matches!(u32::from(c), 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF | 0x10800..=0x10FFF | 0x1E800..=0x1EFFF)
-}
-
 /// Whether the text runs right to left: as set, or by default from its first letter.
 pub fn base_is_rtl(text: &str, direction: BaseDirection) -> bool {
     match direction {
         BaseDirection::Ltr => false,
         BaseDirection::Rtl => true,
-        BaseDirection::Default => text.chars().find(|c| c.is_alphabetic()).is_some_and(is_rtl_letter),
+        BaseDirection::Default => text.chars().find(|c| c.is_alphabetic()).is_some_and(bidi::is_strong_rtl),
     }
 }
 
 /// Lays the preview text out in `master`, lines wrapping at `line_width` font units: one item
-/// per character, kerning on, the runs reordered within each line.
+/// per character, kerning on, runs of the other direction and the ranges with their own direction
+/// ordered by `textlayout::bidi` within each line.
 pub fn lay_out(font: &Font, master: &str, state: &TextPreviewState, line_width: f64, index: Option<&KernIndex>) -> Result<(Text, Layout), String> {
     let map = Charmap::new(font);
     let items: Vec<Item> = state.text.chars().map(|c| map.item(c)).collect();
@@ -510,43 +508,10 @@ pub fn lay_out(font: &Font, master: &str, state: &TextPreviewState, line_width: 
         (Orientation::Horizontal, false) => Direction::Ltr,
     };
     let line_width = line_width.clamp(*LENGTH_RANGE.start(), *LENGTH_RANGE.end());
-    let options = Options { direction, kerning: KerningMode::Kerning, line_width, index, ..Options::default() };
-    let mut layout = fontcraft_textlayout::layout(font, master, &text, &options).map_err(|e| e.to_string())?;
-    if direction != Direction::Vertical {
-        reorder_runs(&mut layout, &state.runs, rtl);
-    }
+    let embeddings: Vec<Embedding> = state.runs.iter().map(|r| Embedding { items: r.start..r.end, rtl: r.direction == BaseDirection::Rtl }).collect();
+    let options = Options { direction, kerning: KerningMode::Kerning, line_width, index, bidi: true, embeddings: &embeddings, ..Options::default() };
+    let layout = fontcraft_textlayout::layout(font, master, &text, &options).map_err(|e| e.to_string())?;
     Ok((text, layout))
-}
-
-/// Reverses, within each line, the order of the items of every run whose direction differs
-/// from the text's.
-fn reorder_runs(layout: &mut Layout, runs: &[Run], base_rtl: bool) {
-    let len = layout.placed.len();
-    for run in runs {
-        if (run.direction == BaseDirection::Rtl) == base_rtl {
-            continue;
-        }
-        let (start, end) = (run.start.min(len), run.end.min(len));
-        let (Some(first), Some(last)) =
-            (layout.placed.get(start).map(|p| p.line), end.checked_sub(1).and_then(|e| layout.placed.get(e)).map(|p| p.line))
-        else {
-            continue;
-        };
-        for line in first..=last {
-            let Some(items) = layout.lines.get(line).map(|l| l.items.clone()) else { continue };
-            let (a, b) = (start.max(items.start), end.min(items.end));
-            let (Some(lo), Some(hi)) =
-                (layout.placed.get(a).map(|p| p.offset), b.checked_sub(1).and_then(|i| layout.placed.get(i)).map(|p| p.offset + p.advance))
-            else {
-                continue;
-            };
-            for p in layout.placed.get_mut(a..b).unwrap_or_default() {
-                let offset = lo + hi - (p.offset + p.advance);
-                p.offset = offset;
-                p.x = if base_rtl { -offset - p.advance } else { offset };
-            }
-        }
-    }
 }
 
 /// The start of every match of `query` in `text`, without overlaps, as character indexes.

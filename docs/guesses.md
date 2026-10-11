@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**626 guesses on 394 rows (190 of them live commands).**
+**627 guesses on 394 rows (190 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -163,7 +163,8 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `textPreview.togglePinned` | M5 | handbook | yes | The Text Preview is a window inside the app window; pinned, it stays in front of the other windows there, unpinned it goes behind the one clicked last. A separate pinned window in the reference app is the model. |
 | `textPreview.setLayoutOrientation` | M5 | handbook | yes | Vertical text runs in columns from right to left, with the vertical widths and origins Edit View uses; the reference app on our own vertical font would settle it. |
 | `textPreview.setWritingDirection` | M5 | handbook | yes | The default direction of the text comes from its first letter: right to left for Hebrew, Arabic and the other right-to-left scripts, else left to right. The reference follows the Unicode bidirectional algorithm; a mixed text in the reference app would settle how far we differ. |
-| `textPreview.setWritingDirection` | M5 | handbook | yes | A selected range with the other direction has its glyphs reversed within each line it spans, and keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it. |
+| `textPreview.setWritingDirection` | M5 | handbook | yes | A selected range with the other direction is an embedding: its base direction changes, one level inside the text's, and its runs are ordered by it; it keeps its direction while text is typed around it; directions do nothing in vertical text. The reference app on a mixed text would settle it. |
+| `textPreview.setWritingDirection` | M5 | handbook | yes | Digits, Arabic-Indic digits included, form left-to-right runs; a neutral between two runs of the same direction takes that direction, else the base direction of the text or its range; a combining mark follows the character before it. Full UAX #9 at M8 would settle the cases where this differs. |
 | `textPreview.find` | M5 | handbook | yes | The search options are Ignore Case (on at first) and Contains, Starts With or Full Word, as the system find bar of the reference offers them; matches do not overlap. |
 | `textPreview.find` | M5 | handbook | yes | Replace changes the current match, All changes every match; a replacement that would take the text past 1,000,000 characters is refused. |
 | `edit.selectSampleText` | M5 | handbook | yes | Choosing a sample string replaces the whole text of the tab; the handbook says the string goes into the text without saying where. |
@@ -548,7 +549,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `kerning.lockStates` (behavior) | M5 | handbook | – | A lock is open when the pair that applies names that glyph itself on that side while the glyph has a group there; opening a lock stores such a pair at the value that applied, so the kerning does not change. The kern field and the Kerning window right after a lock is opened, in the running app or a video, settle it. |
 | `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing a lock deletes the exception pair in the current master only; the all-masters variant exists only for deletion in the Kerning window. Closing a lock in a font with two masters and reading the other master's pairs settles it. |
 | `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing one lock while both are open keeps the other lock open: the glyph–glyph pair is replaced by the closed side's group against the open side's glyph, at the value that applied, unless that pair is already stored. Closing one lock of such a pair in the running app settles it. |
-| `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing the left lock alone of a glyph–glyph pair is refused when the left glyph's pair with the right glyph's group exists, because that pair would apply before the group–glyph pair and the left lock would stay open. Closing the left lock in that situation in the running app settles it. |
+| `kerning.closingLockRemovesException` (behavior) | M5 | handbook | – | Closing the left lock alone of a glyph–glyph pair is refused when the left glyph's pair with the right glyph's group exists, because that pair would apply before the group–glyph pair and the left lock would stay open. The owner chose the refusal over deleting that exception. Closing the left lock in that situation in the running app settles it. |
 | `kerning.pairLookupOrder` (behavior) | M5 | docs | – | When two stored pairs name the same sides in different spellings (the reference's group prefix and the UFO's), the first in stored order applies; a source with both, opened in the reference app, settles it. |
 | `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | The defaults are contains, every entry kind, both sides and not limited to the Font View selection; Reset returns to them. The options menu of a newly opened Kerning window settles them. |
 | `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | A pair is listed when one of the searched sides matches the term, has the chosen entry kind and, with the selection option, is a selected glyph or a group one of them belongs to; a search on a running Kerning window with mixed pairs settles it. |
@@ -672,7 +673,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `Default Layer Width` (parameter) | M5 | handbook | – | A value that is not a number from 0 to 65535 is ignored; the reference app with such a value would settle it. |
 | `Default Layer Width` (parameter) | M5 | handbook | – | The CJK scripts are han, hangul, kana and bopomofo; a new layer of a glyph of each script in the reference app would settle it. |
 | `Link Metrics With First Master` (parameter) | M5 | handbook | – | Spacing and kerning commands refuse to edit a linked master and name the master it follows; no source says what the reference does with such an edit. |
-| `Preview Descender` (parameter) | M5 | handbook | – | The default reads winAscent as the handbook says, though winDescent is likely meant; the reference app with a font whose winAscent and winDescent differ settles it. |
+| `Preview Descender` (parameter) | M5 | handbook | – | The default reads winDescent, not the winAscent the handbook names, because that text reads as a misprint; the reference app with a font whose winAscent and winDescent differ settles it. |
 | `Preview Descender` (parameter) | M5 | handbook | – | A value of either sign is a distance below the baseline; the reference app with a positive and a negative value settles it. |
 
 ## `21-qa-checks.toml`

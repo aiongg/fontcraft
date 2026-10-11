@@ -252,6 +252,21 @@ text out with the Edit View text layout (Unicode mapping, the document's kerning
 direction) and draws characters the font lacks in the interface font (the owner's decision,
 `docs/plans/M5.md` § 7 question 6). A shaping engine comes with M8's features.
 
+Mixed directions in Text Preview follow a simple set of rules (`crates/textlayout/src/bidi.rs`),
+short of the Unicode bidirectional algorithm, which M8 brings. Edit View keeps one direction for
+its whole text.
+
+- Letters of right-to-left scripts (Hebrew, Arabic, Syriac, Thaana, NKo and the other
+  right-to-left blocks) form right-to-left runs; other letters form left-to-right runs.
+- Digits, Arabic-Indic digits included, form left-to-right runs.
+- A neutral (space, punctuation, symbol) between two runs of the same direction takes that
+  direction; otherwise it takes the base direction of the text or of its range.
+- A combining mark takes the direction of the character before it.
+- A range set with Writing Direction has its own base direction, one level inside the text's.
+- On each line, the runs are ordered by their direction and the base direction; a run keeps its
+  letters in their own order. Trailing spaces take the text's direction.
+- Kerning applies between neighbours in the same run, from the table of that run's direction.
+
 ## Measuring
 
 **Info box.** See the selection part above.

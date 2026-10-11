@@ -714,7 +714,8 @@ Behaviour left unclear
   `cmap` only?
 - `isFixedPitch`: are widths really forced to the space width at export, and what is the
   `.monospace` number in the master settings?
-- `Preview Descender`: default given as winAscent; winDescent (negated) seems intended.
+- `Preview Descender`: default given as winAscent, which reads as a misprint. FontCraft uses
+  winDescent (as a distance below the baseline), departing from the handbook's words.
 - `superscriptYOffset`: "positive goes below the baseline" looks copied from the subscript entry.
 - `Name Table Entry`: default language printed as 0x0049; the Windows English id is 0x0409. The
   range "0 to 65536" presumably means 0 to 65535.

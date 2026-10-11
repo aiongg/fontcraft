@@ -111,6 +111,47 @@ fn right_to_left_reverses_each_line_and_kerns_from_its_own_table() {
 }
 
 #[test]
+fn bidi_keeps_latin_words_in_order_in_right_to_left_text() {
+    let mut f = font();
+    f.add_glyph("alef", vec![0x5D0], 500.0).unwrap();
+    f.add_glyph("bet", vec![0x5D1], 450.0).unwrap();
+    f.add_glyph("one", vec![0x31], 550.0).unwrap();
+    f.add_glyph("two", vec![0x32], 550.0).unwrap();
+    kern(&mut f, Direction::Ltr, "f", "o", -40.0);
+    kern(&mut f, Direction::Rtl, "f", "o", -99.0);
+    kern(&mut f, Direction::Rtl, "alef", "space", -30.0);
+    let t = text(&f, "\u{5d0} brown fox \u{5d1} 12");
+    let x = |l: &Layout, i: usize| l.placed[i].x;
+
+    // Without bidi every letter runs right to left, the Latin ones reversed.
+    let plain = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, ..Options::default() }).unwrap();
+    assert!(x(&plain, 3) < x(&plain, 2));
+
+    let l = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, bidi: true, ..Options::default() }).unwrap();
+    // alef ␣ b r o w n ␣ f o x ␣ bet ␣ 1 2: the runs right to left, letters and digits in order.
+    let latin: Vec<f64> = (2..7).chain(8..11).map(|i| x(&l, i)).collect();
+    assert!(latin.windows(2).all(|p| p[0] < p[1]), "brown fox reads left to right: {latin:?}");
+    assert_eq!(x(&l, 0), -500.0, "alef starts the line at the right");
+    assert_eq!(x(&l, 1), -500.0 - 250.0 + 30.0, "the space after it kerns from the right-to-left table");
+    assert_eq!(x(&l, 10) + 600.0, x(&l, 1), "the Latin run ends where the space begins");
+    assert_eq!(x(&l, 9) - x(&l, 8), 600.0 - 40.0, "f o kerns from the left-to-right table");
+    assert_eq!(l.placed[9].kern, -40.0);
+    assert!(x(&l, 12) < x(&l, 2), "bet stands left of the Latin run");
+    assert!(x(&l, 14) < x(&l, 15) && x(&l, 15) < x(&l, 12), "the number reads left to right, left of bet");
+    assert_eq!(x(&l, 14), -l.lines[0].length, "the line ends at its length");
+
+    // An embedding gives a range its own direction: a left-to-right range holding a Hebrew word
+    // and a Latin word sets them left to right.
+    let t = text(&f, "\u{5d0}\u{5d1} fox");
+    let embeddings = [Embedding { items: 0..6, rtl: false }];
+    let l = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, bidi: true, embeddings: &embeddings, ..Options::default() }).unwrap();
+    assert!(x(&l, 1) < x(&l, 0), "the Hebrew letters still read right to left");
+    assert!(x(&l, 0) < x(&l, 3), "the Hebrew word stands left of the Latin one");
+    let l = layout(&f, "m01", &t, &Options { direction: Direction::Rtl, bidi: true, ..Options::default() }).unwrap();
+    assert!(x(&l, 3) < x(&l, 1), "without it, the Latin word stands left");
+}
+
+#[test]
 fn vertical_text_uses_vertical_widths_and_origins() {
     let mut f = font();
     {

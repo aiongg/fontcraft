@@ -45,7 +45,7 @@ pub const MAX_BLUR: f64 = 10.0;
 pub const MAX_AREA_HEIGHT: f64 = 4000.0;
 /// The largest offset, in screen points either way.
 pub const MAX_OFFSET: f64 = 1.0e6;
-/// Largest absolute value read from `Preview Ascender`, `Preview Descender` and `winAscent`.
+/// Largest absolute value read from `Preview Ascender`, `Preview Descender` and `winDescent`.
 const MAX_EDGE: f64 = 65_535.0;
 /// Box blur passes: three approximate a Gaussian.
 const BLUR_PASSES: usize = 3;
@@ -266,14 +266,15 @@ fn number_param(params: &Params, name: &str) -> Option<f64> {
 }
 
 /// The strip's lower and upper edge in font units for a master: `Preview Descender` (a distance
-/// below the baseline, of either sign), else the master's or the font's `winAscent` (the
-/// documented default, though `winDescent` is likely meant), else the master's descender; and `Preview Ascender`, else 1000. Falls back to the master's descender and
-/// ascender when the edges would not enclose the baseline.
+/// below the baseline, of either sign), else the master's or the font's `winDescent` (the
+/// handbook names `winAscent`, read as a misprint), else the master's descender; and
+/// `Preview Ascender`, else 1000. Falls back to the master's descender and ascender when the
+/// edges would not enclose the baseline.
 pub fn vertical_range(font: &Font, master: &Master) -> (f64, f64) {
     let ascender = number_param(&master.params, PREVIEW_ASCENDER).unwrap_or(DEFAULT_PREVIEW_ASCENDER);
     let descender = number_param(&master.params, PREVIEW_DESCENDER)
-        .or_else(|| number_param(&master.params, "winAscent"))
-        .or_else(|| number_param(&font.info.params, "winAscent"))
+        .or_else(|| number_param(&master.params, "winDescent"))
+        .or_else(|| number_param(&font.info.params, "winDescent"))
         .map(|d| -d.abs())
         .unwrap_or_else(|| font.metric_pos(master, metric::DESCENDER, -f64::from(font.units_per_em) * 0.2).min(0.0));
     if ascender > 0.0 && ascender > descender { (descender, ascender) } else { view::vertical_span(font, master) }

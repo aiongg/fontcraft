@@ -1187,7 +1187,7 @@ notes = "Documented, not yet observed: closing the lock removes the exception. A
 guesses = [
   "Closing a lock deletes the exception pair in the current master only; the all-masters variant exists only for deletion in the Kerning window. Closing a lock in a font with two masters and reading the other master's pairs settles it.",
   "Closing one lock while both are open keeps the other lock open: the glyph–glyph pair is replaced by the closed side's group against the open side's glyph, at the value that applied, unless that pair is already stored. Closing one lock of such a pair in the running app settles it.",
-  "Closing the left lock alone of a glyph–glyph pair is refused when the left glyph's pair with the right glyph's group exists, because that pair would apply before the group–glyph pair and the left lock would stay open. Closing the left lock in that situation in the running app settles it.",
+  "Closing the left lock alone of a glyph–glyph pair is refused when the left glyph's pair with the right glyph's group exists, because that pair would apply before the group–glyph pair and the left lock would stay open. The owner chose the refusal over deleting that exception. Closing the left lock in that situation in the running app settles it.",
 ]
 
 [[command]]

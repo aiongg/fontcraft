@@ -10,6 +10,7 @@ use fontcraft_model::{Font, Glyph, Master, metric};
 use fontcraft_spacing::kerning::{Direction, KernError, KernIndex, Table};
 use fontcraft_spacing::metrics_source;
 
+use crate::bidi::{self, Embedding};
 use crate::text::{Item, Text};
 
 /// The master parameter that sets the distance between lines.
@@ -70,6 +71,12 @@ pub struct Options<'a> {
     /// Glyphs shown in another layer than their layer of the master: glyph name → layer id. The
     /// width and vertical metrics come from that layer; a layer the glyph lacks is ignored.
     pub layers: Option<&'a BTreeMap<String, String>>,
+    /// Horizontal text only: order runs of the other direction by the rules of [`crate::bidi`],
+    /// so a left-to-right word in right-to-left text keeps its letters in order. Off, every item
+    /// follows `direction`.
+    pub bidi: bool,
+    /// With `bidi`: ranges of items with their own base direction.
+    pub embeddings: &'a [Embedding],
 }
 
 impl Default for Options<'_> {
@@ -83,6 +90,8 @@ impl Default for Options<'_> {
             missing_advance: None,
             index: None,
             layers: None,
+            bidi: false,
+            embeddings: &[],
         }
     }
 }
@@ -241,6 +250,14 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         }
     };
     let table: Option<Table<'_>> = index.map(|i| i.table(direction, master)).transpose()?;
+    let levels = (options.bidi && direction != Direction::Vertical)
+        .then(|| bidi::levels(text.items(), direction == Direction::Rtl, options.embeddings))
+        .flatten();
+    // A run of the other direction kerns from that direction's table.
+    let other: Option<Table<'_>> = match (&levels, index) {
+        (Some(_), Some(i)) => Some(i.table(if direction == Direction::Rtl { Direction::Ltr } else { Direction::Rtl }, master)?),
+        _ => None,
+    };
 
     let current = text.current_glyph().and_then(|n| font.glyph(n).map(|g| (Arc::<str>::from(n), g)));
     let metrics_of = |name: Arc<str>, glyph: &Glyph| {
@@ -277,11 +294,24 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         })
         .collect();
 
-    // Kerning with the previous item, when both are glyphs.
+    // Kerning with the previous item, when both are glyphs (and, with bidi, in the same run).
     let kerns: Vec<f64> = (0..items.len())
         .map(|i| {
             let prev = i.checked_sub(1).and_then(|p| items.get(p)).and_then(|m| m.kern_id);
             let this = items.get(i).and_then(|m| m.kern_id);
+            let table = match &levels {
+                None => table,
+                Some(levels) => {
+                    let level = levels.get(i);
+                    if i == 0 || levels.get(i - 1) != level {
+                        None
+                    } else if level.is_some_and(|l| (l % 2 == 1) == (direction == Direction::Rtl)) {
+                        table
+                    } else {
+                        other
+                    }
+                }
+            };
             match (table, prev, this) {
                 (Some(t), Some(a), Some(b)) => t.lookup(a, b).map_or(0.0, |applied| finite_or_zero(applied.value)),
                 _ => 0.0,
@@ -331,6 +361,31 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         i += 1;
     }
     lines.push((start..n, pen));
+
+    // With bidi, each line's items move to their visual order; a kern stays between the two
+    // glyphs it was looked up for, which stand side by side in either order.
+    if let Some(levels) = &levels {
+        let rtl = direction == Direction::Rtl;
+        let blank: Vec<bool> = items.iter().map(|m| m.is_space || m.is_break).collect();
+        for (range, length) in &lines {
+            let mut along = 0.0;
+            let mut prev: Option<usize> = None;
+            for i in bidi::visual_order(range.clone(), levels, &blank, rtl) {
+                let gap = match prev {
+                    Some(a) if a + 1 == i => used.get(i).copied().unwrap_or(0.0),
+                    Some(a) if i + 1 == a => used.get(a).copied().unwrap_or(0.0),
+                    _ => 0.0,
+                };
+                along += gap;
+                let advance = items.get(i).map_or(0.0, |m| m.advance);
+                if let Some(o) = offsets.get_mut(i) {
+                    *o = if rtl { length - along - advance } else { along };
+                }
+                along += advance;
+                prev = Some(i);
+            }
+        }
+    }
 
     // `+ 0.0` keeps the first line at 0 rather than −0.
     let base = |line: usize| -(line as f64 * lh) + 0.0;

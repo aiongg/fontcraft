@@ -215,17 +215,32 @@ fn set_layout_orientation_and_writing_direction_reorder_the_glyphs() {
     let r = exec(&mut app, "textPreview.setWritingDirection", json!({"scope": "text", "direction": "rtl"}));
     assert_eq!(r["rtl"], true);
     let rtl = w.drawn(&mut app);
-    assert!(xs(&rtl).windows(2).all(|p| p[0] > p[1]), "right to left: {:?}", xs(&rtl));
-    exec(&mut app, "textPreview.setWritingDirection", json!({"scope": "text", "direction": "default"}));
+    assert!(xs(&rtl).windows(2).all(|p| p[0] < p[1]), "Latin letters keep their order: {:?}", xs(&rtl));
+    assert!(xs(&rtl)[0] > xs(&ltr)[0], "the line ends at the right");
 
-    // A right-to-left selection reverses only its glyphs.
-    let r = exec(&mut app, "textPreview.setWritingDirection", json!({"scope": "selection", "direction": "rtl", "range": [0, 2]}));
-    assert_eq!(r["runs"], json!([{"start": 0, "end": 2, "direction": "rtl"}]));
-    let x = xs(&w.drawn(&mut app));
-    assert!(x[1] < x[0] && x[0] < x[2], "V A | A: {x:?}");
+    // Hebrew and Latin in right-to-left text: the runs right to left, the Latin letters in order.
+    exec(&mut app, "textPreview.setText", json!({"text": "\u{5d0} AVA \u{5d1}"}));
+    let d = w.drawn(&mut app);
+    let at = |d: &Drawn, c: char| d.fallback.iter().find(|(f, _)| *f == c).map(|(_, p)| p.x).unwrap();
+    assert_eq!(names(&d), ["space", "A", "V", "A", "space"]);
+    let x = &xs(&d)[1..4];
+    assert!(x.windows(2).all(|p| p[0] < p[1]), "AVA reads left to right: {x:?}");
+    assert!(at(&d, '\u{5d1}') < x[0] && x[2] < at(&d, '\u{5d0}'), "bet | AVA | alef");
+    exec(&mut app, "textPreview.setWritingDirection", json!({"scope": "text", "direction": "ltr"}));
+
+    // A right-to-left selection is a range with its own direction: in left-to-right text, alef,
+    // the space and A set right to left put A first.
+    exec(&mut app, "textPreview.setText", json!({"text": "\u{5d0} A"}));
+    let d = w.drawn(&mut app);
+    assert!(at(&d, '\u{5d0}') < xs(&d)[1], "alef A");
+    let r = exec(&mut app, "textPreview.setWritingDirection", json!({"scope": "selection", "direction": "rtl", "range": [0, 3]}));
+    assert_eq!(r["runs"], json!([{"start": 0, "end": 3, "direction": "rtl"}]));
+    let d = w.drawn(&mut app);
+    assert!(xs(&d)[1] < at(&d, '\u{5d0}'), "A alef");
     // The run moves with its characters when text is typed before it.
-    let r = exec(&mut app, "textPreview.setText", json!({"text": "VAVA"}));
-    assert_eq!(r["runs"], json!([{"start": 1, "end": 3, "direction": "rtl"}]));
+    let r = exec(&mut app, "textPreview.setText", json!({"text": "V\u{5d0} A"}));
+    assert_eq!(r["runs"], json!([{"start": 1, "end": 4, "direction": "rtl"}]));
+    exec(&mut app, "textPreview.setWritingDirection", json!({"scope": "text", "direction": "default"}));
     refused(&mut app, "textPreview.setWritingDirection", json!({"scope": "selection", "direction": "rtl"}));
     refused(&mut app, "textPreview.setWritingDirection", json!({"scope": "selection", "direction": "rtl", "range": [3, 9]}));
     refused(&mut app, "textPreview.setLayoutOrientation", json!({"orientation": "diagonal"}));

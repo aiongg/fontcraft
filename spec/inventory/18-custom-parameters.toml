@@ -1368,7 +1368,7 @@ effect = "ui"
 summary = "Master parameter, float, default 1000. Raises the top of the preview strip and Preview panel so tall ascenders are not cut off."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Read by the Preview Area and the Preview Panel (M5.11a): the strip's top edge in font units, 1000 by default whatever the em size. Documented, not yet observed."
+notes = "Read by the Preview Area and the Preview Panel (M5.11a): the strip's top edge in font units. Without it, 1000 units at any em size, as documented; a font that needs more room sets the parameter. Documented, not yet observed."
 
 [[parameter]]
 name = "Preview Descender"
@@ -1377,12 +1377,12 @@ kind = "number"
 area = "proofing"
 milestone = "M5"
 effect = "ui"
-summary = "Master parameter, float, the counterpart of Preview Ascender for the lower edge. The source gives its default as winAscent when present, otherwise the master's descender (winDescent may be meant)."
+summary = "Master parameter, float, the counterpart of Preview Ascender for the lower edge. The source gives its default as winAscent when present, otherwise the master's descender."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Read by the Preview Area and the Preview Panel (M5.11a): the strip's bottom edge. Without it, the master's or the font's winAscent as the handbook says, else the master's descender. Documented, not yet observed."
+notes = "Read by the Preview Area and the Preview Panel (M5.11a): the strip's bottom edge. Without it, the master's or the font's winDescent, else the master's descender. This departs from the handbook's words, which name winAscent. Not yet observed."
 guesses = [
-  "The default reads winAscent as the handbook says, though winDescent is likely meant; the reference app with a font whose winAscent and winDescent differ settles it.",
+  "The default reads winDescent, not the winAscent the handbook names, because that text reads as a misprint; the reference app with a font whose winAscent and winDescent differ settles it.",
   "A value of either sign is a distance below the baseline; the reference app with a positive and a negative value settles it.",
 ]
 

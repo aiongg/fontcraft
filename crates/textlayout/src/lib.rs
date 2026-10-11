@@ -23,6 +23,14 @@
 //! vertical widths and origins, with columns from right to left. [`Layout::hit`] turns a point
 //! into a cursor index, [`Layout::caret`] a cursor index into a point.
 //!
+//! # Mixed directions ([`bidi`])
+//! With [`Options::bidi`] (Text Preview), horizontal text is split into runs of right-to-left
+//! and left-to-right script by a simple set of rules short of the Unicode bidirectional
+//! algorithm: a Latin word in right-to-left text keeps its letters in order, and only the runs
+//! are reversed. [`Embedding`]s give ranges their own base direction. Kerning applies between
+//! neighbours in the same run, from the table of that run's direction. Hit testing assumes one
+//! direction per line.
+//!
 //! The public API:
 //! ```text
 //! MAX_ITEMS = 10_000;  MAX_PREVIEW_ITEMS = 1_000_000;  PLACEHOLDER = "Placeholder"
@@ -43,7 +51,10 @@
 //! KerningMode::{None, Kerning, Locked}: name, from_name, shows_kerning
 //! Options<'a> { direction: Direction, kerning: KerningMode, line_width: f64, line_height: Option<f64>,
 //!               single_line: bool, missing_advance: Option<f64>, index: Option<&'a KernIndex>,
-//!               layers: Option<&'a BTreeMap<String, String>> (glyph → layer id) }  (Default)
+//!               layers: Option<&'a BTreeMap<String, String>> (glyph → layer id),
+//!               bidi: bool, embeddings: &'a [Embedding] }  (Default)
+//! Embedding { items: Range<usize>, rtl: bool };  bidi::Class::{Ltr, Rtl, Digit, Mark, Neutral}
+//! bidi::class(c: char) -> Class;  bidi::is_strong_rtl(c: char) -> bool
 //! layout(font: &Font, master: &str, text: &Text, options: &Options) -> Result<Layout, LayoutError>
 //! line_height(font: &Font, master: &Master) -> f64
 //! Layout { placed: Vec<Placed>, lines: Vec<Line>, direction, line_height: f64, ascender: f64 }
@@ -53,12 +64,14 @@
 //! ```
 #![forbid(unsafe_code)]
 
+pub mod bidi;
 pub mod layout;
 pub mod text;
 
 #[cfg(test)]
 mod tests;
 
+pub use bidi::Embedding;
 pub use fontcraft_spacing::kerning::Direction;
 pub use layout::{
     DEFAULT_LINE_WIDTH, KerningMode, LENGTH_RANGE, LINE_HEIGHT_PARAM, Layout, LayoutError, Line, MISSING_ADVANCE_RANGE, Options, Placed, layout,
