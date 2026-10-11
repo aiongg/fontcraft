@@ -122,7 +122,12 @@ fn a_right_click_on_a_node_lists_the_node_commands_and_runs_them_like_the_comman
     assert!(position("path.openCorner") < position("path.makeNodeFirst"), "rows' order: {node:?}");
     assert!(commands(&open, 1).contains(&"glyph.toggleLocked"), "the glyph section follows");
     let greyed: Vec<&str> = open.items().filter(|i| !i.enabled).map(|i| i.command).collect();
-    assert_eq!(greyed, ["path.connectNodes", "path.closeOpenPaths", "path.clearFocusOnPaths"], "one node of a closed path: {:?}", open.sections);
+    assert_eq!(
+        greyed,
+        ["path.connectNodes", "path.closeOpenPaths", "path.clearFocusOnPaths", "glyph.componentFromSelection"],
+        "one node of a closed path: {:?}",
+        open.sections
+    );
     assert!(node.contains(&"path.lockPath") && !node.contains(&"path.unlockPath"), "an unlocked path offers Lock Path only");
     assert_eq!(open.item("glyph.toggleLocked").unwrap().checked, Some(false), "Locked is a check item");
 

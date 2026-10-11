@@ -319,6 +319,8 @@ mod tests {
         assert_eq!(url("zero"), "https://learn.microsoft.com/typography/opentype/spec/features_uz#tag-zero");
         let found: Vec<&str> = search("small cap").map(|t| t.tag).collect();
         assert_eq!(found, ["c2sc", "smcp"]);
-        assert_eq!(search("LIGA").count(), 1);
+        // Case is ignored, and a name match counts: every Ligatures feature.
+        let found: Vec<&str> = search("LIGA").map(|t| t.tag).collect();
+        assert_eq!(found, ["clig", "dlig", "hlig", "liga", "rlig"]);
     }
 }
