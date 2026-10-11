@@ -150,6 +150,11 @@ add formats (`open.compiledFormats`).
 - Layout: features are rebuilt into Font Info › Features where possible; a lookup shared by
   several features goes into a prefix named `Prefix` (`open.reconstructsFeatures`). Kerning and
   kerning groups mostly survive, contextual kerning does not (`open.kerningMostlyPreserved`).
+  FontCraft reads the GPOS `kern` feature's pair lookups (glyph pairs, class pairs, extension
+  lookups; right-to-left by script). Each class becomes a kerning group named after its first
+  glyph, and glyph pairs are added wherever the group pairs would not give the compiled value, so
+  every covered pair keeps it. Limits: 2,000,000 covered pairs; a class table over 1,000,000
+  class pairs is skipped with a warning.
 - PostScript hints: glyph-level stem hints (mostly), alignment zones and standard stems are
   kept. Glyph hints arrive detached from nodes; for multi-master work each hint's two handles
   (blue circle, blue triangle) are dragged onto fitting nodes (`open.postscriptHintsPreserved`).
