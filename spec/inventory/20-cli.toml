@@ -1522,6 +1522,12 @@ milestone = "M12"
 summary = "Removes hinting. From CFF outlines it removes stem hints, hint masks and flex; from TrueType glyphs their instructions; and unless told otherwise the font-wide hinting data as well. Hint-related leftovers in other tables are cleaned up. In a source it clears manual and stored automatic hints."
 ref = "AFDKO tx -n, ttxn -nh; fontTools pyftsubset --no-hinting / --hinting-tables"
 status = "docs"
+notes = "Binary fonts only so far: a source input is refused until clearing stored hints in sources is built on the hint commands. TrueType follows pyftsubset --no-hinting (glyph programs, the hinting tables, the maxp limits, GPOS device tables and contour-point anchors); CFF charstrings come out without subroutines, as tx writes them, with the Private DICT hint values pyftsubset deletes. Checked against pyftsubset 4.66 on a CFF font built for the test (stems, hint masks, flex, local and global subroutines)."
+guesses = [
+  "`--gasp smooth` writes one range up to 0xFFFF ppem with flags 0x000F, the value the font-quality checks expect on an unhinted font; the reference app's export of an unhinted TrueType font would settle it.",
+  "A WOFF, WOFF2 or collection input gives a plain font file of the chosen face; keeping the container would need a decision once collections and WOFF writing are commands.",
+  "With `--keep-font-hints` the TrueType hdmx, VDMX and LTSH tables still go, since they record the hinted glyphs; only fpgm, prep, cvt, cvar and the maxp limits stay.",
+]
 
 [[cli]]
 id = "check"
@@ -2578,6 +2584,7 @@ milestone = "M12"
 summary = "Strips PostScript hints or TrueType instructions from the glyphs of a binary font or source and, unless kept, the font-wide hinting data and hint-dependent fields in other tables. Returns the glyphs affected and the tables removed."
 ref = "docs/spec/20-cli.md › dehint"
 status = "docs"
+notes = "Returns {output, bytes, glyphsChanged, tablesRemoved, tablesChanged}. Also takes outputDir and noClobber (file plumbing). Glyph selectors here take names, glyph ids (12, gid12), id ranges (3..9), U+XXXX and *; /CID and re: patterns are not read yet."
 
 [[command]]
 id = "font.proof"

@@ -213,6 +213,7 @@ bundled, the file says so in its header and the project is listed here with its 
   handling (overlap.py), font dictionaries and override sets (fdTools.py, splitpsdicts.py),
   reports (report.py) and options (autohint.py). otfautohint uses fontTools' bezierTools (MIT
   License) for its curve maths, which crates/autohint/src/bezier.rs ports with it.
+  Hint removal (crates/tables/src/dehint, M12.27) follows the --no-hinting rules of fontTools' subset module (MIT License): the hinting-table list, the maxp limits, the GPOS device-table and anchor pruning, and the Private DICT keys.
 
   The audit's data sets (crates/audit/src/data, M12.45): the OS/2 Unicode range blocks and bit
   search are ported from fontTools 4.66.1 (ttLib/tables/O_S_2f_2.py, MIT License); the expected
