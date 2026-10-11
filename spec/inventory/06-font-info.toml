@@ -699,7 +699,7 @@ milestone = "M7"
 summary = "Returns the custom parameters set on the font, on one master or on one export, in row order with their values."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "M7 plan § 4: M7.2. Disabled rows are listed with `enabled: false`."
+notes = "M7 plan § 4: M7.2. Disabled rows are listed with `enabled: false`; rows the catalogue does not know with `known: false`; for a parameter that takes one value, every enabled row after the first with `duplicate: true`; a row spelled another way with the catalogue's `canonical` name."
 
 [[command]]
 id = "font.customParameters.describe"
@@ -732,6 +732,8 @@ guesses = [
   "One scope may hold the same parameter more than once; for a parameter that takes one value the first enabled row counts and the list marks the others; adding a duplicate in the reference app settles whether it is refused.",
   "Without a value the new row holds the kind's empty value (off, 0, empty text, empty list); the new rows of the reference app settle it.",
   "A parameter whose appendix entry names its scopes is refused in other scopes; one whose entry names none is allowed in all three.",
+  "A name the catalogue does not know is added as given, its value checked only against the size limits, and listed with the unknown mark; whether the reference app's picker accepts a typed free name settles it.",
+  "A name property (designers, versionString and the others the format keeps as properties) added here is written to the General fields, refused on masters and refused where the field is already set; adding one from the reference app's picker settles where it goes.",
 ]
 observe = [
   "In font A (m7-one), add typoAscender twice, then add a yes-or-no parameter and a list parameter: note whether the duplicate is allowed or refused and the empty value each new row gets.",
@@ -749,7 +751,7 @@ milestone = "M7"
 summary = "Changes the value of an existing custom parameter row."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. M7 plan § 4: M7.2."
+notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2."
 
 [[command]]
 id = "font.customParameters.remove"

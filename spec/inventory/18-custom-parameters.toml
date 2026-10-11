@@ -39,6 +39,9 @@ summary = "UFO-derived parameter names are accepted both in the full UFO spellin
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. The compiler reads both spellings already for the names it handles (M2, crates/compile/src/info.rs); the catalogue lists every alias so the picker, `describe` and the compiler share one table. M7 plan § 4: M7.2."
+guesses = [
+  "A parameter added under another spelling is stored under the catalogue's spelling (the short name), and set and remove find rows of either spelling; the saved file of the observe step settles which spelling the reference app keeps.",
+]
 observe = [
   "In font A (m7-one), add the parameter `description`, then search the picker for `openTypeNameDescription`: note which spelling the list shows and which the saved file uses.",
 ]
@@ -1212,6 +1215,7 @@ area = "features"
 milestone = "M12"
 effect = "features"
 summary = "When checked, the compiled layout tables are made comparable to makeotf output, for feature code written against makeotf behaviour or for applications that rely on it."
+picker = "When on, the compiled layout tables match the output of the classic feature compiler, for feature code written against its behaviour or for applications that rely on it."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Moved to M12 by the M8 planning pass, with the makeotf-compatible compile mode (`compile.makeotfReleaseMode` and the other `docs/spec/40-compile.md` § 1.11 rows): the handbook does not say which layout differences it removes, and fea-rs has no such mode."
@@ -1424,6 +1428,7 @@ area = "font-info"
 milestone = "M7"
 effect = "naming"
 summary = "Sets name ID 6. Must be ASCII without spaces and, for compatibility, under 30 characters (Adobe's limit is 29), built as family name, hyphen, style words; long names should use Adobe's standard style abbreviations (list in docs/spec/18-custom-parameters.md)."
+picker = "Sets name ID 6: ASCII without spaces and under 30 characters, built as family name, hyphen and style words; long names use the standard PostScript style abbreviations."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Written to name ID 6 since M2, at all levels as fontmake 3.12.1 (glyphsLib 6.15.0, ufo2ft 3.9.1) does; fontc reads the font's only. M7 plan § 4: M7.8."
@@ -1695,6 +1700,7 @@ area = "compile"
 milestone = "M12"
 effect = "table-value"
 summary = "One of Adobe-CNS1-6, Adobe-GB1-5, Adobe-Japan1-3, Adobe-Japan1-6, Adobe-Korea1-2 or Adobe-Identity-0. With Adobe-Identity-0 the GSUB table is built from the font's own features; with the others Adobe's cmap and GSUB resources for that collection are used."
+picker = "The registry, ordering and supplement of a CID-keyed font, one of the six standard character collections (CNS1, GB1, Japan1-3, Japan1-6, Korea1, Identity). Identity builds GSUB from the font's own features; the others use the collection's cmap and GSUB resources."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Moved from M7 to M12 by the M7 planning pass, with export.cidMapping: CID-keyed output is M12's (compile.cidKeyedFonts, compile.cidCmapResources), where the AFDKO tools are the oracle; neither fontc nor fontmake reads the parameter."
