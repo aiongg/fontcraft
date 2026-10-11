@@ -98,6 +98,7 @@ pub struct SettingDef {
 pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "appearance.displayUnicodeValue", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "start.showAtLaunch", kind: Kind::Bool, default: DefaultValue::Bool(true) },
+    SettingDef { id: "user.disableAutomaticAlignmentForImportedFiles", kind: Kind::Bool, default: DefaultValue::Bool(false) },
 ];
 
 /// Ids that hold other commands' data. `settings.set` refuses them.

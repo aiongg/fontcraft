@@ -20,6 +20,12 @@
 //! (`spacing.updateMetricsKey`); a key naming a glyph the font lacks is turquoise. Emptying a
 //! field that holds a key stores the metric's current number, which removes the key. A master
 //! that takes its metrics from another master shows that master's values, read only.
+//!
+//! On a layer aligned automatically (`spacing.getDerivedMetrics`) the left, right and width
+//! fields show `auto (value)`, the value derived from the components; a sidebearing with an
+//! offset key shows the key and the value (`=+18 (68)`). Typing `=+N` or `=-N` into a sidebearing
+//! sets the offset; emptying a field that holds one sends `=+0`, which removes it. Anything else
+//! typed there is sent as it is, and the setter refuses it with a message.
 
 use fontcraft_geom::Point;
 use serde_json::{Value, json};
@@ -45,6 +51,8 @@ pub enum KeyState {
     Unlinked,
     /// The key cannot be evaluated (a cycle, a division by zero, a result out of range).
     Error,
+    /// Automatic alignment sets the metric; `value` is the derived one and `key` the offset key.
+    Auto,
 }
 
 /// One metric field as the box shows it.
@@ -64,8 +72,13 @@ pub struct MetricField {
 }
 
 impl MetricField {
-    /// The text the field shows: the key, else the number.
+    /// The text the field shows: the key, else the number; `auto (value)` or `key (value)` for a
+    /// derived metric.
     pub fn shown(&self) -> String {
+        if self.state == KeyState::Auto {
+            let value = self.value.map_or_else(String::new, widgets::format_number);
+            return format!("{} ({value})", self.key.as_deref().unwrap_or("auto"));
+        }
         match (&self.key, self.value) {
             (Some(key), _) => key.clone(),
             (None, Some(v)) => widgets::format_number(v),
@@ -98,6 +111,7 @@ pub struct Metrics {
 pub fn key_color(tokens: &Tokens, state: KeyState) -> egui::Color32 {
     match state {
         KeyState::Number | KeyState::InSync => tokens.text,
+        KeyState::Auto => tokens.text_dim,
         KeyState::OutOfSync | KeyState::Error => tokens.info_box_key_out_of_sync,
         KeyState::Unlinked => tokens.info_box_key_unlinked,
     }
@@ -139,6 +153,9 @@ pub fn read(app: &mut FontcraftApp, tokens: &Tokens) -> Option<Metrics> {
     if fields.iter().any(|f| f.state == KeyState::Error) {
         mark_unlinked(app, &name, &shown, &mut fields);
     }
+    if !vertical {
+        mark_derived(app, &name, &shown, &mut fields);
+    }
     Some(Metrics { glyph: name, unicode, layer: edited, vertical, fields, origin: vertical_origin, height, linked, anchor })
 }
 
@@ -159,6 +176,24 @@ fn field_state(reply: &Value, field: &'static str, command: &'static str) -> Met
         _ => (KeyState::InSync, target.map(|t| format!("= {}", widgets::format_number(t)))),
     };
     MetricField { field, command, value, key, state, message }
+}
+
+/// Marks the left, right and width fields of a layer aligned automatically: their values become
+/// the derived ones, and their keys the offset keys.
+fn mark_derived(app: &mut FontcraftApp, glyph: &str, layer: &str, fields: &mut [MetricField]) {
+    let Ok(reply) = app.session.execute("spacing.getDerivedMetrics", &json!({"glyph": glyph, "layer": layer})) else { return };
+    if reply.get("aligned").and_then(Value::as_bool) != Some(true) {
+        return;
+    }
+    for f in fields.iter_mut().filter(|f| matches!(f.field, "left" | "right" | "width")) {
+        f.value = reply.get(f.field).and_then(Value::as_f64).filter(|v| v.is_finite());
+        f.key = reply.get("offsets").and_then(|o| o.get(f.field)).and_then(Value::as_str).map(str::to_string);
+        f.state = KeyState::Auto;
+        f.message = Some(match f.field {
+            "width" => "Automatic alignment: the width comes from the components".to_string(),
+            _ => "Automatic alignment: the value comes from the components; type =+N or =-N to add to it or take from it".to_string(),
+        });
+    }
 }
 
 /// Marks the keys among `fields` that name a missing glyph, from the out-of-sync scan.
@@ -279,7 +314,7 @@ fn metric(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, f: &MetricField, pend
     ui.horizontal(|ui| {
         // A linked master's metrics, and a sidebearing of an empty layer without a key, are not
         // edited here.
-        let editable = m.linked.is_none() && (f.value.is_some() || f.key.is_some());
+        let editable = m.linked.is_none() && (f.value.is_some() || f.key.is_some() || f.state == KeyState::Auto);
         if !editable {
             let response =
                 ui.add_sized([tokens.field_width, ui.spacing().interact_size.y], egui::Label::new(egui::RichText::new(&shown).color(color)));
@@ -289,7 +324,7 @@ fn metric(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, f: &MetricField, pend
             return;
         }
         let step = |text: &str, delta: f64| -> Option<String> {
-            if f.key.is_some() {
+            if f.key.is_some() || f.state == KeyState::Auto {
                 return None;
             }
             let base = text.trim().parse::<f64>().ok().filter(|n| n.is_finite()).or(f.value)?;
@@ -314,9 +349,13 @@ fn metric(ui: &mut egui::Ui, tokens: &Tokens, m: &Metrics, f: &MetricField, pend
 }
 
 /// The value a committed text sets: a number, a key, or for an emptied field that held a key the
-/// metric's current number (which removes the key). `None`: nothing to set.
+/// metric's current number (which removes the key), or `=+0` for a derived metric's offset.
+/// `None`: nothing to set.
 fn commit_value(text: &str, f: &MetricField) -> Option<Value> {
     let t = text.trim();
+    if t.is_empty() && f.state == KeyState::Auto {
+        return f.key.as_ref().map(|_| json!("=+0"));
+    }
     if t.is_empty() {
         return f.key.as_ref().and(f.value).map(|v| json!(v));
     }

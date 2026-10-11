@@ -17,10 +17,10 @@ const MAX_AMOUNT: f64 = 32_767.0;
 /// it takes `amount`.
 macro_rules! nudge_spec {
     ($id:literal, $label:literal, $sc:literal, $what:literal, true, $run:expr) => {
-        nudge_spec!(@spec $id, $label, $sc, $run, concat!("{glyphs: [names], layer?: layer id (default: the first master), amount?: units (default 1)} ", $what, ". Metrics keys stay and may then be out of sync; a master that takes its metrics from another is refused → {glyphs: [names], layer, widths: {glyph: width}}"))
+        nudge_spec!(@spec $id, $label, $sc, $run, concat!("{glyphs: [names], layer?: layer id (default: the first master), amount?: units (default 1)} ", $what, ". Metrics keys stay and may then be out of sync; glyphs aligned automatically on that layer are skipped, as alignment sets their metrics; a master that takes its metrics from another is refused → {glyphs: [names moved], layer, widths: {glyph: width}, skipped: [names]}"))
     };
     ($id:literal, $label:literal, $sc:literal, $what:literal, false, $run:expr) => {
-        nudge_spec!(@spec $id, $label, $sc, $run, concat!("{glyphs: [names], layer?: layer id (default: the first master)} ", $what, ". Metrics keys stay and may then be out of sync; a master that takes its metrics from another is refused → {glyphs: [names], layer, widths: {glyph: width}}"))
+        nudge_spec!(@spec $id, $label, $sc, $run, concat!("{glyphs: [names], layer?: layer id (default: the first master)} ", $what, ". Metrics keys stay and may then be out of sync; glyphs aligned automatically on that layer are skipped, as alignment sets their metrics; a master that takes its metrics from another is refused → {glyphs: [names moved], layer, widths: {glyph: width}, skipped: [names]}"))
     };
     (@spec $id:literal, $label:literal, $sc:literal, $run:expr, $params:expr) => {
         CommandSpec {
@@ -47,7 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Left Sidebearing",
             [],
             None,
-            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key} set the left sidebearing of each glyph's layer. A number moves the layer's outlines, components, anchors, guides and background sideways and changes the width by the same amount, and removes the key the field holds. A key (`n`, `=n`, `=h+8`, `=|n`, `=|`, `=64`, `=H@200`, `==u` for this layer only) is stored and applied at once. Empty layers are skipped → {glyphs: [names changed], layer, values: {glyph: left sidebearing}, key?: text as shown, skipped: [names]}",
+            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key} set the left sidebearing of each glyph's layer. A number moves the layer's outlines, components, anchors, guides and background sideways and changes the width by the same amount, and removes the key the field holds. A key (`n`, `=n`, `=h+8`, `=|n`, `=|`, `=64`, `=H@200`, `==u` for this layer only) is stored and applied at once. Empty layers are skipped. On a layer aligned automatically the field takes only an offset, `=+N` or `=-N` (`==+N` for this layer only), which alignment adds to the derived value; `=+0` removes it; a number or another key is refused → {glyphs: [names changed], layer, values: {glyph: left sidebearing}, key?: text as shown, skipped: [names]}",
             has_doc,
             set_left
         )
@@ -57,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Right Sidebearing",
             [],
             None,
-            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key} set the right sidebearing of each glyph's layer. A number changes the width and removes the key the field holds; a key (`n`, `=n`, `=o-10`, `=|n`, `=|`, `=64`, `==u` for this layer only) is stored and applied at once. Empty layers are skipped → {glyphs: [names changed], layer, values: {glyph: right sidebearing}, key?: text as shown, skipped: [names]}",
+            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key} set the right sidebearing of each glyph's layer. A number changes the width and removes the key the field holds; a key (`n`, `=n`, `=o-10`, `=|n`, `=|`, `=64`, `==u` for this layer only) is stored and applied at once. Empty layers are skipped. On a layer aligned automatically the field takes only an offset, `=+N` or `=-N` (`==+N` for this layer only), which alignment adds to the derived value; `=+0` removes it; a number or another key is refused → {glyphs: [names changed], layer, values: {glyph: right sidebearing}, key?: text as shown, skipped: [names]}",
             has_doc,
             set_right
         )
@@ -67,7 +67,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Width",
             [],
             None,
-            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key} set the advance width of each glyph's layer, from 0 to 65535; the right sidebearing takes the change. A number removes the key the field holds; a key (`n`, `=n`, `=n*2`, `=600`, `==u` for this layer only; no `|` or `@`) is stored and applied at once → {glyphs: [names changed], layer, values: {glyph: width}, key?: text as shown, skipped: []}",
+            "{glyphs: [names], layer?: layer id (default: the first master), value: number or metrics key} set the advance width of each glyph's layer, from 0 to 65535; the right sidebearing takes the change. A number removes the key the field holds; a key (`n`, `=n`, `=n*2`, `=600`, `==u` for this layer only; no `|` or `@`) is stored and applied at once. A layer aligned automatically takes its width from its components and refuses the field → {glyphs: [names changed], layer, values: {glyph: width}, key?: text as shown, skipped: []}",
             has_doc,
             set_width
         )
@@ -103,6 +103,16 @@ pub fn specs() -> Vec<CommandSpec> {
         nudge_spec!("spacing.shiftOutlineLeft", "Shift Outline Left", "Cmd+Ctrl+Left", "move each glyph's outline `amount` (default 1) units left inside its width, which stays", true, |s, v| nudge(s, v, "spacing.shiftOutlineLeft", "Shift Outline Left", Nudge::Shift, -1.0, Step::Amount)),
         nudge_spec!("spacing.shiftOutlineLeftBy10", "Shift Outline Left by 10", "Cmd+Ctrl+Shift+Left", "move each glyph's outline 10 units left inside its width, which stays", false, |s, v| nudge(s, v, "spacing.shiftOutlineLeftBy10", "Shift Outline Left by 10", Nudge::Shift, -1.0, Step::Ten)),
         nudge_spec!("spacing.shiftOutlineRight", "Shift Outline Right", "Cmd+Ctrl+Right", "move each glyph's outline `amount` (default 1) units right inside its width, which stays", true, |s, v| nudge(s, v, "spacing.shiftOutlineRight", "Shift Outline Right", Nudge::Shift, 1.0, Step::Amount)),
+        cmd!(
+            query "spacing.getDerivedMetrics",
+            "Get Derived Metrics",
+            [],
+            None,
+            "{glyph: name, layer?: id (default: the first master's layer)} whether automatic alignment sets the layer's width and left and right sidebearings, and the values it gives them: the advances of the base components (marks attached by anchors do not count) plus the offsets of the `=+N` and `=-N` keys, which are listed as a field shows them. Values are null when the layer is not aligned, and a sidebearing is null when the bases draw nothing → {glyph, layer, aligned: bool, width, left, right, offsets: {left: key | null, right: key | null}, error?: why the components cannot be aligned}",
+            has_doc,
+            get_derived_metrics
+        )
+        .targets(&[TargetKind::Layer]),
         nudge_spec!("spacing.shiftOutlineRightBy10", "Shift Outline Right by 10", "Cmd+Ctrl+Shift+Right", "move each glyph's outline 10 units right inside its width, which stays", false, |s, v| nudge(s, v, "spacing.shiftOutlineRightBy10", "Shift Outline Right by 10", Nudge::Shift, 1.0, Step::Ten)),
     ]
 }
@@ -156,6 +166,12 @@ fn set_metric(s: &mut Session, v: &Value, id: &'static str, label: &str, field: 
                 font.glyph_mut(name)?.layers.push(Layer::new(&layer, 0.0));
             }
             let (glyph, l) = find_layer(&p, font, name, &layer)?;
+            if spacing::derived_field(font, l, field) {
+                let value = set_offset(&p, font, name, &layer, field, &entry)?;
+                values.insert(name.clone(), json!(value));
+                changed.push(name.clone());
+                continue;
+            }
             let current = spacing::metric(font, l, field).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
             let Some(current) = current else {
                 skipped.push(name.clone());
@@ -202,6 +218,54 @@ fn set_metric(s: &mut Session, v: &Value, id: &'static str, label: &str, field: 
         o.insert("key".into(), json!(k.display()));
     }
     Ok(out)
+}
+
+/// Sets `field` of a layer whose metrics automatic alignment derives: only an offset key
+/// (`=+N`, `=-N`) on a sidebearing is taken, stored where it was typed for; alignment applies it
+/// when the command ends (`Session::realign_after`). A glyph-wide `=+0` or `=-0` removes the
+/// field's offset. Anything else is refused, naming the glyph. Returns the derived value with the
+/// offset, or `None` when the components cannot be aligned.
+fn set_offset(p: &Params, font: &mut Font, name: &str, layer: &str, field: Field, entry: &Entry) -> Result<Option<f64>> {
+    let what = match field {
+        Field::Left => "left sidebearing",
+        Field::Right => "right sidebearing",
+        Field::Width | Field::Top | Field::Bottom => "width",
+    };
+    let key = match entry {
+        Entry::Key(k) if spacing::is_offset(k, field) => k,
+        _ if field == Field::Width => {
+            return Err(p.bad(format!(
+                "glyph `{name}` is aligned automatically: its width comes from its components; add space with =+N or =-N in a sidebearing field, or disable automatic alignment of its components"
+            )));
+        }
+        _ => {
+            return Err(p.bad(format!(
+                "glyph `{name}` is aligned automatically: its {what} comes from its components; type =+N or =-N to add to it or take from it, or disable automatic alignment of its components"
+            )));
+        }
+    };
+    let zero = spacing::aligned::offset_amount(key, field) == Some(0.0);
+    {
+        let mut gm = font.glyph_mut(name)?;
+        let g: &mut Glyph = &mut gm;
+        let l = g.layers.iter_mut().find(|l| l.id == layer).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))?;
+        match key.scope {
+            Scope::Local => *slot(&mut l.info.metrics_keys, field) = Some(key.stored()),
+            Scope::Glyph => {
+                // The layer's own key would hide the glyph's on this layer.
+                if slot(&mut l.info.metrics_keys, field).is_some() {
+                    *slot(&mut l.info.metrics_keys, field) = None;
+                }
+                *slot(&mut g.info.metrics_keys, field) = if zero { None } else { Some(key.stored()) };
+            }
+        }
+    }
+    let derived = fontcraft_components::metrics::derived_metrics(font, name, layer).ok().flatten();
+    Ok(derived.and_then(|d| match field {
+        Field::Left => d.lsb,
+        Field::Right => d.rsb,
+        Field::Width | Field::Top | Field::Bottom => Some(d.width),
+    }))
 }
 
 /// A typed number must lie in the field's range.
@@ -270,6 +334,45 @@ fn slot(keys: &mut MetricsKeys, field: Field) -> &mut Option<String> {
     }
 }
 
+// ── Derived metrics ────────────────────────────────────────────────────────────────────────────
+
+fn get_derived_metrics(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("spacing.getDerivedMetrics", v)?;
+    let font = s.font()?;
+    let name = p.str("glyph")?;
+    let g = font.glyph(name).ok_or_else(|| p.bad(format!("there is no glyph `{name}`")))?;
+    let id = match p.opt_str("layer")? {
+        Some(id) => id.to_string(),
+        None => font.default_master()?.id.clone(),
+    };
+    let l = g.layers.iter().find(|l| l.id == id).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{id}`")))?;
+    let mut out = json!({ "glyph": name, "layer": id, "aligned": false, "width": null, "left": null, "right": null, "offsets": { "left": null, "right": null } });
+    if !spacing::derives_metrics(font, l) {
+        return Ok(out);
+    }
+    let derived = match fontcraft_components::metrics::derived_metrics(font, name, &id) {
+        Ok(Some(d)) => d,
+        Ok(None) => return Ok(out),
+        Err(e) => {
+            if let Some(o) = out.as_object_mut() {
+                o.insert("error".into(), json!(e.to_string()));
+            }
+            return Ok(out);
+        }
+    };
+    let offset = |field: Field| -> Value {
+        spacing::effective_key(g, l, field)
+            .and_then(|(scope, text)| spacing::parse_stored(text, scope, field, |n| font.glyph(n).is_some()).ok())
+            .filter(|k| spacing::is_offset(k, field))
+            .map_or(Value::Null, |k| json!(k.display()))
+    };
+    out = json!({
+        "glyph": name, "layer": id, "aligned": true, "width": derived.width, "left": derived.lsb, "right": derived.rsb,
+        "offsets": { "left": offset(Field::Left), "right": offset(Field::Right) },
+    });
+    Ok(out)
+}
+
 // ── The shortcuts ──────────────────────────────────────────────────────────────────────────────
 
 /// Which edge a shortcut moves.
@@ -305,8 +408,15 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
     }
     let d = sign * amount;
     let mut widths = Map::new();
+    let mut moved_glyphs = Vec::new();
+    let mut skipped = Vec::new();
     s.edit(label, |font| {
         for name in &names {
+            // Alignment would put the components and the width back at once.
+            if font.glyph(name).and_then(|g| g.layers.iter().find(|l| l.id == layer)).is_some_and(|l| spacing::derives_metrics(font, l)) {
+                skipped.push(name.clone());
+                continue;
+            }
             let mut g = font.glyph_mut(name)?;
             let l = g.layers.iter_mut().find(|l| l.id == layer).ok_or_else(|| p.bad(format!("glyph `{name}` has no layer `{layer}`")))?;
             let moved = match edge {
@@ -316,10 +426,11 @@ fn nudge(s: &mut Session, v: &Value, id: &'static str, label: &str, edge: Nudge,
             };
             moved.map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
             widths.insert(name.clone(), json!(l.width));
+            moved_glyphs.push(name.clone());
         }
         Ok(())
     })?;
-    Ok(json!({ "glyphs": names, "layer": layer, "widths": widths }))
+    Ok(json!({ "glyphs": moved_glyphs, "layer": layer, "widths": widths, "skipped": skipped }))
 }
 
 // ── Shared ─────────────────────────────────────────────────────────────────────────────────────

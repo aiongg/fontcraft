@@ -760,6 +760,10 @@ milestone = "M6"
 summary = "A user setting, Disable Automatic Alignment for Imported Files, decides whether fonts opened from OpenType or UFO sources start with automatic alignment switched off for all components."
 ref = "Font Info › Other › Disable Automatic Alignment; Settings › User Settings"
 status = "handbook"
+notes = "Documented, not yet observed. Built in M6.15 (`cmd/file.rs`): with the setting on, file.open switches on the opened font's own Disable Automatic Alignment option (Font Info › Other) for a UFO, designspace or compiled font."
+guesses = [
+  "The setting works through the font's own Disable Automatic Alignment option, which stays on and is saved with the font, rather than by setting each component's alignment to disabled; the Font Info of a UFO opened with the setting on, in the reference app, settles it.",
+]
 
 [[behavior]]
 id = "components.autoAlignColors"
@@ -809,7 +813,11 @@ milestone = "M6"
 summary = "An auto-aligned composite accepts exactly one kind of metrics key, a signed number written after an equals sign (=+18, =-12), which adds to or subtracts from the derived sidebearing while alignment stays on."
 ref = "Reusing Shapes › Components › Automatic Alignment; Spacing › Metrics Keys & Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Built in M6.15: `spacing.setLeftSidebearing` and `spacing.setRightSidebearing` store an offset on an aligned layer and refuse numbers and other keys with a message; `spacing.setWidth` refuses every value there."
+guesses = [
+  "Other keys already stored on an aligned layer, from a file or from before the glyph was aligned, are kept but ignored: not evaluated, not listed as out of sync, not applied by Update Metrics; an aligned composite with a key such as =a opened in the reference app settles it.",
+  "The spacing shortcuts of the Text tool skip glyphs aligned on the edited layer and list them, since alignment would put their components back; pressing Ctrl+Left on an aligned composite in the reference app settles it.",
+]
 
 [[behavior]]
 id = "components.autoAlignSingleComponent"

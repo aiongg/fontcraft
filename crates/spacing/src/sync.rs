@@ -4,7 +4,8 @@
 //! smart); backup layers are not. Layers of a master that takes its metrics from another master
 //! ([`crate::metrics_source`]) are not scanned either. A key is out of sync when its value differs
 //! from the layer's metric rounded half up. A sidebearing key on an empty layer has nothing to
-//! compare with and is not listed.
+//! compare with and is not listed, nor is a left, right or width key on a layer whose metrics
+//! automatic alignment derives ([`crate::aligned`]).
 
 use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -12,6 +13,7 @@ use std::sync::{Arc, Weak};
 
 use fontcraft_model::{Font, Glyph, Layer, MAX_COMPONENT_DEPTH, Master, MetricDef, Shape};
 
+use crate::aligned::{alignment_off, derives_metrics, is_derived_field};
 use crate::eval::{Ctx, EvalError, effective_key};
 use crate::keys::{Body, Key, Scope, parse_stored};
 use crate::{Field, metrics_source, referenced_layer, round_half_up};
@@ -73,7 +75,12 @@ impl Own<'_> {
 
 fn scan_into(ctx: &mut Ctx<'_>, glyph: &Glyph, out: &mut Vec<Finding>, own: &mut Own<'_>) {
     for (index, layer) in glyph.layers.iter().enumerate().filter(|(_, l)| scanned(ctx.font, l)) {
+        let aligned = derives_metrics(ctx.font, layer);
         for field in Field::ALL {
+            // Alignment sets these metrics and applies their offset keys itself.
+            if aligned && is_derived_field(field) {
+                continue;
+            }
             let Some((scope, text)) = effective_key(glyph, layer, field) else { continue };
             let problem = match check(ctx, own, glyph, (index, layer), field, scope, text) {
                 Ok(None) => continue,
@@ -125,7 +132,7 @@ pub fn scan_glyph(font: &Font, glyph: &Glyph) -> Vec<Finding> {
 /// components, and every name a key looked up, found or not. A renamed glyph counts as one name
 /// removed and one added. A glyph scanned again reuses its own measured metrics when neither it
 /// nor any glyph its components show changed. A change to the masters, the metrics or the units
-/// per em recomputes everything.
+/// per em, or of the font's Disable Automatic Alignment option, recomputes everything.
 #[derive(Default)]
 pub struct SyncCache {
     /// The font of the last update; the `Weak` keeps its address from being reused.
@@ -133,6 +140,8 @@ pub struct SyncCache {
     masters: Option<Arc<Vec<Master>>>,
     metrics: Option<Arc<Vec<MetricDef>>>,
     units_per_em: u16,
+    /// The font's Disable Automatic Alignment option at the last update.
+    alignment_off: bool,
     entries: HashMap<String, Kept>,
     /// Glyph name → the glyphs whose results read it or looked it up.
     readers: HashMap<String, HashSet<String>>,
@@ -207,7 +216,8 @@ impl SyncCache {
         }
         let same = self.masters.as_ref().is_some_and(|m| Arc::ptr_eq(m, &font.masters))
             && self.metrics.as_ref().is_some_and(|m| Arc::ptr_eq(m, &font.metrics))
-            && self.units_per_em == font.units_per_em;
+            && self.units_per_em == font.units_per_em
+            && self.alignment_off == alignment_off(font);
         if !same {
             self.entries.clear();
             self.readers.clear();
@@ -287,6 +297,7 @@ impl SyncCache {
         self.masters = Some(font.masters.clone());
         self.metrics = Some(font.metrics.clone());
         self.units_per_em = font.units_per_em;
+        self.alignment_off = alignment_off(font);
         self.font = Arc::downgrade(font);
     }
 
