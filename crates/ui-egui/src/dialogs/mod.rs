@@ -538,21 +538,26 @@ fn open_tab(
     open_one(app, &tab.dialog, given, Some(Tabs { list, active: index, saved: saved.clone() }))
 }
 
+fn end_tool(app: &mut FontcraftApp) {
+    let out = app.tools.toolbox.cancel();
+    crate::tools_glue::apply(app, out);
+}
+
 fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>, tabs: Option<Tabs>) -> Result<Value, String> {
     if let Some(d) = &app.dialog {
         return Err(format!("the dialog `{}` is open: confirm or cancel it first", d.title));
     }
-    // The canvas takes no input while the dialog is open: end what the tool was doing and drop
-    // its hover marker, which would otherwise stay drawn under the dialog. First, because fields
-    // that measure the font run a preview of their own, which a running drag would refuse.
-    let out = app.tools.toolbox.cancel();
-    crate::tools_glue::apply(app, out);
     let mut shaped = None;
     let mut given = given.clone();
     let fields = match dialog.fields {
         Fields::Filter => form::filter_fields(&filter_entry(dialog.command).ok_or_else(|| format!("`{}` is not a filter", dialog.command))?)?,
         Fields::Fixed(list) => list(&app.session),
         Fields::Targeted(list) => {
+            // These fields may measure the font on a preview of their own, which a running drag
+            // would refuse: the drag ends first.
+            if app.session.interaction().is_some() {
+                end_tool(app);
+            }
             let mut targets = given.clone();
             if !targets.contains_key("glyph") && !targets.contains_key("glyphs") {
                 targets.extend(selection_targets(app, dialog.command));
@@ -602,6 +607,10 @@ fn open_one(app: &mut FontcraftApp, dialog: &Dialog, given: &Map<String, Value>,
     if dialog.mode == Mode::Preview && targets.is_empty() {
         return Err(format!("{}: select a glyph first", dialog.title));
     }
+    // The canvas takes no input while the dialog is open: end what the tool was doing and drop
+    // its hover marker, which would otherwise stay drawn under the dialog. Only now, so that a
+    // dialog that does not open leaves a drag running.
+    end_tool(app);
     match dialog.mode {
         Mode::Preview => app.session.begin(dialog.title).map_err(|e| e.to_string())?,
         // The command acts on the active document as a whole.

@@ -273,3 +273,20 @@ fn the_paste_conflict_question_opens_in_the_middle_of_a_drag() {
     call(&mut app, "ui.dialog.cancel", json!({}));
     assert!(app.session.interaction().is_none());
 }
+
+#[test]
+fn a_dialog_that_does_not_open_leaves_the_drag_running() {
+    let mut app = kerned_app();
+    app.run("view.editSelectedGlyphs", &json!({"glyphs": ["T"]})).unwrap();
+    app.run("view.setZoom", &json!({"size": 1000, "center": [300, 300]})).unwrap();
+    let r = call(&mut app, "ui.pointer", json!({"events": [{"kind": "down", "x": 50, "y": 500}, {"kind": "drag", "x": 80, "y": 520}]}));
+    assert_eq!(r["errors"], json!([]), "{r}");
+    assert!(app.session.interaction().is_some(), "the node drag is running");
+    let error = fails(
+        &mut app,
+        "engine.execute",
+        json!({"command": "dialog.open", "params": {"dialog": "dialog.findAndReplaceGlyphNames", "params": {"find": 42}}}),
+    );
+    assert!(!error.is_empty());
+    assert!(app.session.interaction().is_some(), "the drag still runs");
+}
