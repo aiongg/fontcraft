@@ -21,14 +21,20 @@ _Updated: 2026-10-11, M5 accepted by the owner (M5.fix6 applied their decisions)
 ## Where to start
 
 1. **The owner's answers to `docs/plans/M6.md` § 7.** Don't start M6 before the plan is
-   accepted.
+   accepted. The questions: accepting the plan, mark attachment at export (M6 or M8), the
+   composition data, caps, segments and brushes (M6 or M13), the TrueType default for
+   overlapping and transformed components, the milestone moves, and how anchor propagation is
+   written (question 7: port fontc's code, which derives from the reference app's source, or
+   write our own from the oracles' outputs; the plan recommends our own). Don't read fontc's or
+   glyphsLib's propagation code before that answer (`docs/clean-room.md`).
 2. **M6.0**, the spec pass: apply the answers (the mark-export rows move in from M8 if question
-   2 is (b); caps, segments and brushes move to M13 if question 4 is (b)), mark `components` as
-   M6.1's crate in `docs/architecture.md`, regenerate parity and guesses. Then the packages in
+   2 is (b); caps, segments and brushes move to M13 if question 4 is (b); the § 2 moves, already
+   in the inventory, are reverted if question 6 is rejected), mark `components` as M6.1's crate
+   in `docs/architecture.md`, regenerate parity and guesses again. Then the packages in
    the order of § 6.
 
 M6's plan in short: 220 rows (59 commands, 45 without caps, segments and brushes); a new crate
-`components` (reverse component index, anchor propagation ported from fontc); automatic
+`components` (reverse component index, anchor propagation equal to the oracles'); automatic
 alignment re-run by the engine inside each command's undo step; composition data from Unicode
 decomposition plus our own tables; smart and corner components drawn in the model's outline
 resolution; the M6 entries of `crates/oracle/allow.toml` removed when they export like the

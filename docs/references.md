@@ -37,7 +37,20 @@ owner, are the substitute, and a row a video confirms becomes `observed` (D13) (
 | fonttools | https://github.com/fonttools/fonttools | MIT | **oracle** (ttx, subset, merge, varLib, instancer, feaLib, cu2qu, interpolatable) and reference for those tools' options; designspace documentation | verified 2026-10-07 |
 | fontmake | https://github.com/googlefonts/fontmake | Apache-2.0 | **oracle**: the Python compile pipeline (static and variable, TrueType and CFF) | verified 2026-10-07 |
 | fontc | https://github.com/googlefonts/fontc (crates `fontc`, `fontir`, `fontbe`, `fea-rs`, `glyphs-reader`, `ufo2fontir`, `glyphs2fontir`, tools `ttx_diff`, `otl-normalizer`, `fontc_crater`) | repository Apache-2.0; the published 1.0.0 crates declare MIT/Apache-2.0 | **oracle** for TrueType-flavoured output; possible **dependency** ([decision 0002](decisions/0002-compile-pipeline.md)); source of the comparison method | verified 2026-10-07 |
+| glyphsLib | https://github.com/googlefonts/glyphsLib | Apache-2.0 (6.15.0) | **oracle** through fontmake for `.glyphs` sources; its `propagate_all_anchors` is the reference output of the M6 anchor-propagation measure | verified 2026-10-11 |
 | fontbakery | https://github.com/fonttools/fontbakery | Apache-2.0 | the check catalogue behind `docs/spec/21-qa.md` | verified 2026-10-07 |
+
+**Code derived from a reference app's source.** fontc's anchor propagation
+(`fontir/src/propagate_anchors.rs`, in `glyphs-reader/src/` at older commits) says in a comment
+that it reimplements a function of the primary reference app with a similar name. glyphsLib's
+`builder/transformations/propagate_anchors.py` says in its header that it is based on fontc's
+version, and that fontc's version is based on the reference app's original Objective-C code,
+which its authors shared with the fontc team privately. Both files are Apache-2.0, but their
+code comes from proprietary source. [`clean-room.md`](clean-room.md) says when such code may be
+ported. fontc's kerning writer (`fontbe/src/features/kern.rs`), its mark writer
+(`fontbe/src/features/marks.rs`), its corner components (`glyphs-reader/src/corner_components.rs`,
+based on glyphsLib's `filters/cornerComponents.py`) and glyphsLib's `cornerComponents.py` carry no
+such note in their headers.
 
 ## Format specifications
 

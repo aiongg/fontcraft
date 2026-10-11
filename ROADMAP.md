@@ -212,8 +212,10 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
 ### What to build next (in priority order)
 
 1. **The owner's answers to `docs/plans/M6.md` § 7**: accepting the plan, mark attachment at
-   export in M6 or M8, the composition data, caps, segments and brushes in M6 or M13, and the
-   TrueType default for overlapping and transformed components.
+   export in M6 or M8, the composition data, caps, segments and brushes in M6 or M13, the
+   TrueType default for overlapping and transformed components, the milestone moves, and whether
+   anchor propagation is ported from fontc (whose code derives from the reference app's source)
+   or written from the oracles' outputs.
 2. **M6, components and anchors**, package by package in the order of `docs/plans/M6.md` § 6,
    starting with M6.0 (the spec pass that applies those answers).
 

@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**676 guesses on 434 rows (190 of them live commands).**
+**677 guesses on 435 rows (190 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -458,6 +458,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `export.flavourSubfolders` (behavior) | M2 | inferred | – | An export of both flavours at once puts them into ttf and otf subfolders; how the reference lays out such an export is not documented. |
 | `export.afmIsLossy` (behavior) | M5 | handbook | – | Group pairs are expanded to glyph pairs with the exceptions applied, so the AFM file holds the kerning that applies to every covered glyph pair; the handbook does not say. |
 | `export.afmIsLossy` (behavior) | M5 | handbook | – | AFM values stay in the font's units and are not scaled to 1,000 units per em, so a round trip loses nothing; Adobe's note assumes 1,000. An AFM exported by the reference from a 2,048-unit font would settle it. |
+| `open.alignsCompositeMetrics` (behavior) | M6 | handbook | – | A UFO counts as an imported file and is aligned on opening, because the Source Formats page points a UFO to the importing behaviours and gives it its own Disable Automatic Alignment option in Font Info; the running app opening a UFO with an out-of-date composite would settle it. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A class read from a compiled font becomes a kerning group named after its first glyph in glyph order; no source says how the reference names recovered groups. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A glyph keeps the first class it is in on each side, and pairs of a later class with other members are stored as glyph pairs; opening a font whose subtables use overlapping classes in the reference app would settle it. |
 | `open.kerningMostlyPreserved` (behavior) | M5 | handbook | – | A `kern` feature record used only by right-to-left scripts fills the right-to-left kerning, any other the left-to-right kerning; opening an Arabic font in the reference app would settle it. |

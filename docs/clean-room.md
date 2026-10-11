@@ -26,6 +26,16 @@ on record.
 A source's licence is checked, not assumed, and recorded in [`references.md`](references.md)
 before the source is used.
 
+### Code derived from a reference app's source
+
+Some permissively licensed code says it was written from a proprietary app's own source, for
+example from code the app's authors shared privately with that project. Its licence allows a
+port, but its content comes from a source this page forbids. Such code is not ported, and not
+read beyond the note that states where it comes from, unless the owner decides otherwise for
+that file. Until then, the behaviour is written from public documentation and from the code's
+outputs, observed as a black box. [`references.md`](references.md) lists the files known to carry
+such a note.
+
 ## Writing
 
 - **Write every sentence yourself.** In code comments, command labels and descriptions, error

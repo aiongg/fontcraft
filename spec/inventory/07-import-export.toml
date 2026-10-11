@@ -642,6 +642,9 @@ milestone = "M6"
 summary = "On opening a font file, composite glyphs are put under automatic alignment so their metrics follow their base glyphs. The setting Disable Automatic Alignment for Imported Files turns this off."
 ref = "Import & Export › Opening Font Files › Font File Importing Behaviors"
 status = "handbook"
+guesses = [
+  "A UFO counts as an imported file and is aligned on opening, because the Source Formats page points a UFO to the importing behaviours and gives it its own Disable Automatic Alignment option in Font Info; the running app opening a UFO with an out-of-date composite would settle it.",
+]
 
 [[behavior]]
 id = "open.truetypeKeepsQuadratic"
