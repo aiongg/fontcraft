@@ -1,11 +1,14 @@
 //! Font Info and whole-font queries.
 
+use fontcraft_fontinfo::fields as fontinfo_fields;
+use fontcraft_fontinfo::{Scope, target};
 use fontcraft_geom::Shape as _;
-use fontcraft_model::{UPM_RANGE, metric};
+use fontcraft_model::{StyleClass, metric};
 use serde_json::{Map, Value, json};
 
+use super::font_fields::{fields_json, params_json, params_of, properties, property_value_json, scope_of, set_field, target_of, targets_of};
 use super::*;
-use crate::params::{Params, kind};
+use crate::params::Params;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -14,7 +17,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Font Info",
             [],
             None,
-            "{keys?: [string]} the font-wide fields (familyName, unitsPerEm, versionMajor, versionMinor, masters, glyphCount), or only `keys` → {…fields}",
+            "{scope?: 'font'|'master'|'instance' (default font), target?: id|name|index (required below the font), keys?: [string]} the Font Info of the font, one master or one export: its built-in fields, its added fields with every language (fields: [{key, label, localizable, value: text | [{language, value}]}]) and its custom parameters (customParameters: [{name, value, enabled}]); `keys` picks top-level entries or added fields by key. Font: {familyName, unitsPerEm, versionMajor, versionMinor, date, masters: [{id, name, ascender, capHeight, xHeight, descender}], glyphCount, fields, customParameters}; master: {id, name, fields, customParameters}; instance: {id, name, weightClass, widthClass, exports, fields, customParameters}",
             has_doc,
             info_get
         ),
@@ -23,7 +26,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Font Info",
             [],
             None,
-            "{values: {familyName?: string (at most 255 bytes), unitsPerEm?: 16–16384, versionMajor?: 0–32767, versionMinor?: 0–999}} change font-wide fields as one undo step; outlines are not scaled when unitsPerEm changes → {changed: [keys]}",
+            "{scope?: 'font'|'master'|'instance' (default font), targets?: [id|name|index] (required below the font), values: {key: value}} write built-in and added fields as one undo step, the same values to every target. Font: familyName (at most 255 bytes), unitsPerEm (16–16384; outlines are not scaled), versionMajor (0–32767), versionMinor (0–999), date (ISO 8601 or the format's text, stored in UTC); master: name; instance: name, weightClass (1–1000), widthClass (1–9). An added field takes a text (a localizable field's default language) or [{language, value}] (all its languages), and is added when the target lacks it → {changed: [keys], warnings: [text]} (a family name with characters other than ASCII letters, digits and spaces; more than 3000, 4096 or 5000 units per em)",
             has_doc,
             info_set
         ),
@@ -42,53 +45,80 @@ pub fn specs() -> Vec<CommandSpec> {
 fn info_get(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.info.get", p)?;
     let font = s.font()?;
-    let all = json!({
-        "familyName": font.family_name,
-        "unitsPerEm": font.units_per_em,
-        "versionMajor": font.version_major,
-        "versionMinor": font.version_minor,
-        "masters": font.masters.iter().map(|m| json!({
-            "id": m.id, "name": m.name,
-            "ascender": font.metric_pos(m, metric::ASCENDER, 0.0), "capHeight": font.metric_pos(m, metric::CAP_HEIGHT, 0.0),
-            "xHeight": font.metric_pos(m, metric::X_HEIGHT, 0.0), "descender": font.metric_pos(m, metric::DESCENDER, 0.0),
-        })).collect::<Vec<_>>(),
-        "glyphCount": font.glyphs.len(),
-    });
+    let scope = scope_of(&p)?;
+    let i = target_of(&p, font, scope)?;
+    let missing = || p.bad(format!("there is no {} #{i}", scope.name()));
+    let props = properties(font, scope, i).ok_or_else(missing)?;
+    let fields = fields_json(props, scope);
+    let params = params_json(params_of(font, scope, i).ok_or_else(missing)?);
+    let class = |c: &Option<StyleClass>| match c {
+        Some(StyleClass::Number(n)) => json!(n),
+        Some(StyleClass::Name(name)) => json!(name),
+        None => Value::Null,
+    };
+    let all = match scope {
+        Scope::Font => json!({
+            "familyName": font.family_name,
+            "unitsPerEm": font.units_per_em,
+            "versionMajor": font.version_major,
+            "versionMinor": font.version_minor,
+            "date": font.info.date,
+            "masters": font.masters.iter().map(|m| json!({
+                "id": m.id, "name": m.name,
+                "ascender": font.metric_pos(m, metric::ASCENDER, 0.0), "capHeight": font.metric_pos(m, metric::CAP_HEIGHT, 0.0),
+                "xHeight": font.metric_pos(m, metric::X_HEIGHT, 0.0), "descender": font.metric_pos(m, metric::DESCENDER, 0.0),
+            })).collect::<Vec<_>>(),
+            "glyphCount": font.glyphs.len(),
+            "fields": fields,
+            "customParameters": params,
+        }),
+        Scope::Master => {
+            let m = font.masters.get(i).ok_or_else(missing)?;
+            json!({"id": m.id, "name": m.name, "fields": fields, "customParameters": params})
+        }
+        Scope::Instance => {
+            let x = font.instances.get(i).ok_or_else(missing)?;
+            json!({
+                "id": x.id, "name": target::instance_name(x), "weightClass": class(&x.weight_class), "widthClass": class(&x.width_class),
+                "exports": x.exports, "fields": fields, "customParameters": params,
+            })
+        }
+    };
     let Some(keys) = p.opt_strings("keys")? else { return Ok(all) };
     let mut out = Map::new();
     for key in keys {
-        let value = all.get(key).ok_or_else(|| p.bad(format!("unknown key `{key}`")))?;
-        out.insert(key.to_string(), value.clone());
+        let value = match all.get(key) {
+            Some(v) => v.clone(),
+            None => {
+                let stored = fontinfo_fields::field(scope, key).map_or(key, |f| f.key);
+                let prop = props.get(stored).or_else(|| props.get(key)).ok_or_else(|| p.bad(format!("unknown key `{key}`")))?;
+                property_value_json(&prop.value)
+            }
+        };
+        out.insert(key.to_string(), value);
     }
     Ok(Value::Object(out))
 }
 
 fn info_set(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.info.set", p)?;
+    let scope = scope_of(&p)?;
     let values = p.opt_object("values")?.ok_or_else(|| p.bad("`values` is required"))?;
     if values.is_empty() {
         return Err(p.bad("`values` is empty"));
     }
-    let whole = |key: &str, v: &Value, min: u32, max: u32| -> Result<u16> {
-        let n = v.as_f64().filter(|n| n.fract() == 0.0 && *n >= f64::from(min) && *n <= f64::from(max));
-        n.map(|n| n as u16).ok_or_else(|| p.bad(format!("`{key}` must be a whole number from {min} to {max}, got {v}")))
-    };
-    s.edit("Set Font Info", |font| {
-        for (key, v) in values {
-            match key.as_str() {
-                "familyName" => match v.as_str().map(str::trim).filter(|n| !n.is_empty()) {
-                    Some(name) => font.family_name = name.to_string(),
-                    None => return Err(p.bad(format!("`familyName` must be a non-empty string, got {}", kind(v)))),
-                },
-                "unitsPerEm" => font.units_per_em = whole(key, v, u32::from(*UPM_RANGE.start()), u32::from(*UPM_RANGE.end()))?,
-                "versionMajor" => font.version_major = whole(key, v, 0, 32_767)?,
-                "versionMinor" => font.version_minor = whole(key, v, 0, 999)?,
-                other => return Err(p.bad(format!("unknown key `{other}` (known: familyName, unitsPerEm, versionMajor, versionMinor)"))),
+    let targets = targets_of(&p, s.font()?, scope, "targets")?;
+    let mut warnings = s.edit("Set Font Info", |font| {
+        let mut warnings = Vec::new();
+        for &i in &targets {
+            for (key, v) in values {
+                set_field(font, scope, i, key, v, &mut warnings).map_err(|m| p.bad(m))?;
             }
         }
-        Ok(())
+        Ok(warnings)
     })?;
-    Ok(json!({ "changed": values.keys().collect::<Vec<_>>() }))
+    warnings.dedup();
+    Ok(json!({ "changed": values.keys().collect::<Vec<_>>(), "warnings": warnings }))
 }
 
 fn list_glyphs(s: &mut Session, p: &Value) -> Result<Value> {

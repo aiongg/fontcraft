@@ -63,31 +63,105 @@ pub enum TargetRef {
 /// Reads one target: a bare number (index), a bare string ([`TargetRef::Key`]), or an object with
 /// exactly one of `id`, `name`, `index`.
 pub fn parse(value: &Json) -> Result<TargetRef, TargetError> {
-    // M7.3: the object forms; numbers that are not whole or not positive refused.
+    let index = |v: &Json| -> Result<usize, TargetError> {
+        v.as_f64()
+            .filter(|n| n.is_finite() && n.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(n))
+            .map(|n| n as usize)
+            .ok_or_else(|| TargetError::BadReference(format!("an index is a whole number from 0, got {v}")))
+    };
+    let text = |key: &str, v: &Json| -> Result<String, TargetError> {
+        match v.as_str() {
+            Some(s) if !s.is_empty() && s.len() <= MAX_REFERENCE_BYTES => Ok(s.to_string()),
+            _ => Err(TargetError::BadReference(format!("`{key}` is a non-empty text of at most {MAX_REFERENCE_BYTES} bytes"))),
+        }
+    };
     match value {
-        Json::String(s) => Ok(TargetRef::Key(s.clone())),
+        Json::Number(_) => index(value).map(TargetRef::Index),
+        Json::String(_) => text("target", value).map(TargetRef::Key),
+        Json::Object(map) => {
+            let mut entries = map.iter().filter(|(_, v)| !v.is_null());
+            match (entries.next(), entries.next()) {
+                (Some((k, v)), None) => match k.as_str() {
+                    "id" => text(k, v).map(TargetRef::Id),
+                    "name" => text(k, v).map(TargetRef::Name),
+                    "index" => index(v).map(TargetRef::Index),
+                    other => Err(TargetError::BadReference(format!("a target object has `id`, `name` or `index`, not `{other}`"))),
+                },
+                _ => Err(TargetError::BadReference("a target object has exactly one of `id`, `name` and `index`".into())),
+            }
+        }
         _ => Err(TargetError::BadReference("a target is an id, a name or an index".into())),
     }
 }
 
+/// Longest id or name a target may give.
+const MAX_REFERENCE_BYTES: usize = 1_024;
+
 /// Reads a `targets` parameter: one target or a list of them, at most [`crate::MAX_INSTANCES`].
 pub fn parse_list(value: &Json) -> Result<Vec<TargetRef>, TargetError> {
-    // M7.3: lists, with the limit.
-    parse(value).map(|t| vec![t])
+    match value {
+        Json::Array(items) => {
+            if items.len() > crate::MAX_INSTANCES {
+                return Err(TargetError::LimitExceeded { what: "targets", limit: crate::MAX_INSTANCES });
+            }
+            if items.is_empty() {
+                return Err(TargetError::BadReference("`targets` is empty".into()));
+            }
+            items.iter().map(parse).collect()
+        }
+        other => parse(other).map(|t| vec![t]),
+    }
 }
 
 /// The index of the master `target` names in `font.masters`.
 pub fn master(font: &Font, target: &TargetRef) -> Result<usize, TargetError> {
-    // M7.3: id, name (ambiguity listed), index, key.
-    let _ = font;
-    Err(TargetError::NotFound { scope: "master", reference: describe(target) })
+    let entries: Vec<(Option<&str>, &str)> = font.masters.iter().map(|m| (Some(m.id.as_str()), m.name.as_str())).collect();
+    resolve("master", &entries, target)
 }
 
-/// The index of the instance `target` names in `font.instances`.
+/// The index of the instance `target` names in `font.instances`. An instance without a style name
+/// (format version 4 keeps it among the properties) is named by its `styleNames` default.
 pub fn instance(font: &Font, target: &TargetRef) -> Result<usize, TargetError> {
-    // M7.3: id, name (ambiguity listed), index, key.
-    let _ = font;
-    Err(TargetError::NotFound { scope: "instance", reference: describe(target) })
+    let entries: Vec<(Option<&str>, &str)> = font.instances.iter().map(|i| (i.id.as_deref(), instance_name(i))).collect();
+    resolve("instance", &entries, target)
+}
+
+/// The name an instance is addressed and shown by.
+pub fn instance_name(instance: &fontcraft_model::Instance) -> &str {
+    if instance.name.is_empty() { instance.properties.value("styleNames").unwrap_or("") } else { &instance.name }
+}
+
+/// The index `target` names among `entries` (id, name).
+fn resolve(scope: &'static str, entries: &[(Option<&str>, &str)], target: &TargetRef) -> Result<usize, TargetError> {
+    let not_found = || TargetError::NotFound { scope, reference: describe(target) };
+    let by_id = |id: &str| entries.iter().position(|(i, _)| *i == Some(id));
+    let by_name = |name: &str| -> Result<usize, TargetError> {
+        let found: Vec<usize> = entries.iter().enumerate().filter(|(_, (_, n))| *n == name).map(|(i, _)| i).collect();
+        match found.as_slice() {
+            [] => Err(not_found()),
+            [one] => Ok(*one),
+            many => Err(TargetError::Ambiguous {
+                scope,
+                name: name.to_string(),
+                ids: many
+                    .iter()
+                    .map(|i| match entries.get(*i).and_then(|(id, _)| *id) {
+                        Some(id) if !id.is_empty() => id.to_string(),
+                        _ => format!("#{i}"),
+                    })
+                    .collect(),
+            }),
+        }
+    };
+    match target {
+        TargetRef::Id(id) => by_id(id).ok_or_else(not_found),
+        TargetRef::Name(name) => by_name(name),
+        TargetRef::Index(i) => (*i < entries.len()).then_some(*i).ok_or_else(not_found),
+        TargetRef::Key(key) => match by_id(key) {
+            Some(i) => Ok(i),
+            None => by_name(key),
+        },
+    }
 }
 
 /// The masters `targets` name, each once, in the order first named. One failing target fails all.
@@ -122,5 +196,36 @@ pub fn describe(target: &TargetRef) -> String {
         TargetRef::Id(id) => format!("with id `{id}`"),
         TargetRef::Name(n) | TargetRef::Key(n) => format!("`{n}`"),
         TargetRef::Index(i) => format!("#{i}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fontcraft_model::{Instance, Master};
+    use serde_json::json;
+    use std::sync::Arc;
+
+    #[test]
+    fn targets_by_id_name_index_and_ambiguity() {
+        let mut font = Font::new("T");
+        let master = |id: &str, name: &str| Master { id: id.into(), name: name.into(), ..Default::default() };
+        font.masters = Arc::new(vec![master("m1", "Light"), master("m2", "Bold"), master("m3", "Bold")]);
+        font.instances = Arc::new(vec![Instance { name: "Regular".into(), ..Default::default() }]);
+        let one = |v| parse(&v).and_then(|t| super::master(&font, &t));
+        assert_eq!(one(json!("m2")), Ok(1));
+        assert_eq!(one(json!("Light")), Ok(0));
+        assert_eq!(one(json!({"index": 2})), Ok(2));
+        assert_eq!(one(json!(0)), Ok(0));
+        assert_eq!(one(json!({"id": "Light"})), Err(TargetError::NotFound { scope: "master", reference: "with id `Light`".into() }));
+        match one(json!({"name": "Bold"})) {
+            Err(TargetError::Ambiguous { ids, .. }) => assert_eq!(ids, ["m2", "m3"]),
+            other => panic!("{other:?}"),
+        }
+        assert!(one(json!(3)).is_err() && one(json!(-1)).is_err() && one(json!(1.5)).is_err() && one(json!({"id": "m1", "name": "x"})).is_err());
+        let list = parse_list(&json!(["m1", {"index": 1}, "m1"])).unwrap();
+        assert_eq!(masters(&font, &list), Ok(vec![0, 1]));
+        assert!(parse_list(&json!([])).is_err());
+        assert_eq!(parse(&json!("Regular")).and_then(|t| instance(&font, &t)), Ok(0));
     }
 }
