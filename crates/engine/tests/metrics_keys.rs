@@ -236,3 +236,39 @@ fn glyph_update_metrics_for_all_masters_clears_every_out_of_sync_key() {
     run(&mut s, "edit.undo", json!({}));
     assert!(Arc::ptr_eq(&font_arc(&s), &before));
 }
+
+fn read_tree(dir: &std::path::Path, root: &std::path::Path, out: &mut fontcraft_io_glyphs::Files) {
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            read_tree(&p, root, out);
+        } else {
+            out.insert(p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"), std::fs::read(&p).unwrap());
+        }
+    }
+}
+
+/// `docs/plans/M5.md` § 5: Update Metrics on every glyph and master of Inter Roman.
+/// `cargo test --release -p fontcraft-engine --test metrics_keys -- --ignored --nocapture`.
+#[test]
+#[ignore = "speed measure"]
+fn update_metrics_on_inter() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/inter/src/Inter-Roman.glyphspackage");
+    if !dir.is_dir() {
+        return;
+    }
+    let mut files = fontcraft_io_glyphs::Files::new();
+    read_tree(&dir, &dir, &mut files);
+    let font = fontcraft_io_glyphs::read_package(&files).unwrap();
+    let (glyphs, masters) = (font.glyphs.len(), font.masters.len());
+    let mut s = Session::new();
+    s.add_document(font, None).unwrap();
+    for pass in ["first", "second"] {
+        let t = std::time::Instant::now();
+        let out = s.execute("glyph.updateMetricsForAllMasters", &json!({})).unwrap();
+        let took = t.elapsed();
+        let updated = out["updated"].as_array().map_or(0, Vec::len);
+        let skipped = out["skipped"].as_array().map_or(0, Vec::len);
+        println!("{pass} run: {glyphs} glyphs, {masters} masters, {updated} updated, {skipped} skipped, {took:?}");
+    }
+}
