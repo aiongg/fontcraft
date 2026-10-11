@@ -10,6 +10,7 @@
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
 //! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
 //! | Pair kerning | `kern` | the master's kerning as `GPOS` (`fontcraft_features`), for a source without a hand-written `kern` feature |
+//! | Component options | [`components_opt`] | decomposition and flattening the options, parameters and filter list ask for |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
 //! | Table builders and assembly | `build`, [`cff`], [`names`] | `glyf`/`loca` with composites, or `CFF ` (cubic outlines in their drawn direction, decomposed); `hmtx`, `hhea`, `maxp`, `head`, `cmap`, `OS/2`, `name`, `post` with production names, `GPOS` when there is kerning, then the font file |
 //!
@@ -33,6 +34,7 @@
 
 mod build;
 pub mod cff;
+pub mod components_opt;
 pub mod drawing;
 pub mod info;
 mod kern;
@@ -135,6 +137,8 @@ pub struct Options {
     pub overlap_time_limit: Duration,
     /// The glyph database that gives production names and categories. `None`: the built-in one.
     pub glyph_data: DataRef,
+    /// Decomposition and flattening beyond what the source asks ([`components_opt`]).
+    pub components: components_opt::ComponentOptions,
 }
 
 /// The glyph database a compile reads ([`Options::glyph_data`]). Two are equal when they are the
@@ -168,6 +172,7 @@ impl Default for Options {
             remove_overlap: true,
             overlap_time_limit: fontcraft_pathops::TIME_LIMIT,
             glyph_data: DataRef::default(),
+            components: components_opt::ComponentOptions::default(),
         }
     }
 }
@@ -219,11 +224,13 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
     let upm = f64::from(resolved.units_per_em);
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
+    let mut expansion = Expansion::new(MAX_EXPANDED_ELEMENTS);
+    let glyphs = components_opt::apply(font, &resolved, glyphs, flavour, &options.components, &mut expansion, &mut warnings)?;
     let settings = outline::Settings {
         flavour,
         tolerance: upm * error,
         keep_direction: options.keep_direction,
-        max_expanded: MAX_EXPANDED_ELEMENTS,
+        max_expanded: expansion.left,
         remove_overlap: options.remove_overlap,
         overlap_time_limit: options.overlap_time_limit,
     };

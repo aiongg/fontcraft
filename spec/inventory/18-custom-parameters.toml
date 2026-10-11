@@ -349,7 +349,10 @@ effect = "export-filter"
 summary = "Decomposes all components at export, for environments that mishandle composites; file size grows. Only relevant to TrueType outlines because CFF output never contains components."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads this parameter (glyphsLib, ufo2ft, fontmake and fontc searched by the M6 planning pass); FontCraft follows the handbook and lists the difference in `docs/spec/40-compile.md` § 4a when it is built."
+notes = "Documented, not yet observed. Neither oracle reads this parameter (glyphsLib, ufo2ft, fontmake and fontc searched by the M6 planning pass). FontCraft follows the handbook: when it is on, every composite of a TrueType build becomes contours (`fontcraft_compile::components_opt`); `docs/spec/40-compile.md` § 4a lists the difference from the oracles."
+guesses = [
+  "A decomposed glyph keeps its own contours first, then its components' contours in the order the compiler decomposes a glyph that mixes contours and components (fontc's order); a composite exported by the reference app with the parameter on would settle it.",
+]
 
 [[parameter]]
 name = "Decompose Components in Variable Font"
@@ -372,7 +375,10 @@ effect = "export-filter"
 summary = "List of glyph names whose components are turned into outlines at export. Useful to freeze a composite before Rename Glyphs swaps one of its base glyphs."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle reads this parameter (glyphsLib, ufo2ft, fontmake and fontc searched by the M6 planning pass); FontCraft follows the handbook and lists the difference in `docs/spec/40-compile.md` § 4a when it is built."
+notes = "Documented, not yet observed. Neither oracle reads this parameter (glyphsLib, ufo2ft, fontmake and fontc searched by the M6 planning pass). FontCraft follows the handbook: the listed composites of a TrueType build become contours, and a composite that uses a listed glyph keeps it as a component (`fontcraft_compile::components_opt`); `docs/spec/40-compile.md` § 4a lists the difference from the oracles."
+guesses = [
+  "A text value is read as glyph names separated by commas or spaces, besides the documented list; the reference app with a text value would settle it.",
+]
 
 [[parameter]]
 name = "Default Layer Width"
@@ -1067,7 +1073,7 @@ effect = "export-filter"
 summary = "When set, composites with overlapping components (such as a letter with an attached cedilla) stay as components in TrueType export. No effect on CFF output."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. The owner's answer to M6 plan § 7 question 5 (a) keeps that default. It departs from what the parameter's text implies, that the reference decomposes them unless the parameter is set, so the parameter changes nothing (docs/spec/40-compile.md § 4a)."
+notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. The owner's answer to M6 plan § 7 question 5 (a) keeps that default. It departs from what the parameter's text implies, that the reference decomposes them unless the parameter is set, so the parameter changes nothing (docs/spec/40-compile.md § 4a). A compile test checks that a build with it set is byte for byte the build without it."
 
 [[parameter]]
 name = "Keep Transformed Components"
@@ -1079,7 +1085,7 @@ effect = "export-filter"
 summary = "When set, composites whose components are scaled horizontally or vertically, or shifted vertically, stay as components in TrueType export. May disturb TrueType hinting of those glyphs; no effect on CFF output."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. The owner's answer to M6 plan § 7 question 5 (a) keeps that default. It departs from what the parameter's text implies, that the reference decomposes them unless the parameter is set, so the parameter changes nothing (docs/spec/40-compile.md § 4a)."
+notes = "Neither oracle reads this parameter (searched by the M6 planning pass); both keep overlapping and transformed components in TrueType output by default, which is what FontCraft does since M2 and M3. The owner's answer to M6 plan § 7 question 5 (a) keeps that default. It departs from what the parameter's text implies, that the reference decomposes them unless the parameter is set, so the parameter changes nothing (docs/spec/40-compile.md § 4a). A compile test checks that a build with it set is byte for byte the build without it."
 
 [[parameter]]
 name = "Keep UI-Font Bounding Box"

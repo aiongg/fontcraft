@@ -557,13 +557,18 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | Marks of a UFO source in the kern writer's split | from `public.openTypeCategories` | from the glyph's stored category and subcategory | the compiler does not fill a UFO's categories from the glyph database (`compile.nonSpacingMarkWidth`); the rules with marks land in other lookups, with the same values |
 | The scripts of the generated kerning of a source whose masters kern in different directions | taken from every master's pairs: the variable font gets a script for pairs only another master has, holding only those pairs | taken from the built master's pairs | FontCraft builds one master statically until M9. In `KerningRtlOnlyMaster.glyphs` only the second master has right-to-left pairs, so a Latin pair read in `hebr` is 0 in fontc's font and the `DFLT` value in FontCraft's; `latn` and `DFLT` agree. The kern measure lists this difference (`KNOWN` in `crates/oracle/tests/kern.rs`), not the allow-list |
 | Yes-or-no custom parameters of a `.glyphs` source (`Use Typo Metrics`, `Has WWS Names`, `isFixedPitch`, `postscriptForceBold`) | on only when the value is exactly 1 | on for any number, or text that reads as a number, other than 0 (`fontcraft_model::param_flag`) | glyphsLib applies `bool(value)`, so fontmake builds a hand-written 2 as on; the reference app writes only 0 and 1. No corpus source has another value, so this row has no allow-list entry |
+| The *Decompose Components* and *Decompose Glyphs* parameters | not read (nor by fontmake) | every composite, or the listed composites, of a TrueType build become contours | the handbook describes them (`docs/plans/M6.md` › M6.16). No corpus source has them, so this row has no allow-list entry |
+| A `decomposeComponents` entry in the ufo2ft filter list | not read: only `--decompose-components` decomposes every composite | the composites the entry names become contours, as ufo2ft (fontmake) reads it | the entry is ufo2ft's filter, and fontmake applies it. No corpus source has one |
+| The `include` and `exclude` lists of a `flattenComponents` or `decomposeTransformedComponents` entry | ignored: the filter reaches every glyph | the filter reaches only the glyphs the list allows, as in ufo2ft | the lists are part of ufo2ft's filter definition. No corpus source has one |
+| Where the ufo2ft filter list is read for a `.glyphs` master that is not the default one | the default master's user data | the built master's user data, else the font's | FontCraft builds one master statically until M9, and fontmake builds each master from its own lib, where glyphsLib puts that master's user data |
 
 **Against the handbook.** TrueType composites with overlapping or transformed components stay
 composites by default, as fontc and fontmake keep them. The texts of the Keep Overlapping
 Components and Keep Transformed Components parameters imply that the reference app decomposes
 such composites unless the parameter is set; FontCraft does not, so the two parameters change
 nothing (the owner's answer to `docs/plans/M6.md` § 7, question 5). No allow-list entry is
-needed: both oracles agree with FontCraft.
+needed: both oracles agree with FontCraft. A compile test checks that a build with both
+parameters set is byte for byte the build without them.
 
 The readers follow fontc where a source leaves a value out (`docs/spec/30-source-formats.md` ›
 Values a source leaves out): a `.glyphs` layer without a `width` is 600 wide; a designspace

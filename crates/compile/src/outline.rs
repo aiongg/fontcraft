@@ -125,7 +125,7 @@ fn composite(g: &ResolvedGlyph) -> Result<Prepared, CompileError> {
 }
 
 /// The contours of glyph `i` with all its components drawn in.
-fn decomposed(
+pub(crate) fn decomposed(
     glyphs: &[ResolvedGlyph],
     index: &HashMap<&str, usize>,
     decompose: &[bool],
