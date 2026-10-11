@@ -384,3 +384,24 @@ fn anchor_names_follow_the_reference_compilers() {
         assert!(anchor_kind(refused).is_err(), "{refused}");
     }
 }
+
+#[test]
+fn ligature_component_slots_are_charged_to_the_work_budget() {
+    // Each ligature keeps a slot per component up to its highest number in every group it has:
+    // 40 ligatures × 100 groups × 1,024 slots, from only 4,140 anchors.
+    let groups = 100;
+    let mut glyphs = vec![glyph(".notdef", &[], None, None, &[])];
+    let lig_anchors: Vec<(String, f64, f64)> =
+        (0..groups).map(|g| (format!("g{g}_1"), 0.0, 0.0)).chain([("g0_1024".to_string(), 0.0, 0.0)]).collect();
+    let lig_anchors: Vec<(&str, f64, f64)> = lig_anchors.iter().map(|(n, x, y)| (n.as_str(), *x, *y)).collect();
+    for i in 0..40 {
+        glyphs.push(glyph(&format!("lig{i}"), &[], Some("Letter"), Some("Ligature"), &lig_anchors));
+    }
+    let mark_anchors: Vec<(String, f64, f64)> = (0..groups).map(|g| (format!("_g{g}"), 0.0, 0.0)).collect();
+    let mark_anchors: Vec<(&str, f64, f64)> = mark_anchors.iter().map(|(n, x, y)| (n.as_str(), *x, *y)).collect();
+    glyphs.push(glyph("mark", &[0x301], Some("Mark"), Some("Nonspacing"), &mark_anchors));
+    let input = MarkInput { glyphs, ..Default::default() };
+    let work = 1_000_000;
+    let limited = mark_features(&MarkRequest { input: &input, master: "m01", tags: MarkTags::default(), limits: MarkLimits { work } });
+    assert!(matches!(limited, Err(FeatureError::TooMany { what: "steps of work", .. })), "{limited:?}");
+}
