@@ -6,6 +6,9 @@
 //! `fontir/src/glyph.rs`, `make_notdef_outline`, Apache-2.0): a hollow box half an em wide, its
 //! stroke 5% of the em, from the descender to the ascender, with the ascender to the descender
 //! as its vertical advance.
+//!
+//! Glyphs the compiler makes ([`MadeGlyph`]: colour layer glyphs) follow the source glyphs
+//! ([`append_made`]).
 
 use fontcraft_geom::BezPath;
 use fontcraft_model::{Resolved, ResolvedGlyph};
@@ -16,7 +19,8 @@ use crate::{CompileError, MAX_FONT_GLYPHS, ot_round};
 pub const NOTDEF: &str = ".notdef";
 
 /// A glyph the compiler makes that the source does not have, appended after the source glyphs
-/// in the order the list gives.
+/// in the order the list gives: a colour layer glyph (`docs/plans/M11.md` § 3 › Layer glyphs) or
+/// a variable font's alternate glyph.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MadeGlyph {
     pub name: String,
@@ -29,6 +33,26 @@ pub enum MadeFrom {
     /// The alternate layers of one range set of `glyph` (a variable font's
     /// `<glyph>.BRACKET.varAltNN`); `set` indexes `fontcraft_interp::GlyphSources::alternates`.
     Alternate { glyph: String, set: usize },
+    /// Shapes of the colour layer `layer` (its id) of the source glyph `glyph`.
+    ColorLayer { glyph: String, layer: String },
+}
+
+/// `glyphs` (already in their final order) with `made` appended in the order given, and the
+/// made glyphs' descriptions in the same order. Refused beyond [`MAX_FONT_GLYPHS`].
+pub fn append_made(
+    mut glyphs: Vec<ResolvedGlyph>,
+    made: Vec<(MadeGlyph, ResolvedGlyph)>,
+) -> Result<(Vec<ResolvedGlyph>, Vec<MadeGlyph>), CompileError> {
+    let total = glyphs.len().saturating_add(made.len());
+    if total > MAX_FONT_GLYPHS {
+        return Err(CompileError::TooManyGlyphs(total));
+    }
+    let mut described = Vec::with_capacity(made.len());
+    for (m, g) in made {
+        described.push(m);
+        glyphs.push(g);
+    }
+    Ok((glyphs, described))
 }
 
 /// `glyphs` in their final order: `.notdef` first, drawn when absent.

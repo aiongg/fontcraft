@@ -7,6 +7,7 @@
 //! | [`metrics`] | metric lines, zones and their names |
 //! | [`guides`] | guides, the grid, parameter metric lines, CJK grids, measurement labels |
 //! | [`background`] | the other side of the layer and the other visible layers, behind the outline; the darker canvas while the background is edited |
+//! | [`images`] | placed images, through a cache of decoded textures |
 //! | [`fill`] | filled glyphs, rasterised by the `render` crate into a texture |
 //! | [`composite`] | (no drawing) each glyph's outline with strokes expanded and masks applied, cached |
 //! | [`nodes`] | nodes and handles with the display conventions of `docs/spec/03a` § 4 |
@@ -35,6 +36,7 @@ pub mod fill;
 pub mod group_members;
 pub mod guides;
 pub mod hints_ps;
+pub mod images;
 pub mod measurement_line;
 pub mod metrics;
 pub mod nodes;

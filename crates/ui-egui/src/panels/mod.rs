@@ -22,6 +22,7 @@
 //! settings (collapsed sections, the Info box point, the Fit Curve range) are UI state in [`PanelState`], which
 //! only this module's shell commands ([`COMMANDS`]) change.
 
+pub mod attributes;
 pub mod bottom_bar;
 pub mod dimensions;
 pub mod fit_curve;
@@ -32,6 +33,7 @@ pub mod info_box_metrics;
 pub mod info_box_ps_hint;
 pub mod info_box_tt;
 pub mod layers;
+pub mod layers_color;
 pub mod palette;
 pub mod selection_info;
 pub mod special_layer_popover;

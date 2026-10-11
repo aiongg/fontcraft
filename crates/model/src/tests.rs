@@ -358,7 +358,7 @@ fn shape_fields_survive_the_native_form() {
         stroke_width: Some(Dimension::Number(46.0)),
         stroke_pos: Some(Dimension::Expression("1".into())),
         line_cap_start: Some(3),
-        fill_color: Some([1.0, 0.0, 0.0, 1.0]),
+        fill_color: Some(Color::Rgba([1.0, 0.0, 0.0, 1.0])),
         color: Some(ColorLabel::Index(4)),
         reverse_paths: true,
         ..Default::default()
@@ -414,7 +414,7 @@ fn check_holds_the_shape_data_limits() {
     }));
     assert!(broken(&|s| *s = Shape::Path({
         let mut p = Path::rect(0.0, 0.0, 1.0, 1.0);
-        p.info.attrs.fill_color = Some([2.0, 0.0, 0.0, 1.0]);
+        p.info.attrs.fill_color = Some(Color::Rgba([2.0, 0.0, 0.0, 1.0]));
         p
     })));
     assert!(broken(&|s| *s = Shape::Image(Box::new(Image { alpha: Some(f64::NAN), ..Default::default() }))));

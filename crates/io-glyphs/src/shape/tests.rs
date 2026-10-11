@@ -91,7 +91,7 @@ fn version_3_paths_and_nodes_are_fields() {
     assert_eq!(a.line_cap_start, Some(3));
     assert_eq!(a.line_cap_end, None, "a number written as text stays as written");
     assert!(a.extra.get(Family::Glyphs, "lineCapEnd").is_some() && a.extra.get(Family::Glyphs, "gradient").is_some());
-    assert_eq!(a.fill_color, Some([1.0, 0.0, 0.0, 1.0]));
+    assert_eq!(a.fill_color, Some(fontcraft_model::Color::Rgba([1.0, 0.0, 0.0, 1.0])));
     // The format writes the start node last; the model keeps it first.
     let [last, first, second, third] = p.nodes.as_slice() else { panic!() };
     assert_eq!((first.x, first.smooth, first.orientation), (0.0, true, Orientation::Right));

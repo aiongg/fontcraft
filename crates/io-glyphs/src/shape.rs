@@ -24,7 +24,7 @@
 //! Written from the GlyphsSDK format documents (Apache-2.0).
 
 use fontcraft_model::{
-    Alignment, Anchor, AnchorInfo, ColorLabel, Component, ComponentInfo, Dimension, Family, MAX_PART_PROPERTIES, Node, NodeInfo, NodeKind,
+    Alignment, Anchor, AnchorInfo, Color, ColorLabel, Component, ComponentInfo, Dimension, Family, MAX_PART_PROPERTIES, Node, NodeInfo, NodeKind,
     Orientation, Path, PathInfo, Rare, Shape, ShapeAttrs, SmartValue, Transform, UserData,
 };
 use fontcraft_plist::{Array, Dict, Layout, Num, Str, Value};
@@ -210,6 +210,16 @@ fn write_rgba(c: &[f64; 4], version: u32) -> Value {
     crate::glyph::write_color(&ColorLabel::Rgba(*c), version)
 }
 
+/// A fill or stroke colour as the file writes it; `None` for what this writer cannot write yet.
+fn write_paint_color(c: &Color, version: u32) -> Option<Value> {
+    match c {
+        Color::Rgba(c) => Some(write_rgba(c, version)),
+        // M11.5: palette references (`("p", index, alpha)` in version 4). The readers keep them in
+        // `extra` until then, so only a command can make one.
+        Color::Palette { .. } => None,
+    }
+}
+
 /// A shape's `attr` dictionary: the drawing attributes, and with `user_data` (version 4 components
 /// and anchors) the user data. `None` when the dictionary would not be written back the same.
 fn read_attrs(v: &Value, version: u32, user_data: bool) -> Option<(ShapeAttrs, UserData)> {
@@ -230,7 +240,7 @@ fn read_attrs(v: &Value, version: u32, user_data: bool) -> Option<(ShapeAttrs, U
     a.fill = take_flag(&mut d, "fill", version);
     a.reverse_paths = take_flag(&mut d, "reversePaths", version);
     a.hidden = take_flag(&mut d, "hidden", version);
-    let rgba = |d: &mut Dict, k: &str| take_same(d, k, version, |v| read_rgba(v, version), |c| Some(write_rgba(c, version)));
+    let rgba = |d: &mut Dict, k: &str| take_same(d, k, version, |v| read_rgba(v, version).map(Color::Rgba), |c| write_paint_color(c, version));
     a.fill_color = rgba(&mut d, "fillColor");
     a.stroke_color = rgba(&mut d, "strokeColor");
     a.color = take_same(&mut d, "color", version, |v| crate::glyph::read_color(v, version), |c| Some(crate::glyph::write_color(c, version)));
@@ -262,11 +272,10 @@ fn write_attrs(a: &ShapeAttrs, user: &UserData, version: u32) -> Option<Value> {
             e.push((k.into(), int(1)));
         }
     }
-    if let Some(c) = &a.fill_color {
-        e.push(("fillColor".into(), write_rgba(c, version)));
-    }
-    if let Some(c) = &a.stroke_color {
-        e.push(("strokeColor".into(), write_rgba(c, version)));
+    for (k, c) in [("fillColor", &a.fill_color), ("strokeColor", &a.stroke_color)] {
+        if let Some(v) = c.as_ref().and_then(|c| write_paint_color(c, version)) {
+            e.push((k.into(), v));
+        }
     }
     if let Some(c) = &a.color {
         e.push(("color".into(), crate::glyph::write_color(c, version)));

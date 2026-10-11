@@ -10,6 +10,7 @@
 
 mod anchor_context;
 mod annotation;
+mod attributes;
 pub(crate) mod audit;
 mod axes;
 mod autohint;
@@ -18,6 +19,8 @@ mod autohint_tt;
 mod background;
 mod clipboard;
 mod clipboard_scale;
+mod color_export;
+mod color_layer;
 mod common;
 mod compare;
 pub(crate) mod compile;
@@ -45,6 +48,7 @@ mod hint_ps;
 mod hint_tt;
 mod hint_tt_defs;
 mod hint_tt_more;
+mod image;
 mod inspect;
 mod instance_masters;
 mod instances;
@@ -65,6 +69,7 @@ mod metrics_keys;
 mod new_document;
 mod node;
 mod numbers;
+mod palette;
 mod path;
 mod pathops;
 mod project;
@@ -273,6 +278,11 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(autohint::specs());
         v.extend(autohint_tt::specs());
         v.extend(autohint_report::specs());
+        v.extend(palette::specs());
+        v.extend(color_layer::specs());
+        v.extend(attributes::specs());
+        v.extend(image::specs());
+        v.extend(color_export::specs());
         v
     })
 }

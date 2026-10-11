@@ -23,6 +23,7 @@
 //! without history, and the commit makes one undo step and one journal entry.
 #![forbid(unsafe_code)]
 
+pub mod assets;
 pub mod clock;
 pub mod cmd;
 pub(crate) mod export_steps;
@@ -42,10 +43,12 @@ use std::sync::Arc;
 
 pub use clock::Clock;
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
+pub use fontcraft_color as color;
 pub use fontcraft_compile as compile;
 pub use fontcraft_container as container;
 pub use fontcraft_fontinfo as fontinfo;
 pub use fontcraft_format as format;
+pub use fontcraft_imagery as imagery;
 pub use fontcraft_model as model;
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph, PropsCache};
@@ -229,6 +232,8 @@ pub struct Session {
     kern_index: HashMap<u64, Arc<fontcraft_spacing::kerning::KernIndex>>,
     /// Each open document's last feature compile, by document id ([`feature_state`]).
     feature_state: HashMap<u64, Arc<feature_state::FeatureState>>,
+    /// The file cache and in-memory files behind [`Session::assets`].
+    assets: assets::SessionAssets,
 }
 
 /// A running interaction (see [`Session::begin`]).

@@ -916,11 +916,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-color"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-geom",
+ "fontcraft-model",
+ "thiserror 2.0.21",
+ "usvg",
+]
+
+[[package]]
 name = "fontcraft-compile"
 version = "0.0.1"
 dependencies = [
  "fontcraft-autohint",
  "fontcraft-cff",
+ "fontcraft-color",
  "fontcraft-components",
  "fontcraft-fea",
  "fontcraft-features",
@@ -981,6 +992,7 @@ dependencies = [
  "base64 0.22.1",
  "fontcraft-audit",
  "fontcraft-autohint",
+ "fontcraft-color",
  "fontcraft-compile",
  "fontcraft-components",
  "fontcraft-container",
@@ -992,6 +1004,7 @@ dependencies = [
  "fontcraft-geom",
  "fontcraft-glyphquery",
  "fontcraft-hinting",
+ "fontcraft-imagery",
  "fontcraft-interp",
  "fontcraft-io-glyphs",
  "fontcraft-io-svg",
@@ -1092,6 +1105,14 @@ dependencies = [
  "skrifa 0.48.0",
  "thiserror 2.0.21",
  "write-fonts 0.54.0",
+]
+
+[[package]]
+name = "fontcraft-imagery"
+version = "0.0.1"
+dependencies = [
+ "image",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1683,6 +1704,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

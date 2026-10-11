@@ -17,6 +17,7 @@
 //! Everything here is view state (`UI_COMMANDS`). Font changes go through engine commands.
 
 pub mod cache;
+pub mod cell_images;
 pub mod columns;
 pub mod grid;
 pub mod images;

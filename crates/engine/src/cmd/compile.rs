@@ -15,7 +15,7 @@ use serde_json::{Map, Value, json};
 
 use std::sync::Arc;
 
-use fontcraft_compile::{DataRef, Flavour, Options};
+use fontcraft_compile::{AssetsRef, DataRef, Flavour, Options};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ModelError, Resolved, Target};
 
@@ -810,7 +810,7 @@ fn compile_request(s: &Session, p: &Params) -> Result<(Vec<Job>, Request)> {
     let flavours = formats(p)?;
     let dest = Dest::read(p)?;
     let containers = containers(p, "containers", &dest)?;
-    let mut options = Options { glyph_data: DataRef(Some(s.glyph_data()?)), ..Options::default() };
+    let mut options = Options { glyph_data: DataRef(Some(s.glyph_data()?)), assets: AssetsRef(Some(s.assets())), ..Options::default() };
     outline_options(p, &mut options)?;
     let pick = Pick::read(p, "instances")?;
     let jobs = jobs(font, &pick, p.bool_or("mastersAsInstances", false)?, p)?;

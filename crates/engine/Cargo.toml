@@ -13,6 +13,8 @@ workspace = true
 [dependencies]
 fontcraft-audit.workspace = true
 fontcraft-autohint.workspace = true
+fontcraft-color.workspace = true
+fontcraft-imagery.workspace = true
 fontcraft-geom.workspace = true
 fontcraft-pathops.workspace = true
 fontcraft-spacing.workspace = true

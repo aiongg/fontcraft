@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 fontcraft-autohint.workspace = true
 fontcraft-cff.workspace = true
+fontcraft-color.workspace = true
 fontcraft-components.workspace = true
 fontcraft-fea.workspace = true
 fontcraft-features.workspace = true

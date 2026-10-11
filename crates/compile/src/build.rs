@@ -351,6 +351,7 @@ pub fn assemble(
     gpos: Option<&Gpos>,
     gdef: Option<&Gdef>,
     kern: Option<&[u8]>,
+    color: &[(Tag, Vec<u8>)],
     options: &Options,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
@@ -485,6 +486,9 @@ pub fn assemble(
         let (vhea, vmtx) = vertical(order, &boxes, &info);
         builder.add_table(&vhea).map_err(table("vhea"))?;
         builder.add_table(&vmtx).map_err(table("vmtx"))?;
+    }
+    for (tag, bytes) in color {
+        builder.add_raw(*tag, bytes.as_slice());
     }
     Ok(builder.build())
 }

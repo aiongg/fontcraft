@@ -25,6 +25,7 @@ mod info;
 mod kerning;
 mod layer_info;
 mod order;
+pub mod paint;
 mod props_cache;
 mod rare;
 mod rename;
@@ -51,6 +52,7 @@ pub use order::{
     GLYPH_ORDER_PARAM, Placement, glyph_order, glyph_order_names, glyph_order_sections, insert_by_sort_key, insertion_index, is_section_header,
     keeps_alternates, place_by_sort_key, sort_key,
 };
+pub use paint::{Color, ColorStop, Extend, Gradient, GradientKind, MAX_GRADIENT_STOPS, Shadow};
 pub use props_cache::PropsCache;
 pub use rare::{Rare, RareDefault};
 pub use rename::{GlyphReference, RenameReport, Renamed, rename_glyphs};

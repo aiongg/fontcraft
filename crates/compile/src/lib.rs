@@ -42,6 +42,7 @@
 mod build;
 pub mod cff;
 pub mod cff_hints;
+pub mod color;
 pub mod components_opt;
 pub mod drawing;
 pub mod export_params;
@@ -138,7 +139,13 @@ pub enum CompileError {
     /// The designspace, the glyph sources or the compatibility check refused the font.
     #[error(transparent)]
     Interp(#[from] fontcraft_interp::InterpError),
-    /// A stage whose package has not been written yet.
+    #[error(transparent)]
+    Color(#[from] fontcraft_color::ColorError),
+    /// The colour export of this target is refused (an instance between masters with colour
+    /// layers, until variable colour lands); the message names the instance.
+    #[error("{0}")]
+    ColorRefused(String),
+    /// A stage or table builder whose package has not been written yet.
     #[error("{0} is not available yet")]
     NotYetImplemented(&'static str),
 }
@@ -168,6 +175,32 @@ pub struct Options {
     pub components: components_opt::ComponentOptions,
     /// Hinting at export ([`HintingOptions`]).
     pub hinting: HintingOptions,
+    /// Where image and SVG files of colour layers are read from ([`color`]). `None`: no files,
+    /// so a glyph whose image is needed is left out of its table, with a warning.
+    pub assets: AssetsRef,
+    /// Also write `CBDT` and `CBLC` from the iColor layers (`color.export.cbdtNotInReference`).
+    pub cbdt: bool,
+}
+
+/// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
+/// store.
+#[derive(Clone, Default)]
+pub struct AssetsRef(pub Option<Arc<dyn fontcraft_color::AssetStore>>);
+
+impl PartialEq for AssetsRef {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Debug for AssetsRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() { "AssetsRef(store)" } else { "AssetsRef(none)" })
+    }
 }
 
 /// What the compiler does about hints (`docs/plans/M10.md` § 3). The source's own settings
@@ -215,6 +248,8 @@ impl Default for Options {
             glyph_data: DataRef::default(),
             components: components_opt::ComponentOptions::default(),
             hinting: HintingOptions::default(),
+            assets: AssetsRef::default(),
+            cbdt: false,
         }
     }
 }
@@ -290,6 +325,8 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
     preflight::check_cmap(&glyphs)?;
     let glyph_data = font.and_then(|_| compile_glyph_data(options));
+    let color_plan = color::plan(font, &resolved, options);
+    let (glyphs, made) = color::append_layer_glyphs(font, &color_plan, &resolved, glyphs, &mut warnings)?;
     let kern = match font {
         Some(font) => kern::generate(font, &resolved, &glyphs, &edits, &mut warnings),
         None => None,
@@ -310,6 +347,7 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
     };
     let outlines = outline::prepare(&glyphs, &settings, &mut warnings)?;
     let kern_table = font.and_then(|font| kern_table::build(font, &resolved, &glyphs, flavour, &edits, &mut warnings));
+    let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
     let bytes = build::assemble(
         &resolved,
         &glyphs,
@@ -319,6 +357,7 @@ fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour,
         layout.gpos.as_ref(),
         layout.gdef.as_ref(),
         kern_table.as_deref(),
+        &color_tables.tables,
         options,
         &mut warnings,
     )?;

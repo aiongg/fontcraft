@@ -1,0 +1,18 @@
+[package]
+name = "fontcraft-color"
+description = "FontCraft colour fonts: palettes, colour layers, the paint graph, the export plan, strikes and SVG documents (L2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontcraft-geom.workspace = true
+fontcraft-model.workspace = true
+thiserror.workspace = true
+# Referenced SVG files of svg layers (M11.10), without text or system fonts.
+usvg.workspace = true

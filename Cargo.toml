@@ -45,6 +45,8 @@ fontcraft-interp = { path = "crates/interp" }
 fontcraft-ttasm = { path = "crates/ttasm" }
 fontcraft-autohint = { path = "crates/autohint" }
 fontcraft-hinting = { path = "crates/hinting" }
+fontcraft-color = { path = "crates/color" }
+fontcraft-imagery = { path = "crates/imagery" }
 
 # foundation (all MIT OR Apache-2.0 unless noted)
 kurbo = { version = "0.13", features = ["serde"] }
@@ -87,6 +89,9 @@ tiny-skia = "0.12"
 
 # SVG reading (MIT OR Apache-2.0). Without its default features: no text layout, no system fonts.
 usvg = { version = "0.47", default-features = false }
+
+# Image decoding for `imagery` (MIT OR Apache-2.0): the PNG, JPEG and TIFF decoders only. Builds for wasm.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff"] }
 
 # ui
 egui = "0.36"
