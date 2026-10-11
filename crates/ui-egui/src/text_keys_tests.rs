@@ -343,3 +343,54 @@ fn the_edit_menu_copies_cuts_and_selects_the_text_in_text_mode() {
     assert_eq!(cursor(&mut app), (json!(3), json!([0, 3])));
     assert!(app.session.font().unwrap().same_as(&before), "the font is unchanged");
 }
+
+#[test]
+fn the_kerning_keys_at_the_end_of_the_text_take_the_last_glyph() {
+    let mut app = FontcraftApp::default();
+    app.run("view.newTab", &json!({"glyphs": ["A"]})).unwrap();
+    app.run("tool.select", &json!({"tool": "text"})).unwrap();
+    app.run("editView.setText", &json!({"chars": "AV"})).unwrap();
+    assert_eq!(get(&mut app)["cursor"], json!(2));
+    let r = key(&mut app, json!({"key": "ArrowLeft", "ctrl": true, "alt": true}));
+    assert_eq!(r["result"]["errors"], json!([]), "{r}");
+    assert_eq!(app.run("kerning.getPair", &json!({"left": "A", "right": "V"})).unwrap()["value"], json!(1.0));
+}
+
+#[test]
+fn a_spacing_key_spaces_the_layer_picked_for_the_current_glyph() {
+    let mut app = FontcraftApp::default();
+    let master = app.session.font().unwrap().default_master().unwrap().id.clone();
+    let backup = app.run("layers.addBackupLayer", &json!({"glyphs": ["O"], "master": master})).unwrap()["layer"].as_str().unwrap().to_string();
+    app.run("view.newTab", &json!({"glyphs": ["O"]})).unwrap();
+    app.run("layers.select", &json!({"layer": backup})).unwrap();
+    app.run("tool.select", &json!({"tool": "text"})).unwrap();
+    let (o, o_backup) = (width(&app, "O", &master), width(&app, "O", &backup));
+    key(&mut app, json!({"key": "ArrowRight", "cmd": true}));
+    assert_eq!((width(&app, "O", &master), width(&app, "O", &backup)), (o, o_backup + 1.0));
+}
+
+#[test]
+fn outline_edits_from_the_menu_leave_the_outline_alone_in_text_mode() {
+    let w = Window::new();
+    let mut app = FontcraftApp::default();
+    app.run("path.addRectangle", &json!({"glyph": "H", "x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+    app.run("view.newTab", &json!({"glyphs": ["H", "O"]})).unwrap();
+    app.run_menu_command("edit.selectAll", json!({})).unwrap();
+    assert!(!app.state.tab().unwrap().selection.is_empty(), "the nodes of H are selected");
+    app.run("tool.select", &json!({"tool": "text"})).unwrap();
+    w.frame(&mut app, Vec::new());
+    let before = app.session.font().unwrap().clone();
+
+    app.run("editView.setCursor", &json!({"index": 0, "selectionLength": 1})).unwrap();
+    app.run_menu_command("edit.delete", json!({})).unwrap();
+    assert_eq!(items(&mut app), json!(["O"]), "Delete removes the selected text");
+    assert!(app.run_menu_command("edit.deleteInAllMasters", json!({})).is_err());
+    let r = call(&mut app, "ui.menu.invoke", json!({"command": "edit.pasteSpecial"}));
+    assert_eq!(r["ok"], json!(false), "{r}");
+    // The paste key types the clipboard's text; with Alt (Paste Special) it types nothing.
+    w.frame(&mut app, vec![Event::Paste("xyz".into())]);
+    assert_eq!(items(&mut app), json!(["x", "y", "z", "O"]));
+    w.frame(&mut app, vec![Event::ModifiersChanged(Modifiers::ALT), Event::Paste("abc".into())]);
+    assert_eq!(items(&mut app), json!(["x", "y", "z", "O"]));
+    assert!(app.session.font().unwrap().same_as(&before), "the outline is unchanged");
+}

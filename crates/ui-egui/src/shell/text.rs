@@ -578,11 +578,12 @@ fn across_lines(app: &FontcraftApp, tab: &Tab, key: Key) -> Option<usize> {
     })
 }
 
-/// A spacing or kerning shortcut in text mode. A spacing key acts on the current glyph in the
-/// tab's master; it is off in locked kerning mode. A kerning key acts on the pair on the current
-/// glyph's left (`…Left`, Ctrl) or right (`…Right`, Cmd) as the text shows it, so in
-/// right-to-left text the left pair is the current glyph and the one after it; it is off in
-/// no-kerning mode. Top-to-bottom text has no shortcuts yet (`docs/spec/08`, question 2).
+/// A spacing or kerning shortcut in text mode. A spacing key acts on the current glyph in its
+/// active layer (the layer picked for it, else its layer of the tab's master); it is off in
+/// locked kerning mode. A kerning key acts on the pair on the current glyph's left (`…Left`,
+/// Ctrl) or right (`…Right`, Cmd) as the text shows it, so in right-to-left text the left pair is
+/// the current glyph and the one after it; it is off in no-kerning mode. The current glyph is the
+/// one after the cursor, or the one before it at the end of the text. Top-to-bottom text has no shortcuts yet (`docs/spec/08`, question 2).
 fn shortcut(app: &mut FontcraftApp, id: &'static str) -> Result<(), String> {
     let Some(tab) = app.state.tab() else { return Ok(()) };
     let font = app.session.font().map_err(|e| e.to_string())?;
@@ -595,26 +596,31 @@ fn shortcut(app: &mut FontcraftApp, id: &'static str) -> Result<(), String> {
     }
     let master = view::active_master(font, tab).map(|m| m.id.clone()).ok_or("the tab shows no master")?;
     let params = if kerning {
-        let cursor = tab.text.cursor();
-        let before = cursor.checked_sub(1).and_then(|i| tab.item_glyph(i));
-        let after = tab.item_glyph(cursor);
-        let next = cursor.checked_add(1).and_then(|i| tab.item_glyph(i));
+        let current = tab.edited_index().ok_or("the tab has no current glyph")?;
+        let before = current.checked_sub(1).and_then(|i| tab.item_glyph(i));
+        let at = tab.item_glyph(current);
+        let next = current.checked_add(1).and_then(|i| tab.item_glyph(i));
         let rtl = tab.direction == WritingDirection::Rtl;
-        let (left, right) = if id.contains("Left") != rtl { (before, after) } else { (after, next) };
+        let (left, right) = if id.contains("Left") != rtl { (before, at) } else { (at, next) };
         let (Some(left), Some(right)) = (left, right) else {
             return Err("A kerning key needs a glyph on each side of the pair".into());
         };
         json!({ "left": left, "right": right, "master": master, "direction": if rtl { "rtl" } else { "ltr" } })
     } else {
         let glyph = tab.edited_glyph().ok_or("the tab has no current glyph")?;
-        json!({ "glyphs": [glyph], "layer": master })
+        let layer = view::active_layer(font, tab).map_or(master, |l| l.id.clone());
+        json!({ "glyphs": [glyph], "layer": layer })
     };
     app.run_menu_command(id, params).map(|_| ())
 }
 
-/// Edit › Copy, Cut and Select All from the menu in text mode, which act on the tab's text as
-/// their keys do. `None` outside text mode or for another command, so it runs as usual.
-/// Replies with `editView.getText`'s reply.
+/// Why Paste Special does nothing in text mode.
+pub(crate) const NO_PASTE_SPECIAL: &str = "Paste Special pastes into glyphs: leave text mode (Escape) to use it";
+
+/// Edit › Copy, Cut, Delete and Select All from the menu in text mode, which act on the tab's
+/// text as their keys do; Delete in All Masters and Paste Special, which work on outlines, are
+/// refused there. `None` outside text mode or for another command, so it runs as usual. Replies
+/// with `editView.getText`'s reply.
 pub(crate) fn menu_command(app: &mut FontcraftApp, id: &str) -> Option<Result<Value, String>> {
     if !in_text_mode(app) {
         return None;
@@ -626,6 +632,9 @@ pub(crate) fn menu_command(app: &mut FontcraftApp, id: &str) -> Option<Result<Va
             }
             if id == "edit.cut" { delete_selection(app) } else { Ok(()) }
         }
+        "edit.delete" => delete(app, true),
+        "edit.deleteInAllMasters" => Err("Delete in All Masters removes outline points: leave text mode (Escape) to use it".to_string()),
+        "edit.pasteSpecial" => Err(NO_PASTE_SPECIAL.to_string()),
         "edit.selectAll" => select_all(app),
         _ => return None,
     };

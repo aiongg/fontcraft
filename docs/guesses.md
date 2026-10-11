@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**526 guesses on 348 rows (162 of them live commands).**
+**529 guesses on 348 rows (162 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -50,7 +50,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `path.alignSelection` | M3 | handbook | yes | When width equals height the selection aligns on one X, and the transformation origin's column or row picks min, centre or max (03a question 13). |
 | `edit.delete` | M3 | handbook | yes | The refitted segment keeps its end nodes and the directions it leaves and enters them in, and fits the two handle lengths by least squares over the removed segments (03a question 10). |
 | `edit.delete` | M3 | handbook | yes | With only handles selected the segment becomes a line; with every node of a path selected the path is removed. |
+| `edit.delete` | M3 | handbook | yes | In text mode, Delete run from a menu or the control channel removes the selected text, else the item after the cursor, as the Delete key does; the Edit menu of the running reference app in text mode settles it. |
 | `edit.deleteInAllMasters` | M3 | handbook | yes | Nodes are matched across masters by address; a layer whose structure differs is skipped and listed (03a question 11). |
+| `edit.deleteInAllMasters` | M3 | handbook | yes | In text mode it is refused with a message, so it never deletes nodes the person cannot see; the Edit menu of the running reference app in text mode settles it. |
 | `path.cutWithLine` | M3 | inferred | yes | Crossings are paired within each stretch where the line enters and leaves the filled area, so a cut through overlapping paths joins their pieces; no source shows the Knife on overlapping paths. |
 | `path.openCorner` | M3 | handbook | yes | A master with stems of one direction only uses that stem for both directions, and a master without stems uses an overlap of 4% of the em. |
 | `path.openCorner` | M3 | handbook | yes | Each end node moves along its own segment's direction, so the handles keep their directions. |
@@ -251,6 +253,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `edit.pasteSpecial` | M4 | handbook | yes | Content of Active Layer writes into the target's layer for the master Font View shows. Settled by observation (05 question 18). |
 | `edit.pasteSpecial` | M4 | handbook | yes | Copied masters are matched to the target's by id, then by name, then by position; layers of an unmatched master are not pasted. Settled by pasting between fonts with different masters. |
 | `edit.pasteSpecial` | M4 | handbook | yes | All Data keeps the target's name and code points. Settled by observation. |
+| `edit.pasteSpecial` | M4 | handbook | yes | In Edit View's text mode Paste Special (menu item or the paste key with Option) is refused with a message instead of typing the clipboard's text; the Edit menu of the running reference app in text mode settles it. |
 | `edit.pasteSpecial` | M4 | handbook | yes | LSB moves the outline and keeps the right side bearing; RSB sets the width from the outline's right edge. Settled by observation. |
 | `edit.pasteSpecial` | M4 | handbook | yes | As Components adds each component at the origin, after the shapes already there, and leaves out a component that would make a glyph refer to itself. Settled by observation. |
 | `edit.infoForSelection` | M4 | handbook | yes | The menu item opens the window and does not toggle it; `open: false` closes it. Settled by observation. |

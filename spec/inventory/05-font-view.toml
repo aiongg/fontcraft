@@ -357,6 +357,7 @@ guesses = [
   "Content of Active Layer writes into the target's layer for the master Font View shows. Settled by observation (05 question 18).",
   "Copied masters are matched to the target's by id, then by name, then by position; layers of an unmatched master are not pasted. Settled by pasting between fonts with different masters.",
   "All Data keeps the target's name and code points. Settled by observation.",
+  "In Edit View's text mode Paste Special (menu item or the paste key with Option) is refused with a message instead of typing the clipboard's text; the Edit menu of the running reference app in text mode settles it.",
   "LSB moves the outline and keeps the right side bearing; RSB sets the width from the outline's right edge. Settled by observation.",
   "As Components adds each component at the origin, after the shapes already there, and leaves out a component that would make a glyph refer to itself. Settled by observation.",
 ]

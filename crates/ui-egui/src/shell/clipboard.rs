@@ -20,6 +20,7 @@
 //!
 //! In text mode Copy and Cut put the selected text on the clipboard, a glyph without a
 //! character as `/name`, and Paste types the clipboard's text at the cursor (`text.clipboard`).
+//! Paste Special is refused there.
 //!
 //! Nothing here runs while a text field has the keyboard (it copies and pastes text itself) or a
 //! dialog is open.
@@ -58,7 +59,7 @@ pub fn events(app: &mut FontcraftApp, ctx: &egui::Context) -> Vec<(&'static str,
         (events, i.modifiers.alt)
     });
     if super::text::in_text_mode(app) {
-        text_mode_events(app, events);
+        text_mode_events(app, events, special_asked || alt);
         return Vec::new();
     }
     let font_view = app.state.tab().is_none();
@@ -164,10 +165,11 @@ pub fn after_run(app: &mut FontcraftApp, id: &str, result: &Value) {
     }
 }
 
-/// Copy, Cut and Paste in text mode, on the tab's text.
-fn text_mode_events(app: &mut FontcraftApp, events: Vec<egui::Event>) {
+/// Copy, Cut and Paste in text mode, on the tab's text. Paste Special (`special`) is refused.
+fn text_mode_events(app: &mut FontcraftApp, events: Vec<egui::Event>, special: bool) {
     for event in events {
         let result = match event {
+            egui::Event::Paste(_) if special => Err(super::text::NO_PASTE_SPECIAL.to_string()),
             egui::Event::Copy => super::text::menu_command(app, COPY).unwrap_or(Ok(Value::Null)).map(|_| ()),
             egui::Event::Cut => super::text::menu_command(app, CUT).unwrap_or(Ok(Value::Null)).map(|_| ()),
             egui::Event::Paste(text) if text.len() > MAX_PASTE_BYTES => Err(format!("Paste: the clipboard holds more than {MAX_PASTE_BYTES} bytes")),

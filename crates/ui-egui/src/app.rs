@@ -302,7 +302,8 @@ impl FontcraftApp {
             if self.dialog.is_some() && !is_ui_command(id) {
                 continue;
             }
-            if shell::clipboard::wants_text(id, &params) {
+            // Paste Special in text mode is refused before it asks for the clipboard.
+            if shell::clipboard::wants_text(id, &params) && !(id == "edit.pasteSpecial" && shell::text::in_text_mode(self)) {
                 shell::clipboard::request_text(ui.ctx(), id);
                 continue;
             }

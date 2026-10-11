@@ -1316,6 +1316,7 @@ status = "handbook"
 guesses = [
   "The refitted segment keeps its end nodes and the directions it leaves and enters them in, and fits the two handle lengths by least squares over the removed segments (03a question 10).",
   "With only handles selected the segment becomes a line; with every node of a path selected the path is removed.",
+  "In text mode, Delete run from a menu or the control channel removes the selected text, else the item after the cursor, as the Delete key does; the Edit menu of the running reference app in text mode settles it.",
 ]
 
 [[command]]
@@ -1333,6 +1334,7 @@ ref = "Edit View › Deleting Nodes"
 status = "handbook"
 guesses = [
   "Nodes are matched across masters by address; a layer whose structure differs is skipped and listed (03a question 11).",
+  "In text mode it is refused with a message, so it never deletes nodes the person cannot see; the Edit menu of the running reference app in text mode settles it.",
 ]
 
 [[command]]
