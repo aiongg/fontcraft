@@ -742,6 +742,10 @@ milestone = "M12"
 summary = "Renames glyphs everywhere they are referenced: outline table, post or CFF names, and for sources also components, kerning, groups and feature code. Names come from a GOADB (source name to final name), a two-column map, the production-name rules, or pairs on the command line. Renaming two glyphs to the same name is an error."
 ref = "AFDKO tx -gf / -gr, MakeOTFUserGuide.md › GlyphOrderAndAliasDB; mergefonts glyph alias file"
 status = "docs"
+notes = "Built in M12.15 (crates/tables/src/rename.rs, cmd/glyph_order_file.rs). A compiled font gets new names in post (version 2) and, for a CFF font, in the charset; a CID-keyed font is refused. A source is renamed with the model's rename, so components, kerning, groups and the glyph order parameter follow; feature code is not rewritten yet: the result lists where an old name is still used. --update-unicodes works on sources only; on a compiled font it is refused."
+guesses = [
+  "Names a GOADB or map lists that the font lacks are reported as missing, not refused, since one GOADB serves a whole family. Settled by running tx -gf with a GOADB that names an absent glyph.",
+]
 
 [[cli]]
 id = "glyphs reorder"
@@ -763,6 +767,12 @@ milestone = "M12"
 summary = "Changes the glyph order of a font and rewrites everything indexed by glyph: outlines, metrics, cmap, coverage and class tables in GDEF/GSUB/GPOS, variation data, colour tables. The new order must contain every glyph exactly once, except that glyphs left unnamed keep their relative order at the end; .notdef stays at index 0."
 ref = "fontTools ttLib.reorderGlyphs (library); AFDKO tx -go, +b"
 status = "docs"
+notes = "Built in M12.15 (crates/tables/src/reorder.rs). Compiled fonts: glyf and loca, hmtx and vmtx (with the long-metric counts), cmap, post, CFF, GDEF, GSUB, GPOS, kern, gvar, HVAR, VVAR, VORG, hdmx and LTSH are rewritten, as fontTools ttLib.reorderGlyphs does through its object model; a font with CFF2, colour, bitmap, MATH, JSTF, SVG or Apple layout tables is refused. Unlike reorderGlyphs, a partial order is accepted (the rest follows in its old order). An HVAR or VVAR without an advance mapping gets an explicit one, since the implicit mapping goes by glyph id. Sources: unicode and name sorting only."
+guesses = [
+  "--sort unicode puts encoded glyphs first by their lowest code point and keeps the unencoded ones after them in their old order. Settled by tx's +b ordering on a font with unencoded glyphs.",
+  "--sort size sorts by the byte size of each glyph's outline data (glyf entry or charstring), smallest first. Settled by finding a reference tool that documents a size order.",
+  "A post version 3 TrueType font, which stores no names, gets the names glyphNNNNN; fontTools derives names from cmap instead. Settled by comparing glyph orders with fontTools on such a font.",
+]
 
 [[cli]]
 id = "metrics"

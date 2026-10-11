@@ -934,7 +934,7 @@ milestone = "M12"
 summary = "makeotf's GlyphOrderAndAliasDB has one glyph per line: final name, source name, optional Unicode override (uniXXXX or uXXXX[XX], uppercase hex only, comma-separated for several). Renaming and ordering apply only with -r or -ga; with -gf alone only the Unicode column is used; -gs additionally drops glyphs not listed. Source font and feature file must use the same names as each other."
 ref = "AFDKO docs/MakeOTFUserGuide.md (GlyphOrderAndAliasDB, -ga, -gs, -gf)"
 status = "docs"
-notes = "Column order checked by running AFDKO 5.0.1's tx on a synthetic CFF font: with the line `finalA devA`, the glyph devA is written as finalA. The first column is the final name, as the MakeOTF user guide says; tx's own help text describes the columns the other way round (20-cli.md question 1)."
+notes = "Column order checked by running AFDKO 5.0.1's tx on a synthetic CFF font: with the line `finalA devA`, the glyph devA is written as finalA. The first column is the final name, as the MakeOTF user guide says; tx's own help text describes the columns the other way round (20-cli.md question 1). The parser is crates/tables/src/goadb.rs (M12.15): two or three whitespace-separated fields, '#' comments, a final or source name given twice is an error, code points as uniXXXX or uXXXX to uXXXXXX in uppercase hex."
 
 [[behavior]]
 id = "compile.unicodeFromGlyphNames"
