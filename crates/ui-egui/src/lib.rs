@@ -55,6 +55,8 @@ mod guide_edit_tests;
 #[cfg(test)]
 mod info_box_metrics_tests;
 #[cfg(test)]
+mod info_box_kerning_tests;
+#[cfg(test)]
 mod inspector_tests;
 #[cfg(test)]
 mod panels_tests;

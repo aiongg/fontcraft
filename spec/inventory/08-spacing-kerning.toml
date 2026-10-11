@@ -766,6 +766,11 @@ milestone = "M5"
 summary = "The kerning part of the Edit View Info box: the kerning values for the current glyph against each immediate neighbour, the glyph's two kerning group names, and the locks that control group exceptions."
 ref = "Spacing & Kerning › Kerning › Info Box; Kerning Groups; Kerning Group Exceptions"
 status = "handbook"
+notes = "Documented, not yet observed: the Info box shows the kerning between the current glyph and the glyph on each side, with the grey placeholder 'Kern' when none is set, the glyph's kerning groups in the Group fields, and the locks that make the glyph an exception. A typed value goes to the sides the locks name (kerning.setPair); a lock runs kerning.addException or kerning.removeException, and a refused close goes to the status line."
+guesses = [
+  "A side whose glyph has no kerning group there shows its lock disabled, since opening it has nothing to make an exception from; the Info box on an ungrouped glyph in the running app settles it.",
+  "In right-to-left text the kern field, lock and group at the left edge belong to the pair with the glyph drawn on the left, the next glyph in logical order; a right-to-left tab in the running app settles it.",
+]
 
 [[panel]]
 id = "infoBox.precedingGlyph"
@@ -777,6 +782,11 @@ milestone = "M5"
 summary = "A second, smaller Info box shown while the Text tool is active for the glyph before the cursor, so both members of the pair being kerned show their group and lock state."
 ref = "Spacing & Kerning › Kerning › Info Box"
 status = "handbook"
+notes = "Documented, not yet observed: with the Text tool, a small box shows the glyph before the current one with its lock and its kerning group facing the current glyph."
+guesses = [
+  "The group in the preceding glyph's box is an editable field that sets the group facing the current glyph (the right group in left-to-right text); clicking it in the running app settles it.",
+  "The box is not shown when no glyph comes before the current one on its line; placing the cursor at the start of a line in the running app settles it.",
+]
 
 [[behavior]]
 id = "kerning.infoBoxFieldEditing"
@@ -789,6 +799,8 @@ notes = "Documented, not yet observed: a value typed into a kern field is confir
 guesses = [
   "A typed 0 is stored as a pair with value 0, which overrides a group value; both oracles keep such a pair (a 0 exception against a −60 group pair compiles to 0). Typing 0 in the reference app and reading the Kerning window settles it.",
   "A typed value with a fraction is rounded to a whole unit; values read from files keep their fractions. Typing a fraction in the reference app settles it.",
+  "Emptying the field removes the stored pair that applies, which can be a group pair that other glyph pairs share; emptying a kern field kerned through groups in the running app and reading the Kerning window settles it.",
+  "Up and Down in an empty field step from zero and create the pair; pressing Up in a field showing the placeholder in the running app settles it.",
 ]
 
 [[command]]

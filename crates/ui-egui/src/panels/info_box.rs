@@ -79,6 +79,7 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
         return;
     }
     super::info_box_metrics::show(app, ui, pending);
+    super::info_box_kerning::show(app, ui, pending);
     let Some(info) = read(app) else { return };
     frame(ui, &tokens, "infoBox", |ui| contents(ui, &tokens, &info, pending));
 }
