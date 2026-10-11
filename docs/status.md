@@ -2,14 +2,14 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-10-11, M5 in progress: M5.0–M5.7, M5.15 and M5.16 built; the UI wave M5.8–M5.14 and M5.17 next._
+_Updated: 2026-10-11, M5 in progress: M5.0–M5.16 built; M5.17 (the kern writer) and the close next._
 
 ## State of the tree
 
 - `cargo xtask ci` passes all ten steps (1,076 tests; about 138,000 lines of Rust in 22 crates,
   two apps and `xtask`). Built and run on Linux x86-64 with Rust 1.97.
-- 329 of the 933 inventory commands exist (`docs/parity.md`); M3's 184 and M4's 62 commands
-  are all live, and 61 of M5's 97. Feature parity is about 16% (ROADMAP.md › Parity estimate). 526 guesses on 348
+- 365 of the 933 inventory commands exist (`docs/parity.md`); M3's 184, M4's 62 and M5's 97
+  commands are all live. Feature parity is about 18% (ROADMAP.md › Parity estimate). 620 guesses on 391
   rows are listed in `docs/guesses.md`.
 - The desktop app was run on a virtual display and driven over the control channel; Font View and
   Edit View were looked at, and the screenshots of each M3 and M4 UI package were reviewed. macOS and
@@ -19,8 +19,8 @@ _Updated: 2026-10-11, M5 in progress: M5.0–M5.7, M5.15 and M5.16 built; the UI
 
 ## Where to start
 
-1. **M5**, in the order of `docs/plans/M5.md` § 6: the UI wave M5.8–M5.14 in worktrees and M5.17
-   (the kern writer) by the builder.
+1. **M5**: M5.17 (the pair-kerning writer, ported from fontc) by the builder, then M5.18 (the
+   close: § 5 measures and results).
 
 M4, Font View and glyph management (`docs/plans/M4.md`), as built:
 
@@ -383,4 +383,15 @@ Append one terse entry per session: what landed, numbers, what is still open.
   cursor; tabs open from the document's display strings and are written on save. The § 5
   end-to-end test runs up to the Kerning window step. A frame with 10,000 items takes about
   8–15 ms (target 16). 329 of 933 commands live.
+  M5.fix2: tabs belong to their document (each saves only its own display strings); the text
+  layout follows a picked layer. M5.8–M5.14: the Info box's spacing and kerning fields (numbers
+  and keys, out-of-sync red with an update button, unlinked turquoise, kern fields and locks),
+  the Kerning window (search, sort, in-place editing, copy and paste between masters), the rename
+  and paste-conflict dialogs, Show Group Members, Font View's editable metric and group fields
+  and out-of-sync badge, three smart-filter rules, the Transform Metrics dialog, the Preview Area
+  and Panel, the measurement line, Text Preview (1,000,000 characters in about 360 ms), sample
+  strings, Find Glyphs and `glyph.search`, metrics import and export (kerning-text; AFM read back
+  by afmLib both ways on Inter). M5.syncfast: after a rename the out-of-sync cache rescans only
+  the glyphs that name it; Font View frames after an edit on Inter take 6–10 ms. Open: the cache
+  update after editing `n` takes 7.2 ms (target 2). 365 of 933 commands live; M5's 97 all live.
 
