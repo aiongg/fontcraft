@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::model::{
-    Dimension, Family, Features, Font, GlyphInfo, Image, LayerAttrs, MetricDef, MetricValue, PaletteEntry, Path, PathInfo, PathInfoBox, Shape,
+    Color, Dimension, Family, Features, Font, GlyphInfo, Image, LayerAttrs, MetricDef, MetricValue, PaletteEntry, Path, PathInfo, PathInfoBox, Shape,
     ShapeAttrs, Snippet, StemDef, Transform,
 };
 
@@ -301,13 +301,13 @@ fn m11_full_colour() -> Built {
     let (mut f, styles) = font("FC Eleven Full Colour", &[], &[m("m01", "Regular", &[], 400.0)]);
     add_letters(&mut f, &styles, &[("space", Some(0x20)), ("C", Some(0x43)), ("D", Some(0x44))]);
     let full = || LayerAttrs { full_color: true, ..Default::default() };
-    let solid = attrs_path(rect(40.0, 0.0, 300.0, 700.0), ShapeAttrs { fill_color: Some([1.0, 0.0, 0.0, 1.0]), ..Default::default() });
+    let solid = attrs_path(rect(40.0, 0.0, 300.0, 700.0), ShapeAttrs { fill_color: Some(Color::Rgba([1.0, 0.0, 0.0, 1.0])), ..Default::default() });
     let mut lin = ShapeAttrs::default();
     lin.extra.insert(Family::Glyphs, "gradient", pv("{colors = (((255,0,0,255),0),((0,0,255,255),1)); start = (0,0); end = (1,1);}"));
     let linear = attrs_path(rect(320.0, 0.0, 600.0, 700.0), lin);
     let stroke = attrs_path(
         open_poly(&[(60.0, 760.0), (320.0, 900.0), (580.0, 760.0)]),
-        ShapeAttrs { stroke_width: Some(Dimension::Number(20.0)), stroke_color: Some([0.0, 0.5, 0.0, 1.0]), ..Default::default() },
+        ShapeAttrs { stroke_width: Some(Dimension::Number(20.0)), stroke_color: Some(Color::Rgba([0.0, 0.5, 0.0, 1.0])), ..Default::default() },
     );
     push_layer(&mut f, "C", extra_layer(Draw::new(640.0).path(solid).path(linear).path(stroke), "m01", "C-color", "Color", full()));
     let mut rad = ShapeAttrs::default();
