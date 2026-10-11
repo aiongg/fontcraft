@@ -447,6 +447,9 @@ summary = "The update button beside one out-of-sync metrics key: re-evaluates th
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
 notes = "Documented, not yet observed: the update button beside an out-of-sync key."
+guesses = [
+  "A metric whose value rounded half up already equals its key's value is left as it is, so the command makes no change there; watching the button on a fractional metric in the reference app would settle it.",
+]
 
 [[command]]
 id = "glyph.updateMetrics"
@@ -463,6 +466,7 @@ status = "handbook"
 notes = "Documented, not yet observed: Glyph › Update Metrics (Cmd+Ctrl+M) brings the keys of the current layer in line."
 guesses = [
   "Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value; one Update Metrics on a two-step chain in the reference app settles it.",
+  "A key that cannot be evaluated (unlinked, in error, or on an empty layer) is skipped and the other keys are still updated; running it on a font with one unlinked key in the reference app would settle it.",
 ]
 
 [[command]]
@@ -478,6 +482,9 @@ summary = "The Option-key variant of Update Metrics: re-evaluates the metrics ke
 ref = "Spacing & Kerning › Spacing › Metrics Keys"
 status = "handbook"
 notes = "Documented, not yet observed: Option added to Update Metrics acts on all masters."
+guesses = [
+  "Besides the master layers it updates the layers with attributes (intermediate, alternate, colour, smart), the layers the out-of-sync scan lists, and leaves out masters that take their metrics from another master; a brace layer with an out-of-sync key in the reference app would settle it.",
+]
 
 [[command]]
 id = "spacing.evaluateMetricsKey"
@@ -485,7 +492,7 @@ label = "Evaluate Metrics Key"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{key: string, glyph: name, layer?: id, field: "left"|"right"|"width"}'
+params = '{key: string, glyph: name, layer?: id, field: "left"|"right"|"width"|"top"|"bottom"}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Query, our addition for agents and tests: parses a metrics key in the context of a glyph, layer and field and returns the rounded value it yields or a parse/lookup error, without changing the document."

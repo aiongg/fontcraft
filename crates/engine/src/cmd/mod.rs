@@ -30,6 +30,7 @@ mod layer;
 mod layers;
 mod measure;
 mod meta;
+mod metrics_keys;
 mod new_document;
 mod node;
 mod path;
@@ -171,6 +172,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(glyph_set::specs());
         v.extend(path::specs());
         v.extend(spacing::specs());
+        v.extend(metrics_keys::specs());
         v.extend(font::specs());
         v.extend(compile::specs());
         v.extend(meta::specs());

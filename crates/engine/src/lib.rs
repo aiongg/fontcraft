@@ -202,6 +202,8 @@ pub struct Session {
     props: HashMap<u64, Arc<PropsCache>>,
     /// The language sets named through the glyph data last asked for.
     language_index: Option<Arc<fontcraft_glyphquery::LanguageIndex>>,
+    /// Each open document's metrics keys that need attention, by document id.
+    metrics_sync: HashMap<u64, fontcraft_spacing::SyncCache>,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -383,6 +385,19 @@ impl Session {
         let cache = self.props.entry(id).or_default();
         Arc::make_mut(cache).update(&font, &data);
         Ok(cache.clone())
+    }
+
+    /// The active document's metrics keys that are out of sync, unlinked or in error, up to
+    /// date with its font. While the font is the one last scanned this returns at once; the first
+    /// call after an edit scans again the glyphs that changed and the glyphs whose keys read them.
+    pub fn metrics_sync(&mut self) -> Result<&fontcraft_spacing::SyncCache> {
+        let doc = self.doc()?;
+        let (id, font) = (doc.id, doc.font.clone());
+        let open: Vec<u64> = self.docs.iter().map(|d| d.id).collect();
+        self.metrics_sync.retain(|id, _| open.contains(id));
+        let cache = self.metrics_sync.entry(id).or_default();
+        cache.update(&font);
+        Ok(cache)
     }
 
     /// [`Session::glyph_data`] for one document.
