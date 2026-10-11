@@ -58,6 +58,7 @@ pub const MODULES: &[(&[UiCommand], Handler)] = &[
     (glyph_info::COMMANDS, glyph_info::run),
     (start_window::COMMANDS, start_window::run),
     (text::COMMANDS, text::run),
+    (crate::canvas::group_members::COMMANDS, crate::canvas::group_members::run),
 ];
 
 /// Every shell command, in module order.

@@ -51,10 +51,12 @@ mod interpolate_with_background;
 mod languages_list;
 mod list_filter_editor;
 mod missing_glyphs;
+pub mod paste_kerning_conflict;
 mod paste_special;
 pub mod pasted_outline_bounds;
 pub mod primitive_measurements;
 mod remove_glyph;
+mod rename_kerning_group;
 mod round_corners;
 pub mod rule_tree;
 mod shape_order;
@@ -230,6 +232,8 @@ pub const DIALOGS: &[Dialog] = &[
     remove_glyph::DIALOG,
     paste_special::DIALOG,
     find_and_replace::DIALOG,
+    rename_kerning_group::DIALOG,
+    paste_kerning_conflict::DIALOG,
 ];
 
 /// The shell commands of this module.

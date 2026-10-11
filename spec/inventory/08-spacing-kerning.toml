@@ -1133,6 +1133,11 @@ milestone = "M5"
 summary = "Toggles a background display of the other members of the kerning groups involved at the cursor, so collisions across a whole group can be spotted while kerning one pair."
 ref = "Spacing & Kerning › Kerning › Kerning Groups"
 status = "handbook"
+notes = "Documented, not yet observed. Off at first."
+guesses = [
+  "Members are drawn as thin coloured outlines behind the glyphs, in text mode and while editing outlines alike; a screenshot of the option in the reference app settles the look.",
+  "At most 200 members are drawn for each of the two glyphs, the first in glyph order; a very large group in the reference app settles whether it caps them.",
+]
 
 [[behavior]]
 id = "kerning.groupMembersDisplayScope"
@@ -1141,6 +1146,11 @@ milestone = "M5"
 summary = "Show Group Members draws members for two glyphs only, namely the current glyph and its predecessor in the line. For each, only the group facing the pair is used: the current glyph shows the members of its left group, and the preceding glyph those of its right group (the second half follows from 'the respective group' and is not given as an example)."
 ref = "Spacing & Kerning › Kerning › Kerning Groups"
 status = "handbook"
+notes = "Documented, not yet observed. The side facing the pair is the one the kerning lookup uses, so in right-to-left text the current glyph shows its right group and the preceding glyph its left group."
+guesses = [
+  "Each member is placed so its facing side lines up with the glyph it stands in for (left sides at the glyph's origin, right sides at the end of its advance); vertical members share the glyph's origin. Comparing members of different widths in the reference app settles it.",
+  "The current glyph at the start of a line has no predecessor, so only its own group shows; the reference app with the cursor at a line start settles it.",
+]
 
 # ───────────────────────────── Group exceptions and locks ─────────────────────────────
 
@@ -1421,9 +1431,10 @@ milestone = "M5"
 summary = "Question asked after a group name is edited in the Kerning window: limit the change to the selected pair, or rename the group across the font. Button captions are not given in the handbook."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
-notes = "Documented, not yet observed: the question offers the selected pair only or the whole font."
+notes = "Documented, not yet observed: the question offers the selected pair only or the whole font. The dialog runs `kerning.renameGroup` with the Kerning window's parameters; the new name stays editable, and nothing changes until a button is pressed."
 guesses = [
-  "The buttons read This Pair, All Pairs and Cancel; the handbook gives no captions, and a screenshot or video of the dialog settles them.",
+  "The buttons read All Pairs, This Pair and Cancel; the handbook gives no captions, and a screenshot or video of the dialog settles them.",
+  "All Pairs (scope font) is the default button that Return presses, since editing a group name most often means renaming the group; the dialog in the reference app settles it.",
 ]
 
 [[command]]
@@ -1473,8 +1484,11 @@ milestone = "M5"
 summary = "Warning shown when pasted kerning pairs would replace pairs already present in the target master. A cancel option is likely but not mentioned."
 ref = "Spacing & Kerning › Kerning › Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+notes = "Documented, not yet observed. It opens after a paste the person starts (`kerning.pastePairs` with `onConflict: \"ask\"`) reports conflicts; Overwrite and Keep Existing run the paste again with that answer. Agents read the conflicts from the result instead."
 guesses = [
   "The warning has a Cancel button besides Overwrite and Keep Existing.",
+  "Overwrite is the default button that Return presses; the warning in the reference app settles it.",
+  "The warning lists the conflicting pairs with the pasted and the current value; the handbook names no list, and a screenshot of the warning settles it.",
 ]
 
 [[command]]

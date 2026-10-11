@@ -256,6 +256,9 @@ pub struct Tokens {
     pub info_box_key_out_of_sync: Color32,
     pub info_box_key_unlinked: Color32,
     pub info_box_glyph_gap: f32,
+    /// Show Group Members: the outline of each member drawn behind the edited pair.
+    pub group_members: Color32,
+    pub group_members_width: f32,
 }
 
 impl Tokens {
@@ -427,6 +430,8 @@ impl Tokens {
             info_box_key_out_of_sync: Color32::from_rgb(0xe8, 0x3a, 0x3a),
             info_box_key_unlinked: Color32::from_rgb(0x1f, 0xbf, 0xb8),
             info_box_glyph_gap: 8.0,
+            group_members: Color32::from_rgba_unmultiplied(0x3b, 0x82, 0xf6, 0xa0),
+            group_members_width: 1.0,
         }
     }
 

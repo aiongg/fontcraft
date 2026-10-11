@@ -59,6 +59,8 @@ mod info_box_kerning_tests;
 #[cfg(test)]
 mod inspector_tests;
 #[cfg(test)]
+mod kerning_dialogs_tests;
+#[cfg(test)]
 mod panels_tests;
 #[cfg(test)]
 mod sidebar_tests;

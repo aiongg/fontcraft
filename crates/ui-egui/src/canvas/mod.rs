@@ -15,6 +15,7 @@
 //! | [`annotations`] | notes and correction marks |
 //! | [`audit_markers`] | audit results on the edited layer; also runs live audit |
 //! | [`text`] | text mode: kerned gaps, the text selection and cursor, metrics labels; the pointer in text mode |
+//! | [`group_members`] | Show Group Members: the other members of the edited pair's kerning groups, behind the glyphs |
 //!
 //! Every colour and size comes from [`Tokens`]. Wheel and gestures act through `view.scrollTo`
 //! and `view.setZoom`, like every other input. Primary-button input goes to the pointer tools
@@ -26,6 +27,7 @@ pub mod background;
 pub mod bbox;
 pub mod composite;
 pub mod fill;
+pub mod group_members;
 pub mod guides;
 pub mod metrics;
 pub mod nodes;
@@ -105,6 +107,9 @@ pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Vec<(&'stat
         let doc = session.active().map(|d| (d.id, d.revision)).unwrap_or_default();
         if text_mode && let Some(layout) = layout.as_deref() {
             text::draw_behind(&tc, layout, &tab, span.0);
+        }
+        if state.panels.group_members {
+            group_members::draw(&c, fill_cache, font, &tab, layout.as_deref(), origin, doc);
         }
         let what = fill::Fill { doc, others: state.display.fill_preview, edited: state.display.fill_preview && (*preview_tool || text_mode) };
         fill::draw(&c, fill_cache, font, &tab, layout.as_deref(), origin, what);
