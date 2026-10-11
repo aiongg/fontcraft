@@ -279,7 +279,35 @@ fn a_missing_base_passes_nothing_and_a_cycle_is_an_error() {
     assert!(matches!(effective_anchors(&f, "loop1", M), Err(ComponentsError::Cycle(_))));
     assert!(matches!(effective_anchors(&f, "abovelLoop", M), Err(ComponentsError::Cycle(_))));
     assert!(matches!(effective_anchors(&f, "a", "nolayer"), Err(ComponentsError::MissingLayer { .. })));
-    assert!(matches!(effective_anchors_for_master(&f, M), Err(ComponentsError::Cycle(_))));
+    // A whole master gives the glyphs of the cycle and those using it their own anchors.
+    let all = effective_anchors_for_master(&f, M).unwrap();
+    let failed: Vec<&str> = all.failed.iter().map(|(g, _)| g.as_str()).collect();
+    assert_eq!(failed, ["loop1", "loop2", "abovelLoop"]);
+    assert!(all.failed.iter().all(|(_, e)| matches!(e, ComponentsError::Cycle(_))));
+    assert_eq!(all.anchors.get("abovelLoop"), Some(&Vec::new()));
+    assert_eq!(all.anchors.get("ghost"), Some(&effective_anchors(&f, "ghost", M).unwrap()));
+}
+
+/// One glyph that cannot be worked out keeps its own anchors and passes them on; the rest of
+/// the master propagates.
+#[test]
+fn a_failing_glyph_does_not_stop_the_rest_of_the_master() {
+    let many: Vec<(String, f64, f64)> = (0..=crate::MAX_LAYER_ANCHORS).map(|i| (format!("x{i}"), 0.0, 0.0)).collect();
+    let many: Vec<(&str, f64, f64)> = many.iter().map(|(n, x, y)| (n.as_str(), *x, *y)).collect();
+    let f = with(vec![
+        letter("nan", &[("top", 300.0, 600.0)], &[("a", [f64::NAN, 0.0, 0.0, 1.0, 0.0, 0.0], None)]),
+        letter("nanuser", &[], &[("nan", at(10.0, 0.0), None)]),
+        letter("big", &many, &[("a", ID, None)]),
+        letter("aacute", &[], &[("a", ID, None), ("acutecomb", at(150.0, 0.0), None)]),
+    ]);
+    let all = effective_anchors_for_master(&f, M).unwrap();
+    let failed: Vec<&str> = all.failed.iter().map(|(g, _)| g.as_str()).collect();
+    assert_eq!(failed, ["nan", "big"]);
+    let names = |g: &str| all.anchors[g].iter().map(|a| (a.name.clone(), a.x, a.y)).collect::<Vec<_>>();
+    assert_eq!(names("nan"), [("top".to_string(), 300.0, 600.0)]);
+    assert_eq!(names("nanuser"), [("top".to_string(), 310.0, 600.0)]);
+    assert_eq!(all.anchors["big"].len(), crate::MAX_LAYER_ANCHORS + 1);
+    assert_eq!(all.anchors.get("aacute"), Some(&effective_anchors(&f, "aacute", M).unwrap()));
 }
 
 #[test]
@@ -303,8 +331,9 @@ fn the_whole_master_matches_single_glyph_results() {
         liga("f_f", &[("f", ID, None), ("f", at(200.0, 0.0), None)]),
     ]);
     let all = effective_anchors_for_master(&f, M).unwrap();
+    assert!(all.failed.is_empty());
     for g in f.glyphs.iter() {
-        assert_eq!(all.get(&g.name), Some(&effective_anchors(&f, &g.name, M).unwrap()), "{}", g.name);
+        assert_eq!(all.anchors.get(&g.name), Some(&effective_anchors(&f, &g.name, M).unwrap()), "{}", g.name);
     }
 }
 

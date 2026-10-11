@@ -462,13 +462,12 @@ pub(super) fn build(
     font.check()?;
     let options = Options { glyph_data: DataRef(Some(data)), ..req.options.clone() };
     let prepared = fontcraft_compile::prepare_source(font, &mut report.warnings);
-    let font: &Font = &prepared;
     for job in jobs {
         if req.first_only && !report.fonts.is_empty() {
             report.skipped.push(skip(job, "the destination is one file: give a folder to export every instance"));
             continue;
         }
-        let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
+        let resolved = match fontcraft_compile::drawing::resolve(&prepared, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
                 report.skipped.push(skip(job, BETWEEN_MASTERS));
                 continue;
@@ -866,11 +865,10 @@ fn compile_plan(s: &mut Session, p: &Value) -> Result<Value> {
     let (mut outputs, mut instances, mut skipped) = (Vec::new(), Vec::new(), Vec::new());
     let mut warnings: Vec<String> = Vec::new();
     let prepared = fontcraft_compile::prepare_source(font, &mut warnings);
-    let font: &Font = &prepared;
     let mut glyph_order: Option<Vec<String>> = None;
     let mut production_names: Option<Map<String, Value>> = None;
     for job in &jobs {
-        let resolved = match fontcraft_compile::drawing::resolve(font, &job.target) {
+        let resolved = match fontcraft_compile::drawing::resolve(&prepared, &job.target) {
             Err(ModelError::BetweenMasters(_)) => {
                 skipped.push(skip(job, BETWEEN_MASTERS));
                 continue;

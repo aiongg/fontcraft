@@ -164,3 +164,60 @@ fn a_ufo_source_propagates_anchors_only_when_its_filter_list_says_so() {
     Arc::make_mut(&mut f.info).user_data = with_filters("({name = propagateAnchors; exclude = (Aacute);})");
     assert_eq!(mark_bases(&compile_ttf(&f, &Options::default()).unwrap()), ["A"]);
 }
+
+/// A smart component passes on the anchors of its glyph: propagation reads the source, before
+/// the smart component is drawn as contours.
+#[test]
+fn a_smart_component_passes_its_anchors_to_mark_attachment() {
+    use fontcraft_model::{
+        ComponentInfo, ComponentInfoBox, Glyph, GlyphInfo, GlyphInfoBox, Layer, LayerAttrs, LayerInfo, LayerInfoBox, PartProperty, SmartPole,
+        SmartValue,
+    };
+    let mut f = font();
+    let mut part = Glyph::new("_part.bar");
+    part.export = false;
+    part.info = GlyphInfoBox::new(GlyphInfo {
+        parts: vec![PartProperty {
+            name: "Width".into(),
+            bottom_value: 100.0,
+            top_value: 300.0,
+            bottom_name: None,
+            top_name: None,
+            extra: Default::default(),
+        }],
+        ..Default::default()
+    });
+    for (id, top, width) in [("m01", false, 100.0), ("wide", true, 300.0)] {
+        let mut l = Layer::new("m01", 600.0);
+        l.id = id.into();
+        l.shapes.push(Shape::Path(Path::rect(0.0, 0.0, width, 100.0)));
+        l.anchors.push(Anchor::new("top", width / 2.0, 100.0));
+        l.info = LayerInfoBox::new(LayerInfo {
+            attrs: LayerAttrs { smart_poles: vec![SmartPole { property: "Width".into(), top }], ..Default::default() },
+            ..Default::default()
+        });
+        part.layers.push(l);
+    }
+    f.glyphs.push(part);
+    {
+        let mut a = f.glyph_mut("A").unwrap();
+        a.layers[0].anchors.clear();
+        a.layers[0].shapes.clear();
+        let mut c = Component::new("_part.bar", 0.0, 0.0);
+        c.info =
+            ComponentInfoBox::new(ComponentInfo { smart_values: vec![SmartValue { property: "Width".into(), value: 200.0 }], ..Default::default() });
+        a.layers[0].shapes.push(Shape::Component(c));
+    }
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    let font = FontRef::new(&out.bytes).unwrap();
+    let list = font.gpos().unwrap().lookup_list().unwrap();
+    let mut bases = Vec::new();
+    for lookup in list.lookups().iter() {
+        if let PositionSubtables::MarkToBase(subtables) = lookup.unwrap().subtables().unwrap() {
+            for sub in subtables.iter() {
+                bases.extend(sub.unwrap().base_coverage().unwrap().iter().map(|g| out.glyph_order[usize::from(g.to_u16())].clone()));
+            }
+        }
+    }
+    assert!(bases.iter().any(|b| b == "A"), "{bases:?} {:?}", out.warnings);
+}

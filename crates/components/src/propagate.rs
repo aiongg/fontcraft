@@ -27,6 +27,9 @@
 //!   than [`MAX_LAYER_ANCHORS`] anchors or [`MAX_LAYER_COMPONENTS`] components, a transform that
 //!   is not finite, a missing layer of the glyph asked for. A missing base glyph passes nothing
 //!   on and is not an error (compile's preflight reports it).
+//! - A whole master ([`effective_anchors_for_master`]) never fails for one glyph: a glyph whose
+//!   anchors cannot be worked out keeps its own anchors and is listed in
+//!   [`MasterAnchors::failed`]. Each layer has its own work budget there.
 //! - Propagated anchors are computed, never stored in the font.
 //! - [`AnchorCache`] keeps results across edits. An entry stays valid while the glyph's `Arc`
 //!   and the `Arc`s of every glyph it reaches through components are pointer-equal to those it
@@ -63,9 +66,10 @@ use crate::{ComponentsError, MAX_ANCHOR_NAME_LEN, MAX_COMPONENT_DEPTH, MAX_LAYER
 /// The font custom parameter that turns propagation off when its checkbox is off.
 pub const PROPAGATE_ANCHORS_PARAM: &str = "Propagate Anchors";
 
-/// Most anchors handled (read from a base and placed) in one call, nested composites included.
-/// A layer may hold [`MAX_LAYER_COMPONENTS`] components of bases with [`MAX_LAYER_ANCHORS`]
-/// anchors each; this bounds the product.
+/// Most anchors handled (read from a base and placed) in one call, nested composites included;
+/// for a whole master, by each layer apart from its bases. A layer may hold
+/// [`MAX_LAYER_COMPONENTS`] components of bases with [`MAX_LAYER_ANCHORS`] anchors each; this
+/// bounds the product.
 pub const MAX_PROPAGATION_WORK: usize = 20_000_000;
 
 /// Where an effective anchor comes from.
@@ -109,29 +113,42 @@ pub fn effective_anchors_with(font: &Font, data: Option<&GlyphData>, glyph: &str
     Ok(anchors.to_vec())
 }
 
-/// The effective anchors of every glyph's master layer of `master`, by glyph name, computed in
-/// dependency order so each base is worked out once. For compile and for whole-font checks.
-/// Glyphs without a layer for `master` are left out.
-pub fn effective_anchors_for_master(font: &Font, master: &str) -> Result<HashMap<String, Vec<EffectiveAnchor>>, ComponentsError> {
+/// The effective anchors of every glyph's master layer of `master`, computed in dependency order
+/// so each base is worked out once. For compile and for whole-font checks. Glyphs without a layer
+/// for `master` are left out. Fails only when there is no such master.
+pub fn effective_anchors_for_master(font: &Font, master: &str) -> Result<MasterAnchors, ComponentsError> {
     let data = GlyphData::new().ok();
     effective_anchors_for_master_with(font, data.as_ref(), master)
 }
 
 /// [`effective_anchors_for_master`] with the glyph database to read categories from.
-pub fn effective_anchors_for_master_with(
-    font: &Font,
-    data: Option<&GlyphData>,
-    master: &str,
-) -> Result<HashMap<String, Vec<EffectiveAnchor>>, ComponentsError> {
+pub fn effective_anchors_for_master_with(font: &Font, data: Option<&GlyphData>, master: &str) -> Result<MasterAnchors, ComponentsError> {
     font.master(master)?;
     let mut run = Run::new(font, data);
-    let mut out = HashMap::with_capacity(font.glyphs.len());
+    run.whole_master = true;
+    let mut anchors = HashMap::with_capacity(font.glyphs.len());
     for g in font.glyphs.iter() {
         let Some(layer) = g.layer(master) else { continue };
-        let anchors = run.anchors_of(g, layer, 0)?;
-        out.insert(g.name.clone(), anchors.to_vec());
+        let list = match run.anchors_of(g, layer, 0) {
+            Ok(list) => list.to_vec(),
+            Err(e) => {
+                run.failed.push((g.name.clone(), e));
+                own_anchors(layer)
+            }
+        };
+        anchors.insert(g.name.clone(), list);
     }
-    Ok(out)
+    Ok(MasterAnchors { anchors, failed: run.failed })
+}
+
+/// What [`effective_anchors_for_master`] works out for one master.
+#[derive(Debug, Default, PartialEq)]
+pub struct MasterAnchors {
+    /// The effective anchors by glyph name.
+    pub anchors: HashMap<String, Vec<EffectiveAnchor>>,
+    /// The glyphs whose anchors could not be worked out, with the reason. Each keeps its own
+    /// anchors, and composites using it take those.
+    pub failed: Vec<(String, ComponentsError)>,
 }
 
 /// One cached result and what it was computed from.
@@ -218,6 +235,10 @@ struct Run<'a> {
     work: usize,
     /// When set, every glyph name looked up, with what was found (for [`AnchorCache`]).
     reached: Option<HashMap<String, Option<Arc<Glyph>>>>,
+    /// A whole-master run: each layer has its own work budget, and a layer that fails keeps its
+    /// own anchors and is listed in `failed`.
+    whole_master: bool,
+    failed: Vec<(String, ComponentsError)>,
 }
 
 /// An anchor on its way through one component: its name now, its position, its name before the
@@ -242,6 +263,8 @@ impl<'a> Run<'a> {
             chain: Vec::new(),
             work: 0,
             reached: None,
+            whole_master: false,
+            failed: Vec::new(),
         }
     }
 
@@ -305,9 +328,22 @@ impl<'a> Run<'a> {
             return Err(ComponentsError::Cycle(self.chain.get(start..).map(<[String]>::to_vec).unwrap_or_default()));
         }
         self.chain.push(g.name.clone());
+        let outer_work = if self.whole_master { std::mem::take(&mut self.work) } else { self.work };
         let result = self.compute(g, layer, depth);
+        if self.whole_master {
+            self.work = outer_work;
+        }
         self.chain.pop();
-        let anchors: Arc<[EffectiveAnchor]> = result?.into();
+        let anchors: Arc<[EffectiveAnchor]> = match result {
+            Ok(list) => list.into(),
+            // A cycle and nesting too deep depend on where the layer is reached from, so they
+            // fail the glyph asked for; every other failure belongs to this layer.
+            Err(e) if self.whole_master && !matches!(e, ComponentsError::Cycle(_) | ComponentsError::TooDeep { .. }) => {
+                self.failed.push((g.name.clone(), e));
+                own_anchors(layer).into()
+            }
+            Err(e) => return Err(e),
+        };
         self.memo.insert(key, anchors.clone());
         Ok(anchors)
     }
@@ -454,6 +490,11 @@ fn move_through(glyph: &str, comp: &Component, index: usize, inherited: &[Effect
 /// master layer of the same master.
 fn base_layer<'g>(base: &'g Glyph, layer: &Layer) -> Option<&'g Layer> {
     base.layers.iter().find(|l| l.id == layer.id).or_else(|| base.layer(&layer.master))
+}
+
+/// A layer's anchors as stored.
+fn own_anchors(layer: &Layer) -> Vec<EffectiveAnchor> {
+    layer.anchors.iter().map(|a| own_anchor(a.name.clone(), a.x, a.y)).collect()
 }
 
 fn own_anchor(name: String, x: f64, y: f64) -> EffectiveAnchor {

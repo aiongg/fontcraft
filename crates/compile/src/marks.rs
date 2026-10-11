@@ -93,7 +93,16 @@ fn input(font: Option<&Font>, data: Option<&GlyphData>, resolved: &Resolved, ord
     };
     let propagated = match font {
         Some(font) if !scopes.is_empty() => match effective_anchors_for_master_with(font, data, &resolved.master) {
-            Ok(map) => Some(map),
+            Ok(master) => {
+                if let Some((glyph, e)) = master.failed.first() {
+                    let more = master.failed.len().saturating_sub(1);
+                    let others = if more == 0 { String::new() } else { format!(" (and {more} more glyphs)") };
+                    warnings.push(format!(
+                        "anchors were not passed on from components to `{glyph}`{others}, so it uses its own anchors for mark attachment: {e}"
+                    ));
+                }
+                Some(master.anchors)
+            }
             Err(e) => {
                 warnings.push(format!("anchors were not passed on from components for mark attachment, so each glyph's own anchors were used: {e}"));
                 None

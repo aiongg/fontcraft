@@ -32,8 +32,8 @@ pub struct Plan {
 pub fn plan(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     font.check()?;
     let mut notes = Vec::new();
-    let font = crate::prepare_source(font, &mut notes);
-    let mut plan = plan_stages(Some(&font), crate::drawing::resolve(&font, target)?, flavour, options)?;
+    let prepared = crate::prepare_source(font, &mut notes);
+    let mut plan = plan_stages(Some(font), crate::drawing::resolve(&prepared, target)?, flavour, options)?;
     notes.append(&mut plan.warnings);
     plan.warnings = notes;
     Ok(plan)
@@ -44,7 +44,8 @@ pub fn plan_resolved(resolved: Resolved, flavour: Flavour, options: &Options) ->
     plan_stages(None, resolved, flavour, options)
 }
 
-/// [`plan`] on `resolved`, which was resolved from `font`; `font` gives the kerning.
+/// [`plan`] on `resolved`, which was resolved from `font` after [`crate::prepare_source`]; `font`
+/// is the source as stored ([`crate::compile_resolved_from`]).
 pub fn plan_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     plan_stages(Some(font), resolved, flavour, options)
 }

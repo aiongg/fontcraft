@@ -195,9 +195,9 @@ pub struct Compiled {
 pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     font.check()?;
     let mut notes = Vec::new();
-    let font = prepare_source(font, &mut notes);
-    let resolved = drawing::resolve(&font, target)?;
-    let mut compiled = compile_resolved_from(&font, resolved, flavour, options)?;
+    let prepared = prepare_source(font, &mut notes);
+    let resolved = drawing::resolve(&prepared, target)?;
+    let mut compiled = compile_resolved_from(font, resolved, flavour, options)?;
     notes.append(&mut compiled.warnings);
     compiled.warnings = notes;
     Ok(compiled)
@@ -209,7 +209,8 @@ pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options
 /// both reference compilers apply them when they load a source. Corners go first because a
 /// smart glyph's pole layers can hold corners. A layer whose corners cannot be fitted, and a
 /// smart component that cannot be drawn, stay as they are, with a warning. A font with neither
-/// is borrowed, not copied. Callers of [`compile_resolved_from`] resolve the prepared font.
+/// is borrowed, not copied. Callers of [`compile_resolved_from`] resolve the prepared font and
+/// pass the source as it is stored.
 pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a, Font> {
     let mut out = Cow::Borrowed(font);
     let has_corners = font.glyphs.iter().any(|g| g.layers.iter().any(|l| l.info.hints.iter().any(fontcraft_model::corner::is_corner)));
@@ -236,8 +237,10 @@ pub fn compile_resolved(resolved: Resolved, flavour: Flavour, options: &Options)
     compile_stages(None, resolved, flavour, options)
 }
 
-/// The stages after resolving, on `resolved`, which was resolved from `font`; `font` gives the
-/// kerning.
+/// The stages after resolving, on `resolved`, which was resolved from `font` after
+/// [`prepare_source`]. `font` is the source as stored: it gives the kerning, the feature settings
+/// and the anchors that propagation passes on, which a smart component passes on only while it is
+/// still a component.
 pub fn compile_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     compile_stages(Some(font), resolved, flavour, options)
 }
