@@ -24,6 +24,7 @@ mod color_layer;
 mod common;
 mod compare;
 pub(crate) mod compile;
+mod component;
 mod custom_params;
 mod dimensions;
 mod edit;
@@ -406,6 +407,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(tt_assembly::specs());
         v.extend(tt_debug::specs());
         v.extend(metrics_files::specs());
+        v.extend(component::specs());
         v
     })
 }

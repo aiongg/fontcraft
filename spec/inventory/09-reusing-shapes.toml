@@ -55,6 +55,7 @@ milestone = "M6"
 summary = "The Option-key alternate of Create Composite: replaces the shapes on all master layers of the glyph, not only the current one. The handbook gives the shortcut but no separate menu label, so the label here is ours."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
+notes = "Documented, not yet observed. Shares glyph.createComposite's code path with allMasters on."
 
 [[command]]
 id = "glyph.addComponent"
@@ -69,6 +70,9 @@ summary = "Appends one component to the current layer. In the UI it opens the co
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:42–11:51: the canvas context menu offers Add Component…, which opens a search field titled Choose Component at the bottom of the window; typing O and confirming adds O as a component, drawn filled without nodes. Not shown: the Glyph menu, Cmd+Shift+C, lookup by Unicode value."
+guesses = [
+  "The component is appended at offset zero, after every other shape, and the layer's automatic alignment places it; a component that would make the glyph contain itself is refused; adding a component in the reference app settles it.",
+]
 
 [[command]]
 id = "glyph.addComponentAllMasters"
@@ -82,6 +86,7 @@ milestone = "M6"
 summary = "The Option-key alternate of Add Component: the chosen component is appended on every master layer of the glyph. The handbook gives the shortcut but no separate menu label."
 ref = "Reusing Shapes › Components › Building Composites"
 status = "handbook"
+notes = "Documented, not yet observed. Adds the component on every master layer the glyph has."
 
 [[command]]
 id = "glyph.componentFromSelection"
@@ -267,9 +272,13 @@ kind = "engine"
 params = "{glyph?: name, layer?: id, components?: [indices], dx: number, dy: number}"
 area = "components"
 milestone = "M6"
-summary = "Shifts the selected components by a delta; the UI drives it from mouse drags and arrow keys (1 unit, Shift 10, Cmd 100). Auto-aligned components ignore the move, except the blue single-number case which accepts only the vertical part; locked components do not move."
+summary = "Shifts the selected components by a delta, rounded to the grid; the UI drives it from mouse drags and arrow keys (1 unit, Shift 10, Cmd 100). Moving an auto-aligned component has no effect in the reference app, except the blue single-number case which accepts only the vertical part; here the command refuses such a move with a message. Locked components do not move."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed. Without `components` the command moves every component of the layer. The arrow-key increments are the shell's; the command takes the delta."
+guesses = [
+  "A move of an aligned or locked component is refused with a message rather than silently left without effect (the font stays the same either way); a component aligned horizontally only takes the vertical part, and a purely horizontal move of it is refused; dragging such components in the reference app settles whether it shows a message.",
+]
 
 [[command]]
 id = "component.setAnchor"
@@ -286,6 +295,7 @@ status = "handbook"
 notes = "Documented, not yet observed. Stored as the component's `anchor` attribute."
 guesses = [
   "The anchor menu lists the anchors of the attachment target whose name is the mark anchor's name without its underscore or that name followed by an underscore and a suffix; when the stored name no longer exists, the component attaches to the plain name and keeps the stored value; the reference app settles it.",
+  "The command accepts only names the component can attach with: one of its own underscore anchors without the underscore (`top` for `_top`), or that name followed by an underscore and a suffix (`top_viet`, `top_2`); an empty name clears the choice; the anchor menu of the reference app settles it.",
 ]
 
 [[command]]
@@ -383,6 +393,7 @@ milestone = "M6"
 summary = "Context-menu item that releases a locked component so it can be moved again."
 ref = "Reusing Shapes › Components › Locking Components"
 status = "handbook"
+notes = "Documented, not yet observed. Clears the `locked` flag that component.lock and path.lockPath set."
 
 [[command]]
 id = "glyph.decomposeGlyph"
@@ -514,6 +525,7 @@ milestone = "M6"
 summary = "Arrow keys nudge the selected components by 1 unit, by 10 with Shift held and by 100 with Cmd held."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
+notes = "Documented, not yet observed. The command (component.move) takes any delta; the increments belong to the shell's key handling."
 
 [[behavior]]
 id = "components.optionDragDuplicates"
@@ -755,6 +767,7 @@ milestone = "M6"
 summary = "An auto-aligned component cannot be dragged, nudged or repositioned through the Info box. The single exception is the blue case, which moves along the vertical axis only."
 ref = "Reusing Shapes › Components › Editing Components; Edit View › Info Box"
 status = "handbook"
+notes = "Documented, not yet observed. component.move and component.setTransform refuse the position change with a message; see the guess on component.move."
 
 [[behavior]]
 id = "components.singleNumberComponentShiftsVertically"
