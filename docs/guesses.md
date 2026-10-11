@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**472 guesses on 331 rows (132 of them live commands).**
+**493 guesses on 338 rows (149 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -391,8 +391,35 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `spacing.setLeftSidebearing` | M5 | handbook | yes | A numeric left sidebearing moves the outline, components, anchors, guides, annotations, placed image and background sideways and changes the width by the same amount, so the right sidebearing stays. |
+| `spacing.setLeftSidebearing` | M5 | handbook | yes | A key is evaluated and applied as soon as it is stored. |
+| `spacing.setLeftSidebearing` | M5 | handbook | yes | A glyph-level key is applied to the edited layer only; the glyph's other layers keep their numbers, out of sync, until Update Metrics runs. |
+| `spacing.setLeftSidebearing` | M5 | handbook | yes | A key that cannot be evaluated (a missing glyph, division by zero, an empty referenced glyph, a result out of range) is refused and nothing is stored. |
+| `spacing.setLeftSidebearing` | M5 | handbook | yes | A key typed with one `=` into a field that shows a layer key removes that layer key, so the new glyph-level key applies on that layer. |
+| `spacing.setLeftSidebearing` | M5 | handbook | yes | The sidebearing setters skip a layer without an outline and report it, since such a layer has no sidebearings. |
+| `spacing.setRightSidebearing` | M5 | handbook | yes | A key is evaluated and applied as soon as it is stored. |
 | `spacing.setWidth` | M5 | handbook | yes | A numeric width change is absorbed by the right sidebearing; the handbook does not say how it is split. |
 | `spacing.setWidth` | M5 | handbook | yes | A width key may be a glyph name, a constant or a calculation; `\|` and `@` are refused in the width field. |
+| `spacing.setTopSidebearing` | M5 | inferred | yes | Setting the top sidebearing moves the vertical origin and changes the vertical width by the same amount, so the bottom sidebearing stays, as the left sidebearing does horizontally. |
+| `spacing.setTopSidebearing` | M5 | inferred | yes | The top and bottom fields take the same key forms as the left and right ones, with `\|` naming the opposite vertical sidebearing; `@` is refused there. |
+| `spacing.setBottomSidebearing` | M5 | inferred | yes | Setting the bottom sidebearing changes the vertical width only. |
+| `spacing.updateMetricsKey` | M5 | handbook | yes | A metric whose value rounded half up already equals its key's value is left as it is, so the command makes no change there; watching the button on a fractional metric in the reference app would settle it. |
+| `glyph.updateMetrics` | M5 | handbook | yes | Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value; one Update Metrics on a two-step chain in the reference app settles it. |
+| `glyph.updateMetrics` | M5 | handbook | yes | A key that cannot be evaluated (unlinked, in error, or on an empty layer) is skipped and the other keys are still updated; running it on a font with one unlinked key in the reference app would settle it. |
+| `glyph.updateMetricsForAllMasters` | M5 | handbook | yes | Besides the master layers it updates the layers with attributes (intermediate, alternate, colour, smart), the layers the out-of-sync scan lists, and leaves out masters that take their metrics from another master; a brace layer with an out-of-sync key in the reference app would settle it. |
+| `spacing.listOutOfSyncMetrics` | M5 | inferred | yes | A key is out of sync when its value differs from the layer's metric rounded half up. |
+| `spacing.listOutOfSyncMetrics` | M5 | inferred | yes | Master layers and layers with attributes (intermediate, alternate, colour, smart) are scanned; backup layers and the layers of a master that takes its metrics from another master are not. |
+| `kerning.setPair` | M5 | handbook | yes | A group side must be the group some glyph has on the side that faces the pair, and a glyph side a glyph of the font, so a typo is refused rather than stored as a pair that never applies; storing a pair for an unknown group in the running app's Kerning window settles it. |
+| `kerning.setPair` | M5 | handbook | yes | Values beyond ±32,767 are refused, the range a compiled pair value holds; typing a larger value in a kern field settles what the reference does. |
+| `kerning.removePair` | M5 | handbook | yes | Removing a pair the master does not store is refused with a message rather than ignored; clearing an empty kern field in the running app shows nothing either way, so only the scripting API's behaviour would settle it. |
+| `kerning.increaseLeft` | M5 | handbook | yes | Increase adds to the kerning value (more space) and decrease subtracts; the handbook names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair. The Info box kern value after one keypress, in the running app or a video, settles it. |
+| `kerning.setLeftGroup` | M5 | handbook | yes | An empty name clears the group, as null does; emptying a Group field in the Info box of the running app settles it. |
+| `kerning.setTopGroup` | M5 | handbook | yes | The top and bottom group fields check names as the left and right ones do. |
+| `kerning.renameGroup` | M5 | handbook | yes | With scope `pair`, only the side of the selected pair changes to the new name and the glyphs keep their group; no source says whether the reference also moves glyphs into the new group, and the Group fields after a pair-only rename settle it. |
+| `kerning.renameGroup` | M5 | handbook | yes | With scope `font`, a new name that is already a group of that side is refused rather than merging the two groups; renaming onto an existing group in the reference app settles it. |
+| `kerning.renameGroup` | M5 | handbook | yes | With scope `font`, the rename reaches every master and both writing directions, since groups are shared between them; reading another master's pairs after a rename in the reference app settles it. |
+| `kerning.cleanUp` | M5 | handbook | yes | Clean Up acts on the given master and direction only, like the Kerning window list; running it on a font with two masters and reading the other master's pairs settles it. |
+| `kerning.compress` | M5 | handbook | yes | Compress acts on the given master and direction only; running it on a font with two masters and reading the other master's pairs settles it. |
 | `spacing.infoBoxArrowSteps` (behavior) | M5 | handbook | – | Up and Down in a field that holds a metrics key leave the key unchanged; no source says what they do there, and pressing Up in such a field in the reference app settles it. |
 | `spacing.shortcutsNeedTextTool` (behavior) | M5 | handbook | – | A spacing shortcut on a metric that holds a metrics key changes the number and keeps the key, which then shows as out of sync; no source says whether the reference keeps the key, removes it or ignores the keypress. |
 | `spacing.shortcutModifierScheme` (behavior) | M5 | handbook | – | In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text; in top-to-bottom text they do nothing in M5. No source says. |
@@ -423,26 +450,13 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `kerning.windowSearchOptions` (behavior) | M5 | handbook | – | The defaults are contains, every entry kind, both sides and not limited to the Font View selection; Reset returns to them. The options menu of a newly opened Kerning window settles them. |
 | `kerning.windowSorting` (behavior) | M5 | handbook | – | Before a header is clicked the list keeps the stored order of the pairs. |
 | `kerning.windowSelectionDrivesEditView` (behavior) | M5 | handbook | – | A group side is shown by its first member in glyph order. |
-| `kerning.compressRules` (behavior) | M5 | handbook | – | When two pairs would lift to the same group pair with different values, neither is lifted; running Compress on such a pair list in the reference app settles it. |
+| `kerning.compressRules` (behavior) | M5 | handbook | – | Within one run the pairs are taken in stored order and each sees the lifts made before it, so when two pairs would lift to the same group pair the first is lifted and the second meets it (absorbed with an equal value, kept as an exception with another); running Compress on such a pair list in the reference app settles it. |
+| `kerning.compressRules` (behavior) | M5 | handbook | – | A glyph–group pair is not lifted or absorbed while group–glyph pairs stored for members of its group would take over those glyphs once it is gone; a pair list with T–@n and @T–m in the reference app settles it. |
 | `kerning.compressOneStepPerRun` (behavior) | M5 | handbook | – | A run lifts the left side of every pair that can lift it, else its right side; one run on a pair list where both sides can lift, in the reference app, settles it. |
 | `kerning.implicitKernFeature` (behavior) | M5 | handbook | – | The generated lookups follow fontc's kern writer (split by script and direction, glyph pairs before class pairs, values rounded half up); the handbook gives no rules, and the GPOS of a font the reference app exports from a test source settles it. |
-| `spacing.setLeftSidebearing` | M5 | handbook | no | A numeric left sidebearing moves the outline, components and anchors sideways and changes the width by the same amount, so the right sidebearing stays. |
-| `spacing.setLeftSidebearing` | M5 | handbook | no | A key is evaluated and applied as soon as it is stored. |
-| `spacing.setRightSidebearing` | M5 | handbook | no | A key is evaluated and applied as soon as it is stored. |
-| `spacing.setTopSidebearing` | M5 | inferred | no | Setting the top sidebearing moves the vertical origin and changes the vertical width by the same amount, so the bottom sidebearing stays, as the left sidebearing does horizontally. |
-| `spacing.setTopSidebearing` | M5 | inferred | no | The top and bottom fields take the same key forms as the left and right ones, with `\|` naming the opposite vertical sidebearing; `@` is refused there. |
-| `spacing.setBottomSidebearing` | M5 | inferred | no | Setting the bottom sidebearing changes the vertical width only. |
-| `glyph.updateMetrics` | M5 | handbook | no | Keys are evaluated in dependency order, so a glyph whose reference was updated in the same run gets the new value; one Update Metrics on a two-step chain in the reference app settles it. |
-| `spacing.listOutOfSyncMetrics` | M5 | inferred | no | A key is out of sync when its value differs from the layer's metric rounded half up. |
-| `spacing.listOutOfSyncMetrics` | M5 | inferred | no | Master layers and layers with attributes (intermediate, alternate, colour, smart) are scanned; backup layers and the layers of a master that takes its metrics from another master are not. |
 | `kerning.setMode` | M5 | handbook | no | A new Edit View tab starts in kerning mode; no source gives the default. |
-| `kerning.increaseLeft` | M5 | handbook | no | Increase adds to the kerning value (more space) and decrease subtracts; the handbook names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair. The Info box kern value after one keypress, in the running app or a video, settles it. |
-| `kerning.setTopGroup` | M5 | handbook | no | The top and bottom group fields check names as the left and right ones do. |
-| `kerning.renameGroup` | M5 | handbook | no | With scope `pair`, only the side of the selected pair changes to the new name and the glyphs keep their group; no source says whether the reference also moves glyphs into the new group, and the Group fields after a pair-only rename settle it. |
 | `kerning.copyPairs` | M5 | handbook | no | The clipboard holds the pairs as kerning-text lines (`left<TAB>right<TAB>value`), so they also paste into a text editor; no source gives the reference clipboard format. |
 | `kerning.pastePairs` | M5 | handbook | no | A pasted group side keeps its name; a group the target font lacks is pasted as it is and reported. |
-| `kerning.cleanUp` | M5 | handbook | no | Clean Up acts on the given master and direction only, like the Kerning window list. |
-| `kerning.compress` | M5 | handbook | no | Compress acts on the given master and direction only; running it on a font with two masters and reading the other master's pairs settles it. |
 | `dialog.renameKerningGroup` (panel) | M5 | handbook | – | The buttons read This Pair, All Pairs and Cancel; the handbook gives no captions, and a screenshot or video of the dialog settles them. |
 | `dialog.pasteKerningConflict` (panel) | M5 | handbook | – | The warning has a Cancel button besides Overwrite and Keep Existing. |
 
@@ -471,6 +485,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `filter.roundCorners` | M3 | handbook | yes | The rounding is ours: two smooth nodes joined by a cubic close to a circular arc, each radius / tan(a / 2) units from a corner of inner angle a, at most half of either neighbouring segment. |
 | `filter.roundedFont` | M3 | handbook | yes | `stem` 0 means the master's widest vertical stem. |
 | `filter.roundedFont` | M3 | handbook | yes | A stem ending is a straight segment between two outward corners whose neighbours are straight and parallel within 5°, at most the stem width plus 10% across and at most 20° off square; it becomes two quarter-circle cubics. |
+| `glyph.transformMetrics` | M5 | handbook | yes | Shifts and new widths are rounded to the font's grid, so an absolute sidebearing measured with a fraction lands within half a grid step of the entered value; watching the reference app on a glyph with a fractional extremum would settle it. |
+| `glyph.transformMetrics` | M5 | handbook | yes | In sidebearing mode a layer without an outline is skipped and listed, because it has no sidebearings to set; running the dialog on the space glyph in the reference app would settle it. |
+| `glyph.transformMetrics` | M5 | handbook | yes | Metrics keys are left as they are, so a glyph whose key the command overrides then shows as out of sync; the reference app on a glyph with a key would settle it. |
+| `glyph.transformMetrics` | M5 | handbook | yes | A layer of a master that links its metrics to another master is changed like any other; the reference app on a linked master would settle it. |
 | `path.transformations.copyPreFilterParameter` | M3 | observed | yes | It copies the same string as a PreFilter custom parameter, read from its label (11-filters open questions). |
 | `path.interpolateWithBackground` | M3 | handbook | yes | An incompatible glyph is left unchanged and listed in `skipped` (11-filters open questions). |
 | `path.removeOverlap` | M3 | handbook | yes | Every path operation runs each glyph layer under a 5 s time limit, single-glyph commands included; a layer that runs out of time is skipped with `glyphs` and an error with one `glyph` (docs/plans/M3.md › M3.6, rule 8). |
@@ -493,7 +511,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `filter.roundCorners.visualCorrections` (behavior) | M3 | handbook | – | Visual corrections multiply the radius by tan(a / 2) for a corner of inner angle a, limited to between a quarter and four times the radius; the formula is ours. |
 | `filter.roundedFont.usesVerticalStems` (behavior) | M3 | handbook | – | The widest vertical stem sets the widest ending that is rounded, and with no vertical stem and no `stem` the command fails (11-filters open questions). |
 | `filter.roundedFont.overshoot` (behavior) | M3 | handbook | – | The half circle covers the same area as the square end it replaces, so its tip stands w·(1 − π/4)/2 (about 0.107 w) past the old end; the amount is ours. |
-| `glyph.transformMetrics` | M5 | handbook | no | Width mode without on both sides keeps the left sidebearing and moves the right one; the handbook says the difference lands on one side without saying which. |
+| `glyph.transformMetrics.onBothSides` (behavior) | M5 | handbook | – | When half the change is not on the grid, the left side's half is rounded to the grid and the right side takes the rest; an odd width change in the reference app would settle it. |
 | `dialog.filterExtrude` (panel) | M3 | handbook | – | First values: offset 50, angle -45 (down and to the right), Don't Subtract off. |
 | `dialog.filterHatchOutline` (panel) | M3 | handbook | – | First values: origin (0, 0), step width 20, angle 45, Offset Path on with thickness 5. |
 | `dialog.filterOffsetCurve` (panel) | M3 | handbook | – | First values: horizontal 10, vertical empty (the horizontal value), Make Stroke off, Auto Stroke off, position 50 %, Keep Compatible off, cap style flat. |
@@ -522,6 +540,9 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 
 | Row | Milestone | Status | Live | Guess |
 |---|---|---|---|---|
+| `Default Layer Width` (parameter) | M5 | handbook | – | Entries are looked up in the master's parameters before the font's, as for the other per-script parameters; the reference app with the parameter on a master would settle it. |
+| `Default Layer Width` (parameter) | M5 | handbook | – | A value that is not a number from 0 to 65535 is ignored; the reference app with such a value would settle it. |
+| `Default Layer Width` (parameter) | M5 | handbook | – | The CJK scripts are han, hangul, kana and bopomofo; a new layer of a glyph of each script in the reference app would settle it. |
 | `Link Metrics With First Master` (parameter) | M5 | handbook | – | Spacing and kerning commands refuse to edit a linked master and name the master it follows; no source says what the reference does with such an edit. |
 
 ## `21-qa-checks.toml`
