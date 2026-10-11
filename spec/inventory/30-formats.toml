@@ -231,6 +231,11 @@ milestone = "M9"
 summary = "Rebuilds axes from fvar, user-to-design maps from avar, named instances and STAT labels, and one master per variation-model peak by applying gvar, HVAR, MVAR and GDEF/GPOS deltas; intermediate regions that affect only some glyphs become intermediate layers. The reference handbook does not list variable fonts among the files it opens, so this is our extension and its fidelity target is ours to set."
 ref = "OpenType specification › Font Variations Overview; fontTools varLib (reverse direction); not in Import & Export › Opening Font Files"
 status = "inferred"
+notes = "Built (M9.14) in `crates/decompile/src/variable.rs`; `file.open` reads every font with an `fvar` table this way and falls back to the default instance, with the reason among the warnings, when the variations cannot be read. Design coordinates are the user range laid over the normalized coordinates after `avar`, so they equal the user coordinates when the font has no `avar`; the Axis Mappings parameter holds the `avar` points as user-to-design pairs, and Variable Font Origin names the default master, which comes first. TrueType masters apply the `gvar` deltas to the `glyf` points (read-fonts infers the points a tuple leaves out) and are rounded to whole units, so contours stay quadratic and composites stay components. Advances come from `HVAR` or the phantom points; ascender, descender, cap height and x-height from `MVAR`. Not read: kerning variations (every master gets the default master's pairs), mark positions, `cvar`, hinting; each is named in the warnings. Limits: 64 axes, 1,024 locations, 20,000,000 nodes, 500,000,000 delta applications."
+guesses = [
+  "A peak becomes a master when every coordinate is -1, 0 or 1, or when at least half of the glyphs with variations use it; any other peak becomes an intermediate layer of the glyphs that use it, on the nearest master. Settled by opening fonts built from sources with known masters and intermediate layers and comparing.",
+  "A master takes the name of the named instance at its location, else its axis names and design coordinates; an intermediate layer is named by its coordinates in braces.",
+]
 
 [[format]]
 id = "cff2.open"
@@ -244,6 +249,10 @@ milestone = "M9"
 summary = "Same reconstruction as `variable-ttf.open`, with masters rebuilt from CFF2 blend operators and the item variation store, so outlines stay cubic. Our extension; not listed by the reference handbook."
 ref = "OpenType specification › CFF2; Adobe AFDKO tx (CFF2 reading)"
 status = "inferred"
+notes = "Built (M9.14) with `variable-ttf.open`: the same axes, instances, labels and mappings; the outlines at each master come from drawing the CFF2 charstrings at its location through skrifa, so they stay cubic."
+guesses = [
+  "Every region of the CFF2 variation store becomes a master, since the charstrings do not say which glyphs use which region without evaluating them. Settled by opening CFF2 fonts built from sources with intermediate layers and comparing.",
+]
 
 [[format]]
 id = "ttc.open"
