@@ -682,6 +682,7 @@ milestone = "M10"
 summary = "Read-only stem histogram (AFDKO stemhist): runs the hinter's stem detection without writing hints and returns the horizontal and vertical stem widths found with their glyph counts, for choosing standard stems. By default only stems bounded by straight segments are counted; includeCurved adds stems formed by curves."
 ref = "AFDKO otfautohint __main__.py › stemhist; docs/AFDKO-Overview.md"
 status = "docs"
+notes = "Rows are rounded to whole units and sorted as otfautohint's report files are: most stems first, then widest first; `.notdef` is left out. The text form joins the horizontal and vertical lists that otfautohint writes to two files, without the file path and time in their titles. Overlaps are not removed before the analysis."
 
 [[command]]
 id = "autohint.ps.reportZones"
@@ -695,6 +696,7 @@ milestone = "M10"
 summary = "Read-only alignment-zone report (AFDKO stemhist -z): returns the top and bottom extreme heights found across the glyphs with their counts, for choosing zone positions and sizes. Like the stem report it runs with flex off and without requiring existing zones."
 ref = "AFDKO otfautohint __main__.py › stemhist"
 status = "docs"
+notes = "A zone row is one edge: the top and bottom of each glyph's extent and of each horizontal stem, rounded to whole units; top edges highest first, bottom edges lowest first, as otfautohint's .top.txt and .bot.txt files sort them."
 
 [[command]]
 id = "autohint.ps.listFdDicts"
@@ -702,12 +704,13 @@ label = "List Hint Dictionaries"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{allInstances?: bool}"
+params = "{fontinfo?: text, master?: id, allInstances?: bool}"
 area = "hinting-ps"
 milestone = "M10"
 summary = "Read-only query listing every zone-and-stem set in effect (from the font or from overrides) together with the glyphs assigned to each, including the catch-all set for glyphs that matched no override. With allInstances it lists them for every master or instance instead of only the default one (otfautohint --print-list-fddict / --print-all-fddict)."
 ref = "AFDKO otfautohint --help"
 status = "docs"
+notes = "The override sets are passed as fontinfo text in `fontinfo` (the reference reads a file beside the font). allInstances lists every master; instances between masters wait for M9. The font's own set is read with zones and stems not required, so a master without them is listed with inactive zones; otfautohint refuses such a font unless --no-zones-stems is given. The font's vertical extremes used for the catch-all set are those otfautohint takes for a source font: one em below the baseline and two above."
 
 [[behavior]]
 id = "autohint.ps.inputs"
@@ -878,6 +881,7 @@ milestone = "M10"
 summary = "Groups of glyphs can be hinted with their own zones and stems instead of the font's global ones. The reference reads them from a text file named fontinfo beside the font (or --fontinfo-file PATH; --ignore-fontinfo disables the lookup) containing named 'begin FDDict NAME … end FDDict NAME' blocks of key/value lines and 'begin GlyphSet NAME … end GlyphSet NAME' blocks listing glyph names or regular expressions; '#' starts a comment."
 ref = "AFDKO otfautohint --doc-fontinfo"
 status = "docs"
+notes = "FontCraft reads the text, not a file: the `fontinfo` parameter of autohint.ps.listFdDicts takes it, and `include` lines are not followed. Glyph patterns are matched by our own engine for the regular-expression features the format's documentation lists (anchors, classes, `.`, `*`, `+`, `?`, `{m,n}`, escapes such as `\\S`); groups and alternation are refused with the line number."
 
 [[behavior]]
 id = "autohint.ps.fontinfoOverrides.rules"
@@ -910,6 +914,7 @@ milestone = "M10"
 summary = "An override set must provide at least two zone pairs (the baseline bottom zone and one top zone) and both DominantH and DominantV; everything else is optional. Non-zone keys are FontName, OrigEmSqUnits and LanguageGroup (used when building CID fonts), DominantV, DominantH, FlexOK, VCounterChars, HCounterChars and BlueFuzz."
 ref = "AFDKO otfautohint --doc-fontinfo; fdTools.py"
 status = "docs"
+notes = "A set without DominantH or DominantV is refused with the line of its `begin`; otfautohint only warns, then fails when it hints a glyph of that set. A FinalFont set is not held to these rules, as otfautohint does not check it. When the final font's zones and stems are merged from the sets, FontCraft keeps the vertical stems of sets that have no OtherBlues zones, which otfautohint 5.0.1 drops."
 
 [[behavior]]
 id = "autohint.ps.dominantStems"
