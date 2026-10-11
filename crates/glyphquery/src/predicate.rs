@@ -132,6 +132,12 @@ pub enum Attr {
     Export,
     HasUnicode,
     HasCustomGlyphInfo,
+    /// A metrics key on the glyph or on any of its layers.
+    HasMetricsKeys,
+    /// The glyph is in the environment's out-of-sync set (`Env::with_out_of_sync`).
+    MetricsKeysOutOfSync,
+    /// Any of the glyph's kerning groups is set.
+    HasKerningGroups,
     CountOfUnicodes,
     CountOfLayers,
     /// Paths on the first master's layer.
@@ -188,6 +194,9 @@ impl Attr {
             "export" => Attr::Export,
             "hasUnicode" => Attr::HasUnicode,
             "hasCustomGlyphInfo" => Attr::HasCustomGlyphInfo,
+            "hasMetricsKeys" => Attr::HasMetricsKeys,
+            "metricsKeysOutOfSync" => Attr::MetricsKeysOutOfSync,
+            "hasKerningGroups" => Attr::HasKerningGroups,
             "countOfUnicodes" => Attr::CountOfUnicodes,
             "countOfLayers" => Attr::CountOfLayers,
             "countOfPaths" => Attr::CountOfPaths,
@@ -227,6 +236,9 @@ impl Attr {
             Attr::Export => "export".into(),
             Attr::HasUnicode => "hasUnicode".into(),
             Attr::HasCustomGlyphInfo => "hasCustomGlyphInfo".into(),
+            Attr::HasMetricsKeys => "hasMetricsKeys".into(),
+            Attr::MetricsKeysOutOfSync => "metricsKeysOutOfSync".into(),
+            Attr::HasKerningGroups => "hasKerningGroups".into(),
             Attr::CountOfUnicodes => "countOfUnicodes".into(),
             Attr::CountOfLayers => "countOfLayers".into(),
             Attr::CountOfPaths => "countOfPaths".into(),
@@ -249,7 +261,13 @@ impl Attr {
             Attr::Tags => Kind::TextList,
             Attr::Case => Kind::Choice(CASE_VALUES),
             Attr::Direction => Kind::Choice(DIRECTION_VALUES),
-            Attr::Export | Attr::HasUnicode | Attr::HasCustomGlyphInfo | Attr::Layer(L::HasAnnotations) => Kind::Bool,
+            Attr::Export
+            | Attr::HasUnicode
+            | Attr::HasCustomGlyphInfo
+            | Attr::HasMetricsKeys
+            | Attr::MetricsKeysOutOfSync
+            | Attr::HasKerningGroups
+            | Attr::Layer(L::HasAnnotations) => Kind::Bool,
             Attr::ColorIndex
             | Attr::CountOfUnicodes
             | Attr::CountOfLayers
@@ -418,6 +436,9 @@ impl Test {
             Attr::Export => Val::Bool(g.export),
             Attr::HasUnicode => Val::Bool(!g.unicodes.is_empty()),
             Attr::HasCustomGlyphInfo => Val::Bool(s.props(env).has_custom_info),
+            Attr::HasMetricsKeys => Val::Bool(!g.info.metrics_keys.is_empty() || g.layers.iter().any(|l| !l.info.metrics_keys.is_empty())),
+            Attr::MetricsKeysOutOfSync => Val::Bool(env.is_out_of_sync(&g.name)),
+            Attr::HasKerningGroups => Val::Bool(!g.kern_groups.is_empty()),
             Attr::CountOfUnicodes => count(g.unicodes.len()),
             Attr::CountOfLayers => count(g.layers.len()),
             Attr::CountOfPaths => count(env.first_layer(g).map_or(0, paths)),

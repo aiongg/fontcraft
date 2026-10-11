@@ -78,6 +78,10 @@ pub enum Property {
     HasUnicode,
     HasCustomGlyphInfo,
     HasAnnotations,
+    HasMetricsKeys,
+    /// Read from the set the caller gives `Env::with_out_of_sync`.
+    MetricsKeysOutOfSync,
+    HasKerningGroups,
     ColorLabel,
     LayerColorLabel,
     /// A glyph predicate as text.
@@ -123,6 +127,9 @@ impl Property {
         Property::HasUnicode,
         Property::HasCustomGlyphInfo,
         Property::HasAnnotations,
+        Property::HasMetricsKeys,
+        Property::MetricsKeysOutOfSync,
+        Property::HasKerningGroups,
         Property::ColorLabel,
         Property::LayerColorLabel,
         Property::Custom,
@@ -141,6 +148,9 @@ impl Property {
             Property::HasUnicode => "hasUnicode",
             Property::HasCustomGlyphInfo => "hasCustomGlyphInfo",
             Property::HasAnnotations => "hasAnnotations",
+            Property::HasMetricsKeys => "hasMetricsKeys",
+            Property::MetricsKeysOutOfSync => "metricsKeysOutOfSync",
+            Property::HasKerningGroups => "hasKerningGroups",
             Property::ColorLabel => "colorLabel",
             Property::LayerColorLabel => "layerColorLabel",
             Property::Custom => "custom",
@@ -157,7 +167,13 @@ impl Property {
             Property::Category => Kind::Category,
             Property::Case => Kind::Case,
             Property::CountOfPaths | Property::CountOfComponents => Kind::Number,
-            Property::ExportGlyph | Property::HasUnicode | Property::HasCustomGlyphInfo | Property::HasAnnotations => Kind::Bool,
+            Property::ExportGlyph
+            | Property::HasUnicode
+            | Property::HasCustomGlyphInfo
+            | Property::HasAnnotations
+            | Property::HasMetricsKeys
+            | Property::MetricsKeysOutOfSync
+            | Property::HasKerningGroups => Kind::Bool,
             Property::ColorLabel | Property::LayerColorLabel => Kind::Color,
             Property::Custom => Kind::Custom,
         }
@@ -512,6 +528,9 @@ impl Rule {
                     Property::ExportGlyph => Attr::Export,
                     Property::HasUnicode => Attr::HasUnicode,
                     Property::HasCustomGlyphInfo => Attr::HasCustomGlyphInfo,
+                    Property::HasMetricsKeys => Attr::HasMetricsKeys,
+                    Property::MetricsKeysOutOfSync => Attr::MetricsKeysOutOfSync,
+                    Property::HasKerningGroups => Attr::HasKerningGroups,
                     _ => Attr::Layer(LayerAttr::HasAnnotations),
                 };
                 Ok(polar(test(attr, Op::Eq, Literal::Bool(*b))?))

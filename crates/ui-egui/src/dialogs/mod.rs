@@ -61,6 +61,7 @@ mod round_corners;
 pub mod rule_tree;
 mod shape_order;
 mod smart_filter_editor;
+mod transform_metrics;
 mod transformations;
 
 use serde::Serialize;
@@ -234,6 +235,7 @@ pub const DIALOGS: &[Dialog] = &[
     find_and_replace::DIALOG,
     rename_kerning_group::DIALOG,
     paste_kerning_conflict::DIALOG,
+    transform_metrics::DIALOG,
 ];
 
 /// The shell commands of this module.

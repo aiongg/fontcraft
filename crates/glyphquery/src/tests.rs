@@ -1,6 +1,7 @@
 //! Behaviour of queries on a synthetic font: every rule and operator, groups, the predicate
 //! language, search, sidebar combination, list order, folders, missing glyphs and hostile input.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use fontcraft_glyphdata::GlyphData;
@@ -464,4 +465,30 @@ fn the_filter_tree_is_edited_by_path() {
     let items = filters();
     let back: Vec<Filter> = serde_json::from_value(serde_json::to_value(&items).unwrap()).unwrap();
     assert_eq!(back, items);
+}
+
+#[test]
+fn spacing_rules() {
+    let (mut font, data) = (font(), data());
+    font.glyph_mut("A").unwrap().info.metrics_keys.left = Some("=H".into());
+    font.glyph_mut("B").unwrap().layers[1].info.metrics_keys.width = Some("=600".into());
+    font.glyph_mut("C").unwrap().kern_groups.right = Some("C".into());
+    font.glyph_mut("D").unwrap().kern_groups.top = Some("D".into());
+    let keys = with_rules(&font, &data, None, one("hasMetricsKeys", "is", json!(true)));
+    assert_eq!(keys, vec!["A".to_string(), "B".to_string()], "a key on any layer counts");
+    let groups = with_rules(&font, &data, None, one("hasKerningGroups", "is", json!(true)));
+    assert_eq!(groups, vec!["C".to_string(), "D".to_string()], "vertical groups count");
+    let ungrouped = with_rules(&font, &data, None, one("hasKerningGroups", "isNot", json!(true)));
+    assert_eq!(ungrouped.len(), font.glyphs.len() - 2);
+
+    let tree = RuleTree::from_json(&one("metricsKeysOutOfSync", "is", json!(true))).unwrap().compile().unwrap();
+    let selection = Selection { rules: Some(tree), ..Selection::default() };
+    let without_set = Catalog::new(Env::new(&font, &data, None).unwrap()).select(&selection).unwrap();
+    assert!(without_set.is_empty(), "no set given: nothing is out of sync");
+    let stale: HashSet<String> = ["B".to_string(), "missing".to_string()].into_iter().collect();
+    let env = Env::new(&font, &data, None).unwrap().with_out_of_sync(&stale);
+    assert_eq!(Catalog::new(env).select(&selection).unwrap(), vec!["B".to_string()]);
+
+    let custom = with_expr(&font, &data, None, &parse_predicate("hasMetricsKeys AND NOT hasKerningGroups").unwrap());
+    assert_eq!(custom, vec!["A".to_string(), "B".to_string()]);
 }

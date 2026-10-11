@@ -32,7 +32,7 @@ const VALUE_CHARS: usize = 1024;
 pub const MATCH: [(&str, &str); 3] = [("all", "All"), ("any", "Any"), ("none", "None")];
 
 /// The rule properties with their labels, in the pop-up's order.
-pub const PROPERTIES: [(&str, &str); 14] = [
+pub const PROPERTIES: [(&str, &str); 17] = [
     ("glyphName", "Glyph Name"),
     ("countOfPaths", "Count of Paths"),
     ("countOfComponents", "Count of Components"),
@@ -44,6 +44,9 @@ pub const PROPERTIES: [(&str, &str); 14] = [
     ("hasUnicode", "Has Unicode"),
     ("hasCustomGlyphInfo", "Has Custom Glyph Info"),
     ("hasAnnotations", "Has Annotations"),
+    ("hasMetricsKeys", "Has Metrics Keys"),
+    ("metricsKeysOutOfSync", "Metrics Keys Out of Sync"),
+    ("hasKerningGroups", "Has Kerning Groups"),
     ("colorLabel", "Color Label"),
     ("layerColorLabel", "Layer Color Label"),
     ("custom", "Custom"),
@@ -90,7 +93,9 @@ enum ValueKind {
 fn value_kind(property: &str) -> ValueKind {
     match property {
         "countOfPaths" | "countOfComponents" => ValueKind::Number,
-        "exportGlyph" | "hasUnicode" | "hasCustomGlyphInfo" | "hasAnnotations" => ValueKind::Bool,
+        "exportGlyph" | "hasUnicode" | "hasCustomGlyphInfo" | "hasAnnotations" | "hasMetricsKeys" | "metricsKeysOutOfSync" | "hasKerningGroups" => {
+            ValueKind::Bool
+        }
         "case" => ValueKind::Case,
         "colorLabel" | "layerColorLabel" => ValueKind::Color,
         _ => ValueKind::Text,

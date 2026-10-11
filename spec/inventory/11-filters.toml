@@ -617,6 +617,12 @@ milestone = "M5"
 summary = "Dialog for assigning widths or sidebearings to many layers at once. The Width checkbox switches between width mode and sidebearing mode."
 ref = "Filters › Built-in Filters › Transformations › Transform Metrics"
 status = "handbook"
+notes = "Opens from Glyph › Transform Metrics on the selected glyphs (Font View) or the edited layer, with a live preview. Width on sends `width` and `onBothSides`; Width off sends `lsb` and `rsb` for the checked sides, and `relative`. The values of the other mode stay in their fields and are not sent. Parameters in the command's shape set the checkboxes when the dialog opens. Documented, not yet observed."
+guesses = [
+  "The dialog opens in sidebearing mode with LSB, RSB and Relative checked and both values 0, so opening it changes nothing; the reference app's first opening would settle it.",
+  "The width field starts at half the units per em; the reference app's first opening would settle it.",
+  "Each checkbox and its value field are two rows of the form (\"LSB\", \"LSB value\") instead of one row; observing the reference dialog would settle the layout.",
+]
 
 [[behavior]]
 id = "glyph.transformMetrics.widthMode"

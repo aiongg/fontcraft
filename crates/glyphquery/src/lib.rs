@@ -117,6 +117,7 @@ pub struct Env<'a> {
     keep_alternates: bool,
     classes: HashMap<String, HashSet<String>>,
     props: Option<&'a PropsCache>,
+    out_of_sync: Option<&'a HashSet<String>>,
 }
 
 impl<'a> Env<'a> {
@@ -130,7 +131,7 @@ impl<'a> Env<'a> {
             },
             None => first_master,
         };
-        Ok(Env { font, data, master, first_master, keep_alternates: keeps_alternates(font), classes: HashMap::new(), props: None })
+        Ok(Env { font, data, master, first_master, keep_alternates: keeps_alternates(font), classes: HashMap::new(), props: None, out_of_sync: None })
     }
 
     /// Gives `name in class(X)` the members of each feature class.
@@ -146,6 +147,18 @@ impl<'a> Env<'a> {
             self.props = Some(cache);
         }
         self
+    }
+
+    /// Names the glyphs whose metrics keys are out of sync, which `metricsKeysOutOfSync` reads.
+    /// The caller computes the set (with `fontcraft_spacing`, a crate beside this one); without
+    /// it, no glyph is out of sync.
+    pub fn with_out_of_sync(mut self, glyphs: &'a HashSet<String>) -> Self {
+        self.out_of_sync = Some(glyphs);
+        self
+    }
+
+    pub(crate) fn is_out_of_sync(&self, glyph: &str) -> bool {
+        self.out_of_sync.is_some_and(|set| set.contains(glyph))
     }
 
     /// The master the layer rules read.

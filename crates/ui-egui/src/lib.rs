@@ -69,6 +69,8 @@ mod panels_tests;
 #[cfg(test)]
 mod sidebar_tests;
 #[cfg(test)]
+mod spacing_dialogs_tests;
+#[cfg(test)]
 mod start_window_tests;
 #[cfg(test)]
 mod stroke_tests;
