@@ -547,6 +547,7 @@ effect = "interpolation"
 summary = "The value is a four-letter axis tag; the instance's style name is then flagged in STAT as elidable for that axis, meaning it is dropped when combined with other names (as with Regular). Typically added to the regular instance once per axis for which its name is the default."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. The value is matched against the axis tags; the derivation (crates/compile/src/var/stat.rs, M9.7) follows fontc's, which also marks a default name elidable without the parameter."
 
 [[parameter]]
 name = "Enforce Compatibility Check"
@@ -697,6 +698,10 @@ effect = "other"
 summary = "A STAT table is written by default; setting this off suppresses it."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Off on the variable font setting being exported means that font has no STAT (crates/compile/src/var/stat.rs, M9.7); fontc instead writes the axes without values when every setting turns it off, which the oracle comparison allows."
+guesses = [
+  "The parameter is read from the variable font setting first and from the font when the setting has none; exporting a font with it only in Font Info settles whether the reference reads it there.",
+]
 
 [[parameter]]
 name = "Export SVG Table"
@@ -1057,6 +1062,10 @@ effect = "interpolation"
 summary = "Controls whether a variable font's STAT table gets a format 3 axis value on the ital axis linking ital=0 to ital=1, overriding the automatic choice. Should not be added to a font that is only italic."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Neither oracle reads it."
+guesses = [
+  "On links the value at 0 on the ital axis (the font's own or the table-only one) to 1 when it has no link; off removes every link on that axis; read from the variable font setting, else from the font. Exporting an upright and an italic family with the parameter on and off and reading STAT settles it.",
+]
 
 [[parameter]]
 name = "italicAngle"
@@ -1802,6 +1811,7 @@ effect = "interpolation"
 summary = "Value is a four-letter axis tag: the instance's style name becomes the combinable display name for that axis in STAT. Only for instances that are non-default on exactly that axis and default on all others (for example Light for wght)."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. As in fontc, one instance with the parameter switches the whole font to these entries: axes no instance lists get no values (crates/compile/src/var/stat.rs, M9.7)."
 
 [[parameter]]
 name = "styleMapFamilyNames"

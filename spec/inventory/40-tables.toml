@@ -1469,6 +1469,7 @@ milestone = "M9"
 summary = "STAT axes default to the fvar axes with no value labels; a source can supply a longer list, including axes with no fvar counterpart (a point width axis, or an ital axis for an upright family). The elided fallback name id defaults to 2. Axis names share the fvar axis name records."
 ref = "fontc fontir/src/ir/static_metadata.rs (set_stat), fontbe/src/stat.rs"
 status = "docs"
+notes = "A table derived from the instances names Regular as its elided fallback, as fontc does for this source format; without a variable font setting the table has the variable axes and no values (crates/compile/src/var/stat.rs, M9.7)."
 
 [[behavior]]
 id = "compile.cff2VariableBuild"
