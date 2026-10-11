@@ -780,6 +780,11 @@ milestone = "M5"
 summary = "Stores a kerning value for a pair in one master and one writing direction. Each side is a glyph name or a group written with a leading '@'. In the UI the sides are derived from the two glyphs at the cursor and their locks: a closed lock substitutes the glyph's group, an open lock keeps the glyph itself."
 ref = "Spacing & Kerning › Kerning › Info Box; Kerning Window › Editing Kerning Pairs"
 status = "handbook"
+notes = "Documented, not yet observed: a kern field and the Kerning window store a value for a pair in the current master and writing direction. The value is rounded and kept as a zero pair as kerning.infoBoxFieldEditing says; a pair already stored keeps its spelling (`@MMK_…` or the UFO's), a new one is written with the prefix of its position."
+guesses = [
+  "A group side must be the group some glyph has on the side that faces the pair, and a glyph side a glyph of the font, so a typo is refused rather than stored as a pair that never applies; storing a pair for an unknown group in the running app's Kerning window settles it.",
+  "Values beyond ±32,767 are refused, the range a compiled pair value holds; typing a larger value in a kern field settles what the reference does.",
+]
 
 [[command]]
 id = "kerning.removePair"
@@ -793,6 +798,10 @@ milestone = "M5"
 summary = "Deletes one stored kerning pair from a master; this is what clearing a kern field in the Info box does."
 ref = "Spacing & Kerning › Kerning › Info Box"
 status = "handbook"
+notes = "Documented, not yet observed: clearing a kern field removes the pair. The pair is found in whatever spelling it is stored in, and a side may name a glyph the font no longer has, so obsolete pairs can be removed one by one."
+guesses = [
+  "Removing a pair the master does not store is refused with a message rather than ignored; clearing an empty kern field in the running app shows nothing either way, so only the scripting API's behaviour would settle it.",
+]
 
 [[command]]
 id = "kerning.getPair"
@@ -1129,7 +1138,7 @@ label = "Open Kerning Lock"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{left: name, right: name, side: "left"|"right"|"both", value?: number, master?: id}'
+params = '{left: name, right: name, side: "left"|"right"|"both", value?: number, master?: id, direction?: "ltr"|"rtl"|"vertical"}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Marks one or both glyphs of a pair as an exception to their group (opening the lock in the Info box), so that kerning set for the pair is stored against the glyph instead of the group. Whether opening the lock alone already creates a stored pair (seeded with the group value) or only the next edit does is not stated."
@@ -1143,7 +1152,7 @@ label = "Close Kerning Lock"
 menu = []
 shortcut = ""
 kind = "engine"
-params = '{left: name, right: name, side: "left"|"right"|"both", master?: id}'
+params = '{left: name, right: name, side: "left"|"right"|"both", master?: id, direction?: "ltr"|"rtl"|"vertical"}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Closes the lock on one or both sides of a pair, removing the glyph-specific exception so the group kerning applies again."
