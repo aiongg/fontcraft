@@ -2229,10 +2229,10 @@ Engine command: `layout.convertSyntax`.
 
 #### `features normalize`
 
-Prints the effective layout rules of a font in a canonical text form that does not depend on how the compiler arranged lookups and subtables, so that two builds can be compared with a text diff. Covers GPOS kerning, mark attachment and cursive attachment, the GDEF ligature-caret list, and GSUB substitutions.
+Prints the effective layout rules of a font in a canonical text form that does not depend on how the compiler arranged lookups and subtables, so that two builds can be compared with a text diff. Covers GPOS kerning, mark attachment and cursive attachment, and the GDEF ligature-caret list. GSUB is accepted but prints no rules, as in otl-normalizer 1.0.0.
 
 ```
-fontcraft-cli features normalize FONT [--table gpos|gsub|gdef|all] [-o OUT]
+fontcraft-cli features normalize FONT [--table gpos|gsub|gdef|all] [--location AXIS=VALUE,...] [--face N|NAME] [-o OUT] [--no-clobber]
 ```
 
 The method is described under *Oracles › Layout normalisation*. In short: rules are grouped by feature

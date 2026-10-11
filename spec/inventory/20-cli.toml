@@ -1805,7 +1805,7 @@ status = "docs"
 
 [[cli]]
 id = "features normalize"
-usage = "fontcraft-cli features normalize FONT [--table gpos|gsub|gdef|all] [-o OUT]"
+usage = "fontcraft-cli features normalize FONT [--table gpos|gsub|gdef|all] [--location AXIS=VALUE,...] [--face N|NAME] [-o OUT] [--no-clobber]"
 options = [
   "--table gpos|gsub|gdef|all: which part to print; default all",
   "--location AXIS=VALUE...: resolve variable values at this location instead of printing them as default plus deltas",
@@ -1817,9 +1817,10 @@ equivalents = [
 ]
 area = "features"
 milestone = "M12"
-summary = "Prints the effective layout rules of a font in a canonical text form that does not depend on how the compiler arranged lookups and subtables, so that two builds can be compared with a text diff. Covers GPOS kerning, mark attachment and cursive attachment, the GDEF ligature-caret list, and GSUB substitutions."
+summary = "Prints the effective layout rules of a font in a canonical text form that does not depend on how the compiler arranged lookups and subtables, so that two builds can be compared with a text diff. Covers GPOS kerning, mark attachment and cursive attachment, and the GDEF ligature-caret list; GSUB is accepted but prints no rules, as in otl-normalizer."
 ref = "fontc otl-normalizer README, args.rs and source"
 status = "docs"
+notes = "Ported from otl-normalizer 1.0.0 (MIT OR Apache-2.0) with its text format kept byte for byte: rules grouped by feature and by the language systems with the same lookups; within a lookup the first subtable that covers a pair or glyph wins; kerning values of one pair add up across the lookups of a feature, later mark and cursive rules replace earlier ones; variable values print as the default plus the value at each master location ({…}). otl-normalizer 1.0.0 prints nothing for GSUB (its GSUB printer is a stub), so neither do we. Glyph names come from post, else the AGLFN name of the lowest code point of the Unicode-platform cmap subtables, else uniXXXX/uXXXXX, else glyph.NNNNN, as otl-normalizer names them. Where otl-normalizer panics on damaged data we report an error; a pair or rule count past the work limit is refused. --location is ours (otl-normalizer has no location option): user coordinates normalised through fvar and avar, each value printed once. -o writes the file even when the text is empty, where otl-normalizer creates no file. Unconfirmed until the corpus measure: text identical to otl-normalizer on every corpus font with GPOS and on fontc's builds."
 
 [[cli]]
 id = "variations"
@@ -2646,12 +2647,13 @@ label = "Normalise Layout Rules"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{font: path, face?: int|name, table?: \"gpos\"|\"gsub\"|\"gdef\"|\"all\", location?: {axis: number}, output?: path}"
+params = "{font: path, face?: int|name, table?: \"gpos\"|\"gsub\"|\"gdef\"|\"all\", location?: {axis: number}, output?: path, noClobber?: bool}"
 area = "features"
 milestone = "M12"
-summary = "Read-only query returning the font's effective positioning, substitution and ligature-caret rules as canonical sorted text that is independent of lookup and subtable arrangement."
+summary = "Returns the font's effective positioning and ligature-caret rules as canonical sorted text that is independent of lookup and subtable arrangement, or writes it to `output`."
 ref = "docs/spec/20-cli.md › features"
 status = "docs"
+notes = "The engine side of `features normalize`; see that row for the format. GSUB prints no rules, as in otl-normalizer 1.0.0. `face` takes a number or a PostScript name (name ID 6). Journaled, not a query, because `output` writes a file."
 
 [[command]]
 id = "variations.buildAvar"
