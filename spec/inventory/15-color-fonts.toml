@@ -36,7 +36,7 @@ label = "List Color Palettes"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{}"
+params = "{master?: id}"
 area = "color"
 milestone = "M11"
 summary = "Query: returns every palette of the font as an ordered list of RGBA colours, with palette numbers and colour indices both counting from 0. Headless counterpart of reading the palette editor; our addition."
@@ -50,7 +50,7 @@ label = "Add Color"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{color?: \"#RRGGBBAA\", colors?: [\"#RRGGBBAA\" per palette]}"
+params = "{color?: \"#RRGGBBAA\", colors?: [\"#RRGGBBAA\" per palette], master?: id}"
 area = "color"
 milestone = "M11"
 summary = "Appends one colour entry to the palette table (the plus button of the editor); the new entry takes the next free colour index. The source does not state the initial colour of a new entry or how it is filled in the other palettes, so the defaults here are ours."
@@ -67,7 +67,7 @@ label = "Remove Color"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{index: int}"
+params = "{index: int, master?: id}"
 area = "color"
 milestone = "M11"
 summary = "Deletes one colour row from every palette (the minus button of the editor). Layers that use a higher index are renumbered down by one in the same step, so they keep their colour; while any layer uses the row itself, the command is refused with a message naming the glyphs."
@@ -75,6 +75,8 @@ ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
 status = "handbook"
 guesses = [
   "Removing a row renumbers the layers that use higher rows and refuses while a layer uses the row. Settled by removing a used row in the reference's editor and reading the layers afterwards.",
+  "Palette colours of shapes (fills, strokes, gradient stops, shadows) count as uses of a row and are renumbered with the palette layers. Settled by removing a row a full-colour layer's gradient uses in the reference's editor.",
+  "The last colour row can be removed, which leaves every palette empty. Settled by removing every colour in the reference's editor.",
 ]
 observe = [
   "Palette font: in the Color Palettes editor remove row 1, which a palette layer of A uses, and press OK; note whether A's layers are renumbered, left pointing at the old index, or the removal is refused.",
@@ -86,7 +88,7 @@ label = "Set Palette Color"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{palette?: int = 0, index: int, color: \"#RRGGBBAA\"}"
+params = "{palette?: int = 0, index: int, color: \"#RRGGBBAA\", master?: id}"
 area = "color"
 milestone = "M11"
 summary = "Changes one entry of one palette to a new colour; in the editor this is done by clicking the entry's swatch and choosing a value in the colour picker."
@@ -99,7 +101,7 @@ label = "Add Palette"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{copyFrom?: int}"
+params = "{copyFrom?: int, master?: id}"
 area = "color"
 milestone = "M11"
 summary = "Adds another palette (a new column in the editor) so the font carries several alternative colour sets; reached from the gear menu of the editor. The palette gets the next number, counting from 0; what colours a new palette starts with is not documented."
@@ -116,7 +118,7 @@ label = "Remove Palette"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{palette: int}"
+params = "{palette: int, master?: id}"
 area = "color"
 milestone = "M11"
 summary = "Removes one palette column; in the editor it is offered after clicking that palette's column heading. Whether the last remaining palette can be removed is not documented."
@@ -818,7 +820,10 @@ milestone = "M11"
 summary = "A master may carry its own Color Palettes parameter, which replaces the font's palettes for that master's colour layers and for exports from it."
 ref = "Color Fonts › COLR/CPAL Fonts › Defining the Color Palette"
 status = "docs"
-notes = "Not in the handbook. fontc's test source COLRv0-palette-redefinition has a master-level Color Palettes, and both fontc 1.0.0 and fontmake 3.12.1 let it win over the font's value."
+notes = "Not in the handbook. fontc's test source COLRv0-palette-redefinition has a master-level Color Palettes, and both fontc 1.0.0 and fontmake 3.12.1 let it win over the font's value. The palette commands take `master` to read or edit a master's own palettes."
+guesses = [
+  "A palette command given `master` edits that master's own Color Palettes, and creates it from the font's palettes when the master has none. Settled by checking whether the reference offers the palette editor on a master's Color Palettes and what it starts with.",
+]
 
 [[behavior]]
 id = "color.palette.editorIsTransactional"

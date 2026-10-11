@@ -277,8 +277,12 @@ effect = "table-value"
 summary = "List of colour palettes exported as the CPAL table of a COLR/CPAL colour font. The same palettes are used to preview colour glyphs in Font View and Edit View."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "A master may carry its own Color Palettes, which wins over the font's for that master (`color.palette.perMaster`); both oracles read it so. Values are stored as `\"r,g,b,a\"` strings in version 2, integer lists in version 3 and floats in version 4."
-observe = ["Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integers or version 4 floats)."]
+notes = "A master may carry its own Color Palettes, which wins over the font's for that master (`color.palette.perMaster`); both oracles read it so. Values are stored as lists of `\"r,g,b,a\"` strings in version 2, lists of integer lists (0 to 255) in version 3, and in version 4 as a dictionary whose `palettes` list holds `{colors; name; backgroundStyle}` with components from 0 to 1 and whose `names` map names colour rows (GlyphsFileFormatv4.md). A colour has two (grey), four (RGB) or five (CMYK) components plus alpha; components out of range are refused."
+guesses = [
+  "An edited Color Palettes keeps the form it was stored in; a new one is written as version 3 integer lists, or as the version 4 dictionary in a document read from version 4. Settled by editing the palettes in the reference and reading the saved file.",
+  "A CMYK palette colour is converted to RGB without a colour profile, as (1 − c)(1 − k) and so on. Settled by exporting a CMYK palette from the reference and reading CPAL.",
+]
+observe = ["Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integer lists or the version 4 dictionary)."]
 
 [[parameter]]
 name = "Compatible name Table"
