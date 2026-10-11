@@ -100,6 +100,10 @@ pub struct CornerHint {
 
 impl CornerHint {
     /// A corner of `name` on node `node` of path `shape`, unscaled and aligned to the left.
+    ///
+    /// `node` counts in file order, unlike the rest of the model: on a closed path the start
+    /// node is last, so `node` k is the model's node `(k + 1) % len`. On an open path the two
+    /// orders agree.
     pub fn new(name: impl Into<String>, shape: usize, node: usize) -> Self {
         Self { name: name.into(), target: CornerTarget::Node { shape, node }, scale: Vec2::new(1.0, 1.0), alignment: CornerAlignment::Left }
     }
@@ -221,7 +225,8 @@ pub fn insert_corners(font: &Font, layer: &Layer) -> Result<Option<Vec<Shape>>, 
 
 /// `layer` with the corner hints at `indices` (positions in the layer's hints) fitted into its
 /// paths and removed. The other corner hints on those paths keep pointing at the nodes they sat
-/// on.
+/// on. Hint node indices count in file order, with a closed path's start node last
+/// ([`CornerHint::new`]).
 pub fn decompose_corners(font: &Font, layer: &Layer, indices: &[usize]) -> Result<Layer, CornerError> {
     let bad = |corner: &str, message: String| CornerError { corner: corner.to_string(), message };
     let mut chosen = Vec::new();
