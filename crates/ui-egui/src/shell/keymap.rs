@@ -64,9 +64,9 @@ pub fn parse(text: &str) -> Option<KeyboardShortcut> {
 }
 
 /// The commands whose shortcuts were pressed this frame. Nothing fires while a text field has
-/// the keyboard.
-pub fn pressed(ctx: &egui::Context) -> Vec<(&'static str, Value)> {
-    if ctx.egui_wants_keyboard_input() {
+/// the keyboard, or had it when the last frame ended (`text_focus`).
+pub fn pressed(ctx: &egui::Context, text_focus: bool) -> Vec<(&'static str, Value)> {
+    if text_focus || ctx.egui_wants_keyboard_input() {
         return Vec::new();
     }
     let mut out = Vec::new();

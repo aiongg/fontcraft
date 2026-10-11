@@ -41,6 +41,7 @@ fn font(app: &FontcraftApp) -> Arc<Font> {
 /// pair T–@o is −60.
 fn kerned_app() -> FontcraftApp {
     let mut app = FontcraftApp::default();
+    app.run("glyph.newGlyph", &json!({"name": "Tbar"})).unwrap();
     for (glyph, width) in [("T", 600), ("Tbar", 700), ("o", 600), ("c", 500), ("e", 550)] {
         app.run("path.addRectangle", &json!({"glyph": glyph, "x": 50, "y": 0, "width": width - 100, "height": 500})).unwrap();
         app.run("spacing.setWidth", &json!({"glyphs": [glyph], "value": width})).unwrap();
@@ -54,7 +55,7 @@ fn kerned_app() -> FontcraftApp {
 
 #[test]
 fn rename_kerning_group_dialog_equals_kerning_rename_group_for_both_scopes() {
-    let asked = json!({"side": "left", "from": "o", "to": "round", "pair": {"left": "T", "right": "@o"}});
+    let asked = json!({"side": "right", "from": "o", "to": "round", "pair": {"left": "T", "right": "@o"}});
     let mut app = kerned_app();
     let before = font(&app);
     let opened = open(&mut app, "dialog.renameKerningGroup", asked.clone());
@@ -97,7 +98,7 @@ fn rename_kerning_group_dialog_equals_kerning_rename_group_for_both_scopes() {
     let mut app = kerned_app();
     app.run("kerning.setLeftGroup", &json!({"glyphs": ["T"], "group": "taken"})).unwrap();
     let before = font(&app);
-    open(&mut app, "dialog.renameKerningGroup", json!({"side": "left", "from": "o", "to": "taken", "pair": {"left": "T", "right": "@o"}}));
+    open(&mut app, "dialog.renameKerningGroup", json!({"side": "right", "from": "o", "to": "taken", "pair": {"left": "T", "right": "@o"}}));
     fails(&mut app, "ui.dialog.confirm", json!({}));
     assert!(Arc::ptr_eq(&font(&app), &before));
     assert_eq!(inspect(&mut app)["dialog"], "dialog.renameKerningGroup", "the question stays open");
@@ -205,7 +206,8 @@ fn member_lines(app: &mut FontcraftApp) -> usize {
     let input = || egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
     let mut count = 0;
     for _ in 0..2 {
-        let output = ctx.run_ui(input(), |ui| app.ui(ui));
+        let mut output = ctx.run_ui(input(), |ui| app.ui(ui));
+        output.textures_delta.clear();
         let mut out: Vec<Shape> = output.shapes.into_iter().map(|c| c.shape).collect();
         count = 0;
         while let Some(shape) = out.pop() {

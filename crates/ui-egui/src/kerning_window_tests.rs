@@ -43,9 +43,11 @@ impl Window {
     }
 
     fn click(&self, app: &mut FontcraftApp, at: Pos2, modifiers: Modifiers) {
-        self.frame(app, vec![Event::PointerMoved(at)]);
+        // Backends report held modifiers as their own event; the input state keeps them.
+        self.frame(app, vec![Event::ModifiersChanged(modifiers), Event::PointerMoved(at)]);
         self.frame(app, vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers }]);
         self.frame(app, vec![Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers }]);
+        self.frame(app, vec![Event::ModifiersChanged(Modifiers::NONE)]);
     }
 
     fn key(&self, app: &mut FontcraftApp, key: Key, modifiers: Modifiers) {
@@ -361,6 +363,8 @@ fn copy_and_paste_move_selected_pairs_between_masters() {
     assert!(app.state.panels.kerning_window.listing.rows.is_empty());
     w.frame(&mut app, vec![Event::Paste(text.clone())]);
     assert_eq!(value(&mut app, "A", "V", Some("m02")), json!(-100.0));
+    // The list reads the font at the start of the next frame.
+    w.frame(&mut app, Vec::new());
     assert_eq!(app.state.panels.kerning_window.listing.rows.len(), 2);
 
     // A clash pastes nothing and asks.

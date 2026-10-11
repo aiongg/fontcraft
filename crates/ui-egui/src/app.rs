@@ -282,7 +282,7 @@ impl FontcraftApp {
         // The tools take their keys first (the Edit View keys have a `when`); the rest go to
         // the menu shortcuts.
         tools_glue::keys(self, ui.ctx());
-        let mut pending: Vec<(&'static str, Value)> = shell::keymap::pressed(ui.ctx());
+        let mut pending: Vec<(&'static str, Value)> = shell::keymap::pressed(ui.ctx(), self.tools.text_focus);
         pending.extend(shell::clipboard::events(self, ui.ctx()));
         self.menu_bar(ui, &mut pending);
         shell::tabs::strip(self, ui, &mut pending);
@@ -326,6 +326,7 @@ impl FontcraftApp {
         if let Some(text) = self.clipboard_out.take() {
             ui.ctx().copy_text(text);
         }
+        self.tools.text_focus_at_end = ui.ctx().egui_wants_keyboard_input();
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, pending: &mut Vec<(&'static str, Value)>) {

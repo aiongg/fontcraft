@@ -22,16 +22,15 @@ pub const DIALOG: Dialog = Dialog {
 
 fn fields(_: &mut fontcraft_engine::Session, targets: &Map<String, Value>) -> Result<Vec<Field>, String> {
     let text = |key: &str| targets.get(key).and_then(Value::as_str);
-    let side = match text("side") {
-        Some(side @ ("left" | "right")) => side,
-        _ => return Err("Rename Kerning Group: `side` must be \"left\" or \"right\"".into()),
-    };
+    if !matches!(text("side"), Some("left" | "right")) {
+        return Err("Rename Kerning Group: `side` must be \"left\" or \"right\"".into());
+    }
     let Some(from) = text("from").map(|f| f.strip_prefix('@').unwrap_or(f)).filter(|f| !f.is_empty()) else {
         return Err("Rename Kerning Group: `from` names the group to rename".into());
     };
     let shown: String = from.chars().take(MAX_GROUP_NAME_LEN).collect();
     Ok(vec![
-        Field::text("to", &format!("New name for the {side} group @{shown}"), MAX_GROUP_NAME_LEN, "the group's new name, without @"),
+        Field::text("to", &format!("New name for the group @{shown}"), MAX_GROUP_NAME_LEN, "the group's new name, without @"),
         Field::choice(
             "scope",
             "",

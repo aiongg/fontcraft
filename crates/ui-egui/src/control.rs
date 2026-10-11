@@ -248,12 +248,7 @@ fn dispatch(app: &mut FontcraftApp, method: &str, params: &Value) -> Result<Valu
             if !menus::menu_tree_for(&app.session, &app.state).iter().any(|m| m.items.iter().any(|i| i.command == id)) {
                 return Err(format!("{method}: `{id}` is not a menu item"));
             }
-            let params = inner();
-            let empty = params.is_null() || params.as_object().is_some_and(serde_json::Map::is_empty);
-            if empty && let Some(result) = crate::shell::text::menu_command(app, id) {
-                return result;
-            }
-            app.run_from_shell(id, &params)
+            app.run_menu_command(id, inner())
         }
         "ui.render" => render(app, params),
         "ui.tool.select" => app.run("tool.select", params),

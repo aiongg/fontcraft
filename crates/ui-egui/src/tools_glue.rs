@@ -97,8 +97,12 @@ pub struct ToolsState {
     target: Option<Target>,
     /// The document revision the selection was last checked against.
     checked: Option<(u64, u64)>,
-    /// A text field had the keyboard at the last frame.
+    /// A text field has the keyboard this frame.
     pub(crate) text_focus: bool,
+    /// A text field had the keyboard when the last frame ended. A plain Escape takes the focus
+    /// away before the frame starts, so without this the shortcuts would take the field's
+    /// Escape.
+    pub(crate) text_focus_at_end: bool,
     /// Text from `ui.text` for the focused text field, typed at the next frame.
     pending_text: String,
     /// A Mac Ctrl+press on the canvas, held back until it turns out to be a click (the context
@@ -501,7 +505,7 @@ pub fn dispatch_queued(app: &mut FontcraftApp) -> bool {
 /// The keys of this frame that the tools take, before the menu shortcuts see them. Also types
 /// the text `ui.text` left for a focused text field.
 pub fn keys(app: &mut FontcraftApp, ctx: &egui::Context) {
-    app.tools.text_focus = ctx.egui_wants_keyboard_input();
+    app.tools.text_focus = ctx.egui_wants_keyboard_input() || app.tools.text_focus_at_end;
     if !app.tools.pending_text.is_empty() {
         let text = std::mem::take(&mut app.tools.pending_text);
         ctx.input_mut(|i| i.events.push(Event::Text(text)));
