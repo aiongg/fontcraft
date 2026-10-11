@@ -475,6 +475,8 @@ milestone = "M12"
 summary = "A component points at a glyph that itself contains components. Nested composites have rendered and printed wrongly in several environments, especially in variable fonts. The fix flattens the nesting to one level, combining the transforms."
 ref = "fontbakery nested_components"
 status = "docs"
+notes = "On sources a component is nested when its base glyph exports and is made of components only, as the TrueType export keeps such a base as a composite; a base that also has paths is decomposed on export and is reported by mixedWithOutlines instead."
+guesses = ["Only glyphs that export are checked, since the reference check reads the compiled font; checking the exported TrueType font with the reference check would settle it."]
 
 [[check]]
 id = "check.components.transformed"
@@ -486,6 +488,7 @@ milestone = "M12"
 summary = "A component is scaled, rotated, skewed or mirrored. In a hinted TrueType font any non-identity 2x2 transform counts; in an unhinted one only a mirrored component (which reverses the outline direction) does. The fix decomposes the offending components."
 ref = "fontbakery transformed_components"
 status = "docs"
+guesses = ["A source does not say whether its TrueType export will be hinted, so a mirrored component (negative determinant) is a failure and any other transform a warning; the reference check makes both failures on hinted fonts and only mirroring on unhinted ones."]
 
 [[check]]
 id = "check.components.duplicate"
@@ -497,6 +500,7 @@ milestone = "M12"
 summary = "A glyph contains the same component twice with the same offset and no transform, so the copies cover each other (the classic broken double quote). The fix removes the extra copy."
 ref = "fontbakery opentype/glyf_non_transformed_duplicate_components"
 status = "docs"
+notes = "Copies count as duplicates when they name the same glyph, their offsets round to the same integers and their 2x2 transforms are equal; the reference check compares only the glyph and the offset. The finding names the later copy, which the fix deletes."
 
 [[check]]
 id = "check.components.overlap"
@@ -508,6 +512,7 @@ milestone = "M12"
 summary = "Two components of a composite glyph overlap each other. Static exports that promise overlap-free outlines must decompose and merge such glyphs; variable TrueType exports must set the overlap flag instead."
 ref = "fontTools ttLib.removeOverlaps (componentsOverlap)"
 status = "docs"
+notes = "Each component is drawn as its outline (curves flattened into 24 pieces); two components overlap when their edges cross properly or a contour of one lies inside the filled area of the other. Edges that only touch do not count. Only glyphs that export are checked."
 
 [[check]]
 id = "check.components.mixedWithOutlines"
@@ -580,6 +585,7 @@ milestone = "M12"
 summary = "A mark component is not where its anchor pair would put it, or a composite's width differs from its base letter although automatic alignment would apply. The fix re-applies automatic alignment."
 ref = "Editor audit convention (components out of alignment)"
 status = "inferred"
+notes = "Not registered yet: the check needs the alignment routine of the components crate, which the audit crate does not depend on."
 
 [[check]]
 id = "check.components.caronAlternate"
@@ -599,9 +605,10 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "A TrueType font stores only a small share of its accented glyphs as composites, which costs file size and rendering speed."
+summary = "More than half of the glyphs of a TrueType font are stored as outlines rather than composites, which costs file size and rendering speed."
 ref = "fontbakery typenetwork/composite_glyphs"
 status = "docs"
+notes = "As the reference check: the share is of all glyphs, empty glyphs count as outlines, glyphs named with one ASCII character are not counted as outlines, and more than 50 percent (threshold maxOutlinePercent) warns."
 
 # ---------------------------------------------------------------------------
 # anchors: Anchors
@@ -617,6 +624,7 @@ milestone = "M12"
 summary = "A base letter lacks an anchor that its glyph-data entry expects (such as top or bottom) while the font contains marks that attach there. The fix adds the default anchors for the glyph at their computed positions."
 ref = "Editor audit convention (missing anchors)"
 status = "inferred"
+notes = "Not registered yet: the check needs the default-anchor table of the components crate, which the audit crate does not depend on."
 
 [[check]]
 id = "check.anchors.markWithoutAttachment"
@@ -628,6 +636,7 @@ milestone = "M12"
 summary = "A combining mark has no attaching anchor (one whose name starts with an underscore), so it cannot be positioned or used to build composites. The fix adds the default mark anchor."
 ref = "Editor audit convention (mark anchors)"
 status = "inferred"
+notes = "Not registered yet: telling combining marks apart needs the glyph data and the default-anchor table of the components crate, which the audit crate does not depend on."
 
 [[check]]
 id = "check.anchors.duplicateName"
@@ -650,6 +659,8 @@ milestone = "M12"
 summary = "An anchor name matches no mark anchor, caret, entry/exit or other known anchor role in the font, so it has no effect."
 ref = "Editor audit convention (anchor names)"
 status = "inferred"
+notes = "An anchor's role is its name without a leading underscore or asterisk, up to the first underscore (top_1, top_viet and *top are all top). A base anchor is paired when some glyph has the underscore anchor of its role, and a mark anchor when some glyph has the base anchor. origin, entry, exit, caret and vcaret (with prefixes # and *, and suffixes) and smart-glyph property names are always known; corner, cap, segment and brush glyphs are not checked. Backup layers are left out."
+guesses = ["Anchors on corner, cap, segment and brush component glyphs are not checked, because their roles are not documented; observing which anchor names those glyphs use in the reference app would settle it."]
 
 [[check]]
 id = "check.anchors.ligatureCaretsMissing"
@@ -661,6 +672,7 @@ milestone = "M12"
 summary = "The font has ligature glyphs but no, or incomplete, caret positions for them in GDEF, so the text cursor cannot be placed inside a ligature. In sources carets are anchors named caret_N; the fix adds evenly spaced ones."
 ref = "fontbakery ligature_carets"
 status = "docs"
+notes = "As the reference check, the ligatures are the outputs of the ligature substitutions of the liga feature; a font without them is skipped. Findings on a font given as a binary carry no fix."
 
 # ---------------------------------------------------------------------------
 # glyphset: Glyph set, names and encoding
