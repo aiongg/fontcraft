@@ -63,7 +63,10 @@ fn session() -> Session {
         ),
     ];
     for (name, shapes) in glyphs {
-        font.add_glyph(name, Vec::new(), 600.0).unwrap();
+        // `I` and `T` come with the new font.
+        if font.glyph(name).is_none() {
+            font.add_glyph(name, Vec::new(), 600.0).unwrap();
+        }
         font.glyph_mut(name).unwrap().layer_mut("m01").unwrap().shapes = shapes;
     }
     let mut s = Session::new();
@@ -270,4 +273,7 @@ fn corner_copy_paste_onto_nodes() {
     }
     let e = run_err(&mut s, "edit.copy", json!({"glyph": "T", "corners": [5]}));
     assert!(e.contains("does not resolve"), "{e}");
+    // A cut of corners is refused rather than taking the whole layer.
+    let e = run_err(&mut s, "edit.cut", json!({"glyph": "T", "corners": [0]}));
+    assert!(e.contains("cannot be cut"), "{e}");
 }

@@ -33,7 +33,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cut",
             ["Edit"],
             Some("Cmd+X"),
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} copies the targets as edit.copy does, then deletes them with edit.delete, as one undo step. Without a target list it cuts what edit.copy copies. A locked glyph refuses it → {json: string, svg: string, selection}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", points?: [[shape, node]], segments?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}]} copies the targets as edit.copy does, then deletes them with edit.delete, as one undo step. Without a target list it cuts what edit.copy copies. A locked glyph refuses it, and so does `corners`: corner components are copied, not cut → {json: string, svg: string, selection}",
             has_doc,
             cut
         )
@@ -102,6 +102,10 @@ fn copy(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn cut(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("edit.cut", p)?;
+    // Without this, `corners` would be ignored and the cut would take the whole layer.
+    if p.get("corners").is_some() {
+        return Err(p.bad("corner components cannot be cut: copy them with edit.copy, then remove them from their nodes"));
+    }
     let c = gather(s.font()?, &p)?;
     if let Ok(r) = c.targets.resolve(s.font()?) {
         crate::check_unlocked(r.glyph)?;
