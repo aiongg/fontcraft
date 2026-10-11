@@ -184,5 +184,12 @@ bundled, the file says so in its header and the project is listed here with its 
   (fea-rs/src/compile/lookups.rs). fontc's kern writer follows ufo2ft's kernFeatureWriter.py (MIT
   License).
 
+  Corner components fitted into outlines (crates/model/src/corner.rs, M6.4) are ported from
+  fontc's glyphs-reader/src/corner_components.rs at commit
+  4504578c3f74c2739f7e55cae133bbfe773f6d8c, which is based on glyphsLib's
+  filters/cornerComponents.py (Apache License 2.0). Its tests rebuild the cases of fontc's
+  resources/testdata/glyphs3/CornerComponents.glyphs, which come from glyphsLib's corner
+  component tests.
+
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

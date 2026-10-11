@@ -11,6 +11,10 @@
 //!
 //! One difference from glyphsLib: an ordinary component inside a pole layer keeps a transform
 //! combined with the smart component's, where glyphsLib keeps the inner transform alone.
+//!
+//! [`crate::Font::outline`] draws a smart component through [`component_shapes`], so the editor,
+//! measurements and metrics see the interpolated outline; [`draw_smart_components`] rewrites a
+//! whole font the same way for export.
 
 use fontcraft_geom::variation::{VariationModel, normalize_value};
 
@@ -68,6 +72,18 @@ pub fn draw_smart_components(font: &Font) -> (Font, SmartOutlines) {
         }
     }
     (out, report)
+}
+
+/// The shapes the smart component `c` draws in master `master`, its transform applied: paths,
+/// and the plain components of its pole layers with the transform combined. `Ok(None)` when its
+/// glyph is not a smart glyph or has one pole layer for the master (it is drawn as a plain
+/// component). Each smart component drawn, nested ones included, takes one from `draws_left`.
+pub fn component_shapes(font: &Font, c: &Component, master: &str, draws_left: &mut usize) -> Result<Option<Vec<Shape>>, String> {
+    let Some(base) = font.glyphs.get(&c.glyph).filter(|g| !g.info.parts.is_empty()) else { return Ok(None) };
+    let mut ctx = Ctx { font, chain: Vec::new(), nodes_left: MAX_OUTLINE_ELEMENTS, draws_left: *draws_left, notes: Vec::new() };
+    let result = ctx.instantiate(base, c, master);
+    *draws_left = ctx.draws_left;
+    result
 }
 
 fn layer_label(l: &Layer) -> &str {
@@ -232,6 +248,10 @@ impl<'a> Ctx<'a> {
 fn too_large() -> String {
     format!("the outline with its smart components drawn has more than {MAX_OUTLINE_ELEMENTS} nodes")
 }
+
+#[cfg(test)]
+#[path = "smart_outline_tests.rs"]
+mod outline_tests;
 
 #[cfg(test)]
 mod tests {

@@ -11,8 +11,8 @@ pub mod segment;
 pub mod variation;
 
 pub use kurbo::{
-    Affine, BezPath, CubicBez, Line, ParamCurve, ParamCurveExtrema, ParamCurveNearest, PathEl, Point, QuadBez, QuadSpline, Rect, Shape, Vec2,
-    cubics_to_quadratic_splines, flatten,
+    Affine, BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveExtrema, ParamCurveNearest, PathEl, PathSeg, Point, QuadBez, QuadSpline,
+    Rect, Shape, Vec2, cubics_to_quadratic_splines, flatten,
 };
 pub use segment::{Nearest, NodePoint, NodeType, Piece, Segment, bounds, grid_step, round_point, round_to_grid, segment_ending_at, segments};
 

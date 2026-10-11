@@ -14,6 +14,7 @@
 
 mod address;
 pub mod axes;
+pub mod corner;
 mod extra;
 mod features;
 mod font;

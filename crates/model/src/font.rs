@@ -11,7 +11,7 @@ use fontcraft_geom::{BezPath, Point};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::features::{Features, Group};
-use crate::glyph::{Glyph, Layer, Path, Shape};
+use crate::glyph::{Component, Glyph, Layer, Path, Shape};
 use crate::glyph_info::check_glyph_info;
 use crate::info::{Params, Properties, UserData};
 use crate::kerning::Kerning;
@@ -859,8 +859,14 @@ impl Font {
 
     /// The outline of `glyph` on `master` with its components resolved, in font units.
     ///
+    /// Corner components are fitted into the paths they sit on ([`crate::corner`]) and smart
+    /// components are drawn interpolated ([`crate::smart`]), after the layer's other shapes, as
+    /// the reference compilers order them. A smart component that cannot be interpolated is drawn
+    /// as a plain component.
+    ///
     /// Bounded work: components nest at most [`MAX_COMPONENT_DEPTH`] deep, the result has at most
-    /// [`MAX_OUTLINE_ELEMENTS`] segments, and every point is within [`MAX_COORDINATE`].
+    /// [`MAX_OUTLINE_ELEMENTS`] segments, every point is within [`MAX_COORDINATE`], and at most
+    /// [`crate::smart::MAX_SMART_DRAWS_PER_LAYER`] smart components are drawn.
     pub fn outline(&self, glyph: &str, master: &str) -> Result<BezPath, ModelError> {
         let g = self.glyph(glyph).ok_or_else(|| ModelError::NoSuchGlyph(glyph.to_string()))?;
         self.outline_of(g, master)
@@ -868,11 +874,11 @@ impl Font {
 
     /// [`Font::outline`] for a glyph already in hand (no lookup by name for the glyph itself).
     pub fn outline_of(&self, glyph: &Glyph, master: &str) -> Result<BezPath, ModelError> {
-        let mut budget = MAX_OUTLINE_ELEMENTS;
+        let mut budget = OutlineBudget { elements: MAX_OUTLINE_ELEMENTS, smart_draws: crate::smart::MAX_SMART_DRAWS_PER_LAYER };
         self.outline_at(glyph, master, 0, &mut budget)
     }
 
-    fn outline_at(&self, g: &Glyph, master: &str, depth: usize, budget: &mut usize) -> Result<BezPath, ModelError> {
+    fn outline_at(&self, g: &Glyph, master: &str, depth: usize, budget: &mut OutlineBudget) -> Result<BezPath, ModelError> {
         let glyph = g.name.as_str();
         if depth > MAX_COMPONENT_DEPTH {
             return Err(ModelError::ComponentCycle(glyph.to_string()));
@@ -880,37 +886,88 @@ impl Font {
         let bad = |message: &str| ModelError::BadOutline { glyph: glyph.to_string(), message: message.to_string() };
         let mut out = BezPath::new();
         let Some(layer) = g.layer(master) else { return Ok(out) };
-        for shape in &layer.shapes {
+        let cornered = crate::corner::insert_corners(self, layer).map_err(|e| bad(&e.to_string()))?;
+        let shapes = cornered.as_deref().unwrap_or(&layer.shapes);
+        // Smart components come after the layer's other shapes.
+        let mut tail = BezPath::new();
+        for shape in shapes {
             let part = match shape {
                 Shape::Path(p) => p.to_bez().map_err(|message| bad(&message))?,
                 Shape::Component(c) => {
                     if c.transform.numbers().iter().any(|v| !v.is_finite()) {
                         return Err(bad("a component transform is not a number"));
                     }
-                    let base = self.glyph(&c.glyph).ok_or_else(|| ModelError::NoSuchGlyph(c.glyph.clone()))?;
-                    let mut inner = self.outline_at(base, master, depth + 1, budget)?;
-                    inner.apply_affine(c.affine());
-                    // A transform can push points anywhere: hold the result to the same limits.
-                    let far = |p: Point| !(in_range(p.x) && in_range(p.y));
-                    let off_limits = inner.elements().iter().any(|el| match *el {
-                        fontcraft_geom::PathEl::MoveTo(p) | fontcraft_geom::PathEl::LineTo(p) => far(p),
-                        fontcraft_geom::PathEl::QuadTo(a, p) => far(a) || far(p),
-                        fontcraft_geom::PathEl::CurveTo(a, b, p) => far(a) || far(b) || far(p),
-                        fontcraft_geom::PathEl::ClosePath => false,
-                    });
-                    if off_limits {
-                        return Err(bad(&format!("a component of `{}` puts points beyond ±{MAX_COORDINATE}", c.glyph)));
+                    let drawn = crate::smart::component_shapes(self, c, master, &mut budget.smart_draws).ok().flatten();
+                    if let Some(drawn) = drawn {
+                        let part = self.shapes_outline(&drawn, master, depth + 1, budget, glyph)?;
+                        budget.charge(&part, glyph)?;
+                        tail.extend(part);
+                        continue;
                     }
-                    inner
+                    self.plain_component_outline(c, master, depth + 1, budget, glyph)?
                 }
                 Shape::Image(_) | Shape::Raw(_) => continue,
             };
             // Charge what this glyph adds, including what its components brought, so nested
             // references cannot multiply the work past the budget.
-            *budget = budget.checked_sub(part.elements().len()).ok_or_else(|| ModelError::OutlineTooLarge(glyph.to_string()))?;
+            budget.charge(&part, glyph)?;
             out.extend(part);
         }
+        out.extend(tail);
         Ok(out)
+    }
+
+    /// The outline of shapes a smart component drew: paths as they are, components resolved.
+    fn shapes_outline(&self, shapes: &[Shape], master: &str, depth: usize, budget: &mut OutlineBudget, glyph: &str) -> Result<BezPath, ModelError> {
+        let mut out = BezPath::new();
+        for shape in shapes {
+            match shape {
+                Shape::Path(p) => out.extend(p.to_bez().map_err(|message| ModelError::BadOutline { glyph: glyph.to_string(), message })?),
+                Shape::Component(c) => out.extend(self.plain_component_outline(c, master, depth, budget, glyph)?),
+                Shape::Image(_) | Shape::Raw(_) => {}
+            }
+        }
+        Ok(out)
+    }
+
+    /// The outline the component `c` draws on a layer of `master`, its transform applied: a smart
+    /// component interpolated as [`Font::outline`] draws it, any other its base glyph's outline.
+    pub fn component_outline(&self, c: &Component, master: &str) -> Result<BezPath, ModelError> {
+        let mut budget = OutlineBudget { elements: MAX_OUTLINE_ELEMENTS, smart_draws: crate::smart::MAX_SMART_DRAWS_PER_LAYER };
+        if let Some(drawn) = crate::smart::component_shapes(self, c, master, &mut budget.smart_draws).ok().flatten() {
+            return self.shapes_outline(&drawn, master, 1, &mut budget, &c.glyph);
+        }
+        self.plain_component_outline(c, master, 1, &mut budget, &c.glyph)
+    }
+
+    /// The outline of the plain component `c` of `glyph`: its base glyph's outline, transformed.
+    fn plain_component_outline(
+        &self,
+        c: &Component,
+        master: &str,
+        depth: usize,
+        budget: &mut OutlineBudget,
+        glyph: &str,
+    ) -> Result<BezPath, ModelError> {
+        let bad = |message: String| ModelError::BadOutline { glyph: glyph.to_string(), message };
+        if c.transform.numbers().iter().any(|v| !v.is_finite()) {
+            return Err(bad("a component transform is not a number".into()));
+        }
+        let base = self.glyph(&c.glyph).ok_or_else(|| ModelError::NoSuchGlyph(c.glyph.clone()))?;
+        let mut inner = self.outline_at(base, master, depth, budget)?;
+        inner.apply_affine(c.affine());
+        // A transform can push points anywhere: hold the result to the same limits.
+        let far = |p: Point| !(in_range(p.x) && in_range(p.y));
+        let off_limits = inner.elements().iter().any(|el| match *el {
+            fontcraft_geom::PathEl::MoveTo(p) | fontcraft_geom::PathEl::LineTo(p) => far(p),
+            fontcraft_geom::PathEl::QuadTo(a, p) => far(a) || far(p),
+            fontcraft_geom::PathEl::CurveTo(a, b, p) => far(a) || far(b) || far(p),
+            fontcraft_geom::PathEl::ClosePath => false,
+        });
+        if off_limits {
+            return Err(bad(format!("a component of `{}` puts points beyond ±{MAX_COORDINATE}", c.glyph)));
+        }
+        Ok(inner)
     }
 
     /// The checks that concern the font as a whole (not the inside of any glyph).
@@ -1076,4 +1133,19 @@ fn check_shapes(shapes: &[Shape], bad: &dyn Fn(String) -> ModelError) -> Result<
         }
     }
     Ok(())
+}
+
+/// What resolving one outline may still spend.
+struct OutlineBudget {
+    /// Path elements.
+    elements: usize,
+    /// Smart components drawn.
+    smart_draws: usize,
+}
+
+impl OutlineBudget {
+    fn charge(&mut self, part: &BezPath, glyph: &str) -> Result<(), ModelError> {
+        self.elements = self.elements.checked_sub(part.elements().len()).ok_or_else(|| ModelError::OutlineTooLarge(glyph.to_string()))?;
+        Ok(())
+    }
 }

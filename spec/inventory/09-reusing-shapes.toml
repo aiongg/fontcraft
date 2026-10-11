@@ -913,7 +913,7 @@ milestone = "M6"
 summary = "Smart properties act like variation axes that exist only inside one glyph; each component instance carries its own value per property and the component outline is interpolated from the glyph's smart layers."
 ref = "Reusing Shapes › Smart Components"
 status = "handbook"
-notes = "Documented, not yet observed. At export both oracles draw smart components as outlines when they load the source (glyphsLib `instantiate_smart_component`, fontc `glyphs-reader/src/smart_components.rs`), propagate the interpolated anchors, and keep a plain component when no layer maps to a pole. FontCraft's `model/smart.rs` (M2) draws them the glyphsLib way; M6 uses it in the editor and the compiler. Corpus: 10 smart glyphs and 15 smart components, all in fontc test data and the format samples."
+notes = "Documented, not yet observed. At export both oracles draw smart components as outlines when they load the source (glyphsLib `instantiate_smart_component`, fontc `glyphs-reader/src/smart_components.rs`), propagate the interpolated anchors, and keep a plain component when no layer maps to a pole. FontCraft's `model/smart.rs` (M2) draws them the glyphsLib way. Outline resolution (`Font::outline`, M6.4) draws every smart component through it, after the layer's other shapes as both oracles order them, so the editor, measurements and metrics see the interpolated outline; a smart component that cannot be interpolated is drawn as a plain component, as glyphsLib keeps it (fontc fails the build). Corpus: 10 smart glyphs and 15 smart components, all in fontc test data and the format samples."
 
 [[command]]
 id = "smartGlyph.showSettings"
@@ -1151,7 +1151,10 @@ milestone = "M6"
 summary = "A glyph is a corner glyph when its name starts with _corner. followed by any name (_corner.serif). It holds an open path lying on both sides of the layer origin."
 ref = "Reusing Shapes › Corner Components › Creating Corner Glyphs"
 status = "handbook"
-notes = "Documented, not yet observed. Both oracles apply corner components (the Corner hint type) when they build: glyphsLib's `cornerComponents` filter and fontc's `corner_components.rs`, both Apache-2.0; FontCraft ports fontc's. Corpus: 29 corner hints in 3 sources."
+notes = "Documented, not yet observed. Both oracles apply corner components (the Corner hint type) when they build: glyphsLib's `cornerComponents` filter and fontc's `corner_components.rs`, both Apache-2.0; FontCraft ports fontc's (`model/corner.rs`, M6.4): outline resolution fits every corner of a layer, earlier paths and nodes first, and rounds the inserted nodes to whole units; `corner::insert_all_corner_components` rewrites a whole font the same way for export. Corpus: 29 corner hints in 3 sources."
+guesses = [
+  "Corners are fitted on the layer's stored shapes, whose indices the hints name, before its smart components are drawn; fontc draws smart components first and then reads the indices against the shapes that result, which differs only in a layer that has both. A layer with a smart component before a path with a corner, built in the reference app, settles it.",
+]
 
 [[behavior]]
 id = "corner.originPoint"
@@ -1234,7 +1237,7 @@ milestone = "M6"
 summary = "Chooses how a corner adapts to a diagonal stem. left: the start node follows the diagonal and the end node stays; right: the end node follows and the start node stays; both: a blend of the two; none: neither end is adjusted."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. fontc's `glyphs-reader/src/corner_components.rs` (a port of glyphsLib's `filters/cornerComponents.py`, both Apache-2.0) rotates the corner by the hint's alignment: left aligns to the outgoing segment, right to the incoming one, both to their mean angle, and none leaves it unrotated (fontc's `Alignment` names left and right as the reference does); FontCraft ports it, and the fontmake and fontc builds of the 3 corpus sources with corner hints are the oracle (M6 plan § 5)."
+notes = "Documented, not yet observed. fontc's `glyphs-reader/src/corner_components.rs` (a port of glyphsLib's `filters/cornerComponents.py`, both Apache-2.0) rotates the corner by the hint's alignment: left aligns to the outgoing segment, right to the incoming one, both to their mean angle, and none leaves it unrotated (fontc's `Alignment` names left and right as the reference does; the stored `options` are 0 left, 1 right, 2 both, 4 none, and 3, which the reference also writes, is fitted unrotated); FontCraft ports it (`model/corner.rs`), and the fontmake and fontc builds of the 3 corpus sources with corner hints are the oracle (M6 plan § 5)."
 
 [[command]]
 id = "cornerComponent.editGlyph"
@@ -1320,9 +1323,11 @@ milestone = "M6"
 summary = "The entry point, where the stem runs into the corner, defaults to the layer origin. An anchor named left (named right when the open path faces right) relocates it; the anchor must lie on the line through the origin and the path's start node. Moving it from the start node toward the baseline lengthens the corner on the obtuse side of a diagonal and shortens it on the acute side; moving it the other way does the opposite."
 ref = "Reusing Shapes › Corner Components › Adjusting the Entry Point of a Corner"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle uses the left and right anchors yet (fontc reads them and marks them unused), so sources that have them compile without the shift in both."
+notes = "Documented, not yet observed. Neither oracle uses the left and right anchors yet (fontc reads them and marks them unused), so sources that have them compile without the shift in both. fontc's test source `CornerComponents.glyphs` holds the reference app's output for two corner glyphs with a left anchor: `av_left_anchoroffpath` (anchor on the line through the origin and the start node) shows the corner slid along its baseline until the anchor is on the slanted stem, which FontCraft draws node for node; `au_left_anchoronpath` (anchor off that line, against the handbook's rule) keeps the corner's start node unmoved, which FontCraft does not reproduce."
 guesses = [
-  "The entry anchor shifts the corner along the line through the origin and the start node by the anchor's distance from the origin before the corner is fitted, and the host segment is trimmed at the shifted point; a corner glyph with a left anchor on a diagonal stem in the reference app settles it.",
+  "The entry anchor slides the fitted corner along its own baseline until the anchor lies on the incoming stroke, and the corner is then fitted as without it; the reference app's output for `av_left_anchoroffpath` agrees, and a left anchor on a curved stem in the reference app settles the rest.",
+  "A corner path faces right when its second node lies right of its start node; it then takes `right` as its entry anchor and `left` as its exit anchor. A right-facing corner glyph with both anchors in the reference app settles it.",
+  "A mirrored corner (one negative scale) ignores its entry and exit anchors; a mirrored corner with a left anchor in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -1334,7 +1339,7 @@ ref = "Reusing Shapes › Corner Components › Adjusting the Exit Point of a Co
 status = "handbook"
 notes = "Documented, not yet observed. Neither oracle uses it yet."
 guesses = [
-  "The outline leaves the corner at the exit anchor's fitted position and joins the host's outgoing segment where that segment is nearest to it; a cupped serif in the reference app settles it.",
+  "The exit anchor stands in for the end node when the corner is rotated and when the outgoing segment is cut (where it is nearest to the anchor); the end node stays where it is drawn and the outgoing segment runs on from it. A cupped serif in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -1355,7 +1360,7 @@ ref = "Reusing Shapes › Corner Components › Adjusting the Width and Height"
 status = "handbook"
 notes = "Documented, not yet observed. Neither oracle handles these layers; the file format does not say how the Width and Height percentages are stored."
 guesses = [
-  "The percentages are read from the intermediate layer's name (for example `Width 150 Height 100`) and interpolated linearly per axis, with scales beyond the layers extrapolated and negative scales mirrored after interpolation; a corner glyph saved by the reference app with such a layer settles it.",
+  "The percentages are read from the intermediate layer's name (for example `Width 150 Height 100`, a missing one is 100); on each axis the layers that vary it with the other axis at 100 % are interpolated piecewise linearly with the master layer at 100 %, scales beyond them are extrapolated, negative scales mirror after interpolation, and layers that vary both axes are not used. A corner glyph saved by the reference app with such a layer settles it.",
 ]
 
 [[behavior]]
@@ -1365,6 +1370,7 @@ milestone = "M6"
 summary = "A corner glyph may hold closed paths besides its single open path; they are carried along with the corner as extra shapes inside or outside it. The open path has to be the first shape of the layer (reorder with Filter › Shape Order)."
 ref = "Reusing Shapes › Corner Components › Closed Paths in Corners"
 status = "handbook"
+notes = "Documented, not yet observed. Ported from fontc: the corner glyph's first path is the corner, its other paths are added to the layer after the layer's shapes, fitted with the corner (the reference app's output for `as_closedpaths` in fontc's test source `CornerComponents.glyphs`)."
 
 [[behavior]]
 id = "corner.extraNodesAcceptCorners"
@@ -1373,6 +1379,7 @@ milestone = "M6"
 summary = "Extra nodes, the points where overlapping paths intersect (displayed with View › Show Nodes › Extra Nodes), can take corner components through the same context-menu item. This gives smooth joins or ink traps at stem and crossbar crossings."
 ref = "Reusing Shapes › Corner Components › Extra Nodes"
 status = "handbook"
+notes = "Documented, not yet observed. The file format stores such a corner with a four-number origin: a path and the node ending one segment, and a path and the node ending the other (GlyphsSDK file-format specification v3, `indexPath`); fontc reads only the first two numbers. FontCraft reads all four and leaves these corners out of outlines: fitting one needs the two paths' overlap removed first, which the model's outline resolution cannot do."
 
 # =====================================================================================
 # Cap components
