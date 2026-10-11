@@ -47,6 +47,7 @@ effect = "features"
 summary = "Adds an OpenType glyph class at export. The value is the class name without the leading @, then a semicolon, then the class contents."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Add Feature"
@@ -58,6 +59,7 @@ effect = "features"
 summary = "Adds an OpenType feature at export. The value is the feature tag, a semicolon, then the feature code; the new feature goes to the end of the feature list, so its position among the other features may be wrong."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Add Prefix"
@@ -69,6 +71,7 @@ effect = "features"
 summary = "Adds a feature-code prefix at export. The value is the prefix name, a semicolon, then the prefix code."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "ascender"
@@ -538,11 +541,12 @@ name = "Export AAT"
 scope = []
 kind = "bool"
 area = "features"
-milestone = "M8"
+milestone = "M14"
 effect = "other"
 summary = "By default, morx instructions entered as a feature prefix are built into a morx table; setting this off suppresses that and gives a pure OpenType font."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Moved to M14 by the M8 planning pass, with the other Mac-only stand-ins (open decision D10): building morx needs Apple's external ftxenhancer tool in the reference, fontTools and the fontations crates have no MIF compiler, and no corpus source uses it."
 
 [[parameter]]
 name = "Export COLR Table"
@@ -613,22 +617,24 @@ name = "Export morx Table"
 scope = []
 kind = "bool"
 area = "features"
-milestone = "M8"
+milestone = "M14"
 effect = "other"
 summary = "Adds a morx table built from the feature prefix named `morx`, which must contain metamorphosis input (MIF) code. In the reference this depends on Apple's external ftxenhancer tool being installed."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Moved to M14 by the M8 planning pass, with the other Mac-only stand-ins (open decision D10): building morx needs Apple's external ftxenhancer tool in the reference, fontTools and the fontations crates have no MIF compiler, and no corpus source uses it."
 
 [[parameter]]
 name = "Export OpenType"
 scope = []
 kind = "bool"
 area = "features"
-milestone = "M8"
+milestone = "M14"
 effect = "other"
 summary = "Setting this off leaves out most OpenType tables; with morx code present in a feature prefix the result is a pure AAT font. The source does not list which tables are affected."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Moved to M14 by the M8 planning pass, with the other Mac-only stand-ins (open decision D10): building morx needs Apple's external ftxenhancer tool in the reference, fontTools and the fontations crates have no MIF compiler, and no corpus source uses it."
 
 [[parameter]]
 name = "Export PostScript Hints"
@@ -1040,6 +1046,7 @@ effect = "features"
 summary = "Works around Microsoft applications that ignore kerning outside the first lookup. When off, kerning is split into lookups by glyph category."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Keep Overlapping Components"
@@ -1075,6 +1082,7 @@ effect = "features"
 summary = "Changes the generated cjct feature so conjuncts do not stack vertically, for user-interface fonts with limited vertical room. The source says it is only implemented for Oriya."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "licenses"
@@ -1143,11 +1151,12 @@ name = "MakeOTF Compatibility Mode"
 scope = []
 kind = "bool"
 area = "features"
-milestone = "M8"
+milestone = "M12"
 effect = "features"
 summary = "When checked, the compiled layout tables are made comparable to makeotf output, for feature code written against makeotf behaviour or for applications that rely on it."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Moved to M12 by the M8 planning pass, with the makeotf-compatible compile mode (`compile.makeotfReleaseMode` and the other `docs/spec/40-compile.md` § 1.11 rows): the handbook does not say which layout differences it removes, and fea-rs has no such mode."
 
 [[parameter]]
 name = "manufacturers"
@@ -1295,6 +1304,7 @@ effect = "features"
 summary = "Five semicolon-separated values: design size in decipoints; subfamily identifier (integer shared by fonts to be grouped); range start (exclusive) and range end (inclusive) in decipoints; size menu name. Example `180; 2; 139; 240; Eighteen` declares an 18 pt design for use above 13.9 pt up to and including 24 pt, named Eighteen."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Optimize Variable Deltas"
@@ -1495,6 +1505,7 @@ effect = "features"
 summary = "List of class names not to export, for hand-written classes that refer to glyphs removed by subsetting. Automatic classes already disappear when the glyphs that trigger them are gone."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Remove Features"
@@ -1506,6 +1517,7 @@ effect = "features"
 summary = "List of feature tags not to export, for an unwanted auto-generated feature or to switch a manual feature off in one instance. Automatic features already disappear when the glyphs that trigger them are gone."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Remove Glyphs"
@@ -1544,6 +1556,7 @@ effect = "features"
 summary = "List of prefix names as defined in the Features tab; their code is not compiled into the exported font."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Rename Glyphs"
@@ -1570,6 +1583,7 @@ effect = "features"
 summary = "Value is the class name without @, a semicolon, then the new contents. Only works for a class that exists in the Features tab and is only needed for manual classes."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Replace Feature"
@@ -1581,6 +1595,7 @@ effect = "features"
 summary = "Value is the four-letter feature tag, a semicolon, then the new code. Only works when that feature exists in the Features tab."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Replace Prefix"
@@ -1592,6 +1607,7 @@ effect = "features"
 summary = "Value is the prefix name exactly as written in the Features tab, a semicolon, then the replacement code."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "ROS"
@@ -2087,6 +2103,7 @@ effect = "features"
 summary = "When on, all automatic feature code is regenerated, which helps while the glyph set is changing; when explicitly off, automatic feature generation is suppressed."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed. Without the parameter, automatic entries are regenerated for each export target, as the handbook says automatic code adapts to each instance; set to off, the stored automatic code is compiled as it is."
 
 [[parameter]]
 name = "Use Arabic Presentation Form Unicodes"
@@ -2113,6 +2130,7 @@ effect = "features"
 summary = "When checked, additional kerning lookups are written as GPOS extension lookups (type 9), which use 32-bit offsets and so hold more kerning. For fonts whose export fails with a GPOS offset overflow."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "Use Line Breaks"

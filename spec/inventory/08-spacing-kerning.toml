@@ -1741,6 +1741,7 @@ milestone = "M8"
 summary = "The user may add a feature named kern in Font Info › Features to hold hand-written positioning rules, typically contextual kerning that looks at more than two glyphs (for example extra space after f when a space and then T, V, W or Y follow). How the hand-written code is combined with the implicit pair kerning is not stated."
 ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "kerning.groupClassNames"
@@ -1749,6 +1750,7 @@ milestone = "M8"
 summary = "Every kerning group is available in feature code as a glyph class named after the side of the pair it occupies: a glyph's left group G is @MMK_R_G (it is used when the glyph is the right member of a pair) and a right group G is @MMK_L_G (used when the glyph is the left member). So left group H gives @MMK_R_H and right group quote gives @MMK_L_quote."
 ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "kerning.kernCodeTokens"
@@ -1757,3 +1759,4 @@ milestone = "M8"
 summary = "Hand-written kerning code may use feature-code tokens, so adjustment values can be derived from a master's number values or from glyph sidebearings instead of being hard-coded."
 ref = "Spacing & Kerning › Kerning › Manual Kerning Code"
 status = "handbook"
+notes = "Documented, not yet observed."

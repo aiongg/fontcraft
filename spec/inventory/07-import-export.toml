@@ -681,6 +681,7 @@ milestone = "M8"
 summary = "OpenType layout from a compiled font is turned back into feature code shown in Font Info › Features, but not every feature can be rebuilt. A lookup referenced by more than one feature is emitted once, in a prefix entry named Prefix, and referenced from the features."
 ref = "Import & Export › Opening Font Files › Importing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "open.kerningMostlyPreserved"
@@ -900,6 +901,7 @@ milestone = "M8"
 summary = "Reads a feature file in AFDKO syntax (.fea) and adds the features it contains to the font's feature list in Font Info › Features. How name clashes with existing features, classes and prefixes are resolved is not stated."
 ref = "Import & Export › Importing Font Data › Importing Feature Files"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[panel]]
 id = "dialog.importFeatures"
@@ -911,6 +913,7 @@ milestone = "M8"
 summary = "File chooser for the feature file to import."
 ref = "Import & Export › Importing Font Data › Importing Feature Files"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 # ───────────────────────────── Pasting from vector drawing applications ─────────────────────────────
 

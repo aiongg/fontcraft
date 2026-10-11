@@ -2396,6 +2396,7 @@ milestone = "M8"
 summary = "A name may carry several dot suffixes in a row. Automatic features only work when the suffixes follow the order of the features in Font Info, so a small cap in stylistic set 2 is h.sc.ss02, not h.ss02.sc."
 ref = "Font View › Names & Unicode › Glyph Naming Rules"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "glyphName.ligature"

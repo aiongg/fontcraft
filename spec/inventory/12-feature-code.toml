@@ -36,6 +36,7 @@ milestone = "M8"
 summary = "Suggestion menu that appears while a glyph name, class name or lookup name is being typed in the code editor, for example after `sub` or after `lookup`."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[panel]]
 id = "fontInfo.featureNamePreview"
@@ -50,6 +51,7 @@ milestone = "M8"
 summary = "Popover opened by Option-clicking a glyph name or class name in the code editor: shows the glyph, or for a class all member glyphs."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[panel]]
 id = "fontInfo.featureTokenPreview"
@@ -64,6 +66,7 @@ milestone = "M8"
 summary = "Popover opened by Option-clicking a token in the code editor: a number value or glyph property token shows its computed value, a predicate token shows every glyph it matches."
 ref = "Feature Code › Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[panel]]
 id = "fontInfo.featureErrorDetails"
@@ -78,6 +81,7 @@ milestone = "M8"
 summary = "Opened by clicking an inline error icon in the code editor: gives the long form of the compile error and, for errors marked with a wrench, a Fix button that applies the suggested correction."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[panel]]
 id = "fontInfo.featureSnippetsMenu"
@@ -93,6 +97,7 @@ milestone = "M8"
 summary = "Menu behind the snippets button at the bottom right of the Features tab. Choosing a snippet inserts its code into the editor; Show Snippet Folder reveals the folder where user snippet files live."
 ref = "Appendix › Custom Feature Code Snippets"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 # ----------------------------------------------------------------------------
 # Commands
@@ -110,6 +115,9 @@ milestone = "M8"
 summary = "Changes the order of entries within one sidebar group; the order of features sets the order of feature blocks in the generated file and the expected order of chained name suffixes. Dragging in the sidebar is assumed; the handbook only states that the order matters."
 ref = "Font View › Glyph Naming Rules; Font Info › Features › Editing Feature Code"
 status = "inferred"
+guesses = [
+  "Entries are dragged within their group, and the order of features is the order of feature blocks and of chained suffixes; the running app would settle whether dragging exists.",
+]
 
 [[command]]
 id = "font.features.showErrorDetails"
@@ -123,6 +131,7 @@ milestone = "M8"
 summary = "Opens the expanded description of an inline error; triggered by clicking its error icon in the editor."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.evaluateToken"
@@ -136,6 +145,7 @@ milestone = "M8"
 summary = "Query: evaluates one feature-code token and returns the number for number-value and glyph-property tokens or the glyph list for predicate tokens. Backs the Option-click token popover."
 ref = "Feature Code › Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.expandCode"
@@ -162,6 +172,10 @@ milestone = "M8"
 summary = "Reveals the folder in which user snippet files are placed."
 ref = "Appendix › Custom Feature Code Snippets"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The snippet folder is `snippets/` inside FontCraft's configuration folder, created on first use; the reference's folder is inside its application support folder, which the running app would show.",
+]
 
 [[command]]
 id = "font.expandTextTokens"
@@ -214,14 +228,19 @@ milestone = "M8"
 summary = "A class entry holds only member names separated by spaces or line breaks, without `@name =` or brackets; predicate tokens may be mixed in with literal names. It is emitted as `@Name = [ ... ];`."
 ref = "Font Info › Features › Editing Feature Code; Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureEditor.outputOrder"
 area = "features"
 milestone = "M8"
-summary = "The generated feature file is assembled as language systems, classes, prefixes and then features, each group in sidebar order. The handbook only says prefix code is placed before feature code; the position of classes and of the languagesystem lines is assumed."
+summary = "The generated feature file is assembled as classes, then prefixes, then features, each group in sidebar order, as both reference compilers assemble a source's code; the language systems sit in the automatic Languagesystems prefix. The handbook only says prefix code is placed before feature code."
 ref = "Font Info › Features › Editing Feature Code"
 status = "inferred"
+notes = "Checked in the M8 planning pass: glyphsLib (`builder/features.py`) and fontc (`glyphs-reader`, `font.rs`) both write all classes, then all prefixes, then all features, separated by blank lines."
+guesses = [
+  "Classes come before prefixes, as both reference compilers assemble them; the expanded code of a reference export whose prefix uses a class would settle the reference app's own order.",
+]
 
 [[behavior]]
 id = "featureEditor.featureBody"
@@ -230,6 +249,7 @@ milestone = "M8"
 summary = "A feature entry stores only the body; the surrounding `feature tag { ... } tag;` wrapper is added when the file is assembled. Assumed from the examples, which show bare rules."
 ref = "Font Info › Features › Editing Feature Code"
 status = "inferred"
+notes = "Both reference compilers wrap a feature's stored code in `feature tag { … } tag;`, and every corpus source stores bare bodies (M8 planning pass)."
 
 [[behavior]]
 id = "featureEditor.afdkoSyntax"
@@ -247,9 +267,13 @@ status = "inferred"
 id = "implicit.markerMissing"
 area = "features"
 milestone = "M8"
-summary = "What happens to an explicit kern or mark feature that has no `# Automatic Code` line (generated code appended, prepended or dropped) is not stated in the handbook; FontCraft appends the generated lookups after the manual code until observed otherwise."
+summary = "An explicit kern feature without a `# Automatic Code` line gets the generated kerning after its own code, as both reference compilers add the line at its end; an explicit mark, mkmk, abvm, blwm, curs or dist feature without the line gets none of that generated feature (the skip mode of `compile.featureWriterModes`). The handbook does not say."
 ref = "Font Info › Features › Implicit Features"
 status = "inferred"
+notes = "Checked in the M8 planning pass: glyphsLib and fontc append `# Automatic Code` to a manual kern feature that lacks it; ufo2ft's and fontc's writers skip a generated feature the code already has."
+guesses = [
+  "Generated kerning follows a hand-written kern feature and a hand-written mark-family feature replaces the generated one, as glyphsLib and fontc do; a reference export of a font with a hand-written mark feature without the line would settle it.",
+]
 
 [[behavior]]
 id = "implicit.markZeroWidth"
@@ -258,6 +282,7 @@ milestone = "M8"
 summary = "Combining marks used for mark attachment are exported with zero advance width."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "Built by M2 (`compile.nonSpacingMarkWidth`): non-spacing marks get advance 0 in a static build, as both oracles do. M8 checks it again with feature code compiled."
 
 # ----------------------------------------------------------------------------
 # Behaviours: Tokens
@@ -270,6 +295,7 @@ milestone = "M8"
 summary = "Feature-code tokens start with `$` and are replaced by text before compilation. Three kinds exist: number values (`$name`, `${expr}`), glyph properties (`${glyph:path}`) and glyph predicates (`$[...]`)."
 ref = "Feature Code › Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.expansionTiming"
@@ -278,6 +304,7 @@ milestone = "M8"
 summary = "Tokens are evaluated separately for each export target (static instance, variable font, preview master) just before compiling, never stored expanded in the source."
 ref = "Feature Code › Tokens"
 status = "inferred"
+notes = "glyphsLib expands tokens per master before compiling (`TokenExpander`); fontc leaves number values to fea-rs and expands nothing else. FontCraft expands every token itself, so one source map covers all of them (M8 planning pass)."
 
 [[behavior]]
 id = "token.numberValue.simple"
@@ -286,6 +313,7 @@ milestone = "M8"
 summary = "`$name` inserts the master number value called name, defined under Font Info > Masters > Number Values."
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.numberValue.interpolated"
@@ -294,6 +322,7 @@ milestone = "M8"
 summary = "With several masters the inserted number is interpolated for the instance being built."
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.numberValue.arithmetic"
@@ -302,6 +331,7 @@ milestone = "M8"
 summary = "`${name*2}` evaluates an expression with +, -, * and /. The number value name must come first in the expression."
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.numberValue.expressionDetails"
@@ -310,6 +340,9 @@ milestone = "M8"
 summary = "Details the handbook leaves open: fea-rs, which implements this token, accepts several operators and numeric literals (including decimals and negatives) in one expression, gives * and / precedence over + and -, allows spaces, and rounds the result to an integer. FontCraft follows that."
 ref = "fea-rs test-data/parse-tests/good/glyphsapp_number_value.fea; Feature Code › Number Value Tokens"
 status = "docs"
+guesses = [
+  "Results are rounded half away from zero, as fea-rs rounds, where glyphsLib truncates, and division by zero is a compile error at the token; an expression giving 2.5 exported from the reference app would settle the rounding.",
+]
 
 [[behavior]]
 id = "token.numberValue.variable"
@@ -326,6 +359,7 @@ milestone = "M8"
 summary = "A token naming a number value that no master defines is a compile error reported at the token. Assumed; the handbook does not say."
 ref = "Feature Code › Number Value Tokens"
 status = "inferred"
+notes = "glyphsLib stops the build with an error naming the token (`builder/tokens.py`); fea-rs reports an error at the token. FontCraft reports a compile error at the token, mapped to its entry (M8 planning pass)."
 
 [[behavior]]
 id = "token.numberValue.inspect"
@@ -334,6 +368,10 @@ milestone = "M8"
 summary = "Option-clicking a number value token shows the value it currently evaluates to."
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Option-click evaluates the token for the master of the active Edit View tab, else the first master; Option-clicking a token in a two-master font with the second master showing in the reference app would settle it.",
+]
 
 [[behavior]]
 id = "token.glyphProperty.syntax"
@@ -342,6 +380,7 @@ milestone = "M8"
 summary = "`${glyphName:property}` inserts a number read from a glyph's layer; property is a dot-separated path."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.glyphProperty.metrics"
@@ -350,6 +389,7 @@ milestone = "M8"
 summary = "Metric properties are width, LSB, RSB, TSB and BSB."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.glyphProperty.anchors"
@@ -358,6 +398,7 @@ milestone = "M8"
 summary = "Anchor coordinates are read as anchors.<name>.x and anchors.<name>.y, for example `${h:anchors.top_tall.x}` inside an `<anchor ...>`."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.glyphProperty.arithmetic"
@@ -366,6 +407,7 @@ milestone = "M8"
 summary = "The same arithmetic as number tokens is allowed after the property: `${comma:RSB*3}`."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.glyphProperty.layerChoice"
@@ -374,6 +416,10 @@ milestone = "M8"
 summary = "The value comes from the glyph's layer for the master or interpolated instance being compiled. Assumed by analogy with number values; other key paths than metrics and anchors are not documented."
 ref = "Feature Code › Glyph Property Tokens"
 status = "inferred"
+notes = "glyphsLib reads the glyph's layer of the master being built and any layer attribute by name; an unknown property or a missing anchor stops the build (`builder/tokens.py`). fea-rs has no glyph property tokens."
+guesses = [
+  "Only the documented properties (width, LSB, RSB, TSB, BSB, anchors.<name>.x and .y) are accepted and any other is an error naming it; Option-clicking a token with another layer property in the reference app would show what else exists.",
+]
 
 [[behavior]]
 id = "token.glyphProperty.inspect"
@@ -382,6 +428,7 @@ milestone = "M8"
 summary = "Option-clicking a glyph property token shows its value."
 ref = "Feature Code › Glyph Property Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.syntax"
@@ -390,6 +437,7 @@ milestone = "M8"
 summary = "`$[predicate]` expands to the names, separated by spaces, of all glyphs for which the predicate is true."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.inClassEntry"
@@ -398,6 +446,7 @@ milestone = "M8"
 summary = "Inside a class entry a predicate token stands directly among literal names: `hyphen endash $[category == \"Number\"]`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.inCode"
@@ -406,6 +455,7 @@ milestone = "M8"
 summary = "In prefix and feature code the token must sit inside class brackets: `@Minuscule = [$[case == lower]];`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.boolean"
@@ -414,6 +464,7 @@ milestone = "M8"
 summary = "Boolean glyph properties are compared with true or false: `isAligned == false`, `hasHints == true`, `isColorGlyph == false`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.numeric"
@@ -422,6 +473,7 @@ milestone = "M8"
 summary = "Numeric properties are compared with numbers: `countOfLayers > 2`, `countOfUnicodes == 1`. Only == and > appear in the handbook; <, <=, >=, != are assumed."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.colorIndex"
@@ -430,6 +482,7 @@ milestone = "M8"
 summary = "`colorIndex == N` tests the glyph's colour label by its number."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.case"
@@ -438,6 +491,7 @@ milestone = "M8"
 summary = "`case == X` compares against the bare words noCase, upper, lower, smallCaps, minor or other."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.direction"
@@ -446,6 +500,7 @@ milestone = "M8"
 summary = "`direction == X` compares against the bare words LTR, BIDI or RTL."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.string"
@@ -454,6 +509,7 @@ milestone = "M8"
 summary = "String properties (name, script, category, also note) are compared with quoted strings using == , endswith or contains: `name endswith \".tf\"`, `script == \"armenian\"`, `category == \"Mark\"`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.stringOperators"
@@ -470,6 +526,7 @@ milestone = "M8"
 summary = "Nested data is reached with dotted paths: `layer.anchors.center.y > 250`, `layer.maxX > 520`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.tags"
@@ -478,6 +535,7 @@ milestone = "M8"
 summary = "Membership uses `in`: `\"draft\" in tags` is true for glyphs that carry that tag."
 ref = "Feature Code › Glyph Predicate Tokens; Font View › Tags"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.logic"
@@ -486,6 +544,7 @@ milestone = "M8"
 summary = "Predicates combine with AND and OR, NOT negates the predicate that follows, and parentheses group: `\"draft\" in tags OR (\"math\" in tags AND case == upper)`."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.classFunction"
@@ -494,6 +553,7 @@ milestone = "M8"
 summary = "`class(Name)` stands for the members of the feature class @Name, so `name in class(Round) AND name in class(Tall)` yields the intersection of two classes."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.resultOrder"
@@ -502,6 +562,10 @@ milestone = "M8"
 summary = "Matching glyphs are listed in the font's glyph order, as fea-rs does. Whether non-exporting glyphs are left out is not documented; FontCraft leaves them out for export targets."
 ref = "fea-rs test-data/compile-tests/mini-latin/good/glyphs_app_predicate.fea"
 status = "inferred"
+notes = "glyphsLib lists matching glyphs in glyph order and leaves out non-exporting glyphs (`builder/tokens.py`), as FontCraft does for export targets (M8 planning pass)."
+guesses = [
+  "The Edit View preview target also leaves out non-exporting glyphs, as export targets do; Option-clicking a predicate token in a font with a non-exporting match would settle it.",
+]
 
 [[behavior]]
 id = "token.predicate.emptyResult"
@@ -518,6 +582,7 @@ milestone = "M8"
 summary = "Option-clicking a predicate token lists every glyph it currently matches."
 ref = "Feature Code › Glyph Predicate Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "token.predicate.compilerSupport"
@@ -650,6 +715,7 @@ milestone = "M8"
 summary = "`delete glyph;` (short form `del`) removes every occurrence of the glyph from the text run."
 ref = "Feature Code › Deleting Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.deleteContextual"
@@ -658,6 +724,7 @@ milestone = "M8"
 summary = "With a context, the glyph to remove is marked with `'` and the surrounding glyphs or classes are written around it: `delete brevecomb' Omega;`."
 ref = "Feature Code › Deleting Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.deleteLowering"
@@ -666,6 +733,7 @@ milestone = "M8"
 summary = "`delete` is not standard; it means the same as `sub glyph by NULL;` (also contextually), which is what FontCraft emits."
 ref = "Feature Code › Deleting Glyphs"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.standaloneLookup"
@@ -674,6 +742,7 @@ milestone = "M8"
 summary = "`standalone lookup name { ... } name;` inside a feature defines a lookup at that place in the lookup order without applying it through the feature; it runs only where another rule calls it."
 ref = "Feature Code › Standalone Lookups"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.standaloneRedundant"
@@ -682,14 +751,18 @@ milestone = "M8"
 summary = "On a lookup defined outside any feature the `standalone` keyword changes nothing and is ignored."
 ref = "Feature Code › Standalone Lookups"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.standaloneLowering"
 area = "features"
 milestone = "M8"
-summary = "Standard syntax has no way to define a lookup inside a feature without registering it, so the compiler front end must support this natively (create the lookup in order, skip the feature registration). fea-rs does not have the keyword."
+summary = "Standard syntax has no way to define a lookup inside a feature without registering it. FontCraft lowers it by closing the feature block before the lookup, defining the lookup at top level and reopening the feature with its current script, language and lookupflag statements repeated: blocks with one tag add up, and lookups are ordered by their place in the file. fea-rs does not have the keyword."
 ref = "Feature Code › Standalone Lookups"
 status = "inferred"
+guesses = [
+  "The split-block lowering keeps the lookup's place in lookup order and leaves it out of the feature; a reference export of a feature with a standalone lookup, read back with a font tool, would settle it.",
+]
 
 [[behavior]]
 id = "featureCode.optionalLookupEndName"
@@ -698,6 +771,7 @@ milestone = "M8"
 summary = "A lookup block may end with `};` without repeating its name."
 ref = "Feature Code › Optional Closing Lookup Name"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.multipleLanguages"
@@ -706,6 +780,7 @@ milestone = "M8"
 summary = "`language` accepts several tags, `language CAT ESP GAL;`, and the rules that follow apply to each as if the statement and rules were repeated per language."
 ref = "Feature Code › Multiple Languages Syntax"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.multipleLanguagesCompiler"
@@ -722,6 +797,7 @@ milestone = "M8"
 summary = "One-to-many substitutions may use classes, plain or contextual: `sub @Bracket by @BracketUpper @BracketLower;`. All classes must have the same number of members and are paired by position."
 ref = "Feature Code › Multiple Substitution With Classes"
 status = "handbook"
+notes = "Documented, not yet observed. fea-rs accepts classes on both sides of a multiple substitution; FontCraft passes the rule through and reports unequal class sizes with fea-rs's message."
 
 [[behavior]]
 id = "featureCode.multipleSubstitutionSingletons"
@@ -730,6 +806,7 @@ milestone = "M8"
 summary = "A single glyph or one-member class on either side of such a rule is repeated to match the size of the other classes."
 ref = "Feature Code › Multiple Substitution With Classes"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.lookupflagReplaces"
@@ -738,6 +815,7 @@ milestone = "M8"
 summary = "A lookupflag statement does not add to earlier flags; it discards them and sets exactly the flags it lists."
 ref = "Feature Code › Lookup Flags"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.emptyLookupflag"
@@ -746,6 +824,7 @@ milestone = "M8"
 summary = "`lookupflag;` with no flags clears all flags, equivalent to the standard `lookupflag 0;`."
 ref = "Feature Code › Lookup Flags"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 # ----------------------------------------------------------------------------
 # Behaviours: Feature code with multiple masters
@@ -758,6 +837,7 @@ milestone = "M8"
 summary = "One set of prefixes, classes and features serves all masters and instances; per-design differences come from tokens, implicit features and per-instance parameters, not from separate feature files."
 ref = "Font Info › Features › Implicit Features; Feature Code › Tokens"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "featureCode.mm.staticVersusVariable"
@@ -778,6 +858,10 @@ milestone = "M8"
 summary = "Update can create and refresh automatic classes; the handbook names All and uses @Uppercase in a cpsp example but does not list the full set. The list must be collected from the running application."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "inferred"
+notes = "The reference's stored output in the corpus has these automatic classes: Uppercase (8 sources), AllLetters (2), Lowercase (2) and All (2), each one line of glyph names in glyph order (M8 planning pass)."
+guesses = [
+  "Update generates Uppercase, Lowercase and AllLetters when the font has such glyphs, and All only when added by hand; which other classes Update offers would be settled in the running app.",
+]
 
 # ----------------------------------------------------------------------------
 # Behaviours: Automatic feature generation
@@ -790,6 +874,10 @@ milestone = "M8"
 summary = "Feature generation is driven by glyph names: a dot suffix (or a feature tag used as suffix) creates a substitution from the unsuffixed glyph, underscore-joined names create ligatures, and certain glyph sets or anchors trigger the rest. Each tag has its own autoFeature.<tag> row."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "A ligature name goes to liga when it is on the handbook's list or has `.liga`, to dlig with `.dlig`, to hlig when it contains longs or has `.hlig` or `.hist`, to rlig with `.rlig` or on the lam-alef list, and to dlig otherwise, the first match winning in that order; Update on a font with f_f_i.dlig and longs_t would settle it.",
+]
 
 [[behavior]]
 id = "autoFeature.languageSystems"
@@ -798,6 +886,10 @@ milestone = "M8"
 summary = "Generated code is preceded by languagesystem statements for the scripts in the font. The handbook does not describe this; expected as an automatic prefix and to be confirmed."
 ref = "Appendix › Automatic Feature Generation"
 status = "inferred"
+notes = "The reference's stored output in the corpus has an automatic prefix named Languagesystems in 14 sources: `languagesystem DFLT dflt;`, a blank line, `languagesystem latn dflt;` and one `languagesystem latn XXX;` line per language the locl feature uses (M8 planning pass)."
+guesses = [
+  "Besides DFLT dflt, one `dflt` line per script of the font's exporting glyphs in script-tag order, then the locl languages of each script; Update on a font with Latin, Cyrillic and Greek glyphs would settle the order.",
+]
 
 [[behavior]]
 id = "autoFeature.aalt"
@@ -806,6 +898,10 @@ milestone = "M8"
 summary = "aalt (All Alternatives). Trigger: At least one other feature in the font substitutes glyphs. Generated: Built from every substituting feature in the list; expected form is one `feature <tag>;` line per such feature, leaving the grouping to the compiler (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (7 sources): only `feature xxxx;` lines, one per substituting feature in the font's feature order (M8 planning pass)."
+guesses = [
+  "Generated as one `feature xxxx;` line per other feature with substitutions, in sidebar order, leaving the grouping to the compiler, as the corpus shows; cv features and features listed after aalt included.",
+]
 
 [[behavior]]
 id = "autoFeature.liga"
@@ -814,6 +910,10 @@ milestone = "M8"
 summary = "liga (Standard Ligatures). Trigger: A ligature glyph, i.e. a name made of component names joined by underscores. Only f_f_i, f_f_l, f_f, fi, fl, lu_lakkhangyao-thai and ru_lakkhangyao-thai land here by default; any other ligature is forced in by a `.liga` suffix (f_b.liga, yi_yi-cy.liga). Generated: One ligature rule per glyph, `sub <components> by <ligature>;`, with the components read from the name parts (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (3 sources): `lookupflag IgnoreMarks;` in the newer files, then one ligature rule per glyph, longest sequences first (`sub f f i by f_f_i;` before `sub f i by fi;`) (M8 planning pass)."
+guesses = [
+  "Generated code starts with `lookupflag IgnoreMarks;`, as the newer corpus files have it, and lists longer ligatures first; Update on a font with f_f_i, fi and a mark would settle it.",
+]
 
 [[behavior]]
 id = "autoFeature.dlig"
@@ -822,6 +922,10 @@ milestone = "M8"
 summary = "dlig (Discretionary Ligatures). Trigger: Any underscore-joined ligature name that no other ligature feature claims, e.g. f_odieresis. Generated: One ligature rule per glyph from its name parts (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (2 sources): as liga, `lookupflag IgnoreMarks;` in the newer file (M8 planning pass)."
+guesses = [
+  "Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with f_odieresis would settle it.",
+]
 
 [[behavior]]
 id = "autoFeature.hlig"
@@ -830,6 +934,10 @@ milestone = "M8"
 summary = "hlig (Historical Ligatures). Trigger: Ligatures that contain longs as a component, or ligature names ending in `.hlig` or `.hist`. Generated: One ligature rule per glyph from its name parts (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with such ligatures would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.rlig"
@@ -838,6 +946,10 @@ milestone = "M8"
 summary = "rlig (Required Ligatures). Trigger: Ligature names ending in `.rlig`, and the Arabic lam-alef set: lam_alef-ar, lam_alefHamzaabove-ar, lam_alefHamzabelow-ar, lam_alefMadda-ar, lam_alefWasla-ar and the `.fina` form of each. Generated: One ligature rule per glyph from its name parts (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated like liga, with `lookupflag IgnoreMarks;` and longer ligatures first; Update on a font with such ligatures would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.c2sc"
@@ -846,6 +958,10 @@ milestone = "M8"
 summary = "c2sc (Small Capitals from Capitals). Trigger: Glyphs ending in `.sc`, `.c2sc` or `.smcp`. To keep two separate sets, put `.c2sc` on uppercase base names and `.smcp` on lowercase base names. Generated: Single substitutions from each capital to its small-cap glyph; with a shared `.sc` set the capital maps to the small cap named after the lowercase letter (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "With a shared `.sc` set each capital maps to the small cap named after its lowercase letter (`sub A by a.sc;`), with a `.c2sc` set to its own suffix; Update on a font with A, a and a.sc would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.smcp"
@@ -854,6 +970,10 @@ milestone = "M8"
 summary = "smcp (Small Capitals). Trigger: Glyphs ending in `.sc` or `.smcp`. Generated: Single substitutions `sub a by a.sc;` from each base glyph to its suffixed form."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.c2pc"
@@ -862,6 +982,10 @@ milestone = "M8"
 summary = "c2pc (Petite Capitals from Capitals). Trigger: Glyphs ending in `.pc`, `.c2pc` or `.pcap`. Generated: Single substitutions from each capital to its petite-cap glyph (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.pcap"
@@ -870,6 +994,10 @@ milestone = "M8"
 summary = "pcap (Petite Capitals). Trigger: Glyphs ending in `.pc` or `.pcap`. Generated: Single substitutions from each base glyph to its suffixed form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.sups"
@@ -878,6 +1006,7 @@ milestone = "M8"
 summary = "sups (Superscript). Trigger: Glyphs ending in `.sups`, or figure names with `superior` appended and no period (onesuperior). Generated: Single substitutions from the default glyph to the superior form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (5 sources): one `sub X by X.sups;` line per glyph; Oswald also maps figures to the unsuffixed superior names (`sub one by onesuperior;`) (M8 planning pass)."
 
 [[behavior]]
 id = "autoFeature.subs"
@@ -886,6 +1015,10 @@ milestone = "M8"
 summary = "subs (Subscript). Trigger: Names with `inferior` appended, or ending in `.sinf` or `.subs`. A single `.subs` set is enough: it feeds both subs and sinf. Generated: Single substitutions from the default glyph to the inferior form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.sinf"
@@ -894,6 +1027,10 @@ milestone = "M8"
 summary = "sinf (Scientific Inferiors). Trigger: Same glyphs as subs: `inferior` names, `.sinf` or `.subs`. Generated: Single substitutions from the default glyph to the inferior form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.afrc"
@@ -902,6 +1039,10 @@ milestone = "M8"
 summary = "afrc (Alternative Fractions). Trigger: The font has figures, slash and at least one nut-fraction glyph, named as numerator word, `over`, denominator word, from the fixed list (oneovertwo, zerooverthree, oneoverthree ... tenovereleven, elevenovertwelve, oneoveronehundred). Generated: One ligature-style rule per nut fraction, replacing the figure-slash-figure sequence with the fraction glyph (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One ligature rule per nut fraction from the figures, slash and figures it names; Update on a font with oneovertwo would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.frac"
@@ -910,6 +1051,10 @@ milestone = "M8"
 summary = "frac (Fractions). Trigger: `.numr` and `.dnom` figures plus the fraction glyph. Without them, the feature falls back to whatever precomposed fractions exist. Generated: With numerators and denominators: contextual rules that turn figures before the fraction slash into numerators and figures after it into denominators, and slash into fraction; in the fallback case: ligature rules onto the precomposed fractions (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (3 Oswald sources): only the fallback, ligature rules onto precomposed fractions (`sub one slash four by onequarter;`); no source stores the numerator and denominator form (M8 planning pass)."
+guesses = [
+  "With `.numr` and `.dnom` figures, fraction gets three lookups: figures to numerators, figures after fraction or a numerator to denominators, slash between figures to fraction; Update on a font with both sets would settle it.",
+]
 
 [[behavior]]
 id = "autoFeature.dnom"
@@ -918,6 +1063,10 @@ milestone = "M8"
 summary = "dnom (Denominators). Trigger: Glyphs ending in `.dnom`. Generated: Single substitutions from the default glyph to the `.dnom` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.numr"
@@ -926,6 +1075,10 @@ milestone = "M8"
 summary = "numr (Numerators). Trigger: Glyphs ending in `.numr`. Generated: Single substitutions from the default glyph to the `.numr` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.onum"
@@ -934,6 +1087,10 @@ milestone = "M8"
 summary = "onum (Oldstyle Figures). Trigger: Glyphs ending in `.osf` (proportional oldstyle) or `.tosf` (tabular oldstyle); works for non-figures such as currency signs too. Generated: Single substitutions from lining forms to the matching oldstyle forms, keeping the current width class (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Default and `.tf` figures map to `.osf` and `.tosf`, keeping proportional or tabular width; Update on a font with lf, tf, osf and tosf figures would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.tnum"
@@ -942,6 +1099,7 @@ milestone = "M8"
 summary = "tnum (Tabular Figures). Trigger: Glyphs ending in `.tf` (tabular lining) or `.tosf` (tabular oldstyle); also for other characters. The default figure set carries no figure suffix at all. Generated: Single substitutions from proportional forms to the matching tabular forms (`sub zero by zero.tf;`)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (3 sources): one `sub zero by zero.tf;` line per glyph (M8 planning pass)."
 
 [[behavior]]
 id = "autoFeature.pnum"
@@ -950,6 +1108,7 @@ milestone = "M8"
 summary = "pnum (Proportional Figures). Trigger: Glyphs ending in `.osf` (proportional oldstyle) or `.lf` (proportional lining); also for other characters. Generated: Single substitutions from tabular forms to the matching proportional forms (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (3 sources): the reverse direction, `sub zero.tf by zero;` (M8 planning pass)."
 
 [[behavior]]
 id = "autoFeature.lnum"
@@ -958,6 +1117,10 @@ milestone = "M8"
 summary = "lnum (Lining Figures). Trigger: Glyphs ending in `.lf` (proportional lining) or `.tf` (tabular lining); also for other characters. Generated: Single substitutions from oldstyle forms to the matching lining forms (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "`.osf` and `.tosf` figures map back to the default and `.tf` figures, keeping width; Update on a font with all four figure sets would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.ordn"
@@ -966,6 +1129,7 @@ milestone = "M8"
 summary = "ordn (Ordinals). Trigger: The default figures together with numero, ordfeminine and ordmasculine are present. Generated: Contextual substitutions after figures that turn a and o into ordfeminine and ordmasculine, and a rule producing numero from N o period (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (5 sources): the same three lines everywhere: `sub [zero … nine] [A a]' by ordfeminine;`, the same with `[O o]` and ordmasculine, then `sub N o period by numero;` (M8 planning pass)."
 
 [[behavior]]
 id = "autoFeature.ornm"
@@ -974,6 +1138,10 @@ milestone = "M8"
 summary = "ornm (Ornaments). Trigger: Glyphs named with `.ornm` on a base name from A-Z or a-z, and a bullet glyph in the font. Generated: An alternate substitution offering all ornaments from bullet, plus single substitutions from each letter to its ornament (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "`sub bullet from [A.ornm …];` with the ornaments in glyph order, then `sub A by A.ornm;` per letter; Update on a font with bullet and A.ornm would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.hist"
@@ -982,6 +1150,10 @@ milestone = "M8"
 summary = "hist (Historical Forms). Trigger: Glyphs ending in `.hist`. Generated: Single substitutions from the base glyph to the `.hist` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.case"
@@ -990,6 +1162,7 @@ milestone = "M8"
 summary = "case (Uppercase Forms). Trigger: Glyphs ending in `.case`, and figures ending in `.lf`. Generated: Single substitutions from the default glyph to the `.case` form, and from default figures to lining figures (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (5 sources): one `sub X by X.case;` line per glyph, no lookup, no flag (M8 planning pass)."
 
 [[behavior]]
 id = "autoFeature.cpsp"
@@ -998,6 +1171,10 @@ milestone = "M8"
 summary = "cpsp (Capital Spacing). Trigger: Uppercase letters exist and the user adds the feature by choosing Capital Spacing from the plus menu at the bottom left of the Features tab. Update never adds it by itself. Generated: A single positioning rule on the uppercase class that widens both sides, of the form `pos @Uppercase <n 0 2n 0>;`; the amount is not documented (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "The amount is a number value named after the feature if the font has one, else 5 units per side, written `pos @Uppercase <5 0 10 0>;`; adding Capital Spacing in the reference app would settle the amount.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.locl"
@@ -1006,6 +1183,10 @@ milestone = "M8"
 summary = "locl (Localized Forms). Trigger: Glyphs ending in `.loclXXX` where XXX is an OpenType language tag (`.loclENG`, `.loclSVE`). Built-in triggers: idotaccent, i.TRK or i.loclTRK with i (TRK, AZE, CRT, KAZ, TAT); Scommaaccent, Tcommaaccent and their lowercase with the cedilla forms present (ROM, MOL); periodcentered.loclCAT (plus `.case`), L_periodcentered_L.loclCAT, l_periodcentered_l.loclCAT or legacy Ldot, ldot with L, l and periodcentered (CAT); Iacute_J.loclNLD, iacute_j.loclNLD or Jacute, jacute with Iacute, iacute, J, j (NLD); six-ar and `.urdu` figures such as four-persian.urdu (URD). Generated: Per script and language, a `script`/`language` section holding single substitutions to the localised glyphs (ligature or contextual rules for the Catalan and Dutch cases); languages sharing rules are listed together (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (6 sources) differs by version: per-script `script`/`language` sections with named lookups referenced from each further language, or one lookup holding several languages, or the non-standard `language AZE CRT KAZ TAT TRK;` in a version 4 file (M8 planning pass)."
+guesses = [
+  "One named lookup per rule set (`locl_latn_0`) inside `script latn; language XXX;`, referenced from each further language that shares it, as the Oswald files have it; Update on a font with idotaccent and Scommaaccent would settle the current form.",
+]
 
 [[behavior]]
 id = "autoFeature.cvXX"
@@ -1014,6 +1195,10 @@ milestone = "M8"
 summary = "cv01-cv99 (Character Variants). Trigger: Glyphs ending in `.cv01` to `.cv99`. Generated: One feature per number with single substitutions from base to variant. Several variants of one glyph belong in one feature and need manual code such as `sub k from [k.loop k.open k.tall];`."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.ssXX"
@@ -1022,6 +1207,7 @@ milestone = "M8"
 summary = "ss01-ss20 (Stylistic Sets). Trigger: Glyphs ending in `.ss01` to `.ss20`. Generated: One feature per number with single substitutions `sub g by g.ss01;`; each set can carry localised names, written as a featureNames block."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (ss01 to ss08 in 5 sources): one `sub X by X.ssNN;` line per glyph, including suffixed variants such as `sub comma.dnom by comma.dnom.ss07;`; 25 of 29 stylistic sets carry labels (M8 planning pass)."
 
 [[behavior]]
 id = "autoFeature.salt"
@@ -1030,6 +1216,10 @@ milestone = "M8"
 summary = "salt (Stylistic Alternates). Trigger: An ss01 feature exists. Generated: A copy of the ss01 rules; Adobe Illustrator and Photoshop read this feature for their OpenType panels."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "salt copies the rules of ss01 only, as the handbook says; Update on a font with ss01 and ss02 would settle whether other sets join.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.swsh"
@@ -1038,6 +1228,10 @@ milestone = "M8"
 summary = "swsh (Swashes). Trigger: Glyphs ending in `.swsh`. Generated: Single substitutions from base to `.swsh` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.titl"
@@ -1046,6 +1240,10 @@ milestone = "M8"
 summary = "titl (Titling). Trigger: Glyphs ending in `.titl`. Generated: Single substitutions from base to `.titl` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.init"
@@ -1054,6 +1252,10 @@ milestone = "M8"
 summary = "init (Initial Forms). Trigger: Glyphs ending in `.init`. Generated: Single substitutions from the base glyph to the `.init` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.medi"
@@ -1062,6 +1264,10 @@ milestone = "M8"
 summary = "medi (Medial Forms). Trigger: Glyphs ending in `.medi`. Generated: Single substitutions from the base glyph to the `.medi` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.med2"
@@ -1070,6 +1276,10 @@ milestone = "M8"
 summary = "med2 (Medial Forms 2). Trigger: Glyphs ending in `.med2`; Syriac only. Generated: Single substitutions from the base glyph to the `.med2` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.fina"
@@ -1078,6 +1288,10 @@ milestone = "M8"
 summary = "fina (Terminal Forms). Trigger: Glyphs ending in `.fina`. Generated: Single substitutions from the base glyph to the `.fina` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.fin2"
@@ -1086,6 +1300,10 @@ milestone = "M8"
 summary = "fin2 (Terminal Forms 2). Trigger: Glyphs ending in `.fin2`; Syriac only. Generated: Single substitutions from the base glyph to the `.fin2` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.fin3"
@@ -1094,6 +1312,10 @@ milestone = "M8"
 summary = "fin3 (Terminal Forms 3). Trigger: Glyphs ending in `.fin3`; Syriac only. Generated: Single substitutions from the base glyph to the `.fin3` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.fwid"
@@ -1102,6 +1324,10 @@ milestone = "M8"
 summary = "fwid (Full Widths). Trigger: Glyphs ending in `.full` or `.fullwidth`. Generated: Single substitutions to the full-width forms, plus space replaced by emspace."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.hkna"
@@ -1110,6 +1336,10 @@ milestone = "M8"
 summary = "hkna (Horizontal Kana Alternates). Trigger: Katakana or Hiragana glyphs ending in `.hori`. Generated: Single substitutions from the kana to the `.hori` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.hojo"
@@ -1118,6 +1348,10 @@ milestone = "M8"
 summary = "hojo (Hojo Kanji Forms). Trigger: Glyphs ending in `.hojo`, holding JIS X 0212-1990 shapes while the unsuffixed glyphs hold JIS X 0213:2004 shapes. Generated: Single substitutions from the default kanji to the `.hojo` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.hwid"
@@ -1126,6 +1360,10 @@ milestone = "M8"
 summary = "hwid (Half Widths). Trigger: Glyphs ending in `.half`. Generated: Single substitutions to the half-width forms, plus space replaced by enspace."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.ital"
@@ -1134,6 +1372,10 @@ milestone = "M8"
 summary = "ital (Italics). Trigger: Glyphs ending in `.italic`. Generated: Single substitutions from the base glyph to the `.italic` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.pkna"
@@ -1142,6 +1384,10 @@ milestone = "M8"
 summary = "pkna (Proportional Kana). Trigger: Katakana or Hiragana glyphs ending in `.proportional`. Generated: Single substitutions from the kana to the `.proportional` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.pwid"
@@ -1150,6 +1396,10 @@ milestone = "M8"
 summary = "pwid (Proportional Widths). Trigger: Glyphs ending in `.proportional`. Generated: Single substitutions from the base glyph to the `.proportional` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.qwid"
@@ -1158,6 +1408,10 @@ milestone = "M8"
 summary = "qwid (Quarter Widths). Trigger: Glyphs ending in `.qartwidth` (the handbook's spelling; whether `.quartwidth` is also recognised is an open question). Generated: Single substitutions from the base glyph to the quarter-width form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Update recognises both `.qartwidth`, the handbook's spelling, and `.quartwidth`; a font with both suffixes updated in the reference app would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.ruby"
@@ -1166,6 +1420,10 @@ milestone = "M8"
 summary = "ruby (Ruby Notation Forms). Trigger: Glyphs ending in `.ruby`. Generated: Single substitutions from the base glyph to the `.ruby` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.twid"
@@ -1174,6 +1432,10 @@ milestone = "M8"
 summary = "twid (Third Widths). Trigger: Glyphs ending in `.thirdwidth`. Generated: Single substitutions from the base glyph to the third-width form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.vkna"
@@ -1182,6 +1444,10 @@ milestone = "M8"
 summary = "vkna (Vertical Kana Alternates). Trigger: Katakana or Hiragana glyphs ending in `.vert`. Generated: Single substitutions from the kana to the `.vert` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.vrt2"
@@ -1190,6 +1456,10 @@ milestone = "M8"
 summary = "vrt2 (Vertical Alternates and Rotation). Trigger: Glyphs ending in `.vert`. Generated: Single substitutions from the base glyph to the `.vert` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.abvs"
@@ -1198,6 +1468,10 @@ milestone = "M8"
 summary = "abvs (Above-base Substitutions). Trigger: Certain pairings of a base with a mark, in the scripts of South Asia. Generated: Script-specific ligature rules joining base and above-base mark; the exact glyph lists are not documented and must be taken from the open GlyphData naming plus observation."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.akhn"
@@ -1206,6 +1480,10 @@ milestone = "M8"
 summary = "akhn (Akhands). Trigger: South Asian scripts only: a particular group of letters and ligatures (the classic akhand conjuncts). Generated: Ligature rules of consonant, halant, consonant onto the akhand glyph (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.blwf"
@@ -1214,6 +1492,10 @@ milestone = "M8"
 summary = "blwf (Below Base Forms). Trigger: South Asian scripts: a halant, glyphs suffixed `.below`, and various further glyphs present with them. Generated: Ligature rules of halant plus consonant onto the `.below` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.blws"
@@ -1222,6 +1504,10 @@ milestone = "M8"
 summary = "blws (Below-base Substitutions). Trigger: South Asian scripts: particular sequences of letters, such as Gujarati glyphs suffixed `.straight`, or specific combinations with halant in Oriya. Generated: Script-specific contextual or ligature rules; details are not documented."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.cjct"
@@ -1230,6 +1516,10 @@ milestone = "M8"
 summary = "cjct (Conjunct Forms). Trigger: Conjunct cluster glyphs in South Asian scripts (ligature names made of consonant names). Generated: Ligature rules from half forms or consonant-halant sequences onto the conjunct (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.half"
@@ -1238,6 +1528,10 @@ milestone = "M8"
 summary = "half (Half Forms). Trigger: Glyphs whose names end in `Halfform`, together with the script's halant. Generated: Ligature rules of consonant plus halant onto the half form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.nukt"
@@ -1246,6 +1540,10 @@ milestone = "M8"
 summary = "nukt (Nukta Forms). Trigger: Nukta ligatures whose names end in `Nukta` plus the script suffix, provided the nukta-less counterparts exist too. Generated: Ligature rules of consonant plus nukta onto the nukta form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.pref"
@@ -1254,6 +1552,10 @@ milestone = "M8"
 summary = "pref (Pre-base Forms). Trigger: South and Southeast Asian scripts: particular letter combinations that include a halant. Generated: Script-specific ligature rules of halant plus consonant onto a pre-base form; details are not documented."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.pres"
@@ -1262,6 +1564,10 @@ milestone = "M8"
 summary = "pres (Pre-base Substitutions). Trigger: South Asian scripts: particular combinations of matras and conjuncts. Width variants of a matra are numbered, e.g. iMatra-deva.01 to iMatra-deva.20. Generated: Contextual rules that pick, for each conjunct, the numbered matra variant whose width fits; the matching method is not documented."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.psts"
@@ -1270,6 +1576,10 @@ milestone = "M8"
 summary = "psts (Post-base Substitutions). Trigger: A halant together with base and matra arrangements that depend on the script, e.g. in Kannada, eMatra-kannada together with glyphs suffixed `.base` and `.base.e`. South Asian scripts only. Generated: Script-specific ligature or contextual rules; details are not documented."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.rkrf"
@@ -1278,6 +1588,10 @@ milestone = "M8"
 summary = "rkrf (Rakar Forms). Trigger: Devanagari, Gujarati and Malayalam only: rakar ligatures present together with their isolated letters and the halant. Generated: Ligature rules of consonant, halant, ra onto the rakar ligature (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.rphf"
@@ -1286,6 +1600,10 @@ milestone = "M8"
 summary = "rphf (Reph Forms). Trigger: The trio ra-deva, halant-deva, reph-deva, or its counterpart in another South Asian script. Generated: A ligature rule `sub ra-deva halant-deva by reph-deva;` per script (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.vatu"
@@ -1294,6 +1612,10 @@ milestone = "M8"
 summary = "vatu (Vattu Variants). Trigger: The rkrf feature contains particular lookups. Generated: Rules derived from the rakar lookups; details are not documented."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Generated from the glyph names alone (ligature rules of the parts the name lists, with the script's halant), and not at all where the trigger needs data the handbook does not give; Update on a Devanagari test font would settle the forms.",
+]
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "autoFeature.ccmp"
@@ -1302,6 +1624,10 @@ milestone = "M8"
 summary = "ccmp (Glyph Composition and Decomposition). Trigger: Many constellations across scripts. Documented example: i and j, their dotless forms idotless and jdotless, and combining marks that sit on top. Generated: For the Latin case, a lookup that swaps the dotted letter for its dotless form when a top mark follows; other scripts add their own lookups, which are not documented."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+notes = "The reference's stored output in the corpus (5 sources): a lookup `ccmp_DFLT_1` with `lookupflag 0;` and ligatures of stacked marks (`sub brevecomb acutecomb by brevecomb_acutecomb;`), and lookups `ccmp_Other_N` with an inline `@CombiningTopAccents = [...]`, `lookupflag UseMarkFilteringSet @CombiningTopAccents;` and `sub i' @CombiningTopAccents by idotless;` (M8 planning pass)."
+guesses = [
+  "Latin ccmp is generated in the corpus's form: mark-ligature lookup first, then the dotless lookups with the top-accent filtering set; scripts other than Latin get no ccmp until a source shows their form.",
+]
 
 [[behavior]]
 id = "autoFeature.mark"
@@ -1610,6 +1936,10 @@ milestone = "M8"
 summary = "The snippets menu ships with predefined code fragments, among them the `# Automatic Code` placeholder. The full built-in list is not in the handbook."
 ref = "Font Info › Features › Manual Feature Code; Font Info › Features › Implicit Features"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "The built-in snippets are `# Automatic Code`, a named lookup block, a contextual substitution, a languagesystem line and a stylistic set with a featureNames block; opening the snippets menu in the reference app would settle the list.",
+]
 
 [[behavior]]
 id = "snippet.fileNaming"
@@ -1618,6 +1948,7 @@ milestone = "M8"
 summary = "User snippets live in files named FeatureSnippets<NAME>.plist in the snippet folder; NAME becomes the group name in the menu."
 ref = "Appendix › Custom Feature Code Snippets"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "snippet.fileFormat"
@@ -1626,6 +1957,7 @@ milestone = "M8"
 summary = "A snippet file is a property list holding an array of dictionaries, each with a `title` (menu label) and `code` (text to insert, may span lines)."
 ref = "Appendix › Custom Feature Code Snippets"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "snippet.insertion"
@@ -1634,6 +1966,9 @@ milestone = "M8"
 summary = "A chosen snippet is inserted at the caret, replacing the selection. The handbook only says it is inserted into the code."
 ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
+guesses = [
+  "A snippet is inserted at the caret and replaces the selection; inserting one over a selection in the reference app would settle it.",
+]
 
 [[behavior]]
 id = "snippet.nativeFormat"

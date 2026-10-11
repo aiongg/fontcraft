@@ -2223,6 +2223,7 @@ milestone = "M8"
 summary = "Pop-up at the bottom left of Edit View that switches OpenType features on and off for the tab's text. Active features appear on the button as their four-letter tags, and the button takes the accent colour while any is on."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "editView.toggleFeature"
@@ -2236,6 +2237,7 @@ milestone = "M8"
 summary = "Turns one OpenType feature on or off for the text of an Edit View tab. Several features can be active together; choosing an active feature again turns it off."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "editView.clearFeatures"
@@ -2249,6 +2251,7 @@ milestone = "M8"
 summary = "Turns off every preview feature of the tab. It is the dash entry at the top of the Features menu."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "editView.setLocalizedForms"
@@ -2262,6 +2265,7 @@ milestone = "M8"
 summary = "Enables language-specific substitutions for the tab's text and picks the script and language they are evaluated for, using the entries at the bottom of the Features menu. It only has an effect if the font has a locl feature with rules for that language."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "editView.getFeatures"
@@ -2283,6 +2287,7 @@ milestone = "M8"
 summary = "The Features menu lists compiled features only. A newly written feature appears after the feature code has been recompiled in Font Info > Features."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "features.previewScope"
@@ -2291,6 +2296,7 @@ milestone = "M8"
 summary = "Edit View applies substitution features, kerning and cursive attachment. Other positioning features are not previewed there and have to be tested with an exported font."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "features.buttonShowsActiveTags"
@@ -2299,6 +2305,42 @@ milestone = "M8"
 summary = "The Features button displays the tags of all active features and is highlighted in the accent colour as soon as one feature is on."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
+notes = "Documented, not yet observed."
+
+[[behavior]]
+id = "text.shaping"
+area = "features"
+milestone = "M8"
+summary = "Edit View text is shaped with the compiled feature code: the substitution features active in the Features menu apply to the tab's text, kerning comes from the font's kerning data and cursive attachment from its exit and entry anchors, so kerning and anchor edits show at once while feature code changes show after Compile."
+ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
+status = "handbook"
+notes = "Documented, not yet observed. The handbook lists what Edit View previews; how it combines the compiled code with live kerning is our design (M8 planning pass)."
+guesses = [
+  "Only the features active in the Features menu apply, with no default features, so Arabic text shows its positional forms only when init, medi and fina are on; typing Arabic in an Edit View tab of the reference app with no feature active would settle it.",
+  "A glyph typed by name is shaped as a private-use character that maps to that glyph, so substitutions apply to it as to typed characters; typing /a.sc next to a feature that substitutes it in the reference app would settle it.",
+  "Kerning is applied by the tab's kerning mode to the glyphs after substitution, and the compiled kern feature is not used in Edit View; a font whose hand-written kern feature has a contextual rule would settle it.",
+]
+
+[[behavior]]
+id = "textPreview.shaping"
+area = "proofing"
+milestone = "M8"
+summary = "Text Preview shapes its text as an application would: every feature that a shaper turns on by default for the script applies, positioning features included, with the generated kerning and mark attachment of the master or instance shown."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+notes = "Documented, not yet observed. The reference uses the operating system's shaper; FontCraft uses its own (M8 planning pass, `docs/plans/M8.md` § 3)."
+guesses = [
+  "The preview's font is rebuilt from the current feature code, kerning and anchors after edits, once editing pauses for half a second, without pressing Compile; editing a feature without compiling while the reference app's Text Preview is open would settle it.",
+]
+
+[[behavior]]
+id = "textPreview.unicodeBidi"
+area = "proofing"
+milestone = "M8"
+summary = "Text Preview orders mixed right-to-left and left-to-right text by the Unicode Bidirectional Algorithm (UAX #9), as the operating system's text system does, replacing M5's simple run rules."
+ref = "Edit View › Entering Text › Text Preview"
+status = "handbook"
+notes = "Documented, not yet observed. Settles the M5 guesses on `textPreview.setWritingDirection` about digits and neutral characters."
 
 [[command]]
 id = "view.togglePreviewArea"

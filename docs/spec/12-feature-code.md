@@ -31,8 +31,9 @@ FontCraft builds one standard feature file per export target. The steps below ar
 3. Resolve `#ifdef VARIABLE` / `#ifndef VARIABLE` blocks (section 5).
 4. Expand tokens against the target (section 3).
 5. Lower the syntax extensions to standard syntax (sections 4 and 5).
-6. Assemble the file: languagesystem lines, classes as `@Name = [ ... ];`, prefixes, then
-   `feature tag { ... } tag;` blocks in sidebar order (`featureEditor.outputOrder`,
+6. Assemble the file: classes as `@Name = [ ... ];`, prefixes (the language systems are in the
+   automatic Languagesystems prefix), then `feature tag { ... } tag;` blocks in sidebar order, as
+   both reference compilers do (`featureEditor.outputOrder`,
    `featureEditor.featureBody`, `featureEditor.classContent`).
 7. Generate the implicit features and splice them in at `# Automatic Code` markers or as new
    feature blocks (section 7).
@@ -162,7 +163,7 @@ The reference accepts these additions to the AFDKO language. "Lowering" is what 
 |---|---|---|---|---|
 | `delete g;` / `del g;` | Remove every `g` | `sub g by NULL;` | no | `featureCode.delete`, `.deleteLowering` |
 | `delete g' ctx;` | Remove `g` in context | `sub g' ctx by NULL;` | no | `featureCode.deleteContextual` |
-| `standalone lookup n { } n;` inside a feature | Define a lookup at this position in lookup order without registering it in the feature | none possible in standard syntax; the front end must create the lookup and skip registration | no | `featureCode.standaloneLookup`, `.standaloneRedundant`, `.standaloneLowering` |
+| `standalone lookup n { } n;` inside a feature | Define a lookup at this position in lookup order without registering it in the feature | close the feature block, define the lookup at top level, reopen the feature with its script, language and lookupflag statements repeated | no | `featureCode.standaloneLookup`, `.standaloneRedundant`, `.standaloneLowering` |
 | `lookup n { ... };` | Closing name omitted | add the name | no | `featureCode.optionalLookupEndName` |
 | `language A B C;` | Rules that follow apply to each language | repeat statement and rules per language, or pass through | yes | `featureCode.multipleLanguages`, `.multipleLanguagesCompiler` |
 | `sub @A by @B @C;` (also contextual) | One-to-many with classes paired by position; equal sizes, singletons repeat | expand to one rule per member, or pass through | yes (classes on both sides) | `featureCode.multipleSubstitutionClasses`, `.multipleSubstitutionSingletons` |
@@ -249,8 +250,9 @@ and never appear in the Features tab (`fontInfo.features.implicit`). Rows: `auto
 
 - Extending one: add a feature with the same tag and put `# Automatic Code` where the generated
   code belongs; code above it is emitted first, code below it after
-  (`fontInfo.features.automaticCodePlaceholder`). Without the marker: generated lookups are
-  appended after the manual code (`implicit.markerMissing`, inferred).
+  (`fontInfo.features.automaticCodePlaceholder`). Without the marker: a kern feature gets the generated lookups after its
+  own code, and a mark-family feature gets none of the generated feature, as both reference
+  compilers do (`implicit.markerMissing`).
 - kern: kerning groups appear as `@MMK_L_<group>` (glyph on the left of the pair) and
   `@MMK_R_<group>` (glyph on the right); contextual kerning goes into an explicit kern feature
   (rows in `08-spacing-kerning`).
@@ -701,43 +703,95 @@ beyond `name`.
 Editor
 1. Which master does Option-click evaluation of a token use (the first master, the master selected
    in the main window, or all masters)?
+   **Decision (M8 planning pass, guess on `token.numberValue.inspect`):** the master of the active
+   Edit View tab, else the first master; to check in the reference app (`docs/plans/M8.md` § 8).
 2. Does typing into an automatic entry switch it to manual, or is the editor read-only until the
    checkbox is cleared?
+   **Decision:** the editor is read-only while Generate Feature Automatically is on, as the handbook
+   has the user untick the box before editing; `font.features.setCode` refuses an automatic entry
+   (guess on that row).
 3. Which errors carry a Fix, and what do the fixes do?
+   **Decision:** three fixes of ours: a glyph name that differs from an existing one only in case,
+   a missing semicolon at the end of a statement, and a class used before it is defined (move the
+   class entry up). Open for the reference's list (§ 8 of the plan).
 4. Can sidebar entries be reordered by dragging, and is there a way to disable an entry without
    deleting it?
+   **Partly answered:** the file format stores a `disabled` flag on prefixes, classes and features
+   (corpus: 8 disabled entries, all in fixtures); both reference compilers leave disabled entries
+   out. Dragging is our guess (`font.features.reorder`).
 5. The built-in snippet list and the location of the snippet folder.
+   **Decision:** our own list and folder (guesses on `snippet.builtIn` and
+   `font.features.showSnippetFolder`); to check in the reference app.
 
 Tokens
 6. Full list of predicate attributes, operators and their spelling variants; precedence of AND and
    OR; whether keywords are case-sensitive.
+   **Answered from glyphsLib's `builder/tokens.py` (oracle) and the predicate format the
+   reference's scripting layer is built on (Apple's documented predicate format strings):**
+   comparators `==` `=` `!=` `<>` `<` `<=` `=<` `>` `>=` `=>` `beginswith` `contains` `endswith`
+   `like` `matches` `in` `between`, keywords in any case, `AND`/`&&`, `OR`/`||`, `NOT`/`!`, values
+   in double or single quotes, `true`/`yes`/`false`/`no`, integers, bare words. glyphsLib reads
+   AND and OR right to left without precedence; FontCraft uses NOT before AND before OR with
+   parentheses, as the documented predicate format does. Attributes: glyphsLib accepts about 60
+   glyph properties; FontCraft implements the handbook's table plus `production`,
+   `leftKerningGroup`, `rightKerningGroup`, `leftMetricsKey`, `rightMetricsKey`, `unicode`,
+   `subCategory`, `export`, `hasComponents`, `hasCorners`, `isSmartGlyph`, and reports others
+   by name.
 7. Do predicates include non-exporting glyphs, and in which order are results listed?
+   **Answered from glyphsLib:** non-exporting glyphs are left out; glyph order.
 8. Which glyph property paths exist beyond metrics and anchors; rounding of arithmetic results;
    division by zero.
+   **Decision:** only metrics and anchors (guess on `token.glyphProperty.layerChoice`). Results are
+   rounded half away from zero to an integer, as fea-rs rounds (glyphsLib truncates); division by
+   zero is a compile error at the token.
 9. May a number-value expression contain a second number value, and may it start with a literal?
+   **Answered from glyphsLib and fea-rs:** both accept further number values and literals anywhere
+   in the expression; glyphsLib also accepts parentheses, which FontCraft accepts too.
 10. How do number and glyph property tokens behave in a variable export: variable values, or the
     value of the default master?
+   **M9.** fea-rs resolves `$name` to a variable value through its variation-info interface;
+    glyph property tokens need the same, built by M9 (`token.numberValue.variable`).
 
 Extensions
 11. Scope of a `condition`: until the next condition, the end of the feature, or `#endif`? Is
     there a way to return to unconditional rules inside the same block?
+   **M9** (the `condition` rows are M9's).
 12. Coordinate scale of `condition` limits and of `(axis:coord)` locations (internal versus
     external), and whether the upper limit is inclusive.
+   **M9.**
 13. Are `#else`, nesting or symbols other than VARIABLE accepted?
+   **Decision for the static half built in M8:** no; another symbol or `#else` is an error at the
+   directive. The rows stay M9 (`featureCode.ifdefOtherSymbols`).
 14. Does `standalone` work on lookups in prefixes only as a no-op, and can a standalone lookup be
     called before its definition?
+   **Decision:** a no-op in prefixes (handbook); calling a lookup before its definition is an
+    error, as in standard syntax. The lowering is in `featureCode.standaloneLowering`.
 15. Class-based multiple substitution: exact error when class sizes differ.
+   **Answered:** fea-rs's message, mapped to the entry.
 
 Automatic features
 16. The exact generated code for every † row, including lookup structure, class names used and the
     languagesystem list.
+   **Partly answered from the corpus** (the reference's stored output in 27 sources): case, sups,
+    subs, sinf, numr, dnom, tnum, pnum, ssNN, liga, dlig, frac (fallback), ordn, aalt, locl,
+    ccmp and the Languagesystems prefix; each finding is in its row's `notes`. The other † rows
+    carry a guess and a check in `docs/plans/M8.md` § 8.
 17. The complete list of automatic classes and of scripts routed to dist, abvm and blwm.
+   **Partly answered:** automatic classes in the corpus are Uppercase, Lowercase, AllLetters and
+    All (`autoClass.general`); dist, abvm and blwm follow fontc's writers (M5.17, M6.17).
 18. Precedence when a ligature qualifies for several ligature features, and how liga's default list
     interacts with `.liga`, `.dlig` suffixes.
+   **Decision:** the order liga list or `.liga`, then `.dlig`, then hlig, then rlig, then dlig
+   (guess on `autoFeature.generalRule`).
 19. Whether `.quartwidth` is recognised besides the handbook's `.qartwidth`.
+   **Decision:** both are recognised (guess on `autoFeature.qwid`).
 20. Behaviour of an explicit kern or mark feature without a `# Automatic Code` line.
+   **Answered from the oracles** (`implicit.markerMissing`): kern gets the generated code after its
+    own; the mark family gets none.
 21. How frac is built when numerators and denominators are missing, and which precomposed
     fractions it then uses.
+   **Partly answered from the corpus:** ligature rules onto the precomposed fractions the font has
+    (`sub one slash four by onequarter;`), from the afrc list and the Unicode vulgar fractions.
 
 Other
 22. Which text fields expand `{{{...}}}` tokens, and the list of key paths users rely on.
@@ -747,5 +801,8 @@ Other
 
 Language
 25. fea-rs rows marked unknown in the checklist need a test each before they are relied on.
+   **Planned:** M8.2 adds one test per such row through the wrapper.
 26. AFDKO v1.27 variable syntax (units required, `locationDef`, per-location records) and the
     fea-rs/feaLib syntax differ; decide which FontCraft writes and whether it reads both.
+   **Answered (open decision D5):** FontCraft writes what fea-rs accepts (the feaLib form) when it
+    lowers the reference's variable syntax, and reads AFDKO's form where fea-rs does; built in M9.

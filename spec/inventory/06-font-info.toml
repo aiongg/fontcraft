@@ -979,6 +979,7 @@ milestone = "M8"
 summary = "Per-master values of the font's named numbers, in number order. Feature code reads them through number value tokens so the inserted number interpolates between masters. Glyphs source key: fontMaster[].numberValues."
 ref = "Font Info › Masters › Number Values; GlyphsSDK GlyphsFileFormatv3.md"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[parameter]]
 name = "master.customParameters"
@@ -1033,6 +1034,7 @@ milestone = "M8"
 summary = "Names of the Number Values shown on the Masters tab; every master stores one value per name. Glyphs source key: numbers."
 ref = "Font Info › Masters › Number Values; GlyphsSDK GlyphsFileFormatv3.md"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.masters.newFileHasRegular"
@@ -1339,6 +1341,7 @@ milestone = "M8"
 summary = "Adds a named number with the plus button beside the Number Values heading; every master then stores its own value under that name."
 ref = "Font Info › Masters › Number Values"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.numbers.rename"
@@ -1352,6 +1355,9 @@ milestone = "M8"
 summary = "Renames a named number in all masters. Feature code that refers to the old name through a token is not said to be updated."
 ref = "Font Info › Masters › Number Values"
 status = "inferred"
+guesses = [
+  "Renaming a number value leaves tokens in feature code unchanged, so they then name an unknown value and the next compile reports them; renaming one used in feature code in the reference app would settle it.",
+]
 
 [[command]]
 id = "font.numbers.remove"
@@ -1365,6 +1371,7 @@ milestone = "M8"
 summary = "Deletes a named number from all masters, through the row's minus button or Cmd+Delete."
 ref = "Font Info"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.master.setNumber"
@@ -1378,6 +1385,7 @@ milestone = "M8"
 summary = "Sets the value one or more masters store for a named number."
 ref = "Font Info › Masters › Number Values"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.numbers.tokensInterpolate"
@@ -1386,6 +1394,7 @@ milestone = "M8"
 summary = "A number value token in feature code is replaced by the named number of the master or, for an instance, by the value interpolated between the masters."
 ref = "Font Info › Masters › Number Values"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 # ───────────────────────────── Exports tab ─────────────────────────────
 
@@ -1838,6 +1847,7 @@ milestone = "M8"
 summary = "Fourth tab of Font Info: the font's feature code organised as prefixes, classes and features, each either generated automatically or written by hand. Kerning, mark attachment and cursive attachment features are generated at export and are not listed."
 ref = "Font Info › Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[panel]]
 id = "fontInfo.featurePicker"
@@ -1849,6 +1859,7 @@ milestone = "M8"
 summary = "Picker opened by the plus button beside the Features heading. Typing filters the registered features by tag or name; double-clicking a result or pressing Return adds it to the sidebar."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.list"
@@ -1901,6 +1912,7 @@ milestone = "M8"
 summary = "Adds a prefix entry: free-form feature code placed outside every feature, mainly for lookups that features share."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.addClass"
@@ -1914,6 +1926,7 @@ milestone = "M8"
 summary = "Adds a glyph class whose body is a list of glyph names separated by spaces or line breaks. Classes that can be generated but are not added by Update, such as All (every exporting glyph), are added this way."
 ref = "Font Info › Features › Editing Feature Code; Automatic Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.addFeature"
@@ -1927,6 +1940,7 @@ milestone = "M8"
 summary = "Adds a feature identified by its four-character tag. Also used to add features that Update leaves out, such as cpsp, and to add an implicit feature such as kern in order to extend it by hand."
 ref = "Font Info › Features › Editing Feature Code; Implicit Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.remove"
@@ -1940,6 +1954,7 @@ milestone = "M8"
 summary = "Deletes the selected prefixes, classes and features; this is the minus button at the bottom-left of the Features tab."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.rename"
@@ -1953,6 +1968,9 @@ milestone = "M8"
 summary = "Changes the name of a prefix or class, or the tag of a feature. The handbook does not describe renaming in the sidebar."
 ref = "Font Info › Features › Editing Feature Code"
 status = "inferred"
+guesses = [
+  "A double-click on a sidebar entry's name renames it; a feature tag must be four characters and a name may not be taken in its group, else the command is refused; the running app would settle it.",
+]
 
 [[command]]
 id = "font.features.setCode"
@@ -1963,9 +1981,12 @@ kind = "engine"
 params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, code: string}"
 area = "features"
 milestone = "M8"
-summary = "Replaces the code of one entry. Whether writing code to an automatic entry switches it to manual or is refused is not documented."
+summary = "Replaces the code of one entry. An automatic entry is refused with a message naming Generate Feature Automatically, because the handbook has the user untick that box before editing the code."
 ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
+guesses = [
+  "Set Feature Code refuses an automatic entry instead of switching it to manual; typing into an automatic entry in the reference app would settle it.",
+]
 
 [[command]]
 id = "font.features.setAutomatic"
@@ -1979,6 +2000,7 @@ milestone = "M8"
 summary = "Sets the checkbox above the code editor. Turning it off keeps the current code as hand-editable text that Update no longer touches; entries that cannot be generated, such as calt, are always manual and cannot be switched on."
 ref = "Font Info › Features › Automatic Feature Code; Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.setNotes"
@@ -1992,6 +2014,7 @@ milestone = "M8"
 summary = "Writes the free-text note kept with a prefix, class or feature, shown in the field under the code editor."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.update"
@@ -2005,6 +2028,7 @@ milestone = "M8"
 summary = "Regenerates every automatic prefix, class and feature in one step and adds entries that have become possible since the last run, for example liga after ligature glyphs with underscore names were added. Manual entries are left alone, and optional ones such as the All class or cpsp are never added by this command."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.updateEntry"
@@ -2018,6 +2042,7 @@ milestone = "M8"
 summary = "Regenerates the code of a single automatic entry, as the update button beside its name in the sidebar does."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.compile"
@@ -2031,6 +2056,7 @@ milestone = "M8"
 summary = "Compiles the feature code so that Edit View can preview it and returns the errors found. Edit View previews hand-written substitution rules but not hand-written positioning rules."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.listErrors"
@@ -2057,6 +2083,10 @@ milestone = "M8"
 summary = "Applies the correction suggested for an error; only errors drawn with a wrench icon carry such a suggestion."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
+guesses = [
+  "Three fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a missing semicolon at the end of a statement, and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.",
+]
 
 [[command]]
 id = "font.features.jumpToError"
@@ -2070,6 +2100,7 @@ milestone = "M8"
 summary = "Selects the entry and scrolls the editor to the faulty code, as clicking the error icon of an entry in the sidebar does."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.listSnippets"
@@ -2096,6 +2127,7 @@ milestone = "M8"
 summary = "Inserts a snippet chosen from the snippets button at the bottom-right of the tab into the code of the current entry. One snippet inserts the '# Automatic Code' placeholder line."
 ref = "Font Info › Features › Manual Feature Code; Implicit Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.openSpec"
@@ -2109,6 +2141,7 @@ milestone = "M8"
 summary = "Opens the specification page of the selected feature on Microsoft's OpenType site in the browser. The button is shown at the top-right only while a feature is selected."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.setLabel"
@@ -2122,6 +2155,7 @@ milestone = "M8"
 summary = "Adds or changes one localized display name of a stylistic set feature (ss01 to ss20). The language defaults to the Default entry, which acts as the fallback name."
 ref = "Font Info › Features › Naming Stylistic Sets"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.removeLabel"
@@ -2135,6 +2169,7 @@ milestone = "M8"
 summary = "Removes one localized name row from a stylistic set feature, as the row's minus button does."
 ref = "Font Info › Features › Naming Stylistic Sets"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "font.features.complete"
@@ -2161,6 +2196,7 @@ milestone = "M8"
 summary = "Shows a popover with a drawing of the glyph, or with all member glyphs of the class, for the glyph or class name that was Alt-clicked in the code editor."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.sidebarGroups"
@@ -2169,6 +2205,7 @@ milestone = "M8"
 summary = "The sidebar always has three groups in fixed order: Prefix (arbitrary code outside features), Classes (whitespace-separated glyph name lists) and Features (rules under a four-character tag)."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.automaticIndicator"
@@ -2177,6 +2214,7 @@ milestone = "M8"
 summary = "Automatic entries carry an update button beside their name in the sidebar; manual entries do not."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.updateDetectsNew"
@@ -2185,6 +2223,7 @@ milestone = "M8"
 summary = "Update inspects glyph names for features it can newly generate: underscore names produce liga, dot suffixes such as .sc or .tf fill the matching feature, and a suffix equal to a feature tag (g.ss01) puts the glyph into that feature."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.optionalAutomatic"
@@ -2193,6 +2232,7 @@ milestone = "M8"
 summary = "Some entries can be generated but are not added by Update, among them the All class and the cpsp feature; the user adds them by hand and may then leave them automatic."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.manualNotUpdated"
@@ -2201,6 +2241,7 @@ milestone = "M8"
 summary = "Entries with Generate Feature Automatically off are skipped by Update, and entries that have no generator, such as calt, are permanently manual."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.syntaxColouring"
@@ -2209,6 +2250,7 @@ milestone = "M8"
 summary = "The code editor colours keywords, glyph names, numbers, lookup names and comments differently."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.autocomplete"
@@ -2217,6 +2259,7 @@ milestone = "M8"
 summary = "Typing where a glyph, class or lookup name is expected opens a suggestion menu. Up and Down move through it, further typing narrows it and Return inserts the highlighted suggestion."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.inlineErrors"
@@ -2225,6 +2268,7 @@ milestone = "M8"
 summary = "Code that fails to compile is flagged inline. Clicking the error icon expands the message, a wrench icon signals an available Fix, and every entry with errors also gets an icon in the sidebar."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.notesDivider"
@@ -2233,6 +2277,7 @@ milestone = "M8"
 summary = "The notes field under the editor is resized by dragging the gray divider line above it."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.stylisticSetNames"
@@ -2241,6 +2286,7 @@ milestone = "M8"
 summary = "Selecting one of ss01 to ss20 shows name rows above the editor, each with a language and a text. The Default language is the fallback, which many systems treat as English, so the usual set-up is Default for English plus rows for other languages. The texts accept text tokens."
 ref = "Font Info › Features › Naming Stylistic Sets"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.implicit"
@@ -2249,6 +2295,7 @@ milestone = "M8"
 summary = "kern, dist, mark, abvm, blwm, mkmk and curs are produced at export from kerning and anchors and never appear in the Features tab, because their code differs for each master and instance. dist behaves like kerning but is not under user control."
 ref = "Font Info › Features › Implicit Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.automaticCodePlaceholder"
@@ -2257,6 +2304,7 @@ milestone = "M8"
 summary = "An implicit feature added by hand may contain the comment line '# Automatic Code'. Code above the line is emitted before the generated rules and code below it after them."
 ref = "Font Info › Features › Implicit Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "fontInfo.features.exportSpecific"
@@ -2265,6 +2313,7 @@ milestone = "M8"
 summary = "Per-instance feature changes are made with the custom parameters Add, Remove and Replace for Prefix, Class and Feature. Automatic classes and features need no such parameters because they are regenerated for the glyph set of each instance."
 ref = "Font Info › Features › Export-Specific Features"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 # ───────────────────────────── Other Settings tab ─────────────────────────────
 

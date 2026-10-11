@@ -2259,6 +2259,7 @@ milestone = "M8"
 summary = "When the mark feature is generated and glyphs such as idotless and jdotless exist, the ccmp feature is generated as well."
 ref = "Edit View › Mark to Base Positioning"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[behavior]]
 id = "anchors.markToMark"
@@ -2294,6 +2295,7 @@ milestone = "M8"
 summary = "An anchor whose name starts with an asterisk (for example *bottom) is contextual: it replaces the plain anchor of the same base name for mark attachment whenever the glyph occurs in the context written in the anchor's Anchor Context field, and the plain anchor is used everywhere else. Several contextual anchors for one base name are told apart by a free suffix (*bottom.noon, *bottom.reh)."
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
+notes = "Documented, not yet observed. fontmake builds contextual anchors through ufo2ft's mark writer, from the `GPOS_Context` user data; fontc ignores them (M8 planning pass). No corpus source has an anchor context."
 
 [[behavior]]
 id = "anchors.contextSyntax"
@@ -2302,6 +2304,7 @@ milestone = "M8"
 summary = "The anchor context is OpenType feature code for a glyph sequence in which * stands for the glyph holding the anchor; classes and tokens are allowed. An optional & marks where the mark glyph sits (needed when it does not come directly after the base), and a leading lookupflag …; statement sets lookup flags, typically UseMarkFilteringSet to restrict which marks the context applies to."
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[panel]]
 id = "palette.anchorContext"
@@ -2313,6 +2316,7 @@ milestone = "M8"
 summary = "Field at the bottom of the Palette for the context of a selected asterisk-prefixed anchor. It is shown only while Show Info is on."
 ref = "Edit View › Contextual Mark Attachment"
 status = "handbook"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "anchor.setContext"
@@ -2326,6 +2330,7 @@ milestone = "M8"
 summary = "Stores the context code of a contextual anchor, the action behind the Anchor Context field. The reference exposes it only as that field."
 ref = "Edit View › Contextual Mark Attachment"
 status = "inferred"
+notes = "Stored in the anchor's user data under the key `GPOS_Context`, where the reference's files keep it: glyphsLib passes anchor user data on and ufo2ft's mark writer reads that key (M8 planning pass). fontc does not support contextual anchors; fontmake is the oracle for them."
 
 # ───────────────────────────── Guides ─────────────────────────────
 

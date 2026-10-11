@@ -672,6 +672,7 @@ milestone = "M8"
 summary = "Feature include() paths are resolved relative to the source file; fontmake needs --expand-features-to-instances or --fea-include-dir when instances are compiled from another directory. Our compiler always resolves includes against the original source location, so no flag is needed."
 ref = "fontmake USAGE.md; fontmake Lib/fontmake/__main__.py (--fea-include-dir)"
 status = "inferred"
+notes = "M8 resolves includes through fea-rs's resolver interface against a closed set of files read relative to the source file, at most 4,096 files and 50 levels deep (M8 planning pass)."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: outline preparation
