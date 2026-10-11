@@ -1058,6 +1058,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "With a shared `.sc` set each capital maps to the small cap named after its lowercase letter (`sub A by a.sc;`), with a `.c2sc` set to its own suffix; Update on a font with A, a and a.sc would settle it.",
+  "A capital takes its own `.c2sc` form first, then a shared-set glyph on its own base (A.sc), then the shared-set glyph of its lowercase letter (a.sc); the case pair is found by code point, else by the name with its first letter changed. Update on a font with A.c2sc, A.sc and a.sc would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1073,10 +1074,12 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "A `.sc` or `.smcp` glyph on an uppercase base (A.sc) serves smcp from the lowercase letter of the same character, after any glyph on a lowercase base; Update on a font with A.sc only would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Inter (2 sources) has 13 exporting, encoded `.sc` glyphs (IPA small capitals such as g.sc for U+0262) and stores no smcp or c2sc entry; whether the reference skips encoded glyphs or the designer removed the entries is not known, and FontCraft writes both features for them."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the smcp entry: compare it with FontCraft's generator for the same font, or note that no smcp entry is created.",
+  "In F1 (Latin features), add a glyph g.sc with code point U+0262 and press Update: note whether smcp and c2sc entries list it.",
 ]
 
 [[behavior]]
@@ -1088,6 +1091,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "Capitals are paired with petite capitals as c2sc pairs them with small capitals: `.c2pc` first, then `.pc` or `.pcap` on the capital, then on its lowercase letter.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1116,6 +1120,9 @@ milestone = "M8"
 summary = "sups (Superscript). Trigger: Glyphs ending in `.sups`, or figure names with `superior` appended and no period (onesuperior). Generated: Single substitutions from the default glyph to the superior form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "The `superior` ending is accepted on any base glyph, not only figures, since the handbook names letter forms such as ainferior too; a `.sups` glyph wins over a `superior` name for the same base. Update on a font with asuperior would settle it.",
+]
 notes = "The reference's stored output in the corpus (5 sources): one `sub X by X.sups;` line per glyph; Oswald also maps figures to the unsuffixed superior names (`sub one by onesuperior;`) (M8 planning pass)."
 
 [[behavior]]
@@ -1126,9 +1133,9 @@ summary = "subs (Subscript). Trigger: Names with `inferior` appended, or ending 
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
-  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "`.subs` comes before `.sinf` and both before an `inferior` name when one glyph has several forms (sinf: `.sinf` first); Update on a font with a.subs and a.sinf would settle it.",
 ]
-notes = "Documented, not yet observed."
+notes = "The reference's stored output in the corpus (Inter, 2 sources): one `sub X by X.suffix;` line per glyph in the glyph order of the suffixed glyphs, no lookup, no flag; FontCraft's generator writes the same lines (M8.10)."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the subs entry: compare it with FontCraft's generator for the same font, or note that no subs entry is created.",
 ]
@@ -1140,10 +1147,7 @@ milestone = "M8"
 summary = "sinf (Scientific Inferiors). Trigger: Same glyphs as subs: `inferior` names, `.sinf` or `.subs`. Generated: Single substitutions from the default glyph to the inferior form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-guesses = [
-  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
-]
-notes = "Documented, not yet observed."
+notes = "The reference's stored output in the corpus (Inter, 2 sources): one `sub X by X.suffix;` line per glyph in the glyph order of the suffixed glyphs, no lookup, no flag; FontCraft's generator writes the same lines (M8.10)."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the sinf entry: compare it with FontCraft's generator for the same font, or note that no sinf entry is created.",
 ]
@@ -1185,10 +1189,7 @@ milestone = "M8"
 summary = "dnom (Denominators). Trigger: Glyphs ending in `.dnom`. Generated: Single substitutions from the default glyph to the `.dnom` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-guesses = [
-  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
-]
-notes = "Documented, not yet observed."
+notes = "The reference's stored output in the corpus (Inter, 2 sources): one `sub X by X.suffix;` line per glyph in the glyph order of the suffixed glyphs, no lookup, no flag; FontCraft's generator writes the same lines (M8.10)."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the dnom entry: compare it with FontCraft's generator for the same font, or note that no dnom entry is created.",
 ]
@@ -1200,10 +1201,7 @@ milestone = "M8"
 summary = "numr (Numerators). Trigger: Glyphs ending in `.numr`. Generated: Single substitutions from the default glyph to the `.numr` form (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
-guesses = [
-  "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
-]
-notes = "Documented, not yet observed."
+notes = "The reference's stored output in the corpus (Inter, 2 sources): one `sub X by X.suffix;` line per glyph in the glyph order of the suffixed glyphs, no lookup, no flag; FontCraft's generator writes the same lines (M8.10)."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the numr entry: compare it with FontCraft's generator for the same font, or note that no numr entry is created.",
 ]
@@ -1230,6 +1228,9 @@ milestone = "M8"
 summary = "tnum (Tabular Figures). Trigger: Glyphs ending in `.tf` (tabular lining) or `.tosf` (tabular oldstyle); also for other characters. The default figure set carries no figure suffix at all. Generated: Single substitutions from proportional forms to the matching tabular forms (`sub zero by zero.tf;`)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "The unsuffixed glyph of a figure set takes the first style no suffixed form claims, in the order lf, osf, tf, tosf, decided per base name; every form maps to the form of the other width with the same height. Update on a font with lf, tf and osf figures would settle it.",
+]
 notes = "The reference's stored output in the corpus (3 sources): one `sub zero by zero.tf;` line per glyph (M8 planning pass)."
 
 [[behavior]]
@@ -1239,6 +1240,9 @@ milestone = "M8"
 summary = "pnum (Proportional Figures). Trigger: Glyphs ending in `.osf` (proportional oldstyle) or `.lf` (proportional lining); also for other characters. Generated: Single substitutions from tabular forms to the matching proportional forms (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "pnum maps each tabular form to the proportional form of the same height, with the default figure placed as tnum describes; lines follow the glyph order of the suffixed glyph of each pair, as the corpus shows.",
+]
 notes = "The reference's stored output in the corpus (3 sources): the reverse direction, `sub zero.tf by zero;` (M8 planning pass)."
 
 [[behavior]]
@@ -1302,6 +1306,9 @@ milestone = "M8"
 summary = "case (Uppercase Forms). Trigger: Glyphs ending in `.case`, and figures ending in `.lf`. Generated: Single substitutions from the default glyph to the `.case` form, and from default figures to lining figures (rule shape inferred, the handbook gives only the trigger)."
 ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
+guesses = [
+  "Default figures that take an oldstyle style (by the tnum rule, for example when `.lf` forms exist and `.osf` forms do not) map to the lining figures of their width; the `.case` rule wins for a glyph that has both. Update on a font with one and one.lf would settle it.",
+]
 notes = "The reference's stored output in the corpus (5 sources): one `sub X by X.case;` line per glyph, no lookup, no flag (M8 planning pass)."
 
 [[behavior]]
@@ -1368,9 +1375,10 @@ status = "handbook"
 guesses = [
   "salt copies the rules of ss01 only, as the handbook says; Update on a font with ss01 and ss02 would settle whether other sets join.",
 ]
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Markow, saved by the reference app version 4, stores an automatic ss01 and no salt entry; FontCraft follows the handbook and writes salt."
 observe = [
   "In F1 (Latin features), press Update in Font Info › Features and copy the code of the salt entry: compare it with FontCraft's generator for the same font, or note that no salt entry is created.",
+  "In F1 (Latin features) with a.ss01 and no salt entry, press Update: note whether a salt entry is created.",
 ]
 
 [[behavior]]
@@ -1442,6 +1450,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "The suffix is accepted on glyphs of any script, since the handbook only says it is used in Syriac; Update on a Latin glyph with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1472,6 +1481,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "The suffix is accepted on glyphs of any script, since the handbook only says it is used in Syriac; Update on a Latin glyph with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1487,6 +1497,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "The suffix is accepted on glyphs of any script, since the handbook only says it is used in Syriac; Update on a Latin glyph with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1502,6 +1513,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.",
+  "The `sub space by emspace;` line comes last and only when the feature has other rules and both glyphs exist; Update on a font with one width form would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1517,6 +1529,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "A base counts as kana by its code point (Hiragana, Katakana, their extensions and the halfwidth forms) or its script; Update on a font with a kanji and a kana with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1547,6 +1560,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "Single substitutions to the suffixed forms plus the space substitution, one line each in glyph order; Update in the reference app would settle it.",
+  "The `sub space by enspace;` line comes last and only when the feature has other rules and both glyphs exist; Update on a font with one width form would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1577,6 +1591,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "A base counts as kana by its code point (Hiragana, Katakana, their extensions and the halfwidth forms) or its script; Update on a font with a kanji and a kana with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
@@ -1653,6 +1668,7 @@ ref = "Appendix › Automatic Feature Generation"
 status = "handbook"
 guesses = [
   "One `sub base by base.suffix;` line per glyph, in glyph order, with no lookup or flag, as the corpus shows for case, sups and tnum; Update in the reference app on a font with such glyphs would settle it.",
+  "A base counts as kana by its code point (Hiragana, Katakana, their extensions and the halfwidth forms) or its script; Update on a font with a kanji and a kana with the suffix would settle it.",
 ]
 notes = "Documented, not yet observed."
 observe = [
