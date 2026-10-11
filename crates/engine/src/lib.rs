@@ -398,6 +398,11 @@ impl Session {
         self.clock.as_ref().and_then(|c| c()).and_then(clock::last_change_text)
     }
 
+    /// Seconds since the Unix epoch from the session's clock; `None` without one.
+    pub(crate) fn now(&self) -> Option<i64> {
+        self.clock.as_ref().and_then(|c| c())
+    }
+
     /// Sets the clock [`Session::edit`] reads to stamp Last Changed on the glyphs an edit
     /// changes (`fontView.column.lastChanged`). `None`, the default, stamps nothing.
     pub fn set_clock(&mut self, clock: Option<Clock>) {

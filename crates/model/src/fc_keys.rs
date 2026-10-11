@@ -57,6 +57,10 @@ pub const STATUS_DEFINITIONS: &str = "com.fontcraft.statusDefinitions";
 /// The user's export profiles: an array of `{"name", "params": {…}}` (M13.43,
 /// `file.saveExportProfile`).
 pub const EXPORT_PROFILES: &str = "com.fontcraft.exportProfiles";
+/// The font's audit settings: `{"defaultProfile"?, "config"?: {check: {threshold: number}},
+/// "values"?: {name: value}, "ignored"?: [{"check", "glyph"?, "master"?, "location"?, "reason"?,
+/// "date"?}], "profiles"?: [profile]}` (M12.59, `fontcraft_audit::profile`).
+pub const AUDIT: &str = "com.fontcraft.audit";
 
 /// Every key with the object it is stored on.
 pub const ALL: &[(&str, Owner)] = &[
@@ -74,6 +78,7 @@ pub const ALL: &[(&str, Owner)] = &[
     (GLYPH_STATUS, Owner::Glyph),
     (STATUS_DEFINITIONS, Owner::Font),
     (EXPORT_PROFILES, Owner::Settings),
+    (AUDIT, Owner::Font),
 ];
 
 /// Whether `key` is one of FontCraft's own keys.

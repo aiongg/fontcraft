@@ -113,11 +113,20 @@ pub enum Reserved {
     ChooserPicks,
     /// The groups of sample strings Edit View offers, `[{name, strings}]`.
     SampleStrings,
+    /// The user's audit profiles and the application's default audit profile,
+    /// `{default?, profiles: [profile]}` (`audit.profile.*`).
+    AuditProfiles,
 }
 
 impl Reserved {
-    pub const ALL: [Reserved; 5] =
-        [Reserved::Filters, Reserved::VisibleScripts, Reserved::RecentDocuments, Reserved::ChooserPicks, Reserved::SampleStrings];
+    pub const ALL: [Reserved; 6] = [
+        Reserved::Filters,
+        Reserved::VisibleScripts,
+        Reserved::RecentDocuments,
+        Reserved::ChooserPicks,
+        Reserved::SampleStrings,
+        Reserved::AuditProfiles,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -126,6 +135,7 @@ impl Reserved {
             Reserved::RecentDocuments => "file.recentDocuments",
             Reserved::ChooserPicks => "start.chooserPicks",
             Reserved::SampleStrings => "sampleStrings.groups",
+            Reserved::AuditProfiles => "audit.userProfiles",
         }
     }
 
@@ -137,6 +147,7 @@ impl Reserved {
             Reserved::RecentDocuments => "opening and saving documents",
             Reserved::ChooserPicks => "the Start Window",
             Reserved::SampleStrings => "the Sample Strings settings",
+            Reserved::AuditProfiles => "the audit.profile commands",
         }
     }
 

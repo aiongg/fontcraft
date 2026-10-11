@@ -25,6 +25,7 @@ pub mod data;
 mod handles;
 mod metrics;
 mod points;
+pub mod profile;
 mod registry;
 mod scope;
 pub mod services;

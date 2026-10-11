@@ -3602,6 +3602,7 @@ milestone = "M12"
 summary = "Discards cached results and the per-glyph change hashes of a target, so the next run examines every glyph again."
 ref = "AFDKO checkoutlinesufo --clear-hash-map"
 status = "docs"
+notes = "Built in M12.59. No per-glyph hash cache exists yet (audit.glyphHashCache), so clearing drops the run kept for audit.results and audit.fix; a file target keeps no cache and reports `cleared: false`."
 
 [[command]]
 id = "audit.profile.list"
@@ -3629,6 +3630,7 @@ milestone = "M12"
 summary = "Returns a profile in full: the profiles it includes, the checks it adds and excludes, severity overrides per check or message code, and threshold defaults."
 ref = "fontbakery profile structure (include_profiles, sections, exclude_checks, overrides, configuration_defaults)"
 status = "docs"
+notes = "Built in M12.59 for built-in, user and project profiles; the result also lists the checks the profile runs once resolved and whether it is the effective default."
 
 [[command]]
 id = "audit.profile.save"
@@ -3642,6 +3644,7 @@ milestone = "M12"
 summary = "Creates or replaces a user profile (application settings) or a project profile (stored beside the source). Built-in profiles cannot be overwritten."
 ref = "Our design; cf. fontbakery custom profiles and configuration file"
 status = "inferred"
+notes = "Built in M12.59. Without `store` the profile goes to the user's settings (reserved id `audit.userProfiles`); a project profile goes to the source's font user data under `com.fontcraft.audit`, as one undo step. A project profile may include only built-in and project profiles and a user profile only built-in and user profiles, so a source's rules never depend on one person's settings; an id the other store already holds is refused. Overrides for one message code beat check-wide ones; otherwise later overrides win. Includes nest at most 8 deep, with cycle detection."
 
 [[command]]
 id = "audit.profile.delete"
@@ -3649,12 +3652,13 @@ label = "Delete Audit Profile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{profile: id}"
+params = "{profile: id, store?: 'user'|'project'}"
 area = "qa"
 milestone = "M12"
-summary = "Deletes a user or project profile. Documents that named it as their default fall back to universal."
+summary = "Deletes a user or project profile. Documents that named it as their default fall back to the application default, else universal."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59. Deleting a profile that another profile of its store includes is refused. A cleared default makes runs use the application default, else universal. `store` is needed only when both stores hold the id."
 
 [[command]]
 id = "audit.profile.setDefault"
@@ -3662,12 +3666,13 @@ label = "Set Default Audit Profile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{profile: id, target?: 'document'|'application'}"
+params = "{profile: id|null, target?: 'document'|'application'}"
 area = "qa"
 milestone = "M12"
 summary = "Sets the profile used when audit.run is called without one, for the current document (stored in the source) or as the application default."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59. `target` defaults to the document; null clears the default. Order: the document's default, then the application's, then universal; a stored default that no longer exists is skipped with a note. A project profile cannot be the application default."
 
 [[command]]
 id = "audit.config.get"
@@ -3675,12 +3680,13 @@ label = "Get Audit Settings"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{check?: id}"
+params = "{check?: id, profile?: id}"
 area = "qa"
 milestone = "M12"
 summary = "Returns the effective thresholds and options (document values over profile values over built-in defaults), for one check or all, including project values such as vendorId and defaultUrl."
 ref = "fontbakery configuration file; AFDKO comparefamily CF_DEFAULT_URL / CF_DEFAULT_FOUNDRY_CODE"
 status = "docs"
+notes = "Built in M12.59. Thresholds outside a check's range are ignored, as audit.run ignores them. Project values: vendorId, defaultUrl, fsType, allowedTables, glyphSet, keepMacNames, warnSize, failSize (fontcraft_audit::profile::PROJECT_VALUES); unset ones are null."
 
 [[command]]
 id = "audit.config.set"
@@ -3694,6 +3700,7 @@ milestone = "M12"
 summary = "Stores threshold or option overrides in the document; null removes an override. Unknown names are rejected."
 ref = "fontbakery configuration file"
 status = "docs"
+notes = "Built in M12.59 as one undo step. With `check` the names are that check's thresholds; without it they are project values. One bad name or value refuses the whole call."
 
 [[command]]
 id = "audit.ignoreIssue"
@@ -3707,6 +3714,7 @@ milestone = "M12"
 summary = "Adds an entry to the document's ignore list, from a result id or from an explicit check and location, so that matching results are hidden and do not count toward the exit status. An entry without a glyph silences the check for the whole font."
 ref = "Our design; cf. fontbakery exclude_checks"
 status = "inferred"
+notes = "Built in M12.59. An entry made from a result keeps the result's check, glyph, master and table-level location keys (table, field, nameId, platform, encoding, language, feature, script, lookup, axis, instance, pair); outline addresses change with every edit and are not kept. Ignoring the same issue again replaces its reason and date. The date comes from the session clock. At most 100,000 entries. Hiding matching results in audit.run and the exit status is the runner's (M12.44)."
 
 [[command]]
 id = "audit.unignoreIssue"
@@ -3720,6 +3728,7 @@ milestone = "M12"
 summary = "Removes matching entries from the document's ignore list."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59. Keys left out match any entry; a call that matches no entry is refused."
 
 [[command]]
 id = "audit.listIgnored"
@@ -3733,6 +3742,7 @@ milestone = "M12"
 summary = "Returns the document's ignore list with the reason and date of each entry and whether the issue still occurs."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59. Whether an issue still occurs is judged against the run kept from the last audit.run: null when no run is kept or that run did not include the check."
 
 [[command]]
 id = "audit.export"
@@ -4170,6 +4180,7 @@ milestone = "M12"
 summary = "Ignored issues are stored in the source as a list of check id, optional glyph, master and location, reason and date; entries whose issue no longer occurs are flagged so they can be pruned."
 ref = "Our design"
 status = "inferred"
+notes = "Built in M12.59: the list lives in the font user data under `com.fontcraft.audit` with the document's default profile, threshold overrides, project values and project profiles, and survives a save and reopen as .fontcraft, .glyphs and UFO. Entries that cannot be read are dropped and reported. audit.listIgnored flags entries whose issue no longer occurs."
 
 [[behavior]]
 id = "audit.exitStatus"
