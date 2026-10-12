@@ -39,6 +39,7 @@ pub(crate) mod linked;
 pub mod log;
 pub mod macros;
 pub mod params;
+pub mod project;
 pub mod settings;
 
 use std::collections::HashMap;
@@ -258,6 +259,8 @@ pub struct Session {
     export_outside: bool,
     /// The user's feature code snippet folder ([`Session::set_snippets_dir`]).
     snippets_dir: Option<PathBuf>,
+    /// The open projects (`project`).
+    projects: project::Projects,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -629,7 +632,7 @@ impl Session {
         }
         // Snapshot for rollback. It copies pointers and labels, no glyph data, but it does walk
         // each document's history, so queries (which change nothing) skip it.
-        let snapshot = spec.journal.then(|| (self.docs.clone(), self.active, self.untitled, self.settings.clone()));
+        let snapshot = spec.journal.then(|| (self.docs.clone(), self.active, self.untitled, self.settings.clone(), self.projects.clone()));
         self.depth = 1;
         let outcome = guard::catch_panic(|| (spec.run)(self, params));
         self.depth = 0;
@@ -654,8 +657,8 @@ impl Session {
                 Ok(value)
             }
             Err(e) => {
-                if let Some((docs, active, untitled, settings)) = snapshot {
-                    (self.docs, self.active, self.untitled, self.settings) = (docs, active, untitled, settings);
+                if let Some((docs, active, untitled, settings, projects)) = snapshot {
+                    (self.docs, self.active, self.untitled, self.settings, self.projects) = (docs, active, untitled, settings, projects);
                 }
                 Err(e)
             }

@@ -17,6 +17,7 @@
 mod atomic;
 mod gzip;
 mod layout;
+pub mod project;
 mod v1;
 
 use fontcraft_model::Font;
