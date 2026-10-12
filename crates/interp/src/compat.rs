@@ -28,14 +28,14 @@
 //!   incompatible.
 //! - The check never fails: a glyph it cannot read is reported as incompatible.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use fontcraft_geom::variation::VariationModel;
 use fontcraft_model::{Font, Layer, Shape};
 
 use crate::designspace::{Designspace, variable_settings};
-use crate::params::enforce_compatibility;
+use crate::params::{self, enforce_compatibility};
 use crate::sources::{GlyphSources, Source};
 use crate::{ANGLE_WARNING_DEGREES, MAX_INSTANCES};
 
@@ -294,18 +294,38 @@ pub fn scope(font: &Font, designspace: &Designspace) -> MasterPairs {
         return MasterPairs { masters: ids.iter().map(|s| s.to_string()).collect(), indicators };
     }
     let mut needed = vec![false; ids.len()];
+    let index: HashMap<&str, usize> = ids.iter().enumerate().rev().map(|(k, id)| (*id, k)).collect();
     let mut mark = |id: &str| {
-        if let Some(n) = ids.iter().position(|m| *m == id).and_then(|i| needed.get_mut(i)) {
+        if let Some(n) = index.get(id).and_then(|i| needed.get_mut(*i)) {
             *n = true;
         }
     };
-    let settings = variable_settings(font);
+    let settings: HashSet<usize> = variable_settings(font).into_iter().collect();
     let model = master_model(designspace);
+    // Settings that disable the same masters and carry the same Axis Mappings have the same
+    // masters: each such designspace is built once.
+    let mut setting_masters: HashMap<(Vec<String>, Option<String>), Vec<String>> = HashMap::new();
     for i in 0..font.instances.len().min(MAX_INSTANCES) {
         if settings.contains(&i) {
-            let masters: Vec<String> = match Designspace::for_setting(font, i) {
-                Ok(ds) => ds.masters().iter().map(|m| m.id.clone()).collect(),
-                Err(_) => ids.iter().map(|s| s.to_string()).collect(),
+            let key = font.instances.get(i).map(|inst| {
+                let mut disabled = params::disabled_masters(inst);
+                disabled.sort();
+                disabled.dedup();
+                (disabled, inst.params.get(params::AXIS_MAPPINGS).map(|v| format!("{v:?}")))
+            });
+            let cached = key.as_ref().and_then(|k| setting_masters.get(k)).cloned();
+            let masters: Vec<String> = match cached {
+                Some(m) => m,
+                None => {
+                    let m: Vec<String> = match Designspace::for_setting(font, i) {
+                        Ok(ds) => ds.masters().iter().map(|m| m.id.clone()).collect(),
+                        Err(_) => ids.iter().map(|s| s.to_string()).collect(),
+                    };
+                    if let Some(k) = key {
+                        setting_masters.insert(k, m.clone());
+                    }
+                    m
+                }
             };
             if masters.len() >= 2 {
                 for m in &masters {
@@ -550,5 +570,24 @@ mod tests {
         Arc::make_mut(&mut font.info).params.remove(ENFORCE_COMPATIBILITY_CHECK);
         Arc::make_mut(&mut font.instances).push(Instance { name: "VF".into(), kind: Some("variable".into()), ..Instance::default() });
         assert_eq!(scope(&font, &ds).masters, ["thin", "regular", "black"], "a variable font needs every master");
+    }
+
+    #[test]
+    fn many_settings_and_instances_finish_quickly() {
+        // Thousands of settings over thousands of instances: building every setting's
+        // designspace, each mapping its axis from every instance pair by pair, would not finish.
+        let masters = vec![master("thin", "Thin", &[100.0]), master("regular", "Regular", &[400.0]), master("black", "Black", &[900.0])];
+        let mut instances: Vec<Instance> =
+            (0..2_000).map(|k| Instance { name: format!("Light {k}"), location: vec![250.0], ..Instance::default() }).collect();
+        for k in 0..2_000 {
+            let mut setting = Instance { name: format!("VF {k}"), kind: Some("variable".into()), ..Instance::default() };
+            if k % 2 == 0 {
+                setting.params.set(crate::params::DISABLE_MASTERS, Value::String(fontcraft_model::plist::Str::new("Black")));
+            }
+            instances.push(setting);
+        }
+        let font = font_with(&[("Weight", "wght")], masters, instances, Vec::new());
+        let ds = Designspace::new(&font).unwrap();
+        assert_eq!(scope(&font, &ds).masters, ["thin", "regular", "black"]);
     }
 }

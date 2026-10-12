@@ -540,7 +540,7 @@ mod tests {
 
     fn axis(tag: &str, name: &str, min: f64, default: f64, max: f64) -> SourceAxis {
         let tag = tag_of(tag).unwrap();
-        SourceAxis { tag, name: name.to_string(), min, default, max, map: Mapping { pairs: vec![(min, min), (max, max)], default } }
+        SourceAxis { tag, name: name.to_string(), min, default, max, map: Mapping::new(vec![(min, min), (max, max)], default) }
     }
 
     fn stat(axes: Vec<SourceAxis>, mut instances: Vec<StatInstance>) -> Vec<StatAxis> {

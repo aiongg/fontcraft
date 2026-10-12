@@ -12,7 +12,7 @@
 //! | `fontInfo` | `familyName`, `unitsPerEm`, `versionMajor`, `versionMinor`, `date`, `property:<key>`, `parameter:<name>` |
 //! | `masterMetrics` | `metric:<kind>[:<name>][\|<filter>]`, `stem:<name>` (`stem:#<n>` when unnamed), `number:<name>` |
 //! | `glyph` | the glyph name; compares the master layer's width, shapes and anchors |
-//! | `kerning` | `<first> <second>`, the left-to-right pairs of the master |
+//! | `kerning` | `<first> <second>` (a tab between them when `<first>` has a space), the left-to-right pairs of the master; each row also has `first` and `second` |
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Use Left",
             [],
             None,
-            "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}} write the row's value from the left master to the right one, as one undo step in the right document; `key` is the row key compareFonts.diff returns. A glyph row copies the master layer's width, shapes and anchors (adding the glyph when the right font lacks it); a row the left side has no value for removes the value on the right for font info and kerning, and is refused for metrics and glyphs → {changed, document, master, category, key}",
+            "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string, first?: string, second?: string}} write the row's value from the left master to the right one, as one undo step in the right document; `key` is the row key compareFonts.diff returns, and a kerning row's `first` and `second`, when given, name the pair. A glyph row copies the master layer's width, shapes and anchors (adding the glyph when the right font lacks it); a row the left side has no value for removes the value on the right for font info and kerning, and is refused for metrics and glyphs → {changed, document, master, category, key}",
             has_doc,
             use_left
         ),
@@ -48,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Use Right",
             [],
             None,
-            "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string}} write the row's value from the right master to the left one, as one undo step in the left document (see compareFonts.useLeft) → {changed, document, master, category, key}",
+            "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, row: {category: fontInfo|masterMetrics|glyph|kerning, key: string, first?: string, second?: string}} write the row's value from the right master to the left one, as one undo step in the left document (see compareFonts.useLeft) → {changed, document, master, category, key}",
             has_doc,
             use_right
         ),
@@ -57,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Diff Two Masters",
             [],
             None,
-            "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, categories?: [fontInfo|masterMetrics|glyph|kerning]} the rows whose values differ between two masters of one or two open documents, grouped by category in that order; a value the side lacks is null. Glyph rows summarise each layer and list `differences` (width, shapes, anchors) → {left: {document, title, master}, right: {…}, rows: [{category, key, label, left, right, differences?}], truncated}",
+            "{left?: {document?: index|title|path, master?: id|name}, right?: {document?, master?}, categories?: [fontInfo|masterMetrics|glyph|kerning]} the rows whose values differ between two masters of one or two open documents, grouped by category in that order; a value the side lacks is null. Glyph rows summarise each layer and list `differences` (width, shapes, anchors) → {left: {document, title, master}, right: {…}, rows: [{category, key, label, left, right, differences?, first?, second?}], truncated}",
             has_doc,
             diff
         ),
@@ -250,16 +250,22 @@ fn master_metric_entries(font: &Font, master: &str) -> Result<Vec<Entry>> {
     Ok(out)
 }
 
+/// The row key of a kerning pair: the two sides with a space between them, or a tab when the
+/// first side has a space (names hold no control characters, so the key is never ambiguous).
+fn kern_key(first: &str, second: &str) -> String {
+    if first.contains(' ') { format!("{first}\t{second}") } else { format!("{first} {second}") }
+}
+
+/// The two sides of a kerning row key made by [`kern_key`].
+fn split_kern_key(key: &str) -> Option<(&str, &str)> {
+    key.split_once('\t').or_else(|| key.split_once(' ')).filter(|(a, b)| !a.is_empty() && !b.is_empty())
+}
+
 fn kern_entries(font: &Font, master: &str) -> Vec<Entry> {
     let Some(m) = font.kerning.ltr.0.iter().find(|k| k.master == master) else { return Vec::new() };
     m.firsts
         .iter()
-        .flat_map(|f| {
-            f.seconds.iter().map(move |(second, v)| {
-                let key = format!("{} {second}", f.first);
-                (key.clone(), key, json!(v))
-            })
-        })
+        .flat_map(|f| f.seconds.iter().map(move |(second, v)| (kern_key(&f.first, second), format!("{} {second}", f.first), json!(v))))
         .collect()
 }
 
@@ -284,6 +290,18 @@ impl Rows {
 
 /// Rows for the keys whose values differ: the left side's keys in its order, then the keys only
 /// the right side has. A key repeated on one side counts once, with its first value.
+/// A kerning row with its `first` and `second` sides as fields of their own; other rows as they are.
+fn with_sides(category: Category, mut row: Value) -> Value {
+    if matches!(category, Category::Kerning) {
+        let sides = row.get("key").and_then(Value::as_str).and_then(split_kern_key).map(|(a, b)| (a.to_string(), b.to_string()));
+        if let (Some((first, second)), Some(obj)) = (sides, row.as_object_mut()) {
+            obj.insert("first".into(), json!(first));
+            obj.insert("second".into(), json!(second));
+        }
+    }
+    row
+}
+
 fn diff_entries(category: Category, left: Vec<Entry>, right: Vec<Entry>, rows: &mut Rows) {
     let mut right_map: HashMap<&str, (&str, &Value)> = HashMap::with_capacity(right.len());
     for (k, label, v) in &right {
@@ -296,7 +314,7 @@ fn diff_entries(category: Category, left: Vec<Entry>, right: Vec<Entry>, rows: &
         }
         let other = right_map.get(k.as_str()).map(|(_, v)| *v);
         if other != Some(v) {
-            let row = json!({ "category": category.name(), "key": k, "label": label, "left": v, "right": other });
+            let row = with_sides(category, json!({ "category": category.name(), "key": k, "label": label, "left": v, "right": other }));
             if !rows.push(row) {
                 return;
             }
@@ -306,7 +324,7 @@ fn diff_entries(category: Category, left: Vec<Entry>, right: Vec<Entry>, rows: &
         if !seen.insert(k.as_str()) {
             continue;
         }
-        let row = json!({ "category": category.name(), "key": k, "label": label, "left": Value::Null, "right": v });
+        let row = with_sides(category, json!({ "category": category.name(), "key": k, "label": label, "left": Value::Null, "right": v }));
         if !rows.push(row) {
             return;
         }
@@ -453,6 +471,13 @@ fn use_side(s: &mut Session, p: &Value, command: &'static str, from_left: bool) 
     if key.is_empty() || key.len() > MAX_KEY_BYTES {
         return Err(p.bad(format!("`row.key` must have 1 to {MAX_KEY_BYTES} bytes")));
     }
+    // A kerning row's sides: its `first` and `second` fields, else the key read back.
+    let sides = match (row.get("first").and_then(Value::as_str), row.get("second").and_then(Value::as_str)) {
+        (Some(a), Some(b)) if !a.is_empty() && !b.is_empty() && a.len() <= MAX_KEY_BYTES && b.len() <= MAX_KEY_BYTES => {
+            Some((a.to_string(), b.to_string()))
+        }
+        _ => None,
+    };
     let (from, to) = if from_left { (left, right) } else { (right, left) };
     let source = font_at(s, from.index)?;
     let before = s.documents().get(to.index).map(|d| d.revision);
@@ -464,7 +489,7 @@ fn use_side(s: &mut Session, p: &Value, command: &'static str, from_left: bool) 
             Category::FontInfo => copy.font_info(font, key),
             Category::MasterMetrics => copy.master_metric(font, key),
             Category::Glyph => copy.glyph(font, key),
-            Category::Kerning => copy.kerning(font, key),
+            Category::Kerning => copy.kerning(font, key, sides.clone()),
         }
     })?;
     let changed = s.documents().get(to.index).map(|d| d.revision) != before;
@@ -610,11 +635,11 @@ impl Transfer<'_> {
         Ok(())
     }
 
-    fn kerning(&self, font: &mut Font, key: &str) -> Result<()> {
-        let (first, second) = key
-            .split_once(' ')
-            .filter(|(a, b)| !a.is_empty() && !b.is_empty())
-            .ok_or_else(|| self.p.bad(format!("`{key}` is not a kerning row: give `<first> <second>`")))?;
+    fn kerning(&self, font: &mut Font, key: &str, sides: Option<(String, String)>) -> Result<()> {
+        let (first, second) = match &sides {
+            Some((a, b)) => (a.as_str(), b.as_str()),
+            None => split_kern_key(key).ok_or_else(|| self.p.bad(format!("`{key}` is not a kerning row: give `<first> <second>`")))?,
+        };
         let value = self.source.kerning.ltr.get(self.from, first, second);
         let table = &mut Arc::make_mut(&mut font.kerning).ltr;
         match value {

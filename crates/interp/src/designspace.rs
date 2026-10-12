@@ -389,7 +389,7 @@ impl Designspace {
         let a = self.axes.get(axis)?;
         let ext = a.external;
         let mut points: Vec<(f64, f64)> = Vec::new();
-        for &(user, design) in &a.map.pairs {
+        for &(user, design) in a.map.pairs() {
             let key = normalize_value(user, ext.minimum, ext.default, ext.maximum, false)?;
             let value = a.normalize(design, false)?;
             match points.iter_mut().find(|p| p.0 == key) {
@@ -500,24 +500,36 @@ fn build(font: &Font, indices: &[usize]) -> Result<Designspace, InterpError> {
 /// coordinate and `designs` the coordinates of every master and virtual master.
 fn axis_info(font: &Font, i: usize, tag: &str, origin: f64, designs: &[f64], warnings: &mut Vec<String>) -> Result<AxisInfo, InterpError> {
     let axis = font.axes.get(i).ok_or_else(|| InterpError::UnknownAxis(tag.to_string()))?;
-    let mut map = axes::mapping(font, i);
-    if map.pairs.len() > MAX_MAPPING_POINTS {
+    // The parameter's own size first: reading it into a map costs more than counting it.
+    let raw_points = font
+        .info
+        .params
+        .get(params::AXIS_MAPPINGS)
+        .and_then(fontcraft_model::plist::Value::as_dict)
+        .and_then(|d| d.get(&axis.tag))
+        .and_then(fontcraft_model::plist::Value::as_dict)
+        .map_or(0, |d| d.entries.len());
+    if raw_points > MAX_MAPPING_POINTS {
         return Err(InterpError::LimitExceeded { what: "points in an axis mapping", limit: MAX_MAPPING_POINTS });
     }
-    for (u, d) in &map.pairs {
+    let mut map = axes::mapping(font, i);
+    if map.pairs().len() > MAX_MAPPING_POINTS {
+        return Err(InterpError::LimitExceeded { what: "points in an axis mapping", limit: MAX_MAPPING_POINTS });
+    }
+    for (u, d) in map.pairs() {
         usable(*u, || format!("the mapping of axis {}", axis.name))?;
         usable(*d, || format!("the mapping of axis {}", axis.name))?;
     }
-    if !monotonic(&map.pairs) {
+    if !monotonic(map.pairs()) {
         warnings.push(format!("the mapping of axis {} neither rises nor falls throughout; it is ignored", axis.name));
-        map.pairs = vec![(origin, origin)];
+        map = Mapping::new(vec![(origin, origin)], map.default);
     }
     // An explicit mapping, or a range the source states, sets the external range by its ends.
     let explicit_ends = match axis.range {
         Some(r) => Some((r.minimum, r.maximum)),
         None => axes::mapping_parameter(font, &axis.tag).filter(|p| !p.is_empty()).map(|_| (map.minimum(), map.maximum())),
     };
-    let (first, last) = (map.pairs.first().map_or(origin, |p| p.1), map.pairs.last().map_or(origin, |p| p.1));
+    let (first, last) = (map.pairs().first().map_or(origin, |p| p.1), map.pairs().last().map_or(origin, |p| p.1));
     let sign = if last < first { -1.0 } else { 1.0 };
     let mut oriented: Vec<f64> = designs.iter().map(|d| sign * d).collect();
     oriented.push(sign * origin);
@@ -534,7 +546,7 @@ fn axis_info(font: &Font, i: usize, tag: &str, origin: f64, designs: &[f64], war
         // Every master at one value: no extent, and user and internal coordinates are the same,
         // as the oracles treat it.
         let range = AxisRange { minimum: origin, default: origin, maximum: origin };
-        let map = Mapping { pairs: vec![(origin, origin)], default: origin };
+        let map = Mapping::new(vec![(origin, origin)], origin);
         return Ok(AxisInfo {
             tag: tag.to_string(),
             name: axis.name.clone(),
@@ -808,6 +820,17 @@ pub(crate) mod tests {
         assert_eq!(ds.classify(&Location(vec![60.0])), Placement::Inside);
         assert_eq!(ds.classify(&Location(vec![40.0])), Placement::Outside);
         assert_eq!(ds.avar_map(0), None);
+    }
+
+    #[test]
+    fn an_oversized_axis_mapping_is_refused_before_it_is_read() {
+        // Half a million points: reading them into a map first would take pairwise work.
+        let mut f = font(&[("Weight", "wght")], &[("Light", &[100.0]), ("Bold", &[900.0])]);
+        let entries = (0..500_000i64).map(|k| (Str::new(k.to_string()), Value::Number(fontcraft_model::plist::Number::int(k)))).collect();
+        let mut outer = Dict::new();
+        outer.insert("wght", Value::Dict(Dict { entries, ..Default::default() }));
+        Arc::make_mut(&mut f.info).params.set(params::AXIS_MAPPINGS, Value::Dict(outer));
+        assert_eq!(Designspace::new(&f), Err(InterpError::LimitExceeded { what: "points in an axis mapping", limit: MAX_MAPPING_POINTS }));
     }
 
     #[test]

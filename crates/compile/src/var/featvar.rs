@@ -11,7 +11,8 @@
 //! Contract:
 //! - Each alternate set of a glyph becomes a glyph of its own, named
 //!   `<glyph>.BRACKET.varAltNN` ([`bracket_glyph_name`]), numbered from 01 in the order of
-//!   `fontcraft_interp::GlyphSources::alternates`. [`bracket_glyphs`] lists them as
+//!   `fontcraft_interp::GlyphSources::alternates`; a number whose name a glyph of the font already
+//!   has is skipped. [`bracket_glyphs`] lists them as
 //!   [`MadeGlyph`]s sorted by name, the order both oracles append them to the glyph order in;
 //!   [`bracket_production_name`] gives each the parent's production name with the same suffix.
 //!   Glyphs that do not export get none.
@@ -106,15 +107,29 @@ fn alternate_sources(font: &Font, designspace: &Designspace) -> Result<Vec<Glyph
     Ok(out)
 }
 
+/// The names of the alternate glyphs of `sources`, one per set in set order: numbered from 01,
+/// skipping each number whose name a glyph of the font already has.
+fn bracket_names(font: &Font, sources: &GlyphSources) -> Vec<String> {
+    let mut names = Vec::with_capacity(sources.alternates.len());
+    let mut number = 0usize;
+    // Every skipped number is a glyph of the font, so the numbers stay below this bound.
+    let last = sources.alternates.len().saturating_add(font.glyphs.len());
+    while names.len() < sources.alternates.len() && number < last {
+        number += 1;
+        let name = bracket_glyph_name(&sources.glyph, number);
+        if font.glyph(&name).is_none() {
+            names.push(name);
+        }
+    }
+    names
+}
+
 /// The alternate glyphs of `font` in `designspace`, sorted by name.
 pub fn bracket_glyphs(font: &Font, designspace: &Designspace) -> Result<Vec<MadeGlyph>, CompileError> {
     let mut made = Vec::new();
     for sources in alternate_sources(font, designspace)? {
-        for set in 0..sources.alternates.len() {
-            made.push(MadeGlyph {
-                name: bracket_glyph_name(&sources.glyph, set.saturating_add(1)),
-                source: MadeFrom::Alternate { glyph: sources.glyph.clone(), set },
-            });
+        for (set, name) in bracket_names(font, &sources).into_iter().enumerate() {
+            made.push(MadeGlyph { name, source: MadeFrom::Alternate { glyph: sources.glyph.clone(), set } });
         }
     }
     made.sort_by(|a, b| a.name.cmp(&b.name));
@@ -126,9 +141,8 @@ pub fn bracket_glyphs(font: &Font, designspace: &Designspace) -> Result<Vec<Made
 pub fn alternate_rules(font: &Font, designspace: &Designspace) -> Result<Vec<OverlayRule<Substitutions>>, CompileError> {
     let mut rules = Vec::new();
     for sources in alternate_sources(font, designspace)? {
-        for (set, alternate) in sources.alternates.iter().enumerate() {
+        for (alternate, name) in sources.alternates.iter().zip(bracket_names(font, &sources)) {
             let region = alternate.ranges.to_box(designspace)?;
-            let name = bracket_glyph_name(&sources.glyph, set.saturating_add(1));
             rules.push(OverlayRule { boxes: vec![region], payload: vec![(sources.glyph.clone(), name)] });
         }
     }
@@ -530,5 +544,16 @@ mod tests {
         assert_eq!(variations[0].substitutions, vec![(GlyphId16::new(a as u16), GlyphId16::new(alt as u16))]);
         let gsub = build_gsub(&variations, &axes, &glyphs).unwrap().unwrap();
         assert_eq!(conditions(&fv(&gsub).feature_variation_records[0]), vec![(0, F2Dot14::from_f64(1.0 / 3.0).to_f32(), 1.0)]);
+    }
+
+    #[test]
+    fn an_alternate_glyph_name_the_font_already_has_is_skipped() {
+        let mut font = alternate_font();
+        font.add_glyph("a.BRACKET.varAlt01", Vec::new(), 500.0).unwrap();
+        let designspace = Designspace::new(&font).unwrap();
+        let made = bracket_glyphs(&font, &designspace).unwrap();
+        assert_eq!(made, vec![MadeGlyph { name: "a.BRACKET.varAlt02".into(), source: MadeFrom::Alternate { glyph: "a".into(), set: 0 } }]);
+        let rules = alternate_rules(&font, &designspace).unwrap();
+        assert_eq!(rules[0].payload, vec![("a".to_string(), "a.BRACKET.varAlt02".to_string())]);
     }
 }

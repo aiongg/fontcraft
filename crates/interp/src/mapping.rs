@@ -44,7 +44,7 @@ pub fn edited_points(font: &Font, tag: &str, edit: &MappingEdit) -> Result<Vec<(
     let axis = font.axes.iter().position(|a| a.tag == tag).ok_or_else(|| InterpError::UnknownAxis(tag.to_string()))?;
     let mut points = match crate::params::axis_mappings(font)?.into_iter().find(|(t, _)| t == tag) {
         Some((_, points)) => points,
-        None => fontcraft_model::axes::mapping(font, axis).pairs,
+        None => fontcraft_model::axes::mapping(font, axis).into_pairs(),
     };
     let no_point = |index: usize| InterpError::BadMapping { axis: tag.to_string(), reason: format!("there is no point number {}", index + 1) };
     let given = |v: f64, which: &str| {
@@ -79,8 +79,8 @@ pub fn edited_points(font: &Font, tag: &str, edit: &MappingEdit) -> Result<Vec<(
     Ok(points)
 }
 
-/// Checks a mapping's points: finite, within range, strictly increasing on both coordinates, at
-/// most [`MAX_MAPPING_POINTS`]. `axis` names the axis in the refusal.
+/// Checks a mapping's points: finite, within range, strictly increasing external values with
+/// internal values strictly increasing or strictly decreasing, at most [`MAX_MAPPING_POINTS`]. `axis` names the axis in the refusal.
 pub fn check_points(axis: &str, points: &[(f64, f64)]) -> Result<(), InterpError> {
     if points.len() > MAX_MAPPING_POINTS {
         return Err(InterpError::LimitExceeded { what: "points in an axis mapping", limit: MAX_MAPPING_POINTS });
@@ -92,10 +92,14 @@ pub fn check_points(axis: &str, points: &[(f64, f64)]) -> Result<(), InterpError
             }
         }
     }
-    if !points.windows(2).all(|w| matches!(w, [a, b] if b.0 > a.0 && b.1 > a.1)) {
+    // External values rise; internal values may rise or fall (an axis whose internal coordinate
+    // shrinks as the user value grows), but in one direction throughout.
+    let rises = points.windows(2).all(|w| matches!(w, [a, b] if b.0 > a.0 && b.1 > a.1));
+    let falls = points.windows(2).all(|w| matches!(w, [a, b] if b.0 > a.0 && b.1 < a.1));
+    if !(rises || falls) {
         return Err(InterpError::BadMapping {
             axis: axis.to_string(),
-            reason: "each point must lie above and to the right of the one before it".into(),
+            reason: "each point must lie to the right of the one before it, and the internal values must all rise or all fall".into(),
         });
     }
     Ok(())
@@ -146,7 +150,7 @@ mod tests {
         let past = edited_points(&f, "wght", &MappingEdit::Set { index: 1, external: 800.0, internal: 650.0 });
         assert!(matches!(past, Err(InterpError::BadMapping { .. })), "a point moved past its neighbour");
         let flat = edited_points(&f, "wght", &MappingEdit::Add { external: 600.0, internal: 400.0 });
-        assert!(matches!(flat, Err(InterpError::BadMapping { .. })), "internal values must rise too");
+        assert!(matches!(flat, Err(InterpError::BadMapping { .. })), "internal values must rise or fall throughout");
         assert!(matches!(edited_points(&f, "wght", &MappingEdit::Remove { index: 3 }), Err(InterpError::BadMapping { .. })));
         assert!(matches!(edited_points(&f, "wght", &MappingEdit::Add { external: f64::NAN, internal: 1.0 }), Err(InterpError::BadNumber { .. })));
         assert_eq!(edited_points(&f, "wdth", &MappingEdit::Remove { index: 0 }), Err(InterpError::UnknownAxis("wdth".into())));
@@ -158,6 +162,15 @@ mod tests {
         }
         assert_eq!(axis_mappings(&f).unwrap(), []);
         assert!(f.info.params.get(crate::params::AXIS_MAPPINGS).is_none());
+    }
+
+    #[test]
+    fn a_falling_map_can_be_edited() {
+        let mut f = font(&[("Weight", "wght")], &[("Light", &[100.0]), ("Bold", &[50.0])]);
+        edit_params(&mut f, |p| set_axis_mappings(p, "wght", &[(300.0, 100.0), (700.0, 50.0)]).unwrap());
+        assert_eq!(apply(&mut f, MappingEdit::Add { external: 500.0, internal: 60.0 }).unwrap(), [(300.0, 100.0), (500.0, 60.0), (700.0, 50.0)]);
+        let turns = edited_points(&f, "wght", &MappingEdit::Set { index: 1, external: 500.0, internal: 120.0 });
+        assert!(matches!(turns, Err(InterpError::BadMapping { .. })), "a map that falls, then rises");
     }
 
     #[test]

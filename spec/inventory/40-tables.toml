@@ -1603,7 +1603,10 @@ milestone = "M9"
 summary = "Each alternate (bracket) layer set becomes an extra glyph named after its parent with a suffix; it is appended to the glyph order, takes the parent's production name plus the same suffix, has no codepoint, and is reached only through the feature variation substitution."
 ref = "fontc glyphs2fontir/src/source.rs"
 status = "docs"
-notes = "M9.8: the glyphs are `<glyph>.BRACKET.varAltNN`, numbered from 01 per glyph in the order its range sets first appear, made only for exported glyphs, and appended sorted by name, as fontc and ufo2ft append them (`compile/src/var/featvar.rs`)."
+notes = "M9.8: the glyphs are `<glyph>.BRACKET.varAltNN`, numbered from 01 per glyph in the order its range sets first appear, made only for exported glyphs, and appended sorted by name, as fontc and ufo2ft append them (`compile/src/var/featvar.rs`). A number whose name a glyph of the font already has is skipped."
+guesses = [
+  "When the font already has a glyph named like an alternate glyph (`a.BRACKET.varAlt01`), the alternate takes the next free number instead of replacing or clashing with it; settle by exporting such a font from the reference app and reading the glyph order.",
+]
 
 [[behavior]]
 id = "compile.layoutPacking"

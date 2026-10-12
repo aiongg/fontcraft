@@ -150,7 +150,7 @@ pub(super) fn derived_classes(axes: &[AxisInfo], location: &[f64]) -> (Option<St
         let i = axes.iter().position(|a| a.tag == tag)?;
         let design = *location.get(i)?;
         let a = axes.get(i)?;
-        let user = if a.map.is_empty() { design } else { Mapping { pairs: a.map.clone(), default: a.user_default }.to_user(design) };
+        let user = if a.map.is_empty() { design } else { Mapping::new(a.map.clone(), a.user_default).to_user(design) };
         // Rounded first, so that a location written with six decimals gives the same class.
         let user = (user * 1e4).round() / 1e4;
         user.is_finite().then_some(user)

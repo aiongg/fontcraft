@@ -836,6 +836,7 @@ status = "inferred"
 notes = "Checked in the M9 planning pass: fontTools 4.66.1 `designspaceLib.evaluateConditions` (used by ufo2ft's instantiator, hence by fontmake's static instances) keeps both bounds; fontc and glyphsLib write the rule bounds as FeatureVariations condition ranges, which are inclusive by the OpenType specification."
 guesses = [
   "Both bounds inclusive, as the oracles; the handbook does not say. Settle with an instance exactly on a bound in the reference app (docs/plans/M9.md § 8).",
+  "A range whose minimum is above its maximum is refused with a message naming the axis, rather than swapped or treated as empty; settle by typing a reversed range into the reference app's layer dialog and exporting.",
 ]
 observe = [
   "In F2 (special layers), export instances at exactly 600 and at 599 and preview them: note which shows the alternate `dollar`.",
@@ -1242,6 +1243,7 @@ status = "handbook"
 notes = "Checked in the M9 planning pass: a `.glyphs` file stores the parameter per axis tag as a dictionary from external to internal value (Oswald: 700 to 710), and both oracles write `avar` from normalised external to normalised internal coordinates with `fvar` in external coordinates (Oswald: wght 200 to 700)."
 guesses = [
   "A mapping read from a file whose internal values neither rise nor fall throughout is ignored (identity) and reported as a warning; settle by giving the reference app such a mapping and exporting.",
+  "The mapping editor accepts internal values that fall throughout as the external values rise (an axis whose internal coordinate shrinks as the user value grows), and refuses a map that rises in one part and falls in another; settle by entering a falling map in the reference app's Axis Mappings dialog.",
 ]
 
 [[behavior]]

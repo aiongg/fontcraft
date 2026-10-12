@@ -24,6 +24,8 @@ pub const VIRTUAL_MASTER: &str = "Virtual Master";
 pub const AXIS_LOCATION: &str = "Axis Location";
 /// The font parameter naming the origin master by id.
 pub const ORIGIN: &str = "Variable Font Origin";
+/// Most points one axis mapping may have, in a parameter or in an opened font's `avar` map.
+pub const MAX_MAPPING_POINTS: usize = 256;
 /// The older name of [`ORIGIN`], which names the master by name.
 const ORIGIN_BY_NAME: &str = "Variation Font Origin";
 
@@ -231,19 +233,32 @@ pub fn piecewise_linear_map(v: f64, pairs: &[(f64, f64)]) -> f64 {
 
 /// `pairs` as a dictionary keyed by the first value, later pairs replacing earlier ones with the
 /// same key but keeping its place, then sorted by key (Python's `sorted(dict.items())`).
+/// Pairs that are not finite are left out.
 fn as_sorted_map(pairs: impl IntoIterator<Item = (f64, f64)>) -> Vec<(f64, f64)> {
-    let mut out: Vec<(f64, f64)> = Vec::new();
-    for (k, v) in pairs {
-        if !(k.is_finite() && v.is_finite()) {
-            continue;
-        }
-        match out.iter_mut().find(|(x, _)| *x == k) {
-            Some(slot) => slot.1 = v,
-            None => out.push((k, v)),
+    let mut all: Vec<(f64, f64)> = pairs.into_iter().filter(|(k, v)| k.is_finite() && v.is_finite()).collect();
+    // A stable sort keeps equal keys in input order: the first gives the key, the last the value.
+    // Adding 0 turns −0 into 0, so the two sort as one key.
+    all.sort_by(|a, b| (a.0 + 0.0).total_cmp(&(b.0 + 0.0)));
+    let mut out: Vec<(f64, f64)> = Vec::with_capacity(all.len());
+    for (k, v) in all {
+        match out.last_mut() {
+            // −0 and 0 are one key, as in a dictionary.
+            Some(slot) if slot.0 == k => slot.1 = v,
+            _ => out.push((k, v)),
         }
     }
-    out.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
     out
+}
+
+/// Whether two of `points` share a first value but not a second.
+fn conflicting(points: &[(f64, f64)]) -> bool {
+    let mut sorted: Vec<(f64, f64)> = points.iter().copied().filter(|(u, _)| !u.is_nan()).collect();
+    // A second value that is not a number differs even from itself.
+    if sorted.iter().any(|(_, d)| d.is_nan()) {
+        return true;
+    }
+    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.total_cmp(&b.1)));
+    sorted.windows(2).any(|w| matches!(w, [a, b] if a.0 == b.0 && a.1 != b.1))
 }
 
 /// The `(user, design)` pairs the `Axis Mappings` parameter gives for the axis tagged `tag`,
@@ -258,11 +273,30 @@ pub fn mapping_parameter(font: &Font, tag: &str) -> Option<Vec<(f64, f64)>> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Mapping {
     /// `(user, design)`, sorted by user value; never empty.
-    pub pairs: Vec<(f64, f64)>,
+    pairs: Vec<(f64, f64)>,
+    /// `pairs` read backwards: `(design, user)`, sorted by design value, a later pair winning
+    /// where two share a design value.
+    inverse: Vec<(f64, f64)>,
     pub default: f64,
 }
 
 impl Mapping {
+    /// The map of `pairs` (`(user, design)`, sorted by user value) with user default `default`.
+    pub fn new(pairs: Vec<(f64, f64)>, default: f64) -> Mapping {
+        let inverse = as_sorted_map(pairs.iter().map(|(u, d)| (*d, *u)));
+        Mapping { pairs, inverse, default }
+    }
+
+    /// The `(user, design)` points, sorted by user value.
+    pub fn pairs(&self) -> &[(f64, f64)] {
+        &self.pairs
+    }
+
+    /// The `(user, design)` points, taken out of the map.
+    pub fn into_pairs(self) -> Vec<(f64, f64)> {
+        self.pairs
+    }
+
     pub fn is_identity(&self) -> bool {
         self.pairs.iter().all(|(u, d)| u == d)
     }
@@ -283,7 +317,7 @@ impl Mapping {
     /// The user value of a design value (the map read backwards, a later pair winning where two
     /// share a design value).
     pub fn to_user(&self, design: f64) -> f64 {
-        piecewise_linear_map(design, &as_sorted_map(self.pairs.iter().map(|(u, d)| (*d, *u))))
+        piecewise_linear_map(design, &self.inverse)
     }
 }
 
@@ -312,7 +346,7 @@ fn active_instances(font: &Font) -> impl Iterator<Item = &Instance> {
 /// When the map is the identity, the font's `Virtual Master` parameters widen the range: each
 /// one's location on the axis becomes a point of the map (glyphsLib's issue 859 rule).
 pub fn mapping(font: &Font, i: usize) -> Mapping {
-    let Some(axis) = font.axes.get(i) else { return Mapping { pairs: vec![(0.0, 0.0)], default: 0.0 } };
+    let Some(axis) = font.axes.get(i) else { return Mapping::new(vec![(0.0, 0.0)], 0.0) };
     let regular = origin(font);
     let regular_design = regular.map_or(0.0, |m| design_value(&m.location, i));
     let reverse_default = |pairs: &[(f64, f64)]| piecewise_linear_map(regular_design, &as_sorted_map(pairs.iter().map(|(u, d)| (*d, *u))));
@@ -329,7 +363,7 @@ pub fn mapping(font: &Font, i: usize) -> Mapping {
         let points: Vec<(f64, f64)> =
             active_instances(font).map(|inst| (instance_user_value(font, i, inst), design_value(&inst.location, i))).collect();
         // Instances that give one user value different design values do not make a map.
-        let conflict = points.iter().any(|(u, d)| points.iter().any(|(v, e)| u == v && d != e));
+        let conflict = conflicting(&points);
         let from_instances = if conflict { Vec::new() } else { as_sorted_map(points) };
         let pairs = if !from_instances.is_empty() && from_instances.iter().any(|(u, d)| u != d) {
             from_instances
@@ -346,7 +380,7 @@ pub fn mapping(font: &Font, i: usize) -> Mapping {
     } else {
         pairs
     };
-    let mut mapping = Mapping { pairs, default };
+    let mut mapping = Mapping::new(pairs, default);
     // The default, clamped to the range.
     mapping.default = default.max(mapping.minimum()).min(mapping.maximum());
     if !mapping.default.is_finite() {
@@ -430,7 +464,7 @@ mod tests {
         let mut f = font(&[("Weight", "wght")], &[("ExtraLight", &[200.0]), ("Regular", &[400.0]), ("Bold", &[710.0])]);
         Arc::make_mut(&mut f.info).params.0.push(mappings("wght", &[("200", 200.0), ("400", 400.0), ("700", 710.0), ("300", 275.0)]));
         let m = mapping(&f, 0);
-        assert_eq!(m.pairs, [(200.0, 200.0), (300.0, 275.0), (400.0, 400.0), (700.0, 710.0)]);
+        assert_eq!(m.pairs(), [(200.0, 200.0), (300.0, 275.0), (400.0, 400.0), (700.0, 710.0)]);
         assert_eq!((m.minimum(), m.default, m.maximum()), (200.0, 400.0, 700.0), "Regular is the origin");
         assert_eq!(m.to_user(275.0), 300.0);
         assert_eq!(m.to_design(350.0), 337.5);
@@ -459,7 +493,7 @@ mod tests {
         Arc::make_mut(&mut f.info).params.0[1].disabled = true;
         assert_eq!(mapping(&f, 1).maximum(), 700.0);
         Arc::make_mut(&mut f.info).params.0.push(mappings("CHGT", &[("650", 700.0), ("700", 720.0)]));
-        assert_eq!(mapping(&f, 1).pairs, [(650.0, 700.0), (700.0, 720.0)]);
+        assert_eq!(mapping(&f, 1).pairs(), [(650.0, 700.0), (700.0, 720.0)]);
     }
 
     #[test]
@@ -479,14 +513,14 @@ mod tests {
         f.instances =
             Arc::new(vec![inst("Light", 40.0, "Light"), inst("Bold", 90.0, "Bold"), Instance { exports: false, ..inst("X", 60.0, "Black") }]);
         let m = mapping(&f, 0);
-        assert_eq!(m.pairs, [(300.0, 40.0), (700.0, 90.0)]);
+        assert_eq!(m.pairs(), [(300.0, 40.0), (700.0, 90.0)]);
         assert_eq!(m.default, 300.0);
         // Two instances at one user value and different design values: the masters' map.
         let mut g = f.clone();
         Arc::make_mut(&mut g.instances).push(inst("Light 2", 50.0, "Light"));
         assert!(mapping(&g, 0).is_identity());
         // The width axis: every instance is at the normal width.
-        assert_eq!(mapping(&f, 1).pairs, [(100.0, 100.0)]);
+        assert_eq!(mapping(&f, 1).pairs(), [(100.0, 100.0)]);
         // A `weightClass` parameter and an `Axis Location` override the name.
         let mut i = inst("Semi", 70.0, "Bold");
         i.params.0.push(Param::new("weightClass", Value::Number(Number::int(600))));
@@ -505,7 +539,7 @@ mod tests {
             m.params.0.push(loc("Weight", v));
         }
         let m = mapping(&f, 0);
-        assert_eq!(m.pairs, [(300.0, 40.0), (800.0, 90.0)]);
+        assert_eq!(m.pairs(), [(300.0, 40.0), (800.0, 90.0)]);
         assert_eq!(m.default, 300.0);
     }
 
@@ -529,6 +563,43 @@ mod tests {
         assert_eq!(piecewise_linear_map(50.0, &m), -40.0);
         assert_eq!(piecewise_linear_map(250.0, &m), 80.0);
         assert_eq!(piecewise_linear_map(7.0, &[]), 7.0);
+    }
+
+    #[test]
+    fn sorted_maps_keep_the_first_key_and_the_last_value() {
+        let got = as_sorted_map([(2.0, 1.0), (1.0, 5.0), (2.0, 3.0), (0.0, 7.0), (-0.0, 8.0), (f64::NAN, 1.0), (3.0, f64::INFINITY)]);
+        assert_eq!(got, [(0.0, 8.0), (1.0, 5.0), (2.0, 3.0)]);
+        assert!(got[0].0.is_sign_positive(), "the first key of a run is kept");
+        assert!(conflicting(&[(1.0, 2.0), (3.0, 4.0), (1.0, 2.5)]));
+        assert!(!conflicting(&[(1.0, 2.0), (3.0, 4.0), (1.0, 2.0), (-0.0, 1.0), (0.0, 1.0)]));
+        assert!(conflicting(&[(1.0, f64::NAN)]), "not a number differs even from itself");
+        assert!(!conflicting(&[(f64::NAN, 1.0), (f64::NAN, 2.0)]));
+        let m = Mapping::new(vec![(100.0, 10.0), (200.0, 30.0), (300.0, 30.0)], 100.0);
+        assert_eq!(m.to_user(30.0), 300.0, "the later point wins backwards");
+        assert_eq!(m.to_user(20.0), 200.0);
+    }
+
+    #[test]
+    fn large_maps_are_built_without_pairwise_work() {
+        // Tens of thousands of points and instances: comparing every pair would not finish.
+        let mut f = font(&[("Weight", "wght")], &[("Light", &[40.0]), ("Bold", &[90.0])]);
+        let points: Vec<(String, f64)> = (0..200_000).map(|k| (format!("{k}"), f64::from(k) * 2.0)).collect();
+        let refs: Vec<(&str, f64)> = points.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+        Arc::make_mut(&mut f.info).params.0.push(mappings("wght", &refs));
+        let m = mapping(&f, 0);
+        assert_eq!(m.pairs().len(), 200_000);
+        assert_eq!(m.to_user(1000.0), 500.0);
+        Arc::make_mut(&mut f.info).params.0.clear();
+        let inst = |name: &str, w: f64| Instance {
+            name: name.into(),
+            location: vec![w],
+            weight_class: Some(StyleClass::Name(name.into())),
+            ..Default::default()
+        };
+        f.instances = Arc::new((0..60_000).map(|k| if k % 2 == 0 { inst("Light", 40.0) } else { inst("Bold", 90.0) }).collect());
+        assert_eq!(mapping(&f, 0).pairs(), [(300.0, 40.0), (700.0, 90.0)]);
+        Arc::make_mut(&mut f.instances).push(inst("Light", 41.0));
+        assert_eq!(mapping(&f, 0).pairs(), [(40.0, 40.0), (90.0, 90.0)], "one user value at two design values makes no map");
     }
 
     #[test]

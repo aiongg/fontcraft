@@ -12,8 +12,10 @@
 //! - What is left out (hinting, `cvar`, layout variations beyond kerning) is listed in
 //!   [`crate::Decompiled::warnings`].
 //! - Counts read from the file are checked before allocation: at most [`MAX_NAMED_INSTANCES`]
-//!   named instances, [`MAX_SOURCES`] masters and intermediate locations, and per glyph the tuple
-//!   and point counts the tables state checked against the glyph itself.
+//!   named instances, [`MAX_SOURCES`] masters and intermediate locations, [`MAX_OPENED_LAYERS`]
+//!   layers, [`MAX_MAPPING_POINTS`] `avar` points per axis, and per glyph the tuple and point
+//!   counts the tables state checked against the glyph itself. A font beyond these limits is
+//!   [`DecompileError::Unreadable`]; [`crate::decompile`] then opens its default instance.
 //! - A static font passed here is opened as [`crate::decompile`] opens it.
 //!
 //! How the designspace is rebuilt:
@@ -32,7 +34,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use fontcraft_model::axes::{AXIS_MAPPINGS, ORIGIN, number_value, piecewise_linear_map, whole};
+use fontcraft_model::axes::{AXIS_MAPPINGS, MAX_MAPPING_POINTS, ORIGIN, number_value, piecewise_linear_map, whole};
 use fontcraft_model::plist::{Dict, Str, Value};
 use fontcraft_model::{
     Axis, AxisLabel, AxisRange, Component, Font, Instance, Layer, LayerAttrs, LayerInfo, LayerInfoBox, MAX_AXIS_VALUES, Master, Node, NodeKind, Path,
@@ -45,16 +47,21 @@ use skrifa::prelude::{LocationRef, Size};
 use skrifa::raw::tables::glyf::{Anchor, Glyph as RawGlyph, PointFlags};
 use skrifa::raw::tables::gvar::{DeltaBuffers, Gvar};
 use skrifa::raw::tables::loca::LocaGlyph;
+use skrifa::raw::tables::name::{Name, NameRecord};
 use skrifa::raw::tables::stat::AxisValue;
 use skrifa::raw::types::{F2Dot14, Fixed, GlyphId, Point, Tag};
 use skrifa::raw::{FileRef, FontRef, TableProvider};
+use skrifa::string::{LocalizedString, StringId};
 
-use crate::{CubicPen, DecompileError, Decompiled, MASTER, clean_name, english};
+use crate::{CubicPen, DecompileError, Decompiled, MASTER, clean_name};
 
 /// Most named instances read from `fvar` (its 16-bit count).
 pub const MAX_NAMED_INSTANCES: usize = 65_535;
 /// Most masters and intermediate locations a variable font opens into.
 pub const MAX_SOURCES: usize = 1_024;
+/// Most layers the masters and intermediate locations add to an opened variable font (glyphs
+/// times masters, plus intermediate layers).
+pub const MAX_OPENED_LAYERS: usize = 2_000_000;
 /// Most nodes and components across every layer an opened variable font gets.
 pub const MAX_OPENED_NODES: usize = 20_000_000;
 /// Most delta applications (points times tuples, summed over every glyph and location).
@@ -105,6 +112,52 @@ pub(crate) fn read_any(font: &FontRef) -> Result<Decompiled, DecompileError> {
         }
     }
 }
+
+/// The name table's records grouped by name ID, read once: a font with many named instances or
+/// STAT values would otherwise scan every record for each of them.
+struct Names<'a> {
+    name: Option<Name<'a>>,
+    by_id: BTreeMap<u16, Vec<&'a NameRecord>>,
+}
+
+impl<'a> Names<'a> {
+    fn new(sfnt: &FontRef<'a>) -> Self {
+        let name = sfnt.name().ok();
+        let mut by_id: BTreeMap<u16, Vec<&'a NameRecord>> = BTreeMap::new();
+        if let Some(n) = &name {
+            for record in n.name_record() {
+                by_id.entry(record.name_id().to_u16()).or_default().push(record);
+            }
+        }
+        Names { name, by_id }
+    }
+
+    /// The first of `ids` with a string that is not blank: its first English record, else its
+    /// first record (the static reader's choice). At most [`MAX_DECODED_CHARS`] characters are
+    /// decoded.
+    fn english(&self, ids: &[StringId]) -> Option<String> {
+        let name = self.name.as_ref()?;
+        ids.iter().find_map(|id| {
+            let mut first = None;
+            let mut english = None;
+            for record in self.by_id.get(&id.to_u16())? {
+                let s = LocalizedString::new(name, record);
+                if s.language().is_some_and(|l| l.starts_with("en")) {
+                    english = Some(s);
+                    break;
+                }
+                if first.is_none() {
+                    first = Some(s);
+                }
+            }
+            let text: String = english.or(first)?.chars().take(MAX_DECODED_CHARS).collect();
+            (!text.trim().is_empty()).then_some(text)
+        })
+    }
+}
+
+/// Most characters of one name string decoded: well beyond what a model name keeps.
+const MAX_DECODED_CHARS: usize = 4 * fontcraft_model::MAX_NAME_LEN;
 
 /// An `fvar` axis with its `avar` map.
 struct VarAxis {
@@ -179,7 +232,9 @@ impl Budget {
         Ok(())
     }
 
+    /// Counts one layer and its nodes; every layer costs one unit of work, empty or not.
     fn nodes(&mut self, layer: &Layer) -> Result<(), DecompileError> {
+        self.work(1)?;
         let n: usize = layer
             .shapes
             .iter()
@@ -196,23 +251,29 @@ impl Budget {
     }
 }
 
-fn read_axes(sfnt: &FontRef) -> Result<Vec<VarAxis>, DecompileError> {
+fn read_axes(sfnt: &FontRef, names: &Names) -> Result<Vec<VarAxis>, DecompileError> {
     let axes = sfnt.axes();
     if axes.len() > MAX_AXIS_VALUES {
         return Err(DecompileError::Unreadable(format!("the font has {} axes; at most {MAX_AXIS_VALUES} can be opened", axes.len())));
     }
-    let maps: Vec<Vec<(f64, f64)>> = match sfnt.avar() {
-        Ok(avar) => avar
-            .axis_segment_maps()
-            .iter()
-            .take(axes.len())
-            .map(|m| {
-                m.map(|m| m.axis_value_maps().iter().map(|p| (p.from_coordinate().to_f64(), p.to_coordinate().to_f64())).collect())
-                    .unwrap_or_default()
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    };
+    let mut maps: Vec<Vec<(f64, f64)>> = Vec::new();
+    if let Ok(avar) = sfnt.avar() {
+        for m in avar.axis_segment_maps().iter().take(axes.len()) {
+            let Ok(m) = m else {
+                maps.push(Vec::new());
+                continue;
+            };
+            let points = m.axis_value_maps();
+            if points.len() > MAX_MAPPING_POINTS {
+                return Err(DecompileError::Unreadable(format!(
+                    "the avar map of axis {} has {} points; at most {MAX_MAPPING_POINTS} can be opened",
+                    maps.len() + 1,
+                    points.len()
+                )));
+            }
+            maps.push(points.iter().map(|p| (p.from_coordinate().to_f64(), p.to_coordinate().to_f64())).collect());
+        }
+    }
     let mut out = Vec::with_capacity(axes.len());
     for (i, a) in axes.iter().enumerate() {
         let tag = a.tag().to_string();
@@ -220,7 +281,7 @@ fn read_axes(sfnt: &FontRef) -> Result<Vec<VarAxis>, DecompileError> {
         if !(min.is_finite() && default.is_finite() && max.is_finite() && min <= default && default <= max) {
             return Err(DecompileError::Unreadable(format!("the range of axis `{tag}` is not ordered")));
         }
-        let name = english(sfnt, &[a.name_id()]).map(|s| clean_name(&s)).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| clean_name(&tag));
+        let name = names.english(&[a.name_id()]).map(|s| clean_name(&s)).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| clean_name(&tag));
         // An identity map, or one that does not keep −1, 0 and 1 in place, adds nothing usable.
         let avar = maps.get(i).cloned().unwrap_or_default();
         let fixed = [-1.0, 0.0, 1.0].iter().all(|v| avar.iter().any(|(f, t)| f == v && t == v));
@@ -231,10 +292,18 @@ fn read_axes(sfnt: &FontRef) -> Result<Vec<VarAxis>, DecompileError> {
     Ok(out)
 }
 
-/// The peaks a glyph's `gvar` tuples use and how many tuples it has.
-fn glyph_peaks(gvar: &Gvar, gid: u32, axis_count: usize, budget: &mut Budget) -> Result<(BTreeSet<Peak>, usize), DecompileError> {
-    let mut set = BTreeSet::new();
-    let Ok(Some(data)) = gvar.glyph_variation_data(GlyphId::new(gid)) else { return Ok((set, 0)) };
+/// The peaks a glyph's `gvar` tuples use, as indices into `ids` (which gains the peaks it has not
+/// seen), and how many tuples the glyph has. Refuses a font that varies at more than
+/// [`MAX_SOURCES`] locations as soon as it does.
+fn glyph_peaks(
+    gvar: &Gvar,
+    gid: u32,
+    axis_count: usize,
+    ids: &mut BTreeMap<Peak, u16>,
+    budget: &mut Budget,
+) -> Result<(Vec<u16>, usize), DecompileError> {
+    let mut used: Vec<u16> = Vec::new();
+    let Ok(Some(data)) = gvar.glyph_variation_data(GlyphId::new(gid)) else { return Ok((used, 0)) };
     let mut tuples = 0usize;
     for t in data.tuples() {
         budget.work(1)?;
@@ -247,9 +316,25 @@ fn glyph_peaks(gvar: &Gvar, gid: u32, axis_count: usize, budget: &mut Budget) ->
         if bits.iter().all(|b| *b == 0) || bits.iter().any(|b| !(-ONE..=ONE).contains(b)) {
             continue;
         }
-        set.insert(bits);
+        let id = match ids.get(&bits) {
+            Some(id) => *id,
+            None => {
+                // The default is one more location.
+                if ids.len().saturating_add(1) >= MAX_SOURCES {
+                    return Err(DecompileError::Unreadable(format!(
+                        "the font varies at more than {MAX_SOURCES} locations; at most {MAX_SOURCES} can be opened"
+                    )));
+                }
+                let id = u16::try_from(ids.len()).map_err(|_| DecompileError::Unreadable("too many variation locations".into()))?;
+                ids.insert(bits, id);
+                id
+            }
+        };
+        used.push(id);
     }
-    Ok((set, tuples))
+    used.sort_unstable();
+    used.dedup();
+    Ok((used, tuples))
 }
 
 /// The peaks of the regions in a CFF2 table's variation store.
@@ -276,12 +361,13 @@ struct NamedInstance {
     design: Vec<f64>,
 }
 
-fn read_instances(sfnt: &FontRef, axes: &[VarAxis]) -> Vec<NamedInstance> {
+fn read_instances(sfnt: &FontRef, axes: &[VarAxis], names: &Names) -> Vec<NamedInstance> {
     let mut out = Vec::new();
     for (k, inst) in sfnt.named_instances().iter().enumerate().take(MAX_NAMED_INSTANCES) {
         let peak: Peak = inst.location().coords().iter().map(|c| c.to_bits()).collect();
         let design = axes.iter().zip(inst.user_coords()).map(|(a, u)| a.user_to_design(f64::from(u))).collect();
-        let name = english(sfnt, &[inst.subfamily_name_id()])
+        let name = names
+            .english(&[inst.subfamily_name_id()])
             .map(|s| clean_name(&s))
             .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| format!("Instance {}", k + 1));
@@ -291,7 +377,7 @@ fn read_instances(sfnt: &FontRef, axes: &[VarAxis]) -> Vec<NamedInstance> {
 }
 
 /// STAT's design-axis order and labels (formats 1 to 3) on the axes they name.
-fn read_stat(sfnt: &FontRef, axes: &mut [Axis], warnings: &mut Vec<String>) {
+fn read_stat(sfnt: &FontRef, axes: &mut [Axis], warnings: &mut Vec<String>, names: &Names) {
     let Ok(stat) = sfnt.stat() else { return };
     let Ok(design) = stat.design_axes() else { return };
     for rec in design {
@@ -311,7 +397,7 @@ fn read_stat(sfnt: &FontRef, axes: &mut [Axis], warnings: &mut Vec<String>) {
         let Some(axis) = axes.iter_mut().find(|a| a.tag == tag) else { continue };
         let flags = v.flags().bits();
         let mut label = AxisLabel {
-            name: english(sfnt, &[v.value_name_id()]).map(|s| clean_name(&s)).unwrap_or_default(),
+            name: names.english(&[v.value_name_id()]).map(|s| clean_name(&s)).unwrap_or_default(),
             user_value: value.to_f64(),
             linked_user_value: v.linked_value().map(Fixed::to_f64),
             elidable: flags & 0x0002 != 0,
@@ -552,7 +638,8 @@ impl Reader<'_> {
 }
 
 fn read_variable(sfnt: &FontRef) -> Result<Decompiled, DecompileError> {
-    let axes = read_axes(sfnt)?;
+    let name_table = Names::new(sfnt);
+    let axes = read_axes(sfnt, &name_table)?;
     if axes.is_empty() {
         return crate::read(sfnt);
     }
@@ -562,34 +649,42 @@ fn read_variable(sfnt: &FontRef) -> Result<Decompiled, DecompileError> {
     let count = d.font.glyphs.len();
     let mut budget = Budget::default();
 
-    // The peaks each glyph uses, and how many tuples it has.
+    // The peaks each glyph uses (indices into `peaks`), and how many tuples it has.
     let gvar = sfnt.gvar().ok();
-    let mut per_glyph: Vec<(BTreeSet<Peak>, usize)> = Vec::with_capacity(count);
-    let shared = match &gvar {
+    let mut per_glyph: Vec<(Vec<u16>, usize)> = Vec::with_capacity(count);
+    let (peaks, shared): (Vec<Peak>, Option<Vec<u16>>) = match &gvar {
         Some(gvar) => {
+            let mut ids: BTreeMap<Peak, u16> = BTreeMap::new();
             for gid in 0..count {
                 let gid = u32::try_from(gid).map_err(|_| DecompileError::Unreadable("too many glyphs".into()))?;
-                per_glyph.push(glyph_peaks(gvar, gid, axis_count, &mut budget)?);
+                per_glyph.push(glyph_peaks(gvar, gid, axis_count, &mut ids, &mut budget)?);
             }
-            None
+            let mut by_id: Vec<(u16, Peak)> = ids.into_iter().map(|(p, id)| (id, p)).collect();
+            by_id.sort_unstable_by_key(|(id, _)| *id);
+            (by_id.into_iter().map(|(_, p)| p).collect(), None)
         }
-        None => Some(cff2_peaks(sfnt, axis_count)),
+        None => {
+            let all: Vec<Peak> = cff2_peaks(sfnt, axis_count).into_iter().collect();
+            let ids = (0..all.len()).map(|i| u16::try_from(i).unwrap_or(u16::MAX)).collect();
+            (all, Some(ids))
+        }
     };
-    let empty = (BTreeSet::new(), 0usize);
-    let peaks_of = |gid: usize| -> &BTreeSet<Peak> {
+    let none: Vec<u16> = Vec::new();
+    let peaks_of = |gid: usize| -> &[u16] {
         match &shared {
             Some(all) => all,
-            None => &per_glyph.get(gid).unwrap_or(&empty).0,
+            None => per_glyph.get(gid).map_or(&none, |(ids, _)| ids),
         }
     };
+    let peak_at = |id: &u16| peaks.get(usize::from(*id));
     let mut usage: BTreeMap<Peak, usize> = BTreeMap::new();
     let mut varying = 0usize;
     for gid in 0..count {
-        let peaks = peaks_of(gid);
-        if !peaks.is_empty() {
+        let ids = peaks_of(gid);
+        if !ids.is_empty() {
             varying += 1;
         }
-        for p in peaks {
+        for p in ids.iter().filter_map(peak_at) {
             *usage.entry(p.clone()).or_default() += 1;
         }
     }
@@ -600,9 +695,20 @@ fn read_variable(sfnt: &FontRef) -> Result<Decompiled, DecompileError> {
     let mut master_peaks: Vec<Peak> =
         usage.iter().filter(|(p, n)| shared.is_some() || corner(p) || n.saturating_mul(2) >= varying).map(|(p, _)| p.clone()).collect();
     master_peaks.sort_by_key(|p| (p.iter().filter(|b| **b != 0).count(), p.clone()));
+    let is_master: BTreeSet<&Peak> = master_peaks.iter().collect();
+
+    // Every glyph gets a layer per master and per intermediate location it uses: refuse the font
+    // before making them when that is too many, empty glyphs included.
+    let intermediates: usize = (0..count).map(|gid| peaks_of(gid).iter().filter_map(peak_at).filter(|p| !is_master.contains(p)).count()).sum();
+    let layers = count.saturating_mul(master_peaks.len()).saturating_add(intermediates);
+    if layers > MAX_OPENED_LAYERS {
+        return Err(DecompileError::Unreadable(format!(
+            "the masters and intermediate locations would make {layers} layers; at most {MAX_OPENED_LAYERS} can be opened"
+        )));
+    }
 
     // Masters: the default first, then one per master peak.
-    let instances = read_instances(sfnt, &axes);
+    let instances = read_instances(sfnt, &axes, &name_table);
     let default_design: Vec<f64> = axes.iter().map(|a| a.default).collect();
     let mut sources = vec![Source { peak: vec![0; axis_count], coords: vec![F2Dot14::ZERO; axis_count], master: MASTER.to_string() }];
     let mut masters: Vec<Master> = d.font.masters.iter().take(1).cloned().collect();
@@ -626,6 +732,19 @@ fn read_variable(sfnt: &FontRef) -> Result<Decompiled, DecompileError> {
     // A copy whose lifetime the locations below can meet.
     let short: FontRef<'_> = sfnt.clone();
     let master_metrics: Vec<GlyphMetrics> = sources.iter().map(|s| short.glyph_metrics(Size::unscaled(), LocationRef::new(&s.coords))).collect();
+    // Each intermediate location's coordinates, metrics and nearest master, found once.
+    let place_coords: BTreeMap<&Peak, Vec<F2Dot14>> =
+        usage.keys().filter(|p| !is_master.contains(p)).map(|p| (p, p.iter().map(|b| F2Dot14::from_bits(*b)).collect())).collect();
+    let mut places: BTreeMap<&Peak, (&[F2Dot14], GlyphMetrics, String)> = BTreeMap::new();
+    for (&peak, coords) in &place_coords {
+        let metrics = short.glyph_metrics(Size::unscaled(), LocationRef::new(coords));
+        let nearest = sources
+            .iter()
+            .min_by_key(|s| s.peak.iter().zip(peak).map(|(a, b)| (i32::from(*a) - i32::from(*b)).unsigned_abs()).sum::<u32>())
+            .map_or(MASTER, |s| s.master.as_str())
+            .to_string();
+        places.insert(peak, (coords.as_slice(), metrics, nearest));
+    }
     let mut incompatible: Vec<String> = Vec::new();
     let mut intermediate = 0usize;
     let mut glyph_layers: Vec<Vec<Layer>> = Vec::with_capacity(count);
@@ -645,14 +764,10 @@ fn read_variable(sfnt: &FontRef) -> Result<Decompiled, DecompileError> {
             layers.push(layer);
         }
         // Peaks only some glyphs use: intermediate layers on the nearest master.
-        for peak in peaks_of(gid).iter().filter(|p| !master_peaks.contains(p)) {
-            let coords: Vec<F2Dot14> = peak.iter().map(|b| F2Dot14::from_bits(*b)).collect();
-            let metrics = short.glyph_metrics(Size::unscaled(), LocationRef::new(&coords));
-            let mut layer = reader.layer_at(tt.as_ref(), id, tuples, &coords, &metrics, base.width, &mut budget)?;
-            let nearest = sources
-                .iter()
-                .min_by_key(|s| s.peak.iter().zip(peak).map(|(a, b)| (i32::from(*a) - i32::from(*b)).unsigned_abs()).sum::<u32>())
-                .map_or(MASTER, |s| s.master.as_str());
+        for peak in peaks_of(gid).iter().filter_map(peak_at).filter(|p| !is_master.contains(p)) {
+            let Some((coords, metrics, nearest)) = places.get(peak) else { continue };
+            let mut layer = reader.layer_at(tt.as_ref(), id, tuples, coords, metrics, base.width, &mut budget)?;
+            let nearest = nearest.as_str();
             let design: Vec<f64> = axes.iter().zip(peak).map(|(a, b)| a.design(norm(*b))).collect();
             intermediate += 1;
             layer.id = format!("{nearest}.i{}", layers.len() + 1);
@@ -670,6 +785,7 @@ fn read_variable(sfnt: &FontRef) -> Result<Decompiled, DecompileError> {
         }
         glyph_layers.push(layers);
     }
+    drop(places);
     drop(master_metrics);
 
     // Font-level data.
@@ -684,7 +800,7 @@ fn read_variable(sfnt: &FontRef) -> Result<Decompiled, DecompileError> {
             ..Default::default()
         })
         .collect();
-    read_stat(sfnt, &mut model_axes, &mut d.warnings);
+    read_stat(sfnt, &mut model_axes, &mut d.warnings, &name_table);
     font.axes = Arc::new(model_axes);
     font.masters = Arc::new(masters);
     font.instances = Arc::new(instances.into_iter().map(|i| Instance { name: i.name, location: i.design, ..Default::default() }).collect());

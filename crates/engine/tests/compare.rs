@@ -115,6 +115,27 @@ fn compare_fonts_use_right_writes_kerning_metrics_and_font_info_to_the_left() {
 }
 
 #[test]
+fn kerning_rows_keep_sides_with_spaces_apart() {
+    let mut s = two_documents();
+    let mut left = font_of(&s, 0).as_ref().clone();
+    Arc::make_mut(&mut left.kerning).ltr.set("m01", "x y", "z", -10.0);
+    Arc::make_mut(&mut left.kerning).ltr.set("m01", "x", "y z", -20.0);
+    s.add_document(left, None).unwrap();
+    let pair = json!({"left": {"document": 2}, "right": {"document": 1}});
+    let out = run(&mut s, "compareFonts.diff", with(pair.clone(), "categories", json!(["kerning"])));
+    let rows = out["rows"].as_array().unwrap();
+    let spaced: Vec<&Value> = rows.iter().filter(|r| r["label"] == "x y z").collect();
+    assert_eq!(spaced.len(), 2, "two pairs, two rows: {rows:?}");
+    for r in &spaced {
+        run(&mut s, "compareFonts.useLeft", with(pair.clone(), "row", (*r).clone()));
+    }
+    let right = font_of(&s, 1);
+    assert_eq!(right.kerning.ltr.get("m01", "x y", "z"), Some(-10.0));
+    assert_eq!(right.kerning.ltr.get("m01", "x", "y z"), Some(-20.0));
+    assert_eq!(right.kerning.ltr.get("m01", "x", "y"), None);
+}
+
+#[test]
 fn compare_fonts_use_left_refuses_a_value_the_giving_side_lacks_and_changes_nothing() {
     let mut s = two_documents();
     let mut right = font_of(&s, 1).as_ref().clone();

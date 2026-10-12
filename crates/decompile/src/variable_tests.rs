@@ -286,3 +286,126 @@ fn a_reopened_variable_font_compiles_to_the_same_outlines_and_advances() {
         }
     }
 }
+
+/// `glyphs` empty glyphs on a weight axis (no `avar`, no named instances); glyph 1 has a `gvar`
+/// tuple at each of `peaks` distinct locations, so every one of them becomes a master.
+fn many_locations(glyphs: u16, peaks: u16) -> Vec<u8> {
+    use write_fonts::from_obj::ToOwnedTable;
+    use write_fonts::tables::{glyf, head::Head, hhea::Hhea, hmtx, loca::LocaFormat, maxp::Maxp};
+    let (_, compiled) = source();
+    let base = FontRef::new(&compiled.bytes).unwrap();
+    let mut builder = glyf::GlyfLocaBuilder::new();
+    for _ in 0..glyphs {
+        builder.add_glyph(&glyf::Glyph::Empty).unwrap();
+    }
+    let (glyf_table, loca_table, format) = builder.build();
+    let mut head: Head = base.head().unwrap().to_owned_table();
+    head.index_to_loc_format = if format == LocaFormat::Long { 1 } else { 0 };
+    let mut hhea: Hhea = base.hhea().unwrap().to_owned_table();
+    hhea.number_of_h_metrics = 1;
+    let hmtx_table = hmtx::Hmtx::new(vec![hmtx::LongMetric::new(500, 0)], vec![0; usize::from(glyphs) - 1]);
+    let mut maxp: Maxp = base.maxp().unwrap().to_owned_table();
+    maxp.num_glyphs = glyphs;
+    let phantoms = || vec![GlyphDelta::required(0, 0), GlyphDelta::required(10, 0), GlyphDelta::required(0, 0), GlyphDelta::required(0, 0)];
+    let variations: Vec<GlyphVariations> = (0..glyphs)
+        .map(|gid| {
+            let deltas = if gid == 1 { (1..=peaks).map(|k| GlyphDeltas::new(tent(f64::from(k) / 1024.0), phantoms())).collect() } else { Vec::new() };
+            GlyphVariations::new(write_fonts::types::GlyphId::new(u32::from(gid)), deltas)
+        })
+        .collect();
+    let gvar = Gvar::new(variations, 1).unwrap();
+    let fvar = Fvar::new(AxisInstanceArrays::new(
+        vec![VariationAxisRecord::new(
+            Tag::new(b"wght"),
+            Fixed::from_f64(100.0),
+            Fixed::from_f64(400.0),
+            Fixed::from_f64(900.0),
+            0,
+            NameId::new(256),
+        )],
+        Vec::new(),
+    ));
+    let mut out = FontBuilder::new();
+    out.add_table(&glyf_table).unwrap().add_table(&loca_table).unwrap().add_table(&head).unwrap().add_table(&hhea).unwrap();
+    out.add_table(&hmtx_table).unwrap().add_table(&maxp).unwrap().add_table(&gvar).unwrap().add_table(&fvar).unwrap();
+    out.copy_missing_tables(base);
+    out.build()
+}
+
+#[test]
+fn a_font_that_would_open_into_too_many_layers_falls_back_to_its_default() {
+    // 65,535 glyphs times 1,023 masters: tens of millions of layers, almost all of them empty.
+    let bytes = many_locations(u16::MAX, 1_023);
+    let refused = open_variable(&bytes, None).err();
+    assert!(matches!(&refused, Some(DecompileError::Unreadable(m)) if m.contains("layers")), "{refused:?}");
+    let opened = decompile(&bytes, None).unwrap();
+    assert_eq!(opened.font.masters.len(), 1);
+    assert!(opened.warnings.iter().any(|w| w.contains("only the default instance")), "{:?}", opened.warnings);
+    // A few glyphs at a few locations still open.
+    let small = open_variable(&many_locations(8, 40), None).unwrap();
+    assert_eq!(small.font.masters.len(), 41);
+}
+
+#[test]
+fn an_avar_map_with_too_many_points_falls_back_to_the_default() {
+    let (_, compiled) = source();
+    let base = FontRef::new(&compiled.bytes).unwrap();
+    let f2 = write_fonts::types::F2Dot14::from_f64;
+    let count = 20_000u32;
+    let points: Vec<AxisValueMap> = (0..=count)
+        .map(|k| {
+            let v = -1.0 + 2.0 * f64::from(k) / f64::from(count);
+            AxisValueMap::new(f2(v), f2(v))
+        })
+        .collect();
+    let avar = Avar::new(vec![SegmentMaps::new(points)]);
+    let instances: Vec<InstanceRecord> = (0..2_000)
+        .map(|k| InstanceRecord {
+            subfamily_name_id: NameId::new(2),
+            flags: 0,
+            coordinates: vec![Fixed::from_f64(300.0 + f64::from(k) * 0.2)],
+            post_script_name_id: None,
+        })
+        .collect();
+    let fvar = Fvar::new(AxisInstanceArrays::new(
+        vec![VariationAxisRecord::new(Tag::new(b"wght"), Fixed::from_f64(300.0), Fixed::from_f64(400.0), Fixed::from_f64(700.0), 0, NameId::new(2))],
+        instances,
+    ));
+    let mut builder = FontBuilder::new();
+    builder.add_table(&fvar).unwrap().add_table(&avar).unwrap();
+    builder.copy_missing_tables(base);
+    let bytes = builder.build();
+    let refused = open_variable(&bytes, None).err();
+    assert!(matches!(&refused, Some(DecompileError::Unreadable(m)) if m.contains("avar")), "{refused:?}");
+    let opened = decompile(&bytes, None).unwrap();
+    assert!(opened.warnings.iter().any(|w| w.contains("only the default instance")), "{:?}", opened.warnings);
+}
+
+#[test]
+fn many_named_instances_read_their_names_from_one_pass_over_the_name_table() {
+    // 20,000 instances, each with a name record of its own: looking each one up by scanning the
+    // whole name table would make hundreds of millions of record checks.
+    let (_, compiled) = source();
+    let base = FontRef::new(&compiled.bytes).unwrap();
+    let count = 20_000u16;
+    let mut records = vec![NameRecord::new(3, 1, 0x409, NameId::new(1), write_fonts::OffsetMarker::new("Var Test".to_string()))];
+    records.extend((0..count).map(|k| NameRecord::new(3, 1, 0x409, NameId::new(256 + k), write_fonts::OffsetMarker::new(format!("Style {k}")))));
+    let instances: Vec<InstanceRecord> = (0..count)
+        .map(|k| InstanceRecord {
+            subfamily_name_id: NameId::new(256 + k),
+            flags: 0,
+            coordinates: vec![Fixed::from_f64(400.0)],
+            post_script_name_id: None,
+        })
+        .collect();
+    let fvar = Fvar::new(AxisInstanceArrays::new(
+        vec![VariationAxisRecord::new(Tag::new(b"wght"), Fixed::from_f64(300.0), Fixed::from_f64(400.0), Fixed::from_f64(700.0), 0, NameId::new(1))],
+        instances,
+    ));
+    let mut builder = FontBuilder::new();
+    builder.add_table(&fvar).unwrap().add_table(&Name::new(records)).unwrap();
+    builder.copy_missing_tables(base);
+    let opened = open_variable(&builder.build(), None).unwrap();
+    assert_eq!(opened.font.instances.len(), usize::from(count));
+    assert_eq!(opened.font.instances.last().unwrap().name, format!("Style {}", count - 1));
+}

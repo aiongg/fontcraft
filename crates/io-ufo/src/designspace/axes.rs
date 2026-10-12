@@ -185,7 +185,7 @@ pub(super) fn map_and_range(font: &Font, i: usize) -> (Vec<(f64, f64)>, AxisRang
         None => {
             let m = rules::mapping(font, i);
             let range = AxisRange { minimum: m.minimum(), default: m.default, maximum: m.maximum() };
-            (m.pairs, range)
+            (m.into_pairs(), range)
         }
     };
     let map = if map.iter().all(|(u, d)| u == d) { Vec::new() } else { map };

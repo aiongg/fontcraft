@@ -406,6 +406,8 @@ pub(crate) mod tests {
         assert!(RangeSet::from_rules(&ds, &bounded_beyond).is_err(), "a bound on an axis the font lacks");
         assert!(RangeSet::from_rules(&ds, &[AxisRule::default(), AxisRule::default()]).is_ok(), "open rules beyond the axes are harmless");
         assert!(RangeSet::from_rules(&ds, &[AxisRule { min: Some(f64::INFINITY), max: None }]).is_err());
+        let reversed = RangeSet::from_rules(&ds, &[AxisRule { min: Some(800.0), max: Some(600.0) }]);
+        assert_eq!(reversed, Err(InterpError::ReversedRange { axis: 1, min: 800.0, max: 600.0 }), "a range whose ends are swapped");
         assert!(RangeSet::from_rules(&ds, &vec![AxisRule::default(); MAX_AXES + 1]).is_err());
     }
 }

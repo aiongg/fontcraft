@@ -26,7 +26,7 @@ pub const MAX_OVERLAY_RECORDS: usize = 4_096;
 /// overlay grow exponentially; past this budget it stops with [`InterpError::LimitExceeded`].
 pub const MAX_OVERLAY_WORK: usize = 10_000_000;
 /// Most points one axis mapping may have.
-pub const MAX_MAPPING_POINTS: usize = 256;
+pub const MAX_MAPPING_POINTS: usize = fontcraft_model::axes::MAX_MAPPING_POINTS;
 /// Largest absolute coordinate, internal or external, accepted anywhere.
 pub const MAX_COORDINATE: f64 = fontcraft_model::MAX_COORDINATE;
 /// Most documents one Generate Instances run may create.
@@ -67,6 +67,9 @@ pub enum InterpError {
     #[error("{what} is not a usable number")]
     BadNumber { what: String },
     /// An axis mapping whose points are not finite and increasing on both coordinates.
+    /// An alternate layer's range whose minimum lies above its maximum.
+    #[error("an alternate range on axis {axis} runs from {min} down to {max}; its minimum must not be above its maximum")]
+    ReversedRange { axis: usize, min: f64, max: f64 },
     #[error("the mapping of axis `{axis}` is not usable: {reason}")]
     BadMapping { axis: String, reason: String },
     /// A custom parameter whose value cannot be read.

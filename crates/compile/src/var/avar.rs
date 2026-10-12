@@ -5,14 +5,13 @@
 //! Contract: one segment map per axis from [`VarAxis::avar`](super::VarAxis::avar), an identity
 //! map for axes without one; no table when every axis is identity, as fontc writes it.
 //!
-//! The segment maps follow fontc (`fontbe` `avar.rs`, Apache-2.0): each point of an axis's
-//! external-to-internal map becomes `(normalized external, normalized internal)`; the points −1
-//! and 1 are added when the map does not reach them; an axis whose points all map to themselves
-//! writes the required (−1, −1), (0, 0), (1, 1) map. Identity is decided on the written F2Dot14
-//! values.
+//! The segment maps come from [`Designspace::avar_map`], which normalizes both sides of each
+//! point of an axis's external-to-internal map with the axis's own orientation, so a map whose
+//! internal values fall as the external ones rise writes the same table as its rising mirror.
+//! As in fontc (`fontbe` `avar.rs`, Apache-2.0), an axis whose points all map to themselves at
+//! F2Dot14 precision writes the required (−1, −1), (0, 0), (1, 1) map.
 
-use fontcraft_interp::designspace::AxisInfo;
-use fontcraft_model::AxisRange;
+use fontcraft_interp::Designspace;
 use write_fonts::tables::avar::{Avar, AxisValueMap, SegmentMaps};
 use write_fonts::types::F2Dot14;
 
@@ -26,44 +25,27 @@ fn avar_error(message: String) -> CompileError {
     CompileError::Table { table: "avar", message }
 }
 
-/// fontTools' `normalizeValue`: `v` clamped to the range, then −1 at the minimum, 0 at the
-/// default and 1 at the maximum, linear in between.
-fn normalize(v: f64, range: &AxisRange) -> f64 {
-    let v = v.clamp(range.minimum.min(range.maximum), range.maximum.max(range.minimum));
-    let span = if v < range.default { range.default - range.minimum } else { range.maximum - range.default };
-    if span == 0.0 || !span.is_finite() { 0.0 } else { ((v - range.default) / span).clamp(-1.0, 1.0) }
-}
-
 fn f2dot14(v: f64) -> F2Dot14 {
     F2Dot14::from_f32(v as f32)
 }
 
-/// The segment map of `axis`: `(normalized external, normalized internal)` pairs, sorted, with
-/// (−1, −1) and (1, 1) added where the map stops short of them; empty when the map is the identity
-/// at F2Dot14 precision.
-pub fn segment_map(axis: &AxisInfo) -> Vec<(f64, f64)> {
-    let ext = &axis.external;
-    let int = &axis.internal;
-    let (lo, hi) = (ext.minimum, ext.maximum);
-    let mut users: Vec<f64> = vec![lo, ext.default, hi];
-    users.extend(axis.map.pairs.iter().map(|(u, _)| *u).filter(|u| u.is_finite() && *u > lo && *u < hi).take(MAX_SEGMENT_POINTS));
-    users.retain(|u| u.is_finite());
-    users.sort_by(f64::total_cmp);
-    let mut map: Vec<(f64, f64)> = Vec::with_capacity(users.len() + 2);
-    for u in users {
-        let from = normalize(u, ext);
-        let to = normalize(axis.map.to_design(u), int);
-        // Points that normalize to the same value (an end equal to the default) keep the first.
-        if map.last().is_some_and(|(f, _)| f2dot14(*f) == f2dot14(from)) {
+/// The segment map of the axis at `axis` in `designspace`: `(normalized external, normalized
+/// internal)` pairs, sorted, with −1, 0 and 1 present; empty when the map is the identity at
+/// F2Dot14 precision.
+pub fn segment_map(designspace: &Designspace, axis: usize) -> Vec<(f64, f64)> {
+    let Some(points) = designspace.avar_map(axis) else { return Vec::new() };
+    let mut map: Vec<(f64, f64)> = Vec::with_capacity(points.len());
+    for (from, to) in points {
+        // Points that round to one F2Dot14 value keep one of them; −1, 0 and 1 win.
+        if let Some(last) = map.last_mut()
+            && f2dot14(last.0) == f2dot14(from)
+        {
+            if [-1.0, 0.0, 1.0].contains(&from) {
+                *last = (from, to);
+            }
             continue;
         }
         map.push((from, to));
-    }
-    if map.first().is_none_or(|(f, _)| *f > -1.0) {
-        map.insert(0, (-1.0, -1.0));
-    }
-    if map.last().is_none_or(|(f, _)| *f < 1.0) {
-        map.push((1.0, 1.0));
     }
     if map.iter().all(|(f, t)| f2dot14(*f) == f2dot14(*t)) {
         return Vec::new();
@@ -120,7 +102,10 @@ pub fn build_avar(axes: &VarAxes) -> Result<Option<Avar>, CompileError> {
 
 #[cfg(test)]
 mod tests {
-    use fontcraft_model::axes::Mapping;
+    use std::sync::Arc;
+
+    use fontcraft_model::plist::{Dict, Number, Str, Value};
+    use fontcraft_model::{Axis, Font, Master};
     use write_fonts::dump_table;
     use write_fonts::types::Tag;
 
@@ -131,16 +116,32 @@ mod tests {
         bytes.iter().map(|b| format!("{b:02x}")).collect()
     }
 
-    fn info(pairs: &[(f64, f64)], user: (f64, f64, f64), design: (f64, f64, f64)) -> AxisInfo {
-        AxisInfo {
-            tag: "wght".into(),
-            name: "Weight".into(),
-            hidden: false,
-            internal: AxisRange { minimum: design.0, default: design.1, maximum: design.2 },
-            external: AxisRange { minimum: user.0, default: user.1, maximum: user.2 },
-            map: Mapping { pairs: pairs.to_vec(), default: user.1 },
-            font_axis: 0,
+    /// A weight axis with masters at `masters` (internal), the first or the one `origin` names as
+    /// the origin, and the Axis Mappings `map` (user to internal).
+    fn designspace(masters: &[f64], origin: Option<usize>, map: &[(i64, i64)]) -> Designspace {
+        let mut f = Font::new("Avar");
+        f.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Axis::default() }]);
+        f.masters = Arc::new(
+            masters
+                .iter()
+                .enumerate()
+                .map(|(k, v)| Master { id: format!("m{k}"), name: format!("M{k}"), location: vec![*v], ..Master::default() })
+                .collect(),
+        );
+        let info = Arc::make_mut(&mut f.info);
+        if !map.is_empty() {
+            let mut inner = Dict::new();
+            for (user, design) in map {
+                inner.insert(user.to_string(), Value::Number(Number::int(*design)));
+            }
+            let mut outer = Dict::new();
+            outer.insert("wght", Value::Dict(inner));
+            info.params.set(fontcraft_model::axes::AXIS_MAPPINGS, Value::Dict(outer));
         }
+        if let Some(k) = origin {
+            info.params.set(fontcraft_model::axes::ORIGIN, Value::String(Str::new(format!("m{k}"))));
+        }
+        Designspace::new(&f).unwrap()
     }
 
     fn axes(avar: Vec<(f64, f64)>) -> VarAxes {
@@ -151,7 +152,8 @@ mod tests {
     // design 600; user and design range 300, 400, 700).
     #[test]
     fn avar_matches_the_oracle() {
-        let map = segment_map(&info(&[(300.0, 300.0), (400.0, 400.0), (500.0, 600.0), (700.0, 700.0)], (300.0, 400.0, 700.0), (300.0, 400.0, 700.0)));
+        let ds = designspace(&[300.0, 400.0, 700.0], Some(1), &[(300, 300), (400, 400), (500, 600), (700, 700)]);
+        let map = segment_map(&ds, 0);
         assert_eq!(map.len(), 4);
         let avar = build_avar(&axes(map)).unwrap().unwrap();
         assert_eq!(hex(&dump_table(&avar).unwrap()), "00010000000000010004c000c0000000000015552aab40004000");
@@ -159,22 +161,37 @@ mod tests {
 
     #[test]
     fn identity_maps_write_no_avar() {
-        let map = segment_map(&info(&[(400.0, 400.0), (700.0, 700.0)], (400.0, 400.0, 700.0), (400.0, 400.0, 700.0)));
+        let map = segment_map(&designspace(&[400.0, 700.0], None, &[(400, 400), (700, 700)]), 0);
         assert!(map.is_empty());
         assert_eq!(build_avar(&axes(map)).unwrap(), None);
         // A map shifted by a constant normalizes to the identity too.
-        let map = segment_map(&info(&[(200.0, 20.0), (700.0, 220.0)], (200.0, 200.0, 700.0), (20.0, 20.0, 220.0)));
-        assert!(map.is_empty());
+        assert!(segment_map(&designspace(&[20.0, 220.0], None, &[(200, 20), (700, 220)]), 0).is_empty());
     }
 
     #[test]
     fn one_sided_axis_gets_the_missing_end() {
-        // Default at the minimum: the map starts at 0 and fontc adds (-1, -1).
-        let map = segment_map(&info(&[(400.0, 400.0), (500.0, 600.0), (700.0, 700.0)], (400.0, 400.0, 700.0), (400.0, 400.0, 700.0)));
+        // Default at the minimum: the map starts at 0 and (-1, -1) is added.
+        let map = segment_map(&designspace(&[400.0, 700.0], None, &[(400, 400), (500, 600), (700, 700)]), 0);
         assert_eq!(map.first(), Some(&(-1.0, -1.0)));
         assert_eq!(map.get(1), Some(&(0.0, 0.0)));
         assert_eq!(map.last(), Some(&(1.0, 1.0)));
         assert!(build_avar(&axes(map)).unwrap().is_some());
+    }
+
+    #[test]
+    fn a_falling_map_exports_with_the_axis_orientation() {
+        // Internal values fall from 100 to 50 as the user value rises from 300 to 700; user 500
+        // sits at 60, four fifths of the way along the internal range.
+        let ds = designspace(&[100.0, 50.0], None, &[(300, 100), (500, 60), (700, 50)]);
+        let var = VarAxes::from_designspace(&ds).unwrap();
+        let axis = var.axes.first().unwrap();
+        assert_eq!((axis.min, axis.default, axis.max), (300.0, 300.0, 700.0));
+        assert_eq!(axis.avar.len(), 4, "{:?}", axis.avar);
+        let (from, to) = axis.avar[2];
+        assert!((from - 0.5).abs() < 1e-9 && (to - 0.8).abs() < 1e-9, "{:?}", axis.avar);
+        let avar = build_avar(&var).unwrap().unwrap();
+        let written = dump_table(&avar).unwrap();
+        assert_eq!(hex(&written), "00010000000000010004c000c000000000002000333340004000");
     }
 
     #[test]

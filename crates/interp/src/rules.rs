@@ -25,7 +25,8 @@ pub struct RangeSet {
 
 impl RangeSet {
     /// The range set of a layer's `axis_rules` (parallel to `Font::axes`), matched to the
-    /// designspace's axes. Refuses bounds that are not usable numbers and more rules than axes.
+    /// designspace's axes. Refuses bounds that are not usable numbers, a minimum above its maximum
+    /// and more rules than axes.
     /// A rule on an axis a variable font setting dropped is ignored; for the whole font, a bounded
     /// rule beyond the last axis is refused (open ones are harmless and ignored).
     pub fn from_rules(designspace: &Designspace, rules: &[AxisRule]) -> Result<RangeSet, InterpError> {
@@ -37,6 +38,11 @@ impl RangeSet {
                 if !v.is_finite() || v.abs() > MAX_COORDINATE {
                     return Err(InterpError::BadNumber { what: format!("the alternate range bound {v}") });
                 }
+            }
+            if let (Some(min), Some(max)) = (r.min, r.max)
+                && min > max
+            {
+                return Err(InterpError::ReversedRange { axis: i + 1, min, max });
             }
             let bounded = r.min.is_some() || r.max.is_some();
             if bounded && designspace.setting().is_none() && !designspace.axes().iter().any(|a| a.font_axis == i) {

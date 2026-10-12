@@ -139,7 +139,7 @@ fn axes_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
                 diffs.push(format!("axis `{}`: {what}", a.name));
             }
         }
-        let before = bent(axes::mapping(font, i).pairs);
+        let before = bent(axes::mapping(font, i).into_pairs());
         let after = bent(axes::mapping_parameter(back, &b.tag).unwrap_or_default());
         if before != after {
             diffs.push(format!("axis `{}`: map {before:?} → {after:?}", a.name));
@@ -886,7 +886,7 @@ fn font_information_survives_a_designspace() {
         stemmed += usize::from(font.masters.iter().any(|m| !m.stem_values.is_empty()));
         guided += usize::from(font.masters.iter().any(|m| !m.guides.is_empty()));
         instanced += usize::from(!font.instances.is_empty());
-        mapped += usize::from((0..font.axes.len()).any(|i| !bent(axes::mapping(&font, i).pairs).is_empty()));
+        mapped += usize::from((0..font.axes.len()).any(|i| !bent(axes::mapping(&font, i).into_pairs()).is_empty()));
         noted += usize::from(font.glyphs.iter().any(|g| !g.info.note.is_empty()));
         coloured += usize::from(font.glyphs.iter().any(|g| g.info.color.is_some()));
         produced += usize::from(font.glyphs.iter().any(|g| g.info.production.is_some()));
