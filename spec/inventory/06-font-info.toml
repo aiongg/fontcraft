@@ -319,7 +319,18 @@ milestone = "M7"
 summary = "First tab of Font Info: metadata shared by every exported font file, the design axes, and the font-level custom parameters."
 ref = "Font Info › Font"
 status = "handbook"
-notes = "Documented, not yet observed. The Axes rows are M9's (font.axes.*); until M9 the tab shows the stored axes read-only. M7 plan § 4: M7.16."
+notes = "Documented, not yet observed. The Axes rows are M9's (font.axes.*); until M9 the tab shows the stored axes read-only. M7 plan § 4: M7.16 (`crates/ui-egui/src/shell/font_info/font_tab.rs`)."
+guesses = [
+  "The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form.",
+  "The minor version shows three digits, and its stepper is a plus and a minus button after the field; the reference app's Version field settles the look.",
+  "The Creation Date is shown and typed as the file stores it (`2026-10-11 12:00:00 +0000`), next to an Update button; the reference app's date field settles the display.",
+  "The Version row stands for both version parts, so selecting it selects and copies versionMajor and versionMinor together; copying the Version row in the reference app settles it.",
+  "Until axes can be edited (M9), the Axes section lists the stored axes without a plus button, their names, tags and Hidden boxes read-only.",
+]
+observe = [
+  "In font A (m7-one), look at the Version and Creation Date rows: note how the minor version and the date are shown and what the stepper and the update button look like.",
+  "In font A (m7-one), click the double arrow beside Units per Em: note what asks for the new value and which buttons it has.",
+]
 
 [[panel]]
 id = "fontInfo.fieldPicker"
@@ -434,7 +445,7 @@ milestone = "M7"
 summary = "The Family Name should contain only A-Z, a-z, 0-9 and spaces; other characters can stop fonts from exporting or installing. The UI should warn rather than block, and point to the familyNames field for non-ASCII or localized family names."
 ref = "Font Info › Font › Family Name"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3 (warning in the result), M7.16 (shown under the field)."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3 (warning in the result), M7.16 (the same test shown as a line under the Family Name field while the name holds other characters)."
 guesses = [
   "Other characters are accepted with a warning, not refused; typing an ampersand or an accented letter in the reference app settles whether it warns, refuses or neither.",
 ]
@@ -2608,7 +2619,10 @@ milestone = "M7"
 summary = "Fifth tab of Font Info: document-wide working settings for coordinate rounding, arrow-key steps, glyph naming, component alignment, glyph sorting, the saved file format and the interpolation model."
 ref = "Font Info › Other Settings"
 status = "handbook"
-notes = "Documented, not yet observed. The settings' own behaviour rows belong to M1, M3, M4, M6 and M9 (fontInfo.grid.*, fontInfo.useCustomNaming, fontInfo.disableAutomaticAlignment, fontInfo.fontType…); M7 builds the tab and font.settings.get/set. M7 plan § 4: M7.16."
+notes = "Documented, not yet observed. The settings' own behaviour rows belong to M1, M3, M4, M6 and M9 (fontInfo.grid.*, fontInfo.useCustomNaming, fontInfo.disableAutomaticAlignment, fontInfo.fontType…); M7 builds the tab and font.settings.get/set. M7 plan § 4: M7.16 (`crates/ui-egui/src/shell/font_info/other_tab.rs`)."
+guesses = [
+  "Each setting is written when its field loses the keyboard or its box or menu changes, as one undo step per change; changing a setting and choosing Undo in the reference app settles whether settings are undoable.",
+]
 
 [[command]]
 id = "font.settings.get"
@@ -2751,7 +2765,10 @@ milestone = "M7"
 summary = "Last tab of Font Info: one free-text note for the font, kept in the source and never exported."
 ref = "Font Info › Notes"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.16."
+notes = "Documented, not yet observed. M7 plan § 4: M7.16 (`crates/ui-egui/src/shell/font_info/notes_tab.rs`)."
+guesses = [
+  "The note is written when the text box loses the keyboard, as one undo step for everything typed meanwhile; typing in the Notes tab and choosing Undo in the reference app settles the undo steps.",
+]
 
 [[command]]
 id = "font.note.get"
@@ -2803,7 +2820,12 @@ milestone = "M7"
 summary = "The note field highlights Markdown as plain text styling: italic with single asterisks or underscores, bold with double ones, inline links and angle-bracket autolinks, and headings of level one to six marked with number signs. The text is stored unrendered."
 ref = "Font Info › Notes"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.16."
+notes = "Documented, not yet observed. M7 plan § 4: M7.16 (`notes_tab::highlight`)."
+guesses = [
+  "Headings of every level take the section heading size and the strong text colour, bold takes the strong text colour, italic slants, links take the accent colour, and the Markdown syntax itself is dimmed; the reference app's Notes tab settles the styles.",
+  "Underscore emphasis needs a word boundary on both sides and asterisk emphasis does not, emphasis and links stay within one line, and an autolink needs an http, https or mailto address; typing the edge cases in the reference app settles them.",
+  "A note longer than 256 KiB is shown without highlighting so typing stays fast; a long note in the reference app settles whether it stops highlighting.",
+]
 observe = [
   "In font A (m7-one), type `# Head`, `*it*`, `**bold**` and `<https://example.org>` in the Notes tab: note how each is highlighted.",
 ]
