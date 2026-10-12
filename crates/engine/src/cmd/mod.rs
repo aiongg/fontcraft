@@ -144,7 +144,7 @@ mod nonlinear;
 mod pair_list;
 mod plugin;
 mod power_guides;
-mod related;
+pub mod related;
 mod script;
 mod selections;
 pub mod status;

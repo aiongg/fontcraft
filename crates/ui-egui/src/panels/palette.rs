@@ -15,6 +15,7 @@ fn drawer(section: &str) -> Option<Draw> {
         "dimensions" => Some(dimensions::show),
         "fitCurve" => Some(fit_curve::show),
         "layers" => Some(layers::show),
+        "relatedGlyphs" => Some(super::related_glyphs::show),
         "transformations" => Some(transformations::show),
         _ => None,
     }

@@ -753,14 +753,18 @@ label = "Copy Component Transformation"
 menu = ["Edit"]
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, component: index, to: [{glyph?: name, layer?: id, components: [indices]}]}"
+params = "{glyph: name, layer?: id, component: index, to: [{glyph?: name, layer?: id, components: [indices]}]}"
 area = "components"
 milestone = "M13"
 summary = "Copies the position and live scale, rotation and slant of one element or component so they can be pasted onto others. FontCraft: copies one component's transform (position, scale, rotation, slant) and applies it to the components named in `to`, in one undo step."
 ref = "FontLab 8 What's new › Build & assemble › Elements (Copy transformation)"
 status = "docs"
 origin = "fontlab"
-notes = "FontCraft has no element references (open decision D7, docs/plans/M13.md § 7 question 3), so the command works on components only and its label names components. The reference's label is Copy Element Transformation."
+notes = "FontCraft has no element references (open decision D7, docs/plans/M13.md § 7 question 3), so the command works on components only and its label names components. The reference's label is Copy Element Transformation. Copy and paste are one command with explicit source and targets, so no transform clipboard is kept. Documented, not yet observed."
+guesses = [
+  "A target entry without `glyph` or `layer` means the source glyph and the source layer's id; the reference copies to whatever is selected, so it has no such default.",
+  "An automatically aligned target takes the scale, rotation and slant but keeps the position alignment gives it on the aligned axes; the reference has no automatic alignment, so nothing settles this but use.",
+]
 
 [[command]]
 id = "font.detectComposites"
@@ -2249,14 +2253,17 @@ label = "Show Dependencies"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyph, kind?: 'components' | 'substitutions' | 'both'}"
+params = "{glyph, kind?: 'components' | 'substitutions' | 'both' = 'both'}"
 area = "font-view"
 milestone = "M13"
 summary = "Lists the glyphs that use the given glyph as a component and the glyphs whose substitutions depend on it (for example the ligatures an i takes part in), with a way to open any of them. Read-only."
 ref = "FontForge Element menu › Show Dependencies"
 status = "docs"
 origin = "fontforge"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). The component half is built (M13.18). The substitution half needs the compiled substitution graph (M8): until then `kind: substitutions` is refused with a message and `both` answers `substitutions: null` with a note. The window that lists the result with a way to open each glyph is not built yet; the menu item reports the result like any query."
+guesses = [
+  "Glyphs that use the glyph through other composites are listed too, with their depth and the glyph they reach it through, nearest first; the reference's documentation does not say whether nested references are shown.",
+]
 
 [[command]]
 id = "file.revertGlyph"
@@ -3211,6 +3218,13 @@ summary = "Shows what is connected to the current glyph in both directions, from
 ref = "Fontra reference › Editor › Panels › Related glyphs & characters"
 status = "docs"
 origin = "fontra"
+notes = "Documented, not yet observed. The engine query is `fontcraft_engine::cmd::related::related_glyphs`; components count on every layer of the glyph."
+guesses = [
+  "A glyph's base name is the part of its name before the first dot, and alternates are the other glyphs with the same base name; the reference's documentation does not define the suffix rule.",
+  "The used-as-component section lists direct users only; Show Dependencies lists the nested ones.",
+  "The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.",
+  "Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.",
+]
 
 [[command]]
 id = "font.setStatusDefinitions"
