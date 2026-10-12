@@ -1,6 +1,6 @@
 [package]
 name = "fontcraft-io-ufo"
-description = "FontCraft reader and writer for UFO 2 and 3 and designspace sources, in the layout fontTools writes (L3)"
+description = "FontCraft reader and writer for UFO 2 and 3 and designspace sources, reader for UFO 1, in the layout fontTools writes (L3)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

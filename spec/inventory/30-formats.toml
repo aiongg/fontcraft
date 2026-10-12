@@ -147,7 +147,7 @@ write = true
 spec = "https://unifiedfontobject.org/versions/ufo2/"
 area = "import-export"
 milestone = "M1"
-summary = "The older single-layer UFO: no layercontents, images, data, guidelines, anchor elements or identifiers; anchors are single-point `move` contours and kerning groups are told apart by name convention rather than the `public.kern1.`/`public.kern2.` prefixes. Read into the same model as UFO 3 (GLIF format 1 anchors become anchors) and written back as UFO 2, as the reference keeps the version when it saves. Kerning groups are kept as written; they are not yet recognised as the glyphs' kerning groups (UFO 2 tells them apart by name convention only)."
+summary = "The older single-layer UFO: no layercontents, images, data, guidelines, anchor elements or identifiers; anchors are single-point `move` contours and kerning groups are told apart by name convention rather than the `public.kern1.`/`public.kern2.` prefixes. Read into the same model as UFO 3 (GLIF format 1 anchors become anchors) and written back as UFO 2, as the reference keeps the version when it saves. Kerning groups are recognised as ufoLib does it: a group used on the first (second) side of a kerning pair becomes a `public.kern1.` (`public.kern2.`) group, and saving writes each group back under its own name."
 ref = "UFO 2 specification; UFO 3 specification › Changes from UFO 2, kerning.plist › Converting to UFO 3 formatted kerning; norad src/upconversion.rs; Import & Export › Unified Font Object"
 status = "docs"
 

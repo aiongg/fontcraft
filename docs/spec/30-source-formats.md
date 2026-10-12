@@ -12,7 +12,7 @@ Sources, dated 2026-10-07:
 - Glyphs format documents and JSON schemas: GlyphsSDK `GlyphsFileFormat/GlyphsFileFormatv2.md`,
   `v3.md`, `v4.md` (the version 4 document is dated 17 July 2026), `Schemas/glyphs-1.schema.json`,
   `glyphs-3.schema.json`, `glyphs-4.schema.json`, `fontinfo-*.schema.json`.
-- UFO 3 specification (`ufo-spec/versions/ufo3`), UFO 2 for import.
+- UFO 3 specification (`ufo-spec/versions/ufo3`), UFO 2 for import and saving, UFO 1 for import.
 - fontTools `Doc/source/designspaceLib/xml.rst` and `Lib/fontTools/designspaceLib/__init__.py`.
 - Crates read as code: `norad` 0.19.0, `glyphs-reader` 1.0.0, `fontir` 1.0.0, `glyphs2fontir` 1.0.0,
   `ufo2fontir` 1.0.0, `fontra2fontir` 0.5.0 (all in the fontc and norad repositories).
