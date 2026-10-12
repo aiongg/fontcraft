@@ -1149,6 +1149,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontcraft-io-sfd"
+version = "0.0.1"
+dependencies = [
+ "fontcraft-model",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fontcraft-io-svg"
 version = "0.0.1"
 dependencies = [

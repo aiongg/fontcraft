@@ -549,7 +549,24 @@ summary = "ASCII keyword-and-value source file that starts with `SplineFontDB: <
 ref = "FontForge documentation › Spline Font Database File Format (public docs only)"
 status = "docs"
 origin = "fontforge"
-notes = "M13.56, a new reader crate. If the owner installs FontForge on the build machine, running it as a black-box program on our own synthetic fonts produces test files; its source is never read."
+notes = "Built (M13.56) in `crates/io-sfd`, from FontForge's public pages \"Spline Font Database\" and \"Changes to the sfd format\" only (no code that reads or writes SFD was consulted). `read_sfd` takes a file's bytes, `read_sfdir` a folder's files (`font.props` and top-level `*.glyph`, ordered by glyph index). One master: family, PostScript and localised names (`LangName`, UTF-7), version, units per em (Ascent + Descent), ascender, descender, italic angle, creation date, comments, the absolute OS/2, hhea and underline values as master parameters, fsType, Panose and Use Typo Metrics as font parameters. Glyphs: code points (`Encoding`, `AltUni2`), width, vertical width, contours (`m`/`l`/`c` with point types; quadratic layers give quadratic segments, implied on-curve points are dropped), references (by glyph index, then code point), anchors, GDEF class, comment, colour; font layer 0 is the background, 1 the master layer, others extra layers by name. Kerning: `Kerns2` pairs and `KernClass2` classes in horizontal `kern` pair-positioning subtables, classes as kerning groups. Skipped and listed in the import's report, one entry per kind with a count and first line: lookups and their glyph data, contextual and AAT rules, stem hints, TrueType instructions and tables, the private dictionary, images, Spiro points, bitmap strikes, TeX, MATH, BASE and JSTF data, unknown keywords. Limits: 256 MiB per source, lines of 4 MiB, 10,000,000 points, 256 layers, 65,536 classes and 4,000,000 values per class table, 1,000,000 kerning pairs, 4,096 anchors per glyph; multiple master sources are refused. Opening through the app and the CLI is not wired yet. Documented, not yet checked against files the originating editor writes (it is not installed here)."
+guesses = [
+  "A contour is closed when its last point equals its first and open otherwise; the page does not say how an open contour is written. A file from the originating editor with an open path would settle it.",
+  "In a quadratic layer a `c` line is read as a quadratic segment when both controls are the same point or are exactly two thirds of the way to one point; the page does not say how quadratic splines are written. A quadratic file from the editor would settle it.",
+  "An on-curve point flagged 0x80 that lies halfway between two control points is dropped, so runs of quadratic control points come back. A TrueType-derived file from the editor would settle it.",
+  "The point flags of a closed contour's start come from its `m` line, not from the line that returns to it. A file with a smooth start point would settle it.",
+  "`Refer` and `Kerns2` glyph numbers are the third number of a glyph's `Encoding` line (its original position), or its position in the file when that is missing; a reference that matches no glyph falls back to its code point. Files with reordered glyphs would settle it.",
+  "A glyph without a `Width` line is as wide as the em. A file with such a glyph would settle it.",
+  "Anchor names follow the reference's convention: the class name for base and base-mark anchors, `_` before it for marks, `_1`, `_2`… after it for ligature components, `entry` and `exit` for cursive anchors. The page names only the classes.",
+  "Pair positioning is lookup type 258 (0x102), read from the page's example; subtables no lookup declares count as kerning. A file with several lookup types would settle it.",
+  "Glyph pairs take precedence over class pairs, and an earlier class table over a later one, as in the model; in OpenType the order of subtables decides. A file with overlapping subtables would settle it.",
+  "A kerning class becomes a group named after its first glyph; a glyph already in a group on that side kerns by name instead. Files with a glyph in classes of two tables would settle it.",
+  "Cap height and x-height, which the format does not store, are the tops of H and x, or 70% and 50% of the em; overshoots are zero.",
+  "Hhea, typo and win values marked as offsets from a computed value are not kept, because the page does not say how the value is computed.",
+  "The digits after the point in `Version` are thousandths (`1.5` is version 1.500).",
+  "A TrueType instruction block (`TtTable`, `TtInstrs`) ends at a line starting `EndTt` or at the first line that is neither a mnemonic nor numbers; the page names no end line.",
+  "A glyph layer the font does not declare (the multi-layered Type 3 form) is merged into the master layer.",
+]
 
 # ───────────────────────────── Outline interchange ─────────────────────────────
 
