@@ -100,6 +100,8 @@ fontcraft-cli mcp --automation-read-root /work/fonts --automation-write-root /wo
     | `file.save` without `path`; `file.exportWithProfiles` with `bySource` | Every open document's file lies inside the write root |
     | `project.save` without `path` | Every open project's file lies inside the write root |
     | `project.export` | Every open project's export destination lies inside the write root, its linked font inside the read root |
+    | `font.features.listSnippets`, `font.features.insertSnippet` without `folder` | The session's snippet folder, when it has one, lies inside the read root |
+    | `font.features.showSnippetFolder` without `folder` | The session's snippet folder, when it has one, lies inside the write root |
     | `script.saveActionSet` without `path`; `script.recordMacro` with `name` | Refused: they write into the Macros folder |
 
   - Files a document links to are read only inside the read root, whenever a command reads them:

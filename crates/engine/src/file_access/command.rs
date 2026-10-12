@@ -30,6 +30,8 @@ enum Implicit {
     ProjectFiles,
     /// The open projects' export destinations and the font files they link.
     ProjectExports,
+    /// The session's snippet folder, read or written.
+    SnippetFolder(Access),
     /// A place that cannot be checked; the reason, after the command id.
     Hidden(&'static str),
 }
@@ -42,6 +44,8 @@ fn implicit_place(id: &str, params: &Value) -> Option<Implicit> {
         "file.exportWithProfiles" if given("bySource") && params.get("bySource") != Some(&Value::Bool(false)) => Some(Implicit::Documents),
         "project.save" if !given("path") => Some(Implicit::ProjectFiles),
         "project.export" => Some(Implicit::ProjectExports),
+        "font.features.listSnippets" | "font.features.insertSnippet" if !given("folder") => Some(Implicit::SnippetFolder(Access::Read)),
+        "font.features.showSnippetFolder" if !given("folder") => Some(Implicit::SnippetFolder(Access::Write)),
         "script.saveActionSet" if !given("path") => Some(Implicit::Hidden("writes into the Macros folder without `path`; give `path`")),
         "script.recordMacro" if given("name") => Some(Implicit::Hidden(
             "writes the recording into the Macros folder when `name` is given; stop without `name` and save the steps with script.saveActionSet and `path`",
@@ -124,6 +128,10 @@ fn check_implicit(s: &Session, place: Implicit, roots: &AutomationRoots) -> std:
             }
             Ok(())
         }
+        Implicit::SnippetFolder(access) => match s.snippets_dir() {
+            Some(dir) => implicit(roots, dir, access, "uses the session's snippet folder (give `folder`)"),
+            None => Ok(()),
+        },
     }
 }
 
@@ -328,5 +336,8 @@ mod tests {
         assert!(matches!(implicit_place("script.saveActionSet", &json!({"name": "m"})), Some(Implicit::Hidden(_))));
         assert!(matches!(implicit_place("script.recordMacro", &json!({"action": "stop", "name": "m"})), Some(Implicit::Hidden(_))));
         assert_eq!(implicit_place("script.recordMacro", &json!({"action": "stop"})), None);
+        assert_eq!(implicit_place("font.features.listSnippets", &json!({})), Some(Implicit::SnippetFolder(Access::Read)));
+        assert_eq!(implicit_place("font.features.showSnippetFolder", &json!({})), Some(Implicit::SnippetFolder(Access::Write)));
+        assert_eq!(implicit_place("font.features.insertSnippet", &json!({"folder": "/x"})), None);
     }
 }

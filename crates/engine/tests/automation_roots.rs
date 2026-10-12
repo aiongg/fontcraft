@@ -191,3 +191,20 @@ fn a_link_inside_a_ufo_does_not_lead_a_save_out_of_the_write_root() {
     assert!(!names.iter().any(|n| n.to_string_lossy().starts_with("zz.two")), "{names:?}");
     let _ = std::fs::remove_dir_all(base);
 }
+
+#[test]
+fn the_session_snippet_folder_is_checked_when_no_folder_is_given() {
+    let (base, roots) = folders("snippets");
+    let mut s = Session::with_document();
+    s.set_snippets_dir(Some(base.join("outside/snippets")));
+    confine(Some(&roots), || {
+        let e = refused(&mut s, "font.features.listSnippets", json!({}));
+        assert!(e.contains("snippet folder") && e.contains("outside the read root"), "{e}");
+        let e = refused(&mut s, "font.features.showSnippetFolder", json!({}));
+        assert!(e.contains("outside the write root"), "{e}");
+        run(&mut s, "font.features.listSnippets", json!({"folder": base.join("in/snippets")}));
+    });
+    assert!(!base.join("outside/snippets").exists(), "a refused command creates no folder");
+    run(&mut s, "font.features.listSnippets", json!({}));
+    let _ = std::fs::remove_dir_all(base);
+}
