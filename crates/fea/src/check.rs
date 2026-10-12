@@ -121,9 +121,19 @@ impl Walk<'_> {
                 let size = self.classes.get(token.text.as_str()).copied().unwrap_or(0);
                 self.add_class_total(parent, size);
             }
-            Kind::Number if token.text.parse::<i16>().is_err() => {
-                self.refuse(parent, format!("the number {} is outside -32768 to 32767, the range the feature compiler reads here", token.text));
-            }
+            // fea-rs reads a cvParameters character as 32 bits (`character` bounds it) and an
+            // OS/2 number field as unsigned 16 bits; every other number as signed 16 bits.
+            Kind::Number => match parent.kind() {
+                Kind::CharacterKw => {}
+                Kind::NumberValueNode if token.text.parse::<u16>().is_err() => {
+                    self.refuse(parent, format!("the number {} is outside 0 to 65535", token.text));
+                }
+                Kind::NumberValueNode => {}
+                _ if token.text.parse::<i16>().is_err() => {
+                    self.refuse(parent, format!("the number {} is outside -32768 to 32767, the range the feature compiler reads here", token.text));
+                }
+                _ => {}
+            },
             Kind::Cid if token.text.parse::<u16>().is_err() => {
                 self.refuse(parent, format!("the CID {} is over 65535", token.text));
             }

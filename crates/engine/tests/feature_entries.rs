@@ -305,6 +305,9 @@ fn number_values_are_added_set_per_master_renamed_and_removed() {
 
     refused(&mut s, "font.numbers.add", json!({"name": ".monospace"}), "already has a number value");
     refused(&mut s, "font.numbers.add", json!({"name": "2x"}), "number value name");
+    // A `$name` token stops at a dot, so it could not read this name.
+    refused(&mut s, "font.numbers.add", json!({"name": "pad.left"}), "number value name");
+    refused(&mut s, "font.numbers.add", json!({"name": "..x"}), "number value name");
     refused(&mut s, "font.numbers.add", json!({"name": "pad", "values": {"Black": 1}}), "no master `Black`");
     refused(&mut s, "font.numbers.rename", json!({"number": "nothing", "name": "x"}), "no number value `nothing`");
     refused(&mut s, "font.master.setNumber", json!({"masters": ["m01"], "number": 0, "value": 2e6}), "within");

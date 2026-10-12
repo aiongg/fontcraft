@@ -242,9 +242,10 @@ impl Inliner {
 
     /// The file `raw` names, from `dir` (the including file's folder): its canonical path and
     /// text.
-    fn read(&mut self, raw: &str, dir: &std::path::Path, line: usize) -> std::result::Result<(PathBuf, std::sync::Arc<str>), String> {
+    /// `line` gives the statement's line number, counted only for an error message.
+    fn read(&mut self, raw: &str, dir: &std::path::Path, line: impl Fn() -> usize) -> std::result::Result<(PathBuf, std::sync::Arc<str>), String> {
         if raw.is_empty() {
-            return Err(format!("the include on line {line} names no file"));
+            return Err(format!("the include on line {} names no file", line()));
         }
         let mut found = None;
         for candidate in [self.root.join(raw), dir.join(raw)] {
@@ -257,7 +258,7 @@ impl Inliner {
             }
         }
         let Some(path) = found else {
-            return Err(format!("the included file `{}` (line {line}) does not exist", clip(raw)));
+            return Err(format!("the included file `{}` (line {}) does not exist", clip(raw), line()));
         };
         if let Some(text) = self.cache.get(&path) {
             return Ok((path, text.clone()));
@@ -282,12 +283,13 @@ impl Inliner {
                 continue;
             }
             let Some((a, b, stmt_end)) = lex.include_path(start)? else { continue };
-            let line = line_of(text, start);
+            let line = || line_of(text, start);
             let raw = text.get(a..b).unwrap_or_default().trim();
             if depth >= fontcraft_fea::MAX_INCLUDE_DEPTH {
                 return Err(format!(
-                    "includes are nested more than {} deep (line {line} includes `{}`): files may include each other",
+                    "includes are nested more than {} deep (line {} includes `{}`): files may include each other",
                     fontcraft_fea::MAX_INCLUDE_DEPTH,
+                    line(),
                     clip(raw)
                 ));
             }

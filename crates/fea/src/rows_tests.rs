@@ -909,6 +909,8 @@ fn fea_cv_parameters() {
 #[test]
 fn fea_cv_parameters_character() {
     assert!(ok("feature cv01 { cvParameters { Character 0x10FFFF; Character 97; }; sub a by a.alt; } cv01;").gsub.is_some());
+    assert!(ok("feature cv01 { cvParameters { Character 1114111; Character 40000; }; sub a by a.alt; } cv01;").gsub.is_some());
+    fails_with("feature cv01 { cvParameters { Character 1114112; }; sub a by a.alt; } cv01;", "beyond Unicode");
 }
 
 // ------------------------------------------------------------------------------------------
@@ -1010,6 +1012,8 @@ fn fea_table_name_strings() {
 #[test]
 fn fea_table_os2_fs_type() {
     assert_eq!(ok("table OS/2 { FSType 4; } OS/2;").os2.fs_type, Some(4));
+    assert_eq!(ok("table OS/2 { FSType 40000; } OS/2;").os2.fs_type, Some(40000));
+    fails_with("table OS/2 { FSType 70000; } OS/2;", "outside 0 to 65535");
     fails("table OS/2 { fsType 4; } OS/2;");
 }
 

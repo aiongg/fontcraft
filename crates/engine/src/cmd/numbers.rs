@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Number Value",
             [],
             None,
-            "{name: string (letters, digits, `_` and `.`, not starting with a digit), values?: {master id|name: number}} add a named number at the end; every master gets a value, 0 unless `values` gives one. A name the font has is refused → {index, name, values: {masterId: number}}",
+            "{name: string (letters, digits and `_`, not starting with a digit; a setting such as `.monospace` starts with `.`, and tokens do not read it), values?: {master id|name: number}} add a named number at the end; every master gets a value, 0 unless `values` gives one. A name the font has is refused → {index, name, values: {masterId: number}}",
             has_doc,
             add
         ),
@@ -75,9 +75,11 @@ fn master_index(p: &Params, font: &Font, key: &str, v: &Value) -> Result<usize> 
             .position(|m| m.id == *s)
             .or_else(|| font.masters.iter().position(|m| m.name == *s))
             .ok_or_else(|| p.bad(format!("`{key}`: the font has no master `{s}`"))),
-        Value::Number(n) => {
-            n.as_u64().map(|i| i as usize).filter(|&i| i < font.masters.len()).ok_or_else(|| p.bad(format!("`{key}`: the font has no master {n}")))
-        }
+        Value::Number(n) => n
+            .as_u64()
+            .and_then(|i| usize::try_from(i).ok())
+            .filter(|&i| i < font.masters.len())
+            .ok_or_else(|| p.bad(format!("`{key}`: the font has no master {n}"))),
         other => Err(p.bad(format!("`{key}` names a master by id, name or index, got {}", crate::params::kind(other)))),
     }
 }
@@ -89,9 +91,11 @@ fn number_index(p: &Params, font: &Font) -> Result<usize> {
         Some(Value::String(name)) => {
             font.numbers.iter().position(|d| d.name == *name).ok_or_else(|| p.bad(format!("the font has no number value `{name}`")))
         }
-        Some(Value::Number(n)) => {
-            n.as_u64().map(|i| i as usize).filter(|&i| i < font.numbers.len()).ok_or_else(|| p.bad(format!("the font has no number value {n}")))
-        }
+        Some(Value::Number(n)) => n
+            .as_u64()
+            .and_then(|i| usize::try_from(i).ok())
+            .filter(|&i| i < font.numbers.len())
+            .ok_or_else(|| p.bad(format!("the font has no number value {n}"))),
         Some(other) => Err(p.bad(format!("`number` is an index or a name, got {}", crate::params::kind(other)))),
     }
 }
@@ -99,11 +103,14 @@ fn number_index(p: &Params, font: &Font) -> Result<usize> {
 /// `name` checked for a new or renamed number: valid, and not another number's (`except` is the
 /// number being renamed).
 fn check_name(p: &Params, font: &Font, name: &str, except: Option<usize>) -> Result<()> {
-    let first_ok = name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_' || c == '.');
-    let rest_ok = name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.');
+    // Tokens read `$name` up to the first character that is not a letter, digit or `_`. A
+    // leading `.` marks a setting (`.monospace`), which no token reads.
+    let bare = name.strip_prefix('.').unwrap_or(name);
+    let first_ok = bare.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_');
+    let rest_ok = bare.chars().all(|c| c.is_alphanumeric() || c == '_');
     if !first_ok || !rest_ok || name.chars().count() > MAX_NAME_LEN {
         return Err(
-            p.bad(format!("a number value name is 1 to {MAX_NAME_LEN} letters, digits, `_` and `.`, not starting with a digit, got `{name}`"))
+            p.bad(format!("a number value name is 1 to {MAX_NAME_LEN} letters, digits and `_`, not starting with a digit, with an optional leading `.` for a setting, got `{name}`"))
         );
     }
     if font.numbers.iter().enumerate().any(|(i, d)| Some(i) != except && d.name == name) {

@@ -102,8 +102,9 @@ pub fn assemble(font: &Font, entries: &Features, target: &Target, values: &dyn T
                         if diagnostics.len() >= MAX_DIAGNOSTICS {
                             break;
                         }
-                        let range = map.source_range(diagnostic.span.clone());
-                        diagnostics.push(EntryDiagnostic { place: Some(EntryRange { entry: entry_ref, range }), diagnostic });
+                        // A span in text a pass wrote has no place in the stored code.
+                        let place = map.try_source_range(diagnostic.span.clone()).map(|range| EntryRange { entry: entry_ref, range });
+                        diagnostics.push(EntryDiagnostic { place, diagnostic });
                     }
                 }
             }

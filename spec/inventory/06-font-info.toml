@@ -1506,7 +1506,7 @@ ref = "Font Info › Masters › Number Values"
 status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
-  "A number value name is letters, digits, `_` and `.`, not starting with a digit, and a name the font has is refused; naming a number value with a space or a hyphen in the reference app would settle it.",
+  "A number value name is letters, digits and `_`, not starting with a digit, so that a `$name` token can read all of it; a leading `.` is allowed for settings such as `.monospace`, which the handbook names. A name the font has is refused. Naming a number value with a space, a hyphen or an inner dot in the reference app would settle it.",
 ]
 
 [[command]]

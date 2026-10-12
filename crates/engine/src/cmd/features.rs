@@ -608,7 +608,7 @@ fn reorder(s: &mut Session, raw: &Value) -> Result<Value> {
                     .ok_or_else(|| p.bad(format!("`order`: no {} `{name}` left to place", kind_name(kind))))?
             }
             Value::Number(n) => {
-                let i = n.as_u64().map(|i| i as usize).filter(|i| *i < entries.len());
+                let i = n.as_u64().and_then(|i| usize::try_from(i).ok()).filter(|i| *i < entries.len());
                 i.ok_or_else(|| p.bad(format!("`order`: {n} is not the index of a {}", kind_name(kind))))?
             }
             other => return Err(p.bad(format!("`order` holds names or indices, found {}", crate::params::kind(other)))),
