@@ -166,12 +166,18 @@ pub fn output_path(input: &Path, req: &OutputRequest, suffix: &str, extension: O
     Ok(path)
 }
 
-/// Writes `bytes` to `path` atomically. With `noClobber`, an existing file is refused and left
-/// alone.
+/// Writes `bytes` to `path` atomically, creating `outputDir` when it is missing. With
+/// `noClobber`, an existing file is refused and left alone.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_output(path: &Path, bytes: &[u8], req: &OutputRequest) -> Result<()> {
     if req.no_clobber && !req.in_place && path.exists() {
         return Err(EngineError::Io(format!("{} exists and noClobber is set", path.display())));
+    }
+    if let Some(dir) = &req.output_dir
+        && !req.in_place
+        && !dir.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
     }
     fontcraft_format::write_atomic(path, bytes)?;
     Ok(())
