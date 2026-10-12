@@ -7,14 +7,17 @@
 //! - Stored paths are relative to the document's folder, and may climb out of it with `..`: the
 //!   document stores only a relative path, wherever the file is. An unsaved document stores
 //!   absolute paths; a save into another folder (the first save included) rewrites every image
-//!   path relative to the new file ([`rebase_image_paths`], built on [`relative_to`]).
+//!   path relative to the new file ([`rebase_image_paths`], built on [`relative_to`]). Undo steps
+//!   keep the paths of the folder they were made in; undo and redo rewrite them for the
+//!   document's current folder ([`rebased`]).
 //! - [`FsAssets`] reads regular files at most [`fontcraft_color::MAX_ASSET_BYTES`] long and
 //!   caches their bytes by absolute path and modification time, at most [`MAX_CACHE_BYTES`] in
 //!   all, least recently used evicted. The cache is shared by every store of one session.
 //! - [`Session::assets`] gives the store of the active document: the file store on the desktop
 //!   and in the CLI, the files uploaded to the session in the web build.
-//! - A path that is empty, holds a NUL, is relative in an unsaved document or cannot be read is
-//!   an [`AssetError`], never a panic.
+//! - A path that is empty, holds a NUL, names a network share or a device, is relative in an
+//!   unsaved document or cannot be read is an [`AssetError`], never a panic. Absolute paths and
+//!   paths that climb out of the folder with `..` are read.
 
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
@@ -112,9 +115,10 @@ impl FsAssets {
     }
 
     /// The file a stored path names, or `None` when the path is not usable: empty, holding a
-    /// NUL, or relative while the document has no folder.
+    /// NUL, a network or device path ([`is_network_or_device`]), or relative while the document
+    /// has no folder.
     pub fn resolve(&self, stored: &str) -> Option<PathBuf> {
-        if stored.is_empty() || stored.contains('\0') {
+        if stored.is_empty() || stored.contains('\0') || is_network_or_device(stored) {
             return None;
         }
         let path = Path::new(stored);
@@ -125,29 +129,54 @@ impl FsAssets {
     }
 
     fn unusable(&self, stored: &str) -> AssetError {
-        let message =
-            if self.base.is_none() && !stored.is_empty() { "a relative path needs a saved document" } else { "the path is empty or not usable" };
+        let message = if is_network_or_device(stored) {
+            "network and device paths are not read"
+        } else if self.base.is_none() && !stored.is_empty() {
+            "a relative path needs a saved document"
+        } else {
+            "the path is empty or not usable"
+        };
         AssetError::Unreadable { path: stored.to_string(), message: message.into() }
+    }
+}
+
+/// Whether `stored` starts with two separators, `/` or `\` in any mix: a network share
+/// (`\\host\share`, `//host/share`) or a device or verbatim path (`\\?\`, `\\.\`). A document
+/// names image files; opening one of these could reach another machine or a device, so they
+/// are refused on every platform.
+pub fn is_network_or_device(stored: &str) -> bool {
+    let mut chars = stored.chars();
+    let separator = |c: Option<char>| matches!(c, Some('/' | '\\'));
+    separator(chars.next()) && separator(chars.next())
+}
+
+impl FsAssets {
+    /// The file `path` names and its metadata, refused as [`AssetStore::read`] refuses.
+    fn checked(&self, path: &str) -> Result<(PathBuf, std::fs::Metadata), AssetError> {
+        let file = self.resolve(path).ok_or_else(|| self.unusable(path))?;
+        let meta = std::fs::metadata(&file).map_err(|e| unreadable(path, e))?;
+        if !meta.is_file() {
+            return Err(AssetError::Unreadable { path: path.to_string(), message: "it is not a file".into() });
+        }
+        if meta.len() > u64::try_from(MAX_ASSET_BYTES).unwrap_or(u64::MAX) {
+            return Err(AssetError::TooLarge { path: path.to_string(), size: meta.len(), limit: MAX_ASSET_BYTES });
+        }
+        Ok((file, meta))
+    }
+}
+
+fn unreadable(path: &str, e: std::io::Error) -> AssetError {
+    match e.kind() {
+        std::io::ErrorKind::NotFound => AssetError::Missing(path.to_string()),
+        _ => AssetError::Unreadable { path: path.to_string(), message: e.to_string() },
     }
 }
 
 impl AssetStore for FsAssets {
     fn read(&self, path: &str) -> Result<Arc<[u8]>, AssetError> {
         use std::io::Read;
-        let file = self.resolve(path).ok_or_else(|| self.unusable(path))?;
-        let unreadable = |e: std::io::Error| match e.kind() {
-            std::io::ErrorKind::NotFound => AssetError::Missing(path.to_string()),
-            _ => AssetError::Unreadable { path: path.to_string(), message: e.to_string() },
-        };
-        let meta = std::fs::metadata(&file).map_err(unreadable)?;
-        if !meta.is_file() {
-            return Err(AssetError::Unreadable { path: path.to_string(), message: "it is not a file".into() });
-        }
-        let too_large = |size: u64| AssetError::TooLarge { path: path.to_string(), size, limit: MAX_ASSET_BYTES };
+        let (file, meta) = self.checked(path)?;
         let limit = u64::try_from(MAX_ASSET_BYTES).unwrap_or(u64::MAX);
-        if meta.len() > limit {
-            return Err(too_large(meta.len()));
-        }
         // A file without a modification time is read every time: nothing tells a stale copy.
         let key = meta.modified().ok().map(|t| (file.clone(), Some(t)));
         if let Some(bytes) = key.as_ref().and_then(|k| self.cache.get(k)) {
@@ -155,15 +184,27 @@ impl AssetStore for FsAssets {
         }
         let mut buf = Vec::new();
         // The file may grow between the size check and the read.
-        std::fs::File::open(&file).and_then(|f| f.take(limit.saturating_add(1)).read_to_end(&mut buf)).map_err(unreadable)?;
+        std::fs::File::open(&file).and_then(|f| f.take(limit.saturating_add(1)).read_to_end(&mut buf)).map_err(|e| unreadable(path, e))?;
         if buf.len() > MAX_ASSET_BYTES {
-            return Err(too_large(buf.len() as u64));
+            return Err(AssetError::TooLarge { path: path.to_string(), size: buf.len() as u64, limit: MAX_ASSET_BYTES });
         }
         let bytes: Arc<[u8]> = buf.into();
         if let Some(key) = key {
             self.cache.put(key, Arc::clone(&bytes));
         }
         Ok(bytes)
+    }
+
+    fn read_head(&self, path: &str, max: usize) -> Result<Arc<[u8]>, AssetError> {
+        use std::io::Read;
+        let (file, meta) = self.checked(path)?;
+        if let Some(bytes) = meta.modified().ok().and_then(|t| self.cache.get(&(file.clone(), Some(t)))) {
+            return Ok(bytes);
+        }
+        let mut buf = Vec::new();
+        let max = u64::try_from(max.min(MAX_ASSET_BYTES)).unwrap_or(0);
+        std::fs::File::open(&file).and_then(|f| f.take(max).read_to_end(&mut buf)).map_err(|e| unreadable(path, e))?;
+        Ok(buf.into())
     }
 
     fn exists(&self, path: &str) -> bool {
@@ -322,6 +363,25 @@ pub fn rebase_image_paths(font: &mut fontcraft_model::Font, old_path: Option<&Pa
     changed
 }
 
+/// `font` with its image paths rewritten from `old_path`'s folder to `new_path`'s, for a font kept
+/// from before a save into another folder (an undo step, a batch's starting point). The same
+/// font when nothing changes.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn rebased(font: Arc<fontcraft_model::Font>, old_path: Option<&Path>, new_path: Option<&Path>) -> Arc<fontcraft_model::Font> {
+    let Some(new_path) = new_path else { return font };
+    if old_path == Some(new_path) {
+        return font;
+    }
+    let mut copy = fontcraft_model::Font::clone(&font);
+    if rebase_image_paths(&mut copy, old_path, new_path) == 0 { font } else { Arc::new(copy) }
+}
+
+/// The web build stores uploaded file names, which no save rewrites.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn rebased(font: Arc<fontcraft_model::Font>, _: Option<&Path>, _: Option<&Path>) -> Arc<fontcraft_model::Font> {
+    font
+}
+
 /// Whether `layer` holds a placed image, an image shape, or either in its background.
 #[cfg(not(target_arch = "wasm32"))]
 fn has_image(layer: &Layer) -> bool {
@@ -366,6 +426,23 @@ mod tests {
         assert_eq!(relative_to("/../A.png", None, new), None);
         assert_eq!(relative_to("", None, new), None);
         assert_eq!(relative_to("/fonts/Sans", None, new), None);
+    }
+
+    #[test]
+    fn network_and_device_paths_are_refused_with_a_message() {
+        let store = FsAssets::new(Some(std::env::temp_dir()), Arc::new(ByteCache::default()));
+        for stored in [r"\\host\share\A.png", "//host/share/A.png", r"\\?\C:\A.png", r"\\.\PhysicalDrive0", r"/\host\A.png", r"\/host/A.png"] {
+            assert_eq!(store.resolve(stored), None, "{stored}");
+            assert!(!store.exists(stored), "{stored}");
+            match store.read(stored) {
+                Err(AssetError::Unreadable { message, .. }) => assert!(message.contains("network and device"), "{stored}: {message}"),
+                other => panic!("{stored}: {other:?}"),
+            }
+        }
+        // An absolute path and one that climbs out of the folder are still resolved.
+        assert!(store.resolve("../A.png").is_some());
+        let absolute = std::env::temp_dir().join("A.png");
+        assert_eq!(store.resolve(absolute.to_str().unwrap()), Some(absolute.clone()));
     }
 
     #[test]

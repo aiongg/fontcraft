@@ -77,6 +77,7 @@ guesses = [
   "Removing a row renumbers the layers that use higher rows and refuses while a layer uses the row. Settled by removing a used row in the reference's editor and reading the layers afterwards.",
   "Palette colours of shapes (fills, strokes, gradient stops, shadows) count as uses of a row and are renumbered with the palette layers. Settled by removing a row a full-colour layer's gradient uses in the reference's editor.",
   "The last colour row can be removed, which leaves every palette empty. Settled by removing every colour in the reference's editor.",
+  "Palette colours of shapes in a layer's background count as uses of a row too: they hold it and are renumbered with the foreground. Settled by removing a row only a background shape uses in the reference's editor.",
 ]
 observe = [
   "Palette font: in the Color Palettes editor remove row 1, which a palette layer of A uses, and press OK; note whether A's layers are renumbered, left pointing at the old index, or the removal is refused.",
@@ -203,7 +204,7 @@ milestone = "M11"
 summary = "Changes the pixel size of an iColor layer; in the UI by double-clicking the layer entry and editing the number. The size is the strike's pixels-per-em, so raising it above the image's own resolution makes the image draw smaller and lowering it makes the image draw larger."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "handbook"
-notes = "Built in M11.3. Refused on a layer that is not an iColor layer. Documented, not yet observed."
+notes = "Built in M11.3. Refused on a layer that is not an iColor layer, and when the rescaled image would be scaled to 0 or beyond the coordinate limit. Documented, not yet observed."
 guesses = [
   "The layer's placed image is rescaled about its bottom-left corner so it keeps unitsPerEm ÷ size units per pixel. Settled by the size change in the observe step.",
 ]
@@ -221,7 +222,7 @@ milestone = "M11"
 summary = "References a PNG, JPEG or TIFF file as the image of an iColor layer and positions it using the bounding box of the master layer's paths. The chapter does not name the gesture (the general image commands, drag-and-drop or Glyph › Add Image, are assumed), so this explicit headless form is ours."
 ref = "Color Fonts › sbix Fonts › Adding Images to Glyphs"
 status = "inferred"
-notes = "Built in M11.3. Takes a .png, .jpg, .jpeg, .tif or .tiff path and stores it relative to the document's folder; the file is not read. Refused on a layer that is not an iColor layer."
+notes = "Built in M11.3. Takes a .png, .jpg, .jpeg, .tif or .tiff path and stores it as Add Image does: relative to the document's folder, absolute in a document never saved (a relative path taken from the working directory). The file is not read. Refused on a layer that is not an iColor layer."
 own = true
 guesses = [
   "Only the master layer's paths set the bounds, not its components. Settled by dropping an image on an iColor layer of a glyph made of components in the reference.",
@@ -258,7 +259,7 @@ milestone = "M11"
 summary = "References an SVG file as the artwork of an svg layer; in the UI the file is dragged onto the layer. The file is linked by path, not embedded, and can afterwards be moved and scaled like any placed image."
 ref = "Color Fonts › SVG Color Fonts › Importing Existing SVG Files"
 status = "handbook"
-notes = "Built in M11.3. Takes an .svg path and stores it relative to the document's folder; the file is not read. Refused on a layer that is not an svg layer. Documented, not yet observed."
+notes = "Built in M11.3. Takes an .svg path and stores it as Add Image does: relative to the document's folder, absolute in a document never saved (a relative path taken from the working directory). The file is not read. Refused on a layer that is not an svg layer. Documented, not yet observed."
 guesses = [
   "The SVG's viewBox is placed with its bottom-left corner at the layer origin, one SVG user unit per font unit, y pointing up. Settled by dropping an SVG file on an svg layer in the reference.",
 ]
@@ -311,7 +312,7 @@ milestone = "M11"
 summary = "Adds a further style control to the selected paths from the plus button beside the Attributes heading. Gradient is exportable; Shadow, Inner Shadow and Pattern Image only affect PNG/PDF output from Filter › Glyph as Image and are never written to a font."
 ref = "Color Fonts › SVG Color Fonts › Creating SVG Glyphs"
 status = "handbook"
-notes = "Documented in the handbook; not yet observed in the reference app."
+notes = "Documented in the handbook; not yet observed in the reference app. A Pattern Image path longer than 4,096 bytes or holding a control character is refused, as the colour layers' image paths are."
 guesses = [
   "Shadow and Inner Shadow have blur, offset and colour fields, as the file format stores them; Pattern Image has an image reference. Settled by adding each in the reference's inspector.",
   "A new Shadow or Inner Shadow is black at 50 % opacity with blur 10 and offset (10, −10) font units; Pattern Image keeps only a file reference, in a FontCraft key. Settled by adding each in the reference and reading the saved file.",
@@ -1349,6 +1350,7 @@ ref = "Color Fonts › Layered Color Fonts › Exporting; Appendix › Custom Pa
 status = "handbook"
 guesses = [
   "The SVG table is written whenever svg layers exist or a conversion asks for it, without Export SVG Table, as the appendix says; the parameter set off removes it. Settled by exporting the SVG test font from the reference with no parameters.",
+  "When no glyph's SVG document can be made, the font gets no SVG table, with a warning, rather than an empty one. Settled by exporting from the reference a font whose only svg layer names a missing file.",
 ]
 observe = ["SVG font: export with no colour parameters; note whether an SVG table is written."]
 

@@ -23,8 +23,15 @@ use super::GlyphOrder;
 use crate::CompileError;
 use crate::drawing::shapes_outline;
 
-/// The table. `font` gives the outlines of the paints' shapes and the svg layers' placements.
-pub fn build(font: &Font, plan: &SvgPlan, order: &GlyphOrder, assets: &dyn AssetStore, warnings: &mut Vec<String>) -> Result<Vec<u8>, CompileError> {
+/// The table; `None` when no glyph has a document, which leaves the font without one.
+/// `font` gives the outlines of the paints' shapes and the svg layers' placements.
+pub fn build(
+    font: &Font,
+    plan: &SvgPlan,
+    order: &GlyphOrder,
+    assets: &dyn AssetStore,
+    warnings: &mut Vec<String>,
+) -> Result<Option<Vec<u8>>, CompileError> {
     let _ = assets; // M11.10: svg layer files and bitmaps.
     let mut docs: Vec<(u16, u16, Vec<u8>)> = Vec::with_capacity(plan.documents.len());
     let mut done = HashSet::new();
@@ -44,7 +51,13 @@ pub fn build(font: &Font, plan: &SvgPlan, order: &GlyphOrder, assets: &dyn Asset
             Err(message) => warnings.push(format!("glyph `{}`: {message}; it has no SVG document", doc.glyph)),
         }
     }
-    table(&docs).map_err(|e| CompileError::Table { table: "SVG ", message: e.to_string() })
+    if docs.is_empty() {
+        if !plan.documents.is_empty() {
+            warnings.push("no glyph has an SVG document, so the font has no SVG table".to_string());
+        }
+        return Ok(None);
+    }
+    table(&docs).map(Some).map_err(|e| CompileError::Table { table: "SVG ", message: e.to_string() })
 }
 
 /// The document of `name` drawing `paint`, or why it cannot be made.
@@ -161,7 +174,7 @@ mod tests {
         let glyphs: Vec<ResolvedGlyph> = [".notdef", "space", "heart"].into_iter().map(|n| ResolvedGlyph::new(n, 600.0)).collect();
         let order = GlyphOrder::new(&glyphs, &[]).unwrap();
         let mut warnings = Vec::new();
-        let bytes = build(&font, &plan, &order, &MemoryAssets::new(), &mut warnings).unwrap();
+        let bytes = build(&font, &plan, &order, &MemoryAssets::new(), &mut warnings).unwrap().unwrap();
 
         let svg = Svg::read(FontData::new(&bytes)).unwrap();
         assert_eq!(svg.svg_document_list().unwrap().num_entries(), 1);
@@ -172,5 +185,11 @@ mod tests {
         assert!(doc.contains(r##"fill="#0000FF"/>"##) && !doc.contains("stroke="), "{doc}");
         assert!(warnings.iter().any(|w| w.starts_with("glyph `space`")), "{warnings:?}");
         assert_eq!(warnings.len(), 1, "{warnings:?}");
+
+        // No document can be made: no table, rather than an empty one.
+        let failing = SvgPlan { palette: Vec::new(), documents: plan.documents.into_iter().filter(|d| d.glyph == "space").collect() };
+        let mut warnings = Vec::new();
+        assert_eq!(build(&font, &failing, &order, &MemoryAssets::new(), &mut warnings).unwrap(), None);
+        assert!(warnings.iter().any(|w| w.contains("no SVG table")), "{warnings:?}");
     }
 }

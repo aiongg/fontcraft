@@ -17,7 +17,7 @@ use std::path::Path as FilePath;
 use fontcraft_color::MAX_PALETTE_ROWS;
 use fontcraft_color::layers::{self, ColorLayerKind, DEFAULT_ICOLOR_SIZE, ICOLOR_SIZES};
 use fontcraft_geom::{Point, Rect, Shape as _};
-use fontcraft_model::{Font, Image, Layer, NodeKind, PaletteEntry, Shape, Transform};
+use fontcraft_model::{Font, Image, Layer, MAX_COORDINATE, NodeKind, PaletteEntry, Shape, Transform};
 use serde_json::{Value, json};
 
 use super::*;
@@ -71,7 +71,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set iColor Size",
             [],
             None,
-            "{glyph: name, layer: id (an iColor layer), size: int 1 to 4096 pixels per em} set the layer's pixel size; its image is scaled about its bottom-left corner so it stays at unitsPerEm ÷ size units per pixel → {glyph, layer, master, kind: \"iColor\", label, size, width}",
+            "{glyph: name, layer: id (an iColor layer), size: int 1 to 4096 pixels per em} set the layer's pixel size; its image is scaled about its bottom-left corner so it stays at unitsPerEm ÷ size units per pixel, refused when that would scale it to 0 or beyond the coordinate limit → {glyph, layer, master, kind: \"iColor\", label, size, width}",
             has_doc,
             set_icolor_size
         )
@@ -81,7 +81,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set iColor Image",
             [],
             None,
-            "{glyph: name, layer: id (an iColor layer), path: string (a .png, .jpg, .jpeg, .tif or .tiff file)} reference the bitmap file as the layer's image, replacing any image it had; it is placed with its bottom-left corner at the bottom left of the master layer's path bounds (the origin when the master layer has no paths) at unitsPerEm ÷ size units per pixel. The file is not read → {glyph, layer, master, kind: \"iColor\", label, size, width, image: stored path}",
+            "{glyph: name, layer: id (an iColor layer), path: string (a .png, .jpg, .jpeg, .tif or .tiff file)} reference the bitmap file as the layer's image, replacing any image it had; it is placed with its bottom-left corner at the bottom left of the master layer's path bounds (the origin when the master layer has no paths) at unitsPerEm ÷ size units per pixel. The file is not read. A relative path is relative to the document's folder (to the working directory for a document never saved); the layer stores it relative to that folder, absolute until the first save → {glyph, layer, master, kind: \"iColor\", label, size, width, image: stored path}",
             has_doc,
             set_icolor_image
         )
@@ -102,7 +102,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set SVG Image",
             [],
             None,
-            "{glyph: name, layer: id (an svg layer), path: string (an .svg file)} reference the SVG file as the layer's artwork, replacing any image it had; its viewBox is placed with the bottom-left corner at the layer origin, one SVG unit per font unit. The file is not read → {glyph, layer, master, kind: \"svg\", label, width, image: stored path}",
+            "{glyph: name, layer: id (an svg layer), path: string (an .svg file)} reference the SVG file as the layer's artwork, replacing any image it had; its viewBox is placed with the bottom-left corner at the layer origin, one SVG unit per font unit. The file is not read. A relative path is relative to the document's folder (to the working directory for a document never saved); the layer stores it relative to that folder, absolute until the first save → {glyph, layer, master, kind: \"svg\", label, width, image: stored path}",
             has_doc,
             set_svg_image
         )
@@ -178,9 +178,15 @@ fn set_icolor_size(s: &mut Session, v: &Value) -> Result<Value> {
         if let ColorLayerKind::IColor(old) = old
             && ICOLOR_SIZES.contains(&old)
             && old != size
-            && let Some(image) = layer.info.image.as_mut()
+            && let Some(image) = layer.info.image.as_ref()
         {
-            image.transform = rescale(image.transform, f64::from(old) / f64::from(size));
+            let transform = rescale(image.transform, f64::from(old) / f64::from(size));
+            if !scale_in_range(&transform) {
+                return Err(p.bad(format!("at {size} pixels per em the image would be scaled to 0 or beyond ±{MAX_COORDINATE}")));
+            }
+            if let Some(image) = layer.info.image.as_mut() {
+                image.transform = transform;
+            }
         }
         layer.info.attrs = layers::with_kind(&layer.info.attrs, Some(ColorLayerKind::IColor(size)));
         Ok(())
@@ -351,28 +357,31 @@ fn icolor_size(p: &Params) -> Result<Option<u16>> {
     u16::try_from(n).map(Some).map_err(|_| p.bad("`size` is out of range"))
 }
 
-/// `path`: a file of one of `extensions`, as the layer stores it: relative to the document's
-/// folder when the document has one and the path is absolute, otherwise as given.
+/// `path`: a file of one of `extensions`, as the layer stores it (see
+/// `Session::stored_image_path`): relative to the document's folder in a saved document,
+/// absolute in an unsaved one.
 fn file_path(s: &Session, p: &Params, extensions: &[&str], what: &str) -> Result<String> {
     let path = p.str("path")?;
     if path.trim().is_empty() {
         return Err(p.bad("`path` is empty"));
     }
-    if path.len() > MAX_PATH_BYTES {
-        return Err(p.bad(format!("`path` is longer than {MAX_PATH_BYTES} bytes")));
-    }
-    if path.chars().any(char::is_control) {
-        return Err(p.bad("`path` holds a control character"));
-    }
+    check_path_text(p, "path", path)?;
     let ext = FilePath::new(path).extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
     if !extensions.contains(&ext.as_str()) {
         return Err(p.bad(format!("`path` must name {}: {what}", extensions.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(", "))));
     }
-    let folder = s.active().and_then(|d| d.path.as_deref()).and_then(FilePath::parent);
-    Ok(match folder {
-        Some(folder) if FilePath::new(path).is_absolute() => crate::assets::relative_to(path, None, folder).unwrap_or_else(|| path.to_string()),
-        _ => path.to_string(),
-    })
+    s.stored_image_path(path).ok_or_else(|| p.bad(format!("`path` `{path}` is not a usable file path")))
+}
+
+/// Refuses a file path parameter `key` that is too long or holds a control character.
+pub(crate) fn check_path_text(p: &Params, key: &str, path: &str) -> Result<()> {
+    if path.len() > MAX_PATH_BYTES {
+        return Err(p.bad(format!("`{key}` is longer than {MAX_PATH_BYTES} bytes")));
+    }
+    if path.chars().any(char::is_control) {
+        return Err(p.bad(format!("`{key}` holds a control character")));
+    }
+    Ok(())
 }
 
 /// The tight bounds of `layer`'s paths; `None` when it has none. A path of one node counts as
@@ -401,6 +410,16 @@ fn rescale(t: Transform, factor: f64) -> Transform {
             Transform::Decomposed { pos, scale: (scale.0 * factor, scale.1 * factor), angle, slant }
         }
         Transform::Matrix([a, b, c, d, dx, dy]) => Transform::Matrix([a * factor, b * factor, c * factor, d * factor, dx, dy]),
+    }
+}
+
+/// Whether the linear part of `t` is finite, within ±[`MAX_COORDINATE`] and does not flatten the
+/// image to nothing.
+fn scale_in_range(t: &Transform) -> bool {
+    let fits = |v: f64| v.is_finite() && v.abs() <= MAX_COORDINATE;
+    match *t {
+        Transform::Decomposed { scale: (x, y), .. } => fits(x) && fits(y) && x != 0.0 && y != 0.0,
+        Transform::Matrix([a, b, c, d, _, _]) => [a, b, c, d].into_iter().all(fits) && a * d - b * c != 0.0,
     }
 }
 

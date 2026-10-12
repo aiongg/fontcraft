@@ -132,7 +132,7 @@ fn realigned(what: &str, old: &Arc<Font>, new: &Arc<Font>, stamp: Option<&str>) 
 
 /// Records `before` as the step that undoes the document's last change, and drops the redo steps.
 pub(crate) fn push_undo(doc: &mut DocState, label: Arc<str>, before: Arc<Font>) {
-    doc.history.undo.push(HistoryEntry { label, font: before });
+    doc.history.undo.push(HistoryEntry { label, font: before, path: doc.path.clone() });
     if doc.history.undo.len() > UNDO_LIMIT {
         let extra = doc.history.undo.len() - UNDO_LIMIT;
         doc.history.undo.drain(..extra);
@@ -177,6 +177,10 @@ fn locked_glyph_changed(next: &Font, before: &Font) -> Option<String> {
 pub struct HistoryEntry {
     pub label: Arc<str>,
     pub font: Arc<Font>,
+    /// Where the document was saved while `font` was current. Its relative image paths start
+    /// from that file's folder; undo and redo rewrite them when the document was saved into
+    /// another folder since.
+    pub path: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default)]

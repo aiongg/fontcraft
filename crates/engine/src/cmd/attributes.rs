@@ -184,10 +184,16 @@ pub fn specs() -> Vec<CommandSpec> {
 /// A path about to be added to `layer`: on a full-colour layer, a path with neither a fill colour
 /// nor a gradient gets the gray fill (`color.fullColor.defaultGrayFill`).
 pub fn style_new_path(layer: &Layer, mut path: Path) -> Path {
-    if layer.info.attrs.full_color && path.info.attrs.fill_color.is_none() && !has_gradient(&path.info.attrs) {
+    if is_full_color(layer) && path.info.attrs.fill_color.is_none() && !has_gradient(&path.info.attrs) {
         path.info.attrs.fill_color = Some(DEFAULT_FILL);
     }
     path
+}
+
+/// Whether `layer` is a full-colour layer, by the colour kind a layer resolves to: a master layer,
+/// or a layer whose palette attribute takes precedence, is not one even with the full-colour flag.
+fn is_full_color(layer: &Layer) -> bool {
+    matches!(fontcraft_color::layers::kind(layer), Some(fontcraft_color::layers::ColorLayerKind::FullColor))
 }
 
 /// Whether a colour is fully transparent, which the swatches show crossed out.
@@ -326,7 +332,7 @@ fn targets(p: &Params, s: &Session) -> Result<Targets> {
     }
     let font = s.font()?;
     let r = t.resolve(font)?;
-    if !r.layer.info.attrs.full_color {
+    if !is_full_color(r.layer) {
         return Err(p.bad(format!(
             "layer `{}` of `{}` is not a full-colour layer: path attributes belong to the paths of full-colour layers",
             r.layer.id, t.glyph
@@ -847,7 +853,11 @@ fn add_attribute(s: &mut Session, value: &Value) -> Result<Value> {
         "gradient" => Edit::Gradient(NewGradient::read(&p)?),
         "shadow" => Edit::Shadow(ShadowEdit::read(&p)?),
         "innerShadow" => Edit::InnerShadow(ShadowEdit::read(&p)?),
-        "patternImage" => Edit::Pattern(p.opt_str("image")?.unwrap_or_default().to_string()),
+        "patternImage" => {
+            let image = p.opt_str("image")?.unwrap_or_default();
+            super::color_layer::check_path_text(&p, "image", image)?;
+            Edit::Pattern(image.to_string())
+        }
         other => return Err(p.bad(format!("`attribute` must be gradient, shadow, innerShadow or patternImage, got \"{other}\""))),
     };
     let t = targets(&p, s)?;

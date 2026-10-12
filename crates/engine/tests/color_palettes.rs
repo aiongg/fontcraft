@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::{EngineError, Session};
-use fontcraft_model::{Color, Glyph, Layer, PaletteEntry, Path, Shape};
+use fontcraft_model::{Background, Color, Glyph, Layer, PaletteEntry, Path, Shape};
 use serde_json::{Value, json};
 
 fn run(s: &mut Session, id: &str, p: Value) -> Value {
@@ -143,6 +143,42 @@ fn removing_a_colour_renumbers_later_rows_and_refuses_a_used_row() {
     run(&mut s, "edit.undo", json!({}));
     assert_eq!(entry(&s, "heart", "a2"), Some(PaletteEntry::Index(2)));
     assert_eq!(palettes(&mut s, json!({}))["rows"], json!(3));
+}
+
+/// The fill of the first background path of `layer` in `glyph`.
+fn background_fill(s: &Session, glyph: &str, layer: &str) -> Option<Color> {
+    let font = s.font().unwrap();
+    let layer = font.glyph(glyph).unwrap().layers.iter().find(|l| l.id == layer).unwrap().clone();
+    let Some(Shape::Path(p)) = layer.info.background.as_ref().and_then(|b| b.shapes.first()) else { panic!("no background path") };
+    p.info.attrs.fill_color
+}
+
+#[test]
+fn background_shapes_hold_and_follow_their_palette_rows() {
+    let mut s = palette_font();
+    let set_background_row = |s: &mut Session, index: u16| {
+        s.edit("background", |font| {
+            {
+                let mut g = font.glyph_mut("heart")?;
+                let layer = g.layers.iter_mut().find(|l| l.id == "a0").unwrap();
+                let mut path = Path::new(true, Vec::new());
+                path.info.attrs.fill_color = Some(Color::Palette { index, alpha: 1.0 });
+                layer.info.background = Some(Background { shapes: vec![Shape::Path(path)], ..Background::default() });
+            }
+            let mut b = font.glyph_mut("star")?;
+            b.layers.retain(|l| l.id != "b1");
+            Ok(())
+        })
+        .unwrap();
+    };
+    // Only heart's background uses row 1: it still holds the row.
+    set_background_row(&mut s, 1);
+    refused(&mut s, "colorPalette.removeColor", json!({"index": 1}), "used by heart");
+    // A background colour after the removed row moves down with the foreground's.
+    set_background_row(&mut s, 2);
+    run(&mut s, "colorPalette.removeColor", json!({"index": 1}));
+    assert_eq!(background_fill(&s, "heart", "a0"), Some(Color::Palette { index: 1, alpha: 1.0 }));
+    assert_eq!(entry(&s, "heart", "a2"), Some(PaletteEntry::Index(1)));
 }
 
 #[test]

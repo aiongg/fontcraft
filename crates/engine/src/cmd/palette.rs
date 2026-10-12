@@ -326,14 +326,15 @@ fn palette_row(c: &Color) -> Option<u16> {
     }
 }
 
-/// Every palette row `layer` uses: its palette entry and its shapes' palette colours. The text
-/// colour is not a row.
+/// Every palette row `layer` uses: its palette entry and the palette colours of its shapes and
+/// of its background's shapes. The text colour is not a row.
 fn indices(layer: &Layer) -> impl Iterator<Item = u16> + '_ {
     let entry = match layer.info.attrs.color_palette {
         Some(PaletteEntry::Index(i)) if i != FOREGROUND_INDEX => Some(i),
         _ => None,
     };
-    entry.into_iter().chain(layer.shapes.iter().filter_map(shape_attrs).flat_map(colours).filter_map(palette_row))
+    let background = layer.info.background.iter().flat_map(|b| b.shapes.iter());
+    entry.into_iter().chain(layer.shapes.iter().chain(background).filter_map(shape_attrs).flat_map(colours).filter_map(palette_row))
 }
 
 /// Moves every row after `removed` that `layer` uses down by one.
@@ -344,9 +345,24 @@ fn renumber(layer: &mut Layer, removed: u16) {
     {
         layer.info.attrs.color_palette = Some(PaletteEntry::Index(i - 1));
     }
-    for shape in &mut layer.shapes {
+    renumber_shapes(&mut layer.shapes, removed);
+    // The layer's info is only written to when its background changes.
+    if layer.info.background.as_ref().is_some_and(|b| b.shapes.iter().any(|s| uses_later(s, removed)))
+        && let Some(b) = layer.info.background.as_mut()
+    {
+        renumber_shapes(&mut b.shapes, removed);
+    }
+}
+
+/// Whether `shape` uses a row after `removed`.
+fn uses_later(shape: &Shape, removed: u16) -> bool {
+    shape_attrs(shape).is_some_and(|a| colours(a).filter_map(palette_row).any(|i| i > removed))
+}
+
+fn renumber_shapes(shapes: &mut [Shape], removed: u16) {
+    for shape in shapes {
         // Only shapes that change are touched, so the others keep their shared storage.
-        if !shape_attrs(shape).is_some_and(|a| colours(a).filter_map(palette_row).any(|i| i > removed)) {
+        if !uses_later(shape, removed) {
             continue;
         }
         let Some(attrs) = shape_attrs_mut(shape) else { continue };

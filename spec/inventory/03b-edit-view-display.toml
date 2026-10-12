@@ -2165,10 +2165,11 @@ milestone = "M11"
 summary = "The document records only the image's path relative to the font file. If the file has moved or the path no longer resolves, the canvas shows a missing-image symbol in its place."
 ref = "Edit View › Images › Adding Images"
 status = "handbook"
-notes = "Documented, not yet observed. Every save into another folder, the first save included, rewrites the image paths relative to the new file. The missing-image marker is M11.13's."
+notes = "Documented, not yet observed. Every save into another folder, the first save included, rewrites the image paths relative to the new file; undo and redo afterwards give the steps they restore paths relative to the new file too. The missing-image marker is M11.13's."
 guesses = [
   "A file outside the document's folder is stored with a path that climbs out of it (`../scans/A.png`), as the handbook says only a relative path is stored. Settled by adding an image from another folder in the reference and reading the saved path.",
   "An image added to a document that has never been saved keeps its absolute path until the first save, which rewrites it relative to the new file. Settled by adding an image to an untitled document in the reference and saving it.",
+  "A stored path that names a network share or a device (`\\\\host\\share`, `//host/share`, `\\\\?\\`, `\\\\.\\`) is never read, on every platform, and the image counts as unreadable; absolute paths and paths climbing out with `..` are read. Settled by opening, in the reference, a file whose image path names a network share.",
 ]
 observe = [
   "Image font: save, move H.png away and reopen the file; note how the missing image is drawn and whether a message appears.",

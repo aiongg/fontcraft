@@ -24,6 +24,11 @@ fn font(s: &Session) -> Value {
     serde_json::to_value(s.font().unwrap()).unwrap()
 }
 
+/// The path an unsaved document stores for `relative`: absolute, taken from the working directory.
+fn absolute(relative: &str) -> String {
+    std::path::absolute(relative).unwrap().to_str().unwrap().to_string()
+}
+
 fn layer(s: &Session, glyph: &str, id: &str) -> Layer {
     s.font().unwrap().glyph(glyph).unwrap().layers.iter().find(|l| l.id == id).unwrap().clone()
 }
@@ -123,9 +128,11 @@ fn layer_set_icolor_image_places_the_bitmap_at_the_master_bounds_and_layer_set_i
     let mut s = session();
     run(&mut s, "layer.convertToIColor", json!({"glyph": "E", "layer": "x1", "size": 64}));
     let r = run(&mut s, "layer.setIColorImage", json!({"glyph": "E", "layer": "x1", "path": "Images/E 64.png"}));
-    assert_eq!(r["image"].as_str(), Some("Images/E 64.png"));
+    // The document is unsaved: a relative path is stored absolute, as Add Image stores it.
+    let stored = absolute("Images/E 64.png");
+    assert_eq!(r["image"].as_str(), Some(stored.as_str()));
     let image = layer(&s, "E", "x1").info.image.clone().unwrap();
-    assert_eq!(image.path.as_deref(), Some("Images/E 64.png"));
+    assert_eq!(image.path.as_deref(), Some(stored.as_str()));
     // Bottom left of the master's path bounds, 1000 / 64 units per pixel.
     assert_eq!(image.transform, Transform::Decomposed { pos: (50.0, -100.0), scale: (15.625, 15.625), angle: 0.0, slant: (0.0, 0.0) });
 
@@ -153,13 +160,35 @@ fn layer_set_icolor_image_places_the_bitmap_at_the_master_bounds_and_layer_set_i
 }
 
 #[test]
+fn layer_set_icolor_size_refuses_to_scale_the_image_beyond_the_coordinate_limit() {
+    let mut s = session();
+    run(&mut s, "layer.convertToIColor", json!({"glyph": "E", "layer": "x1", "size": 4096}));
+    run(&mut s, "layer.setIColorImage", json!({"glyph": "E", "layer": "x1", "path": "E.png"}));
+    s.edit("huge", |font| {
+        let mut g = font.glyph_mut("E")?;
+        let l = g.layers.iter_mut().find(|l| l.id == "x1").unwrap();
+        l.info.image.as_mut().unwrap().transform =
+            Transform::Decomposed { pos: (0.0, 0.0), scale: (500_000.0, 500_000.0), angle: 0.0, slant: (0.0, 0.0) };
+        Ok(())
+    })
+    .unwrap();
+    // From 4096 to 1 pixel per em multiplies the scale by 4096.
+    fails(&mut s, "layer.setIColorSize", json!({"glyph": "E", "layer": "x1", "size": 1}), "beyond");
+    // Twice the scale reaches the limit and is taken.
+    run(&mut s, "layer.setIColorSize", json!({"glyph": "E", "layer": "x1", "size": 2048}));
+    let image = layer(&s, "E", "x1").info.image.clone().unwrap();
+    assert_eq!(image.transform, Transform::Decomposed { pos: (0.0, 0.0), scale: (1_000_000.0, 1_000_000.0), angle: 0.0, slant: (0.0, 0.0) });
+}
+
+#[test]
 fn layer_set_svg_image_references_the_file_at_the_origin() {
     let mut s = session();
     run(&mut s, "layer.convertToSvg", json!({"glyph": "A", "layer": "x1"}));
     let r = run(&mut s, "layer.setSvgImage", json!({"glyph": "A", "layer": "x1", "path": "Images/F.svg"}));
-    assert_eq!((r["kind"].as_str(), r["image"].as_str()), (Some("svg"), Some("Images/F.svg")));
+    let stored = absolute("Images/F.svg");
+    assert_eq!((r["kind"].as_str(), r["image"].as_str()), (Some("svg"), Some(stored.as_str())));
     let image = layer(&s, "A", "x1").info.image.clone().unwrap();
-    assert_eq!(image.path.as_deref(), Some("Images/F.svg"));
+    assert_eq!(image.path.as_deref(), Some(stored.as_str()));
     assert!(image.transform.is_identity());
     fails(&mut s, "layer.setSvgImage", json!({"glyph": "A", "layer": "x1", "path": "F.png"}), "path");
     fails(&mut s, "layer.setSvgImage", json!({"glyph": "A", "layer": "x2", "path": "F.svg"}), "svg layer");
@@ -178,7 +207,10 @@ fn layer_list_color_layers_reports_kinds_in_paint_order_with_their_files() {
     assert_eq!(glyphs, ["A", "E"], "every glyph with a colour layer, nothing else");
     let a = &r["glyphs"][0]["layers"];
     assert_eq!(a[0]["layer"], "x1", "file order: the first layer is painted at the bottom");
-    assert_eq!((a[0]["kind"].as_str(), a[0]["image"].as_str(), a[0]["exists"].as_bool()), (Some("svg"), Some("missing/F.svg"), Some(false)));
+    assert_eq!(
+        (a[0]["kind"].as_str(), a[0]["image"].as_str(), a[0]["exists"].as_bool()),
+        (Some("svg"), Some(absolute("missing/F.svg").as_str()), Some(false))
+    );
     assert_eq!((a[1]["kind"].as_str(), a[1]["index"].as_u64(), a[1]["label"].as_str()), (Some("palette"), Some(2), Some("Color 2")));
     assert_eq!(r["glyphs"][1]["layers"][0]["size"].as_u64(), Some(64));
 

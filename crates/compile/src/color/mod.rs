@@ -129,7 +129,9 @@ pub fn build(
     }
     let mut out = ColorTables::default();
     if let (Some(svg_plan), Some(font)) = (&plan.svg, font) {
-        out.tables.push((Tag::new(b"SVG "), svg::build(font, svg_plan, order, assets, warnings)?));
+        if let Some(bytes) = svg::build(font, svg_plan, order, assets, warnings)? {
+            out.tables.push((Tag::new(b"SVG "), bytes));
+        }
     }
     Ok(out)
 }

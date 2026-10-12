@@ -256,11 +256,20 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     saved.losses.extend(smart_losses);
     let font = Arc::new(font);
     let doc = s.doc_mut()?;
+    let (id, old_path) = (doc.id, doc.path.replace(path.clone()));
     doc.title = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| doc.title.clone());
     doc.font = font.clone();
     doc.saved = font;
-    doc.path = Some(path.clone());
     doc.stamp = io::document_stamp(&path, &doc.font);
+    // Undo steps carry their own folder (`HistoryEntry::path`). The starting font of a running
+    // batch or interaction becomes an undo step under the new folder, so it is rewritten here.
+    let rebase = |font: &mut Arc<Font>| *font = crate::assets::rebased(Arc::clone(font), old_path.as_deref(), Some(&path));
+    if let Some(batch) = s.batch.as_mut() {
+        batch.before.iter_mut().filter(|(d, _)| *d == id).for_each(|(_, before)| rebase(before));
+    }
+    if let Some(it) = s.interaction.as_mut().filter(|it| it.doc == id) {
+        rebase(&mut it.before);
+    }
     remember(s, &path);
     Ok(json!({
         "path": path.to_string_lossy(), "format": format.name(), "version": version, "bytes": saved.bytes,

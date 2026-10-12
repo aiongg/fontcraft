@@ -288,3 +288,65 @@ fn an_unsaved_document_stores_absolute_paths_until_its_first_save() {
     assert_eq!(info(&mut t, "A")["path"].as_str(), Some("../doc/images/A.png"));
     assert_eq!(info(&mut t, "A")["resolved"].as_bool(), Some(true));
 }
+
+#[test]
+fn undo_after_a_save_into_another_folder_keeps_every_image_resolved() {
+    let dir = folder("undo-save-as");
+    let file = write(&dir, "doc/images/A.png", &png(10, 10, None));
+    let mut s = Session::with_document();
+    run(&mut s, "file.saveAs", json!({"path": dir.join("doc/Font.fontcraft")}));
+    run(&mut s, "glyph.addImage", json!({"files": [file]}));
+    run(&mut s, "image.setTransform", json!({"glyph": "A", "x": 10}));
+    assert_eq!(info(&mut s, "A")["path"].as_str(), Some("images/A.png"));
+
+    std::fs::create_dir_all(dir.join("other")).unwrap();
+    run(&mut s, "file.saveAs", json!({"path": dir.join("other/Font.fontcraft")}));
+    let resolved = |s: &mut Session| {
+        let i = info(s, "A");
+        (i["path"].as_str().map(str::to_string), i["resolved"].as_bool(), i["x"].as_f64())
+    };
+    let moved = Some("../doc/images/A.png".to_string());
+    assert_eq!(resolved(&mut s), (moved.clone(), Some(true), Some(10.0)));
+
+    // Steps made before the save hold paths of the old folder; undo and redo give them the new one.
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(resolved(&mut s), (moved.clone(), Some(true), Some(0.0)));
+    run(&mut s, "edit.undo", json!({}));
+    assert!(info(&mut s, "A").is_null());
+    run(&mut s, "edit.redo", json!({}));
+    assert_eq!(resolved(&mut s), (moved.clone(), Some(true), Some(0.0)));
+
+    // The next save writes the path relative to the new file.
+    run(&mut s, "file.save", json!({}));
+    let mut t = Session::new();
+    run(&mut t, "file.open", json!({"path": dir.join("other/Font.fontcraft")}));
+    assert_eq!(resolved(&mut t), (moved, Some(true), Some(0.0)));
+}
+
+#[test]
+fn the_most_files_one_call_takes_are_placed_without_slowing_down() {
+    use fontcraft_engine::assets::MAX_ADD_IMAGE_FILES;
+    use fontcraft_model::{Glyph, Layer};
+    let dir = folder("many");
+    let bytes = png(8, 8, None);
+    let names: Vec<String> = (0..MAX_ADD_IMAGE_FILES).map(|i| format!("g{i:05}")).collect();
+    let files: Vec<String> = names.iter().map(|n| write(&dir, &format!("{n}.png"), &bytes)).collect();
+    let mut s = Session::with_document();
+    s.edit("glyphs", |font| {
+        let master = font.masters[0].id.clone();
+        for n in &names {
+            let mut g = Glyph::new(n.as_str());
+            g.layers.push(Layer::new(master.as_str(), 500.0));
+            font.glyphs.push(g);
+        }
+        Ok(())
+    })
+    .unwrap();
+    let started = std::time::Instant::now();
+    let r = run(&mut s, "glyph.addImage", json!({ "files": files }));
+    // Matching file names to glyphs once took time growing with the square of the file count.
+    assert!(started.elapsed() < std::time::Duration::from_secs(60), "{:?}", started.elapsed());
+    assert_eq!(r["placed"].as_array().unwrap().len(), MAX_ADD_IMAGE_FILES);
+    assert_eq!(r["unmatched"], json!([]));
+    assert_eq!(info(&mut s, "g09999")["pixelWidth"].as_u64(), Some(8));
+}

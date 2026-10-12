@@ -15,8 +15,9 @@ pub fn specs() -> Vec<CommandSpec> {
 fn undo(s: &mut Session, _: &Value) -> Result<Value> {
     let doc = s.doc_mut()?;
     let step = doc.history.undo.pop().ok_or_else(|| EngineError::Disabled("edit.undo".into(), "nothing to undo".into()))?;
-    let current = std::mem::replace(&mut doc.font, step.font);
-    doc.history.redo.push(HistoryEntry { label: step.label.clone(), font: current });
+    let font = crate::assets::rebased(step.font, step.path.as_deref(), doc.path.as_deref());
+    let current = std::mem::replace(&mut doc.font, font);
+    doc.history.redo.push(HistoryEntry { label: step.label.clone(), font: current, path: doc.path.clone() });
     doc.revision += 1;
     Ok(json!({ "undone": step.label.as_ref(), "revision": doc.revision }))
 }
@@ -24,8 +25,9 @@ fn undo(s: &mut Session, _: &Value) -> Result<Value> {
 fn redo(s: &mut Session, _: &Value) -> Result<Value> {
     let doc = s.doc_mut()?;
     let step = doc.history.redo.pop().ok_or_else(|| EngineError::Disabled("edit.redo".into(), "nothing to redo".into()))?;
-    let current = std::mem::replace(&mut doc.font, step.font);
-    doc.history.undo.push(HistoryEntry { label: step.label.clone(), font: current });
+    let font = crate::assets::rebased(step.font, step.path.as_deref(), doc.path.as_deref());
+    let current = std::mem::replace(&mut doc.font, font);
+    doc.history.undo.push(HistoryEntry { label: step.label.clone(), font: current, path: doc.path.clone() });
     doc.revision += 1;
     Ok(json!({ "redone": step.label.as_ref(), "revision": doc.revision }))
 }

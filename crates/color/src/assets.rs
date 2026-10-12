@@ -40,6 +40,13 @@ pub trait AssetStore: Send + Sync {
     fn read(&self, path: &str) -> Result<Arc<[u8]>, AssetError>;
     /// Whether `path` names a file the store can read, without reading it.
     fn exists(&self, path: &str) -> bool;
+    /// The start of the file at `path`, at least `max` bytes of it when it is that long, for
+    /// reading a header without reading a large file whole. Refused as [`AssetStore::read`]
+    /// refuses. A store that holds whole files gives the whole file.
+    fn read_head(&self, path: &str, max: usize) -> Result<Arc<[u8]>, AssetError> {
+        let _ = max;
+        self.read(path)
+    }
 }
 
 /// Files held in memory, keyed by stored path.

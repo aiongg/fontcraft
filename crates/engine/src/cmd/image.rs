@@ -13,6 +13,8 @@
 //! address them. Crop rectangles are in image pixels from the image's bottom-left corner, the
 //! space the image's transform maps into the glyph.
 
+use std::collections::HashMap;
+
 use fontcraft_color::AssetStore;
 use fontcraft_geom::{Point, Rect};
 use fontcraft_imagery::{self as imagery, ImageFormat};
@@ -31,6 +33,8 @@ pub const DEFAULT_PPI: f64 = 72.0;
 const POINTS_PER_INCH: f64 = 72.0;
 /// Most file names quoted in one message.
 const MAX_LISTED: usize = 10;
+/// Bytes of a file Add Image reads for its format, pixel size and resolution.
+const HEADER_BYTES: usize = 1 << 20;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -381,10 +385,11 @@ fn add_image(s: &mut Session, p: &Value) -> Result<Value> {
             pairs.extend(glyphs.into_iter().map(|g| (g, *file)));
         }
         None => {
+            let mut by_glyph: HashMap<&str, &str> = HashMap::with_capacity(files.len());
             for &file in &files {
                 match glyph_name_of(file).filter(|name| font.glyph(name).is_some()) {
                     Some(name) => {
-                        if let Some((_, first)) = pairs.iter().find(|(g, _)| g == name) {
+                        if let Some(first) = by_glyph.insert(name, file) {
                             return Err(p.bad(format!("`{first}` and `{file}` both name glyph `{name}`: give one file per glyph")));
                         }
                         pairs.push((name.to_string(), file));
@@ -398,21 +403,21 @@ fn add_image(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
 
-    // Read every file before anything changes, so a bad file refuses the whole call.
+    // Read every file before anything changes, so a bad file refuses the whole call. Each file
+    // is read once, however many glyphs it goes on.
     let store = s.assets();
+    let mut read: HashMap<&str, (Image, ImageFormat, Option<(u32, u32)>)> = HashMap::new();
     let mut placements = Vec::with_capacity(pairs.len());
     for (glyph, file) in pairs {
-        let stored = s.stored_image_path(file).ok_or_else(|| p.bad(format!("`{file}` is not a usable file path")))?;
-        let bytes = store.read(&stored).map_err(|e| p.bad(e.to_string()))?;
-        let info = imagery::sniff(&bytes).map_err(|e| p.bad(format!("`{file}`: {e}")))?;
-        if info.format == ImageFormat::Other {
-            return Err(p.bad(format!("`{file}` is not a PNG, JPEG, TIFF, PDF, PSD or SVG file")));
-        }
-        let (ppi_x, ppi_y) = imagery::resolution(&bytes).unwrap_or((DEFAULT_PPI, DEFAULT_PPI));
-        let parts = Parts { pos: (0.0, 0.0), scale: (POINTS_PER_INCH / ppi_x, POINTS_PER_INCH / ppi_y), angle: 0.0, slant: (0.0, 0.0) };
-        let image = Image { path: Some(stored), transform: parts.transform(), crop: None, alpha: None, locked: false, extra: Extra::new() };
-        let pixels = (info.width > 0 && info.height > 0).then_some((info.width, info.height));
-        placements.push(Placement { glyph, file: file.to_string(), image, format: info.format, pixels });
+        let (image, format, pixels) = match read.get(file) {
+            Some(known) => known.clone(),
+            None => {
+                let known = read_image(s, store.as_ref(), &p, file)?;
+                read.insert(file, known.clone());
+                known
+            }
+        };
+        placements.push(Placement { glyph, file: file.to_string(), image, format, pixels });
     }
 
     let replaced = s.edit("Add Image", |font| {
@@ -445,6 +450,29 @@ fn add_image(s: &mut Session, p: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({ "placed": placed, "unmatched": unmatched }))
+}
+
+/// The image Add Image places for `file`, its format and pixel size. Only the file's start is
+/// read ([`HEADER_BYTES`]) unless the header lies beyond it, as a TIFF's may.
+fn read_image(s: &Session, store: &dyn AssetStore, p: &Params, file: &str) -> Result<(Image, ImageFormat, Option<(u32, u32)>)> {
+    let stored = s.stored_image_path(file).ok_or_else(|| p.bad(format!("`{file}` is not a usable file path")))?;
+    let mut bytes = store.read_head(&stored, HEADER_BYTES).map_err(|e| p.bad(e.to_string()))?;
+    let cut = bytes.len() >= HEADER_BYTES;
+    let mut info = imagery::sniff(&bytes);
+    let tiff_without_resolution = matches!(&info, Ok(i) if i.format == ImageFormat::Tiff) && imagery::resolution(&bytes).is_none();
+    if cut && (info.is_err() || tiff_without_resolution) {
+        bytes = store.read(&stored).map_err(|e| p.bad(e.to_string()))?;
+        info = imagery::sniff(&bytes);
+    }
+    let info = info.map_err(|e| p.bad(format!("`{file}`: {e}")))?;
+    if info.format == ImageFormat::Other {
+        return Err(p.bad(format!("`{file}` is not a PNG, JPEG, TIFF, PDF, PSD or SVG file")));
+    }
+    let (ppi_x, ppi_y) = imagery::resolution(&bytes).unwrap_or((DEFAULT_PPI, DEFAULT_PPI));
+    let parts = Parts { pos: (0.0, 0.0), scale: (POINTS_PER_INCH / ppi_x, POINTS_PER_INCH / ppi_y), angle: 0.0, slant: (0.0, 0.0) };
+    let image = Image { path: Some(stored), transform: parts.transform(), crop: None, alpha: None, locked: false, extra: Extra::new() };
+    let pixels = (info.width > 0 && info.height > 0).then_some((info.width, info.height));
+    Ok((image, info.format, pixels))
 }
 
 fn set_transform(s: &mut Session, p: &Value) -> Result<Value> {
