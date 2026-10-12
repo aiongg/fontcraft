@@ -7,7 +7,7 @@
 //! | head | `checksumAdjustment`, `created`, `modified`; `indexToLocFormat` (an offset size) |
 //! | hhea, vhea | `numberOfHMetrics`, `numberOfLongVerMetrics` (how many advances are spelt out; `hmtx` and `vmtx` compare the values) |
 //! | hmtx, vmtx | compared as advance and side bearing per glyph, by glyph name |
-//! | name | compared as a set of records; the reference compiler's own stamp at the end of the version string (ID 5); IDs 256 and up (feature and variation names) left out |
+//! | name | compared as a set of records; the compiler's own stamp at the end of the version string (ID 5: `;fontc …`, `;FontCraft …`) on either side; IDs 256 and up (feature and variation names) left out |
 //! | cmap | compared as code point → glyph name mappings over all Unicode subtables, plus the list of subtables and the variation sequences |
 //! | glyf, CFF | outlines drawn and compared within half a unit, start points free; for `glyf` also each glyph's kind (empty, simple, composite), components, flags, bounds and instructions. With overlaps removed on both sides ([`Outlines::Coverage`]), outlines that differ are compared by rendered coverage, and a simple glyph whose outline is coverage-equal is not compared by contour count or bounds |
 //! | loca | offsets: compared through `glyf` |
@@ -546,10 +546,11 @@ fn post(a: &Side, b: &Side, renamed: &[(u32, String, String)]) -> Vec<Difference
 /// A name record: platform, encoding, language, name id.
 type NameKey = (u16, u16, u16, u16);
 
-/// The oracle's own stamp at the end of a version string (`Version 1.000;fontc 1.0.0`).
+/// A compiler's own stamp at the end of a version string (`Version 1.000;fontc 1.0.0`,
+/// `Version 1.000;FontCraft 0.1.0`).
 pub(crate) fn strip_tool_stamp(s: &str) -> (&str, bool) {
     match s.rsplit_once(';') {
-        Some((head, tail)) if tail.trim_start().starts_with("fontc ") => (head, true),
+        Some((head, tail)) if tail.trim_start().starts_with("fontc ") || tail.trim_start().starts_with("FontCraft ") => (head, true),
         _ => (s, false),
     }
 }
@@ -583,17 +584,18 @@ fn name(a: &Side, b: &Side) -> (Vec<Difference>, Option<String>) {
         let key = format!("name {}/{}/{:#06x}/{}", k.0, k.1, k.2, k.3);
         match (ra.get(k), rb.get(k)) {
             (Some(x), Some(y)) => {
+                let (x, cut_x) = if k.3 == 5 { strip_tool_stamp(x) } else { (x.as_str(), false) };
                 let (y, cut) = if k.3 == 5 { strip_tool_stamp(y) } else { (y.as_str(), false) };
-                stamped |= cut;
+                stamped |= cut || cut_x;
                 if x != y {
-                    out.push(diff(key, x.clone(), y));
+                    out.push(diff(key, x, y));
                 }
             }
             (x, y) => out.push(diff(key, x.cloned().unwrap_or_else(|| "absent".into()), y.cloned().unwrap_or_else(|| "absent".into()))),
         }
     }
     if stamped {
-        notes.push("the reference compiler's stamp in the version string is not compared".to_string());
+        notes.push("the compilers' stamps in the version string are not compared".to_string());
     }
     if high_a + high_b > 0 {
         notes.push(format!("records with name id 256 or more left out ({high_a} in FontCraft's, {high_b} in the reference's)"));

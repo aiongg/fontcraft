@@ -119,7 +119,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export",
             [],
             None,
-            "{project?: id|path|title, outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, timestamp?: number|\"now\"} build every active static instance of the project from the linked font file, read from disk (it need not be open), into the export destination, through the same build as File › Export; an instance's Export Folder parameter puts its files in that sub-folder. Needs a saved project without unsaved changes, a font link that resolves and a destination. Default outlines truetype, container plain; with both outline formats the files go into ttf and otf subfolders. Instances between masters are skipped and listed. A failing export writes nothing → {destination, written, fonts: [{instance, source, format, outlines, glyphs, warnings, files}], skipped: [{instance, source, reason}], warnings}",
+            "{project?: id|path|title, outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, timestamp?: number|\"now\", versionStamp?: bool} build every active static instance of the project from the linked font file, read from disk (it need not be open), into the export destination, through the same build as File › Export; an instance's Export Folder parameter puts its files in that sub-folder. Needs a saved project without unsaved changes, a font link that resolves and a destination. Default outlines truetype, container plain; with both outline formats the files go into ttf and otf subfolders. Instances between masters are skipped and listed. A failing export writes nothing → {destination, written, fonts: [{instance, source, format, outlines, glyphs, warnings, files}], skipped: [{instance, source, reason}], warnings}",
             has_project,
             export
         ).writes_files(),
@@ -526,7 +526,12 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let dest = Dest::Folder(destination.clone());
     let containers = compile::containers(&p, "containers", &dest)?;
-    let options = Options { timestamp: compile::timestamp(&p)?, remove_overlap: p.bool_or("removeOverlap", true)?, ..Options::default() };
+    let options = Options {
+        timestamp: compile::timestamp(&p)?,
+        remove_overlap: p.bool_or("removeOverlap", true)?,
+        version_stamp: p.bool_or("versionStamp", true)?,
+        ..Options::default()
+    };
     let req = Request { flavours, containers, options, dest, first_only: false };
 
     let (mut font, mut warnings) = crate::project::read_font(&font_path)?;

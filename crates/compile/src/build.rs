@@ -352,7 +352,10 @@ pub fn assemble(
     options: &Options,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
-    let info = info::derive(font, &options.style_name, warnings);
+    let mut info = info::derive(font, &options.style_name, warnings);
+    if options.version_stamp {
+        info::stamp_version(&mut info, font);
+    }
     let m = info.metrics;
     let mut builder = FontBuilder::new();
     // Glyph names: in `post` for TrueType, unless there are too many; in the charset for CFF.

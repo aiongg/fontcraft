@@ -161,6 +161,23 @@ pub fn instance_user_value(font: &Font, i: usize, inst: &Instance) -> f64 {
     user_value(font, i, &inst.location, class, default, &inst.params)
 }
 
+/// An instance's weight (`wght`: the value an OS/2 weight class holds) or width (`wdth`: percent
+/// of the normal width) from its Weight Class or Width Class (absent meaning `Regular` or
+/// `Medium (normal)`), then its `weightClass` or `widthClass` parameter, as the handbook says the
+/// classes reach the `OS/2` table. A static export of a font with an axis of that tag takes the
+/// instance's location on the axis instead.
+pub fn instance_class_value(inst: &Instance, tag: &str) -> f64 {
+    let (class, default_name, default) =
+        if tag == "wght" { (inst.weight_class.as_ref(), "Regular", 400.0) } else { (inst.width_class.as_ref(), "Medium (normal)", 100.0) };
+    let named = StyleClass::Name(default_name.to_string());
+    let mut value = style_value(tag, class.unwrap_or(&named)).unwrap_or(default);
+    let param = if tag == "wght" { "weightClass" } else { "widthClass" };
+    if let Some(v) = inst.params.get(param).and_then(number_of).and_then(|c| class_value(tag, c)) {
+        value = v;
+    }
+    value
+}
+
 /// The words every master name shares, in the first master's order (glyphsLib's
 /// `find_base_style`).
 fn base_style(masters: &[Master]) -> String {

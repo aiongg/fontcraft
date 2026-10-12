@@ -79,7 +79,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Static Fonts",
             [],
             None,
-            "{instances?: [string], outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, removeOverlap?: bool, autohint?: bool, timestamp?: number|\"now\"} compile the active document's exportable instances (or the named ones; a font without instances exports its first master) to static fonts with TrueType (.ttf) or CFF (.otf) outlines, in each container asked for (default plain; WOFF and WOFF2 are .woff and .woff2). Instances between masters are skipped and listed. destination: a folder, created when missing, where each file is named by the instance's fileName parameter, else its PostScript name (with the document's file name standing in for a missing family name), in the sub-folder an instance's Export Folder parameter names (`..` climbs out of the destination); or one file path ending in .ttf, .otf, .woff or .woff2, which sets the outlines and container when they are not given and receives the first instance that can be built; without it the fonts are returned as dataBase64. Existing files are replaced; a failing export writes nothing. removeOverlap: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). autohint: not supported yet. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now) → {fonts: [{instance, source, format, outlines, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], skipped: [{instance, source, reason}], warnings}; with one file also {path? | dataBase64?, bytes, glyphs, glyphOrder}",
+            "{instances?: [string], outlines?: \"truetype\"|\"cff\", containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, removeOverlap?: bool, autohint?: bool, timestamp?: number|\"now\", versionStamp?: bool} compile the active document's exportable instances (or the named ones; a font without instances exports its first master) to static fonts with TrueType (.ttf) or CFF (.otf) outlines, in each container asked for (default plain; WOFF and WOFF2 are .woff and .woff2). Instances between masters are skipped and listed. destination: a folder, created when missing, where each file is named by the instance's fileName parameter, else its PostScript name (with the document's file name standing in for a missing family name), in the sub-folder an instance's Export Folder parameter names (`..` climbs out of the destination); or one file path ending in .ttf, .otf, .woff or .woff2, which sets the outlines and container when they are not given and receives the first instance that can be built; without it the fonts are returned as dataBase64. Existing files are replaced; a failing export writes nothing. removeOverlap: merge overlapping contours in every glyph (default true; a glyph whose overlaps cannot be removed keeps them, with a warning). autohint: not supported yet. timestamp: seconds since the Unix epoch for the head table (default SOURCE_DATE_EPOCH, else now). versionStamp: append `;FontCraft <version>` to the version string (name ID 5) unless the font states its own (default true) → {fonts: [{instance, source, format, outlines, glyphs, warnings, files: [{name, container, bytes, path? | dataBase64?}]}], skipped: [{instance, source, reason}], warnings}; with one file also {path? | dataBase64?, bytes, glyphs, glyphOrder}",
             has_doc,
             export_static
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
@@ -88,7 +88,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export All",
             ["File"],
             Some("Cmd+Alt+E"),
-            "{documents?: [string], outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], destination: string, removeOverlap?: bool, autohint?: bool, timestamp?: number|\"now\"} export every exportable instance of every open document (or of the documents named by title or path) in each outline format and container asked for (default truetype, plain) into the destination folder, as file.exportStatic names them; with both outline formats, the files go into ttf and otf subfolders. Instances between masters are skipped and listed. removeOverlap: as in file.exportStatic (default true). A failing export writes nothing → {documents: [{title, fonts, skipped}], written, warnings}",
+            "{documents?: [string], outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], destination: string, removeOverlap?: bool, autohint?: bool, timestamp?: number|\"now\", versionStamp?: bool} export every exportable instance of every open document (or of the documents named by title or path) in each outline format and container asked for (default truetype, plain) into the destination folder, as file.exportStatic names them; with both outline formats, the files go into ttf and otf subfolders. Instances between masters are skipped and listed. removeOverlap: as in file.exportStatic (default true). A failing export writes nothing → {documents: [{title, fonts, skipped}], written, warnings}",
             has_doc,
             export_all
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
@@ -463,7 +463,12 @@ fn export_options(p: &Params) -> Result<Options> {
     if p.bool_or("autohint", false)? {
         return Err(EngineError::Unsupported("`autohint`: hinting on export (ROADMAP.md, M10)".into()));
     }
-    Ok(Options { timestamp: compile::timestamp(p)?, remove_overlap: p.bool_or("removeOverlap", true)?, ..Default::default() })
+    Ok(Options {
+        timestamp: compile::timestamp(p)?,
+        remove_overlap: p.bool_or("removeOverlap", true)?,
+        version_stamp: p.bool_or("versionStamp", true)?,
+        ..Default::default()
+    })
 }
 
 fn export_static(s: &mut Session, p: &Value) -> Result<Value> {

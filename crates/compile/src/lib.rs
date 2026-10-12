@@ -189,6 +189,10 @@ pub struct Options {
     /// Which included files on disk may be read; `None` reads any (see
     /// [`fontcraft_fea::VirtualFiles`]).
     pub include_check: Option<fontcraft_fea::IncludeCheck>,
+    /// Append `;FontCraft <version>` to a generated version string (name ID 5), as the reference
+    /// app appends its own name; a versionString parameter is written as it is
+    /// (`fontInfo.version.headAndNameId5`). Exports turn it on; the default leaves it off.
+    pub version_stamp: bool,
 }
 
 /// The asset store a compile reads ([`Options::assets`]). Two are equal when they are the same
@@ -262,6 +266,7 @@ impl Default for Options {
             skip_features: false,
             feature_dir: None,
             include_check: None,
+            version_stamp: false,
         }
     }
 }
@@ -333,6 +338,7 @@ pub fn compile_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, 
 fn compile_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Compiled, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
+    info::expand_tokens(font, &mut resolved, &mut warnings);
     let edits = export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
@@ -442,5 +448,7 @@ pub(crate) fn u16_of(v: f64) -> u16 {
     ot_round(v).clamp(0.0, f64::from(u16::MAX)) as u16
 }
 
+#[cfg(test)]
+mod instance_names_tests;
 #[cfg(test)]
 mod tests;

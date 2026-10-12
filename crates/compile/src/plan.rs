@@ -53,6 +53,7 @@ pub fn plan_resolved_from(font: &Font, resolved: Resolved, flavour: Flavour, opt
 fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, options: &Options) -> Result<Plan, CompileError> {
     let mut warnings = std::mem::take(&mut resolved.notes);
     fill_glyph_data(&mut resolved, options, &mut warnings);
+    info::expand_tokens(font, &mut resolved, &mut warnings);
     let edits = crate::export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;

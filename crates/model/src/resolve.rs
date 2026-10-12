@@ -84,6 +84,12 @@ pub struct Resolved {
     pub date: Option<String>,
     /// Style linking of the instance (none for a master).
     pub style: Option<StyleLinking>,
+    /// The index of the instance in [`Font::instances`]; `None` for a master.
+    pub instance: Option<usize>,
+    /// An instance's weight as an OS/2 weight class would hold it (before rounding) and its width
+    /// as a percentage of the normal width ([`crate::axes::instance_class_value`]); `None` for a
+    /// master.
+    pub instance_classes: Option<(f64, f64)>,
     /// Glyphs are written under their production names: neither the *Don't use Production
     /// Names* parameter nor the font's *Use Custom Naming* setting (`disablesNiceNames`) is on.
     pub production_names: bool,
@@ -415,6 +421,11 @@ impl Font {
             params,
             date: self.info.date.clone(),
             style: instance.map(|i| StyleLinking { is_bold: i.is_bold, is_italic: i.is_italic, link_style: i.link_style.clone() }),
+            instance: match target {
+                Target::Instance(i) => Some(*i),
+                Target::Master(_) => None,
+            },
+            instance_classes: instance.map(|i| (crate::axes::instance_class_value(i, "wght"), crate::axes::instance_class_value(i, "wdth"))),
             production_names,
             glyphs,
             notes,
@@ -496,6 +507,10 @@ const NAME_PARAMS: [(&str, &str); 8] = [
 /// reads the font's only, which gives the same bit).
 const SELECTION_PARAMS: [&str; 2] = ["Use Typo Metrics", "Has WWS Names"];
 
+/// Parameters a master's or instance's own add to the font's instead of replacing them, as
+/// glyphsLib adds the name records of every level together.
+const ADDED_PARAMS: [&str; 2] = ["Name Table Entry", "Prevent Name ID"];
+
 /// Whether a parameter's value is on, read as the compiler reads it ([`crate::param_flag`]).
 fn is_on(v: &fontcraft_plist::Value) -> bool {
     crate::param_flag(v).unwrap_or(false)
@@ -504,7 +519,7 @@ fn is_on(v: &fontcraft_plist::Value) -> bool {
 /// Puts `own` properties and enabled parameters in place of those of the same key or name. An
 /// own parameter of [`NAME_PARAMS`] also takes the place of the property it holds, as glyphsLib
 /// writes a master's parameters over the font's names; one of [`SELECTION_PARAMS`] that is off
-/// does not replace one that is on.
+/// does not replace one that is on; one of [`ADDED_PARAMS`] is added after the others.
 fn overlay(properties: &mut Properties, params: &mut Params, own_properties: &Properties, own_params: &Params) {
     for p in &own_properties.0 {
         match properties.0.iter_mut().find(|q| q.key == p.key) {
@@ -521,7 +536,7 @@ fn overlay(properties: &mut Properties, params: &mut Params, own_properties: &Pr
         SELECTION_PARAMS.contains(&p.name.as_str()) && !is_on(&p.value) && params.0.iter().any(|q| q.name == p.name && is_on(&q.value))
     };
     let own: Vec<&crate::Param> = own_params.0.iter().filter(|p| !p.disabled && !kept_on(p)).collect();
-    params.0.retain(|p| !own.iter().any(|o| o.name == p.name));
+    params.0.retain(|p| ADDED_PARAMS.contains(&p.name.as_str()) || !own.iter().any(|o| o.name == p.name));
     params.0.extend(own.into_iter().cloned());
 }
 

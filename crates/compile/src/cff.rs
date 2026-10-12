@@ -201,7 +201,10 @@ fn notice(s: Option<&str>) -> String {
 
 fn top_dict(font: &Resolved, info: &Info, warnings: &mut Vec<String>) -> TopDict {
     let (family, subfamily) = typographic_names(info);
-    let full = text(font, "postscriptFullName", &["postscriptFullName"]).map_or_else(|| format!("{family} {subfamily}"), str::to_string);
+    // A static instance also reads the plural key, as the handbook describes it.
+    let full = text(font, "postscriptFullName", &["postscriptFullName"])
+        .or_else(|| font.style.as_ref().and_then(|_| text(font, "postscriptFullNames", &[])))
+        .map_or_else(|| format!("{family} {subfamily}"), str::to_string);
     let weight = param(&font.params, &["postscriptWeightName"], |v| v.as_str().map(str::to_string));
     let m = &info.metrics;
     let upm = f64::from(font.units_per_em.max(1));
