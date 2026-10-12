@@ -295,7 +295,7 @@ milestone = "M8"
 summary = "An explicit kern feature without a `# Automatic Code` line gets the generated kerning after its own code, as both reference compilers add the line at its end; an explicit mark, mkmk, abvm, blwm, curs or dist feature without the line gets none of that generated feature (the skip mode of `compile.featureWriterModes`). The handbook does not say."
 ref = "Font Info › Features › Implicit Features"
 status = "inferred"
-notes = "Checked in the M8 planning pass: glyphsLib and fontc append `# Automatic Code` to a manual kern feature that lacks it; ufo2ft's and fontc's writers skip a generated feature the code already has."
+notes = "Checked in the M8 planning pass: glyphsLib and fontc append `# Automatic Code` to a manual kern feature that lacks it; ufo2ft's and fontc's writers skip a generated feature the code already has. Built by M8.7: a kern feature entry gets the marker when assembled; a kern feature inside a prefix (a UFO's `features.fea` read as one text) does not, so it keeps the generated kerning out, as fontc and fontmake build it."
 guesses = [
   "Generated kerning follows a hand-written kern feature and a hand-written mark-family feature replaces the generated one, as glyphsLib and fontc do; a reference export of a font with a hand-written mark feature without the line would settle it.",
 ]

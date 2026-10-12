@@ -41,8 +41,8 @@ pub(crate) enum Mode {
 
 /// What a run gives back.
 pub(crate) enum Output {
-    Compiled(Compiled),
-    FirstPass(FirstPass),
+    Compiled(Box<Compiled>),
+    FirstPass(Box<FirstPass>),
 }
 
 /// One run of `mode` on the request.
@@ -112,8 +112,8 @@ impl Job<'_> {
             return Err(messages);
         }
         match self.mode {
-            Mode::Validate => return Ok(Output::Compiled(Compiled { warnings: messages, ..Compiled::default() })),
-            Mode::FirstPass => return first_pass(&tree, &glyph_map, max, messages).map(Output::FirstPass),
+            Mode::Validate => return Ok(Output::Compiled(Box::new(Compiled { warnings: messages, ..Compiled::default() }))),
+            Mode::FirstPass => return first_pass(&tree, &glyph_map, max, messages).map(|f| Output::FirstPass(Box::new(f))),
             Mode::Build => {}
         }
         let opts = Opts::new().compile_gpos(self.gpos).max_error_messages(max);
@@ -122,7 +122,7 @@ impl Job<'_> {
             Ok((compilation, warnings)) => {
                 messages.extend(convert(&tree, &warnings, max));
                 messages.truncate(max);
-                self.output(&tree, compilation, messages).map(Output::Compiled)
+                self.output(&tree, compilation, messages).map(|c| Output::Compiled(Box::new(c)))
             }
             Err(errors) => {
                 messages.extend(convert(&tree, &errors, max));

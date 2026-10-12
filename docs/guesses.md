@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1669 guesses on 1081 rows (395 of them live commands).**
+**1670 guesses on 1082 rows (395 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1409,6 +1409,7 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `Scale to UPM` (parameter) | M7 | handbook | – | The instance's value wins over the master's and the font's; a value that is not a whole number from 16 to 16384 is skipped with a warning, and a scaling that cannot be done refuses the export; a Scale to UPM on a master and another on its instance in the reference app settle the first part. |
 | `styleMapStyleNames` (parameter) | M7 | handbook | – | The value must be regular, italic, bold or bold italic in any case, as the UFO key it comes from; another value is ignored with a warning; the reference app settles it. |
 | `TTFAutohint options` (parameter) | M10 | handbook | – | No corpus source holds the parameter; FontCraft stores and reads it as ttfautohint command-line options in one string, which is how fontmake reads it from an instance (split on spaces); a file saved by the reference app with the options sheet filled in would show the real form. |
+| `Update Features` (parameter) | M8 | handbook | – | Export regenerates only the automatic entries the font already has and adds none of the entries Update would add; an export of a font whose Features list lacks an automatic feature its glyphs call for would settle it. |
 | `Use Arabic Presentation Form Unicodes` (parameter) | M7 | handbook | – | An exported glyph without code points gets the legacy code point the glyph database records for its name (`unicodeLegacy`: beh-ar.init FE91, lam_alef-ar FEFB) when it lies in FB50–FDFF or FE70–FEFF and no other glyph has it; glyphs with code points keep them; only cmap changes; custom glyph data is not read for it; an export from the reference app settles which glyphs it covers. |
 | `Variable Font Family Name` (parameter) | M9 | handbook | – | Looked up on the variable font setting first and on the font second; an export from the reference app with the parameter on each would settle it. |
 | `Variable Font File Name` (parameter) | M9 | handbook | – | Without it the file is named as glyphsLib names it: the font's family name, a hyphen and the setting's name unless that is Regular, then `VF`, spaces removed (the default font of a source without settings: family name and `VF`); an export from the reference app would settle it. |

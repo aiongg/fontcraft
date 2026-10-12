@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1098 rows to check: 1525 guesses and 399 observe steps.**
+**1098 rows to check: 1526 guesses and 399 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -2325,6 +2325,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Only the first feature of that tag is replaced, its labels are kept and it counts as hand-written from then on, so a replaced `kern` still gets the generated kerning after it; exporting a font with a stylistic-set name and a replaced `kern` in the reference app settles it.
   - Guess: A Replace parameter that names no entry does nothing, without a message, as the handbook limits these parameters to existing entries and glyphsLib skips them; the reference app's export report settles it.
 - [ ] `Update Features` (parameter, M8, handbook): When on, all automatic feature code is regenerated, which helps while the…
+  - Guess: Export regenerates only the automatic entries the font already has and adds none of the entries Update would add; an export of a font whose Features list lacks an automatic feature its glyphs call for would settle it.
   - Observe: In F1 (Latin features), add a glyph with `.sc` after the last Update and export without pressing Update, then export again with Update Features off: read GSUB each time and note whether export regenerated smcp.
 - [ ] `fontInfo.customParameters.masterInterpolation` (behavior, M9, handbook): A custom parameter present on every master is interpolated for instances that…
   - Guess: A parameter interpolates when its value is a number, or a list of numbers of the same length, on every master; other values are taken from the origin master. Settle with a parameter that is text on one master in the reference app.

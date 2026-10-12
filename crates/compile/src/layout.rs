@@ -107,15 +107,18 @@ fn entries(input: &LayoutInput, font: &Font, opts: &LayoutOptions, warnings: &mu
     let mut entries: Features = (*font.features).clone();
     let update_off = resolved.params.get(UPDATE_FEATURES).and_then(param_flag) == Some(false);
     let has_automatic = entries.prefixes.iter().chain(&entries.classes).chain(&entries.features).any(|e| e.automatic);
-    if opts.regenerate_automatic && !update_off && has_automatic && !is_ufo_family(resolved.format) {
-        if let Some(data) = input.data {
-            let names: Vec<String> = input.order.iter().map(|g| g.name.clone()).collect();
-            match fontcraft_features::auto::AutoContext::from_font(font, data, Some(&names))
-                .and_then(|cx| fontcraft_features::auto::update(&entries, &cx))
-            {
-                Ok(report) => entries = refreshed(&entries, report.features),
-                Err(e) => warnings.push(format!("the automatic feature code was compiled as stored: it could not be regenerated: {e}")),
-            }
+    if opts.regenerate_automatic
+        && !update_off
+        && has_automatic
+        && !is_ufo_family(resolved.format)
+        && let Some(data) = input.data
+    {
+        let names: Vec<String> = input.order.iter().map(|g| g.name.clone()).collect();
+        match fontcraft_features::auto::AutoContext::from_font(font, data, Some(&names))
+            .and_then(|cx| fontcraft_features::auto::update(&entries, &cx))
+        {
+            Ok(report) => entries = refreshed(&entries, report.features),
+            Err(e) => warnings.push(format!("the automatic feature code was compiled as stored: it could not be regenerated: {e}")),
         }
     }
     fontcraft_features::params::apply_instance_params(&entries, &resolved.params).map_err(|e| request_error(e.to_string()))

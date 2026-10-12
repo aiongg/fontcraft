@@ -103,7 +103,7 @@ impl<'a> CompileRequest<'a> {
 /// refusals of the pre-checks, come back as diagnostics; at most [`Limits::diagnostics`] of them.
 pub fn compile(req: &CompileRequest) -> Result<Compiled, Vec<Diagnostic>> {
     match run::run(req, run::Mode::Build)? {
-        run::Output::Compiled(compiled) => Ok(compiled),
+        run::Output::Compiled(compiled) => Ok(*compiled),
         run::Output::FirstPass(_) => Err(vec![Diagnostic::request(Severity::Error, "the compiler stopped early")]),
     }
 }
@@ -113,7 +113,7 @@ pub fn compile(req: &CompileRequest) -> Result<Compiled, Vec<Diagnostic>> {
 /// (fontc's first pass). The request's generated lookups are not used.
 pub fn first_pass(req: &CompileRequest) -> Result<FirstPass, Vec<Diagnostic>> {
     match run::run(req, run::Mode::FirstPass)? {
-        run::Output::FirstPass(first) => Ok(first),
+        run::Output::FirstPass(first) => Ok(*first),
         run::Output::Compiled(_) => Err(vec![Diagnostic::request(Severity::Error, "the compiler stopped early")]),
     }
 }

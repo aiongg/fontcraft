@@ -157,22 +157,24 @@ pairs in each lookup; write-fonts splits subtables and moves lookups to extensio
 offsets overflow. Each feature lists each of its lookups once, in order, as fea-rs leaves them.
 Vertical kerning is not written: neither reference writes `vkrn`.
 
-Feature code itself is compiled from M8. Until then:
+Built by M8.7 (`crates/compile/src/layout.rs`), for static builds:
 
-- A source with a hand-written `kern` feature gets no `GPOS`, with a warning naming the feature
-  when its master has kerning. A `kern` feature is hand-written when the editor does not write it
-  and it has code besides comments; a UFO's `features.fea` read as one text is searched for
-  top-level `feature kern {` and `feature kern useExtension {` blocks, and a block with only
-  comments (such as `# Automatic Code`) does not count.
-- A top-level `include(…)` in enabled code may bring a `kern` feature from another file. The
-  compile does not read the file, so the source gets no `GPOS` either, with a warning naming the
-  file. An `include` inside a feature or lookup block cannot hold a feature and does not count.
-- Code the editor writes itself (automatic prefixes and features, which most `.glyphs` sources
-  carry) does not stop the generated kerning. The compile names the features it did not write
-  once.
-- Kerning past one of the writer's caps (`fontcraft_features::KernLimits`: rules, glyph pairs,
-  class cells per lookup and in all, classes per lookup, groups of scripts, steps of work) is left
-  out with a warning; the rest of the font is written.
+- The target's entries are prepared first: the automatic entries the font has are regenerated for
+  the target's glyph set unless Update Features is off (Update adds no entry at export), then the
+  instance parameters apply. Tokens, lowering and assembly follow (`fontcraft_features`).
+- A first pass compiles `GSUB` alone and reads what the feature writers need from the code: its
+  language systems, the generated features it declares and whether each holds `# Automatic Code`,
+  and the classes of a `table GDEF` block.
+- The kern writer adds the code's language systems to the scripts it guesses and registers its
+  lookups for each declared language; unencoded glyphs the substitutions reach take the scripts
+  and directions of the glyphs they come from (the `GSUB` closure). Lookups that skip marks get
+  a mark filtering set of the spacing marks when the font has any.
+- A generated feature the code declares without the marker is not generated (skip mode); a writer
+  in append mode adds its lookups after every hand-written lookup. A hand-written `kern` entry gets
+  the marker at its end when assembled.
+- A compile error stops the export with the diagnostics mapped to the entries. Includes are read
+  from the folder of the source (the folder that holds a UFO); a path that leaves that folder is
+  refused.
 
 The source's feature-writer setting (the `com.github.googlei18n.ufo2ft.featureWriters` key of
 the font's user data or the master's UFO lib) is read as fontc reads it: without the key the
@@ -559,11 +561,10 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | `openTypeNameRecords` of a UFO | written as English records whatever their language | each in its own language | the records state their language |
 | *Use Custom Naming* (`disablesNiceNames`) | ignored: production names are written | the source names are written | the handbook gives it the effect of *Don't use Production Names*; glyphsLib also ignores it (allow-listed for `CornerComponents.glyphs`) |
 | A UFO that glyphsLib wrote, with a non-spacing mark's width as 0 in the GLIF and the drawn width in `com.schriftgestaltung.Glyphs.originalWidth` | advance 0 | the drawn width | the model reads the drawn width so the UFO converts back to the reference's format unchanged, and the compiler takes a UFO's widths as they are (allow-listed for the two `designspace_from_glyphs` sources) |
-| Generated pair kerning of a source with a hand-written `kern` feature | the feature's code, with the generated lookups where it holds `# Automatic Code` | not written, with a warning | feature code is compiled from M8; where the generated lookups go depends on the code (`compile.featureWriterModes`) |
-| Generated pair kerning of a source whose feature code has a top-level `include` | the included file is read: its `kern` feature, if any, is compiled; else the generated kerning is written | not written, with a warning naming the file | feature code, and so the included files, are compiled from M8; without reading the file the compile cannot tell whether it holds a `kern` feature |
-| Generated pair kerning of a source with other feature code | compiled next to the feature code: its language systems get the `kern` lookups, and unencoded glyphs its substitutions reach get the scripts of their inputs | written as for a source without feature code; the other features are not written, with a warning naming them | feature code is compiled from M8. The scripts of the code's language systems join the scripts guessed from the code points (fontc's `guess_font_scripts`): a code point with several script extensions then also counts in a declared script, which can move its pairs to another lookup. FontCraft guesses the scripts from the code points only. An unencoded glyph has no script without the substitutions, so its pairs are common and apply in every script: in `Oswald.glyphs` the ligature `f_f` (made by `liga` from `f`) is kerned in `cyrl` by FontCraft and not by either reference. The kern measure lists this difference (`KNOWN` in `crates/oracle/tests/kern.rs`) |
 | A pair in both the left-to-right and the right-to-left kerning of a master, and groups of glyphs with right-to-left kerning | the two tables are joined: the right-to-left value replaces the left-to-right one, and a glyph with right-to-left kerning in any master is given by its other group on each side of every pair | the same, with a warning that counts the replaced pairs and the glyphs whose groups swap sides in left-to-right pairs | fontc's join, kept so the values agree; glyphsLib shares the group names between the directions the same way. The warning tells the user that left-to-right kerning changed |
-| Lookups of the generated kerning that skip marks | `IgnoreMarks`, or a mark filtering set of the spacing marks when the font has any; `GDEF` written | `IgnoreMarks`; no `GDEF` | `GDEF` comes with the mark writer (M6.17). Without `GDEF`, HarfBuzz classes glyphs from their Unicode general category, so `IgnoreMarks` skips the encoded non-spacing marks; a spacing mark, or an unencoded mark, is not skipped |
+| An `include` whose path leaves the source's folder (`../features/shared.fea` from a UFO) | read | refused: the export stops with the error | feature code is untrusted; reads stay inside the folder of the source (`docs/plans/M8.md` § 3). `fea_include_resolve` in the corpus differs |
+| Variable `pos` values (`(wght=400:10 wght=700:20)`) in a static build of one master | compiled into the variable font | the export stops: fea-rs refuses variable metrics outside a variable font | static builds of one master until M9.12 passes the variation data. `varpos*` and `variable_fea/VarFeaOneShot*` in the corpus |
+| The `GDEF` classes of a UFO whose stated classes (`public.openTypeCategories`) equal the classes the rules give | written | not written: the reader keeps a stated class on the glyph only where it differs from the rules, so the compile sees none | the reader's round-trip rule (`crates/io-ufo/src/gdef.rs`); the compile should read the rules' class for those glyphs. `HVVAR/*` and `designspace_from_glyphs/IntermediateLayer*` differ |
 | Marks of a UFO source in the kern writer's split | from `public.openTypeCategories` | from the glyph's stored category and subcategory | the compiler does not fill a UFO's categories from the glyph database (`compile.nonSpacingMarkWidth`); the rules with marks land in other lookups, with the same values |
 | The scripts of the generated kerning of a source whose masters kern in different directions | taken from every master's pairs: the variable font gets a script for pairs only another master has, holding only those pairs | taken from the built master's pairs | FontCraft builds one master statically until M9. In `KerningRtlOnlyMaster.glyphs` only the second master has right-to-left pairs, so a Latin pair read in `hebr` is 0 in fontc's font and the `DFLT` value in FontCraft's; `latn` and `DFLT` agree. The kern measure lists this difference (`KNOWN` in `crates/oracle/tests/kern.rs`), not the allow-list |
 | Yes-or-no custom parameters of a `.glyphs` source (`Use Typo Metrics`, `Has WWS Names`, `isFixedPitch`, `postscriptForceBold`) | on only when the value is exactly 1 | on for any number, or text that reads as a number, other than 0 (`fontcraft_model::param_flag`) | glyphsLib applies `bool(value)`, so fontmake builds a hand-written 2 as on; the reference app writes only 0 and 1. No corpus source has another value, so this row has no allow-list entry |

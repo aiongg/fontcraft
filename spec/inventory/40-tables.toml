@@ -192,6 +192,7 @@ milestone = "M8"
 summary = "Substitution lookups compiled from feature code, plus single-substitution lookups and a FeatureVariations table generated from designspace rules or Glyphs bracket layers. write-fonts has typed tables for every lookup type, contextual formats 1 to 3, extension lookups and FeatureVariations with condition formats 1 to 5, and builders for single, multiple, alternate and ligature substitution; contextual and reverse-chain lookups are assembled by fea-rs."
 ref = "write-fonts src/tables/gsub.rs, gsub/builders.rs, generated/generated_layout.rs; fontc fea-rs/src/compile/, fontbe/src/features/feature_variations.rs"
 status = "docs"
+notes = "Static builds from M8.7 (`crates/compile/src/layout.rs`): compiled through fea-rs from the target's feature code; compared with fontc and fontmake lookup by lookup by the oracle harness. Feature variations are M9's."
 
 [[table]]
 tag = "GPOS"
@@ -203,6 +204,7 @@ milestone = "M8"
 summary = "Positioning lookups from feature code plus generated kern/dist, mark, mkmk, abvm, blwm and curs lookups. Values that vary across masters are written as VariationIndex references into the GDEF item variation store. write-fonts has builders for single, pair (glyph and class), cursive, mark-to-base, mark-to-ligature and mark-to-mark positioning, value records and anchors with device or variation deltas."
 ref = "write-fonts src/tables/gpos.rs, gpos/builders.rs, gpos/value_record.rs; fontc fontbe/src/features/kern.rs, marks.rs"
 status = "docs"
+notes = "Static builds from M8.7: the code's lookups with the generated kern, dist, mark, mkmk, abvm, blwm and curs lookups merged by fea-rs; compared with fontc and fontmake lookup by lookup. Variation deltas are M9's."
 
 [[table]]
 tag = "GDEF"
@@ -214,6 +216,7 @@ milestone = "M8"
 summary = "Glyph class definitions (from an explicit FEA GDEF block when present, otherwise from the source's glyph categories), ligature caret list from caret anchors, mark attachment classes and mark glyph sets used by lookup flags, and in variable fonts the ItemVariationStore that GPOS and caret VariationIndex records point into."
 ref = "write-fonts src/tables/gdef.rs, generated/generated_gdef.rs; fontc fontbe/src/features.rs, fontbe/src/features/marks.rs"
 status = "docs"
+notes = "Static builds from M8.7: from the code's GDEF block when it has one, else the mark writer's classes, carets and mark filtering sets (the kern lookups' set of spacing marks among them); compared with fontc and fontmake by the oracle harness."
 
 [[table]]
 tag = "BASE"
@@ -1511,6 +1514,7 @@ milestone = "M8"
 summary = "Generated features have two modes. skip (default): a generated feature is not written when the feature code already declares that feature, unless the code contains the comment '# Automatic Code', in which case the generated lookups are inserted at that position. append: generated lookups are added after all hand-written lookups and markers are ignored. A source can replace the whole writer list, and an empty list or fontmake's --feature-writer None disables generation."
 ref = "fontmake USAGE.md (Feature writing); fontc fontbe/src/features.rs, fea-rs/src/compile/output.rs (insert_markers)"
 status = "docs"
+notes = "Built by M8.7 (`crates/compile/src/layout.rs`): the feature code's first pass tells which generated features it declares and where it holds the marker; a writer in append mode (`mode = append` in the source's feature-writer setting) puts its lookups after every hand-written lookup. Compared with fontc's and fontmake's GSUB, GPOS and GDEF lookup by lookup over the corpus."
 
 [[behavior]]
 id = "compile.kernValueLookup"
@@ -1624,6 +1628,7 @@ milestone = "M8"
 summary = "fontc's --skip-features builds the font without any layout tables, for fast outline-only iteration. We offer the same switch for preview builds."
 ref = "fontc fontc/src/args.rs"
 status = "docs"
+notes = "Built by M8.7: the compile option `skip_features` and `font.compile`'s `skipFeatures` parameter leave GSUB, GPOS and GDEF out."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: CFF path

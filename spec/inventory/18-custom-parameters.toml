@@ -2248,7 +2248,10 @@ effect = "features"
 summary = "When on, all automatic feature code is regenerated, which helps while the glyph set is changing; when explicitly off, automatic feature generation is suppressed."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Documented, not yet observed. Without the parameter, automatic entries are regenerated for each export target, as the handbook says automatic code adapts to each instance; set to off, the stored automatic code is compiled as it is."
+notes = "Documented, not yet observed. Without the parameter, automatic entries are regenerated for each export target, as the handbook says automatic code adapts to each instance; set to off, the stored automatic code is compiled as it is. Built in `crates/compile/src/layout.rs` (M8.7); a UFO source has no automatic entries and is compiled as stored."
+guesses = [
+  "Export regenerates only the automatic entries the font already has and adds none of the entries Update would add; an export of a font whose Features list lacks an automatic feature its glyphs call for would settle it.",
+]
 observe = [
   "In F1 (Latin features), add a glyph with `.sc` after the last Update and export without pressing Update, then export again with Update Features off: read GSUB each time and note whether export regenerated smcp.",
 ]
