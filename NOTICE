@@ -110,8 +110,7 @@ bundled, the file says so in its header and the project is listed here with its 
   the reversal of its path class (GSPath.reverse).
   The text written around feature-code entries and the reading of the Replace Feature and Replace Prefix values follow its feature builder (crates/features/src/assemble.rs and params.rs, from builder/features.py and custom_params.py).
 
-  fontTools (https://github.com/fonttools/fonttools), MIT License. The glyph reordering of
-  crates/tables/src/reorder/layout.rs follows the reorder rules of ttLib/reorderGlyphs.py. The XML property-list writer
+  fontTools (https://github.com/fonttools/fonttools), MIT License. The XML property-list writer
   follows the output rules of its plistlib (crates/plist/src/xmlplist.rs): number and data
   formatting, empty-container forms and line wrapping of base64. The GLIF writer follows the
   output rules of its glifLib (crates/io-ufo/src/glif.rs: element and attribute order, number
@@ -140,7 +139,8 @@ bundled, the file says so in its header and the project is listed here with its 
   255UInt16 encodings, and the glyf, loca and hmtx transforms (WOFF2GlyfTable, WOFF2LocaTable,
   WOFF2HmtxTable, the glyf and loca normalisation), with the glyph reading and writing of
   ttLib/tables/_g_l_y_f.py (Glyph, GlyphComponent, compileDeltasGreedy, the glyph padding) and
-  the offset format choice of ttLib/tables/_l_o_c_a.py.
+  the offset format choice of ttLib/tables/_l_o_c_a.py. The glyph reordering of
+  crates/tables/src/reorder/layout.rs follows the reorder rules of ttLib/reorderGlyphs.py.
 
   ufo2ft (https://github.com/googlefonts/ufo2ft), MIT License, Copyright (c) 2015-2016 Tal
   Leming, Ben Kiel, Cosimo Lupo and contributors. What the compiler puts into a CFF table and
@@ -228,7 +228,7 @@ bundled, the file says so in its header and the project is listed here with its 
   reports (report.py) and options (autohint.py). otfautohint uses fontTools' bezierTools (MIT
   License) for its curve maths, which crates/autohint/src/bezier.rs ports with it;
   crates/autohint/src/glyph.rs also ports the quadratic-to-cubic step of fontTools' BasePen.
-  License) for its curve maths, which crates/autohint/src/bezier.rs ports with it.
+
   Hint removal (crates/tables/src/dehint, M12.27) follows the --no-hinting rules of fontTools' subset module (MIT License): the hinting-table list, the maxp limits, the GPOS device-table and anchor pruning, and the Private DICT keys.
 
   The audit's data sets (crates/audit/src/data, M12.45): the OS/2 Unicode range blocks and bit
