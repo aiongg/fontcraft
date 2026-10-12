@@ -7,8 +7,10 @@
 //!   so the agent's changes appear in the window.
 //!
 //! Besides the tools the server offers workflow prompts ([`prompts`]), resources and argument
-//! completion ([`resources`]) and log notifications. A [`Policy`] decides which commands and file
-//! paths a client may use; everything it cannot place is refused.
+//! completion ([`resources`]) and log notifications. A [`Policy`] decides which commands a client may
+//! run; everything it cannot place is refused. Automation roots
+//! ([`fontcraft_engine::file_access`]), given with [`Server::with_roots`], confine the files the
+//! commands read and write: the server puts them in force around every request.
 //!
 //! The server reads one line and writes one reply, preceded by the log notifications the request
 //! produced. It never panics on input: malformed JSON, wrong types and unknown methods get
@@ -22,8 +24,10 @@ mod resources;
 
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
+use std::sync::Arc;
 
 pub use backend::{Backend, DEFAULT_ADDR, Headless, Remote};
+use fontcraft_engine::file_access::{self, AutomationRoots};
 use fontcraft_engine::guard;
 pub use policy::Policy;
 use serde_json::{Value, json};
@@ -90,6 +94,8 @@ impl LogLevel {
 pub struct Server {
     backend: Box<dyn Backend>,
     policy: Policy,
+    /// The folders the commands may read and write; `None`: anywhere.
+    roots: Option<Arc<AutomationRoots>>,
     /// Command id → what the policy needs to know about it, read from the backend when the
     /// policy first needs it.
     catalogue: Option<HashMap<String, policy::CommandFacts>>,
@@ -97,17 +103,6 @@ pub struct Server {
     log_level: Option<LogLevel>,
     /// Notifications produced while answering the current request.
     pending: Vec<Value>,
-}
-
-/// What one request's checks have already looked up.
-#[derive(Default)]
-struct Seen {
-    /// Every open document's file was checked against the roots.
-    documents: bool,
-    /// The open projects (`project.list`).
-    projects: Option<Value>,
-    /// An earlier step of the batch opens a project, whose stored places the server has not seen.
-    project_opened: bool,
 }
 
 /// The tools offered to agents. `run_command` reaches every command; the others save a round trip.
@@ -144,13 +139,21 @@ fn no_cursor(params: &Value) -> Result<(), (i64, String)> {
 }
 
 impl Server {
-    /// A server that admits every command and path.
+    /// A server that admits every command and file.
     pub fn new(backend: Box<dyn Backend>) -> Self {
         Self::with_policy(backend, Policy::unrestricted())
     }
 
     pub fn with_policy(backend: Box<dyn Backend>, policy: Policy) -> Self {
-        Self { backend, policy, catalogue: None, log_level: None, pending: Vec::new() }
+        Self { backend, policy, roots: None, catalogue: None, log_level: None, pending: Vec::new() }
+    }
+
+    /// Confines the files the commands read and write to `roots` (`None`: anywhere). The engine
+    /// checks them, so the backend must run the engine in this process ([`Headless`]): a running
+    /// app confines itself (`fontcraft --control PORT --automation-read-root DIR …`).
+    pub fn with_roots(mut self, roots: Option<Arc<AutomationRoots>>) -> Self {
+        self.roots = roots;
+        self
     }
 
     /// The log notifications produced since the last call, as JSON-RPC lines. A transport sends
@@ -186,6 +189,11 @@ impl Server {
     }
 
     fn handle(&mut self, request: &Value) -> Option<Value> {
+        let roots = self.roots.clone();
+        file_access::confine(roots.as_ref(), || self.handle_confined(request))
+    }
+
+    fn handle_confined(&mut self, request: &Value) -> Option<Value> {
         let Some(obj) = request.as_object() else {
             return Some(error(&Value::Null, INVALID_REQUEST, "a request is a JSON object (batches are not supported)"));
         };
@@ -226,6 +234,12 @@ impl Server {
                 if let Some(restricted) = self.policy.describe() {
                     instructions.push(' ');
                     instructions.push_str(&restricted);
+                }
+                if let Some(roots) = &self.roots {
+                    instructions.push_str(&format!(
+                        " This server's {}; a path outside them is refused with a message, and macros and other commands that run steps it cannot see are refused.",
+                        roots.describe()
+                    ));
                 }
                 Ok(json!({
                     "protocolVersion": version,
@@ -358,133 +372,27 @@ impl Server {
     }
 
     /// Checks a command and, for `command.batch`, each of its steps; `depth` counts batches.
-    /// File parameters in `params` are replaced by the paths that were checked.
-    fn check_command(&mut self, id: &str, params: &mut Value, depth: usize, seen: &mut Seen) -> Result<(), String> {
+    fn check_command(&mut self, id: &str, params: &Value, depth: usize) -> Result<(), String> {
         if depth > policy::MAX_BATCH_NESTING {
             return Err(format!("command.batch nests deeper than {} levels", policy::MAX_BATCH_NESTING));
         }
-        let facts = self.admit(id)?;
-        if self.policy.restricts_paths() {
-            if let Some(place) = policy::implicit_place(id, params) {
-                self.check_implicit(id, place, seen)?;
-            }
-            if id == "project.open" {
-                seen.project_opened = true;
-            }
-            if let Some(facts) = &facts {
-                let names_document =
-                    facts.files.iter().any(|f| f.form == policy::FileForm::Document && params.get(&f.name).is_some_and(|v| !v.is_null()));
-                let open = if names_document { self.open_documents()? } else { Vec::new() };
-                let reads = self.policy.check_params_reads(facts, params, &open)?;
-                let what = format!("`{id}`");
-                for path in &reads {
-                    self.policy.check_references(path, &what)?;
-                    if id == "project.open" {
-                        self.check_project_link(path, &what)?;
-                    }
-                }
-            }
-        }
+        self.admit(id)?;
         if id == policy::BATCH_COMMAND && self.policy.is_restricted() {
-            for step in params.get_mut("steps").and_then(Value::as_array_mut).into_iter().flatten() {
+            for step in params.get("steps").and_then(Value::as_array).into_iter().flatten() {
                 // A step without a command id is refused by the batch itself.
-                let Some(command) = step.get("command").and_then(Value::as_str).map(str::to_string) else { continue };
-                let mut none = Value::Null;
-                let step_params = match step.get_mut("params") {
-                    Some(p) => p,
-                    None => &mut none,
-                };
-                self.check_command(&command, step_params, depth + 1, seen)?;
+                let Some(command) = step.get("command").and_then(Value::as_str) else { continue };
+                self.check_command(command, step.get("params").unwrap_or(&Value::Null), depth + 1)?;
             }
         }
         Ok(())
-    }
-
-    /// Checks a place a command writes to, or reads, without a parameter naming it. Which
-    /// document or project a step acts on can change inside a batch, so every open one is
-    /// checked.
-    fn check_implicit(&mut self, id: &str, place: policy::Implicit, seen: &mut Seen) -> Result<(), String> {
-        match place {
-            policy::Implicit::Hidden(why) => Err(format!("`{id}` {why}: this server restricts file access (--root)")),
-            policy::Implicit::Documents => {
-                if !seen.documents {
-                    let documents = self.backend.inspect()?;
-                    let list = documents.get("documents").and_then(Value::as_array).ok_or("cannot list the open documents")?;
-                    for path in list.iter().filter_map(|d| d.get("path").and_then(Value::as_str)) {
-                        self.policy.check_implicit_path(path, &format!("`{id}` writes to or beside the open document's file"))?;
-                    }
-                    seen.documents = true;
-                }
-                Ok(())
-            }
-            policy::Implicit::ProjectExports if seen.project_opened => {
-                Err(format!("`{id}` follows project.open in the same batch, so its destination cannot be checked first; run it on its own"))
-            }
-            policy::Implicit::ProjectFiles | policy::Implicit::ProjectExports => {
-                if seen.projects.is_none() {
-                    seen.projects = Some(self.backend.execute("project.list", &json!({}))?);
-                }
-                let projects =
-                    seen.projects.as_ref().and_then(|p| p.get("projects")).and_then(Value::as_array).ok_or("cannot list the open projects")?;
-                let keys: &[(&str, &str)] = if place == policy::Implicit::ProjectFiles {
-                    &[("path", "writes the project's file")]
-                } else {
-                    &[("destination", "writes into the project's export destination"), ("font", "reads the project's linked font")]
-                };
-                for project in projects {
-                    for (key, what) in keys {
-                        if let Some(path) = project.get(*key).and_then(Value::as_str) {
-                            self.policy.check_implicit_path(path, &format!("`{id}` {what}"))?;
-                            if *key == "font" {
-                                self.policy.check_references(std::path::Path::new(path), &format!("`{id}`"))?;
-                            }
-                        }
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
-
-    /// Checks the font a project file links, which `project.open` reads, and the files that font
-    /// reads in turn.
-    #[cfg(not(target_arch = "wasm32"))]
-    fn check_project_link(&self, project: &std::path::Path, what: &str) -> Result<(), String> {
-        // A project file that cannot be read links nothing; project.open then fails on its own.
-        let Ok(Some(font)) = fontcraft_engine::project::linked_font(project) else { return Ok(()) };
-        let text = font.to_str().ok_or_else(|| format!("{what}: the project's linked font is not a UTF-8 path"))?;
-        self.policy.check_implicit_path(text, &format!("{what} reads the project's linked font"))?;
-        self.policy.check_references(&font, what)
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn check_project_link(&self, _: &std::path::Path, _: &str) -> Result<(), String> {
-        Ok(())
-    }
-
-    /// The titles and paths of the open documents.
-    fn open_documents(&mut self) -> Result<Vec<String>, String> {
-        let documents = self.backend.inspect()?;
-        let list = documents.get("documents").and_then(Value::as_array).ok_or("cannot list the open documents")?;
-        Ok(list.iter().flat_map(|d| [d.get("title"), d.get("path")]).filter_map(|v| v.and_then(Value::as_str).map(str::to_string)).collect())
-    }
-
-    /// The parameters to run a command with, once the policy admits it and its paths.
-    fn checked(&mut self, id: &str, params: &Value) -> Result<Value, String> {
-        let mut params = params.clone();
-        self.check_command(id, &mut params, 0, &mut Seen::default())?;
-        Ok(params)
     }
 
     fn run_command(&mut self, id: &str, params: &Value) -> Result<Value, String> {
-        let params = match self.checked(id, params) {
-            Ok(p) => p,
-            Err(reason) => {
-                self.log(LogLevel::Warning, json!({"command": id, "refused": reason}));
-                return Err(reason);
-            }
-        };
-        let result = self.backend.execute(id, &params);
+        if let Err(reason) = self.check_command(id, params, 0) {
+            self.log(LogLevel::Warning, json!({"command": id, "refused": reason}));
+            return Err(reason);
+        }
+        let result = self.backend.execute(id, params);
         match &result {
             Ok(_) => self.log(LogLevel::Info, json!({"command": id, "ok": true})),
             Err(e) => self.log(LogLevel::Warning, json!({"command": id, "error": e})),
@@ -494,13 +402,14 @@ impl Server {
 
     fn list_commands(&mut self, pattern: Option<&str>) -> Result<Value, String> {
         let mut all = self.backend.commands(pattern)?;
-        if self.policy.is_restricted() {
+        if self.policy.is_restricted() || self.roots.is_some() {
             let list = all.get_mut("commands").and_then(Value::as_array_mut).ok_or("the command catalogue has no `commands` list")?;
             let policy = &self.policy;
+            let confined = self.roots.is_some();
             list.retain(|c| {
                 let id = c.get("id").and_then(Value::as_str).unwrap_or("");
                 let facts = policy::CommandFacts::from_entry(c).map(|(_, f)| f);
-                policy.admit(id, facts.as_ref()).is_ok()
+                policy.admit(id, facts.as_ref()).is_ok() && !(confined && policy::INDIRECT_COMMANDS.contains(&id))
             });
         }
         Ok(all)
@@ -540,7 +449,7 @@ impl Server {
 
 impl resources::Reader for Server {
     fn query(&mut self, command: &str, params: Value) -> Result<Value, String> {
-        let params = self.checked(command, &params)?;
+        self.check_command(command, &params, 0)?;
         self.backend.execute(command, &params)
     }
     fn document(&mut self) -> Result<Value, String> {
@@ -734,76 +643,134 @@ mod tests {
         assert!(is_error);
     }
 
+    /// A fresh folder holding `in` (the read root), `out` (the write root) and `outside`.
+    fn roots(name: &str) -> (std::path::PathBuf, Option<Arc<AutomationRoots>>) {
+        let dir = std::env::temp_dir().join(format!("fontcraft-mcp-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for d in ["in", "out", "outside"] {
+            std::fs::create_dir_all(dir.join(d)).unwrap();
+        }
+        let roots = AutomationRoots::new(Some(&dir.join("in")), Some(&dir.join("out"))).unwrap();
+        (dir, roots)
+    }
+
+    fn confined(h: Headless, roots: &Option<Arc<AutomationRoots>>) -> Server {
+        Server::new(Box::new(h)).with_roots(roots.clone())
+    }
+
+    fn at(dir: &std::path::Path, name: &str) -> String {
+        dir.join(name).to_str().unwrap().to_string()
+    }
+
     #[test]
-    fn file_parameters_outside_the_roots_are_refused() {
-        let dir = std::env::temp_dir().join(format!("fontcraft-mcp-roots-{}", std::process::id()));
-        let root = dir.join("root");
-        std::fs::create_dir_all(&root).unwrap();
-        let mut s = restricted(Policy::unrestricted().root(&root).unwrap().base_dir(&root));
-        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.saveAs", "params": {"path": "../outside.fontcraft"}}));
-        assert!(is_error && text.contains("--root"), "{text}");
-        assert!(!dir.join("outside.fontcraft").exists());
-        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.saveAs", "params": {"path": "inside.fontcraft"}}));
-        assert!(!is_error, "{text}");
-        assert!(root.join("inside.fontcraft").exists(), "a relative path resolves inside the root");
+    fn reads_stay_in_the_read_root_and_writes_in_the_write_root() {
+        let (dir, roots) = roots("roots");
+        let mut setup = Headless::with_document();
+        setup.execute("file.saveAs", &json!({"path": at(&dir, "outside/A.fontcraft")})).unwrap();
+        setup.execute("file.saveAs", &json!({"path": at(&dir, "in/A.fontcraft")})).unwrap();
+        let mut s = confined(Headless::with_document(), &roots);
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}));
+        assert!(r["result"]["instructions"].as_str().unwrap_or("").contains("files are confined: read root"), "{r}");
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.saveAs", "params": {"path": at(&dir, "outside/x.fontcraft")}}));
+        assert!(is_error && text.contains("automation path rejected: outside the write root"), "{text}");
+        assert!(!dir.join("outside/x.fontcraft").exists());
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.saveAs", "params": {"path": at(&dir, "out/x.fontcraft")}}));
+        assert!(!is_error && dir.join("out/x.fontcraft").exists(), "{text}");
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.save", "params": {"force": true}}));
-        assert!(!is_error, "the document's own file is inside the root: {text}");
+        assert!(!is_error, "the document's own file is inside the write root: {text}");
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.open", "params": {"path": at(&dir, "outside/A.fontcraft")}}));
+        assert!(is_error && text.contains("outside the read root"), "{text}");
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.open", "params": {"path": at(&dir, "in/A.fontcraft")}}));
+        assert!(!is_error, "{text}");
+        // Its own file lies in the read root, where nothing may be written.
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.save", "params": {"force": true}}));
+        assert!(is_error && text.contains("outside the write root"), "{text}");
+        // Macros run steps the server cannot see in advance; they are not even listed.
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "script.run", "params": {"macro": "missing"}}));
+        assert!(is_error && text.contains("automation roots"), "{text}");
+        assert!(!listed(&mut s).iter().any(|i| i == "script.run"));
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// Inputs that once slipped past the policy: each is refused and writes nothing.
+    #[test]
+    fn a_read_root_alone_grants_no_writes() {
+        let (dir, _) = roots("read-alone");
+        let roots = AutomationRoots::new(Some(&dir.join("in")), None).unwrap();
+        let mut s = confined(Headless::with_document(), &roots);
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.saveAs", "params": {"path": at(&dir, "in/x.fontcraft")}}));
+        assert!(is_error && text.contains("write authority is absent"), "{text}");
+        // Without a path, an export still returns the bytes.
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.exportStatic", "params": {"timestamp": 0}}));
+        assert!(!is_error && text.contains("dataBase64"), "{}", text.get(..300).unwrap_or(&text));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn without_roots_nothing_is_confined() {
+        let (dir, _) = roots("unconfined");
+        let mut s = server();
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.saveAs", "params": {"path": at(&dir, "outside/x.fontcraft")}}));
+        assert!(!is_error, "{text}");
+        let (_, text) = tool(&mut s, "run_command", json!({"command": "script.run", "params": {"macro": "missing"}}));
+        assert!(!text.contains("automation roots"), "macros are admitted: {text}");
+        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}));
+        let instructions = r["result"]["instructions"].as_str().unwrap_or("");
+        assert!(!instructions.contains("This server is restricted") && !instructions.contains("confined"), "{instructions}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Inputs that once slipped past the checks: each is refused and writes nothing.
     #[test]
     fn undeclared_and_implicit_writes_are_refused() {
-        let dir = std::env::temp_dir().join(format!("fontcraft-mcp-writes-{}", std::process::id()));
-        let (root, outside) = (dir.join("root"), dir.join("outside"));
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::create_dir_all(&outside).unwrap();
-        let rooted = || Policy::unrestricted().root(&root).unwrap().base_dir(&root);
-        let out = |name: &str| outside.join(name).to_str().unwrap().to_string();
+        let (dir, roots) = roots("writes");
+        let out = |name: &str| at(&dir, &format!("outside/{name}"));
+        std::fs::write(dir.join("in/f.ttf"), b"not a font").unwrap();
 
         // A table file after the tag, alone or as a batch step.
-        let mut s = restricted(rooted());
-        let extract = json!({"font": "f.ttf", "tables": [format!("head={}", out("head.bin"))]});
+        let mut s = confined(Headless::with_document(), &roots);
+        let extract = json!({"font": at(&dir, "in/f.ttf"), "tables": [format!("head={}", out("head.bin"))]});
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "tables.extract", "params": extract.clone()}));
-        assert!(is_error && text.contains("--root"), "{text}");
-        let batch = json!({"steps": [{"command": "glyph.newGlyph", "params": {"name": "b"}}, {"command": "tables.extract", "params": extract}]});
+        assert!(is_error && text.contains("outside the write root"), "{text}");
+        let batch = json!({"steps": [{"command": "glyph.newGlyph", "params": {"name": "b.alt"}}, {"command": "tables.extract", "params": extract}]});
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "command.batch", "params": batch}));
-        assert!(is_error && text.contains("--root"), "{text}");
+        assert!(is_error && text.contains("outside the write root"), "{text}");
         // A WOFF block extracted outside the roots.
-        let (is_error, text) =
-            tool(&mut s, "run_command", json!({"command": "woff.decompress", "params": {"font": "f.woff", "extractMetadata": out("meta.xml")}}));
-        assert!(is_error && text.contains("--root"), "{text}");
-        assert!(!outside.join("head.bin").exists() && !outside.join("meta.xml").exists());
+        let params = json!({"font": at(&dir, "in/f.woff"), "extractMetadata": out("meta.xml")});
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "woff.decompress", "params": params}));
+        assert!(is_error && text.contains("outside the write root"), "{text}");
+        assert!(!dir.join("outside/head.bin").exists() && !dir.join("outside/meta.xml").exists());
 
         // A query that writes in place, under --read-only.
-        std::fs::write(root.join("f.ttf"), b"not a font").unwrap();
-        let mut s = restricted(rooted().read_only(true));
-        let params = json!({"font": "f.ttf", "tables": ["DSIG"], "inPlace": true});
+        let mut s = Server::with_policy(Box::new(Headless::with_document()), Policy::unrestricted().read_only(true)).with_roots(roots.clone());
+        let params = json!({"font": at(&dir, "in/f.ttf"), "tables": ["DSIG"], "inPlace": true});
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "tables.delete", "params": params}));
         assert!(is_error && text.contains("read-only"), "{text}");
-        assert_eq!(std::fs::read(root.join("f.ttf")).unwrap(), b"not a font");
+        assert_eq!(std::fs::read(dir.join("in/f.ttf")).unwrap(), b"not a font");
         assert!(!listed(&mut s).iter().any(|i| i == "tables.delete" || i == "font.dumpTables"));
 
-        // A project whose stored file and destination lie outside the roots.
+        // A project whose stored file and destination lie outside the roots; a copy in the read root.
         let mut h = Headless::with_document();
-        let stored = outside.join("p.fontcraftproject");
+        let stored = dir.join("outside/p.fontcraftproject");
         h.execute("file.newProject", &json!({})).unwrap();
         h.execute("project.setExportDestination", &json!({"folder": out("fonts")})).unwrap();
+        h.execute("project.save", &json!({"path": at(&dir, "in/q.fontcraftproject")})).unwrap();
         h.execute("project.save", &json!({"path": stored})).unwrap();
         std::fs::remove_file(&stored).unwrap();
-        let mut s = Server::with_policy(Box::new(h), rooted());
+        let mut s = confined(h, &roots);
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "project.save", "params": {}}));
-        assert!(is_error && text.contains("--root"), "{text}");
+        assert!(is_error && text.contains("writes the project's file") && text.contains("outside the write root"), "{text}");
         assert!(!stored.exists());
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "project.export", "params": {}}));
-        assert!(is_error && text.contains("--root"), "{text}");
-        assert!(!outside.join("fonts").exists());
-        // A project opened earlier in the same batch: its stored destination is unknown.
-        let batch =
-            json!({"steps": [{"command": "project.open", "params": {"path": "p.fontcraftproject"}}, {"command": "project.export", "params": {}}]});
+        assert!(is_error && text.contains("export destination"), "{text}");
+        // A project opened earlier in the same batch is checked when the export step runs.
+        let batch = json!({"steps": [
+            {"command": "project.open", "params": {"path": at(&dir, "in/q.fontcraftproject")}},
+            {"command": "project.export", "params": {}}
+        ]});
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "command.batch", "params": batch}));
-        assert!(is_error && text.contains("on its own"), "{text}");
-        // Macros saved into the Macros folder, which the server cannot see.
+        assert!(is_error && text.contains("export destination"), "{text}");
+        assert!(!dir.join("outside/fonts").exists());
+        // Macros saved into the Macros folder, which is not a root.
         let save = json!({"name": "m", "steps": [{"command": "glyph.newGlyph", "params": {"name": "x"}}]});
         let (is_error, text) = tool(&mut s, "run_command", json!({"command": "script.saveActionSet", "params": save}));
         assert!(is_error && text.contains("Macros folder"), "{text}");
@@ -812,40 +779,26 @@ mod tests {
 
     /// Files a source or a project refers to are checked before they are read.
     #[test]
-    fn files_a_source_or_project_refers_to_lie_inside_the_roots() {
-        let dir = std::env::temp_dir().join(format!("fontcraft-mcp-references-{}", std::process::id()));
-        let (root, outside) = (dir.join("root"), dir.join("outside"));
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::create_dir_all(&outside).unwrap();
-        let rooted = || Policy::unrestricted().root(&root).unwrap().base_dir(&root);
-
-        // A designspace inside the roots whose source lies outside them.
+    fn files_a_source_or_project_refers_to_lie_inside_the_read_root() {
+        let (dir, roots) = roots("references");
+        // A designspace inside the read root whose source lies outside it.
         let doc = r#"<?xml version="1.0"?><designspace format="5.0"><sources><source filename="../outside/A.ufo" name="A"/></sources></designspace>"#;
-        std::fs::write(root.join("ds.designspace"), doc).unwrap();
-        let mut s = restricted(rooted());
-        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.open", "params": {"path": "ds.designspace"}}));
-        assert!(is_error && text.contains("--root") && text.contains("A.ufo"), "{text}");
+        std::fs::write(dir.join("in/ds.designspace"), doc).unwrap();
+        let mut s = confined(Headless::with_document(), &roots);
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "file.open", "params": {"path": at(&dir, "in/ds.designspace")}}));
+        assert!(is_error && text.contains("outside the read root") && text.contains("A.ufo"), "{text}");
 
-        // A project inside the roots whose linked font lies outside them.
+        // A project inside the read root whose linked font lies outside it.
         let mut h = Headless::with_document();
-        let font = outside.join("f.fontcraft");
+        let font = dir.join("outside/f.fontcraft");
         h.execute("file.saveAs", &json!({"path": font})).unwrap();
         h.execute("file.newProject", &json!({})).unwrap();
         h.execute("project.linkFont", &json!({"font": font})).unwrap();
-        h.execute("project.save", &json!({"path": root.join("p.fontcraftproject")})).unwrap();
-        let mut s = Server::with_policy(Box::new(h), rooted());
-        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "project.open", "params": {"path": "p.fontcraftproject"}}));
-        assert!(is_error && text.contains("linked font") && text.contains("--root"), "{text}");
+        h.execute("project.save", &json!({"path": at(&dir, "in/p.fontcraftproject")})).unwrap();
+        let mut s = confined(h, &roots);
+        let (is_error, text) = tool(&mut s, "run_command", json!({"command": "project.open", "params": {"path": at(&dir, "in/p.fontcraftproject")}}));
+        assert!(is_error && text.contains("linked font") && text.contains("outside the read root"), "{text}");
         std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn the_file_system_root_alone_restricts_nothing() {
-        let mut s = restricted(Policy::unrestricted().root(std::path::Path::new("/")).unwrap());
-        let (_, text) = tool(&mut s, "run_command", json!({"command": "script.run", "params": {"macro": "missing"}}));
-        assert!(!text.contains("cannot check"), "macros are admitted: {text}");
-        let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}));
-        assert!(!r["result"]["instructions"].as_str().unwrap_or("").contains("This server is restricted"));
     }
 
     #[test]
