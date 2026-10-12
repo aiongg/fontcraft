@@ -1043,7 +1043,7 @@ ref = "Appendix › Custom Parameters"
 status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.18."
 guesses = [
-  "The value lists glyph names separated by spaces or line breaks; names the font lacks are skipped; an instance between masters shows its nearest master until M9 interpolates; the reference app settles separators and missing names.",
+  "The value lists glyph names separated by spaces or line breaks, at most 64 drawn; names the font lacks are skipped; a disabled parameter is ignored; the reference app settles separators and missing names.",
 ]
 observe = [
   "In font B (m7-two), add the parameter Instance Preview with `A a n` to an instance: note what the preview shows afterwards.",

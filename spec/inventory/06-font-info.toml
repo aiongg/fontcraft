@@ -1610,6 +1610,14 @@ summary = "Third tab of Font Info: the list of fonts that File > Export produces
 ref = "Font Info › Exports"
 status = "handbook"
 notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting and Axes Coordinates are M9's rows; until M9 those menu items are disabled and the coordinates read-only. M7 plan § 4: M7.18."
+guesses = [
+  "Active, Style Name, Weight Class, Width Class, the read-only Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.",
+  "A variable font setting shows Active, its name and its custom parameters, without classes, axes or style linking; selecting a variable font setting in the reference app settles it.",
+  "The class menus list each standard value with its OpenType name (400 Regular, 5 Medium (normal)); the disclosure menus of the reference app settle the labels.",
+]
+observe = [
+  "In font B (m7-two), select two instances with Cmd-click and look at a field where they differ: note what it shows.",
+]
 
 [[command]]
 id = "font.instance.list"
@@ -1986,6 +1994,10 @@ summary = "In the export list Cmd+click toggles single entries and Shift+click s
 ref = "Font Info › Exports"
 status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.18."
+guesses = [
+  "With nothing selected the tab acts on the first entry, and Cmd-click on the only selected entry leaves the first entry shown; the reference app settles what an empty selection shows.",
+  "Dropping a dragged entry onto another moves it to that entry's place, and the moved entry becomes the selection; dragging in the reference app settles it.",
+]
 
 [[behavior]]
 id = "fontInfo.exports.orderIsCosmetic"
@@ -2004,6 +2016,9 @@ summary = "An export entry with Active off is drawn with a gray icon in the list
 ref = "Font Info › Exports › Active"
 status = "handbook"
 notes = "Documented, not yet observed. M7 plan § 4: M7.18."
+guesses = [
+  "Entries are drawn with a square icon in the accent colour, a variable font setting with an outlined square; inactive ones grey; the reference app's sidebar settles the icons.",
+]
 
 [[behavior]]
 id = "fontInfo.styleName.limits"
@@ -2848,7 +2863,8 @@ ref = "Appendix › Custom Parameters (Instance Preview)"
 status = "handbook"
 notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18."
 guesses = [
-  "The preview sits above the instance's fields, one line high, and an instance between masters is drawn with its nearest master until M9 interpolates; the Exports tab of the reference app settles placement.",
+  "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters shows a message until M9 interpolates, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
+  "The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead.",
 ]
 observe = [
   "In font B (m7-two), look at an instance's preview on the Exports tab: note where it is and what it shows.",
