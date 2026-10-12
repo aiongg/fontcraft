@@ -91,7 +91,12 @@ fn svg_font_written_reads_back_and_matches_tx() {
     for g in font.glyphs.iter() {
         let b = back.glyph(&g.name).unwrap();
         assert_eq!(g.unicodes, b.unicodes, "{}", g.name);
-        assert_eq!(points(&font, &g.name), points(&back, &g.name), "{}", g.name);
+        // The writer keeps three decimals.
+        let (a, b) = (points(&font, &g.name), points(&back, &g.name));
+        assert_eq!(a.len(), b.len(), "{}", g.name);
+        for (p, q) in a.iter().zip(&b) {
+            assert!((p.0 - q.0).abs() < 1e-3 && (p.1 - q.1).abs() < 1e-3 && p.2 == q.2, "{}: {a:?} against {b:?}", g.name);
+        }
     }
     assert_eq!(back.kerning.ltr.get(&master, "A", "O"), Some(-40.0));
 }
