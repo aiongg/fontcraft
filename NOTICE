@@ -116,7 +116,8 @@ bundled, the file says so in its header and the project is listed here with its 
   output rules of its glifLib (crates/io-ufo/src/glif.rs: element and attribute order, number
   formatting, and how a note is written and read), and crates/io-ufo/src/names.rs ports its
   user-name-to-file-name rule. crates/io-ufo/src/kerning.rs ports ufoLib's renaming of UFO 2
-  kerning groups (converters.py). The AFM reader and writer (crates/spacing/src/afm.rs) were
+  kerning groups (converters.py), and crates/io-ufo/src/ufo1.rs its UFO 1 font-info conversion
+  (__init__.py). The AFM reader and writer (crates/spacing/src/afm.rs) were
   written with its afmLib read for reference on what common readers expect: whole numbers, a
   `B` field on every `C` line, and `KPX` pairs. The piecewise-linear map of crates/model/src/axes.rs ports varLib's piecewiseLinearMap, and the
   designspace writer follows the element order of designspaceLib. crates/io-ufo/src/designspace/rules.rs
@@ -274,6 +275,9 @@ bundled, the file says so in its header and the project is listed here with its 
   The audit's family reports (crates/audit/src/export.rs, M12.60) follow comparefamily.py in AFDKO
   5.0.1, Apache License 2.0, Copyright 2015 Adobe Systems Incorporated: its face order and
   grouping, the values its reports collapse and sort, and its PANOSE value names.
+
+  defcon (https://github.com/robotools/defcon), MIT License. crates/io-ufo/src/ufo1.rs ports how
+  its font object moves a UFO 1's feature code and PostScript hint data out of the lib.
 
 Product names mentioned in the documentation are trademarks of their owners and are used only to
 identify the products FontCraft is compared with or interoperates with.

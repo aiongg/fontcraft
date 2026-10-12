@@ -36,6 +36,9 @@
 //! | vertical metrics | the GLIF height and `public.verticalOrigin`, by glyphsLib's rules (`builder/glyph.py`) |
 //! | glyph, layer and shape data with no GLIF element (categories, metrics keys, hints, annotations, image crops, component placement, node and anchor user data…); layer ids, order and libs; glyph user data | glyphsLib's GLIF lib keys, `layerinfo.plist` lib keys and `lib.plist` keys ([`crate::glyphkeys`], [`crate::shapekeys`]) |
 //! | `data/`, `images/`, other files | [`Font::files`] |
+//!
+//! A UFO 1 is read as its UFO 2 form (the `ufo1` module converts its font information and lib)
+//! and becomes a UFO 3 source: saving writes UFO 3.
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -56,6 +59,7 @@ use crate::kerning;
 use crate::libkeys;
 use crate::names::{glyph_file_name, layer_dir_name};
 use crate::shapekeys;
+use crate::ufo1;
 use crate::{Files, Result, UfoError, bad};
 
 const METAINFO: &str = "metainfo.plist";
@@ -318,14 +322,21 @@ pub(crate) fn kept_default_layer(m: &Master) -> String {
 pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     let meta_doc = read_plist(files, METAINFO)?.ok_or_else(|| bad(METAINFO, "missing: this is not a UFO"))?;
     let plist_style = PlistStyle::of(&meta_doc);
-    let Value::Dict(meta) = meta_doc.root else { return Err(bad(METAINFO, "the file does not hold a dictionary")) };
-    let format_version = match meta.get("formatVersion").and_then(as_f64) {
+    let Value::Dict(mut meta) = meta_doc.root else { return Err(bad(METAINFO, "the file does not hold a dictionary")) };
+    let file_version = match meta.get("formatVersion").and_then(as_f64) {
         Some(3.0) => 3,
         Some(2.0) => 2,
+        Some(1.0) => ufo1::VERSION,
         Some(v) => return Err(UfoError::Unsupported(format!("UFO format version {v}"))),
         None => return Err(bad(METAINFO, "no formatVersion")),
     };
-    let glif_format = if format_version == 2 { 1 } else { 2 };
+    // A UFO 1 is read as its UFO 2 form and becomes a UFO 3 source ([`crate::ufo1`]).
+    let upconvert = file_version == ufo1::VERSION;
+    let format_version = if upconvert { 3 } else { file_version };
+    if upconvert {
+        patch(&mut meta, "formatVersion", Some(Value::Number(Number::int(3))));
+    }
+    let glif_format = if file_version == 3 { 2 } else { 1 };
 
     let mut master = Master { id: master_id.to_string(), ..Default::default() };
     let mx = &mut master.extra;
@@ -333,8 +344,19 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     mx.push(Family::Ufo, METAINFO, Value::Dict(meta));
     let mut plists = Plists { files, style: plist_style, styles: Dict::new() };
 
-    // fontinfo.plist
-    let info = plists.dict(FONTINFO)?;
+    // fontinfo.plist; a UFO 1's lib holds some of its values.
+    let mut info = plists.dict(FONTINFO)?;
+    let mut ufo1_lib = None;
+    let mut ufo1_features = None;
+    if upconvert {
+        let mut converted = ufo1::info(info.as_ref().unwrap_or(&Dict::new()));
+        let mut lib = plists.dict(LIB).ok().flatten();
+        if let Some(lib) = &mut lib {
+            ufo1_features = ufo1::take_lib_data(lib, &mut converted);
+        }
+        info = (info.is_some() || !converted.is_empty()).then_some(converted);
+        ufo1_lib = Some(lib);
+    }
     let get = |k: &str| info.as_ref().and_then(|d| d.get(k));
     let family_name = get("familyName").and_then(Value::as_str).map(str::to_string);
     master.name = get("styleName").and_then(Value::as_str).unwrap_or("").to_string();
@@ -362,7 +384,10 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     // lib.plist
     // A lib that is not a well-formed property list (some old tools wrote keys without values)
     // is kept as a file and written back as it is.
-    let lib = plists.dict(LIB).ok().flatten();
+    let lib = match ufo1_lib {
+        Some(lib) => lib,
+        None => plists.dict(LIB).ok().flatten(),
+    };
     let order = strings(lib.as_ref().and_then(|d| d.get("public.glyphOrder")));
     let skip: HashSet<String> = strings(lib.as_ref().and_then(|d| d.get("public.skipExportGlyphs"))).into_iter().collect();
     let glyph_map = |key: &str| lib.as_ref().and_then(|d| d.get(key)).and_then(Value::as_dict).cloned();
@@ -395,7 +420,12 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
             master.extra.push(Family::Ufo, LAYERCONTENTS, root);
             out
         }
-        None => vec![("public.default".to_string(), DEFAULT_DIR.to_string())],
+        None => {
+            if upconvert {
+                master.extra.push(Family::Ufo, LAYERCONTENTS, ufo1::layer_contents());
+            }
+            vec![("public.default".to_string(), DEFAULT_DIR.to_string())]
+        }
     };
     if !layer_list.iter().any(|(_, d)| d == DEFAULT_DIR) {
         return Err(bad(LAYERCONTENTS, "no layer is stored in `glyphs`"));
@@ -551,8 +581,8 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     // Kerning groups, other groups and kerning. A UFO 2's kerning groups get their UFO 3 names.
     let groups = plists.dict(GROUPS)?;
     let kerning_dict = plists.dict(KERNING)?;
-    let renames = match (&groups, format_version) {
-        (Some(g), 2) => {
+    let renames = match (&groups, file_version) {
+        (Some(g), 1 | 2) => {
             let names: HashSet<&str> = ordered.iter().map(|g| g.name.as_str()).collect();
             kerning::ufo2_renames(g, kerning_dict.as_ref(), &names)
         }
@@ -605,7 +635,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         master.extra.push(Family::Ufo, KERNING, Value::Dict(k));
     }
 
-    let features = match files.get(FEATURES) {
+    let file_features = match files.get(FEATURES) {
         Some(bytes) => match std::str::from_utf8(bytes) {
             Ok(t) => Some(t.to_string()),
             // Not text: kept as a file.
@@ -613,14 +643,15 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         },
         None => None,
     };
+    if file_features.is_some() {
+        consumed.insert(FEATURES.to_string());
+    }
+    let features = ufo1_features.or(file_features);
     for f in [METAINFO, FONTINFO, GROUPS, KERNING, LAYERCONTENTS] {
         consumed.insert(f.to_string());
     }
     if ufo_get(&master.extra, LIB).is_some() {
         consumed.insert(LIB.to_string());
-    }
-    if features.is_some() {
-        consumed.insert(FEATURES.to_string());
     }
     if !plists.styles.is_empty() {
         master.extra.push(Family::Ufo, "plistStyles", Value::Dict(plists.styles));
@@ -2748,5 +2779,185 @@ mod tests {
         let height = |n: &str| back.glyph(n).unwrap().layer("m01").unwrap().info.vert_width;
         assert_eq!((height("A"), height("B")), (None, Some(0.0)), "the default height, and none at all (ufo2ft's 0)");
         assert_eq!(write(&back).unwrap(), files);
+    }
+
+    /// A property list of a dictionary whose entries are XML snippets, keys sorted when `sorted`.
+    fn plist_dict(entries: &[(&str, &str)], sorted: bool) -> Vec<u8> {
+        let mut entries = entries.to_vec();
+        if sorted {
+            entries.sort_by_key(|(k, _)| *k);
+        }
+        let body: String = entries.iter().map(|(k, v)| format!("    <key>{k}</key>\n    {v}\n")).collect();
+        format!("{PLIST_HEAD}  <dict>\n{body}  </dict>\n</plist>\n").into_bytes()
+    }
+
+    /// The same small font as a UFO 1, with its feature code and hint data in the lib, and in the
+    /// UFO 3 form the up-conversion gives it.
+    fn ufo1_and_ufo3() -> (Files, Files) {
+        let shared_info = [
+            ("familyName", "<string>Sample</string>"),
+            ("styleName", "<string>Bold Italic</string>"),
+            ("unitsPerEm", "<integer>1000</integer>"),
+            ("ascender", "<integer>750</integer>"),
+            ("descender", "<integer>-250</integer>"),
+            ("capHeight", "<integer>700</integer>"),
+            ("xHeight", "<integer>500</integer>"),
+            ("italicAngle", "<integer>-10</integer>"),
+            ("versionMajor", "<integer>1</integer>"),
+            ("versionMinor", "<integer>2</integer>"),
+            ("copyright", "<string>Copyright notice</string>"),
+            ("note", "<string>A note</string>"),
+        ];
+        let renamed = [
+            ("menuName", "styleMapFamilyName", "<string>Sample</string>", "<string>Sample</string>"),
+            ("fontStyle", "styleMapStyleName", "<integer>33</integer>", "<string>bold italic</string>"),
+            ("fullName", "postscriptFullName", "<string>Sample Bold Italic</string>", "<string>Sample Bold Italic</string>"),
+            ("fontName", "postscriptFontName", "<string>Sample-BoldItalic</string>", "<string>Sample-BoldItalic</string>"),
+            ("designer", "openTypeNameDesigner", "<string>A Designer</string>", "<string>A Designer</string>"),
+            ("notice", "openTypeNameDescription", "<string>A description</string>", "<string>A description</string>"),
+            ("widthName", "openTypeOS2WidthClass", "<string>Condensed</string>", "<integer>3</integer>"),
+            ("weightValue", "openTypeOS2WeightClass", "<integer>700</integer>", "<integer>700</integer>"),
+            ("weightName", "postscriptWeightName", "<string>Bold</string>", "<string>Bold</string>"),
+            ("ttVendor", "openTypeOS2VendorID", "<string>NONE</string>", "<string>NONE</string>"),
+            ("msCharSet", "postscriptWindowsCharacterSet", "<integer>0</integer>", "<integer>1</integer>"),
+        ];
+        let hints = [
+            ("postscriptBlueValues", "<array><integer>-10</integer><integer>0</integer><integer>700</integer><integer>710</integer></array>"),
+            ("postscriptStemSnapH", "<array><integer>80</integer></array>"),
+            ("postscriptStemSnapV", "<array><integer>90</integer></array>"),
+            ("postscriptBlueScale", "<real>0.039625</real>"),
+        ];
+        let kern = "feature kern {\n    pos A B -20;\n} kern;\n";
+        let classes = "@UC = [A B];\n";
+        let glif = |name: &str, unicode: &str, format: u32, body: &str| {
+            format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<glyph name=\"{name}\" format=\"{format}\">\n  <advance width=\"600\"/>\n  <unicode hex=\"{unicode}\"/>\n{body}</glyph>\n").into_bytes()
+        };
+        let triangle = "    <contour>\n      <point x=\"0\" y=\"0\" type=\"line\"/>\n      <point x=\"600\" y=\"0\" type=\"line\"/>\n      <point x=\"300\" y=\"700\" type=\"line\"/>\n    </contour>\n";
+        let component = "  <outline>\n    <component base=\"A\" xOffset=\"10\"/>\n  </outline>\n";
+        let contents = plist_dict(&[("A", "<string>A_.glif</string>"), ("B", "<string>B_.glif</string>")], false);
+
+        let mut one = Files::new();
+        one.insert(
+            METAINFO.into(),
+            plist_dict(&[("creator", "<string>org.robofab.ufoLib</string>"), ("formatVersion", "<integer>1</integer>")], false),
+        );
+        let mut info1: Vec<(&str, &str)> = shared_info.to_vec();
+        info1.extend(renamed.iter().map(|(old, _, v, _)| (*old, *v)));
+        one.insert(FONTINFO.into(), plist_dict(&info1, false));
+        let features = format!("<dict><key>kern</key><string>{kern}</string></dict>");
+        let hint_data = "<dict><key>blueValues</key><array><array><integer>-10</integer><integer>0</integer></array><array><integer>700</integer><integer>710</integer></array></array><key>hStems</key><array><integer>80</integer></array><key>vStems</key><array><integer>90</integer></array><key>blueScale</key><real>0.039625</real></dict>";
+        let classes_xml = format!("<string>{classes}</string>");
+        one.insert(
+            LIB.into(),
+            plist_dict(
+                &[
+                    ("com.example.keep", "<string>yes</string>"),
+                    ("org.robofab.opentype.classes", classes_xml.as_str()),
+                    ("org.robofab.opentype.featureorder", "<array><string>kern</string></array>"),
+                    ("org.robofab.opentype.features", features.as_str()),
+                    ("org.robofab.postScriptHintData", hint_data),
+                ],
+                false,
+            ),
+        );
+        let groups = [("UC", "<array><string>A</string><string>B</string></array>")];
+        let mut groups1 = groups.to_vec();
+        groups1.push(("@MMK_L_A", "<array><string>A</string></array>"));
+        one.insert(GROUPS.into(), plist_dict(&groups1, false));
+        one.insert(KERNING.into(), plist_dict(&[("@MMK_L_A", "<dict><key>B</key><integer>-20</integer></dict>")], false));
+        one.insert("glyphs/contents.plist".into(), contents.clone());
+        let anchor1 = "    <contour>\n      <point x=\"300\" y=\"700\" type=\"move\" name=\"top\"/>\n    </contour>\n";
+        one.insert("glyphs/A_.glif".into(), glif("A", "0041", 1, &format!("  <outline>\n{anchor1}{triangle}  </outline>\n")));
+        one.insert("glyphs/B_.glif".into(), glif("B", "0042", 1, component));
+
+        let mut three = Files::new();
+        three.insert(
+            METAINFO.into(),
+            plist_dict(&[("creator", "<string>org.robofab.ufoLib</string>"), ("formatVersion", "<integer>3</integer>")], false),
+        );
+        let mut info3: Vec<(&str, &str)> = shared_info.to_vec();
+        info3.extend(renamed.iter().map(|(_, new, _, v)| (*new, *v)));
+        info3.extend(hints);
+        three.insert(FONTINFO.into(), plist_dict(&info3, true));
+        three.insert(LIB.into(), plist_dict(&[("com.example.keep", "<string>yes</string>")], false));
+        three.insert(FEATURES.into(), format!("{classes}\n{kern}").into_bytes());
+        let mut groups3 = groups.to_vec();
+        groups3.push(("public.kern1.A", "<array><string>A</string></array>"));
+        three.insert(GROUPS.into(), plist_dict(&groups3, true));
+        three.insert(KERNING.into(), plist_dict(&[("public.kern1.A", "<dict><key>B</key><integer>-20</integer></dict>")], false));
+        three.insert(
+            LAYERCONTENTS.into(),
+            format!("{PLIST_HEAD}  <array>\n    <array>\n      <string>public.default</string>\n      <string>glyphs</string>\n    </array>\n  </array>\n</plist>\n")
+                .into_bytes(),
+        );
+        three.insert("glyphs/contents.plist".into(), contents);
+        let anchor3 = "  <anchor x=\"300\" y=\"700\" name=\"top\"/>\n";
+        three.insert("glyphs/A_.glif".into(), glif("A", "0041", 2, &format!("{anchor3}  <outline>\n{triangle}  </outline>\n")));
+        three.insert("glyphs/B_.glif".into(), glif("B", "0042", 2, component));
+        (one, three)
+    }
+
+    /// Asserts that two documents hold the same model, leaving out what each file format keeps
+    /// for itself (`Extra`).
+    fn same_model(a: &Font, b: &Font) {
+        assert_eq!(
+            (&a.family_name, a.units_per_em, a.version_major, a.version_minor, &a.note),
+            (&b.family_name, b.units_per_em, b.version_major, b.version_minor, &b.note)
+        );
+        assert_eq!(a.info, b.info, "font info");
+        assert_eq!((&a.metrics, &a.stems), (&b.metrics, &b.stems));
+        let (ma, mb) = (&a.masters[0], &b.masters[0]);
+        assert_eq!(
+            (&ma.id, &ma.name, &ma.metric_values, &ma.zones, &ma.stem_values),
+            (&mb.id, &mb.name, &mb.metric_values, &mb.zones, &mb.stem_values)
+        );
+        assert_eq!((&ma.properties, &ma.params, &ma.user_data), (&mb.properties, &mb.params, &mb.user_data), "master values");
+        assert_eq!(a.groups, b.groups);
+        assert_eq!(a.kerning, b.kerning);
+        assert_eq!(a.features, b.features);
+        let outline = |l: &Layer| -> Vec<String> {
+            l.shapes
+                .iter()
+                .map(|s| match s {
+                    fontcraft_model::Shape::Path(p) => format!("{} {:?}", p.closed, p.nodes.iter().map(|n| (n.x, n.y, n.kind)).collect::<Vec<_>>()),
+                    fontcraft_model::Shape::Component(c) => format!("{} {:?}", c.glyph, c.transform),
+                    other => format!("{other:?}"),
+                })
+                .collect()
+        };
+        assert_eq!(a.glyphs.len(), b.glyphs.len());
+        for (ga, gb) in a.glyphs.iter().zip(b.glyphs.iter()) {
+            assert_eq!((&ga.name, &ga.unicodes, &ga.kern_groups, ga.export), (&gb.name, &gb.unicodes, &gb.kern_groups, gb.export));
+            let (la, lb) = (ga.layer(&ma.id).unwrap(), gb.layer(&mb.id).unwrap());
+            assert_eq!(la.width, lb.width, "{}", ga.name);
+            assert_eq!(outline(la), outline(lb), "{}", ga.name);
+            let anchors = |l: &Layer| l.anchors.iter().map(|a| (a.name.clone(), a.x, a.y)).collect::<Vec<_>>();
+            assert_eq!(anchors(la), anchors(lb), "{}", ga.name);
+        }
+    }
+
+    #[test]
+    fn a_ufo1_opens_as_its_ufo3_form_and_saves_as_ufo3() {
+        let (one, three) = ufo1_and_ufo3();
+        let font = read(&one).unwrap();
+        let expected = read(&three).unwrap();
+        assert_eq!(font.source.ufo_version, Some(3));
+        same_model(&font, &expected);
+        assert_eq!(font.kerning.ltr.get(&font.masters[0].id, "public.kern1.A", "B"), Some(-20.0));
+        assert_eq!(font.groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["UC"]);
+        assert!(!font.masters[0].user_data.0.entries.iter().any(|(k, _)| k.as_str().starts_with("org.robofab")), "the lib keeps only its own keys");
+
+        let out = write(&font).unwrap();
+        assert!(s(&out[METAINFO]).contains("<integer>3</integer>"), "{}", s(&out[METAINFO]));
+        assert!(out.contains_key(LAYERCONTENTS), "a UFO 3 lists its layers");
+        let a = s(&out["glyphs/A_.glif"]);
+        assert!(a.contains("format=\"2\"") && a.contains("<anchor"), "{a}");
+        assert_eq!(s(&out[FEATURES]), s(&three[FEATURES]));
+        let info = s(&out[FONTINFO]);
+        assert!(info.contains("<key>styleMapStyleName</key>") && !info.contains("<key>menuName</key>"), "{info}");
+        assert!(!s(&out[LIB]).contains("org.robofab"), "{}", s(&out[LIB]));
+        let groups = s(&out[GROUPS]);
+        assert!(groups.contains("<key>public.kern1.A</key>") && !groups.contains("@MMK_L_A"), "{groups}");
+        same_model(&read(&out).unwrap(), &font);
     }
 }

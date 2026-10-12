@@ -160,10 +160,16 @@ write = false
 spec = "https://unifiedfontobject.org/versions/ufo1/"
 area = "import-export"
 milestone = "M13"
-summary = "Read-only import of the first UFO version, up-converted on read (font info and features stored in lib keys move to their UFO 3 homes). Saving always produces UFO 3. Not supported yet: opening a UFO 1 is refused."
-ref = "norad src/upconversion.rs, src/font.rs (FormatVersion::V1)"
+summary = "Read-only import of the first UFO version, up-converted on read: `fontinfo.plist` keys get their UFO 2 names and values (ufoLib's tables), the feature code and PostScript hint data the lib kept under `org.robofab.*` keys move to `features.fea` and the font info, kerning groups get their UFO 3 names as in UFO 2, and GLIF files are format 1. The document is a UFO 3 source, so saving writes UFO 3."
+ref = "fontTools ufoLib __init__.py (fontInfoAttributesVersion1To2 and the value tables); defcon objects/font.py (_convertFromFormatVersion1RoboFabData); norad src/upconversion.rs, src/font.rs (FormatVersion::V1)"
 status = "docs"
-notes = "M13.53 adds the up-conversion to `crates/io-ufo` as norad and fontTools' ufoLib describe it; test UFO 1 sources are written in code."
+notes = "The reference app's documentation names UFO 2 and 3 as the versions it opens and says it exports UFO 3; UFO 1 is ours, from the UFO 1 specification and the readers above. Test UFO 1 sources are written in code."
+guesses = [
+  "A font-info value that ufoLib cannot convert (an unknown `fontStyle`, `widthName` or `msCharSet`, or a value of the wrong type) is dropped and the file opens; ufoLib and norad refuse the file instead. A UFO 1 from the tools of that time with such a value would settle whether refusing is better.",
+  "The feature code is joined as defcon joins it (a line break between the classes and each feature, tags sorted when the lib has no order); norad leaves out the line breaks between features. Both texts compile the same; a UFO 1 whose features only work with one of the two joins would settle it.",
+  "A tag the feature order lists twice is written once, so a crafted order cannot multiply the feature code; defcon writes it each time.",
+  "Font-info keys a UFO 1 does not define are dropped, as ufoLib drops them, so the saved UFO 3 holds only valid keys.",
+]
 
 [[format]]
 id = "designspace5"

@@ -7,6 +7,7 @@
 //!
 //! - [`glif`]: one glyph's file in one layer.
 //! - [`names`]: the specification's user-name-to-file-name rule.
+//! - `ufo1`: a UFO 1's font information and lib in their UFO 2 form, read as a UFO 3 source.
 //! - [`ufo`]: a UFO directory, as one master; `fontinfo` maps its font information to the
 //!   reference's properties and parameters, `design` its blue zones, stem snaps and guidelines to
 //!   the master's fields, and `libkeys` the lib keys glyphsLib writes for the rest (settings,
@@ -37,6 +38,7 @@ pub(crate) mod libkeys;
 pub mod names;
 mod shapekeys;
 pub mod ufo;
+mod ufo1;
 pub mod zip;
 
 /// A UFO's files: relative path (with `/`) → contents.
