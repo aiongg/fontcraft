@@ -31,7 +31,7 @@ use std::hash::{Hash, Hasher};
 
 use egui::{Align2, Color32, ColorImage, Id, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, pos2, vec2};
 use fontcraft_engine::fontinfo::Scope;
-use fontcraft_engine::fontinfo::rows::{Row, RowKind, rows_of};
+use fontcraft_engine::fontinfo::rows::RowKind;
 use fontcraft_engine::fontinfo::value as fv;
 use fontcraft_model::axes::design_value;
 use fontcraft_model::{Font, Instance, StyleClass};
@@ -39,7 +39,7 @@ use fontcraft_render::{LineOptions, Style, render_line};
 use serde_json::{Value, json};
 
 use super::param_value::{self, MULTIPLE_VALUES};
-use super::rows::{RowAction, RowOptions, ShownRow, Target, action_commands, heading, plus_id, row_id, row_with};
+use super::rows::{Target, heading, plus_id};
 use super::{FontInfoState, Picker};
 use crate::app::FontcraftApp;
 use crate::dialogs::field_picker::FieldPicker;
@@ -56,8 +56,6 @@ pub const MAX_PREVIEW_GLYPHS: usize = 64;
 const MAX_AXES_SHOWN: usize = 64;
 /// The list's width, in list columns of the theme.
 const LIST_COLUMNS: f32 = 4.0;
-/// The label column's width, in list columns of the theme (as the shared rows).
-const LABEL_COLUMNS: f32 = 4.0;
 /// The preview's height, in list rows of the theme.
 const PREVIEW_ROWS: f32 = 3.0;
 /// Empty pixels around the preview's glyphs.

@@ -1016,6 +1016,7 @@ dependencies = [
  "fontcraft-imagery",
  "fontcraft-interp",
  "fontcraft-io-glyphs",
+ "fontcraft-io-sfd",
  "fontcraft-io-svg",
  "fontcraft-io-ufo",
  "fontcraft-model",

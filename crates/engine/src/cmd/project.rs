@@ -541,7 +541,7 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
     let data = s.glyph_data_beside(&font, &font_path, &mut warnings)?;
     let title = font_path.file_stem().map(|t| t.to_string_lossy().into_owned()).unwrap_or_default();
     let mut report = Report { warnings, ..Report::default() };
-    let mut sink = Sink::new(&req.dest, false)?;
+    let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
     compile::build(&font, &title, Some(&font_path), data, &jobs, &req, &mut sink, &mut report)?;
     if report.fonts.is_empty() {
         return Err(compile::nothing_built(&report));

@@ -11,13 +11,13 @@
 //! Rows: `fontInfo.font`, `fontInfo.familyName.allowedCharacters` (the warning under the field)
 //! (M7.16).
 
-use egui::{Align2, Id, Label, RichText, Sense};
+use egui::{Id, Label, RichText};
 use fontcraft_engine::fontinfo::Scope;
-use fontcraft_engine::fontinfo::rows::{RowKind, rows_of};
+use fontcraft_engine::fontinfo::rows::RowKind;
 use fontcraft_model::Font;
 use serde_json::json;
 
-use super::rows::{self, RowAction, RowOptions, ShownRow, Target, action_commands, builtin_field, heading, plus_id, row_id, row_with};
+use super::rows::{self, ShownRow, Target, builtin_field, heading, plus_id};
 use super::{FontInfoState, Picker};
 use crate::app::FontcraftApp;
 use crate::dialogs::field_picker::FieldPicker;

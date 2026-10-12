@@ -403,7 +403,15 @@ pub fn builtin_field(ui: &mut egui::Ui, tokens: &Tokens, state: &mut FontInfoSta
 }
 
 /// The rows of `kind` of `target`, in stored order.
-pub(crate) fn section_rows(ui: &mut egui::Ui, tokens: &Tokens, state: &mut FontInfoState, font: &Font, target: &Target, kind: RowKind, pending: &mut Pending) {
+pub(crate) fn section_rows(
+    ui: &mut egui::Ui,
+    tokens: &Tokens,
+    state: &mut FontInfoState,
+    font: &Font,
+    target: &Target,
+    kind: RowKind,
+    pending: &mut Pending,
+) {
     let rows: Vec<Row> = rows_of(font, target.scope, target.first()).into_iter().filter(|r| r.kind == kind).collect();
     // The other targets' values by (key, occurrence), to mark the rows they differ in.
     let others: Vec<HashMap<(String, usize), Value>> = if target.below_font() {
