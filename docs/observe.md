@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1097 rows to check: 1516 guesses and 399 observe steps.**
+**1098 rows to check: 1525 guesses and 399 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 39 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **637** |
+| **Later milestones (after M6)** | all | **638** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 39 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 33 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 13 |
-| Later milestones (after M6) | Font Info and features | 246 |
+| Later milestones (after M6) | Font Info and features | 247 |
 | Later milestones (after M6) | Interpolation | 41 |
 | Later milestones (after M6) | Hinting | 67 |
 | Later milestones (after M6) | Colour fonts | 44 |
@@ -1301,7 +1301,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (637)
+## Later milestones (after M6) (638)
 
 ### Edit View: drawing, guides, layers and the Palette (39)
 
@@ -1671,7 +1671,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The decomposition sections use Unicode's canonical decompositions, one level and full together, so U+1EA4 lists both U+00C2 and U+0041, and characters the font has no glyph for are listed dimmed.
   - Guess: Clicking an entry opens the glyph in a new tab; the reference's documentation does not say whether it replaces the current glyph instead.
 
-### Font Info and features (246)
+### Font Info and features (247)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.
@@ -1995,7 +1995,12 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Set Feature Code refuses an automatic entry instead of switching it to manual; typing into an automatic entry in the reference app would settle it.
   - Observe: In F1 (Latin features), select an automatic feature and type into the editor: note whether the code is read-only or the entry switches to manual.
 - [ ] `font.features.update` (M8, handbook, live): Update
+  - Guess: An automatic entry whose generator no longer writes it (its glyphs are gone) is removed, as the handbook says automatic classes are at export; Update after deleting every .sc glyph would settle it.
+  - Guess: A new feature goes before the first feature that sorts after it in this order, else last: aalt, ccmp, locl, the Indic features, subs, sinf, sups, numr, dnom, frac, afrc, ordn, lnum, pnum, tnum, onum, case, the positional forms, dlig, liga, hlig, rlig, c2sc, smcp, c2pc, pcap, hist, titl, swsh, ornm, salt, ss01 to ss20, cv01 to cv99, the width and kana features, vrt2, cpsp; aalt and the Languagesystems prefix go first. Oswald and Markow store their features in this order; Update on F1 (Latin features) would settle it.
+  - Guess: salt is added beside ss01, as the handbook says, although none of the five corpus sources with an automatic ss01 has a salt feature; Update on a font with .ss01 glyphs would settle it.
   - Observe: In any font, look for a shortcut or menu item for Update in Font Info › Features: note both.
+- [ ] `font.features.updateEntry` (M8, handbook, live): Update Entry
+  - Guess: An entry whose glyphs are gone keeps its place with empty code rather than being removed; pressing the entry's update button after deleting its glyphs would settle it.
 - [ ] `font.features.compile` (M8, handbook, live): Compile
   - Guess: Compile reads the master the Features tab passes (the active Edit View tab's), else the first master; compiling in a two-master font whose masters differ in a number value used by the code, with the second master showing, would settle it.
   - Guess: Compile checks the code without the generated kerning and mark features; an error the reference app reports only when the generated code is added would show the difference.
@@ -2067,13 +2072,18 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `featureCode.multipleSubstitutionSingletons` (behavior, M8, handbook): A single glyph or one-member class on either side of such a…
   - Guess: A single glyph or one-member class as the target of a rule whose replacements are larger classes is passed to the compiler, which refuses it: repeating the target gives several rules for one glyph. A reference export of `sub a by @B @C;` would settle what the reference does.
 - [ ] `autoClass.general` (behavior, M8, inferred): Update can create and refresh automatic classes; the handbook names All and…
-  - Guess: Update generates Uppercase, Lowercase and AllLetters when the font has such glyphs, and All only when added by hand; which other classes Update offers would be settled in the running app.
+  - Guess: All four classes are optional: Update refreshes them when the font has them and never adds them, because Oswald has lowercase letters and no Lowercase class, and Markow and Oswald Italic have capitals and no Uppercase class; Update on a font with capitals and no classes would settle it.
+  - Guess: Uppercase and Lowercase hold the letters whose subcategory is Uppercase or Lowercase, and a glyph without a subcategory takes it from its case; Inter's stored Lowercase also holds 11 small capitals that store the category Letter and nothing else, which this rule leaves out.
+  - Guess: All leaves out .notdef and .null, as Inter's stored All does.
+  - Guess: Which other classes Update offers would be settled in the running app.
   - Observe: In F1 (Latin features) plus a few Greek and Cyrillic letters, press Update in Font Info › Features: copy the automatic classes it creates and their contents.
 - [ ] `autoFeature.generalRule` (behavior, M8, handbook): Feature generation is driven by glyph names: a dot suffix (or a…
   - Guess: A ligature name goes to liga when it is on the handbook's list or has `.liga`, to dlig with `.dlig`, to hlig when it contains longs or has `.hlig` or `.hist`, to rlig with `.rlig` or on the lam-alef list, and to dlig otherwise, the first match winning in that order; Update on a font with f_f_i.dlig and longs_t would settle it.
   - Observe: In F1 (Latin features), press Update in Font Info › Features and copy the code of every entry it creates: compare each with FontCraft's generators and note the order in which the entries are added.
 - [ ] `autoFeature.languageSystems` (behavior, M8, inferred): Generated code is preceded by languagesystem statements for the scripts in the…
-  - Guess: Besides DFLT dflt, one `dflt` line per script of the font's exporting glyphs in script-tag order, then the locl languages of each script; Update on a font with Latin, Cyrillic and Greek glyphs would settle the order.
+  - Guess: Only the scripts the locl code names get lines, as in every corpus source (Andika Mini, with Latin glyphs and no locl, has the DFLT line alone); Update on a font with Latin, Cyrillic and Greek glyphs and no locl would settle it.
+  - Guess: With several scripts, each script's group follows a blank line, in the order locl first names the scripts; Update on a font with .loclBGR and .loclTRK glyphs would settle it.
+  - Guess: A language that locl names before any `script` statement gets a `languagesystem DFLT <language>;` line after the DFLT line.
   - Observe: In F1 (Latin features) plus a few Greek and Cyrillic letters, press Update in Font Info › Features: copy the Languagesystems prefix and note its script list and order.
 - [ ] `autoFeature.aalt` (behavior, M8, handbook): aalt (All Alternatives)
   - Guess: Generated as one `feature xxxx;` line per other feature with substitutions, in sidebar order, leaving the grouping to the compiler, as the corpus shows; cv features and features listed after aalt included.

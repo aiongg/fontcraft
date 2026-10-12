@@ -947,9 +947,12 @@ milestone = "M8"
 summary = "Update can create and refresh automatic classes; the handbook names All and uses @Uppercase in a cpsp example but does not list the full set. The list must be collected from the running application."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "inferred"
-notes = "The reference's stored output in the corpus has these automatic classes: Uppercase (8 sources), AllLetters (2), Lowercase (2) and All (2), each one line of glyph names in glyph order (M8 planning pass)."
+notes = "The reference's stored output in the corpus has these automatic classes: Uppercase (8 sources), AllLetters (2), Lowercase (2) and All (2), each one glyph name per line in glyph order (M8 planning pass). FontCraft writes the four in that form (M8.9); Uppercase equals the stored code in Oswald and Andika Mini 4. The Inter sources' classes are older than their glyph sets."
 guesses = [
-  "Update generates Uppercase, Lowercase and AllLetters when the font has such glyphs, and All only when added by hand; which other classes Update offers would be settled in the running app.",
+  "All four classes are optional: Update refreshes them when the font has them and never adds them, because Oswald has lowercase letters and no Lowercase class, and Markow and Oswald Italic have capitals and no Uppercase class; Update on a font with capitals and no classes would settle it.",
+  "Uppercase and Lowercase hold the letters whose subcategory is Uppercase or Lowercase, and a glyph without a subcategory takes it from its case; Inter's stored Lowercase also holds 11 small capitals that store the category Letter and nothing else, which this rule leaves out.",
+  "All leaves out .notdef and .null, as Inter's stored All does.",
+  "Which other classes Update offers would be settled in the running app.",
 ]
 
 # ----------------------------------------------------------------------------
@@ -983,7 +986,9 @@ ref = "Appendix › Automatic Feature Generation"
 status = "inferred"
 notes = "The reference's stored output in the corpus has an automatic prefix named Languagesystems in 14 sources: `languagesystem DFLT dflt;`, a blank line, `languagesystem latn dflt;` and one `languagesystem latn XXX;` line per language the locl feature uses (M8 planning pass)."
 guesses = [
-  "Besides DFLT dflt, one `dflt` line per script of the font's exporting glyphs in script-tag order, then the locl languages of each script; Update on a font with Latin, Cyrillic and Greek glyphs would settle the order.",
+  "Only the scripts the locl code names get lines, as in every corpus source (Andika Mini, with Latin glyphs and no locl, has the DFLT line alone); Update on a font with Latin, Cyrillic and Greek glyphs and no locl would settle it.",
+  "With several scripts, each script's group follows a blank line, in the order locl first names the scripts; Update on a font with .loclBGR and .loclTRK glyphs would settle it.",
+  "A language that locl names before any `script` statement gets a `languagesystem DFLT <language>;` line after the DFLT line.",
 ]
 observe = [
   "In F1 (Latin features) plus a few Greek and Cyrillic letters, press Update in Font Info › Features: copy the Languagesystems prefix and note its script list and order.",

@@ -276,7 +276,7 @@ Rules common to all suffix features (inferred unless the handbook is cited in th
 - Rules of one feature form one single-substitution lookup, written class-to-class when more than
   a few glyphs are involved.
 - Only exporting glyphs take part; the result is recomputed per instance.
-- Entries appear on `font.features.update`; cpsp and the class All only when added by hand.
+- Entries appear on `font.features.update`; cpsp and the automatic classes only when added by hand.
 
 † = the handbook gives only the trigger; the rule shape is our inference and must be checked
 against the reference's output.
@@ -355,7 +355,18 @@ against the reference's output.
 | `blwm` | Below-base Mark Positioning | Same anchor convention as mark, for glyphs of scripts that use blwm. | Built at export like mark and never listed in the Features tab; the split between mark, abvm and blwm is not documented. | no (implicit) |
 
 Automatic classes: the handbook names `All` and uses `@Uppercase` in an example; the full list is
-an open question (`autoClass.general`).
+an open question (`autoClass.general`). The corpus has `Uppercase`, `Lowercase`, `AllLetters` and
+`All`, one glyph name per line in glyph order; FontCraft writes those four.
+
+Languagesystems prefix (`autoFeature.languageSystems`): `languagesystem DFLT dflt;`, then for each
+script the `locl` code names, a blank line, the script's `dflt` line and one line per language,
+in the order `locl` names them. A font without `locl` gets the `DFLT` line alone.
+
+Update's merge rules: manual entries stay as they are; an automatic entry takes its regenerated
+code, or is removed when its glyphs are gone; a missing entry is added in the reference's feature
+order, unless it is optional (cpsp, the classes); aalt and the Languagesystems prefix are computed
+last, from the merged list. The measure against the reference's stored code is
+`crates/features/tests/corpus_auto.rs`.
 
 ## 9. Text tokens
 

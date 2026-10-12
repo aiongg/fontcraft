@@ -2310,7 +2310,12 @@ milestone = "M8"
 summary = "Regenerates every automatic prefix, class and feature in one step and adds entries that have become possible since the last run, for example liga after ligature glyphs with underscore names were added. Manual entries are left alone, and optional ones such as the All class or cpsp are never added by this command."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. Measured against the reference's stored code in the corpus (`crates/features/tests/corpus_auto.rs`, M8.9): 69 stored entries are equal; the differences are sources older than their glyph sets (Inter), forms of other reference versions (locl and ccmp before version 4, Oswald Heavy from version 2), hand-written fixtures, salt (which the handbook gives and no corpus source has), and 11 small capitals in Inter's Lowercase class (`autoClass.general`)."
+guesses = [
+  "An automatic entry whose generator no longer writes it (its glyphs are gone) is removed, as the handbook says automatic classes are at export; Update after deleting every .sc glyph would settle it.",
+  "A new feature goes before the first feature that sorts after it in this order, else last: aalt, ccmp, locl, the Indic features, subs, sinf, sups, numr, dnom, frac, afrc, ordn, lnum, pnum, tnum, onum, case, the positional forms, dlig, liga, hlig, rlig, c2sc, smcp, c2pc, pcap, hist, titl, swsh, ornm, salt, ss01 to ss20, cv01 to cv99, the width and kana features, vrt2, cpsp; aalt and the Languagesystems prefix go first. Oswald and Markow store their features in this order; Update on F1 (Latin features) would settle it.",
+  "salt is added beside ss01, as the handbook says, although none of the five corpus sources with an automatic ss01 has a salt feature; Update on a font with .ss01 glyphs would settle it.",
+]
 observe = [
   "In any font, look for a shortcut or menu item for Update in Font Info › Features: note both.",
 ]
@@ -2328,6 +2333,9 @@ summary = "Regenerates the code of a single automatic entry, as the update butto
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
+guesses = [
+  "An entry whose glyphs are gone keeps its place with empty code rather than being removed; pressing the entry's update button after deleting its glyphs would settle it.",
+]
 
 [[command]]
 id = "font.features.compile"
@@ -2548,7 +2556,7 @@ milestone = "M8"
 summary = "Some entries can be generated but are not added by Update, among them the All class and the cpsp feature; the user adds them by hand and may then leave them automatic."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. FontCraft treats the classes Uppercase, Lowercase and AllLetters as optional too (`autoClass.general`)."
 observe = [
   "In F1 (Latin features), add the class All by hand, then press Update: note All's content and whether Update keeps, refreshes or replaces it.",
 ]

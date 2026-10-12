@@ -196,7 +196,6 @@ fn feature_registry_queries_find_tags_and_their_specification() {
 
 /// Needs the automatic generators (the suffix features): `a.sc` calls for `smcp`.
 #[test]
-#[ignore = "M8.9: font.features.update needs the automatic feature framework (auto::update)"]
 fn feature_update_writes_automatic_entries_and_leaves_manual_ones() {
     let mut s = Session::with_document();
     s.edit("small caps", |font| {

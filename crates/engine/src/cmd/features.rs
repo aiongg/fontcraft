@@ -147,7 +147,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Update",
             [],
             None,
-            "{} regenerate every automatic prefix, class and feature and add the entries the glyph names now call for, in one undo step; manual entries stay as they are, and optional entries (the All class, cpsp) are only refreshed when present → {added: [{kind, name}], updated: [{kind, name}], notGenerated: [{name, reason}]}",
+            "{} regenerate every automatic prefix, class and feature, add the entries the glyph names now call for and remove automatic entries they no longer call for, in one undo step; manual entries stay as they are, and optional entries (the classes, cpsp) are only refreshed when present → {added: [{kind, name}], updated: [{kind, name}], removed: [{kind, name}], notGenerated: [{name, reason}]}",
             has_doc,
             update
         ),
@@ -725,6 +725,7 @@ fn update(s: &mut Session, raw: &Value) -> Result<Value> {
     Ok(json!({
         "added": pairs_json(&report.added),
         "updated": pairs_json(&report.updated),
+        "removed": pairs_json(&report.removed),
         "notGenerated": not_generated,
     }))
 }

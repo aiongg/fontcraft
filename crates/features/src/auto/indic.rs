@@ -147,7 +147,6 @@ pub(super) fn generators() -> Vec<&'static dyn Generator> {
 
 /// The Indic features Update does not write, with the reason, when `cx` has glyphs of a script
 /// with Indic shaping; none otherwise. [`super::update`] adds them to its report.
-#[allow(dead_code, reason = "called by Update's report, written with the automatic feature framework")]
 pub(super) fn not_generated(cx: &AutoContext) -> Vec<(String, String)> {
     if !cx.glyphs().iter().any(|g| parse(&g.name).is_some()) {
         return Vec::new();

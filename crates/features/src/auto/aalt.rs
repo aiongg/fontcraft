@@ -10,7 +10,7 @@
 //!
 //! The generator sees the entries before Update. It projects the list Update will write:
 //! automatic entries take their regenerated code, and features no entry has yet follow in
-//! generator order. Update can call [`code_for`] on its merged list instead.
+//! generator order. Update calls [`code_for`] on its merged list instead.
 
 use std::collections::HashSet;
 

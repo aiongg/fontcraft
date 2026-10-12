@@ -22,3 +22,6 @@ read-fonts.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 write-fonts.workspace = true
+
+[dev-dependencies]
+fontcraft-io-glyphs.workspace = true
