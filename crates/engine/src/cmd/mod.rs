@@ -133,7 +133,7 @@ mod drag_aids;
 mod encodings;
 pub mod export_profiles;
 mod expressions;
-mod external_changes;
+pub mod external_changes;
 mod file_helpers;
 mod find_outline;
 mod geometry_helpers;

@@ -3184,20 +3184,46 @@ summary = "Appears when another program has changed the files of an open source 
 ref = "RoboFont reference › External Changes window"
 status = "docs"
 origin = "robofont"
+notes = "Documented in the reference's public manual, not yet observed. The shell window lists the selected font's items under a heading per layer, then the glyphs' own data, added and removed glyphs, and font-level data; every item starts ticked; Accept Selected runs file.reviewExternalChanges with the ticked items."
+guesses = [
+  "Every item starts ticked, so Accept Selected with no change of the ticks takes everything; the reference's manual does not say which state the ticks start in, and opening the window there settles it.",
+  "The stored-text view on double-click shows the glyph in FontCraft's native JSON form rather than as a .glif file, since the comparison is between models; the reference shows the file text, and a file-per-glyph text view would follow it more closely.",
+]
 
 [[command]]
-id = "file.reviewExternalChanges"
+id = "dialog.externalChanges"
 label = "Review External Changes…"
 menu = ["File"]
 shortcut = ""
-kind = "engine"
-params = "{font?: fontRef, accept?: [{layer: id, glyph: name}] | 'all' | 'none'}"
+kind = "ui"
+params = "{font?: number, action?: 'review' | 'updateAll' | 'rejectAll' | 'acceptSelected' | 'showText' | 'close', glyph?: name}"
 area = "import-export"
 milestone = "M13"
-summary = "Lists what differs between the open document and its files on disk, by layer and glyph plus font-level data, and merges the accepted items into the open document as one undoable step. Without accept it only reports."
+summary = "Shows the External Changes window for the open documents whose files changed on disk; its actions answer the window as its buttons do."
 ref = "RoboFont reference › External Changes window"
 status = "docs"
 origin = "robofont"
+notes = "Our shell command for the dialog.externalChanges window, so the menu, shortcuts and agents can open and answer it; the work is file.reviewExternalChanges."
+
+[[command]]
+id = "file.reviewExternalChanges"
+label = "Review External Changes"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{font?: number | path, accept?: [{glyph: name, layer?: id, attributes?: bool} | {part: name}] | 'all' | 'none', glyph?: name}"
+area = "import-export"
+milestone = "M13"
+summary = "Lists what another program changed in an open document's files since the document last read or wrote them, by layer and glyph plus font-level data, and takes the accepted items into the open document as one undoable step. Without accept it only reports."
+ref = "RoboFont reference › External Changes window"
+status = "docs"
+origin = "robofont"
+notes = "Documented in the reference's public manual, not yet observed. The comparison is three-way by model equality (the document, the font as last read or written, the file), so the document's own unsaved edits are never offered as changes; items both sides changed are marked conflict. M12's source diff can replace the model comparison when it lands. A review that leaves nothing out refreshes the document's stamp, so file.save writes without asking; after a refusal file.save refuses until force: true. The menu item is dialog.externalChanges."
+guesses = [
+  "The document's own unsaved edits are kept and never listed, so Update All merges rather than reloads; the manual speaks of taking the incoming change, and a document with unsaved edits in the reference settles whether it keeps them.",
+  "Font-level data is grouped into nine parts (info, axes, masters, instances, kerning, features, groups, glyph order, other), each accepted whole; the manual mentions font-level data without saying how finely it is split.",
+  "Glyph data apart from the layers (code points, export, kerning groups, metadata) is one item per glyph, beside one item per changed layer; changing a glyph's code point in a UFO while it is open in the reference settles how it is listed.",
+]
 
 [[behavior]]
 id = "io.watchSourceOnDisk"
@@ -3207,6 +3233,12 @@ summary = "While a file-per-glyph source is open, the application watches it for
 ref = "RoboFont reference › External Changes window"
 status = "docs"
 origin = "robofont"
+notes = "Documented in the reference's public manual, not yet observed. The check compares each open document's stamp (file count, total size, newest modification time of its files) with the one it had when last read or written; it reads no file and runs only when the window regains focus. A change already asked about is not asked about again until the files change once more. The web app has no files and never prompts."
+guesses = [
+  "Every source with a file is watched, single-file sources (.glyphs, .fontcraft, .designspace) and compiled fonts included, not only file-per-glyph sources; the manual names UFOs only.",
+  "A file that is only touched (same content) refreshes the stamp without a prompt; touching an open UFO in the reference settles it.",
+  "A document whose file was deleted on disk raises no prompt; the next save writes the file again. Deleting an open UFO in the reference settles it.",
+]
 
 [[behavior]]
 id = "io.stableSourceSerialization"

@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub mod external_changes;
+
 use super::{Args, UiCommand};
 use crate::app::FontcraftApp;
 use crate::panels::Pending;
@@ -14,16 +16,23 @@ use crate::panels::Pending;
 /// This module's view and window state, kept in `UiState::panels`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
-pub struct ExtensionsState {}
+pub struct ExtensionsState {
+    /// The External Changes dialog (session only).
+    #[serde(skip)]
+    pub external: external_changes::ExternalChangesState,
+}
 
-pub const COMMANDS: &[UiCommand] = &[];
+pub const COMMANDS: &[UiCommand] = &[external_changes::COMMAND];
 
 pub fn run(app: &mut FontcraftApp, id: &str, args: &Args) -> Result<Value, String> {
+    if id == external_changes::COMMAND.0 {
+        return external_changes::run(app, args);
+    }
     let _ = (app, args);
     Err(format!("unknown command `{id}`"))
 }
 
 /// Draws this module's windows while they are open.
 pub fn show(app: &mut FontcraftApp, ui: &mut egui::Ui, pending: &mut Pending) {
-    let _ = (app, ui, pending);
+    external_changes::show(app, ui, pending);
 }

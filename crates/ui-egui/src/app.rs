@@ -286,6 +286,7 @@ impl FontcraftApp {
             self.themed = true;
         }
         self.follow_document();
+        shell::extensions::external_changes::on_focus(self, ui.ctx());
         tools_glue::sync(self);
         crate::dialogs::frame_keys(self, ui.ctx());
         // The tools take their keys first (the Edit View keys have a `when`); the rest go to
