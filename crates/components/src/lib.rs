@@ -13,8 +13,9 @@
 //! | [`compose`] | M6.3 | the parts of a glyph name, a new composite glyph |
 //! | [`recipe`] | M6.3 | recipe parsing and part roles |
 //! | [`default_anchors`] | M6.3 | the anchors Set Anchors adds |
+//! | [`auto_layer`], [`expressions`] | M13.16 | automatic layers, anchor expressions, the engine hook [`expressions::follow_changes`] |
 //!
-//! Who calls what: the engine runs [`metrics::realign`] after every font-changing command, inside
+//! Who calls what: the engine runs [`expressions::follow_changes`] (which ends in [`metrics::realign`]) after every font-changing command, inside
 //! the same undo step. Commands use [`align`], [`compose`], [`recipe`] and [`default_anchors`].
 //! The compiler reads [`propagate::effective_anchors_for_master`] and hands the result to the
 //! mark writer in `fontcraft-features` as plain data.
@@ -29,6 +30,7 @@ pub mod compose;
 pub mod construction;
 pub mod default_anchors;
 pub mod error;
+pub mod expressions;
 pub mod index;
 pub mod metrics;
 pub mod propagate;
@@ -43,6 +45,8 @@ pub use propagate::{AnchorCache, AnchorSource, EffectiveAnchor};
 
 #[cfg(test)]
 mod align_tests;
+#[cfg(test)]
+mod auto_layer_tests;
 #[cfg(test)]
 mod compose_tests;
 #[cfg(test)]

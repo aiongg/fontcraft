@@ -109,15 +109,16 @@ pub const JOURNAL_LIMIT: usize = 10_000;
 /// How deeply commands may call other commands.
 const MAX_DEPTH: u32 = 16;
 
-/// `new` with the composites that follow its changes since `old` re-aligned
-/// (`fontcraft_components::metrics::realign`), checked as every edit is; `None` when nothing
+/// `new` with the automatic layers, anchor expressions and composites that follow its changes
+/// since `old` brought up to date (`fontcraft_components::expressions::follow_changes`, which
+/// ends in `fontcraft_components::metrics::realign`), checked as every edit is; `None` when nothing
 /// moves. `what` names the command or interaction in the error. The glyphs re-aligned get
 /// `stamp` as their last change, as edited glyphs do.
 fn realigned(what: &str, old: &Arc<Font>, new: &Arc<Font>, stamp: Option<&str>) -> Result<Option<Arc<Font>>> {
     if Arc::ptr_eq(old, new) {
         return Ok(None);
     }
-    let mut next = fontcraft_components::metrics::realign(old, Font::clone(new))
+    let mut next = fontcraft_components::expressions::follow_changes(old, Font::clone(new))
         .map_err(|e| EngineError::Disabled(what.to_string(), format!("the composites that follow this change cannot be aligned: {e}")))?;
     if next.same_as(new) {
         return Ok(None);

@@ -428,7 +428,7 @@ impl<'a> Run<'a> {
         if comps.len() > MAX_LAYER_COMPONENTS {
             return Err(ComponentsError::LimitExceeded { what: "components on one layer", limit: MAX_LAYER_COMPONENTS });
         }
-        if comps.is_empty() || !self.enabled {
+        if comps.is_empty() || !self.enabled || crate::auto_layer::stops_anchor_inheritance(layer) {
             return Ok((own(), 0));
         }
         self.charge(layer.anchors.len())?;

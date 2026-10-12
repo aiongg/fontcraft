@@ -770,14 +770,21 @@ label = "Set Auto Layer Recipe"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, masters?: [id], recipe?: string, auto?: bool}"
+params = "{glyph?, glyphs?, masters?: [id], recipe?: string, auto?: bool}"
 area = "components"
 milestone = "M13"
 summary = "Marks a glyph layer as automatic and stores the recipe it is built from. An automatic layer is rebuilt whenever its sources change, and is created empty-but-pending when a component source does not exist yet so it fills in once that glyph is added. A companion action copies the recipe to all masters."
 ref = "FontLab 8 What's new › Build & assemble › Components, auto layers, mark attachment"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). FontCraft (M13.16): the recipe is a string in the layer's user data (`com.fontcraft.autoLayerRecipe`); after every font-changing command the engine rebuilds the automatic layers whose glyph changed or whose recipe names a glyph that was added or removed, and automatic alignment then places the components. Documented by the reference, not yet observed."
+guesses = [
+  "`masters` defaults to every master, which covers the reference's companion action that copies the recipe to all masters; seeing whether that action is a command of its own would settle it.",
+  "Without `recipe`, a glyph keeps the recipe one of its layers has, else takes the components its name decomposes into by Create Composite's rules; the reference's default recipe is not documented.",
+  "An automatic layer holds only the recipe's components: paths or components added by hand are replaced at the next rebuild; whether the reference lets one draw on an automatic layer would settle it.",
+  "A recipe whose components contain the glyph is refused, and a layer whose recipe becomes circular later stays empty.",
+  "Recipe parts are glyph names only, without placement suffixes such as `@anchor`.",
+]
 
 [[behavior]]
 id = "recipe.directives"
@@ -787,7 +794,11 @@ summary = "Recipe text accepts directives beside glyph names: a comment marker f
 ref = "FontLab 8 What's new › Build & assemble › Components, auto layers, mark attachment"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5)."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). FontCraft (M13.16): read by `fontcraft_components::auto_layer`; with `#?noanchors` anchor propagation gives the layer only its own anchors, so export, the mark feature and composites built on the glyph see no inherited anchors. Documented by the reference, not yet observed."
+guesses = [
+  "A recipe has one line of components; directives may follow it on that line or stand on lines of their own, several `#!` lines are joined with line breaks, and the note is written when the recipe is set, not at every rebuild.",
+  "An unknown `#?` keyword is refused, and `noanchors` is matched without regard to case; the reference's handling is not documented.",
+]
 
 [[command]]
 id = "component.setInstanceLocation"
@@ -810,14 +821,17 @@ label = "Remove Anchor Expressions"
 menu = ["Glyph", "Anchors"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id], anchors?: [name]}"
+params = "{glyph?, glyphs?, layers?: [id], anchors?: [name]}"
 area = "components"
 milestone = "M13"
 summary = "Replaces formula-driven anchor positions with their current numeric coordinates on the chosen glyphs, layers and anchor names."
 ref = "FontLab 8 What's new › Build & assemble › Anchors"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). FontCraft: deletes the expression keys from the anchors' user data and keeps their current positions (M13.16)."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). FontCraft: deletes the expression keys from the anchors' user data and keeps their current positions (M13.16). Documented by the reference, not yet observed."
+guesses = [
+  "Without `glyph` or `glyphs` it acts on every glyph, and locked glyphs are skipped and listed; the reference acts on the selection.",
+]
 
 [[behavior]]
 id = "anchor.positionExpressions"
@@ -827,10 +841,33 @@ summary = "An anchor's x and y may each be an expression instead of a number, re
 ref = "FontLab 7 manual › Using Expressions; FontLab 8 What's new › Build & assemble › Anchors"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Verified by the M13 planning pass against the FontLab 7 manual page Using Expressions, which gives the operators, the variables and examples but no formal grammar."
+notes = "Moved from M6 to M13 by the M6 planning pass: it comes from a secondary reference and goes beyond the primary one, as the M3 and M5 passes moved such rows (owner decision M3 § 7, question 3; M5 § 7, question 5). Verified by the M13 planning pass against the FontLab 7 manual page Using Expressions, which gives the operators, the variables and examples but no formal grammar. FontCraft (M13.16): grammar and limits in `fontcraft_geom::expr` (1,024 bytes, nesting 64, 10,000 steps, finite results), names and the engine hook in `fontcraft_components::expressions`, set with `anchor.setExpressions`. Documented by the reference, not yet observed."
 guesses = [
   "FontCraft's variable names are ascender, descender, xHeight, capHeight, baseline and width, plus `anchor:<name>.x`, `guide:<name>`, `zone:<name>` and `param:<name>` references; the reference's spellings (x_height, caps_height) are read as aliases. Nothing settles it in the primary reference, which has no anchor expressions.",
   "An expression that names something missing, divides by zero or gives a value that is not finite leaves the anchor where it was and is reported in the command's warnings; the reference's handling is not documented.",
+  "When expressions are worked out again after other commands, failures leave the anchors in place without a warning; `anchor.setExpressions` reports them.",
+  "Results are rounded to the font's grid, as typed anchor positions are.",
+  "An anchor with expressions that is moved by hand goes back to its expressions' values at once; removing the expressions frees it.",
+  "Anchors are worked out once per change, in layer order, so `anchor:NAME` sees the new position of an anchor before it and the old position of one after it.",
+  "`guide:NAME` is the y of a horizontal guide and the x of a vertical one (`.x` and `.y` pick either), looked up on the layer and then on the master; `zone:NAME` is a master metric by name, then by kind; `param:NAME` is a master number value, then a numeric font custom parameter.",
+]
+
+[[command]]
+id = "anchor.setExpressions"
+label = "Set Anchor Expressions"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph, layer?: id, anchor: name, x?: string | null, y?: string | null}"
+area = "components"
+milestone = "M13"
+summary = "Stores expressions for an anchor's x and y position and moves the anchor to their values; the anchor then follows them after every later change. An empty string or null removes one coordinate's expression."
+ref = "FontLab 7 manual › Using Expressions"
+status = "docs"
+origin = "fontlab"
+notes = "FontCraft's command for what `anchor.positionExpressions` describes (M13.16). Documented by the reference, not yet observed."
+guesses = [
+  "Expressions are set by a command of their own, where the reference types them into the anchor's coordinate fields; a syntax error refuses the command.",
 ]
 
 # =====================================================================================================
