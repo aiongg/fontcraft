@@ -348,6 +348,7 @@ fn few_composites_counts_outlines_as_the_reference_check_does() {
     assert!(binary(&bytes, "check.components.fewComposites", &config).findings.is_empty());
 
     let mut tables = outlines(&[Tt::Empty, Tt::Simple, Tt::Composite(vec![1]), Tt::Composite(vec![1])]);
-    tables.push(post(&[".notdef", "b", "c", "d"]));
+    // Names of more than one character, so every simple glyph counts: exactly half is not reported.
+    tables.push(post(&[".notdef", "b.alt", "c.comp", "d.comp"]));
     assert!(binary(&sfnt(tables), "check.components.fewComposites", &Config::default()).findings.is_empty(), "2 of 4 is not more than half");
 }

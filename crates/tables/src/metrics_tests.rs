@@ -113,9 +113,9 @@ fn font_report_metrics_measures_compiled_fonts() {
         assert_eq!((a.unicode, a.advance, a.bounds), (Some(0x41), 620.0, Some([60.0, 0.0, 560.0, 700.0])));
         assert_eq!((a.left_side_bearing, a.right_side_bearing), (60.0, 60.0));
         close(a.area.unwrap(), sign * 350_000.0, "the area's sign follows the contour direction");
+        // Exact up to rounding: the shared tolerance is relative, too loose at these magnitudes.
         let [cx, cy] = a.centroid.unwrap();
-        close(cx, 310.0, "centroid x");
-        close(cy, 350.0, "centroid y");
+        assert!((cx - 310.0).abs() < 1e-6 && (cy - 350.0).abs() < 1e-6, "centroid ({cx}, {cy})");
         let c = r.glyphs.iter().find(|g| g.name == "C").unwrap();
         assert_eq!(c.bounds, Some([70.0, 20.0, 570.0, 720.0]), "the component is placed");
         let space = r.glyphs.iter().find(|g| g.name == "space").unwrap();

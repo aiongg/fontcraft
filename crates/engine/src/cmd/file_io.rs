@@ -167,26 +167,61 @@ pub fn output_path(input: &Path, req: &OutputRequest, suffix: &str, extension: O
 }
 
 /// Writes `bytes` to `path` atomically, creating `outputDir` when it is missing. With
-/// `noClobber`, an existing file is refused and left alone.
+/// `noClobber`, an existing file is refused and left alone. When the write fails, the folders
+/// this call created are removed again.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_output(path: &Path, bytes: &[u8], req: &OutputRequest) -> Result<()> {
     if req.no_clobber && !req.in_place && path.exists() {
         return Err(EngineError::Io(format!("{} exists and noClobber is set", path.display())));
     }
-    if let Some(dir) = &req.output_dir
-        && !req.in_place
-        && !dir.as_os_str().is_empty()
-    {
-        std::fs::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))?;
+    let created = create_output_dir(req)?;
+    let written = fontcraft_format::write_atomic(path, bytes);
+    if written.is_err() {
+        remove_created(&created);
     }
-    fontcraft_format::write_atomic(path, bytes)?;
+    written?;
     Ok(())
+}
+
+/// Creates the request's `outputDir` when it is missing. Answers the folders this call created,
+/// deepest first, for [`remove_created`].
+#[cfg(not(target_arch = "wasm32"))]
+pub fn create_output_dir(req: &OutputRequest) -> Result<Vec<PathBuf>> {
+    let Some(dir) = &req.output_dir else { return Ok(Vec::new()) };
+    if req.in_place || dir.as_os_str().is_empty() {
+        return Ok(Vec::new());
+    }
+    let missing: Vec<PathBuf> = dir.ancestors().take_while(|a| !a.as_os_str().is_empty() && !a.exists()).map(Path::to_path_buf).collect();
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        remove_created(&missing);
+        return Err(EngineError::Io(format!("cannot create {}: {e}", dir.display())));
+    }
+    Ok(missing)
+}
+
+/// Removes the folders [`create_output_dir`] created, deepest first, stopping at the first that
+/// is not empty or cannot be removed.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn remove_created(dirs: &[PathBuf]) {
+    for dir in dirs {
+        if std::fs::remove_dir(dir).is_err() {
+            break;
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
 pub fn write_output(_: &Path, _: &[u8], _: &OutputRequest) -> Result<()> {
     Err(refused())
 }
+
+#[cfg(target_arch = "wasm32")]
+pub fn create_output_dir(_: &OutputRequest) -> Result<Vec<PathBuf>> {
+    Err(refused())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn remove_created(_: &[PathBuf]) {}
 
 #[cfg(target_arch = "wasm32")]
 fn refused() -> EngineError {
@@ -218,6 +253,14 @@ mod tests {
         assert_eq!(std::fs::read(&target).unwrap(), b"old", "a refused write changes nothing");
         write_output(&target, b"new", &OutputRequest::default()).unwrap();
         assert_eq!(std::fs::read(&target).unwrap(), b"new");
+
+        // A write that fails removes the output folders it created, and only those.
+        let made = tmp.join("made");
+        let req = OutputRequest { output_dir: Some(made.join("deeper")), ..OutputRequest::default() };
+        let blocked = made.join("deeper").join("missing").join("C.ttf");
+        assert!(write_output(&blocked, b"x", &req).is_err());
+        assert!(!made.exists(), "the folders the failed write created are gone");
+        assert!(tmp.exists());
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

@@ -333,11 +333,20 @@ Font 1: FontBold.ttf
             assert_eq!(a.tables.keys().collect::<Vec<_>>(), b.tables.keys().collect::<Vec<_>>());
             assert_eq!(a.get(*b"name"), b.get(*b"name"));
         }
-        // A single font lists as one member and unpacks to itself (the write sets head's
-        // checksum adjustment, so the file is the reference, not the input tables).
+        // A single font lists as one member and unpacks to its own tables; the write sets head's
+        // checksum adjustment (bytes 8 to 11), so that field is left out of the comparison.
         let single = crate::sfnt::write(&input[0], &crate::sfnt::WriteOptions::default()).unwrap();
         assert_eq!(list(&single).unwrap().len(), 1);
-        assert_eq!(unpack(&single).unwrap(), vec![crate::sfnt::read(&single, 0).unwrap()]);
+        let unpacked = unpack(&single).unwrap();
+        assert_eq!(unpacked.len(), 1);
+        let masked = |font: &crate::sfnt::SfntFont| {
+            let mut tables = font.tables.clone();
+            if let Some(adjustment) = tables.get_mut(b"head").and_then(|h| h.get_mut(8..12)) {
+                adjustment.fill(0);
+            }
+            tables
+        };
+        assert_eq!(masked(&unpacked[0]), masked(&input[0]));
     }
 
     #[test]

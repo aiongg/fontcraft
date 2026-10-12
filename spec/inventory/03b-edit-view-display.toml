@@ -1993,6 +1993,7 @@ ref = "Edit View › Images › Adding Images"
 status = "handbook"
 notes = "Documented, not yet observed. With `glyphs`, one file goes on each named glyph; without, every file is matched by name, so one file with no glyph named works like a batch of one. A relative path in `files` is relative to the document's folder (to the working directory for a document never saved). The whole call is one undo step, and a file that cannot be read, is not an image or would replace a locked image refuses it."
 guesses = [
+  "A stored image path that starts with two separators (`//host/share`, `\\\\host\\share`) is refused on every platform, not only on Windows: a document comes from anywhere, and on other systems such a path is either a network share or one whose meaning the system decides. Settled by opening, in the reference app on a Mac, a file whose image path starts with `//`.",
   "Two files that name the same glyph (A.png and A.jpg) refuse the call instead of one winning. Settled by Add Image with both files in the reference.",
   "A layer holds one placed image, as the version 3 format stores one: Add Image on a layer that has an image replaces it. Image shapes of the version 4 format are read, drawn and written back but not created. Settled by adding a second image to a glyph in the reference and reading the saved file.",
 ]

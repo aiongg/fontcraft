@@ -282,8 +282,10 @@ pub(super) fn resolved(path: &Path) -> PathBuf {
 }
 
 /// Writes every file, in order. When one fails, the files this call created before it are
-/// removed again, and the error says so and names the files it had replaced.
+/// removed again, as are the output folders it created, and the error says so and names the
+/// files it had replaced.
 pub(super) fn write_all(files: &[(&Path, &[u8])], req: &OutputRequest) -> Result<()> {
+    let created = file_io::create_output_dir(req)?;
     let mut written: Vec<(&Path, bool)> = Vec::with_capacity(files.len());
     for &(target, bytes) in files {
         let existed = target.exists();
@@ -306,6 +308,7 @@ pub(super) fn write_all(files: &[(&Path, &[u8])], req: &OutputRequest) -> Result
             if !kept.is_empty() {
                 message.push_str(&format!("; these were written and remain: {}", kept.join(", ")));
             }
+            file_io::remove_created(&created);
             return Err(EngineError::Io(message));
         }
         written.push((target, existed));

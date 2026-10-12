@@ -156,6 +156,12 @@ add formats (`open.compiledFormats`).
   glyph, and glyph pairs are added wherever the group pairs would not give the compiled value, so
   every covered pair keeps it. Limits: 2,000,000 covered pairs; a class table over 1,000,000
   class pairs is skipped with a warning.
+- Variable fonts (TrueType and CFF2) open into axes, masters and intermediate layers. Limits:
+  1,024 masters and intermediate locations; 2,000,000 added layers (glyphs times the masters
+  other than the default, plus intermediate layers); 20,000,000 nodes and components; and
+  500,000,000 delta applications (points times tuples). A font over any of them opens as its
+  default instance, with a warning that gives the reason. Every region of a CFF2 font becomes a master, so a CFF2 font with
+  65,535 glyphs keeps its variations only with at most 30 regions.
 - PostScript hints: glyph-level stem hints (mostly), alignment zones and standard stems are
   kept. Glyph hints arrive detached from nodes; for multi-master work each hint's two handles
   (blue circle, blue triangle) are dragged onto fitting nodes (`open.postscriptHintsPreserved`).
