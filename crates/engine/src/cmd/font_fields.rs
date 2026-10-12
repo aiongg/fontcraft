@@ -88,7 +88,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste Rows",
             [],
             None,
-            "{scope: 'font'|'master'|'instance', targets?: [id|name|index] (required below the font), rows?: [row] | {fontcraftRows, rows}, text?: string (either clipboard form), mode?: 'replace'|'append'|'skip' (default replace)} paste rows into each target as one undo step. replace: a field or a parameter the target has takes the pasted value, except a parameter that may repeat, which is appended; append: parameters are added after the others; skip: rows the target already has are left out. A field cannot repeat, so append replaces it. A row the scope does not allow is skipped and listed; a value that fails its check refuses the whole paste → {added, replaced, skipped: [{target?, key, reason}]}",
+            "{scope: 'font'|'master'|'instance', targets?: [id|name|index] (required below the font), rows?: [row] | {fontcraftRows, rows}, text?: string (either clipboard form), mode?: 'replace'|'append'|'skip' (default replace)} paste rows into each target as one undo step. replace: a field or a parameter the target has takes the pasted value, except a parameter that may repeat, which is appended; append: parameters are added after the others; skip: rows the target already has are left out. A field cannot repeat, so append replaces it. A parameter matches the target's row under any spelling of it; a name parameter (designers, familyNames…) is written as the name property, as font.customParameters.add does. A row the scope does not allow is skipped and listed; a value that fails its check refuses the whole paste → {added, replaced, skipped: [{target?, key, reason}]}",
             has_doc,
             paste_rows
         ),
