@@ -40,6 +40,7 @@ notes = "Documented, not yet observed. The list of components comes from the gly
 guesses = [
   "The components are the full Unicode canonical decomposition of the glyph's code point, each code point mapped to its glyph name through the glyph database (U+0301 to acutecomb), suffixes carried over and the preferred-mark rules applied, plus our own table for glyphs Unicode does not decompose (i, j and ligatures by their name parts); the composites stored in corpus files saved by the reference app measure it (M6 plan § 5).",
   "A glyph the database cannot decompose, or one whose parts are missing from the font, is refused with a message naming the missing parts and nothing changes; running it on such a glyph in the reference app settles it.",
+  "The hints that pointed at nodes of the replaced shapes (stems, corner and cap components) are removed with them, and hints without node references stay; running it on a glyph with corner components in the reference app settles it.",
   "Create Composite keeps the layer's anchors and the glyph's metrics keys; the reference app settles it.",
 ]
 

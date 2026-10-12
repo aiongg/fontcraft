@@ -374,6 +374,7 @@ fn run_create_composite(s: &mut Session, v: &Value, id: &'static str, all: Optio
                         Some(layer) => {
                             layer.shapes = new.shapes.clone();
                             layer.width = new.width;
+                            drop_shape_hints(layer);
                         }
                         None => g.layers.push(new.clone()),
                     }
@@ -384,12 +385,23 @@ fn run_create_composite(s: &mut Session, v: &Value, id: &'static str, all: Optio
                 let new = composite.layer(&layer.master).ok_or_else(|| p.bad(format!("`{name}` has no composite for master `{}`", layer.master)))?;
                 layer.shapes = new.shapes.clone();
                 layer.width = new.width;
+                drop_shape_hints(layer);
             }
         }
         Ok(())
     })?;
     let out: Vec<Value> = built.iter().map(|(name, parts, _)| json!({"glyph": name, "components": parts})).collect();
     Ok(json!({ "glyphs": out }))
+}
+
+/// Drops the hints that point at nodes of the shapes a layer had: its shapes were all replaced.
+/// Hints without node references stay.
+fn drop_shape_hints(layer: &mut Layer) {
+    if layer.info.hints.is_empty() {
+        return;
+    }
+    let hints: Vec<_> = layer.info.hints.iter().filter_map(|h| super::decompose::remap_hint(h, &|_| None)).collect();
+    layer.info.hints = hints;
 }
 
 // ── Add Component ───────────────────────────────────────────────────────────────────────────────
@@ -841,13 +853,15 @@ fn set_components(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let r = t.resolve(&font)?;
     let layer_id = r.layer.id.clone();
-    let result = s.edit("Edit Components List", |f| t.edit_layer(f, |layer| Ok(match_components(layer, &wanted))))?;
+    let result = s.edit("Edit Components List", |f| t.edit_layer(f, |layer| match_components(layer, &wanted).map_err(|m| p.bad(m))))?;
     Ok(json!({ "glyph": t.glyph, "layer": layer_id, "components": result }))
 }
 
 /// Makes the components of `layer` match `wanted` by count per name: extra components of a name
-/// go from the end, missing ones are appended in the list's order. The component names after.
-fn match_components(layer: &mut Layer, wanted: &[String]) -> Vec<String> {
+/// go from the end, missing ones are appended in the list's order. The layer's hints follow their
+/// shapes to their new places; a hint on a removed component goes with it. A locked component
+/// that would go refuses the change. The component names after.
+fn match_components(layer: &mut Layer, wanted: &[String]) -> std::result::Result<Vec<String>, String> {
     let mut want: HashMap<&str, usize> = HashMap::new();
     for n in wanted {
         *want.entry(n.as_str()).or_default() += 1;
@@ -872,6 +886,33 @@ fn match_components(layer: &mut Layer, wanted: &[String]) -> Vec<String> {
             }
         }
     }
+    let locked: Vec<String> = layer
+        .shapes
+        .iter()
+        .zip(&keep)
+        .filter_map(|(s, k)| match s {
+            Shape::Component(c) if !k && c.info.locked => Some(format!("`{}`", c.glyph)),
+            _ => None,
+        })
+        .collect();
+    if !locked.is_empty() {
+        return Err(format!("the locked components {} would be removed: unlock them first", locked.join(", ")));
+    }
+    // The new index of every old shape; `None` for a removed one.
+    let map: Vec<Option<usize>> = keep
+        .iter()
+        .scan(0usize, |next, &k| {
+            let at = k.then_some(*next);
+            *next += usize::from(k);
+            Some(at)
+        })
+        .collect();
+    if !layer.info.hints.is_empty() && map.iter().any(Option::is_none) {
+        // A reference past the old shapes pointed at nothing before and is left as it is.
+        let to = |i: usize| map.get(i).map_or(Some(i), |m| *m);
+        let hints: Vec<_> = layer.info.hints.iter().filter_map(|h| super::decompose::remap_hint(h, &to)).collect();
+        layer.info.hints = hints;
+    }
     let mut flags = keep.into_iter();
     layer.shapes.retain(|_| flags.next().unwrap_or(true));
     let mut seen: HashMap<&str, usize> = HashMap::new();
@@ -882,14 +923,14 @@ fn match_components(layer: &mut Layer, wanted: &[String]) -> Vec<String> {
             layer.shapes.push(Shape::Component(Component::new(n.as_str(), 0.0, 0.0)));
         }
     }
-    layer
+    Ok(layer
         .shapes
         .iter()
         .filter_map(|s| match s {
             Shape::Component(c) => Some(c.glyph.clone()),
             _ => None,
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
@@ -1176,5 +1217,37 @@ mod tests {
         assert_eq!(out["components"], json!(["A"]));
         refused(&mut s, "glyph.setComponents", json!({"glyph": "Acomp", "components": ["nosuchglyph"]}));
         refused(&mut s, "glyph.setComponents", json!({"glyph": "A", "components": ["Acomp"]}));
+    }
+
+    /// Hints follow their shapes when components before them go; a locked component is never
+    /// removed silently.
+    #[test]
+    fn set_components_renumbers_hints_and_refuses_to_remove_a_locked_component() {
+        use fontcraft_model::corner::{self, CornerHint, CornerTarget};
+        let mut s = session();
+        s.edit("path and hint", |f| {
+            let mut g = f.glyph_mut("Acomp")?;
+            let l = &mut g.layers[0];
+            l.shapes.insert(1, Shape::Path(Path::rect(0.0, -100.0, 10.0, -90.0)));
+            l.info.hints = vec![CornerHint::new("_corner.one", 1, 0).to_hint()];
+            Ok(())
+        })
+        .unwrap();
+        run(&mut s, "glyph.setComponents", json!({"glyph": "Acomp", "components": ["acutecomb"]}));
+        let l = layer(&s, "Acomp");
+        assert!(matches!(l.shapes[0], Shape::Path(_)), "{:?}", l.shapes);
+        let hint = corner::corner_hint(&l.info.hints[0]).unwrap().unwrap();
+        assert!(matches!(hint.target, CornerTarget::Node { shape: 0, .. }), "the hint follows its path to index 0: {:?}", hint.target);
+
+        s.edit("lock", |f| {
+            let mut g = f.glyph_mut("Acomp")?;
+            if let Some(Shape::Component(c)) = g.layers[0].shapes.get_mut(1) {
+                c.info.locked = true;
+            }
+            Ok(())
+        })
+        .unwrap();
+        let e = refused(&mut s, "glyph.setComponents", json!({"glyph": "Acomp", "components": ["A"]}));
+        assert!(e.contains("locked") && e.contains("acutecomb"), "{e}");
     }
 }
