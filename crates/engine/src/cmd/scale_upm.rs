@@ -1,6 +1,11 @@
 //! `font.info.scaleToUnitsPerEm`: the whole font scaled to a new units-per-em through
 //! `fontcraft_fontinfo::scale`, one undo step. Typing a new value with `font.info.set` changes
 //! the units per em alone; the two together make the resize trick (`fontInfo.unitsPerEm.resizeTrick`).
+//!
+//! Glyphs linked by an Import Font parameter are locked (`crate::linked`), and a locked glyph's
+//! drawing cannot change, so scaling a font that has any is refused, naming the glyph. The same
+//! holds for adding, duplicating and removing masters, which add or take layers of every glyph.
+//! Removing the Import Font parameter, or unlocking the linked glyphs, lifts the refusal.
 
 use fontcraft_model::UPM_RANGE;
 use serde_json::{Value, json};

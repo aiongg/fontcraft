@@ -23,6 +23,9 @@
 //!   axis values matched by axis tag (else name), its metric, stem and number values matched by
 //!   definition; the master's layers of every glyph the font has; its kerning.
 //!
+//! Outlines and metrics are taken as the file holds them: a file with other units per em than the
+//! font is not scaled, and a warning says so.
+//!
 //! Marks: [`fontcraft_model::fc_keys::LINKED_SOURCE`] in the user data of each linked glyph and
 //! master, holding the parameter's path. A layer belongs to a linked master by its master id.
 //!
@@ -70,6 +73,7 @@ pub(crate) fn resolve(font: &Font, path: Option<&Path>, warnings: &mut Vec<Strin
             continue;
         };
         if let Some(linked) = files.read(IMPORT_FONT, rel, path, warnings) {
+            check_upm(&out, &linked, IMPORT_FONT, rel, warnings);
             link_glyphs(&mut out, &linked, rel, warnings);
         }
     }
@@ -82,6 +86,7 @@ pub(crate) fn resolve(font: &Font, path: Option<&Path>, warnings: &mut Vec<Strin
             continue;
         };
         if let Some(linked) = files.read(IMPORT_MASTER, rel, path, warnings) {
+            check_upm(&out, &linked, IMPORT_MASTER, rel, warnings);
             link_master(&mut out, &linked, which, rel, warnings);
         }
     }
@@ -259,6 +264,16 @@ fn moved(layer: &Layer, from: &str, to: &str) -> Layer {
     l
 }
 
+/// Warns when `linked` has other units per em than `font`: its values are taken unscaled.
+fn check_upm(font: &Font, linked: &Font, param: &str, source: &str, warnings: &mut Vec<String>) {
+    if linked.units_per_em != font.units_per_em {
+        warnings.push(format!(
+            "{param} `{source}`: the file has {} units per em and the font {}; its outlines and metrics are used unscaled",
+            linked.units_per_em, font.units_per_em
+        ));
+    }
+}
+
 /// Import Font: the glyphs of `linked` the font lacks, appended, locked and marked.
 fn link_glyphs(font: &mut Font, linked: &Font, source: &str, warnings: &mut Vec<String>) {
     let map = master_map(font, linked);
@@ -428,6 +443,18 @@ mod tests {
         host.check().unwrap();
         let saved = unlinked(&host);
         assert_eq!(*saved, before, "saving writes the host as it was");
+    }
+
+    #[test]
+    fn a_file_with_other_units_per_em_is_used_unscaled_with_a_warning() {
+        let host = font_with(&["A"]);
+        let mut other = font_with(&["A", "B"]);
+        let mut warnings = Vec::new();
+        check_upm(&host, &other, IMPORT_FONT, "Other.glyphs", &mut warnings);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        other.units_per_em = 2048;
+        check_upm(&host, &other, IMPORT_FONT, "Other.glyphs", &mut warnings);
+        assert!(warnings.iter().any(|w| w.contains("2048") && w.contains("unscaled")), "{warnings:?}");
     }
 
     #[test]
