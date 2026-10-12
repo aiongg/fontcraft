@@ -27,11 +27,20 @@ const A_COUNTER: [(f64, f64); 3] = [(220.0, 200.0), (300.0, 500.0), (380.0, 200.
 const ACUTE: [(f64, f64); 4] = [(-50.0, 520.0), (50.0, 520.0), (90.0, 620.0), (10.0, 620.0)];
 const PAREN: [(f64, f64); 6] = [(100.0, -100.0), (200.0, -100.0), (150.0, 300.0), (220.0, 700.0), (120.0, 700.0), (50.0, 300.0)];
 
+/// A detected component: placed at (`x`, `y`) with automatic alignment off.
+fn placed(glyph: &str, x: f64, y: f64) -> Component {
+    let mut c = Component::new(glyph, x, y);
+    c.info.alignment = fontcraft_engine::model::Alignment::Disabled;
+    c
+}
+
 fn add_glyph(f: &mut Font, name: &str, shapes: Vec<Shape>) {
     let mut l = Layer::new("m01", 600.0);
     l.shapes = shapes;
     let mut g = Glyph::new(name);
     g.layers.push(l);
+    // A new document seeds `B` and other basic glyphs; the fixture replaces them.
+    f.glyphs.remove(name);
     f.glyphs.push(g);
 }
 
@@ -64,10 +73,7 @@ fn detect_composites_rebuilds_a_flattened_accented_glyph_from_its_bases() {
     assert_eq!(r["components"], json!(2));
     assert_eq!(r["stopped"], Value::Null);
     let f = s.font().unwrap();
-    assert_eq!(
-        layer(f, "Aacute").shapes,
-        vec![Shape::Component(Component::new("A", 0.0, 0.0)), Shape::Component(Component::new("acutecomb", 300.0, 200.0))]
-    );
+    assert_eq!(layer(f, "Aacute").shapes, vec![Shape::Component(placed("A", 0.0, 0.0)), Shape::Component(placed("acutecomb", 300.0, 200.0))]);
     assert_eq!(layer(f, "A").shapes.len(), 2, "a base keeps its paths");
     run(&mut s, "edit.undo", json!({}));
     assert_eq!(layer(s.font().unwrap(), "Aacute").shapes.len(), 3, "one undo step gives the paths back");
@@ -105,7 +111,7 @@ fn detect_component_replaces_the_chosen_paths_with_the_glyph_they_repeat() {
     assert_eq!(r["component"], json!("acutecomb"));
     assert_eq!(r["selection"]["shapes"], json!([0]));
     let shapes = &layer(s.font().unwrap(), "B").shapes;
-    assert_eq!(shapes[0], Shape::Component(Component::new("acutecomb", 100.0, 0.0)));
+    assert_eq!(shapes[0], Shape::Component(placed("acutecomb", 100.0, 0.0)));
     assert!(matches!(shapes[1], Shape::Path(_)), "the other path stays");
     assert_eq!(shapes.len(), 2);
 }

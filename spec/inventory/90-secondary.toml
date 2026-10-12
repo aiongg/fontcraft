@@ -858,6 +858,7 @@ guesses = [
   "Bases are tried from the most nodes down, a base must have fewer nodes than the target or as many and come earlier in the glyph order (no cycles), and among bases of equal size one whose name (without suffix and 'comb') appears in the target's name goes first; comparing the reference app's choice between identical outlines (period and dotaccentcomb) would settle it.",
   "Without `layer` or `layers` every master layer is searched, each on its own, and a glyph whose masters got different components is warned about; the reference app's behaviour on a multi-master font would settle it.",
   "A mirrored match is a mirrored copy drawn in the opposite direction, as a mirrored component draws once decomposed; the offset is rounded to the font's grid when the match still holds.",
+  "Detected components have automatic alignment turned off so they stay where the outline was; checking the alignment setting of a component the reference app detected would settle it.",
 ]
 
 [[command]]

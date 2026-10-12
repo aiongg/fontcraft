@@ -186,10 +186,11 @@ fn rounded(m: &Match, pattern: &[Contour], target: &[Contour], grid: f64, tol: f
 }
 
 /// A component of `glyph` placed by `affine`: a plain offset, an offset with a mirroring scale,
-/// or a matrix.
+/// or a matrix. Automatic alignment is off, so the component stays where the outline was.
 fn component(glyph: &str, affine: Affine) -> Component {
     let [a, b, c, d, e, f] = affine.as_coeffs();
     let mut out = Component::new(glyph, e, f);
+    out.info.alignment = fontcraft_model::Alignment::Disabled;
     if (a, b, c, d) != (1.0, 0.0, 0.0, 1.0) {
         out.transform = if b == 0.0 && c == 0.0 && a.abs() == 1.0 && d.abs() == 1.0 {
             Transform::Decomposed { pos: (e, f), scale: (a, d), angle: 0.0, slant: (0.0, 0.0) }
