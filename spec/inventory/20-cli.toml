@@ -2059,13 +2059,14 @@ own = true
 
 [[cli]]
 id = "mcp"
-usage = "fontcraft-cli mcp [--connect ADDR | --headless] [--transport stdio|http] [--listen ADDR] [--root DIR]... [--read-only] [--allow PATTERN]... [--deny PATTERN]..."
+usage = "fontcraft-cli mcp [--connect ADDR | --headless] [--transport stdio|http] [--listen ADDR] [--automation-read-root DIR] [--automation-write-root DIR] [--read-only] [--allow PATTERN]... [--deny PATTERN]..."
 options = [
   "--connect ADDR: attach to a running app's control port, so tool calls show in its window (default: try 127.0.0.1:7985, then fall back to headless)",
   "--headless: an engine session inside this process, starting with a new font",
   "--transport stdio|http: speak over standard input and output (default) or serve HTTP",
   "--listen ADDR: address and port for the HTTP transport; default loopback only",
-  "--root DIR: folder the server may read and write; repeatable; default the working directory",
+  "--automation-read-root DIR: every file a command reads must lie inside DIR; given once; implies --headless",
+  "--automation-write-root DIR: every file a command writes must lie inside DIR; given once; implies --headless",
   "--read-only: expose only commands that do not modify documents or files",
   "--allow PATTERN, --deny PATTERN: restrict the exposed commands by id pattern; repeatable",
   "[global options]: -o/--output, --output-dir, --in-place, --no-clobber, --face, --json, -q/--quiet, -v/--verbose, --log, --log-file, --color, -j/--jobs, --timing, --trace, --backtrace, --options, --save-options, --dry-run, --timestamp, @FILE, -h/--help, --version (behavior rows cli.global.*)",
@@ -2077,10 +2078,11 @@ milestone = "M13"
 summary = "Runs a Model Context Protocol server that exposes the command registry as tools, one tool per engine command with its parameter schema, plus resources for open documents. Agents then drive FontCraft headless exactly as the CLI does."
 ref = "brief.md › MCP server dispatches the same commands"
 status = "inferred"
-notes = "Built: stdio transport, `--connect` and `--headless`; tools list_commands, run_command and inspect_document; `--read-only`, `--allow` and `--deny` command patterns and `--root` folders for file parameters (docs/mcp.md, Permissions); logging/setLevel with notifications/message; five workflow prompts; resources for the document, glyphs, commands, custom parameters and features; completion/complete for glyph names, command ids, parameter names, feature tags and master names. Still to come (docs/plans/M13.md, M13.12): the HTTP transport with `--listen`. The summary's one tool per command is not how it works: run_command reaches every command, and list_commands describes them."
+notes = "Built: stdio transport, `--connect` and `--headless`; tools list_commands, run_command and inspect_document; `--read-only`, `--allow` and `--deny` command patterns; `--automation-read-root` and `--automation-write-root`, which the engine enforces on every command's declared file parameters, the places commands use without a parameter and the files a document links to (a link outside the read root is a missing file); the desktop app takes the same flags and FONTCRAFT_AUTOMATION_READ_ROOT / FONTCRAFT_AUTOMATION_WRITE_ROOT for its control channel (docs/mcp.md, Permissions; docs/control-protocol.md); logging/setLevel with notifications/message; five workflow prompts; resources for the document, glyphs, commands, custom parameters and features; completion/complete for glyph names, command ids, parameter names, feature tags and master names. Still to come (docs/plans/M13.md, M13.12): the HTTP transport with `--listen`. The summary's one tool per command is not how it works: run_command reaches every command, and list_commands describes them."
 guesses = [
-  "`--read-only` admits only commands that declare themselves queries; `--allow` and `--deny` take shell-style patterns over command ids, deny winning; `--root` refuses any file parameter outside the named folders. No reference has such options; settled by the sibling apps' conventions.",
-  "File parameters are recognised by name (path, file, files, folder, destination, font, input, output, outputDir and their plurals) at any depth, and macro, recent-document and URL commands are refused under any restriction because their files and steps are not in their parameters; a per-command declaration of file parameters in the registry would settle it more precisely.",
+  "`--read-only` admits only commands that declare themselves queries; `--allow` and `--deny` take shell-style patterns over command ids, deny winning. No reference has such options; settled by the sibling apps' conventions.",
+  "File access is unrestricted by default; `--automation-read-root` and `--automation-write-root` each take one folder, grant read and write access separately, and are an error with `--connect`. No reference has such options; settled by the sibling apps' conventions.",
+  "Macro, recent-document and URL commands are refused while a root, `--read-only`, `--allow` or `--deny` is set, because their files and steps are not in their parameters; agents' needs would settle whether a checked macro runner is worth building.",
   "No log notifications are sent until the client calls logging/setLevel; the protocol leaves the default to the server, and client feedback would settle it.",
   "The five prompts are start_family, add_master, build_accented_glyphs, kern_pair_list and prepare_release, with the steps of docs/mcp.md; agents' use of them would settle the wording.",
 ]

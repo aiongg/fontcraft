@@ -125,8 +125,10 @@ JSON out. Ids follow the reference's menu structure (`file.*`, `edit.*`, `glyph.
 
 A command that touches files declares it: `files` lists every parameter that holds a path (read
 or write, and its form), and `writes_files` marks a command that writes to disk, a query
-included. The catalogue carries both (`file_params`, `writes_files`); the MCP server's `--root`
-and `--read-only` checks read nothing else. A test in `crates/engine/src/cmd/file_params.rs`
+included. The catalogue carries both (`file_params`, `writes_files`). The automation roots
+(`crates/engine/src/file_access/`, `--automation-read-root` and `--automation-write-root` on the
+MCP server and the desktop app's control channel) and the MCP server's `--read-only` read nothing
+else. A test in `crates/engine/src/cmd/file_params.rs`
 fails when a params doc names a path-like parameter that is not declared.
 
 What `Session::execute` guarantees for every command, checked for the whole registry by

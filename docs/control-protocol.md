@@ -27,6 +27,39 @@ Transport: `apps/fontcraft/src/control_server.rs`. Dispatch: `crates/ui-egui/src
 `ui.screenshot` needs the window, so the dispatch hands it back to the transport, which asks eframe
 for the next frame and replies when the frame arrives.
 
+## Confining file access
+
+```sh
+fontcraft --control 7985 --automation-read-root /work/fonts --automation-write-root /work/fonts/build
+```
+
+`--automation-read-root <dir>` and `--automation-write-root <dir>` confine the files that control
+requests read and write. They are the same flags as `fontcraft-cli mcp` takes, and also come as
+`--flag=<dir>` or as the variables `FONTCRAFT_AUTOMATION_READ_ROOT` and
+`FONTCRAFT_AUTOMATION_WRITE_ROOT` (a flag replaces its variable).
+
+- Every file a request reads (open, import, a source's linked files, images, feature includes…)
+  must lie inside the read root. Every file it writes (save, export, `ui.render` and
+  `ui.screenshot` with `path`…) must lie inside the write root. Anything else is an ordinary error
+  reply that names the root.
+- A root left out grants none of its access. Without either flag nothing is confined.
+- Each root must be an existing folder, or the app does not start. Each flag is given once.
+  Without `--control` the flags are ignored.
+- Paths are made absolute against the app's working directory and their links are followed (for
+  a file that does not exist yet, its nearest existing folder's). They are compared with the root
+  by whole folder names, ignoring case on Windows. `..` below a missing folder, a link that leads
+  nowhere and Windows device names are refused.
+- Macros, recent documents and URLs (`script.run`, `file.openRecent`, `url.open`, `url.show`…) are
+  refused while a root is set: the steps they run cannot be checked first.
+- Only requests are confined, together with everything they run, including the keys, pointer
+  events and dialog buttons they inject. The person at the keyboard is not: files opened from the
+  command line or a file dialog, and everything done with the mouse and keyboard, work as usual.
+- A link in an open document that points outside the read root is treated as a missing file when
+  a request reads it.
+
+[MCP › Confining file access](mcp.md#confining-file-access) has the details of what each command
+is checked for.
+
 ## Methods today
 
 | Method | Params | Result |

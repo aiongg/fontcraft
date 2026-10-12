@@ -2413,7 +2413,7 @@ Engine command: `commands.list`.
 Runs a Model Context Protocol server that exposes the command registry as tools, one tool per engine command with its parameter schema, plus resources for open documents. Agents then drive FontCraft headless exactly as the CLI does.
 
 ```
-fontcraft-cli mcp [--transport stdio|http] [--listen ADDR] [--root DIR]... [--read-only] [--allow PATTERN]... [--deny PATTERN]...
+fontcraft-cli mcp [--connect ADDR | --headless] [--transport stdio|http] [--listen ADDR] [--automation-read-root DIR] [--automation-write-root DIR] [--read-only] [--allow PATTERN]... [--deny PATTERN]...
 ```
 
 ### `bench`

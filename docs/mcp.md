@@ -47,51 +47,99 @@ printf '%s\n' \
 
 | Option | Effect |
 |---|---|
-| `--root DIR` | File parameters must lie inside DIR. Repeatable. Default: the working directory. `--root /` admits every path: with no other option, nothing is restricted and macros run |
+| `--automation-read-root DIR` | Every file a command reads must lie inside DIR. Given once |
+| `--automation-write-root DIR` | Every file a command writes must lie inside DIR. Given once |
 | `--read-only` | Only commands that read (`query: true` in the catalogue) and write no files run |
 | `--allow PATTERN` | Only commands whose id matches a pattern run. Repeatable |
 | `--deny PATTERN` | Commands whose id matches are refused, even when an allow pattern matches. Repeatable |
+
+Without any of these options nothing is restricted: commands read and write anywhere, and macros
+run.
+
+### Confining file access
+
+```sh
+fontcraft-cli mcp --automation-read-root /work/fonts --automation-write-root /work/fonts/build
+```
+
+```json
+{"mcpServers": {"fontcraft": {"command": "/abs/path/target/release/fontcraft-cli",
+  "args": ["mcp", "--automation-read-root", "/work/fonts", "--automation-write-root", "/work/fonts/build"]}}}
+```
+
+- Read and write access are granted separately. To let an agent read and write one folder, give
+  it to both flags. A root left out grants none of its access: with only a read root, nothing can
+  be written to disk. Save and export commands without a path still return the bytes.
+- Each root must be an existing folder; a missing one, or a file, stops the server with an error.
+  Each flag is given once, as `--flag DIR` or `--flag=DIR`.
+- The roots confine the headless server and imply `--headless`. With `--connect` they are an
+  error: a running app confines itself. Start it as `fontcraft --control 7985
+  --automation-read-root DIR --automation-write-root DIR` (see
+  [Control protocol](control-protocol.md#confining-file-access)).
+- What is checked:
+  - Each command declares the parameters that name files (`file_params` in the catalogue: name,
+    `read` or `write`, and form) and whether it writes to disk (`writes_files`). A `read`
+    parameter must lie inside the read root, a `write` parameter inside the write root.
+  - Form `path`: a path or a list of paths. Form `tables`: `"TAG"`, `"TAG=FILE"` (several
+    comma-separated in one string) or `{tag, file?, from?: {font}}`; the file parts are checked.
+    Form `document`: an open document's title or path is left as it is; anything else is checked
+    as a path. `keywords` are values that are not paths (`"nice"` for a list of names).
+  - A source a command reads may read other files in turn: the UFOs of a designspace, the Import
+    Font and Import Master files, a project's linked font. They must lie inside the read root too,
+    and are checked before anything is read.
+  - Places a command uses without a parameter naming them:
+
+    | Command | Checked |
+    |---|---|
+    | `file.save` without `path`; `file.exportWithProfiles` with `bySource` | Every open document's file lies inside the write root |
+    | `project.save` without `path` | Every open project's file lies inside the write root |
+    | `project.export` | Every open project's export destination lies inside the write root, its linked font inside the read root |
+    | `script.saveActionSet` without `path`; `script.recordMacro` with `name` | Refused: they write into the Macros folder |
+
+  - Files a document links to are read only inside the read root, whenever a command reads them:
+    Import Font and Import Master sources (at export, in hinting previews, when reviewing external
+    changes), images, glyph data files beside the document and feature includes. A link that
+    points outside the read root is treated as a missing file, with a warning. This also covers
+    links an agent sets during the session.
+  - `command.batch` checks each step when it runs. A refused step fails the batch, and the
+    session is as it was before it.
+  - Commands that run steps or open files no parameter names (`script.run` and the other macro
+    commands, `file.openRecent`, `url.open`, `url.show`) are refused, and `list_commands` leaves
+    them out. Run the steps one by one, or with `command.batch`.
+- How a path is compared:
+  - It is made absolute against the server's working directory, and its links are followed. A
+    file or folder link that leads out of a root is outside it.
+  - For a file that does not exist yet, the links of its nearest existing folder are followed and
+    the rest of the path must be plain names: `..` below a missing folder is refused, as is a link
+    that leads nowhere (writing through it would create its target).
+  - The result is compared with the root by whole folder names: `/work2/x` is not inside `/work`.
+    On Windows case is ignored, UNC paths (`\\server\share\…`) are resolved as drive-letter paths
+    are, and device names (`CON`, `NUL`, `COM1`…) are refused.
+  - The command then runs on the absolute path that was checked.
+- A refused path is an ordinary tool error the agent can read and correct, for example
+  ``file.saveAs: `path`: automation path rejected: outside the write root /work/fonts/build: /etc/x.glyphs``
+  or ``file.saveAs: `path`: automation filesystem access is not granted: write authority is absent: /work/fonts/x.glyphs``.
+- Outside the desktop app, the engine writes no file that an instance's Export Folder parameter
+  would put outside the export destination, so exports stay inside their destination.
+- A path is checked, then opened. Another program that swaps in a link between the two can still
+  win that race: the roots keep an agent to the files it was given; they do not guard against
+  other software on the computer.
+
+### Command restrictions
 
 - Patterns are shell-style over the whole id: `*` is any run of characters, `?` one character
   (`glyph.*`, `kerning.set*`).
 - A refused command is a tool result with `isError: true` and the reason. It changes nothing.
 - `list_commands` lists only the commands the server admits. Resource reads and completions run
   query commands, so the same rules apply to them.
-- `command.batch` is checked step by step: one refused step refuses the whole batch. It must
-  itself be admitted.
-- Each command declares in the catalogue the parameters that name files (`file_params`: name,
-  `read` or `write`, and form) and whether it writes to disk (`writes_files`). These are the file
-  parameters the server checks, and only these.
-  - Form `path`: a path or a list of paths.
-  - Form `tables`: `"TAG"`, `"TAG=FILE"` (several comma-separated in one string) or
-    `{tag, file?, from?: {font}}`; the file parts are checked.
-  - Form `document`: an open document's title or path is left as it is; anything else is
-    checked as a path.
-  - `keywords` are values that are not paths (`"nice"` for a list of names).
-- Each checked path is resolved (relative to the working directory, symbolic links followed) and
-  replaced by its absolute path before the command runs. A missing part of a path may not contain
-  `..`. A declared parameter that holds something other than text, a list of texts or null is
-  refused.
-- Under `--root`, a command that is not in the catalogue is refused.
-- Under `--read-only`, a query that writes files (`writes_files`, or a `write` parameter, as
-  `tables.delete` with `inPlace` or `font.dumpTables` with `output`) is refused.
-- Places a command uses without a parameter naming them are checked under `--root`:
-
-  | Command | Checked |
-  |---|---|
-  | `file.save` without `path`; `file.exportWithProfiles` with `bySource` | Every open document's file lies inside the roots |
-  | `project.save` without `path` | Every open project's file lies inside the roots |
-  | `project.export` | Every open project's export destination and linked font lie inside the roots |
-| `project.export` after `project.open` in the same batch | Refused: the opened project's places are not known yet |
-  | `script.saveActionSet` without `path`; `script.recordMacro` with `name` | Refused: they write into the Macros folder |
-
-- Outside the desktop app, the engine writes no file that an instance's Export Folder parameter
-  would put outside the export destination, so exports over MCP stay inside their destination.
-- Commands that run steps or open files the server cannot see in their parameters (`script.run`
-  and the other macro commands, `file.openRecent`, `url.open`, `url.show`) are refused whenever
-  any restriction is set, which with the default root is always. Run the steps with
-  `command.batch` instead, or start the server with `--root /` and no other option.
-- `initialize` describes the restrictions in its `instructions`.
+- `command.batch` is checked step by step before it runs: one refused step refuses the whole
+  batch. It must itself be admitted.
+- Under `--read-only`, a command that is not in the catalogue is refused, and so is a query that
+  writes files (`writes_files`, or a `write` parameter, as `tables.delete` with `inPlace` or
+  `font.dumpTables` with `output`).
+- With `--read-only`, `--allow` or `--deny`, macros and the other commands that run steps the
+  server cannot see are refused.
+- `initialize` describes the restrictions and the roots in its `instructions`.
 
 ## Prompts
 
