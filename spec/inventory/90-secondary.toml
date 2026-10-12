@@ -2081,13 +2081,18 @@ label = "Add Nodes at Intersections"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layer?, paths?: [pathRef]}"
+params = "{glyph, layer?, side?, shapes?: [index]} or {glyphs, layer? | layers?}"
 area = "path-ops"
 milestone = "M13"
 summary = "Inserts a node on each contour at every point where contours cross, without removing anything."
 ref = "FontForge Element menu › Overlap › Find Intersections"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference user manual; not yet observed in the running app."
+guesses = [
+  "Crossings of a path with itself count too, and touching curves get a node like crossing ones; the manual speaks only of overlapping contours.",
+  "Locked paths get no nodes but still cross the others; the manual does not mention locks.",
+]
 
 [[command]]
 id = "path.makeParallel"
@@ -2095,13 +2100,17 @@ label = "Make Parallel"
 menu = ["Path", "Align Points"]
 shortcut = ""
 kind = "engine"
-params = "{segments?: [segmentRef]}"
+params = "{glyph, layer?, side?, points?: [pointRef] (four nodes) | segments?: [segmentRef] (two or four)}"
 area = "path-ops"
 milestone = "M13"
 summary = "Rotates one of two selected straight segments so the two become parallel; with four selected lines forming a quadrilateral it produces a parallelogram."
 ref = "FontForge Element menu › Align › Make Parallel"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference user manual; not yet observed in the running app. The manual moves the node selected last; FontCraft takes the last node of `points`, or the end node of the last of `segments`, since a selection has no order of its own."
+guesses = [
+  "With two lines, the moved line keeps its length and turns about its fixed end to the nearer of the two parallel directions; the manual only says the lines become parallel.",
+]
 
 [[command]]
 id = "path.spacePoints"
@@ -2109,13 +2118,19 @@ label = "Space Points Evenly"
 menu = ["Path", "Align Points"]
 shortcut = ""
 kind = "engine"
-params = "{nodes?: [nodeRef], byRegion?: bool}"
+params = "{glyph, layer?, side?, points: [pointRef], byRegion?: bool, within?: number}"
 area = "path-ops"
 milestone = "M13"
 summary = "Distributes three or more selected points at equal steps along the axis on which they are spread; with byRegion, clusters of nearby points are treated as units and the clusters are spaced evenly."
 ref = "FontForge Element menu › Align › Space Points, Space Regions"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference user manual; not yet observed in the running app. One selected node moves halfway between its neighbours along the line through them, as the manual describes."
+guesses = [
+  "The lowest and highest points stay and the others keep their order; the manual only says the points are spaced regularly.",
+  "Regions join points whose coordinates along the spacing axis are at most `within` apart (default 100 units), and the centres of the regions' extents are spaced evenly; the manual gives no distance and no reference point.",
+  "An on-curve node's handles move with it unless they are selected too.",
+]
 
 [[command]]
 id = "path.roundToCluster"
@@ -2123,13 +2138,17 @@ label = "Round to Cluster"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layer?, nodes?: [nodeRef], within?: number}"
+params = "{glyph, layer?, side?, points?: [pointRef]} or {glyphs, layer? | layers?}, within?: number"
 area = "path-ops"
 milestone = "M13"
 summary = "Gives coordinates that lie very close together the same value, so nearly aligned points become exactly aligned."
 ref = "FontForge Element menu › Round › Round to Cluster"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference user manual; not yet observed in the running app."
+guesses = [
+  "x and y are clustered on their own, every node and handle included; a cluster grows while values are at most `within` (default 1 unit) above its lowest, and takes the value most of its members have (ties: nearest the mean, then the lower). The manual gives no distance and no rule for the shared value.",
+]
 
 [[command]]
 id = "path.makeArc"
@@ -2144,6 +2163,11 @@ summary = "Reshapes the segment between two adjacent selected nodes into an elli
 ref = "FontForge Point menu › Make Arc"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference user manual; not yet observed in the running app. Joining the end nodes of two open paths with an arc, which the manual also describes, is not built."
+guesses = [
+  "Of the many ellipses through the two nodes with the path's directions there, FontCraft takes the quarter ellipse framed by the two tangent lines (a quarter circle when they meet square at equal distances), and half an ellipse when the directions are opposite; the manual does not say which ellipse it picks beyond preferring one with a node on an axis.",
+  "At an open end without a neighbouring segment the segment's own direction is used, and the result is always a cubic segment.",
+]
 
 [[command]]
 id = "path.insertNodeAt"
@@ -2151,13 +2175,17 @@ label = "Insert Node at Coordinate…"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{segment: segmentRef, x?: number, y?: number}"
+params = "{glyph, layer?, side?, segment: segmentRef, x?: number, y?: number}"
 area = "path-ops"
 milestone = "M13"
 summary = "Adds a node to a segment where it crosses the given x or y coordinate, without changing its shape."
 ref = "FontForge Point menu › Insert Point on Spline at"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference user manual; not yet observed in the running app."
+guesses = [
+  "A node goes in at every place the segment crosses the coordinate, and a segment that does not reach it is refused; the manual does not cover several or no crossings.",
+]
 
 [[command]]
 id = "path.nameContour"
@@ -2165,13 +2193,17 @@ label = "Name Contour…"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{path: pathRef, name: string}"
+params = "{glyph, layer?, side?, path: index, name: string}"
 area = "drawing"
 milestone = "M13"
 summary = "Attaches a name to a contour, kept in the source. FontLab names nodes for the same purpose; both give scripts and agents a stable handle that survives reordering."
 ref = "FontForge Point menu › Name Contour; FontLab 8 What's new › Edit & refine › Node names"
 status = "docs"
 origin = "fontforge"
+notes = "Documented in the reference user manual; not yet observed in the running app. The name is stored as the path's `com.fontcraft.contourName` value; the native format keeps it, while carrying it in `.glyphs` and UFO files waits for those writers to store path-level FontCraft keys."
+guesses = [
+  "An empty name removes the name; the manual does not say how a name is cleared.",
+]
 
 [[command]]
 id = "filter.changeWeight"
@@ -3155,13 +3187,14 @@ label = "Slice Along Guide"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{guide: guideRef, glyph?, layer?, addPointsOnly?: bool}"
+params = "{glyph, layer?, side?, guide: guideRef, addPointsOnly?: bool}"
 area = "path-ops"
 milestone = "M13"
 summary = "Cuts the glyph's contours along a guide exactly as a knife stroke along that line would; with addPointsOnly it just inserts nodes at the crossings."
 ref = "RoboFont reference › Guidelines (contextual menu); Slice Tool"
 status = "docs"
 origin = "robofont"
+notes = "Documented in the RoboFont reference; not yet observed. Without addPointsOnly the command runs path.cutWithLine along the guide's line, extended past every path."
 
 [[command]]
 id = "view.showOutlineErrors"
