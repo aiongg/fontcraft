@@ -49,10 +49,11 @@ pub const GUIDE_APPEARANCE: &str = "com.fontcraft.guideAppearance";
 pub const GUIDE_MAGNETIC: &str = "com.fontcraft.guideMagnetic";
 /// A power guide's links: an array of `[shape, node]` it moves (M13.36, `guide.makePowerGuide`).
 pub const POWER_GUIDE_LINKS: &str = "com.fontcraft.powerGuideLinks";
-/// A glyph's status: the name of one of the font's status definitions (M13.39, `glyph.setStatus`).
+/// A glyph's status: the integer code of one of the font's status definitions (M13.39,
+/// `glyph.setStatus`).
 pub const GLYPH_STATUS: &str = "com.fontcraft.status";
-/// The font's status definitions: an array of `{"name", "color": [r, g, b, a]}` (M13.39,
-/// `font.setStatusDefinitions`).
+/// The font's status definitions: an array of `{"code", "color": [r, g, b, a], "isDefault"?: 1,
+/// "name"}` (M13.39, `font.setStatusDefinitions`).
 pub const STATUS_DEFINITIONS: &str = "com.fontcraft.statusDefinitions";
 /// The user's export profiles: an array of `{"name", "params": {…}}` (M13.43,
 /// `file.saveExportProfile`).

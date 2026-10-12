@@ -3106,8 +3106,11 @@ summary = "Defines the project's list of development statuses (for example draft
 ref = "Fontra reference › Font menu › Status definitions"
 status = "docs"
 origin = "fontra"
+notes = "Documented (Font menu › Status definitions) but not yet observed in the running reference app. The command takes the whole list; the dialog that edits it is not built yet."
 guesses = [
   "The definitions are stored in the font's user data as a list of code, name, colour and default flag; Fontra's storage is not documented.",
+  "Two definitions with the same code or the same name, or more than one default, are refused; checking the reference's Status definitions panel would settle it.",
+  "Redefining the list keeps every glyph's stored code, even one the new list lacks (such glyphs show no tint); renaming or deleting a status in the reference app would settle it.",
 ]
 
 [[command]]
@@ -3116,16 +3119,18 @@ label = "Set Status"
 menu = ["Glyph"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, sources?: [id], status: number}"
+params = "{glyphs, status: number | name | null}"
 area = "font-view"
 milestone = "M13"
 summary = "Assigns one of the font's defined statuses to glyphs; a display option tints each glyph on the canvas with its status colour. The documentation confirms the definitions and the tint but does not say whether a status belongs to a glyph or to each of its sources."
 ref = "Fontra reference › Glyph editor appearance (Development status color); Font menu › Status definitions"
 status = "docs"
 origin = "fontra"
-notes = "Verified by the M13 planning pass against Fontra's documentation (Font menu › Status definitions; Glyph editor appearance), which does not say where a status is stored."
+notes = "Verified by the M13 planning pass against Fontra's documentation (Font menu › Status definitions; Glyph editor appearance), which does not say where a status is stored. Documented, not yet observed in the running reference app."
 guesses = [
   "FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say.",
+  "A glyph without a stored status is shown in the default status; setting a status on a new glyph in the reference app would settle it.",
+  "The tint fills the advance box from the descender to the ascender at a quarter of the status colour's opacity, and shows whenever the glyph is in a defined status (no display toggle yet); the reference's Development status color option would settle the look and the default.",
 ]
 
 [[behavior]]
