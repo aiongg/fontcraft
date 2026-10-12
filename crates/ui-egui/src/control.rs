@@ -137,8 +137,8 @@ fn handle_confined(app: &mut FontcraftApp, id: Value, method: &str, params: &Val
     if method == "ui.screenshot" {
         return match params.get("path") {
             None | Some(Value::Null) => Handled::Screenshot(ScreenshotRequest { id, path: None }),
-            Some(Value::String(p)) if !p.is_empty() => match file_access::check_write(std::path::Path::new(p)) {
-                Ok(()) => Handled::Screenshot(ScreenshotRequest { id, path: Some(p.clone()) }),
+            Some(Value::String(p)) if !p.is_empty() => match screenshot_path(p) {
+                Ok(path) => Handled::Screenshot(ScreenshotRequest { id, path: Some(path) }),
                 Err(e) => Handled::Reply(reply(&id, Err(format!("ui.screenshot: {e}")))),
             },
             Some(_) => Handled::Reply(reply(&id, Err("ui.screenshot: `path` must be a file path".into()))),
@@ -154,6 +154,15 @@ fn handle_confined(app: &mut FontcraftApp, id: Value, method: &str, params: &Val
         Ok(result) => reply(&id, result),
         Err(panic) => reply(&id, Err(format!("internal error (please report it): `{method}` failed unexpectedly: {panic}"))),
     })
+}
+
+/// Where `ui.screenshot` writes `path`. The frame is written later, after the roots are out of
+/// force, so while they are in force this is the absolute path checked against the write root;
+/// without them, `path` as given.
+fn screenshot_path(path: &str) -> Result<String, String> {
+    let Some(roots) = file_access::current() else { return Ok(path.to_string()) };
+    let resolved = roots.resolved(path, file_access::Access::Write)?;
+    resolved.to_str().map(str::to_string).ok_or_else(|| format!("{path} does not resolve to a UTF-8 path"))
 }
 
 /// Sets `key` on a JSON object (and does nothing to anything else).

@@ -501,6 +501,13 @@ fn control_requests_honour_the_automation_roots() {
     assert!(r["ok"] == false && r["error"].as_str().unwrap_or("").contains("outside the write root"), "{r}");
     let r = ask(&mut app, "ui.screenshot", json!({"path": at("in/s.png")}));
     assert!(r["ok"] == false && r["error"].as_str().unwrap_or("").contains("outside the write root"), "{r}");
+    // The frame is written a frame later, outside the roots: to the path that was checked.
+    let shot = json!({"id": 1, "method": "ui.screenshot", "params": {"path": at("in/../out/s.png")}});
+    let checked = std::fs::canonicalize(base.join("out")).unwrap().join("s.png");
+    match control::handle_request(&mut app, &shot) {
+        control::Handled::Screenshot(r) => assert_eq!(r.path.as_deref(), checked.to_str()),
+        other => panic!("{other:?}"),
+    }
     let r = ask(&mut app, "engine.execute", json!({"command": "script.run", "params": {"macro": "m"}}));
     assert!(r["ok"] == false && r["error"].as_str().unwrap_or("").contains("automation roots"), "{r}");
     // A shell command's declared file parameters are checked too.
