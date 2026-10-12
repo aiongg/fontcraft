@@ -11,9 +11,10 @@
 //! A flipped match is the pattern mirrored and drawn the other way round (or turned half a turn,
 //! which keeps the direction): the outline a mirrored component draws once decomposed.
 //!
-//! Work is bounded: every node comparison and every start position tried costs one unit of a
-//! budget ([`MAX_MATCH_WORK`] for [`match_outline`]); when it runs out the matches found so far
-//! are returned.
+//! Work is bounded: every node comparison, every start position and every target contour tried
+//! costs one unit of a budget ([`MAX_MATCH_WORK`] for [`match_outline`]), and each call pays
+//! [`MATCH_CALL_WORK`] plus one unit per pattern and target node for its setup; when the budget
+//! runs out the matches found so far are returned.
 
 use std::collections::{HashMap, HashSet};
 
@@ -27,6 +28,9 @@ pub const MAX_PATTERN_NODES: usize = 1_024;
 pub const MAX_MATCHES: usize = 100_000;
 /// Node comparisons one [`match_outline`] call may make.
 pub const MAX_MATCH_WORK: usize = 50_000_000;
+/// What one call's setup costs beyond its nodes, in work units: indexing the target and
+/// preparing the pattern allocate, which costs about as much as this many node comparisons.
+pub const MATCH_CALL_WORK: usize = 64;
 /// Slack added to every distance comparison, for floating-point noise.
 const EPSILON: f64 = 1e-9;
 
@@ -120,6 +124,15 @@ pub fn match_outline_within(pattern: &[Contour], target: &[Contour], options: &M
     if max == 0 {
         return Vec::new();
     }
+    let target_nodes = target.iter().fold(target.len(), |n, c| n.saturating_add(c.nodes.len()));
+    let setup = MATCH_CALL_WORK.saturating_add(total).saturating_add(target_nodes);
+    match work.checked_sub(setup) {
+        Some(left) => *work = left,
+        None => {
+            *work = 0;
+            return Vec::new();
+        }
+    }
     let index = TargetIndex::new(target);
     let mut search =
         Search { target, index: &index, tol, used: target.iter().map(|c| vec![false; c.nodes.len()]).collect(), out: Vec::new(), max, work };
@@ -183,21 +196,23 @@ fn size(points: impl Iterator<Item = Point>) -> Option<(f64, f64)> {
     b.map(|(x0, y0, x1, y1)| (x1 - x0, y1 - y0))
 }
 
-/// The target's closed contours by signature, and every contour's size.
+/// The target's closed contours by signature, and every contour's signature and size.
 struct TargetIndex {
     closed: HashMap<Signature, Vec<usize>>,
+    sigs: Vec<Signature>,
     sizes: Vec<Option<(f64, f64)>>,
 }
 
 impl TargetIndex {
     fn new(target: &[Contour]) -> Self {
+        let sigs: Vec<Signature> = target.iter().map(signature).collect();
         let mut closed: HashMap<Signature, Vec<usize>> = HashMap::new();
-        for (i, c) in target.iter().enumerate() {
-            if c.closed {
-                closed.entry(signature(c)).or_default().push(i);
+        for (i, sig) in sigs.iter().enumerate() {
+            if sig.closed {
+                closed.entry(*sig).or_default().push(i);
             }
         }
-        Self { closed, sizes: target.iter().map(|c| size(c.nodes.iter().map(|n| n.point))).collect() }
+        Self { closed, sigs, sizes: target.iter().map(|c| size(c.nodes.iter().map(|n| n.point))).collect() }
     }
 }
 
@@ -228,9 +243,12 @@ impl Search<'_, '_> {
         let Some((a, anchor)) = pattern.iter().enumerate().max_by_key(|(i, p)| (p.points.len(), std::cmp::Reverse(*i))) else { return };
         let target = self.target;
         for (ci, tc) in target.iter().enumerate() {
+            if self.out.len() >= self.max || !self.charge(1) {
+                return;
+            }
             let len = tc.nodes.len();
             let starts = if anchor.closed {
-                let fits = tc.closed && signature(tc) == anchor.sig && self.size_fits(anchor, ci);
+                let fits = tc.closed && self.index.sigs.get(ci) == Some(&anchor.sig) && self.size_fits(anchor, ci);
                 if fits { len } else { 0 }
             } else if len < anchor.points.len() {
                 0
@@ -305,14 +323,19 @@ impl Search<'_, '_> {
     /// best translation is at most the tolerance from any node's own one).
     fn find_run(&mut self, pc: &Prepared, t: Vec2, claimed: &HashSet<(usize, usize)>) -> Option<MatchedRun> {
         let target = self.target;
+        let index = self.index;
         let limit = 2.0 * self.tol;
         let first = *pc.points.first()? + t;
-        let candidates: Vec<usize> = if pc.closed {
-            self.index.closed.get(&pc.sig).cloned().unwrap_or_default().into_iter().filter(|&ci| self.size_fits(pc, ci)).collect()
-        } else {
-            (0..target.len()).collect()
-        };
-        for ci in candidates {
+        let same_sig: &[usize] = if pc.closed { index.closed.get(&pc.sig).map_or(&[], Vec::as_slice) } else { &[] };
+        let count = if pc.closed { same_sig.len() } else { target.len() };
+        for k in 0..count {
+            if !self.charge(1) {
+                return None;
+            }
+            let ci = if pc.closed { *same_sig.get(k)? } else { k };
+            if pc.closed && !self.size_fits(pc, ci) {
+                continue;
+            }
             let tc = target.get(ci)?;
             let len = tc.nodes.len();
             let starts = if pc.closed {
@@ -481,6 +504,19 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].runs[0], MatchedRun { contour: 0, start: 2, len: 4 });
         assert_eq!(found[0].transform, Affine::translate((40.0, 100.0)));
+    }
+
+    #[test]
+    fn every_call_and_every_target_contour_costs_work() {
+        // Triangles: none has the pattern's signature, so no start position is ever tried.
+        let target: Vec<Contour> = (0..1000).map(|i: i32| poly(&[(0.0, 0.0), (10.0 + f64::from(i), 0.0), (0.0, 10.0)])).collect();
+        let mut work = MAX_MATCH_WORK;
+        assert!(match_outline_within(&[ell()], &target, &MatchOptions::default(), &mut work).is_empty());
+        let spent = MAX_MATCH_WORK - work;
+        assert!(spent >= MATCH_CALL_WORK + 6 + 4000 + 1000, "{spent}");
+        let mut work = MATCH_CALL_WORK;
+        assert!(match_outline_within(&[ell()], &target, &MatchOptions::default(), &mut work).is_empty());
+        assert_eq!(work, 0, "a call that cannot pay for its setup does nothing");
     }
 
     #[test]

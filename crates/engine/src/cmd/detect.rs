@@ -301,6 +301,20 @@ struct Detected {
     components: Vec<String>,
 }
 
+/// Takes `units` from `work`; when it holds fewer, empties it and returns false.
+fn spend(work: &mut usize, units: usize) -> bool {
+    match work.checked_sub(units) {
+        Some(left) => {
+            *work = left;
+            true
+        }
+        None => {
+            *work = 0;
+            false
+        }
+    }
+}
+
 /// Finds base outlines in the closed, unlocked paths of `layer` of glyph `name` (at `order`).
 fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &MatchOptions, grid: f64, work: &mut usize) -> Option<Detected> {
     let mut slots = Vec::new();
@@ -327,6 +341,11 @@ fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &M
             continue;
         }
         for &b in bases.by_key.get(sig).map_or(&[][..], Vec::as_slice) {
+            // Glyphs sharing a key signature are each looked at once per layer: charged, so many
+            // of them in many layers reach the work limit instead of running on.
+            if !spend(work, 1usize.saturating_add(sigs.len())) {
+                return None;
+            }
             let Some(base) = bases.list.get(b) else { continue };
             if base.name != name && (base.nodes, base.order) < (nodes, order) && sub_multiset(&base.sigs, &sigs) {
                 candidates.push(base);
@@ -343,7 +362,7 @@ fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &M
         if *work == 0 || alive.is_empty() {
             break;
         }
-        if !sub_multiset(&base.sigs, &sigs) {
+        if !spend(work, sigs.len()) || !sub_multiset(&base.sigs, &sigs) {
             continue;
         }
         let found = match_outline_within(&base.contours, &alive, opts, work);
@@ -357,6 +376,7 @@ fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &M
             claimed.extend(m.runs.iter().map(|r| r.contour));
             entries.push((shapes, component(&base.name, affine)));
         }
+        spend(work, alive.len());
         let (mut keep, mut keep_at) = (Vec::new(), Vec::new());
         for (i, (c, at)) in alive.into_iter().zip(alive_at).enumerate() {
             if !claimed.contains(&i) {

@@ -119,3 +119,23 @@ fn detect_component_without_a_matching_glyph_is_an_error_that_changes_nothing() 
     assert!(s.execute("path.detectComponent", &json!({"glyph": "B", "shapes": [5]})).is_err());
     assert!(Arc::ptr_eq(&s.doc().unwrap().font, &before));
 }
+
+#[test]
+fn detect_composites_on_many_glyphs_that_almost_match_stops_at_the_work_limit() {
+    // 50,000 squares of different sizes: every glyph is a candidate base of every later one,
+    // and no candidate fits.
+    let mut s = Session::with_document();
+    s.edit("fixture", |f| {
+        for i in 0..50_000u32 {
+            let side = 10.0 + 2.0 * f64::from(i);
+            add_glyph(f, &format!("sq{i}"), vec![Shape::Path(Path::rect(0.0, 0.0, side, side))]);
+        }
+        Ok(())
+    })
+    .unwrap();
+    let start = std::time::Instant::now();
+    let out = run(&mut s, "font.detectComposites", json!({}));
+    assert!(start.elapsed() < std::time::Duration::from_secs(60), "{:?}", start.elapsed());
+    assert_eq!(out["components"], 0);
+    assert!(out["stopped"].is_string(), "{out}");
+}
