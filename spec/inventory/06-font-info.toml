@@ -2332,15 +2332,19 @@ label = "Compile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{}"
+params = "{master?: id|name, force?: bool}"
 area = "features"
 milestone = "M8"
 summary = "Compiles the feature code so that Edit View can preview it and returns the errors found. Edit View previews hand-written substitution rules but not hand-written positioning rules."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. Compiling unchanged code again reuses the last result."
 observe = [
   "In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.",
+]
+guesses = [
+  "Compile reads the master the Features tab passes (the active Edit View tab's), else the first master; compiling in a two-master font whose masters differ in a number value used by the code, with the second master showing, would settle it.",
+  "Compile checks the code without the generated kerning and mark features; an error the reference app reports only when the generated code is added would show the difference.",
 ]
 
 [[command]]
@@ -2349,12 +2353,16 @@ label = "List Feature Errors"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{kind?: 'prefix'|'class'|'feature', name?: string}"
+params = "{kind?: 'prefix'|'class'|'feature', name?: string, index?: integer}"
 area = "features"
 milestone = "M8"
 summary = "Returns the current compile errors with entry, text range, message, expanded description and, where one exists, the suggested fix. The UI shows the same data as inline markers and sidebar icons."
 ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
+notes = "Returns the last compile's diagnostics with ids, entry, byte range, line, column and fix labels, and whether the font changed since; it never compiles on its own (M8.15)."
+guesses = [
+  "The error list is the one of the last Compile and is marked out of date after an edit rather than recomputed; editing code after a compile in the reference app and watching whether the error markers move or vanish would settle it.",
+]
 
 [[command]]
 id = "font.features.applyFix"
@@ -2370,7 +2378,7 @@ ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
 notes = "Documented, not yet observed."
 guesses = [
-  "Three fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a missing semicolon at the end of a statement, and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.",
+  "Four fixes of ours carry a wrench: a glyph name that matches an existing one apart from case, a class name that matches a defined one apart from case, a missing semicolon at the end of a statement (inserted before any comment), and a class used before its entry (moving the class entry up); the reference app's error list on a font with these mistakes would settle its own set.",
 ]
 observe = [
   "In F1 (Latin features), write a misspelt glyph name, drop a semicolon, and use a class before its entry: note which errors show a wrench and what Fix does for each.",
@@ -2381,14 +2389,14 @@ id = "font.features.jumpToError"
 label = "Jump to Error"
 menu = []
 shortcut = ""
-kind = "ui"
-params = "{kind: 'prefix'|'class'|'feature', name: string, error?: id}"
+kind = "engine"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, error?: id}"
 area = "features"
 milestone = "M8"
 summary = "Selects the entry and scrolls the editor to the faulty code, as clicking the error icon of an entry in the sidebar does."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. An engine query returning the entry, range, line and column of the error; the Features tab selects the entry and scrolls to that place (M8.17)."
 
 [[command]]
 id = "font.features.listSnippets"
@@ -2475,26 +2483,30 @@ label = "Complete Feature Code"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{kind: 'prefix'|'class'|'feature', name: string, position: integer, prefix?: string}"
+params = "{kind: 'prefix'|'class'|'feature', name: string, index?: integer, position: integer, code?: string}"
 area = "features"
 milestone = "M8"
 summary = "Returns the glyph names, class names and lookup names that fit at a position in the code, the data behind the editor's autocomplete menu."
 ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
+notes = "`position` is a byte offset of the code; `code` stands for the editor's unsaved text. The data behind `fontInfo.features.autocomplete` (M8.15)."
+guesses = [
+  "Completion offers glyphs in rules, classes after @, lookups after `lookup`, number values after $ and inside ${…}, registered feature tags after `feature` and statement keywords (then glyphs) at the start of a statement, exact-case matches first; typing in each of these places in the reference app would settle its lists.",
+]
 
 [[command]]
 id = "font.features.previewName"
 label = "Preview Glyph or Class"
 menu = []
 shortcut = ""
-kind = "ui"
-params = "{name: string}"
+kind = "engine"
+params = "{name: string, master?: id}"
 area = "features"
 milestone = "M8"
 summary = "Shows a popover with a drawing of the glyph, or with all member glyphs of the class, for the glyph or class name that was Alt-clicked in the code editor."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class entry with nested classes and tokens resolved; the Features tab draws the popover (M8.17)."
 
 [[behavior]]
 id = "fontInfo.features.sidebarGroups"
@@ -2554,7 +2566,7 @@ milestone = "M8"
 summary = "The code editor colours keywords, glyph names, numbers, lookup names and comments differently."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The token classes come from `features::edit::highlight`: keywords, tags, glyph, class and lookup names, numbers, strings, comments, tokens and punctuation."
 
 [[behavior]]
 id = "fontInfo.features.autocomplete"
@@ -2563,7 +2575,7 @@ milestone = "M8"
 summary = "Typing where a glyph, class or lookup name is expected opens a suggestion menu. Up and Down move through it, further typing narrows it and Return inserts the highlighted suggestion."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The suggestions come from `font.features.complete`."
 
 [[behavior]]
 id = "fontInfo.features.inlineErrors"
@@ -2572,7 +2584,7 @@ milestone = "M8"
 summary = "Code that fails to compile is flagged inline. Clicking the error icon expands the message, a wrench icon signals an available Fix, and every entry with errors also gets an icon in the sidebar."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while the font is unchanged since."
 
 [[behavior]]
 id = "fontInfo.features.notesDivider"
