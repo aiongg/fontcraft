@@ -351,7 +351,11 @@ fn write_macro(p: &Params, target: &Path, m: &Macro, replace: bool) -> Result<()
         std::fs::create_dir_all(parent).map_err(|e| EngineError::Io(format!("{}: {e}", parent.display())))?;
     }
     let text = serde_json::to_string_pretty(&m.to_json()).map_err(|e| EngineError::Io(e.to_string()))?;
+    #[cfg(not(target_arch = "wasm32"))]
     fontcraft_format::write_atomic(target, text.as_bytes())?;
+    // The web build has no Macros folder; a plain write keeps it compiling.
+    #[cfg(target_arch = "wasm32")]
+    std::fs::write(target, text.as_bytes()).map_err(|e| EngineError::Io(format!("{}: {e}", target.display())))?;
     Ok(())
 }
 

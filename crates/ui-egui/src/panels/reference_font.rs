@@ -77,7 +77,11 @@ pub struct Reference {
 
 impl Reference {
     /// Reads the font at `path`.
+    #[cfg_attr(target_arch = "wasm32", allow(unreachable_code, unused_variables))]
     pub fn read(path: &str) -> Result<Self, String> {
+        #[cfg(target_arch = "wasm32")]
+        let font: Font = return Err(format!("{path}: the web app cannot read font files"));
+        #[cfg(not(target_arch = "wasm32"))]
         let (font, _) = fontcraft_engine::io::open(Path::new(path), None).map_err(|e| e.to_string())?;
         let mut by_code = BTreeMap::new();
         for g in font.glyphs.iter() {

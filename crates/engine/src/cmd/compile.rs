@@ -410,6 +410,7 @@ impl Sink {
     /// count them.
     /// `outside`: files may land outside a destination folder where an Export Folder parameter
     /// climbs out of it ([`crate::Session::export_outside`]).
+    #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
     pub(super) fn new(dest: &Dest, keep: bool, outside: bool) -> Result<Self> {
         match dest {
             Dest::Memory => Ok(Sink::Memory { bytes: 0, keep }),

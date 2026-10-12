@@ -152,6 +152,7 @@ impl Session {
     }
 
     /// Marks project `i` as saved to `path`.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn project_saved(&mut self, i: usize, path: PathBuf) -> Result<()> {
         let doc = self.projects.docs.get_mut(i).ok_or_else(|| EngineError::Disabled("project".into(), "no project open".into()))?;
         if let Some(stem) = path.file_stem().map(|s| s.to_string_lossy().into_owned()).filter(|t| !t.is_empty()) {
