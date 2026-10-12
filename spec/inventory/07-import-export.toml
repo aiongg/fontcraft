@@ -721,7 +721,7 @@ milestone = "M3"
 summary = "Imports the vector paths of PDF, EPS or SVG files as glyph outlines. From Font View several files are matched to glyphs by file name; from Edit View one file goes into the current glyph. With an explicit glyph parameter the file-name matching is bypassed."
 ref = "Import & Export › Importing Font Data › Importing Outlines"
 status = "handbook"
-notes = "PDF and EPS input wait for M11 (they need a PDF content-stream reader and a PostScript subset); M3 builds the SVG route. `scale: em` fits the drawing's box to the em, and points are rounded to the grid as a paste does. File › Import › Outlines… in the desktop app opens the system file chooser (SVG files, several at once) and imports them as the person's run, so dialog.importOutlinesMissingGlyph can follow; without a chooser it says to run the command with `files`. From Edit View the files are matched by name too, not put into the current glyph (not built)."
+notes = "SVG and EPS files import (EPS through the fixed PostScript subset of the SVG crate's EPS reader, recognised by its header); PDF input waits for a PDF content-stream reader. `scale: em` fits the drawing's box to the em, and points are rounded to the grid as a paste does. File › Import › Outlines… in the desktop app opens the system file chooser (SVG files, several at once) and imports them as the person's run, so dialog.importOutlinesMissingGlyph can follow; without a chooser it says to run the command with `files`. From Edit View the files are matched by name too, not put into the current glyph (not built)."
 guesses = [
   "An SVG reads as one font unit per SVG unit with SVG y = 0 at the ascender; the handbook does not say how a drawing is scaled.",
 ]

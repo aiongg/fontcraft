@@ -32,7 +32,7 @@ pub fn import_outlines(app: &mut FontcraftApp) {
         app.state.status = "Import Outlines: this window has no file chooser; run file.importOutlines with `files`".into();
         return;
     };
-    let files = picker.files("Import Outlines", "SVG", &["svg"]);
+    let files = picker.files("Import Outlines", "SVG or EPS", &["svg", "eps"]);
     if files.is_empty() {
         return;
     }
@@ -97,7 +97,7 @@ mod tests {
         let asked = Arc::new(Mutex::new(Vec::new()));
         app.picker = Some(Box::new(FakePicker { files: Vec::new(), asked: asked.clone() }));
         import_outlines(&mut app);
-        assert_eq!(*asked.lock().unwrap(), [("Import Outlines".to_string(), vec!["svg".to_string()])]);
+        assert_eq!(*asked.lock().unwrap(), [("Import Outlines".to_string(), vec!["svg".to_string(), "eps".to_string()])]);
         assert!(app.dialog.is_none());
 
         // The chosen file has no glyph of its name: the person's import asks about it.

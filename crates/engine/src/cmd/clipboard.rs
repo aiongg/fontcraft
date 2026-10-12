@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use fontcraft_geom::{Point, Rect, Segment, bounds, round_to_grid};
 use fontcraft_io_svg::clipboard::{self, Fragment, FragmentGuide, FragmentShape, GuideScope as FragmentScope};
-use fontcraft_io_svg::{Placement, glyph_name_for_file, looks_like_svg, read_svg, shapes_to_svg};
+use fontcraft_io_svg::{Placement, glyph_name_for_file, looks_like_eps, looks_like_svg, read_eps, read_svg, shapes_to_svg};
 use fontcraft_model::{Component, Font, MAX_COORDINATE, MAX_LAYER_GUIDES, MAX_NAME_LEN, NodeKind, Path, Shape, Transform, metric};
 use serde_json::{Value, json};
 
@@ -63,7 +63,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Outlines…",
             ["File", "Import"],
             None,
-            "{files: [paths], glyphs?: [names], layer?: id (default: the first master's layer), onMissingGlyph?: \"add\" | \"skip\" (default skip), scale?: \"unscaled\" | \"em\" (default unscaled)} imports SVG files as outlines, added to the glyph's layer after its shapes, as one undo step. Each file goes to the glyph named by its base name (A.svg into A), or to the glyph at the same position in `glyphs`. A file whose glyph does not exist is listed in `unmatched`, or with add the glyph is created. unscaled reads one font unit per SVG unit with SVG y = 0 at the master's ascender; em scales the drawing's box to the em with its top edge at the ascender. Coordinates are rounded to the grid; styling is dropped and named in `notes`. A file that cannot be read is listed in `failed`; when no file is imported and one failed, the command fails. At most 4096 files and 2,000,000 nodes → {imported: [{file, glyph, paths, notes?}], added: [names], unmatched: [files], failed: [{file, error}]}",
+            "{files: [paths], glyphs?: [names], layer?: id (default: the first master's layer), onMissingGlyph?: \"add\" | \"skip\" (default skip), scale?: \"unscaled\" | \"em\" (default unscaled)} imports SVG or EPS files (EPS by its `%!` or DOS EPS header) as outlines, added to the glyph's layer after its shapes, as one undo step. Each file goes to the glyph named by its base name (A.svg into A), or to the glyph at the same position in `glyphs`. A file whose glyph does not exist is listed in `unmatched`, or with add the glyph is created. unscaled reads one font unit per SVG unit with SVG y = 0 at the master's ascender; em scales the drawing's box to the em with its top edge at the ascender. Coordinates are rounded to the grid; styling is dropped and named in `notes`. A file that cannot be read is listed in `failed`; when no file is imported and one failed, the command fails. At most 4096 files and 2,000,000 nodes → {imported: [{file, glyph, paths, notes?}], added: [names], unmatched: [files], failed: [{file, error}]}",
             has_doc,
             import_outlines
         ),
@@ -565,27 +565,35 @@ fn import_outlines(s: &mut Session, p: &Value) -> Result<Value> {
         let master = font.master(&master_id)?;
         let ascender = font.metric_pos(master, metric::ASCENDER, em * 0.8);
         let placement = if fit_em { Placement::FitEm { units_per_em: em, ascender } } else { Placement::Unscaled { top: ascender } };
-        let read = match read_bytes(file).and_then(|bytes| read_svg(&bytes, placement).map_err(|e| EngineError::Io(e.to_string()))) {
+        // EPS files run through the PostScript subset reader; everything else is read as SVG.
+        let read = read_bytes(file).and_then(|bytes| {
+            if looks_like_eps(&bytes) {
+                read_eps(&bytes, placement).map(|r| (r.paths, r.dropped.summary())).map_err(|e| EngineError::Io(e.to_string()))
+            } else {
+                read_svg(&bytes, placement).map(|r| (r.paths, r.dropped.summary())).map_err(|e| EngineError::Io(e.to_string()))
+            }
+        });
+        let (paths, notes) = match read {
             Ok(read) => read,
             Err(e) => {
                 failed.push((file.into(), e.to_string()));
                 continue;
             }
         };
-        if read.paths.is_empty() {
+        if paths.is_empty() {
             failed.push((file.into(), "the file has no outlines".into()));
             continue;
         }
-        total_nodes = read.paths.iter().fold(total_nodes, |sum, path| sum.saturating_add(path.nodes.len()));
+        total_nodes = paths.iter().fold(total_nodes, |sum, path| sum.saturating_add(path.nodes.len()));
         if total_nodes > MAX_IMPORT_NODES {
             return Err(p.bad(format!("the files hold more than {MAX_IMPORT_NODES} nodes together: import fewer at a time")));
         }
-        let mut paths = read.paths;
+        let mut paths = paths;
         for n in paths.iter_mut().flat_map(|path| path.nodes.iter_mut()) {
             n.x = round_to_grid(n.x, step);
             n.y = round_to_grid(n.y, step);
         }
-        jobs.push(ImportJob { file: file.into(), glyph: name.into(), new, paths, notes: read.dropped.summary() });
+        jobs.push(ImportJob { file: file.into(), glyph: name.into(), new, paths, notes });
     }
 
     let failed_json: Vec<Value> = failed.iter().map(|(file, error)| json!({"file": file, "error": error})).collect();
