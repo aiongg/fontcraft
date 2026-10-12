@@ -18,6 +18,9 @@ pub const MAX_CROSSING_SEGMENTS: usize = 20_000;
 /// stretch rather than a crossing) never narrow down; past this many tests the pair counts as
 /// touching, not crossing.
 pub const MAX_PAIR_WORK: usize = 4_096;
+/// Most work one [`segment_crossings`] call does: one unit per pair of segment boxes tested, per
+/// pair of pieces compared and per subdivision step of two curves. Past it the call is refused.
+pub const MAX_CROSSING_WORK: usize = 50_000_000;
 /// Most crossings one call reports.
 pub const MAX_CROSSINGS: usize = 100_000;
 /// Two curves cross where their sub-curves fit in boxes this small, in units.
@@ -65,10 +68,16 @@ fn overlaps(a: Rect, b: Rect, slack: f64) -> bool {
 /// Local parameter pairs `(ta, tb)` where two pieces meet, each in 0..=1. A pair that runs along
 /// itself (a shared stretch) gives none.
 pub fn piece_crossings(a: &Piece, b: &Piece) -> Vec<(f64, f64)> {
+    let mut work = usize::MAX;
+    piece_crossings_within(a, b, &mut work).unwrap_or_default()
+}
+
+/// [`piece_crossings`] charging its subdivision steps to `work`; `None` when `work` runs out.
+fn piece_crossings_within(a: &Piece, b: &Piece, work: &mut usize) -> Option<Vec<(f64, f64)>> {
     match (a, b) {
-        (_, Piece::Line(l)) => with_line(a, *l).into_iter().collect(),
-        (Piece::Line(l), _) => with_line(b, *l).into_iter().map(|(t, u)| (u, t)).collect(),
-        _ => curves(a, b),
+        (_, Piece::Line(l)) => Some(with_line(a, *l)),
+        (Piece::Line(l), _) => Some(with_line(b, *l).into_iter().map(|(t, u)| (u, t)).collect()),
+        _ => curves(a, b, work),
     }
 }
 
@@ -87,8 +96,9 @@ fn with_line(p: &Piece, l: Line) -> Vec<(f64, f64)> {
 }
 
 /// Two curved pieces by subdivision: halve the larger sub-curve while the boxes overlap, until
-/// both fit in [`CROSSING_TOLERANCE`].
-fn curves(a: &Piece, b: &Piece) -> Vec<(f64, f64)> {
+/// both fit in [`CROSSING_TOLERANCE`]. Each step also takes one unit of `budget`; `None` when it
+/// runs out.
+fn curves(a: &Piece, b: &Piece, budget: &mut usize) -> Option<Vec<(f64, f64)>> {
     struct Job {
         a: Piece,
         ta: (f64, f64),
@@ -102,8 +112,9 @@ fn curves(a: &Piece, b: &Piece) -> Vec<(f64, f64)> {
     while let Some(j) = stack.pop() {
         work += 1;
         if work > MAX_PAIR_WORK {
-            return Vec::new();
+            return Some(Vec::new());
         }
+        *budget = budget.checked_sub(1)?;
         let (Some(ra), Some(rb)) = (hull(&j.a), hull(&j.b)) else { continue };
         if !overlaps(ra, rb, CROSSING_TOLERANCE) {
             continue;
@@ -134,7 +145,7 @@ fn curves(a: &Piece, b: &Piece) -> Vec<(f64, f64)> {
             out.push(f);
         }
     }
-    out
+    Some(out)
 }
 
 /// The box around a segment's pieces.
@@ -150,8 +161,8 @@ fn segment_hull(pieces: &[Piece]) -> Option<Rect> {
 /// For each segment (a list of pieces), the segment parameters where another segment crosses
 /// or touches it, sorted, repeats removed. A segment is not compared with itself; segments that
 /// share an end node meet there at parameter 0 or 1, which callers drop as an existing node.
-/// Errors when there are more than [`MAX_CROSSING_SEGMENTS`] segments or more than
-/// [`MAX_CROSSINGS`] crossings.
+/// Errors when there are more than [`MAX_CROSSING_SEGMENTS`] segments, more than
+/// [`MAX_CROSSINGS`] crossings, or the comparisons take more than [`MAX_CROSSING_WORK`].
 pub fn segment_crossings(segments: &[Vec<Piece>]) -> Result<Vec<Vec<f64>>, String> {
     if segments.len() > MAX_CROSSING_SEGMENTS {
         return Err(format!("the layer has {} segments; at most {MAX_CROSSING_SEGMENTS} can be compared", segments.len()));
@@ -161,11 +172,14 @@ pub fn segment_crossings(segments: &[Vec<Piece>]) -> Result<Vec<Vec<f64>>, Strin
     let mut order: Vec<(usize, Rect)> = segments.iter().enumerate().filter_map(|(i, s)| segment_hull(s).map(|r| (i, r))).collect();
     order.sort_by(|a, b| a.1.x0.total_cmp(&b.1.x0));
     let mut total = 0usize;
+    let mut work = MAX_CROSSING_WORK;
+    let too_much = || format!("the segments overlap too much to compare: the search stopped after {MAX_CROSSING_WORK} steps");
     for (k, (i, ri)) in order.iter().enumerate() {
         for (j, rj) in order.iter().skip(k + 1) {
             if rj.x0 > ri.x1 + CROSSING_TOLERANCE {
                 break;
             }
+            work = work.checked_sub(1).ok_or_else(too_much)?;
             if !overlaps(*ri, *rj, CROSSING_TOLERANCE) {
                 continue;
             }
@@ -173,7 +187,8 @@ pub fn segment_crossings(segments: &[Vec<Piece>]) -> Result<Vec<Vec<f64>>, Strin
             let (na, nb) = (a.len() as f64, b.len() as f64);
             for (pa, piece_a) in a.iter().enumerate() {
                 for (pb, piece_b) in b.iter().enumerate() {
-                    for (ta, tb) in piece_crossings(piece_a, piece_b) {
+                    work = work.checked_sub(1).ok_or_else(too_much)?;
+                    for (ta, tb) in piece_crossings_within(piece_a, piece_b, &mut work).ok_or_else(too_much)? {
                         total += 1;
                         if total > MAX_CROSSINGS {
                             return Err(format!("the paths cross more than {MAX_CROSSINGS} times"));
@@ -472,6 +487,24 @@ mod tests {
         let (ta, tb) = hits[0];
         assert!(a.eval(ta).distance(c.eval(tb)) < 0.01);
         assert!(piece_crossings(&a, &a).is_empty());
+    }
+
+    #[test]
+    fn many_overlapping_segments_are_refused_quickly() {
+        // Nearly parallel arches 0.01 apart: every pair's boxes overlap and each pair needs
+        // subdivision before it can be told apart.
+        let segments: Vec<Vec<Piece>> = (0..MAX_CROSSING_SEGMENTS)
+            .map(|i| {
+                let y = f64::from(u32::try_from(i).unwrap_or(0)) * 0.01;
+                vec![Piece::Cubic(CubicBez::new((0.0, y), (300.0, y + 600.0), (700.0, y + 600.0), (1000.0, y)))]
+            })
+            .collect();
+        let start = std::time::Instant::now();
+        let refused = segment_crossings(&segments);
+        assert!(start.elapsed() < std::time::Duration::from_secs(60), "{:?}", start.elapsed());
+        assert!(refused.is_err_and(|e| e.contains("overlap too much")));
+        // Two of them still compare.
+        assert!(segment_crossings(segments.get(..2).unwrap_or_default()).is_ok());
     }
 
     #[test]
