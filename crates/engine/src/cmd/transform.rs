@@ -823,7 +823,10 @@ const NOT_WITH_CORNERS: [&str; 9] = ["glyphs", "side", "points", "segments", "sh
 fn mirror_corners(s: &mut Session, v: &Value, flip: &str, id: &'static str, label: &str) -> Result<Option<Value>> {
     let Some(corners) = v.get("corners") else { return Ok(None) };
     if let Some(key) = NOT_WITH_CORNERS.iter().find(|k| v.get(**k).is_some()) {
-        return Err(EngineError::BadParams { command: id.into(), message: format!("`corners` flips corner components in place: `{key}` is not taken with it") });
+        return Err(EngineError::BadParams {
+            command: id.into(),
+            message: format!("`corners` flips corner components in place: `{key}` is not taken with it"),
+        });
     }
     let mut p = json!({"corners": corners, "flip": flip});
     for key in ["glyph", "layer"] {

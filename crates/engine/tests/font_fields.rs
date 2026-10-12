@@ -284,6 +284,10 @@ fn pasted_parameters_match_other_spellings_and_name_parameters_become_properties
     assert!(matches!(&info.params.0[0].value, PlistValue::Number(n) if n.value().as_f64() == 2.0), "{:?}", info.params);
     assert_eq!(info.properties.value("designerURL"), Some("https://example.com"));
 
-    let r = run(&mut s, "font.info.pasteRows", json!({"scope": "master", "targets": ["m01"], "rows": [{"kind": "param", "key": "designerURL", "value": "x"}]}));
+    let r = run(
+        &mut s,
+        "font.info.pasteRows",
+        json!({"scope": "master", "targets": ["m01"], "rows": [{"kind": "param", "key": "designerURL", "value": "x"}]}),
+    );
     assert_eq!(r["skipped"].as_array().unwrap().len(), 1, "{r}");
 }
