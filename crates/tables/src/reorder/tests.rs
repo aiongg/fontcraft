@@ -3,20 +3,22 @@
 use std::sync::Arc;
 
 use fontcraft_compile::{Flavour as CompileFlavour, Options, compile};
-use fontcraft_model::{Anchor, Component, Font, Path, Shape, Snippet};
-use read_fonts::types::{GlyphId, GlyphId16};
+use fontcraft_model::{Anchor, Component, Font, Path, Shape};
+use read_fonts::types::{GlyphId, GlyphId16, Tag};
 use read_fonts::{FontRef, TableProvider};
 use write_fonts::from_obj::ToOwnedTable;
 use write_fonts::tables::gpos::{PairPos, PositionLookup};
-use write_fonts::tables::gsub::SubstitutionLookup;
-use write_fonts::tables::layout::CoverageTable;
+use write_fonts::tables::gsub::{Gsub, Ligature, LigatureSet, LigatureSubstFormat1, SubstitutionLookup, SubstitutionLookupList};
+use write_fonts::tables::layout::{
+    CoverageTable, Feature, FeatureList, FeatureRecord, LangSys, Lookup, LookupFlag, Script, ScriptList, ScriptRecord,
+};
 
 use super::*;
 use crate::rename::{RenameOptions, rename_glyphs};
 use crate::sfnt::{WriteOptions, read, write};
 
 /// A, V, a combining acute with anchors, Aacute built from components, kerning A V and a
-/// ligature A V → Aacute, so the compiled font has `glyf` composites, `cmap`, `hmtx`, `GDEF`,
+/// ligature A V → Aacute (added after the compile), so the font has `glyf` composites, `cmap`, `hmtx`, `GDEF`,
 /// `GSUB` and `GPOS`.
 fn source() -> Font {
     let mut f = Font::new("Order Sans");
@@ -24,6 +26,8 @@ fn source() -> Font {
         if f.glyph(name).is_none() {
             f.add_glyph(name, cps, width).unwrap();
         }
+        // The new font's own A and V are 600 wide.
+        f.glyph_mut(name).unwrap().layers[0].width = width;
     }
     {
         let mut a = f.glyph_mut("A").unwrap();
@@ -42,14 +46,23 @@ fn source() -> Font {
         c.layers[0].shapes.push(Shape::Component(Component::new("acutecomb", 200.0, 200.0)));
     }
     Arc::make_mut(&mut f.kerning).ltr.set("m01", "A", "V", -50.0);
-    Arc::make_mut(&mut f.features).features.push(Snippet { name: "liga".into(), code: "sub A V by Aacute;".into(), ..Default::default() });
     f
 }
 
 fn built(flavour: CompileFlavour) -> SfntFont {
     let f = source();
     let out = compile(&f, &f.default_target().unwrap(), flavour, &Options::default()).unwrap();
-    read(&out.bytes, 0).unwrap()
+    let mut font = read(&out.bytes, 0).unwrap();
+    // Hand-written feature code is not compiled yet, so the ligature A V → Aacute is built here.
+    let compiled = FontRef::new(&out.bytes).unwrap();
+    let (a, v, aacute) = (g16(gid(&compiled, 'A')), g16(gid(&compiled, 'V')), g16(gid(&compiled, 'Á')));
+    let lig = LigatureSubstFormat1::new([a].into_iter().collect(), vec![LigatureSet::new(vec![Ligature::new(aacute, vec![v])])]);
+    let lookup = SubstitutionLookup::Ligature(Lookup::new(LookupFlag::empty(), vec![lig]));
+    let scripts = ScriptList::new(vec![ScriptRecord::new(Tag::new(b"DFLT"), Script::new(Some(LangSys::new(vec![0])), vec![]))]);
+    let features = FeatureList::new(vec![FeatureRecord::new(Tag::new(b"liga"), Feature::new(None, vec![0]))]);
+    let gsub = Gsub::new(scripts, features, SubstitutionLookupList::new(vec![lookup]));
+    font.insert(*b"GSUB", write_fonts::dump_table(&gsub).unwrap());
+    font
 }
 
 fn gid(font: &FontRef, c: char) -> GlyphId {
@@ -192,7 +205,7 @@ fn hostile_tables_fail_with_a_message() {
     order.swap(1, 2);
     for tag in [*b"glyf", *b"loca", *b"hmtx", *b"cmap", *b"GSUB", *b"GPOS", *b"GDEF", *b"post"] {
         let mut bad = font.clone();
-        let mut bytes = bad.get(tag).unwrap().to_vec();
+        let mut bytes = bad.get(tag).unwrap_or_else(|| panic!("no {}", String::from_utf8_lossy(&tag))).to_vec();
         bytes.truncate(bytes.len() / 3);
         bad.insert(tag, bytes);
         let _ = apply_order(bad, &order);
