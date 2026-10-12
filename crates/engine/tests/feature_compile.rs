@@ -347,3 +347,17 @@ fn a_reused_compile_skips_includes_outside_the_folder_and_caps_what_it_reads() {
     assert!(!cached(&mut s), "more included bytes than the key reads");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// An include that names a named pipe does not stop the compile: opening it would wait for a
+/// writer forever.
+#[cfg(unix)]
+#[test]
+fn an_included_named_pipe_is_not_opened() {
+    let (mut s, dir) = including_session("fifo");
+    std::fs::remove_file(dir.join("rules.fea")).unwrap();
+    let made = std::process::Command::new("mkfifo").arg(dir.join("rules.fea")).status().unwrap();
+    assert!(made.success());
+    let r = run(&mut s, "font.features.compile", json!({}));
+    assert_eq!(r["ok"], json!(false), "{r}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

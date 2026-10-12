@@ -117,6 +117,10 @@ impl Loader<'_> {
         if !dir.is_some_and(|d| real.starts_with(d)) {
             return Err(format!("`{path}` is outside the source's folder"));
         }
+        // Opening a named pipe would wait for a writer.
+        if !std::fs::metadata(&real).is_ok_and(|m| m.is_file()) {
+            return Err(format!("`{path}` is not a file"));
+        }
         let budget = self.limits.text_bytes.saturating_sub(self.files.total_bytes()).saturating_sub(self.disk_bytes);
         // The length on record can be wrong (special files report zero, a file can grow), so the
         // read itself stops one byte past the budget, and what was read is what counts.
