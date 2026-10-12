@@ -307,19 +307,24 @@ mod tests {
 
     #[test]
     fn stored_pairs_that_expand_to_nothing_still_count_toward_the_work_cap() {
-        // One left group of 2,000 members kerned against 2,100 right groups with no members:
-        // no glyph pair results, but each stored pair lists the 2,000 members again.
+        // One left group of 2,000 members that are not exported, kerned against 2,100 right
+        // groups: no glyph pair results, but each stored pair lists the 2,000 members again.
         let mut f = Font::new("Kern Table Sans");
         for i in 0..2_000 {
             let l = format!("l{i:04}");
             f.add_glyph(&l, vec![], 500.0).unwrap();
             group(&mut f, &l, GroupSide::Right, "L");
         }
+        for i in 0..2_100 {
+            let r = format!("r{i:04}");
+            f.add_glyph(&r, vec![], 500.0).unwrap();
+            group(&mut f, &r, GroupSide::Left, &format!("R{i}"));
+        }
         let kerning = Arc::make_mut(&mut f.kerning);
         for i in 0..2_100 {
-            kerning.ltr.set("m01", "@MMK_L_L", &format!("@MMK_R_empty{i}"), -10.0);
+            kerning.ltr.set("m01", "@MMK_L_L", &format!("@MMK_R_R{i}"), -10.0);
         }
-        let order: Vec<&str> = f.glyphs.iter().map(|g| g.name.as_str()).collect();
+        let order: Vec<&str> = f.glyphs.iter().map(|g| g.name.as_str()).filter(|n| !n.starts_with('l')).collect();
         let mut warnings = Vec::new();
         let started = std::time::Instant::now();
         let out = pairs(&f, "m01", &order, &ExportEdits::default(), &mut warnings);
