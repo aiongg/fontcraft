@@ -375,9 +375,11 @@ pub fn avar_version(font: &SfntFont) -> Result<Option<u16>> {
     font.get(AVAR).map(avar_major).transpose()
 }
 
+/// The (from, to) pairs of one axis's avar segment map.
+pub type SegmentMap = Vec<(f64, f64)>;
 /// The segment maps of the font's `avar` table, normalised, one per `fvar` axis in table order;
 /// empty without an `avar` table.
-pub fn segment_maps(font: &SfntFont) -> Result<Vec<(Tag, Vec<(f64, f64)>)>> {
+pub fn segment_maps(font: &SfntFont) -> Result<Vec<(Tag, SegmentMap)>> {
     let axes = fvar_axes(font)?;
     let Some(avar) = read_avar(font, &axes)? else { return Ok(Vec::new()) };
     Ok(axes.iter().zip(avar.segments).map(|(a, s)| (a.tag, s)).collect())
@@ -447,7 +449,7 @@ fn validated_map(tag: Tag, pairs: &[(f64, f64)]) -> Result<Vec<(f64, f64)>> {
 
 /// One axis's segment map from its user-to-design map, and the axis range in design
 /// coordinates. `None` for the map when it changes nothing.
-fn axis_segments(axis: &FvarAxis, map: &[(f64, f64)]) -> Result<(Option<Vec<(f64, f64)>>, (f64, f64, f64))> {
+fn axis_segments(axis: &FvarAxis, map: &[(f64, f64)]) -> Result<(Option<SegmentMap>, (f64, f64, f64))> {
     let name = tag_str(axis.tag);
     let keys_triple = (axis.minimum, axis.default, axis.maximum);
     if map.is_empty() {

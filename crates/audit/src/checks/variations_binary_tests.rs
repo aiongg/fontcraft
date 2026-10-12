@@ -398,7 +398,7 @@ fn cmap() -> Vec<u8> {
 }
 
 fn sfnt(mut tables: Vec<([u8; 4], Vec<u8>)>) -> Vec<u8> {
-    tables.sort_by(|a, b| a.0.cmp(&b.0));
+    tables.sort_by_key(|a| a.0);
     let mut w = W::default();
     w.u32(0x0001_0000).u16(tables.len() as u16).u16(0).u16(0).u16(0);
     let start = 12 + 16 * tables.len();
@@ -406,7 +406,7 @@ fn sfnt(mut tables: Vec<([u8; 4], Vec<u8>)>) -> Vec<u8> {
     for (tag, data) in &tables {
         w.tag(tag).u32(0).u32((start + body.len()) as u32).u32(data.len() as u32);
         body.extend(data);
-        while body.len() % 4 != 0 {
+        while !body.len().is_multiple_of(4) {
             body.push(0);
         }
     }

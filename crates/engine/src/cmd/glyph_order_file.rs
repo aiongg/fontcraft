@@ -132,16 +132,10 @@ fn rename(s: &mut Session, v: &Value) -> Result<Value> {
         let result = rename_glyphs(font, &options)?;
         let new = reorder::glyph_names(&result.font)?;
         let mut font = result.font;
-        if reorder_too {
-            if let Some(g) = &goadb {
-                let wanted: Vec<String> = g
-                    .entries
-                    .iter()
-                    .map(|e| if reverse { e.source_name.clone() } else { e.final_name.clone() })
-                    .filter(|n| new.contains(n))
-                    .collect();
-                font = reorder::reorder_glyphs(font, &ReorderOptions { order: wanted })?;
-            }
+        if reorder_too && let Some(g) = &goadb {
+            let wanted: Vec<String> =
+                g.entries.iter().map(|e| if reverse { e.source_name.clone() } else { e.final_name.clone() }).filter(|n| new.contains(n)).collect();
+            font = reorder::reorder_glyphs(font, &ReorderOptions { order: wanted })?;
         }
         let renamed: Vec<Value> = old.iter().zip(&new).filter(|(a, b)| a != b).map(|(a, b)| json!({"from": a, "to": b})).collect();
         let output = write_binary(&p, &path, &font)?;
@@ -198,21 +192,17 @@ fn rename_source(
     }
     let renames: Vec<(String, String)> = names.iter().filter_map(|n| after.get(n).filter(|t| *t != n).map(|t| (n.clone(), t.clone()))).collect();
     let report = fontcraft_model::rename_glyphs(&mut font, &renames)?;
-    if update_unicodes {
-        if let Some(g) = &goadb {
-            for e in g.entries.iter().filter(|e| !e.code_points.is_empty()) {
-                let name = if reverse { &e.source_name } else { &e.final_name };
-                if let Ok(mut glyph) = font.glyph_mut(name) {
-                    glyph.unicodes = e.code_points.clone();
-                }
+    if update_unicodes && let Some(g) = &goadb {
+        for e in g.entries.iter().filter(|e| !e.code_points.is_empty()) {
+            let name = if reverse { &e.source_name } else { &e.final_name };
+            if let Ok(mut glyph) = font.glyph_mut(name) {
+                glyph.unicodes = e.code_points.clone();
             }
         }
     }
-    if reorder_too {
-        if let Some(g) = &goadb {
-            let order: Vec<String> = g.entries.iter().map(|e| if reverse { e.source_name.clone() } else { e.final_name.clone() }).collect();
-            reorder_source(&mut font, &order)?;
-        }
+    if reorder_too && let Some(g) = &goadb {
+        let order: Vec<String> = g.entries.iter().map(|e| if reverse { e.source_name.clone() } else { e.final_name.clone() }).collect();
+        reorder_source(&mut font, &order)?;
     }
     let output = save_source(p, path, &font)?;
     let still: Vec<Value> = report.still_used.iter().map(|r| json!({"name": r.name, "place": r.place})).collect();
@@ -246,13 +236,12 @@ fn reorder_source(font: &mut fontcraft_model::Font, order: &[String]) -> Result<
     let mut taken = vec![false; index.len()];
     let mut new_to_old = Vec::with_capacity(taken.len());
     for name in order {
-        if let Some(i) = index.get(name.as_str()) {
-            if let Some(t) = taken.get_mut(*i) {
-                if !*t {
-                    *t = true;
-                    new_to_old.push(*i);
-                }
-            }
+        if let Some(i) = index.get(name.as_str())
+            && let Some(t) = taken.get_mut(*i)
+            && !*t
+        {
+            *t = true;
+            new_to_old.push(*i);
         }
     }
     for (i, t) in taken.iter().enumerate() {

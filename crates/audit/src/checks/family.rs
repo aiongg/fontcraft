@@ -835,10 +835,14 @@ fn vertical(face: &Face<'_>) -> Option<[(&'static str, &'static str, i32); 8]> {
     ])
 }
 
+/// A metric that differs: table, field, and each font's value.
+type MetricDifference<'f> = (&'static str, &'static str, Vec<(&'f str, i32)>);
+/// The eight vertical metrics of one font, each with its table and field.
+type VerticalMetrics = [(&'static str, &'static str, i32); 8];
 /// For each of the eight metrics that differ between `group`'s fonts: table, field, and the
 /// value of each font.
-fn metric_differences<'f>(group: &[&'f Face<'_>]) -> Vec<(&'static str, &'static str, Vec<(&'f str, i32)>)> {
-    let rows: Vec<(&str, [(&'static str, &'static str, i32); 8])> = group.iter().filter_map(|f| Some((f.label.as_str(), vertical(f)?))).collect();
+fn metric_differences<'f>(group: &[&'f Face<'_>]) -> Vec<MetricDifference<'f>> {
+    let rows: Vec<(&str, VerticalMetrics)> = group.iter().filter_map(|f| Some((f.label.as_str(), vertical(f)?))).collect();
     let mut out = Vec::new();
     for i in 0..8 {
         let values: Vec<(&str, (&'static str, &'static str, i32))> = rows.iter().filter_map(|(label, r)| Some((*label, *r.get(i)?))).collect();
@@ -1267,7 +1271,8 @@ pub(crate) fn tabular_figure_widths(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &
 pub(crate) fn axis_ranges(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
     let faces = faces(ctx.fonts);
     for (name, group) in typographic(&faces) {
-        let axes: Vec<(&Face<'_>, Vec<(Tag, [i32; 3])>)> = group
+        type AxisRanges = Vec<(Tag, [i32; 3])>;
+        let axes: Vec<(&Face<'_>, AxisRanges)> = group
             .iter()
             .filter_map(|f| {
                 let fvar = f.font.fvar().ok()?;
@@ -1496,7 +1501,7 @@ pub(crate) fn size_feature_groups(ctx: &FamilyCtx<'_>, _: &Params<'_>, sink: &mu
             }
             let mut ranges: Vec<(u16, u16, &Face<'_>)> =
                 members.iter().filter_map(at).map(|(f, [_, _, _, start, end], _)| (*start, *end, *f)).collect();
-            ranges.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+            ranges.sort_by_key(|a| (a.0, a.1));
             for pair in ranges.windows(2) {
                 let [(_, end, a), (start, next_end, b)] = pair else { continue };
                 if start != end {
@@ -1832,6 +1837,9 @@ mod tests {
         shift: Option<i32>,
     }
 
+    /// Tag, minimum, default and maximum of one fvar axis.
+    type FvarAxis = ([u8; 4], f64, f64, f64);
+
     /// One font of a synthetic family, as data the builder turns into an sfnt.
     #[derive(Clone)]
     struct Spec {
@@ -1855,7 +1863,7 @@ mod tests {
         copyright: String,
         full: Option<String>,
         extra_names: Vec<(u16, u16, u16, u16, String)>,
-        fvar: Option<Vec<([u8; 4], f64, f64, f64)>>,
+        fvar: Option<Vec<FvarAxis>>,
         gsub: Option<Vec<([u8; 4], Vec<u16>)>>,
         size: Option<[u16; 5]>,
         cff: Option<Private>,
@@ -1916,7 +1924,7 @@ mod tests {
     }
 
     fn sfnt(mut tables: Vec<([u8; 4], Vec<u8>)>) -> Vec<u8> {
-        tables.sort_by(|a, b| a.0.cmp(&b.0));
+        tables.sort_by_key(|a| a.0);
         let cff = tables.iter().any(|(t, _)| t == b"CFF ");
         let mut out = Vec::new();
         u32be(&mut out, if cff { 0x4F54_544F } else { 0x0001_0000 });
@@ -1978,7 +1986,7 @@ mod tests {
             records.push((3, 1, 0x409, 16, t.clone()));
         }
         records.extend(s.extra_names.iter().cloned());
-        records.sort_by(|a, b| (a.0, a.1, a.2, a.3).cmp(&(b.0, b.1, b.2, b.3)));
+        records.sort_by_key(|a| (a.0, a.1, a.2, a.3));
         let mut strings = Vec::new();
         let mut v = Vec::new();
         u16be(&mut v, 0);
@@ -2091,8 +2099,9 @@ mod tests {
         v
     }
 
+    type FeatureSpec = ([u8; 4], Vec<u16>, Option<[u16; 5]>);
     /// A GSUB or GPOS table with one script (latn, default language) using every feature.
-    fn layout(features: &[([u8; 4], Vec<u16>, Option<[u16; 5]>)]) -> Vec<u8> {
+    fn layout(features: &[FeatureSpec]) -> Vec<u8> {
         let n = features.len();
         let feature_list = 28 + 2 * n;
         let tables_len: usize = features.iter().map(|(_, l, p)| 4 + 2 * l.len() + if p.is_some() { 10 } else { 0 }).sum();

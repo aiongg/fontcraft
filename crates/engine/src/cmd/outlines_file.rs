@@ -376,6 +376,7 @@ fn prepare_source(_: &Params, _: &Path, _: &OutlineOptions, _: OutputRequest, _:
     Err(EngineError::Unsupported("reading and writing files by path in the browser".into()))
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 #[path = "outlines_file_tests.rs"]
 mod tests;

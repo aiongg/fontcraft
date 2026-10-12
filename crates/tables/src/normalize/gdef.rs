@@ -23,10 +23,10 @@ fn caret_subtables(table: &Gdef<'_>, budget: &mut Budget) -> Result<BTreeSet<u16
         let lig_glyph = lig_glyph.map_err(&err)?;
         for caret in lig_glyph.caret_values().iter() {
             budget.charge(1)?;
-            if let CaretValue::Format3(caret) = caret.map_err(&err)? {
-                if let DeviceOrVariationIndex::VariationIndex(index) = caret.device().map_err(&err)? {
-                    outers.insert(index.delta_set_outer_index());
-                }
+            if let CaretValue::Format3(caret) = caret.map_err(&err)?
+                && let DeviceOrVariationIndex::VariationIndex(index) = caret.device().map_err(&err)?
+            {
+                outers.insert(index.delta_set_outer_index());
             }
         }
     }

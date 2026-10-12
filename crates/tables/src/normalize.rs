@@ -80,17 +80,18 @@ fn run(font: &SfntFont, options: &NormalizeOptions, max_work: usize) -> Result<S
     let mut out = Out::default();
     let mut budget = Budget { left: max_work };
 
-    if (wanted.all || wanted.gdef) && has_carets {
-        if let Some(gdef) = gdef.as_ref() {
-            out.put(format_args!("# GDEF #\n"))?;
-            gdef::print(&mut out, gdef, &names, coords.as_deref(), &mut budget)?;
-        }
+    if (wanted.all || wanted.gdef)
+        && has_carets
+        && let Some(gdef) = gdef.as_ref()
+    {
+        out.put(format_args!("# GDEF #\n"))?;
+        gdef::print(&mut out, gdef, &names, coords.as_deref(), &mut budget)?;
     }
-    if wanted.all || wanted.gpos {
-        if let Ok(gpos) = provider.gpos() {
-            out.put(format_args!("# GPOS #\n"))?;
-            gpos::print(&mut out, &gpos, gdef.as_ref(), &names, coords.as_deref(), &mut budget)?;
-        }
+    if (wanted.all || wanted.gpos)
+        && let Ok(gpos) = provider.gpos()
+    {
+        out.put(format_args!("# GPOS #\n"))?;
+        gpos::print(&mut out, &gpos, gdef.as_ref(), &names, coords.as_deref(), &mut budget)?;
     }
     // GSUB: the oracle prints no rules for it, so neither does this.
     Ok(out.text)

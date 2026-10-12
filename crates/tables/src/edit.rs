@@ -206,7 +206,7 @@ fn u32_at(b: &[u8], at: usize) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::string_slice)]
 
     use super::*;
     use crate::sfnt::{Flavour, WriteOptions, read, write};

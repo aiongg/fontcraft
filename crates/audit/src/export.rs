@@ -748,7 +748,8 @@ fn sort_number(v: &Option<ReportValue>) -> f64 {
 }
 
 fn metrics_field(spec: &FieldSpec, faces: &[&FaceInfo]) -> MetricsField {
-    let cells: Vec<(&FaceInfo, Option<(ReportValue, Option<String>)>)> = faces.iter().map(|f| (*f, (spec.get)(f))).collect();
+    type Cell = (ReportValue, Option<String>);
+    let cells: Vec<(&FaceInfo, Option<Cell>)> = faces.iter().map(|f| (*f, (spec.get)(f))).collect();
     let mut out = MetricsField { field: spec.field, source: spec.source, same: false, value: None, label: None, fonts: Vec::new(), skipped: None };
     let Some((_, first)) = cells.first() else { return out };
     let Some((first_value, first_label)) = first.clone() else {
@@ -839,7 +840,7 @@ pub fn weight_class_label(w: u16) -> &'static str {
         return "value out of range";
     }
     let step = usize::from(w / 100) - 1;
-    if w % 100 == 0 { NAMES.get(step).copied() } else { BETWEEN.get(step).copied() }.unwrap_or("value out of range")
+    if w.is_multiple_of(100) { NAMES.get(step).copied() } else { BETWEEN.get(step).copied() }.unwrap_or("value out of range")
 }
 
 /// The name of a `usWidthClass` value.

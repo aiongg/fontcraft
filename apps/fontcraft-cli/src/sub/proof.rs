@@ -64,8 +64,8 @@ fn run(args: &[String]) -> Outcome {
     if parsed.switch("quiet") {
         return Ok(());
     }
-    for proof in result["proofs"].as_array().into_iter().flatten() {
-        for file in proof["files"].as_array().into_iter().flatten() {
+    for proof in result.get("proofs").and_then(|p| p.as_array()).into_iter().flatten() {
+        for file in proof.get("files").and_then(|f| f.as_array()).into_iter().flatten() {
             out(file.as_str().unwrap_or_default())?;
         }
     }

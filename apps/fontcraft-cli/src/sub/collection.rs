@@ -110,8 +110,8 @@ fn run(raw: &[String]) -> Outcome {
             if json_out {
                 return io::out_json(&result);
             }
-            io::note(&format!("packed {} fonts into {}", result["fonts"], output));
-            if let Some(saved) = result["savedBySharing"].as_object().filter(|s| !s.is_empty()) {
+            io::note(&format!("packed {} fonts into {}", result.get("fonts").unwrap_or(&serde_json::Value::Null), output));
+            if let Some(saved) = result.get("savedBySharing").and_then(|s| s.as_object()).filter(|s| !s.is_empty()) {
                 let shared: Vec<String> = saved.iter().map(|(tag, bytes)| format!("{tag} ({bytes} bytes)")).collect();
                 io::detail(&format!("shared: {}", shared.join(", ")));
             }
@@ -139,8 +139,8 @@ fn run(raw: &[String]) -> Outcome {
             if json_out {
                 return io::out_json(&result);
             }
-            for o in result["outputs"].as_array().map(Vec::as_slice).unwrap_or_default() {
-                out(o["path"].as_str().unwrap_or_default())?;
+            for o in result.get("outputs").and_then(|o| o.as_array()).map(Vec::as_slice).unwrap_or_default() {
+                out(o.get("path").and_then(|p| p.as_str()).unwrap_or_default())?;
             }
             Ok(())
         }

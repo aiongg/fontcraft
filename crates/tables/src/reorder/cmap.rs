@@ -32,7 +32,7 @@ pub(crate) fn cmap(table: &[u8], order: &Order) -> Result<Vec<u8>> {
                 let sub = subtable(d, *at, order)?;
                 let new_at = header_len + body.len();
                 body.extend(sub);
-                while body.len() % 4 != 0 {
+                while !body.len().is_multiple_of(4) {
                     body.push(0);
                 }
                 placed.insert(*at, new_at);

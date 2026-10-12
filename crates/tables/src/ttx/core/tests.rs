@@ -1,3 +1,6 @@
+// Tests may slice strings: a failing assertion is the point of a test.
+#![allow(clippy::string_slice)]
+
 //! The core tables against `ttx`. The fonts are built here table by table; the expected text in
 //! `testdata/` is what fontTools 4.66.1's `ttx` writes for the same bytes, with comments taken
 //! out (they hold no data, and `ttx` puts tracebacks in some).

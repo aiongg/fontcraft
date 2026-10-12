@@ -347,8 +347,8 @@ fn boolean(v: &PValue) -> Option<bool> {
     match v {
         PValue::Bool(b) => Some(*b),
         PValue::Number(n) => match n.value().as_f64() {
-            x if x == 1.0 => Some(true),
-            x if x == 0.0 => Some(false),
+            1.0 => Some(true),
+            0.0 => Some(false),
             _ => None,
         },
         PValue::String(s) => match s.as_str() {
@@ -727,7 +727,7 @@ impl LocValue {
     fn scalar(v: &PValue) -> Option<LocValue> {
         match v {
             PValue::String(s) => Some(LocValue::Text(s.as_str().to_string())),
-            PValue::Number(n) => Some(LocValue::Number(n.value().as_f64())).filter(|_| n.value().as_f64().is_finite()),
+            PValue::Number(n) => n.value().as_f64().is_finite().then(|| LocValue::Number(n.value().as_f64())),
             PValue::Bool(b) => Some(LocValue::Number(if *b { 1.0 } else { 0.0 })),
             _ => None,
         }

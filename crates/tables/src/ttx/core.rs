@@ -644,7 +644,7 @@ pub(crate) fn long_loca(font: &SfntFont) -> Result<bool> {
 pub(crate) fn loca_offsets(data: &[u8], font: &SfntFont) -> Result<Vec<usize>> {
     let long = long_loca(font)?;
     let size = if long { 4 } else { 2 };
-    if data.len() % size != 0 {
+    if !data.len().is_multiple_of(size) {
         return Err(TablesError::invalid("the 'loca' table length does not fit its offset size"));
     }
     let mut r = Rd::new(data);
@@ -684,7 +684,7 @@ fn gasp(data: &[u8], w: &mut XmlWriter) -> Result<()> {
 }
 
 fn cvt(data: &[u8], w: &mut XmlWriter) -> Result<()> {
-    if data.len() % 2 != 0 {
+    if !data.len().is_multiple_of(2) {
         return Err(TablesError::invalid("the 'cvt ' table has an odd length"));
     }
     for (i, pair) in data.chunks(2).enumerate() {

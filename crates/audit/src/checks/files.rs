@@ -245,7 +245,8 @@ fn check_tables(ctx: &BinaryCtx<'_>, sink: &mut Sink) {
             Err(e) => bad_table(sink, "head", &e),
         }
     }
-    let simple: [(&[u8; 4], fn(&FontRef<'_>) -> Option<ReadError>); 13] = [
+    type TableCheck = fn(&FontRef<'_>) -> Option<ReadError>;
+    let simple: [(&[u8; 4], TableCheck); 13] = [
         (b"hhea", |f| f.hhea().err()),
         (b"maxp", |f| f.maxp().err()),
         (b"hmtx", |f| f.hmtx().err()),

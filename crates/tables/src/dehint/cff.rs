@@ -1056,6 +1056,8 @@ fn read_u32(b: &[u8], at: usize) -> Option<u32> {
 pub(super) mod build {
     //! Small CFF helpers for the tests: an assembler, a disassembler and readers.
 
+    #![allow(clippy::string_slice)]
+
     const OPS: [(&str, &[u8]); 21] = [
         ("hstem", &[1]),
         ("vstem", &[3]),

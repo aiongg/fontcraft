@@ -5,6 +5,8 @@
 //! `data/corpus_*.txt` are the output of `tx -dump -0` (without its `## Filename` line) and
 //! `tx -dump -6` (AFDKO 5.0.1) on the same fonts, built byte for byte the same way, and on the
 //! corpus files.
+// Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::string_slice)]
 
 use std::path::Path;
 
@@ -250,7 +252,7 @@ fn cff_index(items: &[Vec<u8>]) -> Vec<u8> {
 
 fn dint(v: i32) -> Vec<u8> {
     match v {
-        -107..=1131 | -1131..=-108 => num(v, true),
+        -1131..=1131 => num(v, true),
         _ => [vec![28], (v as i16).to_be_bytes().to_vec()].concat(),
     }
 }

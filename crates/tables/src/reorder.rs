@@ -157,10 +157,10 @@ pub fn glyph_code_points(font: &SfntFont) -> Result<Vec<Vec<u32>>> {
         }
         let Ok(sub) = record.subtable(cmap.offset_data()) else { continue };
         for (cp, gid) in sub.iter().take(crate::limits::MAX_CODE_POINTS) {
-            if let Some(list) = out.get_mut(gid.to_u32() as usize) {
-                if gid.to_u32() != 0 {
-                    list.push(cp);
-                }
+            if let Some(list) = out.get_mut(gid.to_u32() as usize)
+                && gid.to_u32() != 0
+            {
+                list.push(cp);
             }
         }
     }
@@ -182,7 +182,7 @@ fn outline_sizes(font: &SfntFont, n: usize) -> Result<Vec<usize>> {
     (0..n).map(|g| Ok(at(g + 1)?.saturating_sub(at(g)?))).collect()
 }
 
-fn required<'a>(font: &'a SfntFont, tag: Tag) -> Result<&'a [u8]> {
+fn required(font: &SfntFont, tag: Tag) -> Result<&[u8]> {
     font.get(tag).ok_or_else(|| TablesError::MissingTable(tag_str(tag)))
 }
 
@@ -226,10 +226,10 @@ pub(crate) fn apply_order(font: SfntFont, new_to_old: &[u16]) -> Result<SfntFont
             out.insert(hea, header);
         }
     }
-    if let Some(post) = font.get(*b"post") {
-        if let Some(bytes) = names::reorder_post(post, new_to_old)? {
-            out.insert(*b"post", bytes);
-        }
+    if let Some(post) = font.get(*b"post")
+        && let Some(bytes) = names::reorder_post(post, new_to_old)?
+    {
+        out.insert(*b"post", bytes);
     }
     if let Some(bytes) = font.get(*b"CFF ") {
         out.insert(*b"CFF ", cff::parse(bytes, n)?.rebuild(new_to_old, None)?);

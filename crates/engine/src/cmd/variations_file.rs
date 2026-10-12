@@ -150,7 +150,8 @@ fn build_avar(_: &mut Session, params: &Value) -> Result<Value> {
     Ok(result)
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
     use fontcraft_tables::sfnt::Flavour;

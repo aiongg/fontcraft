@@ -12,7 +12,7 @@
 //! each member with its own copy of every table it uses.
 
 use std::collections::HashMap;
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::BuildHasher;
 
 use fontcraft_container::sfnt as csfnt;
 
@@ -107,9 +107,7 @@ pub fn pack(fonts: &[SfntFont], options: &PackOptions) -> Result<Vec<u8>> {
         let mut tables = Vec::with_capacity(font.tables.len());
         // The directory is sorted by tag; otf2otc walks it in that order.
         for (position, (tag, bytes)) in font.tables.iter().enumerate() {
-            let mut hasher = state.build_hasher();
-            bytes.hash(&mut hasher);
-            let candidates = by_hash.entry((*tag, hasher.finish())).or_default();
+            let candidates = by_hash.entry((*tag, state.hash_one(bytes))).or_default();
             let same =
                 if options.share_tables { candidates.iter().copied().find(|&i| data.get(i).is_some_and(|d| d.1 == bytes.as_slice())) } else { None };
             let index = match same {

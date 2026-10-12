@@ -166,10 +166,10 @@ mod m12_12 {
     fn tags(p: &Params, key: &str, allowed: Option<&[&str]>) -> Result<Vec<Tag>> {
         let mut out = Vec::new();
         for s in p.opt_strings(key)?.unwrap_or_default() {
-            if let Some(allowed) = allowed {
-                if !allowed.contains(&s) {
-                    return Err(p.bad(format!("`{key}` takes {}, got \"{s}\"", allowed.join(", "))));
-                }
+            if let Some(allowed) = allowed
+                && !allowed.contains(&s)
+            {
+                return Err(p.bad(format!("`{key}` takes {}, got \"{s}\"", allowed.join(", "))));
             }
             out.push(parse_tag(s)?);
         }

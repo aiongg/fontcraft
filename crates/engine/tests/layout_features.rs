@@ -1,4 +1,6 @@
 //! layout.listFeatures and layout.decompileFeatures on a font exported from a document.
+// Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::path::PathBuf;
 

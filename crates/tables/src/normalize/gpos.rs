@@ -86,12 +86,12 @@ fn print_rules<T: PrintNames + Clone>(
             out.put(format_args!("# lookupflag {flags:?}\n"))?;
             last_flag = Some(flags);
         }
-        if filter_set_id != last_filter_set {
-            if let (Some(filter_id), Some(sets)) = (filter_set_id, mark_glyph_sets) {
-                let coverage = sets.coverages().get(usize::from(filter_id)).map_err(read_err("a mark glyph set"))?;
-                let glyphs: GlyphSet = coverage.iter().collect();
-                out.put(format_args!("# filter glyphs: {}\n", glyphs.printer(names)))?;
-            }
+        if filter_set_id != last_filter_set
+            && let (Some(filter_id), Some(sets)) = (filter_set_id, mark_glyph_sets)
+        {
+            let coverage = sets.coverages().get(usize::from(filter_id)).map_err(read_err("a mark glyph set"))?;
+            let glyphs: GlyphSet = coverage.iter().collect();
+            out.put(format_args!("# filter glyphs: {}\n", glyphs.printer(names)))?;
         }
         last_filter_set = filter_set_id;
         out.put(format_args!("{}\n", rule.printer(names)))?;
@@ -251,9 +251,7 @@ fn normalize_mark_lookups<'a>(
             let to_remove: Vec<GlyphId16> =
                 rule.rule().iter_base_mark_pairs().filter(|pair| last_seen.get(pair) != Some(&i)).map(|pair| pair.1).collect();
             budget.charge(to_remove.len().saturating_add(1))?;
-            if to_remove.is_empty() {
-                result.push(rule);
-            } else if rule.rule_mut().remove_marks(&to_remove) {
+            if to_remove.is_empty() || rule.rule_mut().remove_marks(&to_remove) {
                 result.push(rule);
             }
         }

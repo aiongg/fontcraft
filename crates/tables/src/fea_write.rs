@@ -97,7 +97,8 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
     let mut head: Vec<Line> = Vec::new();
     let mut systems_seen: BTreeSet<(bool, Tag, bool, Tag)> = BTreeSet::new();
     // feature tag → (script, language) → (required, lookups by table)
-    let mut feats: BTreeMap<Tag, BTreeMap<SysKey, (bool, Vec<(Tag, u16)>)>> = BTreeMap::new();
+    type SysFeatures = (bool, Vec<(Tag, u16)>);
+    let mut feats: BTreeMap<Tag, BTreeMap<SysKey, SysFeatures>> = BTreeMap::new();
     let mut params: BTreeMap<Tag, Vec<Line>> = BTreeMap::new();
     let mut lookups: Vec<LookupOut> = Vec::new();
 
@@ -126,11 +127,10 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
                     .get(usize::from(index))
                     .and_then(|r| r.feature(features.offset_data()).ok())
                     .and_then(|f| f.feature_params())
+                    && let std::collections::btree_map::Entry::Vacant(slot) = params.entry(tag)
                 {
-                    if let std::collections::btree_map::Entry::Vacant(slot) = params.entry(tag) {
-                        let lines = w.feature_params(tag, &p);
-                        slot.insert(lines);
-                    }
+                    let lines = w.feature_params(tag, &p);
+                    slot.insert(lines);
                 }
                 systems_seen.insert(sys_key(sys.script, sys.language));
                 let entry = feats.entry(tag).or_default().entry(sys_key(sys.script, sys.language)).or_insert((false, Vec::new()));
@@ -184,10 +184,10 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
 
     // GDEF and BASE.
     let mut blocks: Vec<Line> = Vec::new();
-    if wanted(GDEF) {
-        if let Some(g) = &gdef {
-            blocks.extend(w.gdef_block(g)?);
-        }
+    if wanted(GDEF)
+        && let Some(g) = &gdef
+    {
+        blocks.extend(w.gdef_block(g)?);
     }
     if wanted(BASE) {
         let base = provider.base().map_err(|e| read_err("BASE", e))?;
@@ -232,7 +232,7 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
                 body.push(Line::text(1, "# the compiler rebuilds this feature from the lookups it names".into()));
             }
             let mut seen = HashSet::new();
-            for (_, (_, ids)) in systems.iter() {
+            for (_, ids) in systems.values() {
                 for id in ids {
                     if seen.insert(*id) {
                         body.push(Line::text(1, format!("lookup {};", w.lookup_name(id.0, id.1))));
@@ -240,7 +240,8 @@ pub fn decompile_report(font: &SfntFont, options: &DecompileOptions) -> Result<D
                 }
             }
         } else {
-            let mut scripts: BTreeMap<(bool, Tag), Vec<(Tag, bool, &Vec<(Tag, u16)>)>> = BTreeMap::new();
+            type LangEntry<'a> = (Tag, bool, &'a Vec<(Tag, u16)>);
+            let mut scripts: BTreeMap<(bool, Tag), Vec<LangEntry<'_>>> = BTreeMap::new();
             for ((nd, script, _, lang), (required, ids)) in systems {
                 scripts.entry((*nd, *script)).or_default().push((*lang, *required, ids));
             }
@@ -307,12 +308,12 @@ fn visit(li: u16, outs: &HashMap<u16, LookupOut>, state: &mut HashMap<u16, bool>
         return;
     }
     state.insert(li, false);
-    if depth < MAX_LOOKUP_NESTING {
-        if let Some(out) = outs.get(&li) {
-            for r in &out.refs {
-                if *r != li {
-                    visit(*r, outs, state, order, depth + 1);
-                }
+    if depth < MAX_LOOKUP_NESTING
+        && let Some(out) = outs.get(&li)
+    {
+        for r in &out.refs {
+            if *r != li {
+                visit(*r, outs, state, order, depth + 1);
             }
         }
     }
@@ -537,10 +538,11 @@ impl<'a> Writer<'a> {
 
     /// A glyph set as one piece: a single glyph plain unless `class` asks for brackets.
     fn set_piece(&mut self, glyphs: Vec<u16>, class: bool) -> Piece {
-        if !class && glyphs.len() == 1 {
-            if let Some(g) = glyphs.first() {
-                return Piece::Glyph(*g);
-            }
+        if !class
+            && glyphs.len() == 1
+            && let Some(g) = glyphs.first()
+        {
+            return Piece::Glyph(*g);
         }
         Piece::Set(self.set(glyphs), class)
     }
@@ -910,16 +912,16 @@ impl<'a> Writer<'a> {
                                     wrote = true;
                                 }
                                 // A covered first glyph stops later subtables even with a zero value.
-                                if !wrote && many {
-                                    if let Some(second) = (1..n2).filter_map(|c| u16::try_from(c).ok()).map(|c| cd2.glyphs(c)).find(|g| !g.is_empty())
-                                    {
-                                        let a = self.set_piece(first.clone(), true);
-                                        let b = self.set_piece(second, true);
-                                        out.body.push(Line::new(
-                                            1,
-                                            vec![Piece::Text("pos ".into()), a, Piece::Text(" ".into()), b, Piece::Text(" 0;".into())],
-                                        ));
-                                    }
+                                if !wrote
+                                    && many
+                                    && let Some(second) = (1..n2).filter_map(|c| u16::try_from(c).ok()).map(|c| cd2.glyphs(c)).find(|g| !g.is_empty())
+                                {
+                                    let a = self.set_piece(first.clone(), true);
+                                    let b = self.set_piece(second, true);
+                                    out.body.push(Line::new(
+                                        1,
+                                        vec![Piece::Text("pos ".into()), a, Piece::Text(" ".into()), b, Piece::Text(" 0;".into())],
+                                    ));
                                 }
                             }
                         }
@@ -1444,17 +1446,17 @@ impl<'a> Writer<'a> {
                     }
                     _ => self.unsupported.push(format!("BASE script '{}' without baseline values", tag_str(script))),
                 }
-                if let Some(Ok(mm)) = bs.default_min_max() {
-                    if let Some(line) = self.min_max(prefix, script, DFLT_LANG, &mm) {
-                        minmax.push(line);
-                    }
+                if let Some(Ok(mm)) = bs.default_min_max()
+                    && let Some(line) = self.min_max(prefix, script, DFLT_LANG, &mm)
+                {
+                    minmax.push(line);
                 }
                 for lang in bs.base_lang_sys_records() {
                     self.budget.charge(1)?;
-                    if let Ok(mm) = lang.min_max(bs.offset_data()) {
-                        if let Some(line) = self.min_max(prefix, script, lang.base_lang_sys_tag().into_bytes(), &mm) {
-                            minmax.push(line);
-                        }
+                    if let Ok(mm) = lang.min_max(bs.offset_data())
+                        && let Some(line) = self.min_max(prefix, script, lang.base_lang_sys_tag().into_bytes(), &mm)
+                    {
+                        minmax.push(line);
                     }
                 }
             }
@@ -1516,10 +1518,10 @@ impl<'a> Writer<'a> {
         let mut uses = vec![0usize; self.sets.len()];
         for line in head.iter().chain(&rest) {
             for piece in &line.pieces {
-                if let Piece::Set(id, _) = piece {
-                    if let Some(u) = uses.get_mut(*id) {
-                        *u += 1;
-                    }
+                if let Piece::Set(id, _) = piece
+                    && let Some(u) = uses.get_mut(*id)
+                {
+                    *u += 1;
                 }
             }
         }
@@ -1603,10 +1605,10 @@ impl<'a> Writer<'a> {
             push_line(&mut self, line, &mut text, &mut used_glyphs)?;
         }
         for g in used_glyphs {
-            if let Some(raw) = self.raw.get(usize::from(g)) {
-                if !fea_glyph_name(raw).1 {
-                    bad.insert(raw.clone());
-                }
+            if let Some(raw) = self.raw.get(usize::from(g))
+                && !fea_glyph_name(raw).1
+            {
+                bad.insert(raw.clone());
             }
         }
         if !bad.is_empty() && !self.bad_names_noted {

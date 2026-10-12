@@ -654,9 +654,11 @@ pub(crate) fn hhea_matches_typo(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut 
     }
 }
 
+/// A y value and the glyph that reaches it.
+type Extreme = (i16, Option<GlyphId>);
 /// The lowest and highest glyph extents as FontBakery reads them: the head box for CFF fonts,
 /// the glyph headers (with 0) for TrueType ones, with the glyph that reaches each.
-fn y_extents(font: &FontRef<'_>) -> Option<((i16, Option<GlyphId>), (i16, Option<GlyphId>))> {
+fn y_extents(font: &FontRef<'_>) -> Option<(Extreme, Extreme)> {
     let head = font.head().ok()?;
     let otto = font.table_directory.sfnt_version() == 0x4F54_544F;
     let glyf = font.glyf().ok();

@@ -176,10 +176,11 @@ fn split(args: &[String]) -> (Vec<String>, Vec<String>) {
         if arg.len() < 2 || !(arg.starts_with('-') || arg.starts_with('@')) {
             break;
         }
-        if let Some(body) = arg.strip_prefix("--") {
-            if !body.contains('=') && takes_value(body) {
-                i += 1;
-            }
+        if let Some(body) = arg.strip_prefix("--")
+            && !body.contains('=')
+            && takes_value(body)
+        {
+            i += 1;
         }
         i += 1;
     }

@@ -199,10 +199,10 @@ fn to_json(r: &MetricsReport, o: &TextOptions) -> Value {
             .collect();
         out.insert("glyphs".into(), Value::Array(glyphs));
     }
-    if o.aggregate_bbox {
-        if let Some(fb) = &r.font_bounds {
-            out.insert("aggregate".into(), json!({ "bounds": fb.bounds, "gids": fb.gids, "glyphs": fb.names }));
-        }
+    if o.aggregate_bbox
+        && let Some(fb) = &r.font_bounds
+    {
+        out.insert("aggregate".into(), json!({ "bounds": fb.bounds, "gids": fb.gids, "glyphs": fb.names }));
     }
     if !r.kerning.is_empty() {
         let pairs: Vec<Value> = r.kerning.iter().map(|k| json!({ "left": k.left, "right": k.right, "value": k.value })).collect();

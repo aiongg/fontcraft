@@ -67,7 +67,7 @@ const PARTS: &[&[CheckSpec]] = &[
 /// Every check, in registry order.
 pub static CHECKS: &[CheckSpec] = &ALL;
 
-const ALL: [CheckSpec; count(PARTS)] = concat(PARTS);
+static ALL: [CheckSpec; count(PARTS)] = concat(PARTS);
 
 /// The fields an outline check that reads one layer shares; each entry sets the rest and takes
 /// these with `..LAYER_OUTLINES`.

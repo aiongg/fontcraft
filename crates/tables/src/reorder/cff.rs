@@ -594,7 +594,7 @@ fn write_fd_select(fds: &[u8]) -> Result<Vec<u8>> {
         }
     }
     let mut out = Vec::new();
-    if 1 + fds.len() <= 5 + 3 * ranges.len() {
+    if fds.len() < 5 + 3 * ranges.len() {
         out.push(0);
         out.extend_from_slice(fds);
     } else {

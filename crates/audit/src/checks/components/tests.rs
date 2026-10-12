@@ -205,7 +205,7 @@ pub(crate) fn sfnt(mut tables: Vec<([u8; 4], Vec<u8>)>) -> Vec<u8> {
     for (tag, data) in &tables {
         dir.tag(tag).u32(0).u32((header + body.len()) as u32).u32(data.len() as u32);
         body.extend(data);
-        while body.len() % 4 != 0 {
+        while !body.len().is_multiple_of(4) {
             body.push(0);
         }
     }

@@ -285,7 +285,8 @@ fn write_table(font: &SfntFont, options: &DumpOptions, w: &mut XmlWriter, tag: T
 }
 
 fn write_known(tag: Tag, data: &[u8], font: &SfntFont, w: &mut XmlWriter) -> Result<bool> {
-    let writers: [fn(Tag, &[u8], &SfntFont, &mut XmlWriter) -> Result<bool>; 6] =
+    type TableWriter = fn(Tag, &[u8], &SfntFont, &mut XmlWriter) -> Result<bool>;
+    let writers: [TableWriter; 6] =
         [core::write_table, cff::write_table, otdata::write_table, var::write_table, color::write_table, misc::write_table];
     for write in writers {
         if write(tag, data, font, w)? {

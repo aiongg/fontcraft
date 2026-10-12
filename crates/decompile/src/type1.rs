@@ -284,10 +284,7 @@ fn pfb_parts(bytes: &[u8]) -> Result<(Vec<u8>, Option<Vec<u8>>), DecompileError>
     let mut clear = Vec::new();
     let mut binary = Vec::new();
     let mut pos = 0usize;
-    loop {
-        let Some(&[0x80, kind]) = bytes.get(pos..pos + 2) else {
-            break;
-        };
+    while let Some(&[0x80, kind]) = bytes.get(pos..pos + 2) {
         if kind == 3 {
             break;
         }
@@ -650,7 +647,9 @@ fn parse_encoding(lx: &mut Lexer) -> Encoding {
 
 type Charstrings = Vec<(String, Vec<u8>)>;
 
-fn parse_private(text: &[u8], font: &mut PsFont) -> Result<(Vec<Option<Vec<u8>>>, Charstrings), DecompileError> {
+/// The Subrs array: one charstring per index, `None` where the font leaves a gap.
+type Subrs = Vec<Option<Vec<u8>>>;
+fn parse_private(text: &[u8], font: &mut PsFont) -> Result<(Subrs, Charstrings), DecompileError> {
     let mut lx = Lexer::new(text);
     let mut len_iv: i64 = 4;
     let mut subrs = Vec::new();

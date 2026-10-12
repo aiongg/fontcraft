@@ -142,7 +142,7 @@ fn read_subtable(format: u16, body: &[u8]) -> Result<Kind> {
 }
 
 fn u16s(data: &[u8]) -> Result<Vec<u32>> {
-    if data.len() % 2 != 0 {
+    if !data.len().is_multiple_of(2) {
         return Err(TablesError::invalid("a 'cmap' array has an odd length"));
     }
     Ok(data.chunks(2).map(|p| u32::from(p.first().copied().unwrap_or(0)) << 8 | u32::from(p.get(1).copied().unwrap_or(0))).collect())
@@ -300,7 +300,8 @@ fn format14(body: &[u8]) -> Result<Vec<(u32, u32, Option<u32>)>> {
     let _ = (h.u16()?, h.u32()?);
     let records = h.u32()?;
     let data = h.rest();
-    let mut by_selector: Vec<(u32, Vec<(u32, Option<u32>)>)> = Vec::new();
+    type Records = Vec<(u32, Option<u32>)>;
+    let mut by_selector: Vec<(u32, Records)> = Vec::new();
     let mut r = Rd::new(data);
     let bad = || TablesError::invalid("a format 14 'cmap' subtable points before its records");
     let mut total = 0usize;

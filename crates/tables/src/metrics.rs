@@ -329,10 +329,10 @@ fn code_points(p: &Provider<'_>, count: usize, warnings: &mut Vec<String>) -> Ve
 fn lowest_codes(codes: &[(u32, u32)], count: usize) -> Vec<Option<u32>> {
     let mut lowest = vec![None; count];
     for &(code, gid) in codes {
-        if let Some(slot) = lowest.get_mut(gid as usize) {
-            if slot.is_none_or(|c: u32| code < c) {
-                *slot = Some(code);
-            }
+        if let Some(slot) = lowest.get_mut(gid as usize)
+            && slot.is_none_or(|c: u32| code < c)
+        {
+            *slot = Some(code);
         }
     }
     lowest
@@ -415,10 +415,10 @@ fn font_info(p: &Provider<'_>, revision: f64, cff: Option<&CffFontRef<'_>>) -> F
         info.version = get(5);
         info.postscript_name = get(6);
     }
-    if info.postscript_name.is_empty() {
-        if let Some(name) = cff.and_then(|c| c.metadata()).and_then(|m| m.name()) {
-            info.postscript_name = name.chars().filter(|c| !c.is_control()).take(127).collect();
-        }
+    if info.postscript_name.is_empty()
+        && let Some(name) = cff.and_then(|c| c.metadata()).and_then(|m| m.name())
+    {
+        info.postscript_name = name.chars().filter(|c| !c.is_control()).take(127).collect();
     }
     let version = info.version.trim_start_matches("Version").trim_start_matches("version").trim();
     let version = version.split(';').next().unwrap_or_default().trim().to_string();
@@ -1041,12 +1041,10 @@ fn font_bounds(glyphs: &[GlyphMetrics]) -> Option<FontBounds> {
         for edge in 0..4 {
             let (Some(&v), Some(cur)) = (b.get(edge), fb.bounds.get(edge).copied()) else { continue };
             let beyond = if edge < 2 { v < cur } else { v > cur };
-            if beyond {
-                if let (Some(slot), Some(gid), Some(name)) = (fb.bounds.get_mut(edge), fb.gids.get_mut(edge), fb.names.get_mut(edge)) {
-                    *slot = v;
-                    *gid = g.gid;
-                    name.clone_from(&g.name);
-                }
+            if beyond && let (Some(slot), Some(gid), Some(name)) = (fb.bounds.get_mut(edge), fb.gids.get_mut(edge), fb.names.get_mut(edge)) {
+                *slot = v;
+                *gid = g.gid;
+                name.clone_from(&g.name);
             }
         }
     }
@@ -1373,13 +1371,13 @@ pub fn to_text(report: &MetricsReport, o: &TextOptions) -> String {
             s.push_str("}\n");
         }
     }
-    if o.aggregate_bbox {
-        if let Some(fb) = &report.font_bounds {
-            let [a, b, c, d] = fb.bounds.map(|v| num(v, r));
-            let [ga, gb, gc, gd] = fb.gids;
-            let [na, nb, nc, nd] = &fb.names;
-            let _ = writeln!(s, "### aggregate\nbbox  {{{a},{b},{c},{d}}}\ntag   {{{ga},{gb},{gc},{gd}}}\ngname {{{na},{nb},{nc},{nd}}}");
-        }
+    if o.aggregate_bbox
+        && let Some(fb) = &report.font_bounds
+    {
+        let [a, b, c, d] = fb.bounds.map(|v| num(v, r));
+        let [ga, gb, gc, gd] = fb.gids;
+        let [na, nb, nc, nd] = &fb.names;
+        let _ = writeln!(s, "### aggregate\nbbox  {{{a},{b},{c},{d}}}\ntag   {{{ga},{gb},{gc},{gd}}}\ngname {{{na},{nb},{nc},{nd}}}");
     }
     if !o.font_only && report.glyphs.iter().any(|g| g.statistics.is_some()) {
         s.push_str("### statistics[tag] {gname,area,{meanX,meanY},{varianceX,varianceY},covariance,correlation,slant}\n");
@@ -1468,13 +1466,13 @@ pub fn to_csv(report: &MetricsReport, o: &TextOptions) -> String {
         }
     }
     let mut props: Vec<(String, String)> = Vec::new();
-    if o.aggregate_bbox {
-        if let Some(fb) = &report.font_bounds {
-            for (i, edge) in ["xMin", "yMin", "xMax", "yMax"].iter().enumerate() {
-                let (Some(v), Some(n)) = (fb.bounds.get(i), fb.names.get(i)) else { continue };
-                props.push(((*edge).into(), num(*v, r)));
-                props.push((format!("{edge}Glyph"), csv_field(n)));
-            }
+    if o.aggregate_bbox
+        && let Some(fb) = &report.font_bounds
+    {
+        for (i, edge) in ["xMin", "yMin", "xMax", "yMax"].iter().enumerate() {
+            let (Some(v), Some(n)) = (fb.bounds.get(i), fb.names.get(i)) else { continue };
+            props.push(((*edge).into(), num(*v, r)));
+            props.push((format!("{edge}Glyph"), csv_field(n)));
         }
     }
     if let Some(f) = &report.font_statistics {

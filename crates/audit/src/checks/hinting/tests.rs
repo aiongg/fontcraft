@@ -156,7 +156,7 @@ fn dict_real(s: &str) -> Vec<u8> {
         })
         .collect();
     nibbles.push(0x0F);
-    if nibbles.len() % 2 != 0 {
+    if !nibbles.len().is_multiple_of(2) {
         nibbles.push(0x0F);
     }
     let mut o = vec![30];

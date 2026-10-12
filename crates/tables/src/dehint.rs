@@ -126,17 +126,17 @@ pub fn dehint_with_report(font: &SfntFont, options: &DehintOptions) -> Result<(S
     let mut report = DehintReport::default();
     let mut changed: BTreeSet<Tag> = BTreeSet::new();
 
-    if let Some(glyf) = font.get(*b"glyf") {
-        if let Some(stripped) = strip_glyf(font, glyf, options)? {
-            report.glyphs_changed += stripped.glyphs_changed;
-            out.insert(*b"glyf", stripped.glyf);
-            out.insert(*b"loca", stripped.loca);
-            changed.insert(*b"glyf");
-            changed.insert(*b"loca");
-            if let Some(head) = stripped.head {
-                out.insert(*b"head", head);
-                changed.insert(*b"head");
-            }
+    if let Some(glyf) = font.get(*b"glyf")
+        && let Some(stripped) = strip_glyf(font, glyf, options)?
+    {
+        report.glyphs_changed += stripped.glyphs_changed;
+        out.insert(*b"glyf", stripped.glyf);
+        out.insert(*b"loca", stripped.loca);
+        changed.insert(*b"glyf");
+        changed.insert(*b"loca");
+        if let Some(head) = stripped.head {
+            out.insert(*b"head", head);
+            changed.insert(*b"head");
         }
     }
     for tag in [*b"CFF ", *b"CFF2"] {
@@ -174,11 +174,11 @@ pub fn dehint_with_report(font: &SfntFont, options: &DehintOptions) -> Result<(S
                 changed.insert(*b"head");
             }
         }
-        if let Some(data) = font.get(*b"GPOS") {
-            if let Some(bytes) = gpos::prune(data)? {
-                out.insert(*b"GPOS", bytes);
-                changed.insert(*b"GPOS");
-            }
+        if let Some(data) = font.get(*b"GPOS")
+            && let Some(bytes) = gpos::prune(data)?
+        {
+            out.insert(*b"GPOS", bytes);
+            changed.insert(*b"GPOS");
         }
     }
 

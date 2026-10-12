@@ -190,20 +190,21 @@ fn resolve_item(
         return Ok(());
     }
     let range = item.split_once("..").or_else(|| item.split_once('-'));
-    if let Some((a, b)) = range {
-        if let (Some(a), Some(b)) = (gid(a), gid(b)) {
-            if a > b {
-                return Err(format!("the range `{item}` runs backwards"));
-            }
-            in_font(b)?;
-            set.extend((a..=b).filter_map(|g| u16::try_from(g).ok()));
-            return Ok(());
+    if let Some((a, b)) = range
+        && let (Some(a), Some(b)) = (gid(a), gid(b))
+    {
+        if a > b {
+            return Err(format!("the range `{item}` runs backwards"));
         }
+        in_font(b)?;
+        set.extend((a..=b).filter_map(|g| u16::try_from(g).ok()));
+        return Ok(());
     }
     Err(format!("no glyph is named `{item}`"))
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
     use fontcraft_tables::Flavour;

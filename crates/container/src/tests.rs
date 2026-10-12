@@ -370,8 +370,9 @@ fn damaged_transformed_tables_never_panic() {
     }
 }
 
+type Tables = Vec<(Tag, Vec<u8>)>;
 /// Each member of a collection file: its flavour and its tables, sorted by tag.
-fn members(ttc: &[u8]) -> Vec<(u32, Vec<(Tag, Vec<u8>)>)> {
+fn members(ttc: &[u8]) -> Vec<(u32, Tables)> {
     let (_, fonts) = sfnt::parse_collection(ttc).unwrap();
     fonts
         .iter()

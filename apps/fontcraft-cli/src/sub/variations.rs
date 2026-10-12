@@ -156,7 +156,7 @@ fn format_g(v: f64) -> String {
     let (mantissa, exp) = sci.split_once('e').unwrap_or((sci.as_str(), "0"));
     let exp: i32 = exp.parse().unwrap_or(0);
     let trim = |s: &str| if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s.to_string() };
-    if exp < -4 || exp >= DIGITS {
+    if !(-4..DIGITS).contains(&exp) {
         let sign = if exp < 0 { '-' } else { '+' };
         format!("{}e{sign}{:02}", trim(mantissa), exp.abs())
     } else {

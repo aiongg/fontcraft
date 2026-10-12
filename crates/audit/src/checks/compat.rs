@@ -275,8 +275,8 @@ fn label(font: &Font, layer: &Layer) -> String {
 /// [`crate::AuditServices::compatibility`] with it until the interpolation routine of M9 takes
 /// over.
 pub fn structural_report(font: &Font) -> CompatibilityReport {
-    let mut report = CompatibilityReport::default();
-    report.default_master = axes::origin(font).map(|m| m.id.clone()).unwrap_or_default();
+    let mut report =
+        CompatibilityReport { default_master: axes::origin(font).map(|m| m.id.clone()).unwrap_or_default(), ..CompatibilityReport::default() };
     if font.masters.len() < 2 || font.masters.len() > MAX_COMPAT_MASTERS {
         return report;
     }

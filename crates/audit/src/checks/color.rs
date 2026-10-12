@@ -323,7 +323,8 @@ mod tests {
         };
         let svg = vec![0u8, 0, 0, 0, 0, 10, 0, 0, 0, 0];
         let fvar = vec![0u8; 16];
-        let cases: [(Vec<(&[u8; 4], Vec<u8>)>, &[&str]); 6] = [
+        type Case<'a> = (Vec<(&'a [u8; 4], Vec<u8>)>, &'a [&'a str]);
+        let cases: [Case<'_>; 6] = [
             (vec![(b"COLR", colr0([0, 0]))], &[]),
             (vec![(b"COLR", colr0([0, 0])), (b"SVG ", svg.clone())], &["drop-svg"]),
             (vec![(b"COLR", colr1())], &["add-svg"]),

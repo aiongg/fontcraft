@@ -1,6 +1,8 @@
 //! SVG fonts (format `svg-font`): reading a font built here, writing it back, and the written
 //! glyph elements against what AFDKO tx 5.0.1 writes for the same outline (`tx -svg -sa -gn2
 //! -abs`).
+// Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::string_slice)]
 
 use fontcraft_io_svg::svg_font::{is_svg_font, read_svg_font, write_svg_font};
 use fontcraft_model::{Font, NodeKind, Shape};

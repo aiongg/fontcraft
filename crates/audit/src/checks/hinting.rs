@@ -612,8 +612,8 @@ pub(crate) fn stem_hint_sanity(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut S
                 // Ghost hints exist for horizontal stems only: -20 marks a top edge at the lower
                 // value, -21 a bottom edge at the upper one.
                 let edge = match (horizontal, width) {
-                    (true, w) if w == -20.0 => Some(lo),
-                    (true, w) if w == -21.0 => Some(hi),
+                    (true, -20.0) => Some(lo),
+                    (true, -21.0) => Some(hi),
                     _ => None,
                 };
                 if let Some(e) = edge {

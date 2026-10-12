@@ -59,7 +59,7 @@ fn decode(bytes: &[u8], enc: Option<Encoding>) -> Option<String> {
     }
     let text: String = match enc {
         Encoding::Utf16 => {
-            if bytes.len() % 2 != 0 {
+            if !bytes.len().is_multiple_of(2) {
                 return None;
             }
             let units = bytes.chunks(2).map(|p| u16::from_be_bytes([p.first().copied().unwrap_or(0), p.get(1).copied().unwrap_or(0)]));

@@ -11,7 +11,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::BuildHasher;
 
 use super::{
     HEAD_FLAGS_AT, HEAD_LOCA_FORMAT_AT, HHEA, HHEA_METRICS_AT, LOSSLESS_TRANSFORM, MAXP, MAXP_GLYPHS_AT, Options, Stored, Woff2Collection,
@@ -80,7 +80,7 @@ pub(crate) fn decode(dir: &Woff2Directory, collection: &Woff2Collection, data: &
     }
     let list: Vec<Table<'_>> = dir.tables.iter().zip(&built).map(|(t, data)| Table { tag: t.tag, data }).collect();
     let version = if collection.version == VERSION_2 { 2 } else { 1 };
-    Ok(sfnt::assemble_collection(version, &members, &list)?)
+    sfnt::assemble_collection(version, &members, &list)
 }
 
 /// One distinct table of the collection being written.
@@ -103,9 +103,7 @@ pub(crate) fn encode(ttc: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
     for font in &fonts {
         let mut list = Vec::with_capacity(font.tables.len());
         for t in font.tables.iter().filter(|t| t.tag != DSIG) {
-            let mut hasher = state.build_hasher();
-            t.data.hash(&mut hasher);
-            let candidates = by_hash.entry((t.tag, hasher.finish())).or_default();
+            let candidates = by_hash.entry((t.tag, state.hash_one(t.data))).or_default();
             let found = candidates.iter().copied().find(|&i| distinct.get(i).is_some_and(|d| d.data.as_ref() == t.data));
             let index = match found {
                 Some(i) => i,
@@ -126,7 +124,8 @@ pub(crate) fn encode(ttc: &[u8], options: &Options) -> Result<Vec<u8>, Error> {
 
     // The `loca` format each `head` must get, and the transforms that fit.
     let mut head_format: HashMap<usize, bool> = HashMap::new();
-    let mut glyf_plan: HashMap<usize, (usize, Vec<u8>, Vec<u8>, Vec<u8>)> = HashMap::new();
+    type GlyfPlan = (usize, Vec<u8>, Vec<u8>, Vec<u8>);
+    let mut glyf_plan: HashMap<usize, GlyfPlan> = HashMap::new();
     if options.transform_glyf {
         let glyfs: Vec<usize> = distinct.iter().enumerate().filter(|(_, d)| d.tag == GLYF).map(|(i, _)| i).collect();
         for g in glyfs {

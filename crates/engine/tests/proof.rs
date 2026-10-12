@@ -1,6 +1,6 @@
 //! `font.proof` on a font built in code: page count, glyphs per page and glyph order of the SVG
 //! sheets, and the structure of the HTML specimen.
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::path::{Path, PathBuf};
 
