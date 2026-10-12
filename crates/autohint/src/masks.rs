@@ -106,6 +106,9 @@ impl DimHinter<'_> {
         if let Some(other) = self.glyphs.others.get_mut(glidx.wrapping_sub(1)) {
             std::mem::swap(&mut self.glyphs.main, other);
         }
+        if glidx < self.glyphs.without_overlap.len() {
+            self.glyphs.without_overlap.swap(0, glidx);
+        }
         if glidx < self.st.fddicts.len() {
             self.st.fddicts.swap(0, glidx);
         }
@@ -707,7 +710,7 @@ mod tests {
     /// element asks for some of them; element 3 asks for none.
     fn mask_case(masters: &[&[(f64, f64)]]) -> MaskResult {
         let gd = test_glyph();
-        let mut glyphs = Glyphs { main: gd.clone(), others: vec![gd; masters.len() - 1] };
+        let mut glyphs = Glyphs { main: gd.clone(), others: vec![gd; masters.len() - 1], ..Default::default() };
         let mut st = state(Dim::V);
         st.is_multi = masters.len() > 1;
         let hs = &mut st.hs;

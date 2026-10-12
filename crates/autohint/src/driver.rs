@@ -33,7 +33,7 @@ pub fn hint_glyph(input: &HintInput) -> Result<GlyphHints, AutohintError> {
     let mut warnings = Vec::new();
     let overlap = overlap_state(&glyph, input, false, &mut warnings);
     let mut hinter = GlyphHinter::new(Arc::new(input.options.clone()));
-    hinter.glyphs = Glyphs { main: glyph, others: Vec::new() };
+    hinter.glyphs = Glyphs { main: glyph, ..Default::default() };
     hinter.hint_with_overlap(input.name, vec![Arc::new(input.dict.clone())], overlap)?;
     let mut hints = hinter.result(0).unwrap_or_default();
     warnings.append(&mut hints.warnings);
@@ -158,14 +158,14 @@ impl GlyphHinter {
     }
 
     /// [`GlyphHinter::hint`], with the main master's overlap-free outline already associated
-    /// (`OverlapState::Unchecked` leaves overlap handling to segment generation).
+    /// (`OverlapState::Unchecked` leaves overlap handling to segment generation). The other
+    /// masters' outlines are those already in [`Glyphs::without_overlap`].
     pub fn hint_with_overlap(&mut self, name: &str, fddicts: Vec<Arc<FdDict>>, overlap: OverlapState) -> Result<bool, AutohintError> {
         let masters = self.glyphs.len();
         let report = Some(crate::report::GlyphReport::new(name, self.options.report_all_stems));
         self.h.set_glyph(fddicts.clone(), report.clone(), masters, name);
         self.v.set_glyph(fddicts.clone(), report, masters, name);
-        self.h.hs.overlap_removed = overlap.clone();
-        self.v.hs.overlap_removed = overlap;
+        self.glyphs.set_without_overlap(0, overlap);
 
         if !self.compatible_paths(&fddicts) {
             return Ok(false);
@@ -742,6 +742,21 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn hints_read_back_are_the_hints_written() {
+        // `to_hints` and `set_hints` place a mask on the same element, the closing line of the
+        // second bar included, so manual hints survive a pass through the glyph data.
+        let contours = [rect(100.0, 0.0, 180.0, 300.0), rect(140.0, 400.0, 220.0, 700.0)];
+        let dict = test_dict();
+        let options = Options::default();
+        let input = HintInput { name: "staggered", contours: &contours, without_overlap: None, dict: &dict, options: &options };
+        let hints = hint_glyph(&input).unwrap();
+        assert!(!hints.masks.is_empty());
+        let mut g = GlyphData::from_contours("staggered", &contours, true).unwrap();
+        g.set_hints(&hints);
+        assert_eq!(g.to_hints(), hints);
+    }
+
+    #[test]
     fn staggered_stems_get_a_second_hint_mask() {
         // otfautohint 5.0.1 (tests/oracle/driver.py, "staggered"): the overlapping vertical
         // stems are split over the start mask and a mask on the second bar's closing element.
@@ -803,7 +818,7 @@ pub(crate) mod tests {
             vstems: vec![Stem::new(10.0, 90.0)],
             ..GlyphData::default()
         };
-        gh.glyphs = Glyphs { main: g(0.0), others: vec![g(10.0)] };
+        gh.glyphs = Glyphs { main: g(0.0), others: vec![g(10.0)], ..Default::default() };
         gh.glyphs.main.start_masks = Some(mask(&[true, false], &[true]));
         gh.glyphs.main.cntr = vec![mask(&[true, true], &[false])];
         if let Some(pe) = gh.glyphs.main.element_mut(PeRef::new(0, 0)) {

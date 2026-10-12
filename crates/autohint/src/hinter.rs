@@ -18,7 +18,7 @@ use crate::Options;
 use crate::fddict::{BlueValue, FdDict};
 use crate::glyph::{Dim, GlyphData, PeRef};
 use crate::report::GlyphReport;
-use crate::state::GlyphHintState;
+use crate::state::{GlyphHintState, OverlapState};
 
 // otfautohint's constants (`dimensionHinter.__init__`), with the original's comments where they
 // say why a value is what it is.
@@ -97,6 +97,11 @@ pub const PROMOTION_DISTANCE: f64 = 50.0;
 pub struct Glyphs {
     pub main: GlyphData,
     pub others: Vec<GlyphData>,
+    /// The overlap-free outline of each master, associated with its elements, as it was before
+    /// segment generation split or straightened anything: index 0 is [`Glyphs::main`]; a
+    /// missing entry is [`OverlapState::Unchecked`]. Segment generation copies the entry of the
+    /// master it works on, the way the original removes overlaps afresh in every `genSegs`.
+    pub without_overlap: Vec<OverlapState>,
 }
 
 impl Glyphs {
@@ -116,6 +121,16 @@ impl Glyphs {
 
     pub fn get_mut(&mut self, i: usize) -> Option<&mut GlyphData> {
         if i == 0 { Some(&mut self.main) } else { self.others.get_mut(i - 1) }
+    }
+
+    /// Stores the overlap-free outline of master `i`.
+    pub fn set_without_overlap(&mut self, i: usize, state: OverlapState) {
+        if self.without_overlap.len() <= i {
+            self.without_overlap.resize(i + 1, OverlapState::Unchecked);
+        }
+        if let Some(slot) = self.without_overlap.get_mut(i) {
+            *slot = state;
+        }
     }
 }
 

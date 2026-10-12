@@ -147,7 +147,7 @@ fn analyse(input: &HintInput, zones: bool) -> Result<Option<GlyphReport>, Autohi
     let all_stems = options.report_all_stems;
     let main = GlyphData::from_contours(input.name, input.contours, options.round_coords)?;
     let mut hinter = GlyphHinter::new(Arc::new(options));
-    hinter.glyphs = Glyphs { main, others: Vec::new() };
+    hinter.glyphs = Glyphs { main, ..Default::default() };
     hinter.hint(input.name, vec![Arc::new(input.dict.clone())])?;
     let mut report = GlyphReport::new(input.name, all_stems);
     for part in [hinter.h.report.take(), hinter.v.report.take()].into_iter().flatten() {

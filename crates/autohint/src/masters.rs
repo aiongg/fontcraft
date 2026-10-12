@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::driver::overlap_state;
 use crate::glyph::{Dim, GlyphData, PeRef};
 use crate::hinter::{GlyphHinter, Glyphs};
+use crate::state::OverlapState;
 use crate::{AutohintError, FdDict, GlyphHints, HintInput, MAX_MASTERS};
 
 /// Hints the same glyph in every master, main master first. Every input must draw the same path
@@ -38,12 +39,18 @@ pub fn hint_masters(inputs: &[HintInput]) -> Result<Vec<GlyphHints>, AutohintErr
     let fddicts: Vec<Arc<FdDict>> = present.iter().filter_map(|(i, _)| inputs.get(*i)).map(|input| Arc::new(input.dict.clone())).collect();
     let mut glyphs = present.iter().map(|(_, g)| g.clone());
     let Some(main) = glyphs.next() else { return Ok(results) };
-    // Only the main master's overlap-free outline reaches segment generation: the other masters'
-    // segments are made while their stems are placed, from a fresh state.
+    // Every master's overlap-free outline is associated with its own elements: the other
+    // masters' segments are generated while their stems are placed.
     let mut warnings = Vec::new();
     let overlap = overlap_state(&main, main_input, multi, &mut warnings);
+    let others: Vec<GlyphData> = glyphs.collect();
+    let mut without_overlap = vec![OverlapState::Unchecked];
+    for ((i, _), glyph) in present.iter().skip(1).zip(&others) {
+        let state = inputs.get(*i).map_or(OverlapState::Unchecked, |input| overlap_state(glyph, input, multi, &mut warnings));
+        without_overlap.push(state);
+    }
     let mut hinter = GlyphHinter::new(Arc::new(main_input.options.clone()));
-    hinter.glyphs = Glyphs { main, others: glyphs.collect() };
+    hinter.glyphs = Glyphs { main, others, without_overlap };
     let hinted = hinter.hint_with_overlap(main_input.name, fddicts, overlap)?;
     if !hinted && multi {
         let reason = hinter.h.warnings.last().cloned().unwrap_or_else(|| "the paths differ".to_string());
@@ -223,6 +230,46 @@ mod tests {
         for h in &hints {
             assert_eq!(h.start_mask, Some(mask(&[true, true], &[true, false])));
             assert_eq!(h.masks, vec![(ElementPos { subpath: 1, element: 3 }, mask(&[true, true], &[false, true]))]);
+        }
+    }
+
+    fn tee(dx: f64) -> [BezPath; 2] {
+        [rect(100.0 + dx, 0.0, 180.0 + dx, 700.0), rect(140.0 + dx, 300.0, 500.0 + dx, 380.0)]
+    }
+
+    /// `tee` without its overlap, drawn as the original's overlap removal draws it.
+    fn tee_union(dx: f64) -> [BezPath; 1] {
+        let pts = [(180.0, 0.0), (180.0, 300.0), (500.0, 300.0), (500.0, 380.0), (180.0, 380.0), (180.0, 700.0), (100.0, 700.0)];
+        let mut p = BezPath::new();
+        p.move_to((100.0 + dx, 0.0));
+        for (x, y) in pts {
+            p.line_to((x + dx, y));
+        }
+        p.close_path();
+        [p]
+    }
+
+    #[test]
+    fn every_master_is_hinted_from_its_own_overlap_free_outline() {
+        // otfautohint 5.0.1 (tests/oracle/driver.py, "tee two masters"): without the overlap
+        // the hidden part of the bar makes no second vertical stem, in either master.
+        let (a, b) = (tee(0.0), tee(10.0));
+        let (ua, ub) = (tee_union(0.0), tee_union(10.0));
+        let dict = test_dict();
+        let options = Options::default();
+        let inputs = [
+            HintInput { name: "tee", contours: &a, without_overlap: Some(&ua), dict: &dict, options: &options },
+            HintInput { name: "tee", contours: &b, without_overlap: Some(&ub), dict: &dict, options: &options },
+        ];
+        let hints = hint_masters(&inputs).unwrap();
+        let h = vec![Stem::new(21.0, 0.0), Stem::new(300.0, 380.0), Stem::new(700.0, 680.0)];
+        assert_eq!(hints[0].h, h);
+        assert_eq!(hints[0].v, vec![Stem::new(100.0, 180.0)]);
+        assert_eq!(hints[1].h, h);
+        assert_eq!(hints[1].v, vec![Stem::new(110.0, 190.0)]);
+        for h in &hints {
+            assert_eq!(h.start_mask, None);
+            assert!(h.masks.is_empty());
         }
     }
 

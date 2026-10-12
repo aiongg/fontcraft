@@ -97,3 +97,14 @@ run('staggered', [('staggered', glyph('staggered', staggered))])
 run('m', [('m', glyph('m', m_stems))])
 run('staggered two masters', [('staggered', glyph('staggered', staggered)),
                                ('staggered', glyph('staggered', staggered, 10))])
+
+
+
+def tee(pen, dx):
+    # A bar whose left end is hidden inside a stem: the overlap is removed in every master
+    # before segments are made, so the hidden end makes no stem.
+    rect(pen, 100 + dx, 0, 180 + dx, 700)
+    rect(pen, 140 + dx, 300, 500 + dx, 380)
+
+
+run('tee two masters', [('tee', glyph('tee', tee)), ('tee', glyph('tee', tee, 10))])

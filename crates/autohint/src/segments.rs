@@ -58,6 +58,7 @@ struct ElView {
     e: Pt,
     is_line: bool,
     flex: Option<FlexPart>,
+    flex_unset: bool,
     is_start: bool,
     is_tiny: bool,
 }
@@ -65,7 +66,17 @@ struct ElView {
 impl ElView {
     fn of(g: &GlyphData, c: PeRef) -> Option<Self> {
         let el = g.element(c)?;
-        Some(Self { s: el.s, cs: el.cs, ce: el.ce, e: el.e, is_line: el.is_line, flex: el.flex, is_start: el.is_start(), is_tiny: el.is_tiny() })
+        Some(Self {
+            s: el.s,
+            cs: el.cs,
+            ce: el.ce,
+            e: el.e,
+            is_line: el.is_line,
+            flex: el.flex,
+            flex_unset: el.flex_unset,
+            is_start: el.is_start(),
+            is_tiny: el.is_tiny(),
+        })
     }
 }
 
@@ -108,9 +119,6 @@ impl DimHinter<'_> {
         self.st.keep_hints = false;
         self.st.big_dist = self.dominant_stems().into_iter().fold(MAX_STEM_DIST, f64::max) * BIG_DIST_FACTOR;
         let counter = try_counter && self.is_counter_glyph();
-        // Counter hinting may start over; it needs the overlap-free outline as it was before
-        // segment generation split or straightened its elements.
-        let pristine = if counter { self.st.hs.overlap_removed.clone() } else { OverlapState::Unchecked };
         self.gen_segs();
         self.limit_segs();
         self.st.pruning = !counter;
@@ -132,7 +140,6 @@ impl DimHinter<'_> {
                 self.st.hs.counter_hinted = self.try_counter_hinting();
                 if !self.st.hs.counter_hinted {
                     self.st.reset_for_hinting();
-                    self.st.hs.overlap_removed = pristine;
                     self.calc_hint_values(lnks, true, false);
                     return;
                 }
@@ -530,7 +537,10 @@ impl DimHinter<'_> {
                 self.st.hs.overlap_removed = OverlapState::Unchecked;
             }
         } else if matches!(self.st.hs.overlap_removed, OverlapState::Unchecked) {
-            self.st.hs.overlap_removed = OverlapState::NoOverlap;
+            self.st.hs.overlap_removed = match self.glyphs.without_overlap.first() {
+                Some(OverlapState::Removed(g)) => OverlapState::Removed(g.clone()),
+                _ => OverlapState::NoOverlap,
+            };
         }
 
         self.prep_for_segs();
@@ -615,7 +625,8 @@ impl DimHinter<'_> {
             if el.flex != Some(FlexPart::First) {
                 self.curve_end_segment(c, &el);
             }
-            if el.flex.is_none() {
+            // The original tests `flex is None`, which skips elements whose flex is `False`.
+            if el.flex.is_none() && !el.flex_unset {
                 self.curve_extrema_segment(c, &el);
             }
         }

@@ -930,6 +930,7 @@ impl GlyphData {
     /// would wrap past the subpath's end and `close_wrap_ok` is false.
     fn in_subpath(&self, c: PeRef, dir: isize, skip_tiny: bool, close_wrap_ok: bool, seg_sub: bool) -> Option<PeRef> {
         let sp = self.subpaths.get(c.subpath)?;
+        sp.get(c.offset)?;
         let len = isize::try_from(sp.len()).ok().filter(|l| *l > 0)?;
         let offset = isize::try_from(c.offset).ok()?;
         let mut o = offset;

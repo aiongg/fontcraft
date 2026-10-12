@@ -70,7 +70,8 @@ mod tests {
         let free = associate(&gh.glyphs.main, &tee_union(), false).unwrap();
         let state = free.map_or(OverlapState::NoOverlap, |g| OverlapState::Removed(Box::new(g)));
         gh.h.hs.overlap_removed = state.clone();
-        gh.v.hs.overlap_removed = state;
+        gh.v.hs.overlap_removed = state.clone();
+        gh.glyphs.set_without_overlap(0, state);
     }
 
     // Expected values: tests/oracle/segments.py (otfautohint 5.0.1).
