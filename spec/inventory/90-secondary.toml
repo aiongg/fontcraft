@@ -41,13 +41,17 @@ label = "Edit Tunni Lines"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{glyph?, layer?, segments?: [segmentRef]}"
+params = "{glyph, layer?, side?, points?: [[shape, node]], segments?: [[shape, node]]}"
 area = "drawing"
 milestone = "M13"
 summary = "Selects the Tunni lines of every curve segment inside the current selection, or of all curve segments on the layer when nothing is selected, and switches Tunni line display on. With Tunni lines visible, Select All selects them all."
 ref = "FontLab 7 manual › Tunni Lines; FontLab 8 What's new › Edit & refine › Selecting contours"
 status = "docs"
 origin = "fontlab"
+notes = "FontCraft: a query that returns the named curve segments (all of the layer's without a list) with their Tunni points and tensions, and those segments as the selection; switching Tunni line display on is the view's part (view.showTunniLines)."
+guesses = [
+  "A segment counts as inside the selection when one of its handles is selected, both its end nodes are, or the segment itself is, as for Fit Curve; FontLab does not define it, and selecting nodes in FontLab with Tunni lines on would settle it.",
+]
 
 [[behavior]]
 id = "tunni.dragLineSymmetric"
@@ -73,15 +77,20 @@ label = "Set Curve Tension"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{segments?: [segmentRef], tension: percent, relative?: bool}"
+params = "{glyph, layer?, side?, points?: [[shape, node]], segments?: [[shape, node]]} or {glyphs, layer? | layers?}, tension?: percent, relative?: bool"
 area = "drawing"
 milestone = "M13"
 summary = "Sets both handles of the selected curve segments to a proportional tension given in percent of the distance to the handle intersection (the same percentage a Tunni line reports), or adjusts the current tension by a signed step when relative is true."
 ref = "FontLab 8 What's new › Edit & refine › Curve segments (Node panel: Set proportional curve tension)"
 status = "docs"
 origin = "fontlab"
+notes = "Tension is each handle's length as a percentage of the distance from its node to the Tunni point; a quarter circle drawn with the usual handle factor has about 55.23 %. Without `tension` the master's curveTension parameter is used."
 guesses = [
   "Where a segment's handles are parallel or diverge, so they have no intersection, tension is shown as a dash and Set Curve Tension leaves the segment unchanged with a warning; FontLab does not say (open question 9 in docs/spec/90-secondary-references.md).",
+  "A zero-length handle has no direction, so its segment counts as having no Tunni point and is left unchanged too; running the command on such a segment in FontLab would settle it.",
+  "With no segments named the command acts on every curve segment of the layer, and it also takes a list of glyphs; FontLab documents only the selection.",
+  "An absolute tension must be 1 to 100 percent and a relative step keeps each handle within 1 to 100; FontLab gives no range, and entering larger values in its Node panel would settle it.",
+  "A relative step is added to each handle's own tension, so unequal handles stay unequal; FontLab does not say whether it balances them first.",
 ]
 
 [[command]]
@@ -108,6 +117,10 @@ summary = "Default curve tension (percent) used by tension-driven drawing tools 
 ref = "FontLab 8 What's new › Draft & draw › Drawing contours (Font Info › Font Dimensions › Curve tension)"
 status = "docs"
 origin = "fontlab"
+notes = "FontCraft: a master custom parameter read as a number from 1 to 100; path.setCurveTension uses it when no tension is given."
+guesses = [
+  "A master without the parameter, or with a value outside 1 to 100, uses 55 percent, close to a circle's tension; FontLab's default value is not documented and a new FontLab font would show it.",
+]
 
 [[command]]
 id = "path.harmonizeNodes"
@@ -115,13 +128,18 @@ label = "Harmonize Nodes"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{nodes?: [nodeRef], glyphs?, layer?}"
+params = "{glyph, layer?, side?, points?: [[shape, node]]} or {glyphs, layer? | layers?}"
 area = "path-ops"
 milestone = "M13"
 summary = "Moves each selected smooth node along its handle line to the position where the curvature on both sides is equal (G2 continuity), leaving the handles where they are. Applies to all smooth nodes of the layer when nothing is selected. FontForge documents the same idea as Element › Align › Harmonize."
 ref = "FontLab 8 What's new › Edit & refine › Nodes and handles; FontForge Element menu › Align"
 status = "docs"
 origin = "fontlab"
+notes = "The node moves along the line between its handles so that the incoming and outgoing handle lengths are in the ratio of the square roots of the far handles' distances from that line; curvature is then equal within rounding to the grid."
+guesses = [
+  "At an inflection (the far handles on opposite sides of the tangent) the two curvatures are made equal in size, since equal signed curvature is impossible there; running Harmonize on an S-curve in FontLab would settle it.",
+  "A smooth node with a straight side, or a selected node that is not between two curve segments, is left unchanged and listed in the result; FontLab does not say.",
+]
 
 [[command]]
 id = "path.harmonizeHandles"
@@ -129,13 +147,18 @@ label = "Harmonize Handles"
 menu = ["Path", "Handles"]
 shortcut = ""
 kind = "engine"
-params = "{nodes?: [nodeRef], order?: 'g2' | 'g3'}"
+params = "{glyph, layer?, side?, points?: [[shape, node]]} or {glyphs, layer? | layers?}, order?: 'g2' | 'g3'"
 area = "path-ops"
 milestone = "M13"
 summary = "Reaches curvature continuity at the selected smooth nodes by changing handle lengths while the nodes stay put. Order g3 (Superharmonize in the reference) also equalises the rate of curvature change."
 ref = "FontLab 8 What's new › Edit & refine › Nodes and handles"
 status = "docs"
 origin = "fontlab"
+guesses = [
+  "G2 keeps the sum of the two handle lengths at the node and only divides it differently; FontLab does not say which lengths it keeps, and comparing handle lengths before and after Harmonize Handles in FontLab would settle it.",
+  "G3 changes the lengths of the two neighbouring handles along their own directions, by the smallest change found, so the neighbouring nodes keep their tangents; FontLab does not describe Superharmonize's method.",
+  "With no node selected both orders act on every smooth node of the layer, as Harmonize Nodes does; FontLab documents only the selection.",
+]
 
 [[command]]
 id = "path.togglePowerNudge"
