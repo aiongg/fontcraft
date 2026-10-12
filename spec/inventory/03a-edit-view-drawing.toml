@@ -2193,7 +2193,10 @@ milestone = "M6"
 summary = "Deletes all anchors of the selected glyphs' layers and rebuilds the default set from the glyph info database."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. Same default table as glyph.setAnchors; the anchors are placed as Set Anchors places them on a layer without anchors."
+notes = "Documented, not yet observed. Same default table as glyph.setAnchors; the anchors are placed as Set Anchors places them on a layer without anchors. A locked anchor is kept where it is and the default of its name is not added; the handbook says every anchor is deleted and does not mention locked ones."
+guesses = [
+  "Reset Anchors keeps locked anchors, since a lock refuses every other change to an anchor; resetting a glyph with a locked anchor in the reference app settles it.",
+]
 
 [[command]]
 id = "glyph.resetAnchorsForAllMasters"

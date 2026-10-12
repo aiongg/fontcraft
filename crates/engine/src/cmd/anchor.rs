@@ -104,7 +104,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reset Anchors",
             ["Glyph"],
             Some("Cmd+Shift+U"),
-            "{glyph?: name, glyphs?: [names] (one of the two), layer?: id (default: the first master's layer), layers?: [ids]} remove every anchor of each glyph's layer and add the default anchors in their default places, as glyph.setAnchors places them on an empty layer. Locked glyphs and glyphs without the layer are skipped and listed → {glyphs: [names changed], added: count, removed: count, skipped: [{glyph, layer?, reason}]}",
+            "{glyph?: name, glyphs?: [names] (one of the two), layer?: id (default: the first master's layer), layers?: [ids]} remove every anchor of each glyph's layer except the locked ones and add the default anchors the layer then lacks in their default places, as glyph.setAnchors places them on an empty layer. Locked glyphs and glyphs without the layer are skipped and listed → {glyphs: [names changed], added: count, removed: count, skipped: [{glyph, layer?, reason}]}",
             has_doc,
             reset_anchors
         )
@@ -357,11 +357,13 @@ fn default_anchors(s: &mut Session, p: &Params, label: &str, reset: bool, all_ma
             for id in &layers {
                 if reset {
                     let mut g = font.glyph_mut(name)?;
+                    // A locked anchor stays where it is; the defaults skip its name.
                     if let Some(l) = g.layers.iter_mut().find(|l| l.id == *id)
-                        && !l.anchors.is_empty()
+                        && l.anchors.iter().any(|a| !a.info.locked)
                     {
-                        removed = removed.saturating_add(l.anchors.len());
-                        l.anchors.clear();
+                        let before = l.anchors.len();
+                        l.anchors.retain(|a| a.info.locked);
+                        removed = removed.saturating_add(before.saturating_sub(l.anchors.len()));
                         changed = true;
                     }
                 }

@@ -154,6 +154,23 @@ fn set_anchors_adds_the_missing_defaults_and_reset_anchors_rebuilds_them() {
     let f = s.font().unwrap();
     assert!(!names(f, "A", "m01").contains(&"mine".to_string()), "reset removes anchors that are not defaults");
     assert_eq!(anchor(f, "A", "top"), (300.0, 700.0), "reset puts top back at the cap height");
+
+    // A locked anchor stays where it is, and the default of its name is not added beside it.
+    run(&mut s, "anchor.add", json!({"glyph": "A", "name": "mine", "x": 0, "y": 0}));
+    run(&mut s, "anchor.setPosition", json!({"glyph": "A", "anchor": "top", "x": 5, "y": 5}));
+    s.edit("lock", |f| {
+        let mut g = f.glyph_mut("A")?;
+        for a in g.layers[0].anchors.iter_mut().filter(|a| a.name == "top" || a.name == "mine") {
+            a.info.locked = true;
+        }
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "glyph.resetAnchors", json!({"glyph": "A"}));
+    let f = s.font().unwrap();
+    assert_eq!(anchor(f, "A", "top"), (5.0, 5.0), "the locked top keeps its place");
+    assert_eq!(names(f, "A", "m01").iter().filter(|n| *n == "top").count(), 1);
+    assert!(names(f, "A", "m01").contains(&"mine".to_string()), "a locked anchor that is not a default stays too");
 }
 
 #[test]
