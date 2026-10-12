@@ -1,6 +1,6 @@
 # Charstring programs of the bare CFF test font, one per line: `subr N:`, `gsubr N:` or
 # `glyph NAME:` and Type 2 operators after their operands (`hintmask:HEX` carries its mask
-# bytes). The font around them is built by `tests/ps_fonts.rs`.
+# bytes). The font around them is built by `tests/decompile/ps_fonts.rs`.
 subr 0: 0 700 rlineto return
 gsubr 0: -100 0 rlineto return
 glyph .notdef: 100 50 0 rmoveto 400 0 rlineto 0 700 rlineto -400 0 rlineto endchar

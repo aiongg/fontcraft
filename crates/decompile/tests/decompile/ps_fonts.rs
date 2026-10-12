@@ -15,8 +15,8 @@ use fontcraft_decompile::decompile;
 use fontcraft_decompile::type1::read_type1;
 use fontcraft_model::{NodeKind, Shape, Transform};
 
-const T1_SPEC: &str = include_str!("data/ps_type1.txt");
-const CFF_SPEC: &str = include_str!("data/ps_cff.txt");
+const T1_SPEC: &str = include_str!("../data/ps_type1.txt");
+const CFF_SPEC: &str = include_str!("../data/ps_cff.txt");
 
 fn t1_op(name: &str) -> Option<&'static [u8]> {
     Some(match name {

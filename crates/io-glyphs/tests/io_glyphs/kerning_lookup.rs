@@ -1,6 +1,6 @@
 //! The kerning-lookup speed measure of `docs/plans/M5.md` § 5: the pair that applies to every
 //! pair of glyphs a stored pair of Inter Roman's Regular master covers (groups expanded).
-//! `cargo test --release -p fontcraft-io-glyphs --test kerning_lookup -- --ignored --nocapture`.
+//! `cargo test --release -p fontcraft-io-glyphs --test io_glyphs kerning_lookup:: -- --ignored --nocapture`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::HashSet;

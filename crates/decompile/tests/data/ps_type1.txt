@@ -1,5 +1,5 @@
 # Charstring programs of the Type 1 test font, one per line: `subr N:` or `glyph NAME:` and
-# Type 1 operators after their operands. The font around them is built by `tests/ps_fonts.rs`.
+# Type 1 operators after their operands. The font around them is built by `tests/decompile/ps_fonts.rs`.
 subr 0: 3 0 callothersubr pop pop setcurrentpoint return
 subr 1: 0 1 callothersubr return
 subr 2: 0 2 callothersubr return

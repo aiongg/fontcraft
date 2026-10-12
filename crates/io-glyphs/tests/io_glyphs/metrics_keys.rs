@@ -1,7 +1,7 @@
 //! The metrics-key measure of `docs/plans/M5.md` § 5: every key in the corpus's `.glyphs`
 //! sources and packages is parsed, and every key that applies to a master layer is evaluated and
 //! compared with the layer's metric. Prints the counts per class and samples of each.
-//! `cargo test --release -p fontcraft-io-glyphs --test metrics_keys -- --ignored --nocapture`.
+//! `cargo test --release -p fontcraft-io-glyphs --test io_glyphs metrics_keys:: -- --ignored --nocapture`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::collections::BTreeMap;

@@ -1,5 +1,5 @@
 //! Diagnostic timings on the largest corpus family (Inter, two packages of thousands of glyphs).
-//! `cargo test --release -p fontcraft-io-glyphs --test timing -- --ignored --nocapture`.
+//! `cargo test --release -p fontcraft-io-glyphs --test io_glyphs timing:: -- --ignored --nocapture`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::Path;

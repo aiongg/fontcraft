@@ -1,6 +1,6 @@
 //! Diagnostic: which keys occur on objects at a given path (`.axes[]`, `.instances[]`…), and how
 //! often, in the files listed in the file named by `FONTCRAFT_FILES`. `FONTCRAFT_PATHS` is a
-//! comma-separated list of paths. `cargo test -p fontcraft-plist --test corpus_keys -- --ignored
+//! comma-separated list of paths. `cargo test -p fontcraft-plist --test plist corpus_keys:: -- --ignored
 //! --nocapture`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 

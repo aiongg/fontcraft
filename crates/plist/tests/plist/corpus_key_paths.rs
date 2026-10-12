@@ -1,6 +1,6 @@
 //! Diagnostic: for each object path (`fontMaster[]`, `glyphs[].layers[]`…) in the files listed in
 //! the file named by `FONTCRAFT_FILES`, whether keys are sorted, and the unsorted orders seen.
-//! `cargo test -p fontcraft-plist --test corpus_key_paths -- --ignored --nocapture`.
+//! `cargo test -p fontcraft-plist --test plist corpus_key_paths:: -- --ignored --nocapture`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::BTreeMap;

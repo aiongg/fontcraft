@@ -434,7 +434,7 @@ fn fonts(dir: &Path, out: &mut Vec<PathBuf>) {
 /// `--output-dir` of `fontcraft-cli oracle --corpus --against fontmake`; `corpus/` when unset),
 /// the opened document gives every covered pair the GPOS value. Pairs whose second glyph is in
 /// class 0 of a class table are not listed here. Prints each difference and fails when there is
-/// one. Run with `cargo test --release -p fontcraft-decompile --test gpos_kern -- --ignored`.
+/// one. Run with `cargo test --release -p fontcraft-decompile --test decompile gpos_kern:: -- --ignored`.
 #[test]
 #[ignore = "a measure over many fonts: run it on purpose"]
 fn measure_kerning_from_compiled_fonts() {
