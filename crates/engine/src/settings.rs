@@ -117,16 +117,19 @@ pub enum Reserved {
     /// The user's audit profiles and the application's default audit profile,
     /// `{default?, profiles: [profile]}` (`audit.profile.*`).
     AuditProfiles,
+    /// The user's export profiles, `[{name, params}]` (`file.saveExportProfile`).
+    ExportProfiles,
 }
 
 impl Reserved {
-    pub const ALL: [Reserved; 6] = [
+    pub const ALL: [Reserved; 7] = [
         Reserved::Filters,
         Reserved::VisibleScripts,
         Reserved::RecentDocuments,
         Reserved::ChooserPicks,
         Reserved::SampleStrings,
         Reserved::AuditProfiles,
+        Reserved::ExportProfiles,
     ];
 
     pub fn id(self) -> &'static str {
@@ -137,6 +140,7 @@ impl Reserved {
             Reserved::ChooserPicks => "start.chooserPicks",
             Reserved::SampleStrings => "sampleStrings.groups",
             Reserved::AuditProfiles => "audit.userProfiles",
+            Reserved::ExportProfiles => fontcraft_model::fc_keys::EXPORT_PROFILES,
         }
     }
 
@@ -149,6 +153,7 @@ impl Reserved {
             Reserved::ChooserPicks => "the Start Window",
             Reserved::SampleStrings => "the Sample Strings settings",
             Reserved::AuditProfiles => "the audit.profile commands",
+            Reserved::ExportProfiles => "file.saveExportProfile and file.removeExportProfile",
         }
     }
 

@@ -280,6 +280,9 @@ pub const DIALOGS: &[Dialog] = &[
     stem_filters::WEIGHT,
     stem_filters::CONDENSE,
     stem_filters::X_HEIGHT,
+    export_profiles::DIALOG,
+    export_profiles::EXPORT,
+    export_profiles::ARTWORK,
 ];
 
 /// The shell commands of this module.

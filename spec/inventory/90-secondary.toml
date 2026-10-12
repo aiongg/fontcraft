@@ -1671,6 +1671,37 @@ summary = "Named, reusable bundles of export settings. Built-in profiles cover t
 ref = "FontLab 7 manual › Export Profiles; FontLab 8 What's new › Formats"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. FontCraft's dialog edits one profile at a time (file.saveExportProfile): it lists the existing profiles, opens on a profile named in its parameters or on the one it is based on, and saves under a name; built-in profiles are read-only. Removing is file.removeExportProfile. The settings are those of the static export (subfolder, outline format, containers, overlap removal, autohint); the size, hinting, glyph, layout and colour groups of the row wait for export to support them."
+guesses = [
+  "The built-in profiles are OpenType PS (CFF, plain), OpenType TT (TrueType, plain) and Web (TrueType, WOFF2 and WOFF), each writing into a subfolder named after it; the reference's full built-in list would settle it.",
+  "There is no tick for which profiles the export dialog shows: Export Fonts As lists every profile; the reference's dialog would settle whether hidden profiles are needed.",
+]
+
+[[panel]]
+id = "dialog.exportFontsAs"
+label = "Export Fonts As"
+location = "dialog"
+controls = ["profiles to export through, ticked", "export folder with Choose…"]
+area = "compile"
+milestone = "M13"
+summary = "Exports the active font through the ticked export profiles into a folder, each profile into its own subfolder (file.exportWithProfiles)."
+ref = "FontLab 8 What's new › Formats › File › Export Font As"
+status = "docs"
+origin = "fontlab"
+notes = "Documented, not yet observed. The choice of fonts and exporting next to each source file are parameters of file.exportWithProfiles that the dialog does not offer yet."
+
+[[panel]]
+id = "dialog.exportArtwork"
+label = "Export Artwork"
+location = "dialog"
+controls = ["format: SVG, PDF or PNG", "master", "pixels per em (PNG)", "export folder with Choose…"]
+area = "import-export"
+milestone = "M13"
+summary = "Writes one picture per selected glyph of one master into a folder (glyph.exportArtwork)."
+ref = "FontLab 8 What's new › Formats (Artwork as PDF, SVG, or PNG)"
+status = "docs"
+origin = "fontlab"
+notes = "Documented, not yet observed."
 
 [[command]]
 id = "file.exportWithProfiles"
@@ -1678,13 +1709,19 @@ label = "Export Fonts As…"
 menu = ["File"]
 shortcut = ""
 kind = "engine"
-params = "{fonts?: [fontRef], profiles: [name], destination?: path, bySource?: bool, installTemporarily?: bool}"
+params = "{fonts?: [title or path], profiles: [name], destination?: path, bySource?: bool, installTemporarily?: bool, timestamp?: number|'now'}"
 area = "compile"
 milestone = "M13"
 summary = "Exports every listed open font through every listed export profile in one run, into per-profile subfolders of the destination or next to each source file, and can install the results until the application quits."
 ref = "FontLab 8 What's new › Formats › File › Export Font As"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. Each profile builds the exportable instances as file.exportAll does. installTemporarily is refused as not supported yet: installing fonts for the session needs the desktop app's platform code (M14). All files are staged and moved into place only when every font was built."
+guesses = [
+  "Without `fonts` the active document is exported, not every open one; the reference's Export Fonts As dialog would settle the default.",
+  "A profile's subfolder may not climb out of the destination with `..`, for any caller; the reference's profile settings would settle whether it can.",
+  "Two profiles that would write the same file refuse the whole export instead of keeping one; the reference's behaviour with two profiles sharing a folder would settle it.",
+]
 
 [[command]]
 id = "file.saveExportProfile"
@@ -1692,13 +1729,47 @@ label = "Save Export Profile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{name: string, basedOn?: name, settings: object}"
+params = "{name: string, basedOn?: name, settings: {folder?: path, outlines?: 'truetype' | 'cff', containers?: ['plain' | 'woff' | 'woff2'], removeOverlap?: bool, autohint?: bool}}"
 area = "compile"
 milestone = "M13"
 summary = "Creates or updates a custom export profile from a settings object, optionally starting from an existing profile."
 ref = "FontLab 7 manual › Export Profiles (Creating custom profiles)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. Profiles live in the application settings under com.fontcraft.exportProfiles as [{name, params}], at most 256 with the built-in ones; stored profiles that cannot be read are reported by file.listExportProfiles and left out."
+guesses = [
+  "A copy made with basedOn writes into a subfolder named after the copy unless `settings` names a folder; the reference's Duplicate would settle it.",
+]
+
+[[command]]
+id = "file.removeExportProfile"
+label = "Remove Export Profile"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{name: string}"
+area = "compile"
+milestone = "M13"
+summary = "Removes one of the user's export profiles. Built-in profiles cannot be removed."
+ref = "FontLab 7 manual › Export Profiles (Creating custom profiles)"
+status = "docs"
+origin = "fontlab"
+notes = "Documented, not yet observed: the reference's profile list has a remove button and keeps built-in profiles read-only."
+
+[[command]]
+id = "file.listExportProfiles"
+label = "List Export Profiles"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{}"
+area = "compile"
+milestone = "M13"
+summary = "Lists the export profiles, built-in ones first, with their settings, and reports stored profiles that cannot be read."
+ref = "FontLab 7 manual › Export Profiles"
+status = "docs"
+origin = "fontlab"
+notes = "A query for agents and the dialogs; the reference shows the same list in its Export Profiles dialog."
 
 [[command]]
 id = "file.exportWindowContents"
@@ -1720,15 +1791,20 @@ label = "Export Artwork…"
 menu = ["File", "Export"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layer?: id, format: 'svg' | 'pdf' | 'png', directory: path, pixelsPerEm?: number}"
+params = "{glyphs?, layer?: id, format: 'svg' | 'pdf' | 'png', directory?: path, pixelsPerEm?: number}"
 area = "import-export"
 milestone = "M13"
 summary = "Writes one image file per glyph, named after the glyph, for the chosen layer. The inverse imports a folder of images, one glyph per file."
 ref = "FontLab 8 What's new › Formats (Artwork as PDF, SVG, or PNG; Artwork Collection)"
 status = "docs"
 origin = "fontlab"
+notes = "Documented, not yet observed. Without a directory the pictures come back in the result (the web app and agents). The import side is a separate row."
 guesses = [
   "SVG uses the io-svg writer, PNG the render crate and PDF a minimal writer of our own; FontLab's options beyond the three formats are not followed.",
+  "A picture spans the advance width and the master's descender to ascender, widened to the outline where it reaches further, so pictures of one font line up; exporting a few glyphs in the reference would settle the frame.",
+  "SVG and PDF use one user unit or point per font unit (a PDF is scaled down to at most 14400 points a side); PNG is black on a transparent background at 256 pixels per em by default.",
+  "Characters a file name cannot hold become `_`, and names that differ only in case get `_2`, `_3`; the reference's file names for such glyphs would settle it.",
+  "Without `glyphs` every glyph of the font is exported; the shell passes the selection.",
 ]
 
 [[command]]

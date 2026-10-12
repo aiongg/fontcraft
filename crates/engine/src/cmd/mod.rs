@@ -131,7 +131,7 @@ mod derived_glyphs;
 mod detect;
 mod drag_aids;
 mod encodings;
-mod export_profiles;
+pub mod export_profiles;
 mod expressions;
 mod external_changes;
 mod file_helpers;
