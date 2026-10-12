@@ -2,10 +2,9 @@
 //!
 //! Commands: `font.features.listSnippets`, `insertSnippet`, `showSnippetFolder`.
 //!
-//! The snippet folder is `snippets` in FontCraft's settings folder, the one the desktop app keeps
-//! its settings in (`$XDG_CONFIG_HOME/fontcraft`, `~/Library/Application Support/FontCraft`,
-//! `%APPDATA%\FontCraft`; `FONTCRAFT_SETTINGS_DIR` replaces it). Every command takes `folder` to
-//! name another one; the web app has none. File names, formats and limits are
+//! The snippet folder is the session's ([`Session::snippets_dir`]): the desktop app sets it to
+//! `snippets` in the folder it keeps its settings in. Headless sessions, tests and the web app
+//! have none unless a command names one with `folder`. File names, formats and limits are
 //! `fontcraft_features::snippets`'.
 
 use std::io::Read;
@@ -21,8 +20,6 @@ use super::*;
 use crate::params::Params;
 use crate::{EngineError, Result, Session};
 
-/// The snippet folder's name in the settings folder.
-const SNIPPET_FOLDER: &str = "snippets";
 /// Most entries of the snippet folder looked at.
 const MAX_FOLDER_ENTRIES: usize = 10_000;
 
@@ -33,7 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Code Snippets",
             [],
             None,
-            "{folder?: path (default: the snippets folder in the settings folder)} the snippets the Features tab's snippets menu offers: the built-in ones, then one group per user file FeatureSnippets<NAME>.plist or .toml in the folder, by file name. A file that cannot be read is left out with a warning; a missing folder has no files → {folder: path|null, builtIn: [{title, code}], groups: [{name, file, snippets: [{title, code}]}], warnings: [text]}",
+            "{folder?: path (default: the session's snippet folder, which the desktop app sets and a headless session lacks)} the snippets the Features tab's snippets menu offers: the built-in ones, then one group per user file FeatureSnippets<NAME>.plist or .toml in the folder, by file name. A file that cannot be read is left out with a warning; a missing folder, or none, has no files → {folder: path|null, builtIn: [{title, code}], groups: [{name, file, snippets: [{title, code}]}], warnings: [text]}",
             always,
             list
         ),
@@ -51,37 +48,19 @@ pub fn specs() -> Vec<CommandSpec> {
             "Show Snippet Folder",
             [],
             None,
-            "{folder?: path} the folder user snippet files go in, created when missing; the app opens it in the file manager → {path, created: bool}",
+            "{folder?: path (default: the session's snippet folder)} the folder user snippet files go in, created when missing; the app opens it in the file manager. Refused when there is no folder → {path, created: bool}",
             always,
             show_folder
         ),
     ]
 }
 
-/// The snippet folder of this platform, when it has one.
-fn default_folder() -> Option<PathBuf> {
-    if cfg!(target_arch = "wasm32") {
-        return None;
-    }
-    let env = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
-    let settings = if let Some(dir) = env("FONTCRAFT_SETTINGS_DIR") {
-        Some(dir)
-    } else if cfg!(target_os = "macos") {
-        env("HOME").map(|h| h.join("Library").join("Application Support").join("FontCraft"))
-    } else if cfg!(windows) {
-        env("APPDATA").map(|d| d.join("FontCraft"))
-    } else {
-        env("XDG_CONFIG_HOME").or_else(|| env("HOME").map(|h| h.join(".config"))).map(|d| d.join("fontcraft"))
-    };
-    settings.map(|d| d.join(SNIPPET_FOLDER))
-}
-
-/// The folder the parameters name, else the default one.
-fn folder_param(p: &Params) -> Result<Option<PathBuf>> {
+/// The folder the parameters name, else the session's ([`Session::snippets_dir`]).
+fn folder_param(s: &Session, p: &Params) -> Result<Option<PathBuf>> {
     match p.opt_str("folder")? {
         Some("") => Err(p.bad("`folder` is empty")),
         Some(f) => Ok(Some(PathBuf::from(f))),
-        None => Ok(default_folder()),
+        None => Ok(s.snippets_dir().map(Path::to_path_buf)),
     }
 }
 
@@ -159,9 +138,9 @@ fn snippet_json(s: &CodeSnippet) -> Value {
     json!({ "title": s.name, "code": s.code })
 }
 
-fn list(_: &mut Session, raw: &Value) -> Result<Value> {
+fn list(s: &mut Session, raw: &Value) -> Result<Value> {
     let p = Params::new("font.features.listSnippets", raw)?;
-    let folder = folder_param(&p)?;
+    let folder = folder_param(s, &p)?;
     let (user, warnings) = user_snippets(folder.as_deref());
     // One group per file, in the order read_user gives (file-name order).
     let mut groups: Vec<(String, String, Vec<Value>)> = Vec::new();
@@ -229,7 +208,7 @@ fn entry_param(p: &Params, f: &Features) -> Result<(EntryKind, usize)> {
 }
 
 /// The code of the snippet the parameters name.
-fn snippet_code(p: &Params) -> Result<String> {
+fn snippet_code(s: &Session, p: &Params) -> Result<String> {
     let title = p.str("snippet")?;
     let group = p.opt_str("group")?;
     if group.is_none()
@@ -237,7 +216,7 @@ fn snippet_code(p: &Params) -> Result<String> {
     {
         return Ok(s.code);
     }
-    let (user, _) = user_snippets(folder_param(p)?.as_deref());
+    let (user, _) = user_snippets(folder_param(s, p)?.as_deref());
     user.into_iter().find(|s| s.name == title && group.is_none_or(|g| s.source.group() == Some(g))).map(|s| s.code).ok_or_else(|| match group {
         Some(g) => p.bad(format!("the snippet group `{g}` has no snippet `{title}`")),
         None => p.bad(format!("no snippet is titled `{title}`")),
@@ -247,7 +226,7 @@ fn snippet_code(p: &Params) -> Result<String> {
 fn insert(s: &mut Session, raw: &Value) -> Result<Value> {
     let p = Params::new("font.features.insertSnippet", raw)?;
     let (kind, index) = entry_param(&p, &s.font()?.features)?;
-    let code = snippet_code(&p)?;
+    let code = snippet_code(s, &p)?;
     let features = &s.font()?.features;
     let entries = match kind {
         EntryKind::Prefix => &features.prefixes,
@@ -295,10 +274,10 @@ fn insert(s: &mut Session, raw: &Value) -> Result<Value> {
     Ok(json!({ "kind": kind_name(kind), "name": name, "index": index, "caret": caret }))
 }
 
-fn show_folder(_: &mut Session, raw: &Value) -> Result<Value> {
+fn show_folder(s: &mut Session, raw: &Value) -> Result<Value> {
     let p = Params::new("font.features.showSnippetFolder", raw)?;
-    let Some(dir) = folder_param(&p)? else {
-        return Err(EngineError::Unsupported("a snippet folder: there is no settings folder here (HOME is not set, or this is the web app)".into()));
+    let Some(dir) = folder_param(s, &p)? else {
+        return Err(EngineError::Unsupported("a snippet folder: this session has no settings folder (pass `folder`)".into()));
     };
     let existed = dir.is_dir();
     if !existed {

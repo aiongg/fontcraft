@@ -94,6 +94,7 @@ fn run() -> Result<(), String> {
     // What the user runs in the window may export where an Export Folder parameter points; the
     // control channel turns this off for its own requests.
     session.set_export_outside(true);
+    session.set_snippets_dir(user_files::settings_dir().map(|d| d.join("snippets")));
     let (user_files, problems) = user_files::UserFiles::load(&mut session);
     for p in &problems {
         eprintln!("fontcraft: {p}");

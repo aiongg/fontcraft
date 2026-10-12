@@ -129,3 +129,20 @@ fn show_snippet_folder_creates_the_folder_once() {
     assert_eq!(r["created"], false);
     let _ = std::fs::remove_dir_all(dir.parent().unwrap());
 }
+
+#[test]
+fn without_a_session_folder_only_the_built_in_snippets_are_listed() {
+    let mut s = Session::new();
+    let r = run(&mut s, "font.features.listSnippets", json!({}));
+    assert_eq!(r["folder"], Value::Null);
+    assert_eq!(r["groups"], json!([]));
+    assert!(!r["builtIn"].as_array().unwrap().is_empty());
+    assert!(matches!(s.execute("font.features.showSnippetFolder", &json!({})), Err(EngineError::Unsupported(_))));
+
+    let dir = snippet_folder("snippets-session");
+    s.set_snippets_dir(Some(dir.clone()));
+    let r = run(&mut s, "font.features.listSnippets", json!({}));
+    assert_eq!(r["folder"], json!(folder_str(&dir)));
+    assert!(!r["groups"].as_array().unwrap().is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}

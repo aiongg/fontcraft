@@ -42,7 +42,7 @@ pub mod params;
 pub mod settings;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub use clock::Clock;
@@ -252,6 +252,8 @@ pub struct Session {
     extensions: extensions::ExtensionState,
     /// Exports may write where an Export Folder parameter climbs out of the destination folder.
     export_outside: bool,
+    /// The user's feature code snippet folder ([`Session::set_snippets_dir`]).
+    snippets_dir: Option<PathBuf>,
 }
 
 /// A running interaction (see [`Session::begin`]).
@@ -417,6 +419,19 @@ impl Session {
     /// Whether exports may write outside their destination folder ([`Session::set_export_outside`]).
     pub fn export_outside(&self) -> bool {
         self.export_outside
+    }
+
+    /// The folder of the user's feature code snippets, which the snippet commands use when they
+    /// are not given a `folder`. `None`, the default, means none: the snippet list has the
+    /// built-in snippets only and Show Snippet Folder refuses. The desktop app sets it to the
+    /// `snippets` folder in its settings folder.
+    pub fn set_snippets_dir(&mut self, dir: Option<PathBuf>) {
+        self.snippets_dir = dir;
+    }
+
+    /// The folder set by [`Session::set_snippets_dir`].
+    pub fn snippets_dir(&self) -> Option<&Path> {
+        self.snippets_dir.as_deref()
     }
 
     /// The user's settings (`settings.get`).
