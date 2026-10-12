@@ -592,7 +592,18 @@ milestone = "M13"
 summary = "Imports outlines from EPS files of the kind drawing applications save: a small interpreter for path, transform and paint operators, not a full PostScript implementation. Files that rely on procedures beyond that subset are rejected with a message rather than imported wrongly."
 ref = "Import & Export › Importing Outlines; Adobe Technical Note 5002, Encapsulated PostScript File Format 3.0 (no stable public URL verified)"
 status = "handbook"
-notes = "M13.57: our own interpreter for the path, transform and paint operators drawing applications write."
+notes = "Built (M13.57) in `crates/io-svg/src/eps.rs` (`read_eps`, `looks_like_eps`): a scanner and a fixed operator subset, not a PostScript interpreter. It runs path construction (moveto, rmoveto, lineto, rlineto, curveto, rcurveto, closepath, newpath), painting (fill, eofill, stroke, rectfill, rectstroke; clip operators counted and dropped), gsave/grestore/save/restore, the colour and line style operators (dropped), translate/scale/rotate/concat and the matrix operators, stack and arithmetic operators, and def/bind/load/array/astore. Prolog, setup, procedure-set and resource sections are not run; their `/name { … } bind def` and `/name /op load def` definitions are kept when their procedures use only the subset. The page runs until %%PageTrailer, %%Trailer or %%EOF. Files marked with `%AI` comments may use the drawing-application format's documented abbreviations (m l c v y, f s b n and variants, W; style, text, group and layer operators dropped with their operands). Anything else (conditionals, loops, exec, files, fonts, text, images, arcs) is refused naming the operator. DOS EPS binary headers are followed to the PostScript section. Limits: 16 MiB, 8,000,000 tokens, 2,000,000 stored procedure tokens, nesting 64, calls 32 deep, 64 saved states, operand stack 10,000, 10,000,000 operations, 1,000,000 array elements, 10,000 definitions, numbers within ±1e9, and the SVG reader's 10,000 paths and 200,000 nodes. `file.importOutlines` still reads SVG only; routing `.eps` files to `read_eps` is a change in `crates/engine/src/cmd/clipboard.rs`. The handbook documents EPS import; behaviour on real files from drawing applications is not yet observed."
+guesses = [
+  "Unscaled placement keeps one point per unit and puts the top edge of the bounding box (else of the drawing) at the given top, matching how SVG files are placed; importing an EPS of known geometry in the reference app would settle it.",
+  "Paths that are only used to clip, or ended without painting, are left out and counted as dropped; the reference may import every path, which importing a file with a clipping path and an unpainted path would settle.",
+  "Arcs (arc, arcn, arct), text and images make the file fail with a message rather than being skipped; an EPS with an arc or a text object imported in the reference app would show whether it skips them or converts them.",
+  "A path filled inside gsave/grestore and stroked again afterwards is imported once; a reference import of such a file would settle it.",
+]
+observe = [
+  "Import Outlines with an EPS of our own that draws a 100 × 100 point square at (50, 50) in a 0 0 200 200 bounding box: note where the square lands relative to the baseline and whether it is scaled.",
+  "Import Outlines with an EPS that clips a filled triangle by a rectangle and also has an unpainted path: note which of the three paths arrive.",
+  "Import Outlines with an EPS that uses `arc` and one that contains text: note whether each is refused, skipped or converted.",
+]
 
 [[format]]
 id = "clipboard"

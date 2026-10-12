@@ -7,6 +7,8 @@
 //! - [`shapes_to_svg`], [`bez_to_svg`]: outlines as a compact SVG document, for other apps.
 //! - [`clipboard`]: our own JSON fragment of shapes, anchors and guides, with a version field.
 //! - [`svg_font`]: SVG 1.1 fonts read into a document and written from one master.
+//! - [`read_eps`]: the outlines of an EPS file, from a small fixed subset of PostScript (see
+//!   [`eps`]).
 //!
 //! SVG input is untrusted. It is checked against the limits below before usvg sees it, rewritten
 //! as a geometry-only document (so usvg never reads files, decodes images or runs filters), and
@@ -19,11 +21,13 @@ use std::collections::BTreeMap;
 use fontcraft_model::MAX_COORDINATE;
 
 pub mod clipboard;
+pub mod eps;
 mod read;
 mod sanitize;
 pub mod svg_font;
 mod write;
 
+pub use eps::{EpsError, EpsOutlines, looks_like_eps, read_eps};
 pub use read::{Placement, SvgOutlines, read_svg};
 pub use write::{bez_to_svg, shapes_to_svg};
 
@@ -128,12 +132,12 @@ pub fn looks_like_svg(text: &str) -> bool {
     t.starts_with('<') && t.contains("<svg")
 }
 
-/// The glyph name an imported file maps to: its base name without the `.svg` extension
-/// (`file.importOutlines` matches files to glyphs this way).
+/// The glyph name an imported file maps to: its base name without the `.svg`, `.svgz`, `.eps` or
+/// `.pdf` extension (`file.importOutlines` matches files to glyphs this way).
 pub fn glyph_name_for_file(path: &str) -> &str {
     let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
     match base.rsplit_once('.') {
-        Some((stem, ext)) if !stem.is_empty() && (ext.eq_ignore_ascii_case("svg") || ext.eq_ignore_ascii_case("svgz")) => stem,
+        Some((stem, ext)) if !stem.is_empty() && ["svg", "svgz", "eps", "pdf"].iter().any(|e| ext.eq_ignore_ascii_case(e)) => stem,
         _ => base,
     }
 }

@@ -112,15 +112,16 @@ impl Mapping {
     }
 }
 
-fn round(v: f64) -> f64 {
+pub(crate) fn round(v: f64) -> f64 {
     let r = (v * 1000.0).round() / 1000.0;
     // No negative zero in the output.
     if r == 0.0 { 0.0 } else { r }
 }
 
-struct Collected {
-    paths: Vec<Path>,
-    nodes: usize,
+#[derive(Default)]
+pub(crate) struct Collected {
+    pub(crate) paths: Vec<Path>,
+    pub(crate) nodes: usize,
 }
 
 /// usvg adds a few groups of its own (for `use`, nested `svg`, the root), so its tree may be
@@ -171,21 +172,21 @@ fn collect_path(path: &usvg::Path, mapping: &Mapping, out: &mut Collected) -> Re
     contour.finish(out)
 }
 
-type Pt = (f64, f64);
+pub(crate) type Pt = (f64, f64);
 
 /// One contour being built. The first node is the start point; segments append their off-curve
 /// nodes and end node. Closing removes an end node that repeats the start and gives its kind to
 /// the start node, so the last segment wraps around as the model expects.
 #[derive(Default)]
-struct Contour {
-    nodes: Vec<Node>,
+pub(crate) struct Contour {
+    pub(crate) nodes: Vec<Node>,
     closed: bool,
     start: Option<Pt>,
     last: Option<Pt>,
 }
 
 impl Contour {
-    fn start(&mut self, p: Pt) {
+    pub(crate) fn start(&mut self, p: Pt) {
         self.nodes.push(Node::new(p.0, p.1, NodeKind::Line));
         self.start = Some(p);
         self.last = Some(p);
@@ -200,7 +201,7 @@ impl Contour {
         from
     }
 
-    fn line(&mut self, p: Pt) {
+    pub(crate) fn line(&mut self, p: Pt) {
         self.ensure_started();
         self.nodes.push(Node::new(p.0, p.1, NodeKind::Line));
         self.last = Some(p);
@@ -214,7 +215,7 @@ impl Contour {
         self.cubic(c1, c2, p);
     }
 
-    fn cubic(&mut self, c1: Pt, c2: Pt, p: Pt) {
+    pub(crate) fn cubic(&mut self, c1: Pt, c2: Pt, p: Pt) {
         self.ensure_started();
         self.nodes.push(Node::new(c1.0, c1.1, NodeKind::OffCurve));
         self.nodes.push(Node::new(c2.0, c2.1, NodeKind::OffCurve));
@@ -222,7 +223,7 @@ impl Contour {
         self.last = Some(p);
     }
 
-    fn close(&mut self) {
+    pub(crate) fn close(&mut self) {
         let repeats_start = self.nodes.len() > 1 && self.nodes.last().map(|n| (n.x, n.y)) == self.start;
         if repeats_start
             && let Some(end) = self.nodes.pop()
@@ -235,7 +236,7 @@ impl Contour {
     }
 
     /// Moves the contour into `out` when it has at least two nodes, and starts afresh.
-    fn finish(&mut self, out: &mut Collected) -> Result<(), SvgError> {
+    pub(crate) fn finish(&mut self, out: &mut Collected) -> Result<(), SvgError> {
         let closed = self.closed;
         let mut nodes = std::mem::take(&mut self.nodes);
         self.closed = false;

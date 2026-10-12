@@ -166,7 +166,9 @@ add formats (`open.compiledFormats`).
 
 ### 4.1 Outlines (`file.importOutlines`, File › Import › Outlines…)
 
-- Accepts PDF, EPS, SVG.
+- Accepts PDF, EPS, SVG. EPS is read through a fixed subset of PostScript (paths, painting,
+  transforms, prolog definitions that use only those); other operators make the file fail with a
+  message naming them (`eps-outline`).
 - Font View: multi-file; each file goes to the glyph whose name equals the file's base name
   (`import.outlinesBatchByFileName`). No such glyph: prompt per file, OK skips, Add Glyph creates
   the glyph and imports (`dialog.importOutlinesMissingGlyph`,
