@@ -113,6 +113,9 @@ fn cff(font_name: &str, full_name: &str) -> Vec<u8> {
     index(&mut out, &[248, 27, 2]);
     index(&mut out, full_name.as_bytes());
     be16(&mut out, 0);
+    // An empty global subroutine INDEX is two bytes, but the parser reads three; a real table has
+    // its CharStrings after it.
+    out.push(0);
     out
 }
 

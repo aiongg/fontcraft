@@ -16,10 +16,10 @@ fn dir(name: &str) -> PathBuf {
 
 fn source() -> Font {
     let mut f = Font::new("Order Sans");
+    // .notdef and the three letters only: the new font's alphabet would add Z and space.
+    f.glyphs.retain(|g| g.name == ".notdef");
     for (name, cp) in [("A", 0x41), ("B", 0x42), ("C", 0x43)] {
-        if f.glyph(name).is_none() {
-            f.add_glyph(name, vec![cp], 600.0).unwrap();
-        }
+        f.add_glyph(name, vec![cp], 600.0).unwrap();
         f.glyph_mut(name).unwrap().layers[0].shapes.push(Shape::Path(Path::rect(0.0, 0.0, 500.0, 700.0)));
     }
     f.glyph_mut("C").unwrap().layers[0].shapes.clear();

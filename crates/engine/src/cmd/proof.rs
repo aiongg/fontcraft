@@ -112,11 +112,11 @@ fn proof(_: &mut Session, p: &Value) -> Result<Value> {
         },
     };
     let sheet = match (layout, format) {
+        // The HTML specimen is one page whatever the layout; its sample comes from `text`.
+        (_, ProofFormat::Html) => Sheet::Waterfall { text: p.opt_str("text")?.unwrap_or("").to_string() },
         ("palette", _) => Sheet::GlyphGrid,
         ("outline", _) => Sheet::GlyphPerPage,
         ("waterfall", _) => Sheet::Waterfall { text: p.opt_str("text")?.unwrap_or("").to_string() },
-        // The HTML specimen is one page whatever the layout; its sample comes from `text`.
-        (_, ProofFormat::Html) => Sheet::Waterfall { text: p.opt_str("text")?.unwrap_or("").to_string() },
         (other, _) => return Err(EngineError::Unsupported(format!("the `{other}` proof layout"))),
     };
     let sizes = sizes(&p, &sheet, format, page_size)?;

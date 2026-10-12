@@ -1537,7 +1537,7 @@ fn heuristic(ctx: &GlyphCtx<'_>, sink: &mut Sink, test: Test, tolerance: f64, ki
                 };
                 let mut hit = Hit::new("kink", message);
                 if let (Some(s), Some(n)) = (shape, f.node) {
-                    hit = hit.shapes(vec![s]).points(vec![[s, n]]);
+                    hit = hit.shapes(vec![s]).points(vec![[s, n]]).data("node", n as f64);
                 }
                 hit
             }

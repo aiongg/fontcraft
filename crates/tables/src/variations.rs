@@ -198,6 +198,10 @@ fn read_avar<'a>(font: &'a SfntFont, axes: &[FvarAxis]) -> Result<Option<AvarDat
         let map = map.map_err(bad)?;
         segments.push(as_map(map.axis_value_maps().iter().map(|m| (f2(m.from_coordinate()), f2(m.to_coordinate()))).collect()));
     }
+    // The map list stops quietly at a map cut short, so a short list is a damaged table.
+    if segments.len() < usize::from(table.axis_count()).min(axes.len()) {
+        return Err(TablesError::invalid("the avar table cannot be read: its axis maps are cut short"));
+    }
     Ok(Some(AvarData { major, segments, table }))
 }
 

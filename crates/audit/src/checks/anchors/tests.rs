@@ -12,6 +12,8 @@ fn anchored(name: &str, anchors: &[&str]) -> fontcraft_model::Glyph {
 #[test]
 fn duplicate_anchor_names_are_reported_after_the_first() {
     let mut font = Font::new("Test");
+    // The fixture's own glyphs only: the new font's alphabet would shadow them.
+    font.glyphs.retain(|_| false);
     font.glyphs.push(anchored("a", &["top", "top", "bottom"]));
     font.glyphs.push(anchored("b", &["top", "bottom"]));
     let ctx = AuditContext::new(&font);
@@ -30,6 +32,8 @@ fn duplicate_anchor_names_are_reported_after_the_first() {
 #[test]
 fn anchors_without_a_partner_are_reported() {
     let mut font = Font::new("Test");
+    // The fixture's own glyphs only: the new font's alphabet would shadow them.
+    font.glyphs.retain(|_| false);
     let mut smart = anchored("_part.shoulder", &["Width"]);
     smart.info.parts.push(PartProperty {
         name: "Width".into(),

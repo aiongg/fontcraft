@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1001 rows to check: 1235 guesses and 385 observe steps.**
+**1017 rows to check: 1268 guesses and 385 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 39 |
 | Built milestones (M0 to M6) | Settings and the window | 8 |
 | Built milestones (M0 to M6) | Elsewhere | 3 |
-| **Later milestones (after M6)** | all | **547** |
+| **Later milestones (after M6)** | all | **563** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 13 |
 | Later milestones (after M6) | Edit View: text mode and preview | 14 |
 | Later milestones (after M6) | Components and anchors | 27 |
@@ -56,14 +56,14 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 3 |
 | Later milestones (after M6) | Kerning and the Kerning window | 4 |
 | Later milestones (after M6) | Font View | 7 |
-| Later milestones (after M6) | Font Info and features | 236 |
+| Later milestones (after M6) | Font Info and features | 237 |
 | Later milestones (after M6) | Interpolation | 41 |
 | Later milestones (after M6) | Hinting | 67 |
 | Later milestones (after M6) | Colour fonts | 44 |
-| Later milestones (after M6) | Files: open, import, export | 14 |
+| Later milestones (after M6) | Files: open, import, export | 19 |
 | Later milestones (after M6) | Settings and the window | 11 |
 | Later milestones (after M6) | Scripts, plug-ins and URLs | 60 |
-| Later milestones (after M6) | Elsewhere | 5 |
+| Later milestones (after M6) | Elsewhere | 15 |
 
 ## Built milestones (M0 to M6) (454)
 
@@ -1285,7 +1285,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (547)
+## Later milestones (after M6) (563)
 
 ### Edit View: drawing, guides, layers and the Palette (13)
 
@@ -1297,6 +1297,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `image.storedAsRelativePath` (behavior, M11, handbook): The document records only the image's path relative to the font file
   - Guess: A file outside the document's folder is stored with a path that climbs out of it (`../scans/A.png`), as the handbook says only a relative path is stored. Settled by adding an image from another folder in the reference and reading the saved path.
   - Guess: An image added to a document that has never been saved keeps its absolute path until the first save, which rewrites it relative to the new file. Settled by adding an image to an untitled document in the reference and saving it.
+  - Guess: A stored path that names a network share or a device (`\\host\share`, `//host/share`, `\\?\`, `\\.\`) is never read, on every platform, and the image counts as unreadable; absolute paths and paths climbing out with `..` are read. Settled by opening, in the reference, a file whose image path names a network share.
   - Observe: Image font: save, move H.png away and reopen the file; note how the missing image is drawn and whether a message appears.
   - Observe: Image font: add an image from a folder beside the document's folder, save, and read the stored imagePath.
 - [ ] `image.defaultPlacement` (behavior, M11, handbook): A newly placed image sits at the layer origin, scaled so that…
@@ -1489,7 +1490,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `glyph.setStatus` (M13, docs): Set Status
   - Guess: FontCraft stores the status per glyph, in the glyph's user data, so `.glyphs` and UFO keep it; per-source statuses would move it to layer user data. The reference documentation does not say.
 
-### Font Info and features (236)
+### Font Info and features (237)
 
 - [ ] `fontInfo.familyName.allowedCharacters` (behavior, M7, handbook): The Family Name should contain only A-Z, a-z, 0-9 and spaces; other…
   - Guess: Other characters are accepted with a warning, not refused; typing an ampersand or an accented letter in the reference app settles whether it warns, refuses or neither.
@@ -2176,6 +2177,10 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: Palette font: edit a colour in the Color Palettes editor, press OK and save; note how the stored value is written in the file (version 3 integer lists or the version 4 dictionary).
 - [ ] `fontInfo.styleLinking.recommendedScheme` (behavior, M12, handbook): Recommended scheme, usable as a lint: Bold, Italic and Bold Italic link…
   - Observe: Style font (instances Light, Regular, Semibold and Bold, each with an Italic): in the Exports tab link Semibold as the bold of Light; note whether the app warns, then export and read name IDs 1, 2, 16 and 17 and fsSelection of both.
+- [ ] `layout.decompileFeatures` (M12, docs, live): Decompile Layout to Feature Code
+  - Guess: A lookup a feature uses is named feature_script_language_index after the first language system that uses it, and any other lookup GSUB_index or GPOS_index; the round-trip measure on the corpus would show whether stabler names are needed.
+  - Guess: Glyph sets of two or more glyphs used at least twice become named classes (@first_last); sets used once stay inline. Reading the decompiled text of a few corpus fonts would settle the threshold.
+  - Guess: Mark classes are named @MC_lookup_subtable_class, one set per subtable, so a mark that has different anchors in two subtables of one lookup never collides.
 - [ ] `filter.customParameter.thirdParty` (behavior, M13, handbook): Plug-in filters define their own argument strings and are not guaranteed to…
   - Guess: FontCraft applies include and exclude itself for module filters, where the reference leaves it to each plug-in; settled by nothing in the reference, since our modules cannot see glyph lists.
   - Observe: Open that filter plug-in's dialog and, if it has a gear menu, copy its export string and paste it into a text file: compare it with the built-in filters' export strings (separator, key spelling).
@@ -2215,6 +2220,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A `[]` layer whose master layer has no range is not a source. Settle by exporting such a font from the reference app and comparing the glyph with and without the `[]` layer.
 - [ ] `alternateLayer.rangeSemantics` (behavior, M9, inferred): A range is a conjunction over axes of min ≤ value ≤…
   - Guess: Both bounds inclusive, as the oracles; the handbook does not say. Settle with an instance exactly on a bound in the reference app (docs/plans/M9.md § 8).
+  - Guess: A range whose minimum is above its maximum is refused with a message naming the axis, rather than swapped or treated as empty; settle by typing a reversed range into the reference app's layer dialog and exporting.
   - Observe: In F2 (special layers), export instances at exactly 600 and at 599 and preview them: note which shows the alternate `dollar`.
 - [ ] `alternateLayer.variableExport` (behavior, M9, handbook): In a variable font, alternate layers are switched on by an OpenType…
   - Observe: In F2 (special layers), export the variable font with no Feature for Feature Variations parameter and read GSUB: note the feature that holds the `dollar` swap (rvrn or rlig).
@@ -2224,6 +2230,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The check asks, for each side of the origin an axis range reaches, for a master or virtual master that differs from the origin on that axis alone, and virtual masters count; settle by exporting the handbook's three-master example with Black as the origin.
 - [ ] `axisMappings.controlPoints` (behavior, M9, handbook): A mapping is, per axis, a list of control points pairing an…
   - Guess: A mapping read from a file whose internal values neither rise nor fall throughout is ignored (identity) and reported as a warning; settle by giving the reference app such a mapping and exporting.
+  - Guess: The mapping editor accepts internal values that fall throughout as the external values rise (an axis whose internal coordinate shrinks as the user value grows), and refuses a map that rises in one part and falls in another; settle by entering a falling map in the reference app's Axis Mappings dialog.
 - [ ] `axisMappings.fontAndExportLevel` (behavior, M9, handbook): An Axis Mappings parameter in Font Info › Font applies to every…
   - Guess: A setting's Axis Mappings replaces the font's whole value, not axis by axis; settle by giving a setting a mapping for one axis of a two-axis font and reading `avar`.
 - [ ] `stat.automaticFromInstances` (behavior, M9, handbook): By default the style attributes are derived from the instances: their names…
@@ -2553,6 +2560,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Observe: SVG font: move and scale the svg layer's image, export and read F's SVG document; note how the placement appears in the document.
 - [ ] `color.export.exportSvgTable` (behavior, M11, handbook): Export SVG Table controls whether SVG data is included in an instance
   - Guess: The SVG table is written whenever svg layers exist or a conversion asks for it, without Export SVG Table, as the appendix says; the parameter set off removes it. Settled by exporting the SVG test font from the reference with no parameters.
+  - Guess: When no glyph's SVG document can be made, the font gets no SVG table, with a warning, rather than an empty one. Settled by exporting from the reference a font whose only svg layer names a missing file.
   - Observe: SVG font: export with no colour parameters; note whether an SVG table is written.
 - [ ] `colorPalette.addColor` (M11, handbook, live): Add Color
   - Guess: A new row is opaque black (#000000FF) in every palette unless `color` or `colors` is given. Settled by pressing plus in the reference's palette editor.
@@ -2561,6 +2569,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Removing a row renumbers the layers that use higher rows and refuses while a layer uses the row. Settled by removing a used row in the reference's editor and reading the layers afterwards.
   - Guess: Palette colours of shapes (fills, strokes, gradient stops, shadows) count as uses of a row and are renumbered with the palette layers. Settled by removing a row a full-colour layer's gradient uses in the reference's editor.
   - Guess: The last colour row can be removed, which leaves every palette empty. Settled by removing every colour in the reference's editor.
+  - Guess: Palette colours of shapes in a layer's background count as uses of a row too: they hold it and are renumbered with the foreground. Settled by removing a row only a background shape uses in the reference's editor.
   - Observe: Palette font: in the Color Palettes editor remove row 1, which a palette layer of A uses, and press OK; note whether A's layers are renumbered, left pointing at the old index, or the removal is refused.
 - [ ] `colorPalette.addPalette` (M11, handbook, live): Add Palette
   - Guess: A new palette is a copy of palette 0 (`copyFrom` defaults to 0). Settled by Add Palette in the reference's editor.
@@ -2621,7 +2630,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: The chooser and the Edit View preview always use palette 0. Settled by opening the chooser in a font with two palettes in the reference.
   - Observe: Palette font (two palettes): click the swatch of a palette layer in the Layers palette; note which palette's colours the chooser lists.
 
-### Files: open, import, export (14)
+### Files: open, import, export (19)
 
 - [ ] `export.instanceExportFolder` (behavior, M7, handbook): An instance carrying the Export Folder custom parameter is written to that…
   - Guess: The sub-path is used as written, `..` segments included, as the handbook says; an absolute path, an empty segment, a folder name with a character such as `:` or `\`, or a path of more than 32 segments makes export skip that instance with the reason, one trailing `/` is ignored, and the warnings name every file written outside the export destination; an Export Folder of `../x` and one of `/tmp/x` in the reference app settle it.
@@ -2648,16 +2657,34 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `dialog.importFeatures` (panel, M8, handbook): Import Features
   - Guess: The file is typed as a path, as in the other import dialogs, until the shell has a file chooser limited to .fea files.
 - [ ] `variable-ttf.open` (format, M9, inferred): Variable OpenType, TrueType outlines (opened for editing)
+  - Guess: A variable font beyond the limits (more than 256 avar points on an axis, more than 2,000,000 layers to make) opens as its default instance with the reason among the warnings rather than being refused; settled by checking what users expect when a huge variable font opens.
   - Guess: A peak becomes a master when every coordinate is -1, 0 or 1, or when at least half of the glyphs with variations use it; any other peak becomes an intermediate layer of the glyphs that use it, on the nearest master. Settled by opening fonts built from sources with known masters and intermediate layers and comparing.
   - Guess: A master takes the name of the named instance at its location, else its axis names and design coordinates; an intermediate layer is named by its coordinates in braces.
 - [ ] `cff2.open` (format, M9, inferred): Variable OpenType, CFF2 outlines (opened for editing)
   - Guess: Every region of the CFF2 variation store becomes a master, since the charstrings do not say which glyphs use which region without evaluating them. Settled by opening CFF2 fonts built from sources with intermediate layers and comparing.
+- [ ] `compile.bracketLayerGlyphs` (behavior, M9, docs): Each alternate (bracket) layer set becomes an extra glyph named after its…
+  - Guess: When the font already has a glyph named like an alternate glyph (`a.BRACKET.varAlt01`), the alternate takes the next free number instead of replacing or clashing with it; settle by exporting such a font from the reference app and reading the glyph order.
 - [ ] `color.export.fullColorToColrV1` (behavior, M11, docs): Full-colour layers are compiled to COLR version 1 when any of them…
   - Guess: A full-colour Color layer exports as COLR version 1 without any parameter, as both oracles do; the handbook names only SVG for these layers. Settled by exporting the full-colour test font from the reference with no parameters.
   - Observe: Full-colour font: export with no colour parameters and read it with fontTools; note whether COLR version 1, an SVG table or neither is written.
 - [ ] `color.export.colrVersionChoice` (behavior, M11, docs): The compiler writes COLR version 0 when every colour glyph is a…
   - Guess: Solid-only full-colour layers export as COLR version 0, as fontc does, not version 1 as fontmake does. Settled by exporting the full-colour test font with only solid fills from the reference.
   - Observe: Full-colour font with the gradient and stroke paths deleted (solid fills only): export and read COLR; note whether it is version 0 or version 1.
+- [ ] `type1` (format, M12, docs): Adobe Type 1 (PFB binary, PFA text)
+  - Guess: Vertical metrics are measured on the glyphs d, H, x and p (falling back to the FontBBox), since a Type 1 font has no such fields; the reference app's import of a .pfb would settle it.
+  - Guess: Ghost hints become TopGhost and BottomGhost hints with place (edge, 0), the edge being y for a top ghost and y + dy for a bottom ghost as tx reports them; the reference app's import of a hinted .pfb would settle it.
+  - Guess: Standard stems are named hStem0, hStem1… and vStem0…; the reference app's import of a .pfb would show its names.
+  - Guess: A font whose glyphs together hold more than 20,000,000 hint and path operations, or take more than 500,000,000 charstring steps to run, is refused rather than read in part; no limit of the reference readers is documented, and real fonts stay far below both. A font past them in the reference app would settle it.
+  - Guess: A repeated glyph name gets .1, .2…; when the name is too long for its suffix, it is cut to 247 bytes first so the result stays within 255. Importing a font with repeated long names into the reference app would settle it.
+- [ ] `cff` (format, M12, docs): Bare CFF font program
+  - Guess: A font whose glyphs together hold more than 20,000,000 hint and path operations, or take more than 500,000,000 charstring steps to run, is refused rather than read in part; no limit of the reference readers is documented, and real fonts stay far below both. A font past them in the reference app would settle it.
+- [ ] `svg-font` (format, M12, docs): SVG 1.1 font
+  - Guess: An open subpath in a glyph's path data is read as closed, since SVG fonts fill every subpath; no reference reader was available to settle it.
+  - Guess: A glyph without glyph-name is named from its characters through the glyph database (uniXXXX when it cannot be loaded), ligatures joined with underscores; a reference importer of SVG fonts would settle it.
+  - Guess: Only the first missing-glyph element is read, as .notdef; later ones are left out with a warning. A reference importer of SVG fonts would settle it.
+  - Guess: A repeated glyph name gets .1, .2…; when the name is too long for its suffix, it is cut to 247 bytes first so the result stays within 255. Importing a font with repeated long names into the reference app would settle it.
+- [ ] `proof-html` (format, M12, inferred): HTML specimen
+  - Guess: The default sample is an English pangram with digits when the font maps all of its characters, else the first 64 characters of the character set. Settled by the owner.
 - [ ] `glyphsproject` (format, M13, handbook): Glyphs project
   - Observe: Make a Project from the instances test font (two masters, three instances, one with a custom parameter), set an export destination, save it, and send back the `.glyphsproject` file: its keys show where the instances, the link to the source and the destination are stored.
 - [ ] `glyph.exportArtwork` (M13, docs): Export Artwork…
@@ -2831,12 +2858,34 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `dialog.actions` (panel, M13, docs): Actions
   - Guess: Each action's parameter form is the command's own dialog when it has one, and otherwise a JSON editor checked against the command's params doc; FontLab's dialog lists only its own actions, each with a form.
 
-### Elsewhere (5)
+### Elsewhere (15)
 
 - [ ] `audit.familyGrouping` (behavior, M12, docs): Family checks work on two groupings: style-linked groups, fonts with the same…
   - Guess: On a compiled font without its source the style comes from name IDs 2 and 17 and the fsSelection bits, never from the file name; only check.files.canonicalFileName reads the file name (21-qa.md question 9).
+- [ ] `audit.validatorKnownIssues` (behavior, M12, docs): Findings imported from an external validator are filtered through a list of…
+  - Guess: W2106 (OS/2 version below 3) is treated as wrong for OS/2 version 2 and later, and a ssNN tag counts as registered for 01 to 20 and cvNN for 01 to 99; a run of the validator on fonts with those values would settle it.
+- [ ] `audit.profile.save` (M12, inferred, live): Save Audit Profile
+  - Guess: Without store the profile goes to the user's settings rather than the project; a user report would settle which store people expect by default.
+- [ ] `audit.profile.delete` (M12, inferred, live): Delete Audit Profile
+  - Guess: Deleting a profile that another profile of its store includes is refused rather than removing the include; a user report would settle it.
+- [ ] `audit.profile.setDefault` (M12, inferred, live): Set Default Audit Profile
+  - Guess: target defaults to the document, so a source carries its own default; a user report would settle whether the application default is expected instead.
+- [ ] `audit.ignoreIssue` (M12, inferred, live): Ignore Issue
+  - Guess: An entry made from a result keeps table-level keys but not outline addresses, which change with every edit; a user report would settle whether point-level entries are wanted.
+- [ ] `audit.unignoreIssue` (M12, inferred, live): Stop Ignoring Issue
+  - Guess: A call that matches no entry is refused rather than doing nothing, so a mistyped check id is noticed.
+- [ ] `audit.listIgnored` (M12, inferred, live): List Ignored Issues
+  - Guess: Whether an issue still occurs is judged only against the last kept run, with null when that run did not include the check, rather than running the check again.
+- [ ] `audit.export` (M12, docs, live): Export Audit Report
+  - Guess: Without `format`, the format follows the extension of `path` (.json, .txt, .md, .html) and is JSON for any other; a look at how the command line is used would settle it.
+  - Guess: A result document can be passed in as `results` instead of naming a target, so a run on files can be exported without being kept; settled once the run on compiled fonts keeps its results.
+  - Guess: The Markdown and HTML reports end with the checks that were skipped or failed to run, with their reasons; the reference tools' reports would settle whether to list them.
 - [ ] `audit.compareFamily` (M12, docs): Check Family
   - Guess: The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13).
+- [ ] `audit.report.metrics` (M12, docs, live): Font Metrics Report
+  - Guess: The underline thickness, which comparefamily does not print, is listed after the underline position and sorted the same way; the row's summary asks for it.
+- [ ] `audit.report.panose` (M12, docs, live): PANOSE Report
+  - Guess: Two misspelled value names of comparefamily's tables are spelled correctly (Borders, Literals); a reader comparing text output would notice the difference.
 - [ ] `audit.showPanel` (M12, inferred): Font Audit
   - Guess: The Font Audit panel opens from the Window menu with no shortcut, because the reference app has no audit panel; a later decision on shortcuts would settle it (21-qa.md question 1).
 - [ ] `audit.nextIssue` (M12, inferred): Next Issue
