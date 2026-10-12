@@ -276,6 +276,10 @@ pub const DIALOGS: &[Dialog] = &[
     import_metrics::FILE,
     import_metrics::FONT,
     import_features::DIALOG,
+    stem_filters::ADJUST,
+    stem_filters::WEIGHT,
+    stem_filters::CONDENSE,
+    stem_filters::X_HEIGHT,
 ];
 
 /// The shell commands of this module.

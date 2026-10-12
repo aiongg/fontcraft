@@ -1023,13 +1023,20 @@ label = "Adjust Stems"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id], horizontal?: [{from: number, to: number, set?: number, offset?: number}], vertical?: [{from: number, to: number, set?: number, offset?: number}]}"
+params = "{glyph | glyphs, layer? | layers?: [id], horizontal?: [{from: number, to: number, set?: number, offset?: number}], vertical?: [{from: number, to: number, set?: number, offset?: number}]}"
 area = "path-ops"
 milestone = "M13"
 summary = "Changes the thickness of every detected horizontal or vertical stem whose width falls in a given range, either by an offset or to a fixed value, one range per rule. Diagonal stems are left alone."
 ref = "FontLab 8 What's new › Test & adjust › Actions (Adjust stems)"
 status = "docs"
 origin = "fontlab"
+notes = "Stems come from fontcraft_pathops::stems (straight edge pairs and round cross-sections at vertical or horizontal tangents). The documented behaviour (rules by width range, offset or fixed value, diagonals untouched) is followed; the secondary reference cannot be observed in the trial. The dialog dialog.filterAdjustStems shows one rule per direction; the command takes up to 64 each."
+guesses = [
+  "Both edges of a stem move by half the change, so the stem keeps its centre line; the secondary reference running a rule on a stem away from the sidebearings would settle it.",
+  "A horizontal stem's edge on the baseline, x-height, cap height, ascender or descender stays and the other edge takes the whole change; the secondary reference on a serif sitting on the baseline would settle it.",
+  "A round stem (the sides of o) is adjusted by moving the extreme nodes on both sides with their handles; one without a node at either measured point is left alone.",
+  "A rule that would make a stem narrower than 1 unit makes the whole command fail; the secondary reference with an offset larger than a stem would settle it.",
+]
 
 [[command]]
 id = "app.commandPalette"
@@ -1957,13 +1964,22 @@ label = "Change Weight…"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id], amount: number, method?: 'auto' | 'cjk' | 'lcg' | 'custom', zones?: {bottom: number, top: number, serifHeight?: number}, counters?: 'auto' | 'squish' | 'retain', cleanup?: bool}"
+params = "{glyph | glyphs, layer? | layers?: [id], amount: number, method?: 'auto' | 'cjk' | 'lcg' | 'custom', zones?: {bottom: number, top: number, serifHeight?: number}, counters?: 'auto' | 'squish' | 'retain', cleanup?: bool}"
 area = "path-ops"
 milestone = "M13"
 summary = "Thickens or thins stems by the given amount. The lcg method then pulls the glyph back between its bottom and top zones so letter heights do not grow, keeping serifs near the zones fixed; the cjk method only expands. Counters are either allowed to shrink or kept by widening the glyph."
 ref = "FontForge dialogs › Stylistic Transformations › Change Weight"
 status = "docs"
 origin = "fontforge"
+notes = "Implemented from the public dialog description only: each closed contour is offset outwards by half the amount (nodes along the bisector of their normals, handles with their nodes), then lcg shifts nodes back so the zones keep their heights, with nodes within the serif height of a zone shifted rigidly. The secondary reference cannot be observed in the trial."
+guesses = [
+  "The offset moves nodes and handles without adding nodes, so curves are only approximately parallel to the original; an outline comparison against the secondary reference would settle how close it must be.",
+  "Method auto picks cjk for CJK ideographs, Hangul and kana and lcg for everything else; the secondary reference's documentation on auto would settle it.",
+  "Default zones: bottom at the baseline, top at the x-height for lowercase glyphs (by code point, else by the first letter of the name) and the cap height for the rest, serif height 0; the secondary reference's dialog defaults would settle them.",
+  "Counters auto means retain with lcg and squish with cjk; retain moves each vertical stem right by the amount times its index so the counters keep their widths, and the advance width grows by the amount times (stems − 1).",
+  "Squish keeps the advance width, so the outline grows into both sidebearings by half the amount each.",
+  "Cleanup (Remove Overlap after the change) is off by default.",
+]
 
 [[command]]
 id = "filter.condenseExtend"
@@ -1971,13 +1987,19 @@ label = "Condense / Extend…"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id], counters: {scale?: percent, add?: number}, sidebearings: {scale?: percent, add?: number}}"
+params = "{glyph | glyphs, layer? | layers?: [id], counters?: {scale?: percent, add?: number}, sidebearings?: {scale?: percent, add?: number}}"
 area = "path-ops"
 milestone = "M13"
 summary = "Narrows or widens glyphs by changing counters and sidebearings while holding vertical stem widths roughly constant. A slanted font is unslanted by its italic angle first and reslanted after."
 ref = "FontForge dialogs › Stylistic Transformations › Condense/Extend"
 status = "docs"
 origin = "fontforge"
+notes = "Implemented from the public dialog description only: vertical stems (straight and round) keep their widths, the spaces between and beside them scale, and the advance width follows. The secondary reference cannot be observed in the trial."
+guesses = [
+  "The counter add applies only to counters between two stems; the parts of the outline left of the first stem and right of the last (arms, serifs) only scale. The secondary reference on a T would settle it.",
+  "A glyph with no vertical stem scales as one piece by the counter scale.",
+  "Counters scaled below zero width become zero width.",
+]
 
 [[command]]
 id = "filter.changeXHeight"
@@ -1985,12 +2007,66 @@ label = "Change x-Height…"
 menu = ["Filter"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, layers?: [id], from?: number, to: number, serifHeight?: number}"
+params = "{glyph | glyphs, layer? | layers?: [id], from?: number, to: number, serifHeight?: number}"
 area = "path-ops"
 milestone = "M13"
 summary = "Moves the x-height of the lowercase to a new value by stretching the region between baseline and x-height. A serif height greater than zero keeps features within that distance of the lines rigid."
 ref = "FontForge dialogs › Stylistic Transformations › Change X-Height"
 status = "docs"
+origin = "fontforge"
+notes = "Implemented from the public dialog description only. `from` defaults to the master's x-height. The secondary reference cannot be observed in the trial."
+guesses = [
+  "Above the x-height band the outline stretches so the master's ascender stays where it is, and nothing above the ascender moves; the secondary reference on b or h would settle whether ascenders move instead.",
+  "Below the serif height nothing moves (descenders included) and the band within the serif height of the x-height shifts rigidly.",
+  "The master's x-height metric is not changed; the command changes outlines only.",
+]
+
+[[panel]]
+id = "dialog.filterAdjustStems"
+label = "Adjust Stems"
+location = "dialog"
+controls = ["per direction: Change checkbox, From and To fields, by or to menu, Value field"]
+area = "path-ops"
+milestone = "M13"
+summary = "Options dialog of Adjust Stems: one rule for vertical and one for horizontal stems, previewed live."
+ref = "FontLab 8 What's new › Test & adjust › Actions (Adjust stems)"
+status = "inferred"
+origin = "fontlab"
+
+[[panel]]
+id = "dialog.filterChangeWeight"
+label = "Change Weight"
+location = "dialog"
+controls = ["Amount field", "Method menu", "Bottom zone, Top zone and Serif height fields (custom method)", "Counters menu", "Remove overlaps checkbox"]
+area = "path-ops"
+milestone = "M13"
+summary = "Options dialog of Change Weight, previewed live."
+ref = "FontForge dialogs › Stylistic Transformations › Change Weight"
+status = "inferred"
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.filterCondenseExtend"
+label = "Condense / Extend"
+location = "dialog"
+controls = ["Counters: Scale % and Add fields", "Sidebearings: Scale % and Add fields"]
+area = "path-ops"
+milestone = "M13"
+summary = "Options dialog of Condense / Extend, previewed live."
+ref = "FontForge dialogs › Stylistic Transformations › Condense/Extend"
+status = "inferred"
+origin = "fontforge"
+
+[[panel]]
+id = "dialog.filterChangeXHeight"
+label = "Change x-Height"
+location = "dialog"
+controls = ["Current x-height field", "New x-height field", "Serif height field"]
+area = "path-ops"
+milestone = "M13"
+summary = "Options dialog of Change x-Height, previewed live; the current x-height starts at the default master's."
+ref = "FontForge dialogs › Stylistic Transformations › Change X-Height"
+status = "inferred"
 origin = "fontforge"
 
 [[command]]
