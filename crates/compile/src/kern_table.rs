@@ -26,8 +26,9 @@ use crate::outline::Flavour;
 /// The parameter that turns the table on.
 pub const PARAMETER: &str = "Export kern Table";
 
-/// Most glyph pairs looked at while groups are expanded; past it the rest are left out with a
-/// warning. Two large groups kerned against each other expand to the product of their sizes.
+/// Most steps taken while groups are expanded (one per stored pair, per group member listed and
+/// per glyph pair looked at); past it the rest are left out with a warning. Two large groups kerned
+/// against each other expand to the product of their sizes.
 const MAX_EXPANSION_WORK: usize = 4_000_000;
 
 /// Bytes of a format 0 subtable before its pairs: the subtable header and the search fields.
@@ -86,6 +87,13 @@ pub(crate) fn pairs(font: &Font, master: &str, order: &[&str], edits: &ExportEdi
     'stored: for (first, second) in stored {
         let lefts = side_glyphs(&index, first, first_side);
         let rights = side_glyphs(&index, second, second_side);
+        // Counted even when no pair results: many stored pairs of one large group against empty
+        // ones would otherwise list its members again and again for free.
+        work = work.saturating_add(lefts.len().saturating_add(rights.len()).saturating_add(1));
+        if work > MAX_EXPANSION_WORK {
+            cut_short = true;
+            break;
+        }
         for left in &lefts {
             let (Some(l), Some(li)) = (exported(left), index.glyph_id(left)) else { continue };
             for right in &rights {
@@ -117,7 +125,7 @@ pub(crate) fn pairs(font: &Font, master: &str, order: &[&str], edits: &ExportEdi
     }
     if cut_short {
         warnings.push(format!(
-            "the kerning groups expand to more than {MAX_EXPANSION_WORK} glyph pairs: the kern table holds the pairs found before that"
+            "expanding the kerning groups takes more than {MAX_EXPANSION_WORK} steps: the kern table holds the pairs found before that"
         ));
     }
     out
@@ -295,6 +303,29 @@ mod tests {
         assert_eq!(pairs.get(&("l255".to_string(), "r255".to_string())), Some(&-30));
         assert_eq!(pairs.get(&("l000".to_string(), "r000".to_string())), Some(&-10));
         assert!(out.warnings.iter().any(|w| w.starts_with("the kern table holds at most")), "{:?}", out.warnings);
+    }
+
+    #[test]
+    fn stored_pairs_that_expand_to_nothing_still_count_toward_the_work_cap() {
+        // One left group of 2,000 members kerned against 2,100 right groups with no members:
+        // no glyph pair results, but each stored pair lists the 2,000 members again.
+        let mut f = Font::new("Kern Table Sans");
+        for i in 0..2_000 {
+            let l = format!("l{i:04}");
+            f.add_glyph(&l, vec![], 500.0).unwrap();
+            group(&mut f, &l, GroupSide::Right, "L");
+        }
+        let kerning = Arc::make_mut(&mut f.kerning);
+        for i in 0..2_100 {
+            kerning.ltr.set("m01", "@MMK_L_L", &format!("@MMK_R_empty{i}"), -10.0);
+        }
+        let order: Vec<&str> = f.glyphs.iter().map(|g| g.name.as_str()).collect();
+        let mut warnings = Vec::new();
+        let started = std::time::Instant::now();
+        let out = pairs(&f, "m01", &order, &ExportEdits::default(), &mut warnings);
+        assert!(started.elapsed() < std::time::Duration::from_secs(20), "took {:?}", started.elapsed());
+        assert!(out.is_empty());
+        assert!(warnings.iter().any(|w| w.contains("expanding the kerning groups")), "{warnings:?}");
     }
 
     #[test]
