@@ -7,6 +7,10 @@
 //! the base glyph where the first of them was. Other paths, components, anchors and hints stay;
 //! hints on replaced paths go.
 //!
+//! A new component keeps the default automatic alignment where aligning puts it where the outline
+//! was (within the tolerance) and leaves the width as it is; alignment is turned off on the
+//! components it would move, and on all new components of a layer whose width it would change.
+//!
 //! Detect Composites works across the font without comparing every glyph with every other: base
 //! outlines are indexed by the signature of their largest contour, and a target only tries the
 //! bases whose contour signatures it holds. Bases are tried from the largest (most nodes) down,
@@ -17,8 +21,9 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use fontcraft_components::AnchorCache;
 use fontcraft_geom::{Affine, Point};
-use fontcraft_model::{Component, Font, Layer, Node, NodeKind, Path, Shape, Transform};
+use fontcraft_model::{Alignment, Component, Font, Glyph, Layer, Node, NodeKind, Path, Shape, Transform};
 use fontcraft_pathops::matcher::{MAX_PATTERN_NODES, Match, MatchOptions, Signature, match_outline_within, signature};
 use fontcraft_pathops::{Contour, Node as PNode, NodeKind as PKind};
 use serde_json::{Value, json};
@@ -33,6 +38,8 @@ pub const MAX_DETECT_TOLERANCE: f64 = 10.0;
 /// Node comparisons one Detect Composites or Detect Component run may make; past it the run
 /// stops and says so.
 pub const MAX_DETECT_WORK: usize = 200_000_000;
+/// Alignment passes per layer before the new components that still move are all left unaligned.
+const MAX_ALIGN_PASSES: usize = 8;
 /// Distance slack for floating-point noise.
 const EPSILON: f64 = 1e-9;
 
@@ -43,7 +50,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Detect Composites",
             ["Font"],
             None,
-            "{glyphs?: [names] (default: every glyph), layer?: id or layers?: [ids] (default: every master layer), tolerance?: number (font units, 0 to 10, default 0.5), flips?: bool (default false: translation only)} in each layer, replace every group of closed, unlocked paths that repeats the whole outline of another glyph's layer with the same id (closed paths, no components) by a component of that glyph. Bases are tried from the largest down; a base must have fewer nodes than the glyph, or as many and come earlier in the font. With `flips`, mirrored and half-turned copies are found too. A component's offset is rounded to the font's grid when the match still holds. Locked glyphs are skipped and listed; master layers that end up with different components are named in `warnings`. Past the work limit the run stops, keeps what it found and says so in `stopped` → {glyphs: [names], components: number, skipped: [{glyph, layer?, reason}], warnings: [string], stopped: string | null}",
+            "{glyphs?: [names] (default: every glyph), layer?: id or layers?: [ids] (default: every master layer), tolerance?: number (font units, 0 to 10, default 0.5), flips?: bool (default false: translation only)} in each layer, replace every group of closed, unlocked paths that repeats the whole outline of another glyph's layer with the same id (closed paths, no components) by a component of that glyph. Bases are tried from the largest down; a base must have fewer nodes than the glyph, or as many and come earlier in the font. With `flips`, mirrored and half-turned copies are found too. A component's offset is rounded to the font's grid when the match still holds. New components keep automatic alignment where aligning leaves them and the width in place (within the tolerance); it is turned off on the others. Locked glyphs are skipped and listed; master layers that end up with different components are named in `warnings`. Past the work limit the run stops, keeps what it found and says so in `stopped` → {glyphs: [names], components: number, skipped: [{glyph, layer?, reason}], warnings: [string], stopped: string | null}",
             has_doc,
             detect_composites
         )
@@ -53,7 +60,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Detect Component",
             ["Path", "Convert"],
             None,
-            "{glyph: name, layer?: id, shapes?: [indices] (`paths` is accepted in place of `shapes`; default: every path of the layer), tolerance?: number (0 to 10, default 0.5), flips?: bool} find the first glyph, in font order, whose layer with the same id has closed paths only and whose whole outline equals the chosen paths after a translation (or a flip with `flips`), and replace the chosen paths by a component of it where the first of them was. A chosen shape that is not a closed, unlocked path, or no such glyph, is an error → {glyph, layer, component: name, transform: [xx, yx, xy, yy, dx, dy], selection: {glyph, layer, shapes}}",
+            "{glyph: name, layer?: id, shapes?: [indices] (`paths` is accepted in place of `shapes`; default: every path of the layer), tolerance?: number (0 to 10, default 0.5), flips?: bool} find the first glyph, in font order, whose layer with the same id has closed paths only and whose whole outline equals the chosen paths after a translation (or a flip with `flips`), and replace the chosen paths by a component of it where the first of them was. The component keeps automatic alignment unless aligning would move it or change the width. A chosen shape that is not a closed, unlocked path, or no such glyph, is an error → {glyph, layer, component: name, transform: [xx, yx, xy, yy, dx, dy], selection: {glyph, layer, shapes}}",
             has_doc,
             detect_component
         )
@@ -186,11 +193,10 @@ fn rounded(m: &Match, pattern: &[Contour], target: &[Contour], grid: f64, tol: f
 }
 
 /// A component of `glyph` placed by `affine`: a plain offset, an offset with a mirroring scale,
-/// or a matrix. Automatic alignment is off, so the component stays where the outline was.
+/// or a matrix, with the default automatic alignment ([`settle_alignment`] decides).
 fn component(glyph: &str, affine: Affine) -> Component {
     let [a, b, c, d, e, f] = affine.as_coeffs();
     let mut out = Component::new(glyph, e, f);
-    out.info.alignment = fontcraft_model::Alignment::Disabled;
     if (a, b, c, d) != (1.0, 0.0, 0.0, 1.0) {
         out.transform = if b == 0.0 && c == 0.0 && a.abs() == 1.0 && d.abs() == 1.0 {
             Transform::Decomposed { pos: (e, f), scale: (a, d), angle: 0.0, slant: (0.0, 0.0) }
@@ -199,6 +205,52 @@ fn component(glyph: &str, affine: Affine) -> Component {
         };
     }
     out
+}
+
+/// Turns automatic alignment off on the components at `created` (shape indices of `layer`) that
+/// alignment would move by more than `tol`, and on all of them when it would change the width by
+/// more than `tol` or cannot place them. A component turned off can change where the others go,
+/// so the check repeats until nothing moves.
+fn settle_alignment(font: &Font, glyph: &Glyph, layer: &mut Layer, created: &[usize], tol: f64, cache: &mut AnchorCache) {
+    let disable = |layer: &mut Layer, i: usize| {
+        if let Some(Shape::Component(c)) = layer.shapes.get_mut(i) {
+            c.info.alignment = Alignment::Disabled;
+        }
+    };
+    let offset = |shapes: &[Shape], i: usize| match shapes.get(i) {
+        Some(Shape::Component(c)) => {
+            let [.., e, f] = c.affine().as_coeffs();
+            Some(Point::new(e, f))
+        }
+        _ => None,
+    };
+    for _ in 0..MAX_ALIGN_PASSES {
+        let aligned = match fontcraft_components::align::align_layer_cached(font, glyph, layer, cache) {
+            Ok(Some(aligned)) => aligned,
+            Ok(None) => return,
+            Err(_) => break,
+        };
+        let moved: Vec<usize> = created
+            .iter()
+            .copied()
+            .filter(|&i| {
+                let on = matches!(layer.shapes.get(i), Some(Shape::Component(c)) if c.info.alignment != Alignment::Disabled);
+                on && offset(&layer.shapes, i).zip(offset(&aligned.shapes, i)).is_some_and(|(was, now)| (now - was).hypot() > tol + EPSILON)
+            })
+            .collect();
+        if moved.is_empty() {
+            if (aligned.width - layer.width).abs() <= tol + EPSILON {
+                return;
+            }
+            break;
+        }
+        for i in moved {
+            disable(layer, i);
+        }
+    }
+    for &i in created {
+        disable(layer, i);
+    }
 }
 
 /// `layer` with the paths of each entry replaced by its component, which takes the place of the
@@ -300,6 +352,8 @@ fn layer_ids(p: &Params, font: &Font) -> Result<Vec<String>> {
 struct Detected {
     layer: Layer,
     components: Vec<String>,
+    /// Shape indices of the new components in `layer`.
+    created: Vec<usize>,
 }
 
 /// Takes `units` from `work`; when it holds fewer, empties it and returns false.
@@ -391,9 +445,9 @@ fn detect_layer(layer: &Layer, name: &str, order: usize, bases: &Bases, opts: &M
     if entries.is_empty() {
         return None;
     }
-    let (layer, _) = replace_paths(layer, &entries);
+    let (layer, created) = replace_paths(layer, &entries);
     let components = entries.into_iter().map(|(_, c)| c.glyph).collect();
-    Some(Detected { layer, components })
+    Some(Detected { layer, components, created })
 }
 
 fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
@@ -413,6 +467,7 @@ fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
     let mut stopped: Option<String> = None;
     let mut work = MAX_DETECT_WORK;
     let mut bases: HashMap<String, Bases> = HashMap::new();
+    let mut anchors = AnchorCache::new();
     for name in &glyphs {
         if work == 0 {
             stopped = Some(format!("the work limit was reached before glyph `{name}`; the glyphs from there on were not searched"));
@@ -429,7 +484,8 @@ fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
             let Some(layer) = glyph.layers.iter().find(|l| l.id == *id) else { continue };
             let base_list = bases.entry(id.clone()).or_insert_with(|| Bases::new(font, id));
             match detect_layer(layer, name, order, base_list, &opts, grid, &mut work) {
-                Some(d) => {
+                Some(mut d) => {
+                    settle_alignment(font, glyph, &mut d.layer, &d.created, opts.tolerance, &mut anchors);
                     count += d.components.len();
                     per_layer.push(d.components);
                     changes.push((name.clone(), d.layer));
@@ -517,7 +573,8 @@ fn detect_component(s: &mut Session, value: &Value) -> Result<Value> {
             let why = if work == 0 { "the search reached its work limit before finding" } else { "there is" };
             return Err(p.bad(format!("{why} no glyph whose whole outline equals the chosen paths")));
         };
-        let (new_layer, placed) = replace_paths(layer, &[(which, component(&base_name, affine))]);
+        let (mut new_layer, placed) = replace_paths(layer, &[(which, component(&base_name, affine))]);
+        settle_alignment(font, r.glyph, &mut new_layer, &placed, opts.tolerance, &mut AnchorCache::new());
         t.layer = Some(layer.id.clone());
         t.shapes = placed;
         (new_layer, base_name, affine)

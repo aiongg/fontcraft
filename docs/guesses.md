@@ -6,7 +6,7 @@ Each entry is a choice FontCraft made where no written source says what the refe
 
 To add a guess, append a sentence to the row's `guesses` list and run `cargo xtask guesses`. A live command whose status is `inferred` or `memory` must have at least one entry, unless its row says `own = true` (no counterpart in the reference app). **Live** is yes when the row is a command registered in the engine or the shell; it is – for other row kinds.
 
-**1658 guesses on 1079 rows (393 of them live commands).**
+**1659 guesses on 1079 rows (393 of them live commands).**
 
 ## `00-app-basics.toml`
 
@@ -1650,9 +1650,10 @@ To add a guess, append a sentence to the row's `guesses` list and run `cargo xta
 | `font.detectComposites` | M13 | docs | yes | Bases are tried from the most nodes down, a base must have fewer nodes than the target or as many and come earlier in the glyph order (no cycles), and among bases of equal size one whose name (without suffix and 'comb') appears in the target's name goes first; comparing the reference app's choice between identical outlines (period and dotaccentcomb) would settle it. |
 | `font.detectComposites` | M13 | docs | yes | Without `layer` or `layers` every master layer is searched, each on its own, and a glyph whose masters got different components is warned about; the reference app's behaviour on a multi-master font would settle it. |
 | `font.detectComposites` | M13 | docs | yes | A mirrored match is a mirrored copy drawn in the opposite direction, as a mirrored component draws once decomposed; the offset is rounded to the font's grid when the match still holds. |
-| `font.detectComposites` | M13 | docs | yes | Detected components have automatic alignment turned off so they stay where the outline was; checking the alignment setting of a component the reference app detected would settle it. |
+| `font.detectComposites` | M13 | docs | yes | A detected component keeps the default automatic alignment when aligning puts it where the outline was (within the tolerance) and leaves the width as it is; alignment is turned off on the components it would move, and on all new components of a layer whose width it would change, as the primary reference's Import Metrics does for metrics that alignment would change. Checking the alignment setting of components the reference app detected, with and without matching anchors, would settle it. |
 | `path.detectComponent` | M13 | docs | yes | The first glyph in font order whose same-id layer has only closed paths equal to the selection wins, within 0.5 unit after a translation (and a flip with `flips`); selecting an outline shared by two glyphs in the reference app would settle which one it picks. |
 | `path.detectComponent` | M13 | docs | yes | No matching glyph is an error that changes nothing; the reference app's message or silence when nothing matches would settle it. |
+| `path.detectComponent` | M13 | docs | yes | The new component keeps the default automatic alignment unless aligning would move it beyond the tolerance or change the width, and then alignment is off on it; alignment is judged on the layer as it ends up, so a component next to remaining paths keeps the default. Checking the alignment setting of a component the reference app detected would settle it. |
 | `glyph.setAutoLayerRecipe` | M13 | docs | yes | `masters` defaults to every master, which covers the reference's companion action that copies the recipe to all masters; seeing whether that action is a command of its own would settle it. |
 | `glyph.setAutoLayerRecipe` | M13 | docs | yes | Without `recipe`, a glyph keeps the recipe one of its layers has, else takes the components its name decomposes into by Create Composite's rules; the reference's default recipe is not documented. |
 | `glyph.setAutoLayerRecipe` | M13 | docs | yes | An automatic layer holds only the recipe's components: paths or components added by hand are replaced at the next rebuild; whether the reference lets one draw on an automatic layer would settle it. |

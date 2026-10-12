@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1097 rows to check: 1515 guesses and 399 observe steps.**
+**1097 rows to check: 1516 guesses and 399 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -1556,10 +1556,11 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Bases are tried from the most nodes down, a base must have fewer nodes than the target or as many and come earlier in the glyph order (no cycles), and among bases of equal size one whose name (without suffix and 'comb') appears in the target's name goes first; comparing the reference app's choice between identical outlines (period and dotaccentcomb) would settle it.
   - Guess: Without `layer` or `layers` every master layer is searched, each on its own, and a glyph whose masters got different components is warned about; the reference app's behaviour on a multi-master font would settle it.
   - Guess: A mirrored match is a mirrored copy drawn in the opposite direction, as a mirrored component draws once decomposed; the offset is rounded to the font's grid when the match still holds.
-  - Guess: Detected components have automatic alignment turned off so they stay where the outline was; checking the alignment setting of a component the reference app detected would settle it.
+  - Guess: A detected component keeps the default automatic alignment when aligning puts it where the outline was (within the tolerance) and leaves the width as it is; alignment is turned off on the components it would move, and on all new components of a layer whose width it would change, as the primary reference's Import Metrics does for metrics that alignment would change. Checking the alignment setting of components the reference app detected, with and without matching anchors, would settle it.
 - [ ] `path.detectComponent` (M13, docs, live): Detect Component
   - Guess: The first glyph in font order whose same-id layer has only closed paths equal to the selection wins, within 0.5 unit after a translation (and a flip with `flips`); selecting an outline shared by two glyphs in the reference app would settle which one it picks.
   - Guess: No matching glyph is an error that changes nothing; the reference app's message or silence when nothing matches would settle it.
+  - Guess: The new component keeps the default automatic alignment unless aligning would move it beyond the tolerance or change the width, and then alignment is off on it; alignment is judged on the layer as it ends up, so a component next to remaining paths keeps the default. Checking the alignment setting of a component the reference app detected would settle it.
   - Observe: Draw a copy of a glyph's outline in another glyph, select it and run Detect Component: note which glyph the component names and where it sits.
   - Observe: Select an outline no glyph has and run Detect Component: note the message, if any.
 - [ ] `glyph.setAutoLayerRecipe` (M13, docs, live): Set Auto Layer Recipe

@@ -122,8 +122,9 @@ pub fn align_layer(font: &Font, glyph: &str, layer: &str) -> Result<Option<Layer
     align_layer_cached(font, g, l, &mut AnchorCache::new())
 }
 
-/// [`align_layer`] for a glyph and layer in hand, reading anchors through `cache`.
-pub(crate) fn align_layer_cached(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut AnchorCache) -> Result<Option<Layer>, ComponentsError> {
+/// [`align_layer`] for a glyph and layer in hand, reading anchors through `cache`. The layer need
+/// not be in `font` yet: only its components' glyphs are read from there.
+pub fn align_layer_cached(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut AnchorCache) -> Result<Option<Layer>, ComponentsError> {
     let Some(plan) = plan_layer(font, glyph, layer, cache)? else { return Ok(None) };
     let moves = plan.parts.iter().any(|p| p.mode.is_some() && layer.shapes.get(p.shape).is_some_and(|s| !same_transform(s, &p.transform)));
     let resizes = plan.width.is_some_and(|w| w != layer.width);

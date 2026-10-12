@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Component, Font, Glyph, Layer, Node, NodeKind, Path, Shape, Transform};
+use fontcraft_engine::model::{Alignment, Anchor, Component, Font, Glyph, Layer, Node, NodeKind, Path, Shape, Transform};
 use serde_json::{Value, json};
 
 fn run(s: &mut Session, id: &str, p: Value) -> Value {
@@ -27,11 +27,16 @@ const A_COUNTER: [(f64, f64); 3] = [(220.0, 200.0), (300.0, 500.0), (380.0, 200.
 const ACUTE: [(f64, f64); 4] = [(-50.0, 520.0), (50.0, 520.0), (90.0, 620.0), (10.0, 620.0)];
 const PAREN: [(f64, f64); 6] = [(100.0, -100.0), (200.0, -100.0), (150.0, 300.0), (220.0, 700.0), (120.0, 700.0), (50.0, 300.0)];
 
+/// A detected component placed at (`x`, `y`) with automatic alignment `alignment`.
+fn placed_as(glyph: &str, x: f64, y: f64, alignment: Alignment) -> Component {
+    let mut c = Component::new(glyph, x, y);
+    c.info.alignment = alignment;
+    c
+}
+
 /// A detected component: placed at (`x`, `y`) with automatic alignment off.
 fn placed(glyph: &str, x: f64, y: f64) -> Component {
-    let mut c = Component::new(glyph, x, y);
-    c.info.alignment = fontcraft_engine::model::Alignment::Disabled;
-    c
+    placed_as(glyph, x, y, Alignment::Disabled)
 }
 
 fn add_glyph(f: &mut Font, name: &str, shapes: Vec<Shape>) {
@@ -79,6 +84,35 @@ fn detect_composites_rebuilds_a_flattened_accented_glyph_from_its_bases() {
     assert_eq!(layer(s.font().unwrap(), "Aacute").shapes.len(), 3, "one undo step gives the paths back");
 }
 
+/// The fixture with a `top` anchor on `A` and `_top` on `acutecomb` that put the acute
+/// (`acute_x`, 0) away from where `Aacute` draws it.
+fn anchored(acute_x: f64) -> Session {
+    let mut s = flattened();
+    s.edit("anchors", |f| {
+        f.glyph_mut("A").unwrap().layers[0].anchors.push(Anchor::new("top", 300.0 - acute_x, 700.0));
+        f.glyph_mut("acutecomb").unwrap().layers[0].anchors.push(Anchor::new("_top", 0.0, 500.0));
+        Ok(())
+    })
+    .unwrap();
+    s
+}
+
+/// Without anchors the acute would sit after the `A` and widen the glyph, so both new components
+/// are left unaligned (the test above). With anchors that reproduce the drawing, both stay
+/// aligned; with anchors that would move the acute, only the acute is left unaligned.
+#[test]
+fn detect_composites_keeps_alignment_only_where_it_reproduces_the_outline() {
+    let mut s = anchored(0.0);
+    run(&mut s, "font.detectComposites", json!({"glyphs": ["Aacute"]}));
+    let aligned = |name: &str, x: f64, y: f64| Shape::Component(placed_as(name, x, y, Alignment::Default));
+    assert_eq!(layer(s.font().unwrap(), "Aacute").shapes, vec![aligned("A", 0.0, 0.0), aligned("acutecomb", 300.0, 200.0)]);
+    assert_eq!(layer(s.font().unwrap(), "Aacute").width, 600.0);
+
+    let mut s = anchored(40.0);
+    run(&mut s, "font.detectComposites", json!({"glyphs": ["Aacute"]}));
+    assert_eq!(layer(s.font().unwrap(), "Aacute").shapes, vec![aligned("A", 0.0, 0.0), Shape::Component(placed("acutecomb", 300.0, 200.0))]);
+}
+
 #[test]
 fn detect_composites_finds_a_mirrored_copy_only_with_flips() {
     let mut s = flattened();
@@ -111,7 +145,8 @@ fn detect_component_replaces_the_chosen_paths_with_the_glyph_they_repeat() {
     assert_eq!(r["component"], json!("acutecomb"));
     assert_eq!(r["selection"]["shapes"], json!([0]));
     let shapes = &layer(s.font().unwrap(), "B").shapes;
-    assert_eq!(shapes[0], Shape::Component(placed("acutecomb", 100.0, 0.0)));
+    // Alignment stays at its default: a layer that keeps a path does not align its components.
+    assert_eq!(shapes[0], Shape::Component(placed_as("acutecomb", 100.0, 0.0, Alignment::Default)));
     assert!(matches!(shapes[1], Shape::Path(_)), "the other path stays");
     assert_eq!(shapes.len(), 2);
 }
