@@ -183,7 +183,7 @@ fn usable_title(title: &str) -> bool {
 /// The file's text: UTF-8 (a byte-order mark dropped) or UTF-16 with a byte-order mark.
 fn decode(bytes: &[u8]) -> Result<String, String> {
     let utf16 = |big: bool, body: &[u8]| -> Result<String, String> {
-        if body.len() % 2 != 0 {
+        if !body.len().is_multiple_of(2) {
             return Err("not valid UTF-16 text: an odd number of bytes".to_string());
         }
         let units = body.chunks_exact(2).map(|p| match p {
