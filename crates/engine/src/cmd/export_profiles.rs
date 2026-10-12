@@ -500,7 +500,7 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
                 dest: Dest::Folder(dest_path.clone()),
                 first_only: false,
             };
-            let mut sink = Sink::new(&req.dest, false)?;
+            let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
             for (k, i) in members {
                 let doc = docs.get(i).ok_or(EngineError::NoDocument)?;
                 let doc_jobs = jobs.get(k).ok_or(EngineError::NoDocument)?;
